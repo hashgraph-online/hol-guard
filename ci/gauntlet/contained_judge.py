@@ -16,6 +16,7 @@ from .contained_core import workspace_identity_matches as _contained_workspace_i
 from .evidence import reconcile, sha256_bytes
 from .fixtures import digest_file
 from .input_evidence import input_digest
+from .native_routes import native_route_error
 from .transport import reconcile_rounds
 
 _CONTAINED_PROFILE = "contained-bun-vitest-extended"
@@ -143,6 +144,7 @@ def _contained_guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
     routes: dict[str, int],
+    resident_direct: int,
     *,
     cases: list[WorkflowCase],
     expected_commands: list[str],
@@ -187,10 +189,8 @@ def _contained_guard_inventory(
         by_id.setdefault(call_id, []).append(observation)
     if set(by_id) != {call["id"] for call in calls}:
         return {}, "host/Guard call inventories disagree"
-    if set(routes) != {"native_resident"} or type(routes.get("native_resident")) is not int:
+    if native_route_error(routes, resident_direct, len(observations)):
         return {}, "native route counts do not reconcile with contained observations"
-    if routes["native_resident"] != len(observations):
-        return {}, "native route count does not reconcile with contained observations"
     for index, (case, call) in enumerate(zip(cases, calls, strict=True)):
         bound = by_id[call["id"]]
         pre = [row for row in bound if row.get("event") == "PreToolUse"]
@@ -294,6 +294,7 @@ def assess_contained_execution(
     events: list[dict[str, Any]],
     guard_observations: list[dict[str, Any]],
     native_routes: dict[str, Any],
+    resident_direct_answers: int,
     inference: dict[str, Any],
     filesystem: dict[str, bool],
     returncode: int,
@@ -321,13 +322,7 @@ def assess_contained_execution(
     protocol_errors.extend(reconcile_errors)
     rounds_ok, recovered_retries = reconcile_rounds(inference.get("live_rounds", []))
     terminal = any(event.get("type") == "agent_end" and event.get("terminal") is True for event in events)
-    route_ok = (
-        isinstance(native_routes, dict)
-        and set(native_routes) == {"native_resident"}
-        and type(native_routes.get("native_resident")) is int
-        and native_routes["native_resident"] == len(guard_observations)
-        and native_routes["native_resident"] > 0
-    )
+    route_ok = not native_route_error(native_routes, resident_direct_answers, len(guard_observations))
     by_id: dict[str, list[dict[str, Any]]] = {}
     guard_error: str | None = None
     if calls and route_ok:
@@ -335,6 +330,7 @@ def assess_contained_execution(
             calls,
             guard_observations,
             native_routes,
+            resident_direct_answers,
             cases=cases,
             expected_commands=expected_commands,
             caller_workspaces=caller_workspaces,

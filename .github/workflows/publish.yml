@@ -148,7 +148,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - name: Resolve and validate alpha version
@@ -257,6 +257,7 @@ jobs:
       base_version: ${{ steps.version.outputs.base_version }}
       source_sha: ${{ steps.version.outputs.source_sha }}
       release_repair: ${{ steps.version.outputs.release_repair }}
+      native_wheel_matrix: ${{ steps.native_wheel_matrix.outputs.matrix }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -284,7 +285,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -586,6 +587,40 @@ jobs:
           echo "base_version=$BASE_VERSION" >> "$GITHUB_OUTPUT"
           echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
           echo "Computed $CHANNEL version: $VERSION"
+      - name: Select native wheel platforms
+        id: native_wheel_matrix
+        env:
+          CHANNEL: ${{ steps.version.outputs.channel }}
+          SOURCE_SHA: ${{ steps.version.outputs.source_sha }}
+          # Windows ARM64 wheels ship on alpha and stable GitHub releases only. Pull request
+          # canaries skip that runner, and so do sources that predate GitHub-only native wheels.
+          NATIVE_WHEEL_MATRIX: >-
+            [
+            {"runner": "ubuntu-latest", "platform_tag": "manylinux_2_17_x86_64", "target": "x86_64-unknown-linux-musl",
+             "runtime": "rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime",
+             "source_compiler": "rust/target/x86_64-unknown-linux-musl/release/guard-command-source"},
+            {"runner": "macos-15-intel", "platform_tag": "macosx_13_0_x86_64", "target": "x86_64-apple-darwin",
+             "runtime": "rust/target/x86_64-apple-darwin/release/hol-guard-runtime",
+             "source_compiler": "rust/target/x86_64-apple-darwin/release/guard-command-source"},
+            {"runner": "macos-15", "platform_tag": "macosx_11_0_arm64", "target": "aarch64-apple-darwin",
+             "runtime": "rust/target/aarch64-apple-darwin/release/hol-guard-runtime",
+             "source_compiler": "rust/target/aarch64-apple-darwin/release/guard-command-source"},
+            {"runner": "windows-latest", "platform_tag": "win_amd64", "rustflags": "-C link-arg=/Brepro",
+             "target": "x86_64-pc-windows-msvc",
+             "runtime": "rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe",
+             "source_compiler": "rust/target/x86_64-pc-windows-msvc/release/guard-command-source.exe"},
+            {"runner": "windows-11-arm", "platform_tag": "win_arm64", "rustflags": "-C link-arg=/Brepro",
+             "target": "aarch64-pc-windows-msvc",
+             "runtime": "rust/target/aarch64-pc-windows-msvc/release/hol-guard-runtime.exe",
+             "source_compiler": "rust/target/aarch64-pc-windows-msvc/release/guard-command-source.exe"}
+            ]
+        run: |
+          set -euo pipefail
+          filter='.'
+          if [[ "$CHANNEL" == "canary" ]] || ! git cat-file -e "${SOURCE_SHA}:scripts/embed_native_wheel_manifest.py"; then
+            filter='map(select(.platform_tag != "win_arm64"))'
+          fi
+          echo "matrix=$(jq -c "$filter" <<< "$NATIVE_WHEEL_MATRIX")" >> "$GITHUB_OUTPUT"
       - name: Verify release toolchain and write SBOM
         env:
           EXPECTED_UV_VERSION: "0.9.26"
@@ -607,6 +642,21 @@ jobs:
             exit 0
           fi
           uv run --no-sync python scripts/sync_repo_version.py --version "$VERSION"
+      - name: Stage release source compiler trust defaults
+        run: python scripts/refresh_extension_artifacts.py --trust-only
+      - name: Install pinned Rust toolchain for release source compiler
+        run: |
+          rustup toolchain install 1.88.0 --profile minimal
+          rustup default 1.88.0
+      - name: Cache release source compiler dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          prefix-key: release-native-v1
+          workspaces: rust
+          shared-key: release-source-compiler
+          cache-workspace-crates: false
+          cache-bin: false
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
@@ -617,7 +667,7 @@ jobs:
           HOL_GUARD_PACKAGE_VERSION: ${{ steps.version.outputs.version }}
           # Content-addressed reuse survives fresh-checkout mtimes. Only trusted
           # main pushes may write; pull requests and dispatches are read-only.
-          RUSTC_WRAPPER: sccache
+          RUSTC_WORKSPACE_WRAPPER: sccache
           SCCACHE_GHA_ENABLED: 'on'
           SCCACHE_GHA_VERSION: release-source-compiler-v1
           SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
@@ -625,6 +675,7 @@ jobs:
         run: |
           rustup toolchain install 1.88.0 --profile minimal
           cargo +1.88.0 build --manifest-path rust/Cargo.toml --locked --release \
+            --config 'profile.release.lto="off"' --config 'profile.release.codegen-units=16' \
             -p guard-command --bin guard-command-source
           python scripts/build_native_command_program.py --compiler rust/target/release/guard-command-source
           echo "HOL_GUARD_BUILD_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
@@ -774,28 +825,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: ubuntu-latest
-            platform_tag: manylinux_2_17_x86_64
-            target: x86_64-unknown-linux-musl
-            runtime: rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
-            source_compiler: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
-          - runner: macos-15-intel
-            platform_tag: macosx_13_0_x86_64
-            target: x86_64-apple-darwin
-            runtime: rust/target/x86_64-apple-darwin/release/hol-guard-runtime
-            source_compiler: rust/target/x86_64-apple-darwin/release/guard-command-source
-          - runner: macos-15
-            platform_tag: macosx_11_0_arm64
-            target: aarch64-apple-darwin
-            runtime: rust/target/aarch64-apple-darwin/release/hol-guard-runtime
-            source_compiler: rust/target/aarch64-apple-darwin/release/guard-command-source
-          - runner: windows-latest
-            platform_tag: win_amd64
-            rustflags: -C link-arg=/Brepro
-            target: x86_64-pc-windows-msvc
-            runtime: rust/target/x86_64-pc-windows-msvc/release/hol-guard-runtime.exe
-            source_compiler: rust/target/x86_64-pc-windows-msvc/release/guard-command-source.exe
+        include: ${{ fromJSON(needs.build.outputs.native_wheel_matrix) }}
     steps:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -821,7 +851,7 @@ jobs:
           git show "$SIZE_POLICY_SHA:ci/package_size/budgets.json" > "$policy_root/ci/package_size/budgets.json"
           git show "$SIZE_POLICY_SHA:ci/package_size/alpha-native-budgets.json" > "$policy_root/ci/package_size/alpha-native-budgets.json"
           echo "HOL_GUARD_WHEEL_SIZE_CHECKER=$policy_root/scripts/ci/check_wheel_size.py" >> "$GITHUB_ENV"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -933,8 +963,16 @@ jobs:
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: |
-          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
+          # Python instead of jq: the Windows ARM64 runner image does not ship jq.
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          source = json.loads(Path("rust/crates/guard-command/tests/fixtures/command-source-example.v1.json").read_text(encoding="utf-8"))
+          trust = json.loads(Path("contracts/extensions/build-trust-class-map.v1.json").read_text(encoding="utf-8"))
+          build = {"schema": "guard.command-extension-build.v1", "sources": [source], "mcp_sources": [], "trust": trust, "base": "packaged"}
+          Path("source-build.json").write_text(json.dumps(build), encoding="utf-8")
+          PY
           "$RUNTIME" compile < source-build.json > source-compiled.json
       - name: Rebuild Guard base wheel after projection regeneration
         shell: bash
@@ -1034,7 +1072,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -1048,6 +1086,19 @@ jobs:
           pattern: native-guard-wheel-*
           path: dist/
           merge-multiple: true
+      - name: Embed native wheel digests in the pure wheel
+        # Clients that installed the pure wheel verify a GitHub-only native wheel against this manifest.
+        # A stable repair below replaces the rebuilt files with the attested release files, manifest included.
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Repair runs of sources that predate GitHub-only native wheels keep their original pure wheel.
+          if [[ ! -f scripts/embed_native_wheel_manifest.py ]]; then
+            echo "Source predates the native wheel manifest; skipping."
+            exit 0
+          fi
+          uv run --no-sync python scripts/embed_native_wheel_manifest.py --dist-dir dist --version "$VERSION"
       - name: Reuse wheels already attested on the GitHub release
         # Any stable run can follow a deferred publication, including a dispatch
         # from the release tag itself, so check every stable run for attached wheels.
@@ -1178,7 +1229,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -1466,7 +1517,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -1592,7 +1643,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -1805,7 +1856,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2001,7 +2052,7 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ needs.build.outputs.source_sha }}
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -2089,7 +2140,14 @@ jobs:
         run: |
           set -euo pipefail
           mkdir pypi-hol-guard pypi-plugin-scanner
-          if [[ -f scripts/release_artifact_sets.py ]] && grep -q -- '--wheels-only' scripts/verify_release_registry.py; then
+          if [[ -f scripts/embed_native_wheel_manifest.py ]]; then
+            # GitHub-only native wheels (Windows ARM64) stay on the GitHub release with the sdist.
+            uv run --with packaging==25.0 python scripts/release_artifact_sets.py stage-pypi \
+              --dist-dir dist-hol-guard --output-dir pypi-hol-guard
+            cp dist-plugin-scanner/*.whl pypi-plugin-scanner/
+            echo "wheels_only_flag=--wheels-only" >> "$GITHUB_OUTPUT"
+            echo "artifact_set=wheels" >> "$GITHUB_OUTPUT"
+          elif [[ -f scripts/release_artifact_sets.py ]] && grep -q -- '--wheels-only' scripts/verify_release_registry.py; then
             cp dist-hol-guard/*.whl pypi-hol-guard/
             cp dist-plugin-scanner/*.whl pypi-plugin-scanner/
             echo "wheels_only_flag=--wheels-only" >> "$GITHUB_OUTPUT"
@@ -2833,7 +2891,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
       - name: Sync locked release tooling

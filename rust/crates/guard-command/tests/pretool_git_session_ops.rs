@@ -462,7 +462,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git rm -f tracked.txt",
         "git commit",
         "git commit -e -m x",
-        "git commit -S -m x",
         "git -c core.hooksPath=/tmp/hooks commit -m x",
         "git add notes.md && rm -rf build",
         "git switch main",
@@ -473,7 +472,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
     for (key, value) in [
         ("filter.strip.clean", "sed -e s/x//"),
         ("core.fsmonitor", "/tmp/monitor"),
-        ("commit.gpgSign", "true"),
         ("hook.pre-commit.command", "id"),
         ("diff.text.textconv", "cat"),
         ("submodule.recurse", "true"),
@@ -482,6 +480,17 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         assert!(allowed("git add -A && git commit -m x").is_err(), "{key}");
         session.config(&["--unset-all", key]);
     }
+    // Signing by default asks of a commit what `-S` asks, and of nothing else.
+    let explicit = allowed("git add -A && git commit -S -m x").is_ok();
+    session.config(&["commit.gpgSign", "true"]);
+    allowed("git add -A").unwrap();
+    allowed("git switch -c feat/signed").unwrap();
+    assert_eq!(allowed("git add -A && git commit -m x").is_ok(), explicit);
+    session.config(&["gpg.program", "/tmp/gpg"]);
+    allowed("git add -A").unwrap();
+    assert!(allowed("git add -A && git commit -m x").is_err());
+    session.config(&["--unset-all", "gpg.program"]);
+    session.config(&["--unset-all", "commit.gpgSign"]);
     // Each form answers only for the hooks it runs.
     let hook = session.primary.join(".git/hooks/pre-commit");
     executable_hook(&hook);

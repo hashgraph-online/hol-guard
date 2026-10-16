@@ -1,15 +1,16 @@
 """Exercise the installed Pi/OMP extension against a scoped Guard daemon.
 
 The native-wheel workflow already builds and installs the wheel. This probe
-checks the generated extension boundary through the installed daemon's native
-resident route; negative cases deliberately inject malformed CLI results to
-prove the extension remains fail-closed.
+checks the generated extension boundary through the installed native resident,
+over the native hook bridge or the extension's loopback fetch, whichever lane
+the generated source takes. Negative cases run with no reachable review
+service: every hook must fail closed, and a CLI wired to return malformed
+reviews proves the extension only ever asks it to recover the daemon.
 """
 
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import importlib
 import json
@@ -27,6 +28,17 @@ from pathlib import Path
 from typing import Any
 
 try:
+    from ci.native_runtime.pi_probe_guard_evidence import (
+        FETCH,
+        NODE_BRIDGE_CAPTURE_SOURCE,
+        assert_guard_requests,
+        assert_unavailable_results,
+        capture_log_size,
+        generated_transport,
+        read_capture_records,
+        wait_for_bridge_native_routes,
+    )
+    from ci.native_runtime.pi_probe_guard_evidence import text_digest as _text_digest
     from ci.native_runtime.probe_daemon_calls import (
         ProbeCleanupError,
         ProbeCleanupUnsafeError,
@@ -35,6 +47,17 @@ try:
         bounded_daemon_call,
     )
 except ModuleNotFoundError:  # Run directly as a script from its own directory.
+    from pi_probe_guard_evidence import (  # type: ignore[no-redef]
+        FETCH,
+        NODE_BRIDGE_CAPTURE_SOURCE,
+        assert_guard_requests,
+        assert_unavailable_results,
+        capture_log_size,
+        generated_transport,
+        read_capture_records,
+        wait_for_bridge_native_routes,
+    )
+    from pi_probe_guard_evidence import text_digest as _text_digest  # type: ignore[no-redef]
     from probe_daemon_calls import (  # type: ignore[no-redef]
         ProbeCleanupError,
         ProbeCleanupUnsafeError,
@@ -44,7 +67,6 @@ except ModuleNotFoundError:  # Run directly as a script from its own directory.
     )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_TEXT_LIMIT = 12_000
 _NODE_PROBE_TIMEOUT = 5.0
 # Cold policy publication is setup, not part of the timed hook request.
 # Match the production workspace-readiness cap without extending hook budgets.
@@ -253,11 +275,6 @@ def _negative_cases() -> list[dict[str, Any]]:
     ]
 
 
-def _text_digest(content: list[dict[str, Any]]) -> tuple[str, int, str]:
-    text = "".join(item["text"] for item in content if item.get("type") == "text" and isinstance(item.get("text"), str))
-    return hashlib.sha256(text.encode("utf-8")).hexdigest(), len(text), text[:_TEXT_LIMIT]
-
-
 def _canonical_content_digest(content: list[dict[str, Any]]) -> str:
     canonical = json.dumps(content, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
@@ -381,7 +398,7 @@ const extensionPath = process.argv[2];
 const casesPath = process.argv[3];
 const cwd = process.argv[4];
 const contentDigest = (canonical) => createHash("sha256").update(canonical).digest("hex");
-const fetchEvidence = [];
+const guardEvidence = [];
 const originalFetch = globalThis.fetch;
 if (typeof originalFetch !== "function") throw new Error("fetch is unavailable");
 globalThis.fetch = async (input, init) => {
@@ -419,10 +436,14 @@ globalThis.fetch = async (input, init) => {
       }
     }
   } catch {}
-  fetchEvidence.push({ method, pathname: requestUrl.pathname, status: response.status, ...proof });
+  guardEvidence.push({
+    transport: "fetch", method, pathname: requestUrl.pathname, status: response.status, ...proof,
+  });
   return response;
 };
-const extensionModule = await import(pathToFileURL(extensionPath).href);
+"""
+        + NODE_BRIDGE_CAPTURE_SOURCE
+        + """const extensionModule = await import(pathToFileURL(extensionPath).href);
 const handlers = new Map();
 const notifications = [];
 const pi = {
@@ -436,7 +457,7 @@ const cases = JSON.parse(readFileSync(casesPath, "utf8"));
 const results = [];
 for (const testCase of cases) {
   const before = notifications.length;
-  const fetchStart = fetchEvidence.length;
+  const requestStart = guardEvidence.length;
   const event = {
     toolCallId: testCase.id,
     toolName: "Bash",
@@ -450,8 +471,7 @@ for (const testCase of cases) {
     { cwd, ui: { notify(message, kind) { notifications.push({ message, kind }); } } },
   );
   const inputContentAfter = JSON.stringify(event.content);
-  const fetchEnd = fetchEvidence.length;
-  for (const fetch of fetchEvidence.slice(fetchStart, fetchEnd)) fetch.case_id = testCase.id;
+  for (const request of guardEvidence.slice(requestStart)) request.case_id = testCase.id;
   results.push({
     id: testCase.id,
     preserved: result === undefined,
@@ -462,7 +482,7 @@ for (const testCase of cases) {
     input_content_unchanged: inputContentBefore === inputContentAfter,
   });
 }
-process.stdout.write(JSON.stringify({ results, fetches: fetchEvidence }));
+process.stdout.write(JSON.stringify({ results, guard_requests: guardEvidence }));
 """,
         encoding="utf-8",
     )
@@ -508,58 +528,21 @@ def _run_node_cases(
     try:
         payload = json.loads(completed.stdout.decode("utf-8"))
         results = payload["results"]
-        fetches = payload["fetches"]
+        requests = payload["guard_requests"]
     except (KeyError, TypeError, ValueError, UnicodeDecodeError) as exc:
         raise ProbeError("generated Pi extension returned invalid result JSON") from exc
     if not isinstance(results, list) or not all(isinstance(result, dict) for result in results):
         raise ProbeError("generated Pi extension returned an invalid result list")
-    if not isinstance(fetches, list) or not all(isinstance(fetch, dict) for fetch in fetches):
-        raise ProbeError("generated Pi extension returned invalid fetch evidence")
-    return results, fetches
+    if not isinstance(requests, list) or not all(isinstance(request, dict) for request in requests):
+        raise ProbeError("generated Pi extension returned invalid Guard request evidence")
+    return results, requests
 
 
 def _read_records(path: Path) -> dict[str, list[dict[str, Any]]]:
-    try:
-        lines = path.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
-        raise ProbeError(f"CLI wrapper did not write its capture log: {exc}") from exc
     grouped: dict[str, list[dict[str, Any]]] = {}
-    for line in lines:
-        try:
-            record = json.loads(line)
-            case_id = record["case_id"]
-        except (KeyError, TypeError, ValueError) as exc:
-            raise ProbeError("CLI wrapper capture log contains invalid JSON") from exc
-        if not isinstance(case_id, str) or not isinstance(record, dict):
-            raise ProbeError("CLI wrapper capture log has an invalid record")
-        grouped.setdefault(case_id, []).append(record)
+    for record in read_capture_records(path):
+        grouped.setdefault(record["case_id"], []).append(record)
     return grouped
-
-
-def _payload_from_record(record: Mapping[str, Any]) -> dict[str, Any]:
-    try:
-        raw = base64.b64decode(str(record["stdin_b64"]), validate=True)
-        payload = json.loads(raw.decode("utf-8"))
-    except (KeyError, ValueError, UnicodeDecodeError) as exc:
-        raise ProbeError("CLI wrapper captured invalid request payload") from exc
-    if not isinstance(payload, dict):
-        raise ProbeError("CLI wrapper captured a non-object request payload")
-    return payload
-
-
-def _response_from_record(record: Mapping[str, Any]) -> dict[str, Any] | None:
-    try:
-        stdout = base64.b64decode(str(record["stdout_b64"]), validate=True).decode("utf-8")
-    except (KeyError, ValueError, UnicodeDecodeError) as exc:
-        raise ProbeError("CLI wrapper captured invalid stdout") from exc
-    for line in reversed(stdout.splitlines()):
-        try:
-            value = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(value, dict) and "decision" in value:
-            return value
-    return None
 
 
 def _assert_real_results(
@@ -609,82 +592,7 @@ def _assert_real_results(
     return evidence
 
 
-def _assert_fetch_evidence(
-    fetches: list[dict[str, Any]],
-    results: list[dict[str, Any]],
-    cases: list[dict[str, Any]],
-) -> dict[str, dict[str, Any]]:
-    """Validate redacted daemon responses correlated to each generated case."""
-    allowed_keys = {
-        "case_id",
-        "method",
-        "pathname",
-        "status",
-        "decision",
-        "model_output_action",
-        "reviewed_output_sha256",
-        "observe_mode",
-        "policy_action",
-    }
-    if len(fetches) != len(cases):
-        raise ProbeError("generated extension did not make exactly one daemon request per real case")
-    result_ids = [result.get("id") for result in results]
-    if len(results) != len(cases) or any(not isinstance(result_id, str) for result_id in result_ids):
-        raise ProbeError("daemon fetch evidence could not correlate every real case")
-    if len(set(result_ids)) != len(result_ids):
-        raise ProbeError("daemon fetch evidence found duplicate real case IDs")
-    by_id = {result["id"]: result for result in results}
-    expected_ids = {str(case["id"]) for case in cases}
-    if set(by_id) != expected_ids:
-        raise ProbeError("daemon fetch evidence could not correlate every real case")
-    fetches_by_case: dict[str, list[dict[str, Any]]] = {}
-    for fetch in fetches:
-        case_id = fetch.get("case_id")
-        if not isinstance(case_id, str):
-            raise ProbeError("daemon fetch evidence is missing its case correlation")
-        fetches_by_case.setdefault(case_id, []).append(fetch)
-    if set(fetches_by_case) != expected_ids or any(len(case_fetches) != 1 for case_fetches in fetches_by_case.values()):
-        raise ProbeError("daemon fetch evidence did not contain exactly one response per real case")
-    evidence: dict[str, dict[str, Any]] = {}
-    for case in cases:
-        case_id = str(case["id"])
-        fetch = fetches_by_case[case_id][0]
-        if set(fetch) - allowed_keys:
-            raise ProbeError(f"daemon fetch evidence contains unapproved fields for {case_id}")
-        if fetch.get("method") != "POST" or fetch.get("pathname") != "/v1/hooks/omp":
-            raise ProbeError(f"generated extension used an unexpected daemon route for {case_id}")
-        if fetch.get("status") != 200:
-            raise ProbeError(f"daemon hook response was not successful for {case_id}")
-        result = by_id[case_id]
-        digest, chars, _ = _text_digest(case["content"])
-        preserved = result.get("preserved") is True
-        if preserved:
-            expected_proof = {
-                "decision": "allow",
-                "model_output_action": "allow_original",
-                "reviewed_output_sha256": digest,
-            }
-        else:
-            expected_proof = {
-                "decision": "allow",
-                "model_output_action": "replace_with_reviewed_excerpt",
-            }
-            if case_id != "large-nonsource":
-                raise ProbeError(f"{case_id} was not preserved and is not an excerpt case")
-        for key, expected in expected_proof.items():
-            if fetch.get(key) != expected:
-                raise ProbeError(f"daemon response proof mismatch for {case_id}: {key}")
-        evidence[case_id] = {
-            "case_id": case_id,
-            "method": fetch["method"],
-            "pathname": fetch["pathname"],
-            "status": fetch["status"],
-            **expected_proof,
-            "sha256": digest,
-            "chars": chars,
-            "preserved": preserved,
-        }
-    return evidence
+_assert_fetch_evidence = assert_guard_requests
 
 
 def _assert_native_route_metrics(snapshot: Mapping[str, Any], expected: int) -> dict[str, int]:
@@ -724,61 +632,6 @@ def _wait_for_native_route_metrics(daemon: Any, expected: int, *, timeout_second
 def _assert_no_positive_cli_fallback(path: Path) -> None:
     if path.exists():
         raise ProbeError("positive generated extension unexpectedly used the CLI fallback")
-
-
-def _assert_negative_results(
-    results: list[dict[str, Any]],
-    records: dict[str, list[dict[str, Any]]],
-) -> dict[str, dict[str, Any]]:
-    expected_ids = {str(case["id"]) for case in _negative_cases()}
-    result_ids = [result.get("id") for result in results]
-    if len(results) != len(expected_ids) or any(not isinstance(result_id, str) for result_id in result_ids):
-        raise ProbeError("generated extension did not return every malformed-result case")
-    if len(set(result_ids)) != len(result_ids):
-        raise ProbeError("generated extension returned duplicate malformed-result case IDs")
-    by_id = {result["id"]: result for result in results}
-    if set(by_id) != expected_ids:
-        raise ProbeError("generated extension did not return every malformed-result case")
-    evidence: dict[str, dict[str, Any]] = {}
-    for case_id, result in by_id.items():
-        matching = records.get(case_id, [])
-        if not matching:
-            recorded_cases = sorted(recorded_id for recorded_id in records if recorded_id in expected_ids)
-            raise ProbeError(
-                f"negative CLI wrapper was not invoked for {case_id}; "
-                f"recorded_cases={recorded_cases}, "
-                f"unknown_invocations={len(records.get('unknown', []))}, "
-                f"preserved={result.get('preserved') is True}, "
-                f"is_error={isinstance(result.get('result'), dict) and result['result'].get('isError') is True}"
-            )
-        record = matching[-1]
-        if case_id == "negative-nonzero-allow" and record.get("returncode") == 0:
-            raise ProbeError("negative nonzero CLI case unexpectedly exited zero")
-        preserved = result.get("preserved") is True
-        response: dict[str, Any] | None = None
-        if case_id == "negative-observe":
-            response = _response_from_record(record)
-            if record.get("returncode") != 0:
-                raise ProbeError("explicit observe response exited nonzero")
-            if not preserved or not isinstance(response, dict):
-                raise ProbeError("explicit observe response was not preserved")
-            if response.get("decision") != "allow" or response.get("observe_mode") is not True:
-                raise ProbeError("explicit observe response lacked canonical allow metadata")
-        elif preserved:
-            raise ProbeError(f"malformed result silently preserved output: {case_id}")
-        else:
-            returned = result.get("result")
-            if not isinstance(returned, dict) or returned.get("isError") is not True:
-                raise ProbeError(f"malformed result was not visibly blocked: {case_id}")
-        evidence[case_id] = {
-            "cli_invocations": len(matching),
-            "preserved": preserved,
-            "observe_mode": (
-                response.get("observe_mode") if case_id == "negative-observe" and isinstance(response, dict) else None
-            ),
-            "is_error": bool(isinstance(result.get("result"), dict) and result["result"].get("isError")),
-        }
-    return evidence
 
 
 def _probe_native_identity() -> tuple[Any, Any, Any]:
@@ -1263,7 +1116,7 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             raise
         native_started = True
         _prepare_installed_daemon_workspace(daemon, workspace)
-        real_results, real_fetches = _run_node_cases(
+        real_results, real_requests = _run_node_cases(
             node=node,
             extension=extension,
             runner=runner,
@@ -1273,8 +1126,13 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
         )
         _assert_no_positive_cli_fallback(real_log)
         real_output_evidence = _assert_real_results(real_results, cases)
-        real_fetch_evidence = _assert_fetch_evidence(real_fetches, real_results, cases)
-        native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        # The source names the lane: the native bridge, or loopback fetch.
+        transport = generated_transport(extension.read_text(encoding="utf-8"))
+        real_request_evidence = assert_guard_requests(real_requests, real_results, cases, transport=transport)
+        if transport == FETCH:
+            native_routes = _wait_for_native_route_metrics(daemon, len(cases))
+        else:
+            native_routes = wait_for_bridge_native_routes(daemon, len(cases))
         negative_home = root / "negative-home"
         negative_guard_home = root / "negative-guard-home"
         negative_workspace = root / "negative-workspace"
@@ -1293,12 +1151,14 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
         )
         negative_cases = _negative_cases()
         negative_results = []
+        negative_records: dict[str, list[dict[str, Any]]] = {}
         negative_errors = []
         for case in negative_cases:
-            # Each malformed fallback must start with a fresh extension runtime.
+            # Each unavailable-service case must start with a fresh extension runtime.
             # A timed-out child can leave containment state set for that process.
             negative_cases_path = root / f"{case['id']}-cases.json"
             negative_cases_path.write_text(json.dumps([case], ensure_ascii=True), encoding="utf-8")
+            log_offset = capture_log_size(negative_log)
             try:
                 case_results, _ = _run_node_cases(
                     node=node,
@@ -1312,17 +1172,18 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
                 negative_errors.append((case["id"], exc))
                 continue
             negative_results.extend(case_results)
+            negative_records[str(case["id"])] = read_capture_records(negative_log, log_offset)
         if negative_errors:
             failed_cases = ", ".join(str(case_id) for case_id, _ in negative_errors)
             raise ProbeError(f"generated Pi extension failed negative cases: {failed_cases}") from negative_errors[0][1]
-        negative_evidence = _assert_negative_results(negative_results, _read_records(negative_log))
+        negative_evidence = assert_unavailable_results(negative_results, negative_records, negative_cases)
         receipt = {
             "schema": "hol-guard.installed-pi-native-output.v1",
             "package_version": package_version,
             "source_sha": getattr(capabilities, "build_sha", None),
             "package_origin_kind": "non-editable-distribution-manifest",
             "source_checkout_import": False,
-            "execution_path": "unmodified-generated-extension-via-scoped-installed-daemon-native-resident",
+            "execution_path": f"unmodified-generated-extension-via-{transport}-to-scoped-native-resident",
             "native_prerequisite": "default-auto-status-checked",
             "workflow_order": "after-native-default-auto-probe",
             "daemon": "scoped-installed-GuardDaemonServer",
@@ -1336,16 +1197,17 @@ def _run_probe(*, json_path: Path | None = None) -> dict[str, Any]:
             },
             "generated_extension": {
                 "harness": "omp",
+                "transport": transport,
                 "real_cases": {
                     case_id: {
                         **real_output_evidence[case_id],
-                        "daemon_response": real_fetch_evidence[case_id],
+                        "daemon_response": real_request_evidence[case_id],
                     }
                     for case_id in real_output_evidence
                 },
-                "malformed_result_cases": negative_evidence,
+                "unavailable_service_cases": negative_evidence,
             },
-            "native_route_metrics": {"native_resident": native_routes["native_resident"]},
+            "native_route_metrics": native_routes,
             "cleanup": "authenticated_daemon_stop_then_native_resident_stop",
         }
     finally:

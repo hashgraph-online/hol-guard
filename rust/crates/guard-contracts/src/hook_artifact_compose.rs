@@ -107,6 +107,19 @@ pub struct ConfigActionQueryV1 {
     pub artifact: PolicyArtifactFactsV1,
 }
 
+/// The native edge result fields the policy stack floors on.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct NativeEdgeFactsV1 {
+    pub event_name: Option<String>,
+    pub policy_action: Value,
+    pub minimum_action: Value,
+    pub decision: Value,
+    pub reason_code: Value,
+    /// The runtime artifact is a `package_request`.
+    pub package_request: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct PolicyStackQueryV1 {
@@ -120,7 +133,8 @@ pub struct PolicyStackQueryV1 {
     pub payload_action_present: bool,
     pub payload_action: Value,
     pub native_floor: Value,
-    pub edge_floor: Value,
+    /// The native edge verdict for this hook; the op derives its floor.
+    pub native_edge: Option<NativeEdgeFactsV1>,
     pub current_action_override_present: bool,
     pub has_package: bool,
     pub package_policy_action: Value,

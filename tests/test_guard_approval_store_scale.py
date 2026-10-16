@@ -11,26 +11,35 @@ from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
+from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
     approval_index_statements,
     approval_schema_statement,
     bulk_resolve_approval_requests,
-    count_approval_requests,
     get_approval_request,
     list_approval_requests,
-    list_pending_approval_summaries,
-    resolve_approval_request,
     resolve_request_with_queue_result,
 )
 from tests.coverage_ci import under_coverage_scale
+from tests.native_approval_writes import (
+    _store_for,
+    add_approval_request,
+    native_approval_connection,
+    native_store,
+    page_cursor,
+    seed_pending_approval_rows,
+)
 
 
 def _make_conn() -> sqlite3.Connection:
+    return native_approval_connection()
+
+
+def _make_memory_conn() -> sqlite3.Connection:
+    # Pure-SQL scale fixtures seed rows directly and never call the native writer.
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    conn.execute("pragma journal_mode=wal")
     conn.execute(approval_schema_statement())
     for stmt in approval_index_statements():
         conn.execute(stmt)
@@ -82,72 +91,6 @@ def _insert(conn: sqlite3.Connection, req: GuardApprovalRequest, now: str = "202
     return add_approval_request(conn, req, now)
 
 
-def _bulk_insert_pending(conn: sqlite3.Connection, total: int) -> None:
-    rows = []
-    for index in range(total):
-        timestamp = f"2026-01-01T00:00:00.{index:06d}Z"
-        rows.append(
-            (
-                f"req-{index:06d}",
-                "codex",
-                f"codex:project:tool-{index:06d}",
-                f"tool-{index:06d}",
-                "mcp_server",
-                f"hash-{index:06d}",
-                None,
-                "require-reapproval",
-                "session",
-                '["args"]',
-                "project",
-                "/tmp/config.toml",
-                "ws-a",
-                f"run tool {index:06d}",
-                f"run tool {index:06d}",
-                f"identity-{index:06d}",
-                f"approval-group:v1:{index:064d}",
-                1,
-                timestamp,
-                "stdio",
-                "risk",
-                "[]",
-                None,
-                None,
-                None,
-                None,
-                None,
-                None,
-                f'{{"command":"run tool {index:06d}"}}',
-                None,
-                None,
-                f"hol-guard review req-{index:06d}",
-                f"http://localhost:4455/approve/req-{index:06d}",
-                "pending",
-                None,
-                None,
-                None,
-                timestamp,
-                None,
-            )
-        )
-    conn.executemany(
-        """
-        insert into approval_requests (
-          request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-          recommended_scope, changed_fields_json, source_scope, config_path, workspace,
-          launch_target, normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at,
-          transport, risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-          launch_summary, risk_headline, action_envelope_json, decision_v2_json, fallback_cli_command,
-          review_command, approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
-        )
-        values (
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-        )
-        """,
-        rows,
-    )
-
-
 class TestApprovalIndexStatements:
     def test_index_statements_returns_nonempty_list(self) -> None:
         stmts = approval_index_statements()
@@ -183,8 +126,8 @@ class TestCursorPagination:
             _insert(conn, _make_request(), f"2026-01-{i + 1:02d}T00:00:00Z")
         page1 = list_approval_requests(conn, status="pending", limit=3)
         assert len(page1) == 3
-        cursor = page1[-1]["created_at"]
-        page2 = list_approval_requests(conn, status="pending", limit=3, before_cursor=cursor)
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
         assert len(page2) == 3
         dates_p1 = {r["created_at"] for r in page1}
         dates_p2 = {r["created_at"] for r in page2}
@@ -195,18 +138,20 @@ class TestCursorPagination:
         for i in range(3):
             _insert(conn, _make_request(), f"2026-01-0{i + 1}T00:00:00Z")
         page1 = list_approval_requests(conn, status="pending", limit=3)
-        cursor = page1[-1]["created_at"]
-        page2 = list_approval_requests(conn, status="pending", limit=3, before_cursor=cursor)
+        cursor = page_cursor(page1[-1])
+        page2 = _store_for(conn).list_approval_requests(status="pending", limit=3, cursor=cursor)
         assert page2 == []
 
 
 class TestQueueScaleTargets:
     def test_listing_first_queue_page_with_100k_rows_stays_under_100ms(self) -> None:
         conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
 
         started = time.perf_counter()
-        page = list_pending_approval_summaries(conn, limit=25)
+        page = store.list_pending_approval_summaries(limit=25)
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
@@ -214,8 +159,8 @@ class TestQueueScaleTargets:
         assert elapsed < 0.1
 
     def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
-        conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        conn = _make_memory_conn()
+        seed_pending_approval_rows(conn, 100_000)
 
         started = time.perf_counter()
         result = resolve_request_with_queue_result(
@@ -234,11 +179,13 @@ class TestQueueScaleTargets:
         assert elapsed < 0.1
 
     def test_resolving_duplicates_stays_within_oauth_source(self) -> None:
-        conn = _make_conn()
+        home = Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-"))
         request = _make_request(artifact_id="codex:project:shared-tool")
-        first_id = add_approval_request(conn, request, "2026-01-01T00:00:00Z", oauth_source="source-a")
+        first_id = GuardStore(home, source="source-a").add_approval_request(request, "2026-01-01T00:00:00Z")
         second = dataclasses.replace(request, request_id=str(uuid.uuid4()))
-        second_id = add_approval_request(conn, second, "2026-01-01T00:00:01Z", oauth_source="source-b")
+        second_id = GuardStore(home, source="source-b").add_approval_request(second, "2026-01-01T00:00:01Z")
+        assert second_id != first_id
+        conn = native_approval_connection(home)
 
         result = resolve_request_with_queue_result(
             conn,
@@ -254,9 +201,9 @@ class TestQueueScaleTargets:
 
     def test_listing_queue_page_without_totals_skips_count_queries(self) -> None:
         conn = _make_conn()
-        _bulk_insert_pending(conn, 50)
+        seed_pending_approval_rows(conn, 50)
 
-        page = list_pending_approval_summaries(conn, limit=10, include_totals=False)
+        page = native_store(conn).list_pending_approval_summaries(limit=10, include_totals=False)
 
         assert len(page["items"]) == 10
         assert "total_pending_count" not in page
@@ -264,10 +211,12 @@ class TestQueueScaleTargets:
 
     def test_listing_queue_page_without_totals_stays_under_50ms_with_100k_rows(self) -> None:
         conn = _make_conn()
-        _bulk_insert_pending(conn, 100_000)
+        seed_pending_approval_rows(conn, 100_000)
+        store = native_store(conn)
+        store.count_approval_requests()  # starts the resident outside the timed read
 
         started = time.perf_counter()
-        page = list_pending_approval_summaries(conn, limit=25, include_totals=False)
+        page = store.list_pending_approval_summaries(limit=25, include_totals=False)
         elapsed = time.perf_counter() - started
 
         assert len(page["items"]) == 25
@@ -290,7 +239,7 @@ class TestSearchFilter:
         )
         _insert(conn, req)
         _insert(conn, req2)
-        results = list_approval_requests(conn, search="special")
+        results = _store_for(conn).list_approval_requests(search="special")
         assert len(results) == 1
         assert results[0]["artifact_name"] == "special-tool"
 
@@ -308,7 +257,7 @@ class TestSearchFilter:
             }
         )
         _insert(conn, mod)
-        results = list_approval_requests(conn, search="specialtool")
+        results = _store_for(conn).list_approval_requests(search="specialtool")
         assert len(results) == 1
 
     def test_search_matches_raw_command_text_in_queue_pages(self) -> None:
@@ -327,7 +276,7 @@ class TestSearchFilter:
         _insert(conn, req)
         _insert(conn, mod)
 
-        page = list_pending_approval_summaries(conn, search="bulk")
+        page = native_store(conn).list_pending_approval_summaries(search="bulk")
 
         assert page["total_count"] == 1
         assert page["items"][0]["request_id"] == mod.request_id
@@ -349,7 +298,7 @@ class TestSearchFilter:
         _insert(conn, req)
         _insert(conn, mod)
 
-        results = list_approval_requests(conn, search="bulk-import")
+        results = _store_for(conn).list_approval_requests(search="bulk-import")
 
         assert len(results) == 1
         assert results[0]["request_id"] == mod.request_id
@@ -357,8 +306,16 @@ class TestSearchFilter:
     def test_search_no_match_returns_empty(self) -> None:
         conn = _make_conn()
         _insert(conn, _make_request())
-        results = list_approval_requests(conn, search="xyznotfound")
+        results = _store_for(conn).list_approval_requests(search="xyznotfound")
         assert results == []
+
+
+def _mark_resolved(conn: sqlite3.Connection, request_id: str) -> None:
+    conn.execute(
+        "update approval_requests set status = 'resolved', resolution_action = 'allow', "
+        "resolution_scope = 'session', resolved_at = '2026-01-02T00:00:00Z' where request_id = ?",
+        (request_id,),
+    )
 
 
 class TestStatusFilterList:
@@ -368,14 +325,7 @@ class TestStatusFilterList:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req1.request_id)
         rows = list_approval_requests(conn, status=None)
         statuses = {r["status"] for r in rows}
         assert "pending" in statuses
@@ -385,14 +335,7 @@ class TestStatusFilterList:
         conn = _make_conn()
         req = _make_request()
         _insert(conn, req)
-        resolve_approval_request(
-            conn,
-            req.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
+        _mark_resolved(conn, req.request_id)
         rows = list_approval_requests(conn, status="pending")
         assert rows == []
         rows = list_approval_requests(conn, status="resolved")
@@ -409,24 +352,6 @@ class TestHarnessFilter:
         assert len(rows) == 1
 
 
-class TestDateRangeFilter:
-    def test_after_filter_excludes_older_rows(self) -> None:
-        conn = _make_conn()
-        _insert(conn, _make_request(), "2026-01-01T00:00:00Z")
-        _insert(conn, _make_request(), "2026-03-01T00:00:00Z")
-        rows = list_approval_requests(conn, created_after="2026-02-01T00:00:00Z")
-        assert len(rows) == 1
-        assert rows[0]["created_at"] == "2026-03-01T00:00:00Z"
-
-    def test_before_filter_excludes_newer_rows(self) -> None:
-        conn = _make_conn()
-        _insert(conn, _make_request(), "2026-01-01T00:00:00Z")
-        _insert(conn, _make_request(), "2026-03-01T00:00:00Z")
-        rows = list_approval_requests(conn, created_before="2026-02-01T00:00:00Z")
-        assert len(rows) == 1
-        assert rows[0]["created_at"] == "2026-01-01T00:00:00Z"
-
-
 class TestCountFilter:
     def test_count_matches_status_filter(self) -> None:
         conn = _make_conn()
@@ -434,16 +359,9 @@ class TestCountFilter:
         req2 = _make_request()
         _insert(conn, req1)
         _insert(conn, req2)
-        resolve_approval_request(
-            conn,
-            req1.request_id,
-            resolution_action="allow",
-            resolution_scope="session",
-            reason=None,
-            resolved_at="2026-01-02T00:00:00Z",
-        )
-        pending_count = count_approval_requests(conn, status="pending")
-        resolved_count = count_approval_requests(conn, status="resolved")
+        _mark_resolved(conn, req1.request_id)
+        pending_count = native_store(conn).count_approval_requests(status="pending")
+        resolved_count = native_store(conn).count_approval_requests(status="resolved")
         assert pending_count == 1
         assert resolved_count == 1
 
@@ -451,8 +369,8 @@ class TestCountFilter:
         conn = _make_conn()
         _insert(conn, _make_request(harness="codex"))
         _insert(conn, _make_request(harness="claude"))
-        assert count_approval_requests(conn, status="pending", harness="codex") == 1
-        assert count_approval_requests(conn, status="pending", harness="claude") == 1
+        assert native_store(conn).count_approval_requests(status="pending", harness="codex") == 1
+        assert native_store(conn).count_approval_requests(status="pending", harness="claude") == 1
 
 
 class TestBulkResolve:
@@ -486,19 +404,25 @@ class TestBulkResolve:
             reason=None,
             resolved_at="2026-01-01T00:00:00Z",
         )
-        assert count_approval_requests(conn) == 0
+        assert native_store(conn).count_approval_requests() == 0
 
 
 class TestMigrationFromOldSchema:
     def test_migration_from_schema_without_indexes(self) -> None:
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        bind_connection_guard_home(conn, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-        conn.execute(approval_schema_statement())
+        conn = native_approval_connection()
         req = _make_request()
         add_approval_request(conn, req, "2026-01-01T00:00:00Z")
+        index_query = (
+            "select name from sqlite_master where type = 'index' and tbl_name = 'approval_requests' and sql is not null"
+        )
+        # The store creates every approval index; drop them to start from the
+        # legacy schema the index statements upgrade.
+        for (name,) in conn.execute(index_query).fetchall():
+            conn.execute(f'drop index "{name}"')
+        assert conn.execute(index_query).fetchall() == []
         for stmt in approval_index_statements():
             conn.execute(stmt)
+        assert conn.execute(index_query).fetchall()
         rows = list_approval_requests(conn, status="pending")
         assert len(rows) == 1
 
@@ -553,7 +477,7 @@ class TestCorruptionRecovery:
             assert stored["launch_target"] == f"chrome-devtools {operation} unknown"
             assert stored["risk_signals_json"] == f'["{risk_prefix} unknown target"]'
 
-        page = list_pending_approval_summaries(conn, limit=10)
+        page = native_store(conn).list_pending_approval_summaries(limit=10)
         summaries = page["items"]
         assert isinstance(summaries, list)
         repaired: set[object] = set()

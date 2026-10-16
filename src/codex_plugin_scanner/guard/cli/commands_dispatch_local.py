@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import sys
 from typing import TYPE_CHECKING
@@ -19,6 +20,7 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from ..approval_gate_nudge import approval_gate_posture
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from . import protect_output as _protect_output
 from ._commands_shared import *
@@ -514,6 +516,7 @@ def _run_guard_status_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
+    payload["approval_gate"] = approval_gate_posture(context.guard_home)
     _emit("status", payload, getattr(args, "json", False))
     return 0
 
@@ -670,6 +673,24 @@ def _run_guard_install_command(
     store = _require_guard_store(store)
     if not bool(getattr(args, "dry_run", False)):
         _migrate_legacy_macos_secrets(store)
+    native_repair: dict[str, object] | None = None
+    if not bool(getattr(args, "dry_run", False)):
+        # Hooks fail closed without the native runtime, so fetch it before wiring any harness.
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        if repair is not None:
+            native_repair, repair_exit = repair
+            if repair_exit != 0 or native_repair.get("status") in {"failed", "blocked"}:
+                if getattr(args, "json", False):
+                    print(json.dumps({"status": "failed", "native_runtime_repair": native_repair}, indent=2))
+                else:
+                    print(str(native_repair.get("message") or ""), file=sys.stderr)
+                return 1
     try:
         if bool(getattr(args, "dry_run", False)):
             payload = build_managed_install_plan(args.harness, bool(getattr(args, "all", False)), context, store)
@@ -686,6 +707,8 @@ def _run_guard_install_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
+    if native_repair is not None:
+        payload["native_runtime_repair"] = native_repair
     _emit("install", payload, getattr(args, "json", False))
     return 0
 

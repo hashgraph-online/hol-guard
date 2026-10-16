@@ -191,7 +191,9 @@ fn an_open_quote_is_named_instead_of_the_extension_controls() {
         result.reason
     );
     assert!(
-        result.reason.contains("leaves a quote open"),
+        result
+            .reason
+            .contains("has a shell syntax error: it leaves a quote open"),
         "{}",
         result.reason
     );
@@ -260,6 +262,56 @@ fn a_credential_setting_is_named_with_a_safe_alternative() {
                 && result.reason.contains("ask the user to run the command")
                 && !result.reason.contains("fixture-value")
                 && !result.reason.contains("hol-guard doctor"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+#[test]
+fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-node-heap-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    for command in [
+        "NODE_OPTIONS=--max-old-space-size=6144 bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=6144 npx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result
+                .reason
+                .contains("the NODE_OPTIONS setting can load code")
+                && result.reason.contains(
+                    "`node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit`"
+                ),
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // Anything beyond a bare memory size keeps the plain refusal.
+    for command in [
+        "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
+        "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains("Run the command without it")
+                && !result.reason.contains("more memory"),
             "{command}: {}",
             result.reason
         );

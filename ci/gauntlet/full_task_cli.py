@@ -63,6 +63,47 @@ def validate(args: argparse.Namespace) -> None:
         raise ValueError("GitHub options require --profile full-tasks")
 
 
+def validate_harness(args: argparse.Namespace) -> None:
+    """Claude Code and Codex run local tasks on this host; GitHub, Docker and canary worlds stay on omp."""
+    from .full_task_harness import FULL_TASK_HARNESSES
+    from .full_tasks import REMOTE_TASKS
+
+    if args.harness not in FULL_TASK_HARNESSES:
+        raise ValueError("--profile full-tasks supports --harness omp, claude-code or codex")
+    if (
+        args.full_task_docker
+        or args.github_owner
+        or args.full_task_canary
+        or args.full_task_seed_repo
+        or args.full_task_account_home
+    ):
+        raise ValueError(
+            "--full-task-docker, --github-owner and the --full-task-canary/seed/account options need --harness omp"
+        )
+    if remote := sorted(set(args.cases or ()) & REMOTE_TASKS):
+        raise ValueError(f"{', '.join(remote)} reach real GitHub; run them with --harness omp --full-task-docker")
+    if args.jobs != 1:
+        raise ValueError("full tasks run one at a time; omit --jobs")
+
+
+def run_harness_profile(args: argparse.Namespace) -> dict[str, Any]:
+    """Run local full tasks through Claude Code or Codex and Guard's installed hooks."""
+    validate_harness(args)
+    from .full_task_harness import run_harness_full_tasks
+
+    return run_harness_full_tasks(
+        harness=args.harness,
+        expected_source_sha=args.expected_source_sha,
+        output=args.output,
+        mode=args.full_task_mode,
+        model_timeout=args.timeout,
+        selected_ids=args.cases,
+        executable=args.harness_cli,
+        model=args.harness_model,
+        work_root=args.work_root,
+    )
+
+
 def run_profile(args: argparse.Namespace, provider: dict[str, Any]) -> dict[str, Any]:
     owner = args.github_owner or DEFAULT_OWNER
     if args.full_task_docker:
@@ -107,4 +148,4 @@ def run_profile(args: argparse.Namespace, provider: dict[str, Any]) -> dict[str,
     )
 
 
-__all__ = ["add_arguments", "run_profile", "validate"]
+__all__ = ["add_arguments", "run_harness_profile", "run_profile", "validate", "validate_harness"]

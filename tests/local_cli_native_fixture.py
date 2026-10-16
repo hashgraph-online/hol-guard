@@ -59,7 +59,7 @@ def ensure_keyed_home(guard_home: Path) -> None:
 
 @pytest.fixture(autouse=True)
 def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[None]:
-    from codex_plugin_scanner.guard import local_cli_grant_decision
+    from codex_plugin_scanner.guard import local_cli_grant_decision, local_cli_hook
     from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 
     monkeypatch.setenv("HOL_GUARD_NATIVE", "force")
@@ -80,6 +80,13 @@ def native_local_cli_grant_resident(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     monkeypatch.setattr(
         local_cli_grant_decision, "native_local_cli_grant", keyed(local_cli_grant_decision.native_local_cli_grant)
     )
+    native_hook = local_cli_hook.native_local_cli_hook
+
+    def keyed_hook(store: Any, **kwargs: Any) -> Any:
+        ensure_keyed_home(store.guard_home)
+        return native_hook(store, **kwargs)
+
+    monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", keyed_hook)
     yield
     for home in tuple(homes):
         close_native_residents(home)

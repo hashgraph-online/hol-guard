@@ -385,3 +385,84 @@ fn windows_floor_reviews_only_a_compound_python_launch() {
     assert!(floor("/usr/bin/python3 -c 'print(1)'").is_none());
     assert!(floor("cd /work && ls -la").is_none());
 }
+
+/// [`Host`] whose resident secret classifier finds nothing.
+struct SecretFreeHost;
+
+impl InspectionHost for SecretFreeHost {
+    fn env(&self, _: &str) -> Option<String> {
+        None
+    }
+    fn secret_content_found(&self, _: &str, _: bool) -> bool {
+        false
+    }
+    fn git_executable(&self) -> Option<String> {
+        None
+    }
+    fn git_safety(&self, _: GitCheck, _: Option<&str>, _: &[String]) -> bool {
+        false
+    }
+    fn git_binary_trusted(&self, _: &str, _: &str) -> bool {
+        false
+    }
+    fn run_git(&self, _: &str, _: &[String], _: &str) -> GitRun {
+        GitRun::Failed("unavailable")
+    }
+}
+
+/// A recorded `eph_safe` vector that the ported check accepts.
+const EPHEMERAL_BODY_WORKFLOW: &str = r#"f="$(mktemp)"
+cat > "$f" <<'EOF'
+body
+EOF
+if grep -nE 'password' "$f"
+then
+  echo "found"
+  exit 1
+else
+  cat "$f"
+fi
+gh pr create --title "t" --body-file "$f""#;
+
+fn benign_github_shell(host: &dyn InspectionHost, command: &str) -> Value {
+    let ctx = Ctx::new(host, "/work", "/home/user");
+    evaluate(
+        "benign_github_shell",
+        &json!({"command_text": command}),
+        &ctx,
+        None,
+    )
+    .expect("benign_github_shell answers")
+}
+
+#[test]
+fn static_ephemeral_pr_body_is_benign_github_shell() {
+    assert_eq!(
+        benign_github_shell(&SecretFreeHost, EPHEMERAL_BODY_WORKFLOW),
+        json!(true)
+    );
+}
+
+#[test]
+fn ephemeral_pr_body_with_secret_or_expansion_is_not_benign() {
+    assert_eq!(
+        benign_github_shell(&Host, EPHEMERAL_BODY_WORKFLOW),
+        json!(false)
+    );
+    let unquoted = EPHEMERAL_BODY_WORKFLOW.replacen("<<'EOF'", "<<EOF", 1);
+    assert_eq!(
+        benign_github_shell(&SecretFreeHost, &unquoted),
+        json!(false)
+    );
+    for command in ["ls", "gh run view 1 --log", ""] {
+        assert_eq!(benign_github_shell(&SecretFreeHost, command), json!(false));
+    }
+}
+
+#[test]
+fn benign_github_shell_requires_command_text() {
+    assert_eq!(
+        ask("benign_github_shell", &json!({"command_text": 3})),
+        Err("native_sensitive_request_input_invalid")
+    );
+}

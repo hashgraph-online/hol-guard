@@ -5,19 +5,17 @@ import { renderToStaticMarkup } from "react-dom/server";
 import type { ExtensionCatalogSummary } from "../extension-controls-normalize";
 import {
   advertiseUrl,
-  chooseSponsoredCard,
-  chooseStableCard,
   joinDiscoveryPlacements,
   parseDiscoveryProjection,
-  shouldShowPurchasePrompt,
   sponsoredCardLabel,
-  MIN_ORGANIC_ROWS_BEFORE_IN_FEED,
+  featuredWindowLabel,
+  orderFeaturedFirst,
   type DiscoveryPlacement,
 } from "./extensions-discover-model";
 
 /**
- * Shared semantic vectors for the Discover selection model (mirrors the
- * TypeScript vectors in points-portal and the native Rust suite): local
+ * Shared semantic vectors for the Discover selection model (mirroring the
+ * native Rust suite): local
  * catalog join with unknown-id suppression, one featured and one in-feed
  * position, visit-stable selection, prompt conditions, and the safe
  * advertise URL labels.
@@ -97,73 +95,6 @@ const CATALOG = Array.from({ length: 10 }, (_, index) =>
   );
   assert.equal(joined.featured.length, 1);
   assert.equal(joined.sponsored.length, 2);
-  const featured = chooseStableCard(joined.featured, null, 0.99);
-  assert.equal(featured?.placement.publicPlacementId, "33333333-3333-4333-8333-333333333333");
-  const sponsored = chooseSponsoredCard(joined.sponsored, null, 0.99, featured?.placement.extensionId ?? null);
-  assert.equal(sponsored?.placement.publicPlacementId, "55555555-5555-4555-8555-555555555555");
-  assert.notEqual(sponsored?.placement.extensionId, featured?.placement.extensionId);
-}
-
-// Visit-stable selection: the current card survives a recompute unchanged
-// and polls never shuffle a valid visible card (UX-07).
-{
-  const entries = joinDiscoveryPlacements(
-    [
-      placement({ publicPlacementId: "66666666-6666-4666-8666-666666666666", product: "always", extensionId: "command.tool-03" }),
-      placement({ publicPlacementId: "77777777-7777-4777-8777-777777777777", product: "always", extensionId: "command.tool-04" }),
-    ],
-    CATALOG,
-    NOW_MS,
-  ).featured;
-  const first = chooseStableCard(entries, null, 0.1);
-  assert.ok(first);
-  const again = chooseStableCard(entries, first.placement.publicPlacementId, 0.9);
-  assert.equal(again?.placement.publicPlacementId, first.placement.publicPlacementId);
-  // The selected card left the snapshot, so the next choice is the card that remains.
-  const remaining = entries.filter(
-    (entry) => entry.placement.publicPlacementId !== first.placement.publicPlacementId,
-  );
-  const afterWithdrawal = chooseStableCard(remaining, first.placement.publicPlacementId, 0.9);
-  assert.equal(afterWithdrawal?.placement.publicPlacementId, remaining[0]?.placement.publicPlacementId);
-  assert.notEqual(afterWithdrawal?.placement.publicPlacementId, first.placement.publicPlacementId);
-}
-
-// The purchase prompt appears only for a ready, empty, authoritatively open
-// feed with at least eight organic rows (UX-05/UX-06).
-{
-  const openOffer = {
-    product: "sponsored" as const,
-    availability: "open" as const,
-    indicativeAmountCents: 20000,
-    currency: "usd",
-    checkedAt: END,
-    quoteRequired: true as const,
-  };
-  const empty = { featured: [], sponsored: [] };
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: openOffer, organicCount: 10 }),
-    true,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: { ...openOffer, availability: "sold_out" }, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: { ...openOffer, availability: "unknown" }, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: null, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "unavailable", joined: empty, sponsoredOffer: openOffer, organicCount: 10 }),
-    false,
-  );
-  assert.equal(
-    shouldShowPurchasePrompt({ status: "ready", joined: empty, sponsoredOffer: openOffer, organicCount: MIN_ORGANIC_ROWS_BEFORE_IN_FEED - 1 }),
-    false,
-  );
 }
 
 // Paid labels: every paid card says Sponsored; featured is Sponsored · Featured (UX-04).
@@ -183,6 +114,14 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   assert.ok(!feed.includes("returnUrl"));
   const known = advertiseUrl("extensions_header", "command.tool-07");
   assert.ok(known.includes("extension=command.tool-07"));
+  // The free path for a maker already in the catalog is the same link with a
+  // declared intent; it still carries nothing about this device.
+  const claim = advertiseUrl("extensions_feed", undefined, "claim");
+  // The claim path travels beside the campaign tag, never over it.
+  assert.ok(claim.includes("action=claim"));
+  assert.ok(claim.includes("intent=extension-promotion"));
+  assert.ok(claim.includes("placement=extensions_feed"));
+  assert.ok(!claim.includes("extension="));
 }
 
 // The projection parser rejects malformed shapes instead of trusting them.
@@ -225,6 +164,80 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   );
   assert.ok(markup.includes("Sponsored"));
   assert.ok(markup.includes("Featured"));
+}
+
+// Only a time-window feature names its end; featured rows lead, the rest keep order.
+{
+  assert.equal(featuredWindowLabel(placement({ product: "always" })), null);
+  assert.match(featuredWindowLabel(placement({ product: "time_slot" })) ?? "", /^Featured until /);
+  const ordered = orderFeaturedFirst(
+    [{ extension_id: "a" }, { extension_id: "b" }, { extension_id: "c" }],
+    new Set(["c"]),
+  );
+  assert.deepEqual(ordered.map((entry) => entry.extension_id), ["c", "a", "b"]);
+}
+
+// Offers are normalized, and a slot count survives only as a complete pair
+// that agrees with the availability it arrived with.
+{
+  const parse = (offers: unknown[]) => parseDiscoveryProjection({
+    remainingLeaseMs: 25_000,
+    policyAllowed: true,
+    snapshot: {
+      schemaVersion: "guard.extensions.discovery.v1",
+      snapshotId: "22222222-2222-4222-8222-222222222222",
+      state: "ready",
+      enabled: true,
+      reasonCode: null,
+      generatedAt: "2026-10-13T12:00:00.000Z",
+      leaseExpiresAt: END,
+      placements: [],
+      offers,
+    },
+  })?.snapshot.offers ?? [];
+
+  const base = {
+    product: "sponsored",
+    availability: "open",
+    indicativeAmountCents: 4900,
+    currency: "usd",
+    checkedAt: "2026-10-13T12:00:00.000Z",
+    quoteRequired: true,
+  };
+  const counted = parse([{ ...base, openSlots: 3, totalSlots: 4 }])[0];
+  assert.equal(counted?.openSlots, 3);
+  assert.equal(counted?.totalSlots, 4);
+
+  // Half a pair, a contradiction with availability, an impossible pair, and
+  // counts on an unknown offer all drop the counts and keep the offer.
+  for (const broken of [
+    { ...base, openSlots: 3 },
+    { ...base, openSlots: 0, totalSlots: 4 },
+    { ...base, availability: "sold_out", openSlots: 2, totalSlots: 4 },
+    { ...base, openSlots: 5, totalSlots: 4 },
+    { ...base, openSlots: 1, totalSlots: 0 },
+    { ...base, openSlots: 1.5, totalSlots: 4 },
+    {
+      ...base,
+      availability: "unknown",
+      indicativeAmountCents: null,
+      currency: null,
+      checkedAt: null,
+      openSlots: 3,
+      totalSlots: 4,
+    },
+  ]) {
+    const parsed = parse([broken]);
+    assert.equal(parsed.length, 1);
+    assert.equal(parsed[0]?.openSlots, null);
+    assert.equal(parsed[0]?.totalSlots, null);
+  }
+
+  // An offer the dashboard cannot read is dropped, not rendered half-known.
+  assert.equal(parse([{ ...base, product: "banner" }]).length, 0);
+  assert.equal(parse([{ ...base, availability: "maybe" }]).length, 0);
+  assert.equal(parse([{ ...base, quoteRequired: false }]).length, 0);
+  assert.equal(parse(["sponsored"]).length, 0);
 }
 
 console.log("extensions-discover-model.test.ts: all assertions passed");

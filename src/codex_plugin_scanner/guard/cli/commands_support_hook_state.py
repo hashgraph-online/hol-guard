@@ -88,12 +88,6 @@ def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None 
         output_stream.write("")
 
 
-def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
-    if tool_name is not None:
-        return f"claude_permission_notice:{session_id}:{tool_name}"
-    return f"claude_permission_notice:{session_id}"
-
-
 def _claude_pending_permission_index_key(session_id: str) -> str:
     return f"claude_pending_permissions:{session_id}"
 
@@ -343,10 +337,6 @@ def _cursor_shell_command_fingerprint(command: str) -> str:
     return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
 
 
-def _cursor_pending_shell_index_key(conversation_id: str) -> str:
-    return f"cursor_pending_shells:{conversation_id}"
-
-
 def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
     return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
@@ -520,12 +510,10 @@ __all__ = [
     "_claude_guard_approval_question_text",
     "_claude_pending_permission_index_key",
     "_claude_pending_permission_state_key",
-    "_claude_permission_notice_state_key",
     "_cursor_after_shell_observed",
     "_cursor_conversation_id",
     "_cursor_native_shell_allow_state_key",
     "_cursor_native_shell_is_approved",
-    "_cursor_pending_shell_index_key",
     "_cursor_pending_shell_state_key",
     "_cursor_shell_command_fingerprint",
     "_cursor_shell_command_from_payload",

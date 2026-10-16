@@ -23,6 +23,9 @@ pub const HOOK_AUTHORITY_STATE_REQUEST_SCHEMA: &str = "guard-hook-authority-stat
 pub const HOOK_AUTHORITY_STATE_RESULT_SCHEMA: &str = "guard-hook-authority-state-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const HOOK_AUTHORITY_STATE_FEATURE: &str = "hook-authority-state-v1";
+/// Capability for the single-transaction Cursor lookup and removal and the
+/// Claude session discard ops.
+pub const HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE: &str = "hook-authority-state-session-ops-v1";
 /// Largest canonical request serialization the op will accept.
 pub const HOOK_AUTHORITY_STATE_MAX_BYTES: usize = 512 * 1024;
 

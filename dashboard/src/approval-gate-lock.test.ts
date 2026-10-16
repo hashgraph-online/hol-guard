@@ -9,7 +9,7 @@ import {
 } from "./approval-gate-utils";
 import { ApprovalPasswordModal } from "./approval-center-review-cards";
 import { isApprovalProofSubmitDisabled } from "./approval-proof-inline";
-import { approvalGateRefreshFailureMessage } from "./review-decision-card";
+import { approvalGateRefreshFailureMessage } from "./use-review-decision-resolve";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {

@@ -34,7 +34,7 @@ fn fallback() -> Vec<String> {
 }
 
 #[test]
-fn only_a_stable_codex_at_or_above_0_131_applies_the_rewrite() {
+fn a_codex_from_0_131_or_a_later_pre_release_applies_the_rewrite() {
     for (stdout, supported) in [
         ("codex-cli 0.131.0", true),
         ("codex-cli 0.131.0\n", true),
@@ -42,6 +42,14 @@ fn only_a_stable_codex_at_or_above_0_131_applies_the_rewrite() {
         ("codex-cli 0.200.12", true),
         ("codex-cli 0.130.9", false),
         ("codex-cli 0.131.0-beta.1", false),
+        ("codex-cli 0.130.0-alpha.1", false),
+        ("codex-cli 0.132.0-alpha.1", true),
+        ("codex-cli 0.163.0-alpha.3\n", true),
+        ("codex-cli 2.0.0-rc.1", true),
+        ("codex-cli 0.163.0-", false),
+        ("codex-cli 0.163.0-alpha_3", false),
+        ("codex-cli 0.163.0-alpha 3", false),
+        ("codex-cli 0.163-alpha.3", false),
         ("codex-cli 0.131", false),
         ("codex-cli 0.131.0.1", false),
         ("codex-cli 0..131", false),
@@ -51,6 +59,28 @@ fn only_a_stable_codex_at_or_above_0_131_applies_the_rewrite() {
         ("", false),
     ] {
         assert_eq!(version_supported(stdout), supported, "{stdout:?}");
+    }
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[test]
+fn codex_is_its_own_binary_or_an_official_release_binary() {
+    use std::path::Path;
+
+    for (path, codex) in [
+        ("/opt/homebrew/bin/codex", true),
+        ("/x/vendor/aarch64-apple-darwin/codex/codex", true),
+        ("/usr/local/bin/codex-x86_64-unknown-linux-musl", true),
+        ("/Users/a/Downloads/codex-aarch64-apple-darwin", true),
+        ("/usr/local/bin/node", false),
+        ("/Users/a/.bun/bin/bun", false),
+        ("/tmp/codex-evil", false),
+        ("/tmp/codex-", false),
+        ("/tmp/codex-aarch64-apple-darwin-extra", false),
+        ("/tmp/my-codex", false),
+        ("/tmp/codex.js", false),
+    ] {
+        assert_eq!(super::codex::is_codex(Path::new(path)), codex, "{path}");
     }
 }
 
@@ -133,6 +163,20 @@ fn the_sink_prefix_is_the_isolated_interpreter_and_bootstrap() {
         &[PYTHON, "-c", "-I", BOOTSTRAP, "guard"].map(str::to_owned)[..],
         &[PYTHON, "-I", "-c", "import os", "guard"].map(str::to_owned)[..],
         &[PYTHON, "-I", "-c", BOOTSTRAP, "hook"].map(str::to_owned)[..],
+    ] {
+        assert_eq!(sink_prefix(broken), None, "{broken:?}");
+    }
+}
+
+#[test]
+fn a_frozen_fallback_names_the_guard_executable_as_the_sink_prefix() {
+    let frozen = [PYTHON, "hook", "--harness", "codex", "--json"].map(str::to_owned);
+    assert_eq!(sink_prefix(&frozen), Some(&frozen[..1]));
+    for broken in [
+        &frozen[..3],
+        &["hol-guard", "hook", "--harness", "codex"].map(str::to_owned)[..],
+        &[PYTHON, "hook", "--harness", "claude"].map(str::to_owned)[..],
+        &[PYTHON, "--harness", "hook", "codex"].map(str::to_owned)[..],
     ] {
         assert_eq!(sink_prefix(broken), None, "{broken:?}");
     }

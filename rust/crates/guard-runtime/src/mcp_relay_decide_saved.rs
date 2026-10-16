@@ -12,20 +12,19 @@
 //! The proxy composes each candidate with the portable Git identity of the
 //! workspace (`resolve_policy_decision_lookup`,
 //! `store_portable_project_memory.py`). The resident derives that identity
-//! itself (`project_identity`) and composes it the same way. It answers only
-//! when the identity resolves exactly, every portable row is bound to that
-//! identity, and no workspace row is bound anywhere but this workspace or its
-//! identity. Every other answer defers the call.
+//! itself (`project_identity`) and composes it the same way, and answers
+//! whenever that identity resolves exactly. A row bound to another workspace
+//! or another project's identity is read by no lookup of this one: every
+//! workspace selector the lookup binds is this workspace's own.
 
-use super::store::{Probe, Saved, SAVED_REMOTE, STORE_UNREADABLE};
+use super::store::{Probe, Saved};
 use super::POLICY_NEED;
 use crate::context_digest::python_strip;
 use crate::mcp_tool_policy_lookup::{most_restrictive, without_permission_elevation};
 use crate::memory_pattern::{verdict, MemoryRequest};
-use crate::policy_decision_lookup_op::{evaluate_non_consuming, workspace_policy_key};
-use crate::project_identity::{resolve, PortableIdentity, PORTABLE_PROJECT_IDENTITY_PREFIX};
+use crate::policy_decision_lookup_op::evaluate_non_consuming;
+use crate::project_identity::{portable_workspace, resolve_relative, PortableIdentity};
 use guard_contracts::{ApprovalReuseDiagnosticRequestV1, APPROVAL_REUSE_DIAGNOSTIC_REQUEST_SCHEMA};
-use rusqlite::OptionalExtension;
 use serde_json::{json, Value};
 
 const SAVED_LOOKUP: &str = "mcp_relay_saved_lookup_failed";
@@ -55,7 +54,6 @@ impl Saved<'_> {
     pub(super) fn answer(&self, need: &Value) -> Result<Value, &'static str> {
         match need.get("kind").and_then(Value::as_str) {
             Some("grant_lookup") => {
-                self.portable_rows_bound_to(None)?;
                 let lookup = self.probe(&Probe {
                     harness: text(need, "harness")?,
                     artifact_id: text(need, "selector")?,
@@ -67,10 +65,7 @@ impl Saved<'_> {
                 Ok(json!({"decision": field(&lookup, "decision")}))
             }
             Some("policy_lookup") => self.policy_lookup(need),
-            Some("reuse_diagnostic") => {
-                self.portable_rows_bound_to(None)?;
-                Ok(json!({"reason": self.diagnosis(need)?}))
-            }
+            Some("reuse_diagnostic") => Ok(json!({"reason": self.diagnosis(need)?})),
             _ => Err(POLICY_NEED),
         }
     }
@@ -119,7 +114,9 @@ impl Saved<'_> {
 
     /// One candidate as the proxy reads it (`Prober::candidate`): the local
     /// lookup composed most restrictive with the restrictive-only lookup
-    /// under the workspace's portable identity, when it has one.
+    /// under the workspace's portable identity, when it has one. A workspace
+    /// that already names that identity reads the portable lookup alone, as
+    /// `resolve_policy_decision_lookup` returns it.
     fn candidate(&self, probe: &Probe<'_>, portable: Option<&str>) -> Result<Value, &'static str> {
         let Some(portable) = portable else {
             return self.probe(probe);
@@ -128,101 +125,89 @@ impl Saved<'_> {
             workspace: Some(portable),
             ..*probe
         })?);
+        if probe.workspace.map(python_strip) == Some(portable) {
+            return Ok(preview);
+        }
         let local = self.probe(probe)?;
         most_restrictive(&[local, preview]).ok_or(SAVED_LOOKUP)
     }
 
     /// The portable identity the proxy composes for `workspace`
-    /// (`_portable_project_workspace`), once every portable row is bound to
-    /// it and no workspace row is bound to another workspace. A workspace
-    /// that already names a portable identity reads only that identity, and
-    /// one whose identity does not resolve exactly, defers.
+    /// (`_portable_project_workspace`). A workspace that already names a
+    /// portable identity is its own, and one whose identity the resident
+    /// does not resolve exactly defers the call.
     fn portable_identity(&self, workspace: Option<&str>) -> Result<Option<String>, &'static str> {
-        let Some(workspace) = workspace.filter(|value| !python_strip(value).is_empty()) else {
-            self.portable_rows_bound_to(None)?;
+        let Some(workspace) = workspace else {
             return Ok(None);
         };
-        if python_strip(workspace).starts_with(PORTABLE_PROJECT_IDENTITY_PREFIX) {
-            return Err(SAVED_PORTABLE);
+        match portable_workspace(workspace) {
+            PortableIdentity::Absent => Ok(None),
+            PortableIdentity::Identity(identity) => Ok(Some(identity)),
+            PortableIdentity::Unknown => Err(SAVED_PORTABLE),
         }
-        let key = workspace_policy_key(Some(workspace)).ok_or(SAVED_PORTABLE)?;
-        let identity = match resolve(workspace) {
-            PortableIdentity::Absent => None,
-            PortableIdentity::Identity(identity) => Some(identity),
-            PortableIdentity::Unknown => return Err(SAVED_PORTABLE),
+    }
+
+    /// One candidate for a lane that names its own probe rather than a need
+    /// the resident sent. The portable identity is resolved here, as
+    /// `resolve_policy_decision_lookup` resolves it for every lookup it
+    /// answers, so a caller cannot read the local row alone by mistake.
+    ///
+    /// The package lane probes a scope token rather than a directory, and
+    /// `_workspace_path` reads such a name against the working directory of
+    /// the process that composed it, so that directory is resolved from the
+    /// facts the caller reported rather than from the resident's own.
+    pub(super) fn package_candidate(
+        &self,
+        probe: &Probe<'_>,
+        process_cwd: &str,
+    ) -> Result<Value, &'static str> {
+        let identity = match probe.workspace {
+            None => None,
+            Some(workspace) => match resolve_relative(workspace, process_cwd) {
+                PortableIdentity::Absent => None,
+                PortableIdentity::Identity(identity) => Some(identity),
+                PortableIdentity::Unknown => return Err(SAVED_PORTABLE),
+            },
         };
-        self.portable_rows_bound_to(identity.as_deref())?;
-        // Without an identity, the key stands in for it.
-        let own = identity.as_deref().unwrap_or(key.as_str());
-        if self.any(
-            "select 1 from policy_decisions where scope = 'workspace' \
-             and workspace is not null and workspace not in (?1, ?2, ?3) limit 1",
-            &[key.as_str(), workspace, own],
-        )? || self.any(
-            "select 1 from guard_local_once_approvals \
-             where workspace is not null and workspace not in (?1, ?2) limit 1",
-            &[key.as_str(), own],
-        )? {
-            return Err(SAVED_PORTABLE);
-        }
-        Ok(identity)
+        self.candidate(probe, identity.as_deref())
     }
 
-    /// Defers unless every row bound to a portable identity is bound to
-    /// `identity`: a local save keys every workspace, so a row under another
-    /// identity came from elsewhere.
-    fn portable_rows_bound_to(&self, identity: Option<&str>) -> Result<(), &'static str> {
-        for table in &self.portable_tables {
-            let elsewhere = match identity {
-                None => true,
-                Some(identity) => self.any(
-                    &format!(
-                        "select 1 from {table} where workspace like 'git-project:v1:%' \
-                         and workspace <> ?1 limit 1"
-                    ),
-                    &[identity],
-                )?,
-            };
-            if elsewhere {
-                return Err(SAVED_REMOTE);
-            }
-        }
-        Ok(())
-    }
-
-    /// Whether `query` finds a row.
-    fn any(&self, query: &str, values: &[&str]) -> Result<bool, &'static str> {
-        self.connection
-            .query_row(
-                query,
-                rusqlite::params_from_iter(values.iter().copied()),
-                |_| Ok(()),
-            )
-            .optional()
-            .map(|found| found.is_some())
-            .map_err(|_| STORE_UNREADABLE)
-    }
-
-    fn probe(&self, probe: &Probe<'_>) -> Result<Value, &'static str> {
+    pub(super) fn probe(&self, probe: &Probe<'_>) -> Result<Value, &'static str> {
         // A read the proxy would follow with an audit write fails here, on the
         // read-only snapshot, and defers the call.
         evaluate_non_consuming(&self.lookup_request(probe), self.connection)
             .map_err(|_| SAVED_LOOKUP)
     }
 
-    /// `approval_reuse_diagnostic`'s reason: the first request carries no
-    /// evidence, and the evidence the resident names follows.
+    /// `approval_reuse_diagnostic`'s reason for the selectors `need` names.
     fn diagnosis(&self, need: &Value) -> Result<Value, &'static str> {
+        self.diagnosed(&Probe {
+            harness: text(need, "harness")?,
+            artifact_id: text(need, "artifact_id")?,
+            artifact_hash: Some(text(need, "artifact_hash")?),
+            workspace: optional(need, "workspace")?,
+            publisher: optional(need, "publisher")?,
+            // The diagnostic selects on the saved row, not on an exact
+            // command match, so it reads no exact-match context.
+            exact_match_context: None,
+        })
+        .map(|(reason, _)| reason)
+    }
+
+    /// `approval_reuse_diagnostic`'s reason and the hash it found stored: the
+    /// first request carries no evidence, and the evidence the resident names
+    /// follows.
+    pub(super) fn diagnosed(&self, probe: &Probe<'_>) -> Result<(Value, Value), &'static str> {
         let mut request = ApprovalReuseDiagnosticRequestV1 {
             schema: APPROVAL_REUSE_DIAGNOSTIC_REQUEST_SCHEMA.to_owned(),
             request_id: String::new(),
             store_path: self.store_path.clone(),
             guard_home: self.guard_home.clone(),
-            harness: text(need, "harness")?.to_owned(),
-            artifact_id: text(need, "artifact_id")?.to_owned(),
-            artifact_hash: Some(text(need, "artifact_hash")?.to_owned()),
-            workspace: optional(need, "workspace")?.map(str::to_owned),
-            publisher: optional(need, "publisher")?.map(str::to_owned),
+            harness: probe.harness.to_owned(),
+            artifact_id: probe.artifact_id.to_owned(),
+            artifact_hash: probe.artifact_hash.map(str::to_owned),
+            workspace: probe.workspace.map(str::to_owned),
+            publisher: probe.publisher.map(str::to_owned),
             now: self.now.clone(),
             evidence: None,
         };
@@ -252,7 +237,7 @@ impl Saved<'_> {
         {
             return Err(SAVED_DIAGNOSTIC);
         }
-        Ok(reason.clone())
+        Ok((reason.clone(), stored.clone()))
     }
 }
 

@@ -11,6 +11,10 @@ use std::path::Path;
 
 /// Runner options that neither name a package nor allow a fetch.
 const RUNNER_OPTIONS: &[&str] = &["--no-install", "--bun"];
+/// `npx` options that only answer its install prompt in advance. They allow a
+/// fetch of a tool that is missing, never of one installed where it runs, and
+/// only an installed tool is admitted here. Bun's runners are not given them.
+const NPX_PROMPT_OPTIONS: &[&str] = &["--yes", "-y"];
 
 /// The arguments after the runner itself, when `segment` is one.
 pub(super) fn runner_arguments(segment: &CommandSegmentV1) -> Option<&[String]> {
@@ -50,9 +54,11 @@ pub(super) fn installed_tools(model: &CanonicalCommandV1, workspace: &Path) -> O
         if !segment.environment_names.is_empty() || segment.path_overridden {
             return None;
         }
-        let tool = arguments
-            .iter()
-            .find(|argument| !RUNNER_OPTIONS.contains(&argument.as_str()))?;
+        let npx = segment.executable.as_deref() == Some("npx");
+        let tool = arguments.iter().find(|argument| {
+            !(RUNNER_OPTIONS.contains(&argument.as_str())
+                || npx && NPX_PROMPT_OPTIONS.contains(&argument.as_str()))
+        })?;
         let bare = !tool.starts_with(['.', '-'])
             && tool
                 .chars()
@@ -80,5 +86,42 @@ pub(super) fn intent_only_runs(intent: &PackageIntent, tools: &[String]) -> bool
                 && target.package_name.as_deref().is_some_and(|name| {
                     name == target.raw_spec && tools.iter().any(|tool| tool == name)
                 })
+        })
+}
+
+/// Whether `command`, which a narrower read-only profile claimed, passes the
+/// workspace route's runner gate: every package runner starts an installed
+/// project tool, every package-manager step is local work, and nothing
+/// installs, executes a one-shot package or syncs a lockfile. `bunx vitest`
+/// reaches the workspace sandbox only when vitest is installed.
+pub(in crate::pretool) fn runners_admitted(
+    command: &str,
+    workspace: &Path,
+    home: Option<&Path>,
+) -> bool {
+    let Ok(model) = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: command.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    }) else {
+        return false;
+    };
+    let tools = installed_tools(&model, workspace);
+    if tools.is_none() && model.segments.iter().any(|s| runner_arguments(s).is_some()) {
+        return false;
+    }
+    super::package::local_package_work(&model, tools.is_some())
+        && crate::package_intent_parser::parse_package_intent(
+            command,
+            Some(workspace),
+            home,
+            None,
+            None,
+        )
+        .is_none_or(|intent| {
+            tools
+                .as_deref()
+                .is_some_and(|tools| intent_only_runs(&intent, tools))
         })
 }

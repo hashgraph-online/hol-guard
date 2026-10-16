@@ -3,25 +3,23 @@
 //!
 //! A listing prints entry names and metadata, never file content, so a
 //! dot-directory that stores no credentials, and its visible subdirectories,
-//! are as safe to list as the home directory itself. Credential, key, wallet,
-//! browser-profile, agent-login and Guard state stores keep their review at
-//! any depth, and so do the stores that live below `~/.config` and
+//! are as safe to list as the home directory itself. `~/.codex` and
+//! `~/.claude` keep their logins in known files that content reads still
+//! refuse, so their names list too. Credential, key, wallet, browser-profile,
+//! other agent-login and Guard state stores keep their review at any depth, and so do the stores that live below `~/.config` and
 //! `~/.local/share` (`~/.config/gh`). Callers must bound the listing to the
 //! directory's own entries: a recursive listing of `~/.config` prints the
 //! names inside `~/.config/gh` and keeps its review.
 
 use std::path::{Component, Path, PathBuf};
 
-/// Hidden directories that hold credentials, keys, wallets, browser profiles,
-/// agent harness logins (`~/.codex/auth.json`, `~/.claude/.credentials.json`)
+/// Hidden directories that hold credentials, keys, wallets, browser profiles
 /// or Guard's own state. Their entry names alone reveal which accounts, hosts
 /// and keys exist.
-pub(super) const CREDENTIAL_STORE_NAMES: [&str; 20] = [
+pub(super) const CREDENTIAL_STORE_NAMES: [&str; 18] = [
     ".aws",
     ".azure",
     ".bitcoin",
-    ".claude",
-    ".codex",
     ".docker",
     ".electrum",
     ".ethereum",
@@ -41,17 +39,25 @@ pub(super) const CREDENTIAL_STORE_NAMES: [&str; 20] = [
 
 /// Harness directories that share skills, rules or Git hooks rather than an
 /// agent login. Every other harness directory (`~/.gemini`, `~/.omp`,
-/// `~/.copilot`) may hold login tokens and session files, so it keeps review
-/// like `~/.codex` and `~/.claude`.
+/// `~/.copilot`) may hold login tokens under names Guard does not know, so it
+/// keeps review.
 const HARNESS_SHARED_NAMES: [&str; 5] = [".agent", ".agents", ".clinerules", ".githooks", ".husky"];
 
+/// Harness homes whose login and secret-bearing config live in files the
+/// credential and hidden-name screens already refuse to read
+/// (`auth.json`, `.credentials.json`, `config.toml`, `settings.json`).
+/// Listing them prints plan, memory and session names, never a secret.
+pub(super) const HARNESS_HOME_NAMES: [&str; 2] = [".claude", ".codex"];
+
 /// Credential, password-manager, keyring, browser-profile and agent-login
-/// stores kept directly below `~/.config` or `~/.local/share`.
-const NESTED_CREDENTIAL_STORE_NAMES: [&str; 17] = [
+/// stores kept directly below `~/.config` or `~/.local/share`. A tool whose
+/// directory holds only fixed-name config files (`~/.config/doctl/config.yaml`,
+/// with its tokens inside the file) is not listed: its entry names reveal no
+/// account, host or key, and content reads of the file stay guarded.
+const NESTED_CREDENTIAL_STORE_NAMES: [&str; 16] = [
     "1password",
     "bravesoftware",
     "chromium",
-    "doctl",
     "gcloud",
     "gh",
     "github-copilot",
@@ -167,4 +173,5 @@ fn clears_store_screen(path: &Path) -> bool {
 fn harness_login_store(name: &str) -> bool {
     crate::harness_config_names::HARNESS_DIRECTORIES.contains(&name)
         && !HARNESS_SHARED_NAMES.contains(&name)
+        && !HARNESS_HOME_NAMES.contains(&name)
 }

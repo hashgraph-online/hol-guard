@@ -1,0 +1,79 @@
+name: Prepare instrumented Rust coverage partition
+description: Run one complete package group with checked codegen and fresh LLVM profiles.
+inputs:
+  partition:
+    description: One of core, command, runtime-1 or runtime-2.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: ${{ env.CI_PYTHON_VERSION }}
+    - name: Prepare current source trust defaults
+      shell: bash
+      run: python3 scripts/refresh_extension_artifacts.py --trust-only
+    - name: Initialize pinned Rust analysis toolchain
+      shell: bash
+      run: bash scripts/ci/setup_sonar_rust.sh
+    - name: Cache Rust analysis dependencies
+      id: coverage-cache
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        workspaces: rust
+        # Keep group dependency sets separate so concurrent partial writers
+        # cannot replace another group's cache.
+        # This version is populated only after successful coverage generation,
+        # so failed first builds cannot leave immutable tools-only archives.
+        shared-key: sonar-v2-${{ inputs.partition }}-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
+        cache-on-failure: false
+        save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    - name: Check for restored instrumented dependencies
+      id: restored-dependencies
+      shell: bash
+      # Exact and partial archives can contain only tools. Never unpack an older
+      # archive over real restored instrumented dependencies.
+      run: |
+        restored=false
+        target=rust/target/llvm-cov-target
+        if [ -d "$target" ] && [ -n "$(find "$target" -type f \( -name '*.rlib' -o -name '*.rmeta' \) -print -quit)" ]; then
+          restored=true
+        fi
+        echo "restored=$restored" >> "$GITHUB_OUTPUT"
+    - name: Seed instrumented dependencies from the compatible workspace cache
+      if: steps.restored-dependencies.outputs.restored != 'true'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        workspaces: rust
+        # Same compiler recipe and archive path set as the previous producer.
+        # This fallback is a reader; only the partition cache above may save.
+        shared-key: sonar-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
+        save-if: 'false'
+    - uses: ./.github/actions/setup-bubblewrap
+    - name: Provision the checked test linker
+      shell: bash
+      run: |
+        if ! command -v ld.lld >/dev/null 2>&1; then
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends lld
+        fi
+    - name: Install instrumented compiler cache
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      with:
+        version: v0.18.0
+    - name: Generate current-checkout Rust coverage
+      shell: bash
+      env:
+        COVERAGE_PARTITION: ${{ inputs.partition }}
+        SCCACHE_GHA_ENABLED: 'on'
+        SCCACHE_GHA_VERSION: sonar-rust-checked-v1
+        SCCACHE_GHA_RW_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+        SCCACHE_IGNORE_SERVER_IO_ERROR: '1'
+      run: bash scripts/ci/prepare_sonar_rust_coverage.sh "$COVERAGE_PARTITION"
+    - name: Upload the source-bound coverage partition
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      with:
+        name: rust-coverage-${{ github.run_attempt }}-${{ inputs.partition }}
+        path: coverage-reports/${{ inputs.partition }}/
+        if-no-files-found: error
+        retention-days: 7

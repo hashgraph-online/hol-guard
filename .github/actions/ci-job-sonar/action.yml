@@ -51,26 +51,39 @@ runs:
     shell: bash
     run: bash scripts/ci/setup_sonar_rust.sh
     if: inputs.has-token == 'true'
-  - name: Cache Rust analysis dependencies
-    uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+  - name: Select complete source-bound Rust coverage
+    id: rust-coverage-selection
+    if: inputs.has-token == 'true'
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_reports select
+  - name: Download complete Rust coverage partitions
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
     with:
-      workspaces: rust
-      shared-key: sonar
-      # A failing quality gate must not leave the next run to rebuild cold.
-      cache-on-failure: true
-      save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      artifact-ids: ${{ steps.rust-coverage-selection.outputs.artifact-ids }}
+      path: rust-coverage-data
     if: inputs.has-token == 'true'
-  - name: Provision bubblewrap for the Linux workspace sandbox tests
-    # The coverage run executes the same Rust tests as the workspace job.
-    # Without bubblewrap 0.10+ the sandbox reports the host as unavailable,
-    # and tests that expect a contained run see a review instead.
+  - name: Merge verified Rust coverage with LCOV
     shell: bash
-    run: bash ci/containment/install-bubblewrap.sh
+    run: |
+      if ! command -v lcov >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends lcov
+      fi
+      uv run --no-sync pytest --noconftest -q tests/test_rust_coverage_reports.py
+      uv run --no-sync python -m scripts.ci.rust_coverage_reports merge
     if: inputs.has-token == 'true'
-  - name: Generate current-checkout Rust coverage
-    shell: bash
-    run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+  - name: Preserve merged Rust coverage evidence
     if: inputs.has-token == 'true'
+    uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+    with:
+      name: rust-coverage-merged-${{ github.run_attempt }}
+      path: |
+        coverage-reports/rust-lcov.info
+        rust-coverage-selection.json
+      if-no-files-found: error
+      retention-days: 7
   - name: Wait for successful current-attempt strict Clippy report
     id: clippy-selection
     shell: bash

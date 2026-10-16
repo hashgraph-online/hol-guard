@@ -63,7 +63,7 @@ fn expand(raw: &str, ctx: &Ctx) -> Proof<String> {
         .ok_or(UNPROVEN_LAUNCH)?;
     match raw.strip_prefix('~') {
         Some("") => Ok(home.clone()),
-        Some(rest) if rest.starts_with('/') => Ok(fs_path::join(home, &rest[1..])),
+        Some(rest) if rest.starts_with(fs_path::is_sep) => Ok(fs_path::join(home, &rest[1..])),
         _ => Err(UNPROVEN_LAUNCH),
     }
 }
@@ -147,7 +147,10 @@ pub(super) fn tool_target_identity(
         if sensitive(pattern, cwd, ctx.home) {
             return Err(SENSITIVE_PATH);
         }
-        if !is_read && (fs_path::is_abs(pattern) || pattern.split('/').any(|part| part == "..")) {
+        // A rooted or drive pattern searches outside the scope it was given.
+        let escapes = fs_path::is_anchored(pattern)
+            || pattern.split(fs_path::is_sep).any(|part| part == "..");
+        if !is_read && escapes {
             return Err(BROAD_SCOPE);
         }
     }

@@ -8,8 +8,8 @@
 //! already current, so that work is a no-op that still costs an interpreter
 //! start, an installation lock and a settings write.
 //!
-//! This lane answers only that no-op case, read-only. It requires every one
-//! of these, in process:
+//! This lane answers that no-op case, and the common daemon-down case after
+//! a reboot or a crash. It requires every one of these, in process:
 //! - the installer's config parses, it was written for this runtime build,
 //!   and the session environment matches the one the installer described
 //!   (same home, not running inside Cursor);
@@ -20,11 +20,22 @@
 //!   `127.0.0.1`, the bound auth token, the live-state gate, a signed
 //!   identity challenge, a current `/healthz` and an unchanged generation.
 //!
-//! Only then does it print the context. Any failure, including a parse
-//! error, replaces this process with the installer's Python SessionStart
-//! command (same argv, same environment, same stdin), so the Python
-//! transaction runs exactly as before inside the same hook timeout. This
-//! lane never starts the daemon, never writes settings, never reads or
+//! Only then does it print the context. When the daemon is not live but is
+//! provably down (`stopped_daemon_url`: the authenticated state of a daemon
+//! of this package version on `127.0.0.1` whose pid no longer runs), and
+//! the entries are current for that daemon's URL, the lane runs the bridge's
+//! own `recovery_command` once, the same start a hook bridge runs when its
+//! daemon is unreachable, and prints the context when it exits zero. That
+//! command only schedules the start; the first tool hook's bridge waits for
+//! the daemon as it always does. A daemon restarted on another port is
+//! drift at the next session start, which hands off and rewrites the URL.
+//!
+//! Any other failure, including a parse error, a pid that still runs but
+//! does not answer, or a start that fails, replaces this process with the
+//! installer's Python SessionStart command (same argv, same environment,
+//! same stdin), so the Python transaction runs exactly as before inside the
+//! same hook timeout. Windows has no `exec`, so there it runs that command
+//! as a child on the same stdio and exits with its status. This lane never writes settings, never reads or
 //! writes the installation journal, and never mints the auth token.
 //!
 //! The config pins the runtime build (`PACKAGE_VERSION+BUILD_SHA`) that
@@ -52,7 +63,8 @@ use serde_json::{Map, Value};
 use crate::claude_hook_bridge::home_directory;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::claude_session_start_contract::{contract, settings_current, DaemonHookTemplate};
-use crate::claude_session_start_live::verified_daemon_url;
+use crate::claude_session_start_live::{stopped_daemon_url, verified_daemon_url};
+use crate::hook_bridge_daemon_start::{start_daemon, TRANSPORT_FAILURE};
 use crate::hook_bridge_fallback::{self, Fallback};
 use crate::hook_env_stamp::json_string;
 
@@ -64,6 +76,10 @@ pub(crate) const SESSION_START_FEATURE: &str = "claude-session-start-v1";
 /// Budget for every check, leaving the Python fallback most of the
 /// 10 second hook timeout.
 const CHECK_BUDGET: Duration = Duration::from_secs(2);
+/// Budget for the checks and a daemon start together; the start keeps its
+/// own one second retry reserve, so a failed start still leaves the Python
+/// fallback four seconds of the hook timeout.
+const START_BUDGET: Duration = Duration::from_secs(6);
 const MAX_SETTINGS_BYTES: u64 = 4 * 1024 * 1024;
 const CURSOR_ENV_MARKERS: [&str; 5] = [
     "CURSOR_VERSION",
@@ -206,11 +222,19 @@ pub(crate) fn context_output(event: &str, context: &str) -> String {
     )
 }
 
+/// The bridge's daemon-start command, as the hook bridges run it.
+fn recovery_command(bridge_config: &Map<String, Value>) -> Option<Vec<String>> {
+    strings(bridge_config.get("recovery_command")).filter(|argv| !argv.is_empty())
+}
+
 /// The context to print when every check passes, or why one failed.
-pub(crate) fn no_op_output(
+/// `start` runs the recovery command for a daemon that is provably down;
+/// `true` means it scheduled the start.
+pub(crate) fn session_output(
     config_text: &str,
     environment: &SessionEnvironment,
     deadline: Instant,
+    start: impl FnOnce(&[String]) -> bool,
 ) -> Result<String, String> {
     let config = parse_config(config_text).ok_or(INVALID_CONFIG)?;
     if config.runtime_build != runtime_build() {
@@ -231,13 +255,20 @@ pub(crate) fn no_op_output(
         .and_then(Value::as_str)
         .filter(|path| !path.is_empty())
         .ok_or(INVALID_CONFIG)?;
-    let daemon_url = verified_daemon_url(
-        Path::new(state_path),
-        &contract.session_start_event,
-        deadline,
-    )?;
+    let state_path = Path::new(state_path);
+    let (daemon_url, stopped) =
+        match verified_daemon_url(state_path, &contract.session_start_event, deadline) {
+            Ok(url) => (url, false),
+            Err(error) => (stopped_daemon_url(state_path).map_err(|_| error)?, true),
+        };
     if !settings_current(&contract, &settings, &config.daemon_hook, &daemon_url) {
         return Err("managed hook entries differ from the contract".to_owned());
+    }
+    if stopped {
+        let command = recovery_command(&config.daemon_hook.bridge_config).ok_or(INVALID_CONFIG)?;
+        if !start(&command) {
+            return Err("daemon start failed".to_owned());
+        }
     }
     Ok(context_output(
         &contract.session_start_event,
@@ -254,6 +285,7 @@ pub(crate) fn fallback_process(argv: &[String]) -> Command {
 }
 
 /// Replace this process with the Python SessionStart command.
+#[cfg(unix)]
 fn hand_off(argv: &[String]) -> i32 {
     use std::os::unix::process::CommandExt;
 
@@ -265,14 +297,33 @@ fn hand_off(argv: &[String]) -> i32 {
     1
 }
 
+/// Windows has no `exec`: run the Python SessionStart command with this
+/// process's stdin, stdout and stderr, and exit with its status.
+#[cfg(not(unix))]
+fn hand_off(argv: &[String]) -> i32 {
+    match fallback_process(argv).status() {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(error) => {
+            let _ = writeln!(
+                io::stderr(),
+                "claude session start fallback could not start: {error}"
+            );
+            1
+        }
+    }
+}
+
 /// Run the lane; the exit status when this process is not replaced.
 pub(crate) fn run(config_text: &str) -> i32 {
-    let deadline = Instant::now() + CHECK_BUDGET;
+    let started = Instant::now();
+    let deadline = started + CHECK_BUDGET;
     let Some(fallback) = fallback_command(config_text) else {
         let _ = writeln!(io::stderr(), "{INVALID_CONFIG}");
         return 2;
     };
-    match no_op_output(config_text, &SessionEnvironment::current(), deadline) {
+    let start =
+        |command: &[String]| start_daemon(command, TRANSPORT_FAILURE, started + START_BUDGET);
+    match session_output(config_text, &SessionEnvironment::current(), deadline, start) {
         Ok(output) => {
             let mut stdout = io::stdout().lock();
             match stdout
@@ -292,6 +343,6 @@ pub(crate) fn run(config_text: &str) -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_session_start_tests.rs"]
 mod tests;

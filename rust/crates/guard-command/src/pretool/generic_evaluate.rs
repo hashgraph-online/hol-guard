@@ -1,8 +1,11 @@
 use super::super::PreToolDecisionV1;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result, review_reason};
-use super::tools::{infer_action_type, package_command, tool_matches};
+use super::tools::{infer_action_type, is_package_tool, package_command, tool_matches};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
+
+#[path = "generic_build_review.rs"]
+mod build_review;
 
 pub(super) fn evaluate_signals(
     harness: &str,
@@ -364,12 +367,13 @@ pub(super) fn evaluate_signals(
     {
         // Nothing exists to read, so stopping the call costs nothing. Saying
         // why lets the agent fix the path instead of waiting on an approval.
-        return generic_result(
-            action,
-            "block",
-            MISSING_PATH,
+        let mut result = generic_result(action, "block", MISSING_PATH, "");
+        result.reason = missing_path_reason(
             "HOL Guard did not run this read because the path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one.",
+            "read",
+            Some(&signals.path_values[0]),
         );
+        return result;
     }
     let (reason_code, mut reason) = review_reason(action_type);
     if action_type == PreToolActionTypeV1::Unknown
@@ -379,9 +383,41 @@ pub(super) fn evaluate_signals(
         // Same review; the reason names the form Guard can check instead.
         reason = EVAL_REVIEW_REASON;
     }
+    if action_type == PreToolActionTypeV1::Package
+        && command_decision
+            .and_then(|decision| decision.as_ref().ok())
+            .is_some_and(|decision| {
+                build_review::build_or_test_command(&decision.command_model, is_package_tool)
+            })
+    {
+        // Same package review; install advice does not fit a build or test.
+        reason = build_review::BUILD_REVIEW_REASON;
+    }
     generic_result(action, "review", reason_code, reason)
 }
 
 const EVAL_REVIEW_REASON: &str = "HOL Guard requires review because code run by eval can start processes, change files or reach the network, and Guard cannot check what it will do before it runs. Run shell commands with the bash tool instead, where Guard checks each command.";
 
 pub(super) const MISSING_PATH: &str = "native_missing_path";
+
+/// Why a call that names a missing path did not run. It names the path when
+/// the path prints safely, and says where a relative one is read from:
+/// agents that ran commands in another folder retry the same relative path.
+/// Otherwise it keeps `fallback`.
+pub(super) fn missing_path_reason(fallback: &str, action: &str, path: Option<&str>) -> String {
+    let Some(path) = path.filter(|path| {
+        !path.is_empty()
+            && path.chars().count() <= 512
+            && !path.contains(|c: char| c.is_control() || c == '`')
+    }) else {
+        return fallback.to_owned();
+    };
+    format!(
+        "HOL Guard did not run this {action} because `{path}` does not exist.{} Check the path, for example by listing its parent directory, and try again with the correct one.",
+        if path.starts_with(['/', '~']) {
+            ""
+        } else {
+            " A relative path is read from the session folder, not from the folder of an earlier command."
+        }
+    )
+}

@@ -67,6 +67,10 @@ fn other_parentheses_keep_the_review() {
 #[test]
 fn trailing_group_decides_like_its_command_list() {
     let read_only = "ls -la && git status --short && (cat Cargo.toml 2>/dev/null | head -40)";
+    // `2>/dev/null` is a null sink only on POSIX shells (see
+    // `stderr_null_sink_preserves_each_compound_command_risk`); a Windows
+    // shell writes a file there, so the review is kept on Windows.
+    #[cfg(unix)]
     assert_eq!(decide(read_only).0, "allow", "{read_only}");
     assert_eq!(
         decide(read_only),

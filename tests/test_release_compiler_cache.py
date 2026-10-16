@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -83,12 +84,11 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
         assert steps.index(installer) < steps.index(step)
         assert step["env"]["SCCACHE_GHA_ENABLED"] == "on"
         assert step["env"]["SCCACHE_IGNORE_SERVER_IO_ERROR"] == "1"
-    (prepare_steps, prepare), _ = _release_compile_steps()
-    # Workspace-only wrapping keeps third-party crates in rust-cache and sccache entries small.
-    assert prepare["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
-    assert "RUSTC_WRAPPER" not in prepare["env"]
+        assert step["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
+        assert "RUSTC_WRAPPER" not in step["env"]
+    (prepare_steps, prepare), (publish_steps, _) = _release_compile_steps()
     wheel_steps = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]["steps"]
-    for steps in (prepare_steps, wheel_steps):
+    for steps in (prepare_steps, publish_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
         # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
         # every stable build keep the shared fat-profile key.
@@ -156,12 +156,15 @@ def prepare_steps(job):
     return {step.get("name"): step for step in job["steps"]}
 
 
-def test_intel_binaries_are_cross_compiled_but_executed_only_on_native_intel():
+def test_cross_compiled_binaries_are_executed_only_on_native_hardware():
     prepare = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     legs = {leg["target"]: leg for leg in prepare["strategy"]["matrix"]["include"]}
     assert legs["x86_64-apple-darwin"]["runner"] == "macos-15"
     assert legs["x86_64-apple-darwin"]["cross"] is True
-    assert all("cross" not in leg for target, leg in legs.items() if target != "x86_64-apple-darwin")
+    assert legs["aarch64-pc-windows-msvc"]["runner"] == "windows-latest"
+    assert legs["aarch64-pc-windows-msvc"]["cross"] is True
+    cross_targets = {"x86_64-apple-darwin", "aarch64-pc-windows-msvc"}
+    assert all("cross" not in leg for target, leg in legs.items() if target not in cross_targets)
     assert prepare["env"]["CROSS_COMPILED"] == "${{ matrix.cross == true }}"
     script = next(step for step in prepare["steps"] if step.get("name") == "Compile canonical release inputs")["run"]
     guard = script.index('if [[ "$CROSS_COMPILED" != "true" ]]; then')
@@ -169,8 +172,14 @@ def test_intel_binaries_are_cross_compiled_but_executed_only_on_native_intel():
     assert guard < script.index("build_native_command_program.py") < script.index("self-test") < closed
     assert closed < script.index("prepared_native.py pack")
     wheels = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]
-    runners = {leg["target"]: leg["runner"] for leg in wheels["strategy"]["matrix"]["include"]}
+    selector = next(
+        step
+        for step in load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build"]["steps"]
+        if step.get("id") == "native_wheel_matrix"
+    )
+    runners = {leg["target"]: leg["runner"] for leg in json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])}
     assert runners["x86_64-apple-darwin"] == "macos-15-intel"
+    assert runners["aarch64-pc-windows-msvc"] == "windows-11-arm"
     names = [step.get("name") for step in wheels["steps"]]
     install = names.index("Verify and install prepared native binaries")
     self_test = names.index("Self-test prepared runtime on native hardware")

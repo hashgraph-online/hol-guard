@@ -95,6 +95,8 @@ def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
     scratch = str(scratch_checkout(fixture.root))
     # The scratch leaf does not exist yet, so name its macOS alias directly.
     replacements[scratch] = replacements["/private" + scratch] = "{{scratch}}"
+    # Git for Windows prints the same drive path with forward slashes.
+    replacements[scratch.replace("\\", "/")] = "{{scratch}}"
     # Commands quote each interpolated fixture path. Normalize the entire
     # shell-quoted spelling before redacting raw paths, including apostrophes.
     for value, placeholder in tuple(replacements.items()):
@@ -117,9 +119,10 @@ def read_case_logs(
             case["guard_observation_error"] = type(exc).__name__
     # Keep independently parsed parent evidence available for precise cleanup
     # even if the complete SDK lifecycle does not reconcile.
-    case["events"] = public_events(read_events(raw_log), replacements)
+    completed = case.get("returncode") == 0 and case.get("timed_out") is False
+    case["events"] = public_events(read_events(raw_log), replacements, completed)
     if host_log is not None:
-        case["events"], case["delegated_call_ids"] = complete_host_events(raw_log, host_log, replacements)
+        case["events"], case["delegated_call_ids"] = complete_host_events(raw_log, host_log, replacements, completed)
 
 
 def _scenario_prompt(scenario: Scenario) -> str:

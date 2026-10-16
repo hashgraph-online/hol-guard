@@ -1,6 +1,8 @@
 use super::*;
 use std::fs;
 
+use crate::managed_policy_load::MachineSystem;
+
 struct Dirs {
     root: PathBuf,
 }
@@ -17,6 +19,9 @@ impl Dirs {
         ));
         fs::create_dir_all(root.join("home")).unwrap();
         fs::create_dir_all(root.join("ws")).unwrap();
+        // A canonical workspace has no symlinked ancestor, and macOS's
+        // temporary directory sits below the `/var` -> `/private/var` link.
+        let root = fs::canonicalize(&root).unwrap();
         Self { root }
     }
 
@@ -34,8 +39,27 @@ impl Dirs {
             &self.home(),
             workspace.then_some(&workspace_dir),
             false,
-            &[],
+            &self.unmanaged(),
         )
+    }
+
+    /// A machine root this test owns and never populates: no profile and no
+    /// cache, which is an unmanaged machine.
+    fn unmanaged(&self) -> ManagedPolicySource {
+        ManagedPolicySource {
+            system: MachineSystem::Other,
+            policy_path: None,
+            write_cache: false,
+            machine_root: Some(self.root.join("machine")),
+        }
+    }
+
+    /// A machine whose policy is the document at `path`.
+    fn managed(&self, path: &Path) -> ManagedPolicySource {
+        ManagedPolicySource {
+            policy_path: Some(path.to_path_buf()),
+            ..self.unmanaged()
+        }
     }
 }
 
@@ -68,7 +92,7 @@ fn missing_config_is_the_default_and_allows_an_approvable_pause() {
 fn missing_guard_home_directory_is_the_default() {
     let dirs = Dirs::new("nohome");
     let missing = dirs.root.join("never-created");
-    let config = load_effective_guard_config(&missing, None, false, &[]).unwrap();
+    let config = load_effective_guard_config(&missing, None, false, &dirs.unmanaged()).unwrap();
     assert_eq!(config.security_level, "balanced");
     assert!(!missing.exists());
 }
@@ -239,14 +263,77 @@ fn nested_config_merge_replaces_inherited_actions() {
 }
 
 #[test]
-fn a_machine_managed_policy_source_fails_closed() {
+fn a_managed_requirement_composes_over_the_local_configuration() {
     let dirs = Dirs::new("managed");
+    fs::write(
+        dirs.home().join("config.toml"),
+        "security_level = \"relaxed\"\n",
+    )
+    .unwrap();
     let policy = dirs.root.join("managed-policy.json");
-    let absent = dirs.root.join("absent.json");
-    assert!(load_effective_guard_config(&dirs.home(), None, false, &[absent.clone()]).is_ok());
+    fs::write(
+        &policy,
+        serde_json::json!({
+            "schemaVersion": "hol-guard-mdm-policy.v1",
+            "settings": {"security_level": "paranoid"},
+            "lockedSettings": ["security_level"],
+        })
+        .to_string(),
+    )
+    .unwrap();
+
+    let result = load_effective_guard_config(&dirs.home(), None, false, &dirs.managed(&policy));
+    let config = result.as_ref().unwrap();
+
+    // The local file asked for `relaxed`; a locked managed setting cannot be
+    // weakened, so the effective level is the administrator's.
+    assert_eq!(config.security_level, "paranoid");
+    assert_eq!(config.managed_policy_status, "active");
+    assert_eq!(
+        config.managed_locked_settings,
+        vec!["security_level".to_owned()]
+    );
+    assert!(config.managed_policy_hash.is_some());
+    assert_eq!(incomplete_lockfile_decision(&result), "block");
+}
+
+#[test]
+fn an_unreadable_machine_policy_applies_the_fail_closed_floor() {
+    let dirs = Dirs::new("managed-unreadable");
+    fs::write(
+        dirs.home().join("config.toml"),
+        "security_level = \"relaxed\"\n",
+    )
+    .unwrap();
+    let source = ManagedPolicySource {
+        system: MachineSystem::Windows,
+        ..dirs.unmanaged()
+    };
+
+    let result = load_effective_guard_config(&dirs.home(), None, false, &source);
+    let config = result.as_ref().unwrap();
+
+    // Configured machine authority this runtime cannot read is not an
+    // unmanaged machine: the floor stands in for the policy.
+    assert_eq!(config.managed_policy_status, "inaccessible");
+    assert_eq!(config.security_level, "paranoid");
+    assert!(config
+        .managed_locked_settings
+        .contains(&"default_action".to_owned()));
+    assert_eq!(incomplete_lockfile_decision(&result), "block");
+}
+
+#[test]
+fn an_invalid_machine_policy_fails_closed_rather_than_reading_as_absent() {
+    let dirs = Dirs::new("managed-invalid");
+    let policy = dirs.root.join("managed-policy.json");
     fs::write(&policy, "{}").unwrap();
-    let result = load_effective_guard_config(&dirs.home(), None, false, &[absent, policy]);
-    assert!(result.is_err());
+
+    let result = load_effective_guard_config(&dirs.home(), None, false, &dirs.managed(&policy));
+    let config = result.as_ref().unwrap();
+
+    assert_eq!(config.managed_policy_status, "invalid");
+    assert_eq!(config.security_level, "paranoid");
     assert_eq!(incomplete_lockfile_decision(&result), "block");
 }
 
@@ -254,20 +341,37 @@ fn a_machine_managed_policy_source_fails_closed() {
 fn canonical_workspace_requirement_rejects_relative_and_parent_paths() {
     let dirs = Dirs::new("canonical");
     let relative = Path::new("ws");
-    assert!(load_effective_guard_config(&dirs.home(), Some(relative), true, &[]).is_err());
-    let parent = dirs.workspace().join("..").join("ws");
-    assert!(load_effective_guard_config(&dirs.home(), Some(&parent), true, &[]).is_err());
-    assert!(load_effective_guard_config(&dirs.home(), Some(&dirs.workspace()), true, &[]).is_ok());
+    let unmanaged = dirs.unmanaged();
+    assert!(load_effective_guard_config(&dirs.home(), Some(relative), true, &unmanaged).is_err());
+    // `join` folds `..` into a Windows verbatim path, so the step is spelled out.
+    let parent = PathBuf::from(format!(
+        "{}{sep}..{sep}ws",
+        dirs.workspace().display(),
+        sep = std::path::MAIN_SEPARATOR
+    ));
+    assert!(load_effective_guard_config(&dirs.home(), Some(&parent), true, &unmanaged).is_err());
+    assert!(
+        load_effective_guard_config(&dirs.home(), Some(&dirs.workspace()), true, &unmanaged)
+            .is_ok()
+    );
 }
 
 #[test]
 fn resident_loader_reports_the_requested_guard_home() {
     let dirs = Dirs::new("loader");
     let result = ResidentConfigLoader.load_guard_config(&dirs.home(), None, false);
-    // The production loader also probes this machine's managed policy paths;
-    // when none exist it must agree with the pure loader.
+    // The production loader also reads this machine's own managed policy. An
+    // unmanaged host reports no policy; a Windows host cannot read the registry
+    // key, which is a fail-closed status rather than an absent one.
     if let Ok(config) = result {
         assert_eq!(config.guard_home.as_deref(), Some(dirs.home().as_path()));
-        assert_eq!(config.managed_policy_status, "absent");
+        assert!(
+            matches!(
+                config.managed_policy_status.as_str(),
+                "absent" | "inaccessible"
+            ),
+            "{}",
+            config.managed_policy_status
+        );
     }
 }

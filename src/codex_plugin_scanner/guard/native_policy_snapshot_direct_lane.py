@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
+from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
 DIRECT_LANE_PUSH_FEATURE = "policy-snapshot-direct-lane-v1"
 # The resident queues the evidence of each direct answer for the daemon to drain.
@@ -100,8 +101,6 @@ def direct_lane_binding(
 ) -> dict[str, object] | None:
     """Build the push binding, or None when the lane cannot be proven."""
 
-    if os.name == "nt":
-        return None
     bound_inputs: list[dict[str, object]] = []
     for path, stat_identity in inputs:
         if _hint_only(Path(path)):
@@ -422,19 +421,21 @@ class NativePolicySnapshotDirectLaneAck:
         return self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / DIRECT_LANE_ACK_DIRECTORY / DIRECT_LANE_ACK_FILE_NAME
 
     def _unlink_direct_lane_ack(self) -> None:
-        if os.name == "nt":
-            return
         try:
-            self._direct_lane_ack_path().unlink()
+            if os.name == "nt":
+                unlink_windows_ack(self._direct_lane_ack_path())
+            else:
+                self._direct_lane_ack_path().unlink()
         except FileNotFoundError:
             pass
-        except OSError:
+        except (OSError, RuntimeError):
+            # A failed Windows binding or delete raises NativePolicySnapshotError.
             # The lease still bounds how long the resident can trust it.
             self._direct_lane_lease_expires_at_ms = 0
 
     def _write_direct_lane_ack_locked(self) -> None:
         target = self._direct_lane_ack_target
-        if os.name == "nt" or target is None:
+        if target is None:
             return
         generation, policy_digest = target
         lease_expires_at_ms = _now_ms() + DIRECT_LANE_ACK_LEASE_MS
@@ -449,6 +450,10 @@ class NativePolicySnapshotDirectLaneAck:
         ).encode("ascii")
         path = self._direct_lane_ack_path()
         try:
+            if os.name == "nt":
+                write_windows_ack(self.guard_home, path, body)
+                self._direct_lane_lease_expires_at_ms = lease_expires_at_ms
+                return
             _ensure_private_directory(path.parent)
             temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
             descriptor = os.open(
@@ -464,7 +469,7 @@ class NativePolicySnapshotDirectLaneAck:
                 with contextlib.suppress(OSError):
                     temporary.unlink()
                 raise
-        except OSError:
+        except (OSError, RuntimeError):
             # Without a fresh ACK file the resident defers every direct hook.
             self._direct_lane_lease_expires_at_ms = 0
             return

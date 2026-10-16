@@ -25,6 +25,7 @@ import {
   ensureGuardDashboardSession,
 } from "./guard-api";
 import { ApprovalCenterLayout, type BulkGateCredentials } from "./approval-center-layout";
+import { bulkApprovalProof, bulkApproveCooldownOpen } from "./queue-bulk-approval-credentials";
 import type { AppView } from "./approval-center-primitives";
 import { buildClearPayload } from "./clear-policy-payload";
 import { harnessDisplayName, normalizeHarnessSlug } from "./approval-center-utils";
@@ -786,15 +787,37 @@ export function App() {
     setCodexResume(updated);
   }, [resolvedRequestId]);
 
+  const refreshApprovalGate = useCallback(async (): Promise<GuardApprovalGatePublicConfig | null> => {
+    try {
+      const payload = await fetchSettings();
+      const gate = payload.settings.approval_gate;
+      if (gate === undefined) {
+        return null;
+      }
+      setApprovalGate(gate);
+      return gate;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const handleBulkApprove = useCallback(async (ids: string[], gateCredentials?: BulkGateCredentials) => {
     if (bulkApproveInFlight.current) {
       return;
     }
-    if (!gateCredentials?.approval_password?.trim() && !gateCredentials?.approval_totp_code?.trim()) {
+    const proof = bulkApprovalProof(gateCredentials);
+    if (gateCredentials === undefined || proof === null) {
       throw new Error("Bulk approval requires approval proof.");
     }
     bulkApproveInFlight.current = true;
     try {
+      if (proof === "cooldown") {
+        // The drawer's gate can be stale; recheck the window before relying on it.
+        const freshGate = await refreshApprovalGate();
+        if (!bulkApproveCooldownOpen(freshGate)) {
+          throw new Error("Your approval window has closed. Enter your approval password to continue.");
+        }
+      }
       const result = await bulkAllowReadOnce({
         requestIds: ids,
         approval_password: gateCredentials.approval_password,
@@ -813,10 +836,14 @@ export function App() {
       }
       const label = `${result.resolved_count} item${result.resolved_count !== 1 ? "s" : ""} approved.`;
       setResolutionMessage(label);
+    } catch (error) {
+      // A refused proof may mean the window closed; show the password field again.
+      await refreshApprovalGate();
+      throw error;
     } finally {
       bulkApproveInFlight.current = false;
     }
-  }, [refreshStateAfterAction, setResolutionMessage]);
+  }, [refreshApprovalGate, refreshStateAfterAction, setResolutionMessage]);
 
   const handleRetry = useCallback(() => {
     setRuntime({ kind: "loading" });

@@ -350,16 +350,8 @@ def _lookup_input(store: GuardStore, subject: Mapping[str, object]) -> dict[str,
     Any failure leaves the read to the ``policy_lookup`` effect, which raises the
     same error from the same place it always did.
     """
-    artifact = cast("Mapping[str, Any]", subject["artifact"])
     try:
-        return store.mcp_policy_lookup_input(
-            cast("str", subject["harness"]),
-            cast("str", subject["artifact_id"]),
-            workspace=cast("str | None", subject["workspace"]),
-            memory_command=artifact.get("command"),
-            memory_artifact_type=cast("str | None", subject["artifact_type"]),
-            memory_artifact_name=artifact.get("name"),
-        )
+        return store.mcp_policy_lookup_input(workspace=cast("str | None", subject["workspace"]))
     except Exception:
         return None
 

@@ -16,7 +16,7 @@ use sha2::{Digest, Sha256};
 use crate::command_model::parse_shell_command;
 use crate::home_path_text::{expand_home, normalize_path};
 use crate::runtime_read_paths::{
-    read_small_runtime_text_file, resolved_runtime_path, runtime_read_roots,
+    read_small_runtime_text_file, resolved_runtime_path, runtime_read_roots, strip_verbatim_prefix,
 };
 use crate::shell_execution_context::{model_shell_execution_context, ShellExecutionContext};
 use crate::shell_execution_context_support::{
@@ -424,9 +424,12 @@ pub fn assess_shell_reads(
                 incomplete = true;
                 continue;
             };
+            // The modeled cwd is a `std::fs::canonicalize` result, verbatim
+            // (`\\?\C:\...`) on Windows; `source` is not, so compare plain text.
+            let lexical_cwd = effective_cwd.clone().map(strip_verbatim_prefix);
             let lexical_source = PathBuf::from(normalize_path(
                 &expand_home(&operand, home_dir),
-                effective_cwd.as_deref(),
+                lexical_cwd.as_deref(),
             ));
             if source != lexical_source {
                 incomplete = true;

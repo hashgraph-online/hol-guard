@@ -448,15 +448,33 @@ def _read_bounded_resource(resource: Traversable, maximum: int) -> bytes:
     return content
 
 
+_resolved_catalog_resource_path: str | None = None
+
+
+def resolved_catalog_resource() -> str | None:
+    """The catalog resource this process actually loaded, or None before load.
+
+    Several Guard installs can share one store, so the digest alone does not say
+    which install wrote it. This is the raw path; callers that record it must
+    reduce it first, because it contains the user's home directory.
+    """
+
+    return _resolved_catalog_resource_path
+
+
 def load_generated_command_catalog() -> GeneratedCommandCatalog:
     """Load only release-packaged artifacts; invalid or absent resources fail closed."""
 
+    global _resolved_catalog_resource_path
     try:
         package = resources.files("codex_plugin_scanner.guard")
-        catalog_content = _read_bounded_resource(
-            package.joinpath(_CATALOG_RESOURCE), MAX_GENERATED_CATALOG_ARTIFACT_BYTES
-        )
+        catalog_resource = package.joinpath(_CATALOG_RESOURCE)
+        catalog_content = _read_bounded_resource(catalog_resource, MAX_GENERATED_CATALOG_ARTIFACT_BYTES)
         program_content = _read_bounded_resource(package.joinpath(_PROGRAM_RESOURCE), MAX_NATIVE_COMMAND_PROGRAM_BYTES)
     except (FileNotFoundError, ModuleNotFoundError, OSError) as error:
         raise GeneratedCommandCatalogError("generated_command_catalog_unavailable") from error
-    return load_generated_command_catalog_bytes(catalog_content, program_content)
+    catalog = load_generated_command_catalog_bytes(catalog_content, program_content)
+    # Only after the artifacts verify, so a rejected resource is never reported
+    # as the one in use.
+    _resolved_catalog_resource_path = str(catalog_resource)
+    return catalog

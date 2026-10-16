@@ -115,10 +115,17 @@ fn windows_missing_git_marker_probe_accepts_backslash_home_spellings() {
         format!("ls -d '{home_spelling}\\plain\\.git\\config'"),
         format!("ls -d '{home_spelling}\\plain\\..\\.ssh'"),
         format!("ls -d '{home_spelling}\\missing\\.aws'"),
-        // A Windows host may run this text in PowerShell or cmd, where
-        // `2>/dev/null` writes to `\dev\null` on the current drive.
-        "ls README.md 2>/dev/null".to_owned(),
     ] {
         assert!(!allowed(command.clone()), "{command}");
     }
+    // A Windows host may run this text in PowerShell or cmd, where
+    // `2>/dev/null` opens `\dev\null` on the current drive. That writes
+    // nothing while no drive has a `\dev` directory, and is reviewed once one
+    // does.
+    let dev_directory =
+        (b'A'..=b'Z').any(|drive| Path::new(&format!("{}:\\dev", drive as char)).exists());
+    assert_eq!(
+        allowed("ls README.md 2>/dev/null".to_owned()),
+        !dev_directory
+    );
 }

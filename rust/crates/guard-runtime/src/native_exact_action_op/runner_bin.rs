@@ -51,8 +51,17 @@ pub(crate) fn read_manifest(path: &str) -> Manifest {
 
 /// The bin a runner launches, or `None` for any selector form.
 pub(crate) fn runner_target<'a>(runner: &str, arguments: &'a [String]) -> Option<&'a str> {
+    runner_split(runner, arguments).map(|(target, _)| target)
+}
+
+/// `_split_runner_arguments`: the bin a runner launches and the arguments it
+/// passes through to that bin, or `None` for any selector form.
+pub(crate) fn runner_split<'a>(
+    runner: &str,
+    arguments: &'a [String],
+) -> Option<(&'a str, &'a [String])> {
     let mut exec_allowed = EXEC_SUBCOMMAND_RUNNERS.contains(&runner);
-    for argument in arguments {
+    for (index, argument) in arguments.iter().enumerate() {
         if argument == "--" || PRETARGET_OPTIONS.contains(&argument.as_str()) {
             continue;
         }
@@ -63,7 +72,7 @@ pub(crate) fn runner_target<'a>(runner: &str, arguments: &'a [String]) -> Option
             exec_allowed = false;
             continue;
         }
-        return Some(argument);
+        return Some((argument, &arguments[index + 1..]));
     }
     None
 }

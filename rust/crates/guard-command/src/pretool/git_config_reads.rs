@@ -13,7 +13,10 @@ use std::time::Instant;
 #[path = "git_config_writes.rs"]
 pub(crate) mod writes;
 
-const LIST_LIMIT: u64 = 262_144;
+/// Matches the session probe's bound. A long-lived clone keeps a
+/// `branch.<name>.remote` and `.merge` pair for every branch it ever tracked,
+/// and a quarter-megabyte cap held every config read there for review.
+const LIST_LIMIT: u64 = 8 * 1024 * 1024;
 const FLAGS: &[&str] = &[
     "--local",
     "--global",

@@ -234,7 +234,7 @@ pub(crate) fn normalize_policy_scope_path(path: Option<&str>) -> Option<String> 
 }
 
 /// `PurePosixPath(path)` reduced to its root and non-`.` parts.
-fn posix_parts(path: &str) -> (&'static str, Vec<&str>) {
+pub(crate) fn posix_parts(path: &str) -> (&'static str, Vec<&str>) {
     let root = if path.starts_with("//") && !path.starts_with("///") {
         "//"
     } else if path.starts_with('/') {
@@ -289,7 +289,7 @@ fn directory_scope_path_for(path: &str, windows: bool) -> Option<String> {
 }
 
 /// `PureWindowsPath(path)` reduced to its drive plus root and non-`.` parts.
-fn windows_parts(path: &str) -> (String, Vec<&str>) {
+pub(crate) fn windows_parts(path: &str) -> (String, Vec<&str>) {
     let bytes = path.as_bytes();
     let (drive, rest) = if bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() {
         path.split_at(2)

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +16,7 @@ from codex_plugin_scanner.guard.native_policy_integrity_rows import (
     PolicyRowSignItem,
     PolicyRowVerifyItem,
     discard_row_signing_verifier_key,
+    native_prepare_policy_integrity_generation,
     native_sign_policy_rows,
     native_verify_policy_rows,
 )
@@ -43,9 +45,10 @@ class _Resident:
 
     def __call__(self, **kwargs: object) -> dict[str, object] | None:
         assert kwargs["operation"] == "policy_integrity_rows"
-        assert kwargs["required_feature"] == "policy-integrity-rows-v1"
         request = kwargs["request"]
         assert isinstance(request, dict)
+        expected_feature = "policy-integrity-generation-v1" if "generation" in request else "policy-integrity-rows-v1"
+        assert kwargs["required_feature"] == expected_feature
         self.requests.append(request)
         verify = request["verify"]
         sign = request["sign"]
@@ -252,3 +255,71 @@ def test_reset_keeps_a_verifier_other_native_state_is_bound_to(tmp_path: Path) -
     discard_row_signing_verifier_key(tmp_path)
 
     assert verifier.read_bytes() == b"v" * 32
+
+
+_STATE = {"cutover_complete": False, "generation": 3, "pending_generation": None, "version": 1}
+
+
+def _generation_resident(outcome: object) -> Callable[..., dict[str, object] | None]:
+    honest = _Resident()
+
+    def answer(**kwargs: object) -> dict[str, object] | None:
+        response = honest(**kwargs)
+        assert response is not None
+        response["payload"]["generation"] = outcome  # type: ignore[index]
+        return response
+
+    answer.requests = honest.requests  # type: ignore[attr-defined]
+    return answer
+
+
+def test_generation_returns_the_resident_decision(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    prepared = dict(_STATE, cutover_complete=True)
+    fake = _generation_resident({"prepared_state": prepared, "still_matches": True})
+    monkeypatch.setattr(bridge, "_resident_request", fake)
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    result = native_prepare_policy_integrity_generation(
+        guard_home=tmp_path, store_path=tmp_path / "guard.db", key=_KEY, key_id=_KEY_ID, trusted_state=_STATE
+    )
+
+    assert result == (prepared, True)
+    request = fake.requests[0]  # type: ignore[attr-defined]
+    assert request["verify"] == [] and request["sign"] == []
+    assert request["generation"] == {
+        "store_path": str(tmp_path / "guard.db"),
+        "guard_home": str(tmp_path),
+        "trusted_state": _STATE,
+    }
+    assert (tmp_path / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME).is_file()
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        None,
+        {"prepared_state": _STATE},
+        {"prepared_state": _STATE, "still_matches": 1},
+        {"prepared_state": [], "still_matches": True},
+        {"prepared_state": _STATE, "still_matches": True, "extra": 1},
+    ],
+)
+def test_malformed_generation_replies_fail_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, outcome: object
+) -> None:
+    monkeypatch.setattr(bridge, "_resident_request", _generation_resident(outcome))
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_prepare_policy_integrity_generation(
+            guard_home=tmp_path, store_path=tmp_path / "guard.db", key=_KEY, key_id=_KEY_ID, trusted_state=_STATE
+        )
+
+
+def test_verify_reply_with_a_generation_section_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    outcome = {"prepared_state": _STATE, "still_matches": True}
+    monkeypatch.setattr(bridge, "_resident_request", _generation_resident(outcome))
+    monkeypatch.setattr(bridge, "native_runtime_status", lambda: SimpleNamespace(identity=None))
+
+    with pytest.raises(NativePolicyIntegrityUnavailableError):
+        native_verify_policy_rows(guard_home=tmp_path, items=_verify(1), key=_KEY, key_id=_KEY_ID)

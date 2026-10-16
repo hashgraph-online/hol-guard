@@ -6,6 +6,7 @@
 //! relay calls them in-process and launches only the verified executable.
 
 use std::collections::BTreeMap;
+#[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
 use std::path::{Path, PathBuf};
 use std::process::{Child, ExitStatus};
@@ -142,10 +143,18 @@ pub(crate) struct LiveChild {
 }
 
 /// `int(process.returncode or 0)` as the Python CLI's exit status.
+/// A Windows process always has an exit code; a signal exists only on unix.
 pub(crate) fn exit_code(status: ExitStatus) -> i32 {
-    status
-        .code()
-        .unwrap_or_else(|| status.signal().map_or(1, |signal| (256 - signal) & 0xff))
+    #[cfg(unix)]
+    {
+        status
+            .code()
+            .unwrap_or_else(|| status.signal().map_or(1, |signal| (256 - signal) & 0xff))
+    }
+    #[cfg(not(unix))]
+    {
+        status.code().unwrap_or(1)
+    }
 }
 
 impl LiveChild {
@@ -201,6 +210,6 @@ fn event_frame(event: SessionEvent) -> Value {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "mcp_relay_launch_tests.rs"]
 mod tests;

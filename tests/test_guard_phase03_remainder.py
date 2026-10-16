@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import http.client
 import json
+import sys
+import sysconfig
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +21,8 @@ from tests.update_context_test_support import build_legacy_update_context
 
 @pytest.fixture(autouse=True)
 def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Installer probes must not change the interpreter used by pytest and coverage.
+    monkeypatch.setattr(update_commands, "sys", SimpleNamespace(**vars(sys)))
     monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
 
 
@@ -94,7 +98,11 @@ def _all_alpha_tags_live(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_update_alpha_pins_latest_alpha_release(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime_prefix = sys.prefix
+    runtime_paths = sysconfig.get_paths()
     monkeypatch.setattr(update_commands.sys, "prefix", "/opt/pipx/venvs/hol-guard")
+    assert sys.prefix == runtime_prefix
+    assert sysconfig.get_paths() == runtime_paths
     monkeypatch.setattr(update_commands.shutil, "which", lambda name: f"/opt/bin/{name}")
     monkeypatch.setattr(update_commands, "_current_version", lambda: "2.0.1127")
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)

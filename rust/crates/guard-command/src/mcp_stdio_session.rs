@@ -14,8 +14,8 @@
 //! opaque authority request and the verdict is applied here — this module
 //! never decides allow/deny itself.
 //!
-//! `#[cfg(unix)]`: launch attributes and process-group teardown are unix-only,
-//! matching `local_mcp_stdio.rs`.
+//! The child runs as the root of a `ChildTree`, as in `local_mcp_stdio.rs`:
+//! its own process group on unix, a kill-on-close JobObject on Windows.
 
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -23,7 +23,6 @@ use std::io::Read;
 
 #[path = "mcp_stdio_writer.rs"]
 mod writer;
-use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,9 +32,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use writer::SessionWriter;
 
-use crate::local_mcp_stdio::{
-    is_rpc_message, kill_process_group, pop_json_message, probe_search_path,
-};
+use crate::local_mcp_stdio::{is_rpc_message, pop_json_message, probe_search_path, ChildTree};
 
 /// Per-frame JSON cap for the persistent pump: a single frame may not exceed
 /// this; oversized/undecodable bytes are discarded without killing the pump.
@@ -113,6 +110,18 @@ fn session_pump(
             buffer.clear();
         }
         partial.store(!buffer.is_empty(), Ordering::Release);
+    }
+}
+
+/// The temp dir, resolved through symlinks on unix (`/tmp` -> `/private/tmp`
+/// on macOS). Windows keeps the plain form: `canonicalize` returns a `\\?\`
+/// path, which `cmd.exe`-launched servers cannot use as a working directory.
+fn default_working_dir() -> std::path::PathBuf {
+    let temp = std::env::temp_dir();
+    if cfg!(unix) {
+        temp.canonicalize().unwrap_or(temp)
+    } else {
+        temp
     }
 }
 
@@ -203,7 +212,7 @@ pub enum SessionEvent {
 pub struct LiveMcpSession {
     /// `None` once `close_input` dropped the writer (graceful child EOF).
     writer: Option<SessionWriter>,
-    child_pid: i32,
+    tree: ChildTree,
     inbox: mpsc::Receiver<Value>,
     /// True while the drain pump holds the start of a frame that has not completed.
     partial: Arc<AtomicBool>,
@@ -291,11 +300,9 @@ impl LiveMcpSession {
                 .or_insert_with(|| dir.clone());
             env.entry("NPM_CONFIG_CACHE".to_owned()).or_insert(dir);
         }
-        let working_dir = cwd.map(Path::to_path_buf).unwrap_or_else(|| {
-            std::env::temp_dir()
-                .canonicalize()
-                .unwrap_or_else(|_| std::env::temp_dir())
-        });
+        let working_dir = cwd
+            .map(Path::to_path_buf)
+            .unwrap_or_else(default_working_dir);
         let mut cmd = Command::new(&argv[0]);
         cmd.args(&argv[1..])
             .current_dir(working_dir)
@@ -304,22 +311,19 @@ impl LiveMcpSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        let mut child = cmd
-            .process_group(0)
-            .spawn()
-            .map_err(|_| "transport_failed".to_owned())?;
+        let (mut child, tree) =
+            ChildTree::spawn(&mut cmd).map_err(|_| "transport_failed".to_owned())?;
         let stdin = child.stdin.take().ok_or("transport_failed")?;
         let stdout = child.stdout.take().ok_or("transport_failed")?;
         let writer = match SessionWriter::spawn(stdin) {
             Ok(writer) => writer,
             Err(code) => {
-                kill_process_group(child.id() as i32);
+                tree.kill();
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(code);
             }
         };
-        let child_pid = child.id() as i32;
         let (tx, rx) = mpsc::sync_channel::<Value>(SESSION_QUEUE);
         let cancel_tx = Arc::clone(&cancellation);
         let partial = Arc::new(AtomicBool::new(false));
@@ -328,7 +332,7 @@ impl LiveMcpSession {
         Ok((
             LiveMcpSession {
                 writer: Some(writer),
-                child_pid,
+                tree,
                 inbox: rx,
                 partial,
                 cancellation,
@@ -362,7 +366,7 @@ impl LiveMcpSession {
             // A timed-out write may have delivered part of a frame. Retire the
             // transport rather than retrying and corrupting JSON-RPC framing.
             self.cancel();
-            kill_process_group(self.child_pid);
+            self.tree.kill();
         }
         result
     }
@@ -485,16 +489,13 @@ impl LiveMcpSession {
         self.cancellation.store(true, Ordering::Release);
     }
 
-    /// `stop_child` — kill the process group then reap the child. Idempotent.
+    /// `stop_child` — kill the process tree then reap the child. Idempotent.
     pub fn close(&mut self, child: &mut Child) {
         if self.closed {
             return;
         }
         self.cancel();
-        let pid = child.id() as i32;
-        if pid > 0 {
-            kill_process_group(pid);
-        }
+        self.tree.kill();
         let _ = child.kill();
         let _ = child.wait();
         self.closed = true;
@@ -526,6 +527,6 @@ impl LiveMcpSession {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "mcp_stdio_session_tests.rs"]
 mod tests;

@@ -277,6 +277,27 @@ def test_retire_native_resident_for_update_fails_closed_on_state_discovery_error
     assert stopped == []
 
 
+def test_retire_native_resident_for_update_reports_a_client_it_could_not_contain(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client_module, "close_native_resident_clients", lambda home=None: False)
+    monkeypatch.setattr(
+        client_module,
+        "stop_native_resident",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("stopped")),
+    )
+
+    assert (
+        client_module.retire_native_resident_for_update(
+            executable=tmp_path / "runtime",
+            guard_home=tmp_path / "home",
+            environment={},
+        )
+        is False
+    )
+
+
 def test_stop_native_resident_fails_closed_on_final_state_discovery_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

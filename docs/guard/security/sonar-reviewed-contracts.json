@@ -22,7 +22,6 @@
     ["AaBsqG_kkSbnfNaazftj", "variadic", "guard/runtime/exact_cloud_review.py", "exact_cloud_review_operations"],
     ["AaBsqHIVkSbnfNaazfu2", "loopback", "guard/adapters/codex_daemon_hook_transport.py", "_daemon_json_get"],
     ["AaBsqHIVkSbnfNaazfu1", "loopback", "guard/adapters/codex_daemon_hook_transport.py", "_daemon_response_once"],
-    ["AaBsqHAAkSbnfNaazftl", "variadic", "guard/runtime/routine_node_identity.py", "_string_values"],
     ["AaBsqG4BkSbnfNaazfsg", "variadic", "guard/runtime/secret_file_request_services/request_artifacts.py", "command_list_candidate_texts"],
     ["AaBsqHGdkSbnfNaazfuY", "variadic", "guard/adapters/claude_hook_config.py", "handler_identity"],
     ["AaBsqG7UkSbnfNaazftC", "variadic", "guard/native_cisco_preflight.py", "scan_action_for_cisco_evidence"],

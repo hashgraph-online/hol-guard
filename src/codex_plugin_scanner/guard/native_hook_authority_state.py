@@ -24,6 +24,7 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 HOOK_AUTHORITY_STATE_FEATURE = "hook-authority-state-v1"
+HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE = "hook-authority-state-session-ops-v1"
 _REQUEST_SCHEMA = "guard-hook-authority-state-request.v1"
 _RESULT_SCHEMA = "guard-hook-authority-state-result.v1"
 _TIMEOUT_SECONDS = 5.0
@@ -36,6 +37,7 @@ def hook_authority_state(
     *,
     now: str,
     create_key: bool = False,
+    required_feature: str = HOOK_AUTHORITY_STATE_FEATURE,
     **fields: object,
 ) -> dict[str, object] | None:
     """The resident's ``ok`` payload for ``op``, or ``None`` when it cannot answer.
@@ -70,7 +72,7 @@ def hook_authority_state(
             request=wire,
             guard_home=home,
             timeout_seconds=_TIMEOUT_SECONDS,
-            required_feature=HOOK_AUTHORITY_STATE_FEATURE,
+            required_feature=required_feature,
             response_schema=_RESULT_SCHEMA,
             max_request_bytes=_MAX_REQUEST_BYTES,
             record_success=False,

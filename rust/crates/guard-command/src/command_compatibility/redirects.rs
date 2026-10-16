@@ -88,8 +88,9 @@ mod tests {
             Redirect::Stderr
         );
         assert_eq!(posix_redirect("cat .env 2>&1"), Redirect::Stderr);
-        // Only Unix has the fixed stderr sink the parser treats as inert.
-        let null = if cfg!(unix) {
+        // The sink is inert on Unix, and on Windows only while no drive has a
+        // `\dev` directory a PowerShell or cmd redirection could write into.
+        let null = if crate::parser_segments::stderr_null_sink_is_inert() {
             Redirect::Stderr
         } else {
             Redirect::Output

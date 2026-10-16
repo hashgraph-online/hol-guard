@@ -28,6 +28,12 @@ POLICY_SNAPSHOT_UNAVAILABLE_ERRORS = frozenset(
         "native_policy_snapshot_ack_mismatch",
     }
 )
+# Errors the installed files cannot recover from on their own. A runtime and
+# a command catalog that came from different builds reject every snapshot the
+# publisher sends, so retrying only spends the publish timeout on each hook
+# call. The install has to be repaired.
+POLICY_SNAPSHOT_PERSISTENT_ERRORS = frozenset({"native_command_program_binding_mismatch"})
+POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS = POLICY_SNAPSHOT_UNAVAILABLE_ERRORS | POLICY_SNAPSHOT_PERSISTENT_ERRORS
 POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
 POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
 POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256

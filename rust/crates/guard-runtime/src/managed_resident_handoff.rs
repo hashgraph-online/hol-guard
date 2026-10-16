@@ -123,7 +123,7 @@ fn request_shutdown(state: &ResidentState, deadline: Instant) -> bool {
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
         start_marker: &state.process_start_marker,
-        digest: Some(&state.runtime_sha256),
+        runtime: crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256),
     };
     crate::resident_client::send_request_for_digest(
         &state.transport,

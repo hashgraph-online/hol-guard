@@ -39,6 +39,26 @@ fn plain_hashline_patches_report_each_file_once() {
         targets("*** Begin Patch\n[~/project/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[ ~/src/b.ts]\nPUT >$:\n+y\n*** End Patch\n"),
         Some(vec!["~/project/src/a.ts".to_owned(), "~/src/b.ts".to_owned()])
     );
+    // Windows drive paths name host files. A forward slash works anywhere;
+    // a backslash separates only on Windows.
+    assert_eq!(
+        targets("[C:/Users/x/p/a.md]\nPUT >$:\n+y\n"),
+        Some(vec!["C:/Users/x/p/a.md".to_owned()])
+    );
+    assert_eq!(
+        targets("[C:\\Users\\x\\other-project\\notes.md#FB48]\nPUT 1.=1:\n+x\n"),
+        cfg!(windows).then(|| vec!["C:\\Users\\x\\other-project\\notes.md".to_owned()])
+    );
+    // Oh My Pi drops unified-diff `-old` rows under a `PUT`, or keeps
+    // bullet-shaped ones as text; either way they are body, not headers.
+    assert_eq!(
+        targets("*** Begin Patch\n[package.json#0AC4]\nPUT 3.=3:\n-    \"test\": \"echo none\"\n+    \"test\": \"node --test\"\n*** End Patch\n"),
+        Some(vec!["package.json".to_owned()])
+    );
+    assert_eq!(
+        targets("[README.md#0AC4]\nPUT >$:\n- [ ] add\n-[src/b.ts#0AC4]\n+- [x] list\n"),
+        Some(vec!["README.md".to_owned()])
+    );
     // The envelope is optional, as in Oh My Pi.
     assert_eq!(
         targets("[app/[id]/page.tsx#BEEF]\r\nPUT 1.=1:\r\n+x\r\n"),
@@ -54,6 +74,10 @@ fn deletes_moves_and_rewritten_paths_stay_unproven() {
         "*** Begin Patch\n[\"src/a.ts\"#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[*** Update File: src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[local:/notes.md#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
+        "[C:notes.md#0AC4]\nPUT 1.=1:\n+x\n",
+        "[C:\\x\\a.md:stream#0AC4]\nPUT 1.=1:\n+x\n",
+        "[\\\\?\\C:\\x\\a.md#0AC4]\nPUT 1.=1:\n+x\n",
+        "[ab:/notes.md#0AC4]\nPUT 1.=1:\n+x\n",
         "*** Begin Patch\n[~user/src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[~#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[\tsrc/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
@@ -63,7 +87,10 @@ fn deletes_moves_and_rewritten_paths_stay_unproven() {
         "*** Begin Patch\n[src/a#b.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\n[#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n",
         "*** Begin Patch\nPUT 1.=1:\n+x\n[src/a.ts#0AC4]\n*** End Patch\n",
-        "*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\n-x\n+y\n*** End Patch\n",
+        // A `-` row outside a `PUT` body.
+        "*** Begin Patch\n[src/a.ts#0AC4]\n-x\nPUT 1.=1:\n+y\n*** End Patch\n",
+        "*** Begin Patch\n[src/a.ts#0AC4]\nCUT 1.=1\n-x\n*** End Patch\n",
+        "*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\n+y\n[src/b.ts#0AC4]\n-x\n*** End Patch\n",
         "*** Begin Patch\n[src/a.ts#0AC4]\n  [src/b.ts#0AC4]\n*** End Patch\n",
         "*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n*** End Patch\n[src/b.ts]\n",
         "*** Begin Patch\n*** Update File: src/a.ts\n@@\n-x\n+y\n*** End Patch\n",

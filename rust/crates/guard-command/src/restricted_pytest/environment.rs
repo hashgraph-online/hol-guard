@@ -78,6 +78,14 @@ static SECRET: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(?:^|_)(?:API_?KEY|AUTH(?:ORIZATION)?|BEARER|COOKIE|CREDENTIALS?|DSN|KEY(?:_?ID)?|PASSWORD|PRIVATE_?KEY|SECRET|SESSION|TOKEN)(?:_|$)").unwrap()
 });
 
+/// Whether [`filter`] can pass the caller's setting `key` to the run; it
+/// drops every other name.
+pub(crate) fn forwarded_setting(key: &str) -> bool {
+    matches!(key, "PYTHONPATH" | "VIRTUAL_ENV")
+        || SAFE_ENV_KEYS.contains(&key)
+        || key.starts_with("LC_")
+}
+
 pub(super) fn filter(
     source: &BTreeMap<String, String>,
     workspace: &Path,
@@ -127,6 +135,24 @@ pub(super) fn filter(
         ("TMPDIR", private_tmp.to_string_lossy().into_owned()),
     ] {
         result.insert(key.to_owned(), value);
+    }
+    // A workspace run (no allowed executables) reaches `pnpm` and `yarn`
+    // through Corepack, which reads the package manager it runs from a cache
+    // below the real HOME. The plan grants that cache read-only; Corepack must
+    // neither fetch (there is no network) nor pin a version in the workspace.
+    if allowed.is_empty() {
+        if let Some(cache) = super::toolchains::host_corepack_home() {
+            let cache = cache.to_string_lossy().into_owned();
+            for (key, value) in [
+                ("COREPACK_HOME", cache.as_str()),
+                ("COREPACK_ENABLE_AUTO_PIN", "0"),
+                ("COREPACK_ENABLE_DOWNLOAD_PROMPT", "0"),
+                ("COREPACK_ENABLE_NETWORK", "0"),
+                ("COREPACK_DEFAULT_TO_LATEST", "0"),
+            ] {
+                result.insert(key.to_owned(), value.to_owned());
+            }
+        }
     }
     // A linked user site is read through the private HOME; otherwise it stays off.
     if !user_site {

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ..action_lattice import coerce_guard_action
+from ..local_cli_hook import local_cli_grant_action
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
@@ -14,7 +15,6 @@ from ..native_policy_snapshot_publisher import provision_native_verifier_key_for
 from ..native_pretool import native_pre_tool_policy_floor
 from ..runtime.actions import GuardActionEnvelope
 from ..store import GuardStore
-from .commands_hook_local_cli import local_cli_grant_action
 
 
 def _runtime_package_raw_command(

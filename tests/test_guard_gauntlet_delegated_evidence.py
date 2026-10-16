@@ -138,3 +138,25 @@ def test_parent_evidence_survives_lifecycle_failure_for_cleanup(tmp_path: Path) 
     with pytest.raises(ValueError):
         read_case_logs(case, parent, tmp_path / "absent-guard.jsonl", {}, observer)
     assert any(event.get("args", {}).get("command") == "mktemp -d" for event in case["events"])
+
+
+def test_wait_scenario_accepts_windows_resolved_selector_read() -> None:
+    scenario = next(s for s in load_catalog() if s.id == "omp-native-wait-on-task")
+
+    def read(path: str, resolved: str) -> dict[str, object]:
+        details = {
+            "meta": {"source": {"type": "path", "value": resolved}},
+            "displayContent": {"startLine": 1},
+        }
+        return {"id": "child", "name": "read", "args": {"path": path}, "result": {"details": details}}
+
+    case = {"delegated_call_ids": ["child"]}
+    head = [{"id": "task", "name": "task", "args": {}}, {"id": "wait", "name": "wait", "args": {}}]
+    windows = "{{workspace}}\\src\\one.ts"
+    assert native_tools_scope_error(scenario, [*head, read("src/one.ts:raw", windows)], case) is None
+    for path, resolved in [
+        ("README.md:raw", "{{workspace}}\\README.md"),
+        ("src/one.ts:raw", "{{workspace}}\\src/one.ts"),
+        ("src\\one.ts:raw", windows),
+    ]:
+        assert native_tools_scope_error(scenario, [*head, read(path, resolved)], case)

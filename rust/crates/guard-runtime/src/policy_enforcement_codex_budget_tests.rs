@@ -293,8 +293,11 @@ fn codex_routine_apply_patch_clears_the_persistence_floor() {
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::write(workspace.join("src/settings.ts"), "retryLimit: 3,\n").unwrap();
     std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
+    // Hosts spell the workspace without the `\\?\` that canonicalize adds on
+    // Windows, where `/` inside such a verbatim path is no separator.
     let root = std::fs::canonicalize(root).unwrap();
-    let (home, workspace) = (root.join("home"), root.join("home/project"));
+    let root = std::path::PathBuf::from(root.to_string_lossy().trim_start_matches(r"\\?\"));
+    let (home, workspace) = (root.join("home"), root.join("home").join("project"));
     let mut installed = policy("allow");
     installed
         .risk_actions
@@ -318,7 +321,13 @@ fn codex_routine_apply_patch_clears_the_persistence_floor() {
         );
         apply_pre_tool_policy(&snapshot(installed.clone()), &payload, native).unwrap()
     };
-    let routine = review(&workspace.join("src/settings.ts").display().to_string());
+    let routine = review(
+        &workspace
+            .join("src")
+            .join("settings.ts")
+            .display()
+            .to_string(),
+    );
     assert_eq!(routine.decision, "allow", "{}", routine.reason_code);
     assert_eq!(review(".env").decision, "deny");
 }

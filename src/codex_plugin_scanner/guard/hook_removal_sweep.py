@@ -189,29 +189,32 @@ def prune_guard_hooks(payload: dict[str, object]) -> tuple[dict[str, object], li
     return result, removed
 
 
-def _load(path: Path) -> tuple[dict[str, object] | None, str | None]:
+def _load(path: Path) -> tuple[dict[str, object] | None, str | None, str | None]:
     try:
         metadata = path.lstat()
         if not stat.S_ISREG(metadata.st_mode):
-            return None, "not_regular_file"
+            return None, "not_regular_file", None
         if metadata.st_size > _MAX_CONFIG_BYTES:
-            return None, "too_large"
+            return None, "too_large", None
         raw = path.read_bytes()
     except OSError:
-        return None, "unreadable"
+        return None, "unreadable", None
     try:
         text = raw.decode("utf-8")
         payload = tomllib.loads(text) if path.suffix == ".toml" else json.loads(text)
     except (UnicodeDecodeError, ValueError, tomllib.TOMLDecodeError):
-        return None, "unparseable"
+        return None, "unparseable", None
     if not isinstance(payload, dict):
-        return None, "unexpected_shape"
-    return payload, None
+        return None, "unexpected_shape", None
+    return payload, None, text
 
 
-def _serialize(path: Path, payload: dict[str, object]) -> str | None:
+def _serialize(path: Path, payload: dict[str, object], original: str | None) -> str | None:
     if path.suffix == ".toml":
-        text = dump_toml(payload)
+        # The file belongs to whoever wrote it, and a sweep only takes Guard's
+        # own hooks out of it. Rendering the edit onto the text we read keeps
+        # the rest of their config — comments and all — exactly as it was.
+        text = dump_toml(payload, original=original)
         try:
             if tomllib.loads(text) != payload:
                 return None
@@ -236,7 +239,7 @@ def _atomic_replace(path: Path, text: str, mode: int) -> None:
 def sweep_config_file(path: Path, *, dry_run: bool) -> SweepFileResult:
     """Remove Guard hook handlers from one file; never raises."""
 
-    payload, problem = _load(path)
+    payload, problem, original = _load(path)
     if payload is None:
         return SweepFileResult(path=path, error=problem)
     pruned, removed = prune_guard_hooks(payload)
@@ -245,7 +248,7 @@ def sweep_config_file(path: Path, *, dry_run: bool) -> SweepFileResult:
     events = tuple(sorted({name for name in removed if name}))
     if dry_run:
         return SweepFileResult(path=path, removed=len(removed), event_names=events)
-    text = _serialize(path, pruned)
+    text = _serialize(path, pruned, original)
     if text is None:
         return SweepFileResult(path=path, removed=0, error="rewrite_not_lossless", event_names=events)
     try:
@@ -316,7 +319,7 @@ def _inspect_symlinked_config(path: Path, *, dry_run: bool) -> SweepFileResult |
         target = path.resolve(strict=True)
     except (OSError, RuntimeError):
         return None
-    payload, _problem = _load(target)
+    payload, _problem, _original = _load(target)
     if payload is None:
         return None
     _pruned, removed = prune_guard_hooks(payload)

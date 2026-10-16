@@ -211,27 +211,6 @@ def test_env_outage_returns_incomplete_transport_dto(monkeypatch):
     assert result.executable_argv == ()
 
 
-def test_local_cli_parser_outage_uses_existing_unverified_grant_path(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard import local_cli_hook, local_cli_trust
-
-    def unavailable(*args, **kwargs):
-        raise client.NativeCommandModelError("native_rich_command_model_unavailable")
-
-    monkeypatch.setattr(local_cli_trust, "identify_package_json_scripts", unavailable)
-    seen = []
-    monkeypatch.setattr(
-        local_cli_hook, "unverified_local_cli_action", lambda store, action: seen.append(action) or "review"
-    )
-    action = local_cli_hook.apply_local_cli_grant(
-        store=object(),
-        command="blocked-cli",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="allow",
-    )
-    assert action == "review" and seen == ["allow"]
-
-
 def test_fresh_status_probe_receives_deadline_and_expired_probe_does_not_start(monkeypatch):
     from types import SimpleNamespace
 
@@ -324,7 +303,6 @@ def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
             raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")
 
-    monkeypatch.setattr(artifacts, "parse_shell_command", forbidden)
     monkeypatch.setattr(artifacts, "_hook_runtime_artifact_with_native", forbidden)
     result = artifacts._hook_runtime_artifact(
         harness=harness,

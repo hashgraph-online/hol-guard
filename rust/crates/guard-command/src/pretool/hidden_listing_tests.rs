@@ -14,7 +14,7 @@ fn fixture_root() -> PathBuf {
             std::process::id()
         ));
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::canonicalize(root).unwrap()
+    crate::runtime_read_paths::canonicalize_text(&root).unwrap()
 }
 
 fn listed(value: &Path, home: &Path, cwd: &Path) -> bool {
@@ -220,9 +220,11 @@ fn codex_plan_evidence_reads_but_auth_and_config_do_not() {
     }
     std::fs::write(home.join(".codex/auth.json"), "{}").unwrap();
     std::fs::write(home.join(".codex/config.toml"), "").unwrap();
+    // Callers pass the resolved path (`\\?\` verbatim on Windows).
+    let resolved = |path: PathBuf| std::fs::canonicalize(path).unwrap();
     for allowed in ["todo.md", "evidence.json", "notes.txt"] {
         assert!(
-            codex_notes_document(&plans.join(allowed), home.to_str()),
+            codex_notes_document(&resolved(plans.join(allowed)), home.to_str()),
             "{allowed}"
         );
     }
@@ -232,7 +234,7 @@ fn codex_plan_evidence_reads_but_auth_and_config_do_not() {
         home.join(".codex/config.toml"),
     ] {
         assert!(
-            !codex_notes_document(&denied, home.to_str()),
+            !codex_notes_document(&resolved(denied.clone()), home.to_str()),
             "{}",
             denied.display()
         );

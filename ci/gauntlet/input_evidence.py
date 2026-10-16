@@ -63,6 +63,10 @@ def public_observations(rows: list[dict], replacements: dict[str, str]) -> list[
     """
     result = []
     for row in rows:
+        # A discarded bridge reply is retried by the extension. It is not a
+        # Guard answer, and leaving it in the case fails the retry that recovered.
+        if row.get("observer_error_code") == "bridge_no_reply":
+            continue
         if row.get("observer_error") or row.get("transport_error"):
             result.append(row)
             continue

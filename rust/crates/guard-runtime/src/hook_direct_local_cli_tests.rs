@@ -1,7 +1,8 @@
-use super::{custom_rule_response, launch_cwd, pre_tool_command, RuleCheck};
+use super::{custom_rule_response, launch_cwd, launches_local_cli, pre_tool_command, RuleCheck};
 use crate::context_digest_package_scripts::package_json_scripts;
 use serde_json::{json, Map, Value};
 use std::fs;
+use std::path::Path;
 
 const SCHEMA: &str = "
 create table local_cli_grant (
@@ -28,6 +29,8 @@ fn object(value: Value) -> Map<String, Value> {
     value.as_object().unwrap().clone()
 }
 
+/// A canonical scratch directory. On Windows it carries the `\\?\` prefix,
+/// after which `/` is not a separator, so callers join paths instead.
 fn scratch(label: &str) -> String {
     let root = std::env::temp_dir().join(format!(
         "hook-direct-local-cli-{label}-{}",
@@ -78,7 +81,7 @@ impl Case {
         let workspace = scratch(&format!("{label}-work"));
         let guard_home = scratch(&format!("{label}-home"));
         fs::write(
-            format!("{workspace}/package.json"),
+            Path::new(&workspace).join("package.json"),
             br#"{"name": "demo", "scripts": {"build": "tsc", "db:migrate": "knex"}}"#,
         )
         .unwrap();
@@ -89,7 +92,8 @@ impl Case {
         let seed = seed
             .replace("{cli}", &identity.cli_id)
             .replace("{hash}", &identity.identity_hash);
-        let connection = rusqlite::Connection::open(format!("{guard_home}/guard.db")).unwrap();
+        let connection =
+            rusqlite::Connection::open(Path::new(&guard_home).join("guard.db")).unwrap();
         connection.execute_batch(SCHEMA).unwrap();
         connection.execute_batch(&seed).unwrap();
         Self {
@@ -148,6 +152,29 @@ fn a_launch_without_a_blocking_grant_keeps_the_edge_response() {
         ),
     );
     assert_eq!(stale.check("npm run build", false, false), Ok(None));
+}
+
+#[test]
+fn only_a_command_that_launches_a_local_cli_reads_a_grant() {
+    let case = Case::new("launches", "");
+    let launches =
+        |payload: Value| launches_local_cli(&object(payload), &case.workspace, &case.workspace);
+    assert_eq!(
+        launches(json!({ "tool_input": { "command": "npm run build" } })),
+        Ok(true)
+    );
+    assert_eq!(
+        launches(json!({ "tool_input": { "command": "pwd" } })),
+        Ok(false)
+    );
+    assert_eq!(
+        launches(json!({ "tool_input": { "file_path": "/tmp/a" } })),
+        Ok(false)
+    );
+    assert_eq!(
+        launches(json!({ "tool_input": { "command": "npm run build" }, "cwd": "relative" })),
+        Ok(false)
+    );
 }
 
 #[test]
@@ -235,6 +262,38 @@ fn gated(
 #[test]
 fn an_unreadable_store_defers() {
     let broken = Case::new("broken", "");
-    fs::write(format!("{}/guard.db", broken.guard_home), b"not a database").unwrap();
+    fs::write(
+        Path::new(&broken.guard_home).join("guard.db"),
+        b"not a database",
+    )
+    .unwrap();
     assert_eq!(broken.check("npm run build", false, false), Err(()));
+}
+
+#[test]
+fn a_grant_the_resident_cannot_read_answers_as_unverified() {
+    // A hash of the wrong type fails the resident's grant read after the
+    // catalog read succeeds, which the daemon blocks as unverified.
+    let damaged = Case::new(
+        "damaged",
+        "insert into local_cli_grant values ('{cli}', x'00', 'blocked');",
+    );
+    let response = damaged
+        .check("npm run build", false, false)
+        .unwrap()
+        .unwrap();
+    assert_eq!(response["approval_reuse_status"], "blocked");
+    let text = response.to_string();
+    assert!(
+        text.contains("Guard could not check this command against your custom extension rules.")
+    );
+    assert!(text.contains("local_cli_extension_unverified"));
+    let watch = damaged
+        .check("npm run build", true, false)
+        .unwrap()
+        .unwrap();
+    assert!(watch.get("approval_reuse_status").is_none());
+    assert!(!watch.to_string().contains("local_cli_extension_unverified"));
+    assert_eq!(damaged.check("npm run build", false, true), Err(()));
+    assert_eq!(damaged.check("pwd", false, false), Ok(None));
 }

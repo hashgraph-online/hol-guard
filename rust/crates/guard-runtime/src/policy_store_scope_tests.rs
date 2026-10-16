@@ -375,3 +375,49 @@ fn resident_refuses_mcp_grant_decisions_for_another_guard_home() {
     assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
     let _ = fs::remove_dir_all(&root);
 }
+
+fn policy_integrity_generation_for(guard_home: &Path, store_path: &Path) -> Vec<u8> {
+    serde_json::to_vec(&serde_json::json!({
+        "operation": "policy_integrity_rows",
+        "request": {
+            "schema": guard_contracts::POLICY_INTEGRITY_ROWS_REQUEST_SCHEMA,
+            "request_id": "policy-integrity-home-pin",
+            "verify": [],
+            "sign": [],
+            "generation": {
+                "store_path": store_path.to_string_lossy(),
+                "guard_home": guard_home.to_string_lossy(),
+                "trusted_state": {
+                    "cutover_complete": false,
+                    "generation": 1,
+                    "pending_generation": null,
+                    "version": 1,
+                },
+            },
+        },
+    }))
+    .unwrap()
+}
+
+#[test]
+fn resident_refuses_policy_integrity_generation_for_a_foreign_store() {
+    let root = root();
+    install_key(&root);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let other = std::env::temp_dir().join(format!(
+        "hol-guard-foreign-policy-integrity-{}",
+        std::process::id()
+    ));
+    let mismatch: Result<Vec<u8>, String> = Err("native_guard_home_mismatch".to_owned());
+    let evaluate = |home: &Path, store_path: &Path| {
+        crate::resident_protocol::evaluate_resident_bytes(
+            &policy_integrity_generation_for(home, store_path),
+            Some(&store),
+        )
+    };
+    assert_eq!(evaluate(&other, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &other.join("guard.db")), mismatch);
+    assert_eq!(evaluate(&root, &root.join("other.db")), mismatch);
+    assert_ne!(evaluate(&root, &root.join("guard.db")), mismatch);
+    let _ = fs::remove_dir_all(&root);
+}

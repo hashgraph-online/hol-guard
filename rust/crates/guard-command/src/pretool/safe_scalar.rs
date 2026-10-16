@@ -4,7 +4,48 @@ pub(super) const MAX_SAFE_SLEEP_SECONDS: f64 = 3600.0;
 
 #[path = "process_probes.rs"]
 mod process_probes;
-pub(super) use process_probes::{safe_lsof_arguments, safe_pg_isready_arguments};
+#[cfg(all(test, unix))]
+pub(super) use process_probes::steady_ancestry;
+pub use process_probes::PsqlEnvironment;
+pub(super) use process_probes::{
+    local_postgres_host, plain_name as postgres_name, port as postgres_port, safe_lsof_arguments,
+    safe_pg_isready_arguments, trusted_postgres_socket,
+};
+use process_probes::{PSQL_ROUTING_VARIABLES, PSQL_STARTUP_VARIABLES};
+
+/// What a `psql` read inherits from the session. psql runs the system psqlrc
+/// `PGSYSCONFDIR` may relocate, then the file `PSQLRC` names, else
+/// `~/.psqlrc` from the shell's HOME (`%APPDATA%\postgresql\psqlrc.conf` on
+/// Windows); libpq takes its server from the host, port and service
+/// variables. A stamped name counts whatever its value. The stamp carries
+/// HOME's value, which must name the `home_dir` that `psql_reads` checks, but
+/// not APPDATA's, so a stamped APPDATA on Windows leaves its file unknown.
+pub(super) fn psql_environment(
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    shell_home_matches: bool,
+) -> PsqlEnvironment {
+    let unset = |variables: &[&str]| match execution_environment {
+        Some(environment) => {
+            environment.has_valid_shape()
+                && !environment.environment_names.iter().any(|name| {
+                    variables
+                        .iter()
+                        .any(|variable| name.eq_ignore_ascii_case(variable))
+                })
+        }
+        None => variables
+            .iter()
+            .all(|variable| std::env::var_os(variable).is_none()),
+    };
+    PsqlEnvironment {
+        startup_files_absent: unset(&PSQL_STARTUP_VARIABLES)
+            && execution_environment.is_none_or(|environment| {
+                (environment.home.is_none() || shell_home_matches)
+                    && (!cfg!(windows) || unset(&["APPDATA"]))
+            }),
+        routing_unset: unset(&PSQL_ROUTING_VARIABLES),
+    }
+}
 
 /// `printenv` naming only location, identity or display variables prints
 /// those values and nothing else. A bare `printenv`, an option, or any name
@@ -157,6 +198,33 @@ pub(super) fn version_probe_arguments(basename: &str, arguments: &[String]) -> b
     }
 }
 
+/// `node --check` parses a script and exits without running it; at most a
+/// syntax error with the offending source line reaches the output. That line
+/// is file content, so the file operand needs the same read proof as `cat`,
+/// and the operand-free form only parses what a proven producer piped in.
+/// Every other option is refused: `--require` and `--import` preloads still
+/// run under `--check`, and an operand before the flag is a script to run.
+pub(super) fn node_syntax_check_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    let check = |flag: &String| matches!(flag.as_str(), "--check" | "-c");
+    // An inherited `NODE_OPTIONS=--require` or loader path also runs code.
+    if !context.npm_config_inert {
+        return false;
+    }
+    match arguments {
+        [flag] => piped_input && check(flag),
+        [flag, target] => {
+            check(flag)
+                && !target.starts_with('-')
+                && super::safe_reads::command_read_target(target, context, false)
+        }
+        _ => false,
+    }
+}
+
 pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
     let mut saw_format = false;
     let mut expect_epoch = false;
@@ -212,4 +280,34 @@ pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
         return false;
     }
     !expect_epoch
+}
+
+#[cfg(test)]
+mod psql_environment_tests {
+    fn stamped(names: &[&str]) -> guard_contracts::GuardExecutionEnvironmentV1 {
+        guard_contracts::GuardExecutionEnvironmentV1 {
+            path: "/usr/bin".into(),
+            environment_names: names.iter().map(|name| (*name).to_owned()).collect(),
+            environment_digest: "0".repeat(64),
+            home: None,
+            git_pager_disabled: false,
+            pager_disabled: false,
+            xdg_config_home: None,
+            git_config_no_system: true,
+            library_search_paths: Default::default(),
+        }
+    }
+
+    #[test]
+    fn a_stamped_appdata_leaves_the_windows_startup_file_unknown() {
+        let plain = super::psql_environment(Some(&stamped(&["PATH"])), false);
+        assert!(plain.startup_files_absent && plain.routing_unset);
+        let appdata = super::psql_environment(Some(&stamped(&["PATH", "APPDATA"])), false);
+        assert_eq!(appdata.startup_files_absent, !cfg!(windows));
+        assert!(appdata.routing_unset);
+        for name in ["PSQLRC", "pgsysconfdir"] {
+            let environment = super::psql_environment(Some(&stamped(&[name])), false);
+            assert!(!environment.startup_files_absent, "{name}");
+        }
+    }
 }

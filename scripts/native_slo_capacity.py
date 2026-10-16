@@ -387,6 +387,13 @@ def _measure_rss_and_c64(
                 on_submitted=progress.submit,
                 on_cancelled=progress.cancel,
             )
+        if include_capacity:
+            # 16-client waves reuse a few lazily started resident client streams; the 64-client wave fills the
+            # pool to its fixed cap. Fill it first so the baseline holds that bounded pool, not just the c64 delta.
+            _, burst_errors = _run_concurrent(
+                session, routes, load_concurrency, executor, stage="rss_baseline_requests", **baseline_kwargs
+            )
+            _require(burst_errors == 0, "resident stream pool burst returned request errors")
         rss_baseline = _steady_state_rss_baseline(
             lambda: _prewarm_ready_hook_workers(session, routes, ready_workers, executor, **baseline_kwargs),
             sample_capacity=lambda: _baseline_capacity(session, ready_workers),

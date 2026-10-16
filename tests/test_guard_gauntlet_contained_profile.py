@@ -161,6 +161,7 @@ def _assessment_inputs(case, *, filesystem=None, events=None, wrapper_workspace=
         "events": public,
         "guard_observations": observations,
         "native_routes": {"native_resident": 2},
+        "resident_direct_answers": 0,
         "inference": {
             "live_rounds": [
                 {

@@ -64,6 +64,19 @@ pub(crate) fn proven_in_place_segment(
         && super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
 }
 
+/// A whole `sed` segment that the native proof accepts as a read, such as
+/// `sed -n 5,30p note.md`. It writes nothing, so the compatibility layer
+/// does not count it as a write to the paths it names.
+pub(crate) fn proven_read_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    segment.executable.as_deref() == Some("sed")
+        && !in_place_segment(segment)
+        && super::segment_proof::exact_safe_segment_with_context(model, segment, false, context)
+}
+
 /// The script reaches `sed` as written. A command substitution, parameter
 /// expansion or `$'...'` string could add a flag or a second command after the
 /// script was checked. `$` is accepted only as the end-of-line anchor right

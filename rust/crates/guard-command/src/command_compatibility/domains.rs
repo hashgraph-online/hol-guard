@@ -24,6 +24,8 @@ const SENSITIVE_PATHS: [&str; 9] = [
 /// A credential location named anywhere in the value, even inside prose.
 fn sensitive_path(value: &str) -> bool {
     let value = value.to_ascii_lowercase().replace('\\', "/");
+    // A dotted read of a port variable (`process.env.PORT`) names no `.env` file.
+    let value = crate::environment_secret_dump::without_node_port_reads(&value);
     SENSITIVE_PATHS.iter().any(|needle| value.contains(needle))
 }
 
@@ -363,22 +365,24 @@ pub(super) fn observe(
             );
         }
     }
-    let write_command = matches!(
-        executable.as_str(),
-        "cp" | "mv"
-            | "tee"
-            | "dd"
-            | "install"
-            | "touch"
-            | "truncate"
-            | "sed"
-            | "awk"
-            | "gawk"
-            | "ln"
-            | "chmod"
-            | "chown"
-            | "chgrp"
-    );
+    // A proven `sed` print or stdout substitution writes no file.
+    let write_command = (executable == "sed"
+        && !crate::pretool::sed_edits::proven_read_segment(command, segment, context))
+        || matches!(
+            executable.as_str(),
+            "cp" | "mv"
+                | "tee"
+                | "dd"
+                | "install"
+                | "touch"
+                | "truncate"
+                | "awk"
+                | "gawk"
+                | "ln"
+                | "chmod"
+                | "chown"
+                | "chgrp"
+        );
     // A quoted `>` in a POSIX argument (a Markdown placeholder or arrow in a
     // comment body) writes nothing; interpreter code keeps the raw check.
     let redirect = if interpreter || command.dialect != "posix" {

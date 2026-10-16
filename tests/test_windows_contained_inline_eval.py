@@ -104,8 +104,8 @@ def test_windows_contains_python_eval_only(monkeypatch):
     assert not platform_contains(_receipt("workspace-contained-v1"))
 
 
-@pytest.mark.parametrize(("harness", "routed"), [("claude-code", True), ("codex", False), ("zcode", False)])
-def test_windows_routes_only_the_git_bash_harness(monkeypatch, tmp_path, harness, routed):
+@pytest.mark.parametrize(("harness", "routed"), [("claude-code", True), ("codex", True), ("zcode", False)])
+def test_windows_routes_only_harnesses_with_a_sink_command(monkeypatch, tmp_path, harness, routed):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: tmp_path)
     payload = {
@@ -122,6 +122,10 @@ def test_windows_routes_only_the_git_bash_harness(monkeypatch, tmp_path, harness
     }
     result = contained_zcode_response(_receipt(), input_text=json.dumps(payload), config=config, cli_args=[])
     assert (result is not None) is routed
+    if harness == "codex":
+        command = result["hookSpecificOutput"]["updatedInput"]["command"]
+        assert command.startswith("& '")
+        assert "execute-contained-test" in command
 
 
 def test_windows_sink_finds_the_request_when_temp_differs(monkeypatch, tmp_path):

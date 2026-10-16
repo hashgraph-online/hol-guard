@@ -11,36 +11,28 @@
 //! select the relay wherever the runtime advertises it. A lane the daemon
 //! has only not prepared yet keeps the session native.
 //!
-//! Unix only: the child session relies on process groups.
+//! The child session runs in its own process group on unix and in a
+//! kill-on-close JobObject on Windows.
 
 /// `hol-guard-runtime` subcommand that runs the relay.
 pub(crate) const RELAY_COMMAND: &str = "mcp-relay";
 
-/// Capability string installers gate relay selection on; advertised on unix.
-#[cfg_attr(not(unix), allow(dead_code))]
+/// Capability string installers gate relay selection on.
 pub(crate) const RELAY_FEATURE: &str = "mcp-stdio-relay-v1";
 
 /// Run the relay; returns the process exit status.
 pub(crate) fn run(python_argv: &[String]) -> i32 {
-    #[cfg(unix)]
-    {
-        unix::run(python_argv)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = python_argv;
-        eprintln!("hol-guard mcp-relay: the native MCP relay is not supported on this platform");
-        2
-    }
+    session::run(python_argv)
 }
 
-#[cfg(unix)]
-mod unix {
+mod session {
     use std::io;
 
     use crate::guard_config_load::approval_wait_timeout_seconds;
     use crate::mcp_relay_args::parse;
-    use crate::mcp_relay_core::{child_response_timeout, ChildLink, Relay, RelayExit};
+    use crate::mcp_relay_core::{
+        child_response_timeout, inline_approval_timeout, ChildLink, Relay, RelayExit,
+    };
     use crate::mcp_relay_host::LineHost;
     use crate::mcp_relay_lane::{
         hand_off, hands_off, note, startup, DaemonKick, Gate, STARTUP_BUDGET,
@@ -54,6 +46,10 @@ mod unix {
     }
 
     pub(super) fn run(python_argv: &[String]) -> i32 {
+        // The host reads this relay's stdio to EOF, so no child the relay
+        // starts (a detached daemon launch included) may hold it open.
+        #[cfg(windows)]
+        guard_runtime_windows_process::disinherit_standard_handles();
         let args = match parse(python_argv) {
             Ok(args) => args,
             Err(reason) => return fail(&reason, 2),
@@ -103,7 +99,8 @@ mod unix {
             }
         };
         let timeout = child_response_timeout(configured);
-        let mut relay = Relay::new(child, host, authority, timeout);
+        let inline_timeout = inline_approval_timeout(configured);
+        let mut relay = Relay::new(child, host, authority, timeout, inline_timeout);
         let outcome = relay.serve();
         let mut child = relay.into_child();
         match outcome {

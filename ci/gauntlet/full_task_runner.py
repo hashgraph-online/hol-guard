@@ -36,9 +36,11 @@ from .full_tasks import (
     authorization,
     create_full_task_fixture,
     full_task_checks,
+    full_task_evidence,
     load_full_tasks,
 )
 from .host_process import clean_environment, realistic_environment, run_process
+from .observed_extension import generate_observed_extension
 from .provider import InferenceRelay, LoopbackCollector
 from .source_identity import source_identity
 
@@ -146,7 +148,7 @@ def run_full_task(
             before = worker.store.count_approval_requests(status=None)
             extension, settings = private / "hol-guard.ts", private / "settings.json"
             settings.write_text("{}\n")
-            probe._generate_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
+            generate_observed_extension(extension, guard_home=guard_home, home=fixture.home, settings_path=settings)
             case["guard_extension_sha256"] = digest_file(extension)
             environment = realistic_environment(
                 clean_environment(fixture.home, agent_dir, fixture.canary), fixture.home
@@ -225,6 +227,7 @@ def run_full_task(
             if fixture is not None:
                 try:
                     case["filesystem"] = full_task_checks(fixture, task.id)
+                    case["oracle_evidence"] = full_task_evidence(fixture, task.id)
                 except Exception as exc:
                     case.setdefault("execution_error", "checks-" + type(exc).__name__)
     case["ended_at"] = time.time()

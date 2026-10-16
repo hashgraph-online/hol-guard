@@ -25,6 +25,11 @@ from .runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
+from .store_extension_control_authority_catalog_events import (
+    already_recorded,
+    build_catalog_migration_payload,
+    insert_catalog_migration_event,
+)
 from .store_extension_control_authority_support import (
     _now,
     _private_hash,
@@ -215,35 +220,29 @@ class ExtensionControlAuthorityCatalogMixin:
         layers: tuple[ExtensionControlLayer, ...],
         retired_targets: tuple[str, ...],
     ) -> None:
-        payload = json.dumps(
-            {
-                "previous_revision": previous_revision,
-                "revision": revision,
-                "previous_catalog_digest": previous_catalog_digest,
-                "catalog_digest": catalog_digest,
-                "layer_count": len(layers),
-                "control_count": sum(len(layer.controls) for layer in layers),
-                "retired_target_count": len(retired_targets),
-                "retired_target_ids": list(retired_targets),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
         with self._connect() as connection:
-            existing = connection.execute(
-                "select payload_json from guard_events where event_name = ?",
-                ("extension_control_authority_catalog_migrated",),
-            ).fetchall()
-            for row in existing:
-                try:
-                    recorded = json.loads(str(row["payload_json"]))
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(recorded, dict) and recorded.get("revision") == revision:
-                    return
-            connection.execute(
-                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                ("extension_control_authority_catalog_migrated", payload, _now()),
+            if already_recorded(connection, revision):
+                return
+            payload, regression = build_catalog_migration_payload(
+                connection,
+                previous_revision=previous_revision,
+                revision=revision,
+                previous_catalog_digest=previous_catalog_digest,
+                catalog_digest=catalog_digest,
+                layers=layers,
+                retired_targets=retired_targets,
+                registry=None,
+                trigger="authority-read-backfill",
+                writer=False,
+            )
+            insert_catalog_migration_event(
+                connection,
+                payload=payload,
+                regression=regression,
+                occurred_at=_now(),
+                revision=revision,
+                previous_catalog_digest=previous_catalog_digest,
+                catalog_digest=catalog_digest,
             )
 
     def _migrate_extension_control_catalog(
@@ -381,26 +380,26 @@ class ExtensionControlAuthorityCatalogMixin:
                 "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
                 (AuthorityPhase.COMMITTED.value, created_at, revision),
             )
-            connection.execute(
-                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                (
-                    "extension_control_authority_catalog_migrated",
-                    json.dumps(
-                        {
-                            "previous_revision": previous.revision,
-                            "revision": revision,
-                            "previous_catalog_digest": previous.catalog_digest,
-                            "catalog_digest": catalog_digest,
-                            "layer_count": len(layers),
-                            "control_count": sum(len(layer.controls) for layer in layers),
-                            "retired_target_count": len(retired_targets),
-                            "retired_target_ids": retired_targets,
-                        },
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    created_at,
-                ),
+            payload, regression = build_catalog_migration_payload(
+                connection,
+                previous_revision=previous.revision,
+                revision=revision,
+                previous_catalog_digest=previous.catalog_digest,
+                catalog_digest=catalog_digest,
+                layers=layers,
+                retired_targets=retired_targets,
+                registry=registry,
+                trigger="catalog-migration",
+                writer=True,
+            )
+            insert_catalog_migration_event(
+                connection,
+                payload=payload,
+                regression=regression,
+                occurred_at=created_at,
+                revision=revision,
+                previous_catalog_digest=previous.catalog_digest,
+                catalog_digest=catalog_digest,
             )
         self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED), key=key)
         return self._read_extension_control_authority_locked(catalog_digest)
