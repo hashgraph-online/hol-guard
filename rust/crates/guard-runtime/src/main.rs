@@ -417,6 +417,7 @@ mod local_mcp_grant_launcher;
 mod local_mcp_grant_op;
 mod local_once_store;
 mod local_store_read;
+mod local_tool_eligibility_op;
 mod managed_controls_policy_fields;
 mod managed_resident;
 mod mcp_probe_op;

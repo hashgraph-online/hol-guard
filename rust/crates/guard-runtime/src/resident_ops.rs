@@ -350,6 +350,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::LocalCliHook(request) => {
                 crate::local_cli_hook_op::evaluate_local_cli_hook_request(&request)
             }
+            ResidentOperationV1::LocalToolEligibility(request) => {
+                crate::local_tool_eligibility_op::evaluate_local_tool_eligibility_request(&request)
+            }
             ResidentOperationV1::ShellHelpers(request) => {
                 crate::shell_helpers_op::evaluate(&request)
             }
