@@ -50,12 +50,14 @@ const HARNESS_SHARED_NAMES: [&str; 5] = [".agent", ".agents", ".clinerules", ".g
 pub(super) const HARNESS_HOME_NAMES: [&str; 2] = [".claude", ".codex"];
 
 /// Credential, password-manager, keyring, browser-profile and agent-login
-/// stores kept directly below `~/.config` or `~/.local/share`.
-const NESTED_CREDENTIAL_STORE_NAMES: [&str; 17] = [
+/// stores kept directly below `~/.config` or `~/.local/share`. A tool whose
+/// directory holds only fixed-name config files (`~/.config/doctl/config.yaml`,
+/// with its tokens inside the file) is not listed: its entry names reveal no
+/// account, host or key, and content reads of the file stay guarded.
+const NESTED_CREDENTIAL_STORE_NAMES: [&str; 16] = [
     "1password",
     "bravesoftware",
     "chromium",
-    "doctl",
     "gcloud",
     "gh",
     "github-copilot",

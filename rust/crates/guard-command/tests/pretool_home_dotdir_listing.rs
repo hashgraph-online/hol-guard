@@ -25,6 +25,7 @@ fn home(name: &str) -> PathBuf {
     for directory in [
         ".agents/skills/example-skill",
         ".config/app-portal/.cache",
+        ".config/doctl",
         ".config/gh",
         ".config/github-copilot",
         ".local/share/app-portal",
@@ -51,6 +52,7 @@ fn home(name: &str) -> PathBuf {
             ".config/app-portal/settings.json",
             "{\"theme\": \"dark\"}\n",
         ),
+        (".config/doctl/config.yaml", "access-token: x\n"),
         (".config/gh/hosts.yml", "example.com:\n"),
         (".claude/.credentials.json", "{}\n"),
         (".claude/settings.json", "{}\n"),
@@ -94,6 +96,7 @@ fn ordinary_home_dot_directories_list_by_name() {
             "ls ~/.agents/skills/",
             "ls ~/.agents/skills/example-skill/",
             "ls ~/.config/app-portal",
+            "ls -la ~/.config/doctl",
             "ls ~/.local/share",
             "find ~/.config -maxdepth 1 -type d",
             absolute.as_str(),
@@ -147,6 +150,7 @@ fn walks_reads_globs_and_writes_in_home_dot_directories_keep_review() {
         "find ~/.config -maxdepth 1 -maxdepth 3",
         "grep -r theme ~/.config",
         "cat ~/.config/gh/hosts.yml",
+        "cat ~/.config/doctl/config.yaml",
         "ls ~/.config/*",
         "ls ~/.config/app-portal/.cache",
         "ls ~/.config/missing",
@@ -188,5 +192,20 @@ fn harness_homes_list_and_read_notes_but_not_logins() {
         "ls ~/.claude/.credentials.json",
     ] {
         assert_ne!(action(&home, "codex", command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn file_reports_the_type_of_an_existing_executable_outside_the_workspace() {
+    let home = home("file-type");
+    let tool = home.parent().unwrap().join("tool-binary");
+    std::fs::write(&tool, b"\x7fELF").unwrap();
+    for harness in ["claude-code", "codex", "omp"] {
+        let command = format!("file {}", tool.display());
+        assert_eq!(
+            action(&home, harness, &command),
+            "allow",
+            "{harness}: {command}"
+        );
     }
 }
