@@ -278,6 +278,54 @@ impl CompiledNativeCommandControls {
     }
 }
 
+/// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
+/// `cmd 2>&1` is not glued, and `python3 -` names no script file.
+fn glued_redirect_runs_interpreter(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    let mut glued = false;
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') {
+            glued = true;
+            break;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            glued = true;
+            break;
+        }
+    }
+    if !glued {
+        return false;
+    }
+    let words = named_words(text);
+    words.iter().any(|word| {
+        matches!(
+            word.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        )
+    }) && words.iter().any(|word| word.contains('.'))
+}
+
 /// Loops and conditionals, or one heredoc that only feeds standard input,
 /// with nothing in the shell text that substitutes or overrides `PATH` and no
 /// redirect except to a literal path.
@@ -301,9 +349,12 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
         }
         Some("command_redirect_not_yet_supported") => {
             let text = without_lookups(&command.normalized_text);
-            input_heredoc(&text)
-                || literal_redirects_only(&text)
-                || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell))
+            // `;2>&1 python3 evil.py` has no segments: the redirect is the
+            // uncertainty. Reviewing it would hide the interpreter.
+            !glued_redirect_runs_interpreter(&text)
+                && (input_heredoc(&text)
+                    || literal_redirects_only(&text)
+                    || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
         }
         // A lookup in a substitution is the only one that does not run a
         // program, so a command whose substitutions are all lookups reads
@@ -529,6 +580,45 @@ fn joined_quotes(text: &str) -> String {
         return text.to_owned();
     }
     joined
+}
+
+/// An interpreter word followed by a program file, after redirections are
+/// blanked. `python3 -m` and `node -e` are not file launches.
+pub(crate) fn unread_file_interpreter(shell: &str) -> bool {
+    const FILE_INTERPRETERS: &[&str] = &[
+        "sh", "bash", "dash", "zsh", "python", "python2", "python3", "node", "ruby", "perl", "php",
+    ];
+    without_redirections(shell)
+        .split(|character: char| {
+            matches!(
+                character,
+                ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
+            )
+        })
+        .any(|piece| {
+            let words: Vec<&str> = piece
+                .split_whitespace()
+                .map(|word| word.trim_matches(['\'', '"']))
+                .filter(|word| !word.is_empty() && !is_assignment(word))
+                .skip_while(|word| SHELL_PREFIXES.contains(word))
+                .collect();
+            let Some(program) = words.first() else {
+                return false;
+            };
+            if !FILE_INTERPRETERS.contains(&command_basename(program).as_str()) {
+                return false;
+            }
+            for argument in &words[1..] {
+                if matches!(*argument, "-c" | "-m" | "-e") {
+                    return false;
+                }
+                if argument.starts_with('-') {
+                    continue;
+                }
+                return true;
+            }
+            false
+        })
 }
 
 /// Whether a backgrounded interpreter still names a program file this scan
