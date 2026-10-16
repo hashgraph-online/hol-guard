@@ -140,6 +140,7 @@ pub mod pretool_read_output_scratch;
 pub mod pretool_recursive_copies;
 pub mod pretool_recursive_file_search;
 pub mod pretool_ripgrep_config;
+pub mod pretool_root_removal;
 pub mod pretool_rust_version_probe;
 pub mod pretool_scratch_checkout_copies;
 pub mod pretool_script_content;
