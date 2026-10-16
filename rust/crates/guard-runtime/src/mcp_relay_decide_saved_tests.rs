@@ -104,15 +104,67 @@ pub(in crate::mcp_relay_decide) fn decide(
     workspace: Option<&str>,
     source: &str,
 ) {
+    decide_row(
+        connection,
+        &Row {
+            scope,
+            action,
+            workspace,
+            source,
+            ..Row::default()
+        },
+    );
+}
+
+/// One saved row's selectors, defaulted to the lookups these tests probe.
+pub(in crate::mcp_relay_decide) struct Row<'a> {
+    pub(in crate::mcp_relay_decide) artifact_id: &'a str,
+    pub(in crate::mcp_relay_decide) artifact_hash: Option<&'a str>,
+    pub(in crate::mcp_relay_decide) scope: &'a str,
+    pub(in crate::mcp_relay_decide) action: &'a str,
+    pub(in crate::mcp_relay_decide) workspace: Option<&'a str>,
+    pub(in crate::mcp_relay_decide) source: &'a str,
+    /// A row the daemon never signed, which every lookup ignores.
+    pub(in crate::mcp_relay_decide) unsigned: bool,
+}
+
+impl Default for Row<'_> {
+    fn default() -> Self {
+        Row {
+            artifact_id: ARTIFACT,
+            artifact_hash: Some(HASH),
+            scope: "artifact",
+            action: "block",
+            workspace: None,
+            source: "approval-gate",
+            unsigned: false,
+        }
+    }
+}
+
+/// Insert one row, signed unless it is meant to fail verification.
+pub(in crate::mcp_relay_decide) fn decide_row(connection: &Connection, row: &Row<'_>) {
     connection
         .execute(
             "insert into policy_decisions
              (harness, scope, artifact_id, action, artifact_hash, workspace, source,
               created_at, updated_at)
              values (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)",
-            params![HARNESS, scope, ARTIFACT, action, HASH, workspace, source, SIGNED_AT],
+            params![
+                HARNESS,
+                row.scope,
+                row.artifact_id,
+                row.action,
+                row.artifact_hash,
+                row.workspace,
+                row.source,
+                SIGNED_AT
+            ],
         )
         .unwrap();
+    if row.unsigned {
+        return;
+    }
     let id = connection.last_insert_rowid();
     let row = connection
         .query_row(

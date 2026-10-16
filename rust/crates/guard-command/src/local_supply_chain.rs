@@ -5283,8 +5283,7 @@ fn build_package_execution_context(
 
 /// `approval_scope_support.package_request_runtime_workspace_scope` —
 /// return the only workspace identity valid for a package-policy lookup.
-#[allow(dead_code)]
-fn package_request_runtime_workspace_scope(
+pub fn package_request_runtime_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,

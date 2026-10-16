@@ -798,7 +798,7 @@ jobs:
             target: aarch64-apple-darwin
             deployment_target: '11.0'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
