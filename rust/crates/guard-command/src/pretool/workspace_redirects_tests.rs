@@ -48,6 +48,33 @@ fn quoted_heredocs_are_projected_only_when_they_feed_cat() {
 }
 
 #[test]
+fn a_quoted_heredoc_feeds_python_only_a_builtin_only_program() {
+    let raw = "python3 - <<'EOF'\ns=open('a').read()\nopen('a','w').write(s.replace('if (a && import.meta.url) {', 'if (a) {'))\nEOF\nls";
+    assert_eq!(project(raw).as_deref(), Some("python3 -\nls"));
+    // Bodies are matched to their heredocs in order.
+    let raw = "cat > a <<'A'; python3 - <<'B'\nimport os\nA\nprint(1)\nB\nls";
+    assert!(project(raw).is_some(), "{raw:?}");
+    for raw in [
+        "cat > a <<'A'; python3 - <<'B'\nprint(1)\nA\nimport os\nB\nls",
+        "python3 - <<'EOF'\nimport subprocess\nsubprocess.run(['gh','pr','list'])\nEOF",
+        "python3 - <<'EOF'\nx = 'import.meta'; import os\nEOF",
+        "python3 - <<'EOF'\nexec('print(1)')\nEOF",
+        "python3 - <<'EOF'\n# coding: utf-7\nprint(1)\nEOF",
+        "python3 - <<'EOF'\nprint(1)\n  EOF\nimport os\nEOF",
+        "python3 - <<'EOF'\nprint(1)",
+        "python3 - <<EOF\nprint(1)\nEOF",
+        "python3 <<'EOF'\nprint(1)\nEOF",
+        "PYTHONPATH=. python3 - <<'EOF'\nprint(1)\nEOF",
+        "python3 -I - <<'EOF'\nprint(1)\nEOF",
+        "node - <<'EOF'\nconsole.log(1)\nEOF",
+        "sh - <<'EOF'\necho 1\nEOF",
+        "bash <<'EOF'\necho 1\nEOF",
+    ] {
+        assert_eq!(project(raw), None, "{raw:?}");
+    }
+}
+
+#[test]
 fn other_redirect_forms_are_not_projected() {
     for raw in [
         "python3 app.py",

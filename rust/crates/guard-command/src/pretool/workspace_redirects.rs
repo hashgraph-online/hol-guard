@@ -19,7 +19,9 @@ use serde_json::Value;
 use super::redirect_projection::{
     boundary, remove_quoted_heredoc, skip_heredoc_bodies, trailing_word,
 };
-use crate::native_command_controls::CompiledNativeCommandControls;
+use crate::native_command_controls::{
+    python_is_builtin_only, python_stdin, CompiledNativeCommandControls,
+};
 use crate::pretool::workspace_contained::Shape;
 use crate::CommandModelRequestV1;
 
@@ -31,9 +33,12 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. `None` when nothing was removed or any redirect has
-/// another form: process substitution, a computed or home-relative target, a
-/// descriptor above 2, a herestring, or a heredoc fed to anything but `cat`.
+/// `cat` heredoc removed. A quoted heredoc may also feed `python3 -` a program
+/// that reads only builtins, which cannot start a program or load a module;
+/// the projection keeps `python3 -`, so every control still sees it. `None`
+/// when nothing was removed or any redirect has another form: process
+/// substitution, a computed or home-relative target, a descriptor above 2, a
+/// herestring, or a heredoc fed to anything else.
 pub(crate) fn project(raw: &str) -> Option<String> {
     project_scan(raw).map(|(projected, _, _)| projected)
 }
@@ -56,6 +61,8 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     let mut out = String::with_capacity(raw.len());
     let mut map: Vec<usize> = Vec::with_capacity(raw.len());
     let mut heredocs: Vec<(String, bool)> = Vec::new();
+    // Whether each pending heredoc feeds Python its program.
+    let mut programs: Vec<bool> = Vec::new();
     let (mut quote, mut escaped, mut removed) = (Quote::None, false, false);
     let mut names_files = false;
     let mut index = 0usize;
@@ -98,15 +105,19 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
             '\\' => escaped = true,
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
-                index = skip_heredoc_bodies(&chars, index + 1, &mut heredocs)?;
+                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs)?;
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
-                // A heredoc is stdin. Only `cat` is known to treat it as data.
-                if current_segment(&out).trim() != "cat" {
+                // A heredoc is stdin. Only `cat` is known to treat it as data;
+                // Python runs it, so its body is checked once it is read.
+                let segment = current_segment(&out).trim();
+                let program = python_stdin(segment);
+                if segment != "cat" && !program {
                     return None;
                 }
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
+                programs.push(program);
                 index = rejoin(&chars, index, &mut out);
                 removed = true;
                 continue;
@@ -360,6 +371,37 @@ fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bo
         crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
             && crate::pretool::contained_wrapper::sink_peels_leading_cd(&model, context)
     })
+}
+
+/// Skips the bodies of the pending heredocs in order, as
+/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
+/// builtins, the same check the extension controls apply to such a program.
+fn skip_bodies(
+    chars: &[char],
+    mut index: usize,
+    heredocs: &mut Vec<(String, bool)>,
+    programs: &mut Vec<bool>,
+) -> Option<usize> {
+    if heredocs.len() != programs.len() {
+        return None;
+    }
+    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
+        let start = index;
+        index = skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
+        if program {
+            let text: String = chars[start..index].iter().collect();
+            let text = text.strip_suffix('\n').unwrap_or(&text);
+            // The last line is the delimiter.
+            let body: Vec<&str> = match text.rsplit_once('\n') {
+                Some((body, _)) => body.split('\n').collect(),
+                None => Vec::new(),
+            };
+            if !python_is_builtin_only(&body) {
+                return None;
+            }
+        }
+    }
+    Some(index)
 }
 
 /// The text of the simple command being written, after the last separator.

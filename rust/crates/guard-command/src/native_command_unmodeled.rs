@@ -35,6 +35,7 @@ mod link_makers;
 mod shapes;
 use link_makers::creates_links;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
+pub(crate) use shapes::{python_is_builtin_only, python_stdin};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
 const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
@@ -301,7 +302,8 @@ fn plain_after_heredocs(shell: &str) -> bool {
     !moves_data(&unquoted_literal(shell)) || literal_redirects_only(shell)
 }
 
-/// Every redirect names a literal path or feeds `cat` a quoted heredoc, and
+/// Every redirect names a literal path or is a quoted heredoc fed to `cat`,
+/// or to `python3 -` as a builtin-only program, and
 /// the rest substitutes nothing and, when a redirect names a file other than
 /// `/dev/null`, makes no link that redirect could follow.
 fn literal_redirects_only(text: &str) -> bool {

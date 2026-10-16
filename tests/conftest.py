@@ -147,6 +147,18 @@ def _reset_registry_cache() -> None:
 
 
 @pytest.fixture(autouse=True)
+def _reset_last_bound_digest_home(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A guard home one test bound must not answer another test's unbound digests.
+
+    The remembered home outlives its test's temporary directory; a later test
+    that binds none would otherwise ask the resident about a deleted home.
+    """
+    from codex_plugin_scanner.guard import native_context
+
+    monkeypatch.setattr(native_context, "_last_bound_home", None)
+
+
+@pytest.fixture(autouse=True)
 def _reset_aibom_mcp_native_backoff() -> None:
     """One outage's MCP-enrichment backoff must not leak into the next test."""
 

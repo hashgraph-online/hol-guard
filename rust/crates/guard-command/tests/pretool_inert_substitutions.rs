@@ -69,6 +69,13 @@ fn value_producing_substitutions_are_judged_on_the_rest_of_the_chain() {
         format!(
             "node --test 2>&1 | tail -12; cd \"$(mktemp -d)\" && TODO_FILE=t.json node {cli} add Hello world && TODO_FILE=t.json node {cli} list"
         ),
+        format!(
+            "node --test test/ 2>&1 | tail -10; export TODO_FILE=$(mktemp -d)/t.json; node {cli} add Try it; node {cli} done 1; node {cli} list"
+        ),
+        // A line break separates commands as `;` does.
+        format!(
+            "node --test test/ 2>&1 | tail -10\nexport TODO_FILE=$(mktemp -d)/t.json\nnode {cli} list"
+        ),
     ] {
         let result = evaluate(&root, &controls, &command);
         assert_ne!(result.reason_code, EVALUATION_FAILED, "{command}");
@@ -102,6 +109,13 @@ fn other_substitutions_and_unsafe_uses_are_never_allowed() {
         "rm -rf \"$(mktemp -d)/../..\"",
         "touch \"$(mktemp -d)/x\"",
         "echo hi > \"$(mktemp -d)/x\"",
+        "export X=$(mktemp -d); rm -rf \"$X\"",
+        "export X=$(mktemp -d)/../..; rm -rf \"$X\"",
+        "export PATH=$(mktemp -d); rm -rf /",
+        "export X=$(mktemp -d)\nrm -rf \"$X\"",
+        "cat > f <<EOF\n$(cat ~/.ssh/id_rsa)\nEOF\ncd \"$(mktemp -d)\" && ls",
+        "cat > f <<EOF\n$(mktemp -d)\nEOF\nsh f",
+        "cd \"$(mktemp -d)\" && cat <<'EOF'\nunterminated",
     ] {
         let result = evaluate(&root, &controls, command);
         assert_ne!(
@@ -118,7 +132,12 @@ fn other_substitutions_and_unsafe_uses_are_never_allowed() {
 fn lockdown_keeps_substitutions_closed() {
     let (root, _cleanup) = workspace("lockdown");
     let controls = lockdown_controls();
-    for command in ["echo \"$(date +%Y-%m-%d)\"", "cd \"$(mktemp -d)\" && ls"] {
+    for command in [
+        "echo \"$(date +%Y-%m-%d)\"",
+        "cd \"$(mktemp -d)\" && ls",
+        "export TODO_FILE=$(mktemp -d)/t.json; ls",
+        "node --version\nexport TODO_FILE=$(mktemp -d)/t.json\nls",
+    ] {
         let result = evaluate(&root, &controls, command);
         assert_ne!(
             result.minimum_action, "allow",

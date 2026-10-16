@@ -32,10 +32,17 @@ const PYTHON_UNBOUNDED: &[&str] = &[
     "type(",
 ];
 
+/// Whether `command`, the whole simple command a heredoc feeds, is Python
+/// reading its program from standard input named as `-`.
+pub(crate) fn python_stdin(command: &str) -> bool {
+    command.ends_with(" -") && HEREDOC_PYTHON.contains(&command)
+}
+
 /// Whether a Python program reads only builtins, so it cannot start another
 /// program. An `import` keyword starts a statement, so one inside a string
-/// literal (preceded by a quote or a word) is data.
-fn python_is_builtin_only(body: &[&str]) -> bool {
+/// literal (preceded by a quote or a word) is data. So is one followed by
+/// `.`, such as JavaScript's `import.meta`, which no Python statement allows.
+pub(crate) fn python_is_builtin_only(body: &[&str]) -> bool {
     // A coding declaration can re-decode the whole source into other text.
     if body
         .iter()
@@ -52,10 +59,11 @@ fn python_is_builtin_only(body: &[&str]) -> bool {
             return false;
         }
         !lowered.match_indices("import").any(|(at, _)| {
-            lowered[..at]
-                .chars()
-                .next_back()
-                .is_none_or(|before| before.is_whitespace() || matches!(before, ';' | ':'))
+            !lowered[at + "import".len()..].starts_with('.')
+                && lowered[..at]
+                    .chars()
+                    .next_back()
+                    .is_none_or(|before| before.is_whitespace() || matches!(before, ';' | ':'))
         })
     })
 }

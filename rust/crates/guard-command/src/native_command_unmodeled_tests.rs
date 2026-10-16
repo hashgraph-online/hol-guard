@@ -425,6 +425,22 @@ fn heredoc_python_edits_and_test_runs_are_reviewed_not_blocked() {
 }
 
 #[test]
+fn a_heredoc_python_edit_that_writes_import_meta_is_reviewed() {
+    let controls = controls(serde_json::json!([]), false);
+    let edit = "s=s.replace(\"if (main) {\",\"if (process.argv[1] && import.meta.url) {\")";
+    let command = format!("python3 - <<'EOF'\ns=open('a').read()\n{edit}\nEOF\nnpm test");
+    assert_ne!(decision(&controls, &command).1, FAILED);
+    // A real import beside it, or a program that starts one, still fails.
+    for body in [
+        format!("{edit}; import os"),
+        "import subprocess\nsubprocess.run(['gh','pr','list'])".to_owned(),
+    ] {
+        let command = format!("python3 - <<'EOF'\n{body}\nEOF\nnode --test test/ 2>&1 | tail -10\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list");
+        assert_eq!(decision(&controls, &command).1, FAILED, "{command}");
+    }
+}
+
+#[test]
 fn program_lookups_do_not_make_a_command_unmatchable() {
     let controls = controls(serde_json::json!([]), false);
     let command = "date -u +%Y-%m-%dT%H:%M:%SZ; echo \"rc=$?\"; echo \"HOME=$HOME\"; command -v doctl; ls -l \"$(command -v doctl)\"";

@@ -147,3 +147,64 @@ fn a_substitution_beside_a_pattern_character_stays_opaque() {
         Some(format!("cd \"{TEMPORARY_VALUE}\" && rg TODO -g '*.rs'").as_str())
     );
 }
+
+/// A script that rewrites a source file, as an agent sends it before a smoke
+/// test: its JavaScript template literal is data in a quoted heredoc.
+const SCRIPT: &str = "s=s.replace(\"`file://${process.argv[1]}`\", \"$(x)\")";
+
+#[test]
+fn line_breaks_and_quoted_heredoc_bodies_keep_the_projection() {
+    let t = TEMPORARY_VALUE;
+    for (command, expected) in [
+        (
+            "node --test test/ 2>&1 | tail -10\ncd \"$(mktemp -d)\"\nls".to_owned(),
+            format!("node --test test/ 2>&1 | tail -10\ncd \"{t}\"\nls"),
+        ),
+        (
+            format!("python3 - <<'EOF'\n{SCRIPT}\nEOF\nexport F=$(mktemp -d)/t.json; ls"),
+            format!("python3 - <<'EOF'\n{SCRIPT}\nEOF\nexport F={t}/t.json; ls"),
+        ),
+        (
+            format!("cat > a.js <<\"EOF\"\n{SCRIPT}\nEOF\ncd $(mktemp -d)"),
+            format!("cat > a.js <<\"EOF\"\n{SCRIPT}\nEOF\ncd {t}"),
+        ),
+        (
+            format!("cat > a.js <<-'EOF'\n\t{SCRIPT}\n\tEOF\ncd $(mktemp -d)"),
+            format!("cat > a.js <<-'EOF'\n\t{SCRIPT}\n\tEOF\ncd {t}"),
+        ),
+    ] {
+        assert_eq!(
+            projected(&command).as_deref(),
+            Some(expected.as_str()),
+            "{command}"
+        );
+    }
+    // A quoted body alone substitutes nothing, so there is nothing to project.
+    assert_eq!(
+        projected(&format!(
+            "python3 - <<'EOF'\n{SCRIPT}\nEOF\nnode --test test/"
+        )),
+        None
+    );
+}
+
+#[test]
+fn heredocs_that_could_expand_or_never_close_keep_the_command_opaque() {
+    for command in [
+        // An unquoted delimiter expands the body.
+        "cat > f <<EOF\n$(mktemp -d)\nEOF\ncd $(mktemp -d)".to_owned(),
+        "cat > f <<EOF\n`whoami`\nEOF\ncd $(mktemp -d)".to_owned(),
+        "cat > f <<-EOF\n\t$(cat ~/.ssh/id_rsa)\n\tEOF\ncd $(mktemp -d)".to_owned(),
+        // The shared parser does not read a backslash-quoted delimiter.
+        format!("python3 - <<\\EOF\n{SCRIPT}\nEOF\ncd $(mktemp -d)"),
+        // A body that never closes runs to the end of the text.
+        format!("python3 - <<'EOF'\n{SCRIPT}\ncd $(mktemp -d)"),
+        "cd $(mktemp -d) && cat <<'EOF'".to_owned(),
+        // Line breaks other than `\n` stay refused.
+        "cd $(mktemp -d)\r\nls".to_owned(),
+        // A substitution after a quoted body still has to be a value producer.
+        format!("python3 - <<'EOF'\n{SCRIPT}\nEOF\necho $(whoami)"),
+    ] {
+        assert_eq!(projected(&command), None, "{command}");
+    }
+}

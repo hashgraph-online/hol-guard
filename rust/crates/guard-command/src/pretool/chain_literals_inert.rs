@@ -19,9 +19,19 @@
 //! shell's. `rg TODO -g "$(date +%Y)*"` projects to a pattern matching
 //! nothing while the real one matches every name beginning with the year,
 //! `2026-prod.env` among them.
+//!
+//! A line break between commands separates them as `;` does. A heredoc body
+//! is not shell text: one with a quoted delimiter (`<<'EOF'`, `<<"EOF"`) is
+//! literal data, so the backticks and `$(` of a script it carries are never
+//! substitutions, while one with an unquoted delimiter would expand them, so
+//! any substitution there keeps the command opaque. So does a heredoc that
+//! never closes or that the shared heredoc parser cannot read (`<<\EOF`).
 
 use super::MAX_COMMAND_CHARS;
-use crate::shell_structure::{extract_command_substitution_spans, ShellCommandSubstitution};
+use crate::shell_structure::{
+    extract_command_substitution_spans, extract_heredocs, mask_heredoc_bodies,
+    ShellCommandSubstitution,
+};
 
 /// Absent root of the temporary-path stand-in.
 const TEMPORARY_ROOT: &str = "/hol-guard-substituted";
@@ -44,16 +54,21 @@ const DATE_CONVERSIONS: &str = "FHMSTYdjmsuwy";
 pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<String> {
     if !command.is_ascii()
         || command.len() > MAX_COMMAND_CHARS
-        || command.bytes().any(|b| b.is_ascii_control() && b != b'\t')
+        || command
+            .bytes()
+            .any(|b| b.is_ascii_control() && !matches!(b, b'\t' | b'\n'))
     {
         return None;
     }
-    let substitutions = extract_command_substitution_spans(command);
+    let (substitutions, masked) = substitution_spans(command)?;
     if substitutions.is_empty() || substitutions.len() > MAX_SUBSTITUTIONS {
         return None;
     }
     let chars: Vec<char> = command.chars().collect();
+    let masked: Vec<char> = masked.chars().collect();
     let mut out = String::with_capacity(command.len());
+    // The projection's shell text, heredoc bodies still blanked.
+    let mut shell = String::with_capacity(command.len());
     let mut cursor = 0usize;
     let mut judged: Vec<&str> = Vec::new();
     let mut temporary = false;
@@ -82,11 +97,13 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         temporary |= value == TEMPORARY_VALUE;
         out.extend(&chars[cursor..substitution.start]);
         out.push_str(value);
+        shell.extend(&masked[cursor..substitution.start]);
         cursor = substitution.end;
     }
     out.extend(&chars[cursor..]);
+    shell.extend(&masked[cursor..]);
     // A substitution the scan did not delimit is still in the text.
-    if out.contains("$(") || out.contains('`') {
+    if shell.contains("$(") || shell.contains('`') {
         return None;
     }
     if temporary
@@ -97,6 +114,29 @@ pub(super) fn project(command: &str, allowed: impl Fn(&str) -> bool) -> Option<S
         return None;
     }
     judged.into_iter().all(allowed).then_some(out)
+}
+
+/// The command substitutions the shell runs in `command`, read with every
+/// heredoc body blanked, and that blanked text, which keeps each character's
+/// index. `None` when a heredoc never closes, a `<<` is not a heredoc the
+/// shared parser reads, or a body with an unquoted delimiter would expand a
+/// substitution.
+pub(super) fn substitution_spans(command: &str) -> Option<(Vec<ShellCommandSubstitution>, String)> {
+    let heredocs = extract_heredocs(command);
+    let masked = mask_heredoc_bodies(command, &heredocs);
+    let operators = masked
+        .match_indices("<<")
+        .filter(|(at, _)| !masked[..*at].ends_with('<') && !masked[at + 2..].starts_with('<'))
+        .count();
+    let length = command.chars().count();
+    let unsafe_body = heredocs.iter().any(|heredoc| {
+        heredoc.body_end >= length
+            || (!heredoc.quoted && (heredoc.body.contains("$(") || heredoc.body.contains('`')))
+    });
+    if operators != heredocs.len() || unsafe_body {
+        return None;
+    }
+    Some((extract_command_substitution_spans(&masked), masked))
 }
 
 /// Whether the shell word holding `substitution` also carries a pattern

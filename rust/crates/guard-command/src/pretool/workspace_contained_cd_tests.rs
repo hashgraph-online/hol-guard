@@ -72,3 +72,76 @@ fn the_launcher_runs_the_raw_text_that_enters_a_private_directory() {
     )
     .is_none());
 }
+
+#[test]
+fn the_temporary_stand_in_is_bounded_as_a_private_assignment() {
+    let ws = workspace("temp-assign-shape", true);
+    let (t, w) = (STAND_IN, ws.display());
+    for command in [
+        format!(
+            "export TODO_FILE={t}/t.json; node {w}/src/cli.js add Try it; node {w}/src/cli.js list"
+        ),
+        format!("TODO_FILE=\"{t}/t.json\" && node {w}/src/cli.js list"),
+        format!("export OUT={t}; cd {t} && ls"),
+    ] {
+        assert!(shaped(&command, &ws), "{command}");
+    }
+    for command in [
+        format!("export PATH={t}; ls"),
+        format!("export GIT_DIR={t}; git status"),
+        format!("export NODE_OPTIONS={t}; node {w}/src/cli.js list"),
+        format!("LD_PRELOAD={t}/x.so; ls"),
+        format!("export X={t}/../y; ls"),
+        format!("export X={t}; rm -rf \"$X\""),
+        format!("export X={t}; ls {t}"),
+        format!("X={t}; X={t}; ls"),
+        format!("X={t} node {w}/src/cli.js list"),
+        format!("export TMPDIR=/etc; X={t}; ls"),
+        format!("declare X={t}; ls"),
+        format!("export -n X={t}; ls"),
+        format!("export X={t} Y=1; ls"),
+    ] {
+        assert!(!shaped(&command, &ws), "{command}");
+    }
+}
+
+/// The launcher accepts the raw `export NAME=$(mktemp -d)/...` it will run.
+#[cfg(unix)]
+#[test]
+fn the_launcher_runs_the_raw_text_that_assigns_a_private_directory() {
+    let ws = workspace("temp-assign-launcher", true);
+    for raw in [
+        "node --test test/ 2>&1 | tail -10; export TODO_FILE=$(mktemp -d)/t.json; node src/cli.js add Try it; node src/cli.js done 1; node src/cli.js list",
+        "TODO_FILE=\"$(mktemp -d)/t.json\" && node src/cli.js list",
+        // A file written from a quoted heredoc, its template literal data.
+        "cat > src/url.js <<'EOF'\nexport const url = `file://${process.argv[1]}`;\nEOF\nexport TODO_FILE=$(mktemp -d)/t.json\nnode src/cli.js list",
+        // A builtin-only program fed to `python3 -` from a quoted heredoc.
+        "python3 - <<'EOF'\nprint(1)\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+    ] {
+        let shape = crate::restricted_pytest::workspace_exact_shape(raw, &ws).unwrap();
+        assert!(shape.bootstrap.is_none() && shape.prefix.is_none() && shape.remainder.is_none());
+    }
+    for command in [
+        "export PATH=$(mktemp -d); ls",
+        "export GIT_DIR=$(mktemp -d); git status",
+        "export X=$(mktemp -d); rm -rf \"$X\"",
+        "export X=$(mktemp -d)/../x; ls",
+        "export X=$(whoami); ls",
+        "X=$(mktemp -d) ls",
+        "declare X=$(mktemp -d); ls",
+        "TMPDIR=/etc; export X=$(mktemp -d); ls",
+        "export X=$(mktemp -d)\nrm -rf \"$X\"",
+        "cat > run.sh <<EOF\ncd $(mktemp -d)\nEOF\nsh run.sh",
+        // Any other program fed to an interpreter on stdin.
+        "python3 - <<'EOF'\nimport subprocess\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+        "python3 - <<EOF\nprint(1)\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+        "python3 <<'EOF'\nprint(1)\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+        "sh <<'EOF'\necho 1\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+        "node - <<'EOF'\nconsole.log(1)\nEOF\nexport X=$(mktemp -d)/t.json\nls",
+    ] {
+        assert!(
+            crate::restricted_pytest::workspace_exact_shape(command, &ws).is_none(),
+            "{command}"
+        );
+    }
+}

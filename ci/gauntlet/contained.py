@@ -273,7 +273,10 @@ def run_contained_profile(
                     )
                     returncodes.append(status)
                     timeouts.append(timed)
-                    raw_events.extend(read_events(raw_logs[index]))
+                    batch_events = read_events(raw_logs[index])
+                    raw_events.extend(batch_events)
+                    # Each print process settles on its own; export them apart.
+                    events.extend(public_events(batch_events, replacements, status == 0 and not timed))
                 request_records = capture.records
             returncode = next((status for status in returncodes if status != 0), 0)
             timed_out = any(timeouts)
@@ -281,7 +284,6 @@ def run_contained_profile(
             approval_delta = worker.store.count_approval_requests(status=None) - before_approvals
             inference = relay.evidence(wait_seconds=3)
             egress_requests = list(collector.requests)
-            events = public_events(raw_events, replacements)
             if guard_log.exists():
                 rows = [json.loads(line) for line in guard_log.read_text().splitlines() if line.strip()]
                 guard_observations = public_observations(rows, replacements)

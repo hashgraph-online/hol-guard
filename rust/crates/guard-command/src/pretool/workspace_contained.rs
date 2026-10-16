@@ -191,6 +191,10 @@ pub(crate) fn command_shape(
     let linked = super::worktree_writes::linked_worktree_common_dir(workspace).is_some();
     let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
     for (index, segment) in model.segments.iter().enumerate() {
+        // A bare private assignment starts no program.
+        if segment.executable.is_none() && cd::assigns_private(model, segment) {
+            continue;
+        }
         let executable = segment.executable.as_deref()?;
         if executable.contains('$')
             || !segment.wrapper_chain.is_empty()
@@ -272,7 +276,7 @@ pub(crate) fn command_shape(
         segment
             .executable
             .as_deref()
-            .is_some_and(|value| SHELL_STATE.contains(&super::executable_basename(value)))
+            .is_none_or(|value| SHELL_STATE.contains(&super::executable_basename(value)))
     }) {
         return None;
     }
