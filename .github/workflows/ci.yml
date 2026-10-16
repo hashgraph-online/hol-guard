@@ -527,7 +527,12 @@ jobs:
           retention-days: 7
 
   duration-manifest-candidate:
-    if: needs.coverage.result == 'success'
+    # Main skips the PR planner. Override the implicit ancestor success check,
+    # while still requiring complete successful producers before publishing.
+    if: >-
+      !cancelled() &&
+      needs.coverage.result == 'success' &&
+      needs.native-command-evaluators.result == 'success'
     needs: [coverage, native-command-evaluators]
     runs-on: ubuntu-latest
     timeout-minutes: 2

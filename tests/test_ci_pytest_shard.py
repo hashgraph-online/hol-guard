@@ -177,7 +177,11 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
 
     candidate = jobs["duration-manifest-candidate"]
     assert candidate["needs"] == ["coverage", "native-command-evaluators"]
-    assert candidate["if"] == "needs.coverage.result == 'success'"
+    # Main's skipped PR planner must not trigger an implicit success() check.
+    # Cancellation and incomplete producers must still prevent publication.
+    assert " ".join(candidate["if"].split()) == (
+        "!cancelled() && needs.coverage.result == 'success' && needs.native-command-evaluators.result == 'success'"
+    )
     assert 'if [ "${#reports[@]}" -ne "${{ needs.native-command-evaluators.outputs.shard-count }}" ];' in "\n".join(
         step.get("run", "") for step in candidate["steps"]
     )
