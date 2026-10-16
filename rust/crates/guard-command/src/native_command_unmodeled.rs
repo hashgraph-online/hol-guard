@@ -181,7 +181,9 @@ impl CompiledNativeCommandControls {
         };
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
-        let interpreted = named_words(&joined_quotes(shell));
+        // A redirection such as `;2>&1` is not a program: left in, its fd
+        // number reads as one and hides the interpreter after it.
+        let interpreted = named_words(&joined_quotes(&without_redirections(shell)));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
