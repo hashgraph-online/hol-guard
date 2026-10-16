@@ -15,7 +15,6 @@ from typing import NamedTuple
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.false_positive_rules import fd_args_follow_symlinks
 from tests.native_detector_support import shell_command_signals
 
 
@@ -29,16 +28,6 @@ def detect_persistence_mechanisms(command: str) -> tuple[_PersistenceMatch, ...]
         _PersistenceMatch(signal.signal_id.removeprefix("persistence:"), signal.false_positive_hint)
         for signal in shell_command_signals("persistence.mechanism", command)
     )
-
-
-class TestFdFollowSymlinks:
-    def test_fd_follow_flags(self) -> None:
-        assert fd_args_follow_symlinks(["-L", "id_rsa", "src"]) is True
-        assert fd_args_follow_symlinks(["--follow", "id_rsa", "src"]) is True
-        assert fd_args_follow_symlinks(["-HI", "SKILL.md", "src"]) is False
-        assert fd_args_follow_symlinks(["-xL", "cat"]) is False
-        assert fd_args_follow_symlinks(["-XL", "cat"]) is False
-        assert fd_args_follow_symlinks(["-cL", "always"]) is False
 
 
 @pytest.mark.usefixtures("native_runtime_detectors_runtime")

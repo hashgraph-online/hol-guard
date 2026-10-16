@@ -672,34 +672,6 @@ def context_sha256_digest(
     return f"{prefix or ''}{local}"
 
 
-def context_opaque_digest(
-    material: str,
-    *,
-    guard_home: Path | None = None,
-    unbound_label: str = "opaque-material",
-    strict: bool = True,
-) -> str:
-    """UTF-8-string SHA-256 via the resident op.
-
-    For raw string material (module specifiers, source text, ``h:s:n`` keys,
-    shebang lines) — the bytes hashed are exactly ``material.encode("utf-8")``.
-    ``strict`` semantics match :func:`context_sha256_digest`.
-    """
-
-    home = _resolve_digest_home(guard_home)
-    result = native_context_digest(
-        "opaque_material_digest",
-        {"material": material},
-        guard_home=home,
-    )
-    digest = result.get("digest") if isinstance(result, dict) else None
-    if isinstance(digest, str) and digest:
-        return digest
-    if strict:
-        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
-
-
 def context_mcp_launch_environment(
     inherited: Mapping[str, str],
     configured: Mapping[str, str],
@@ -981,7 +953,6 @@ __all__ = [
     "context_mcp_identity",
     "context_mcp_redact_json",
     "context_mcp_tool_catalog_fingerprint",
-    "context_opaque_digest",
     "context_package_evidence",
     "context_runtime_executable_identity",
     "context_runtime_launch_identity",

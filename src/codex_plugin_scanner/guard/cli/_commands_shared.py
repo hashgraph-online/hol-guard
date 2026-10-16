@@ -149,17 +149,12 @@ from ..protect import build_protect_payload
 from ..receipts import build_receipt
 from ..risk import artifact_risk_profile, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
-from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_arg_requests_exec,
-    fd_args_follow_symlinks,
-    fd_exec_token_is_plain_sed,
-    fd_search_targets,
-    split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
 from ..runtime.github_capability_interaction import github_capability_requires_confirmation
