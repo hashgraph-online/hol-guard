@@ -174,6 +174,10 @@ jobs:
           # Line tables keep panic backtraces readable while cutting link time
           # across test binaries; full debuginfo is never inspected in CI.
           echo "CARGO_PROFILE_TEST_DEBUG=line-tables-only" >> "$GITHUB_ENV"
+      - name: Restore exact runtime test executables
+        id: runtime-archive
+        if: startsWith(matrix.check, 'test-runtime-')
+        uses: ./.github/actions/restore-runtime-tests
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
@@ -215,9 +219,20 @@ jobs:
           fi
       - uses: ./.github/actions/setup-bubblewrap
         if: matrix.check != 'clippy'
+      - name: Archive the complete runtime test build
+        if: >-
+          matrix.check == 'test-runtime-1' &&
+          steps.runtime-archive.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          nextest_bin="$(python3 scripts/ci/install_nextest.py)"
+          PATH="$nextest_bin:$PATH" cargo nextest archive --manifest-path rust/Cargo.toml \
+            --locked --package hol-guard-runtime --all-targets \
+            --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" --zstd-level 1
       - name: Validate the locked Rust workspace
         env:
           CARGO_CHECK: ${{ matrix.check }}
+          RUNTIME_ARCHIVE_HIT: ${{ steps.runtime-archive.outputs.cache-hit }}
         run: |
           case "$CARGO_CHECK" in
             clippy)
@@ -247,12 +262,28 @@ jobs:
                   ;;
               esac
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-              PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
-                "${nextest_args[@]}" \
-                --test-threads 4 --retries 0 --no-fail-fast
+              if [[ "$CARGO_CHECK" == test-runtime-* && "${RUNTIME_ARCHIVE_HIT:-false}" == true ]]; then
+                PATH="$nextest_bin:$PATH" cargo nextest run \
+                  --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" \
+                  --workspace-remap "$GITHUB_WORKSPACE/rust" "${nextest_args[@]}" \
+                  --test-threads 4 --retries 0 --no-fail-fast
+              else
+                PATH="$nextest_bin:$PATH" cargo nextest run --manifest-path rust/Cargo.toml --locked --all-targets "${packages[@]}" \
+                  "${nextest_args[@]}" \
+                  --test-threads 4 --retries 0 --no-fail-fast
+              fi
               ;;
             *) echo "Unsupported workspace check" >&2; exit 64 ;;
           esac
+      - name: Save successful runtime test compilation
+        if: >-
+          matrix.check == 'test-runtime-1' &&
+          steps.runtime-archive.outputs.cache-hit != 'true' &&
+          github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: ${{ runner.temp }}/runtime-test-archive.tar.zst
+          key: ${{ steps.runtime-archive.outputs.cache-primary-key }}
       - name: Report compiler cache statistics
         if: always() && matrix.check != 'clippy'
         run: '"$SCCACHE_PATH" --show-stats || true'
