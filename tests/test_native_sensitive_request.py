@@ -245,21 +245,24 @@ def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPat
     assert secret_file_requests.command_list_candidate_texts(["cat", "README.md"]) == ("cat README.md",)
 
 
-def test_benign_github_shell_forwards_the_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_unmodeled_shell_artifact_forwards_the_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     seen: list[dict[str, Any]] = []
-    _answer(monkeypatch, _reply("benign_github_shell", True), seen)
+    reply = {"fingerprint": "f", "metadata": [["action_class", "unmodeled shell command"]]}
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply), seen)
     monkeypatch.setenv("TMPDIR", str(tmp_path))
 
-    assert client.native_benign_github_shell("gh run view 1 --log") is True
+    review = client.native_unmodeled_shell_artifact("gh run view 1 --log", workspace=None, home_dir=tmp_path)
+
+    assert review == ("f", {"action_class": "unmodeled shell command"})
     assert seen[0]["body"]["facts"]["environment"]["TMPDIR"] == str(tmp_path)
+    assert seen[0]["body"]["input"]["workspace"] is None
+    assert seen[0]["body"]["input"]["home"] == str(tmp_path)
 
 
-def test_benign_github_shell_skips_the_resident_without_gh(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[dict[str, Any]] = []
-    _answer(monkeypatch, _reply("benign_github_shell", True), seen)
+def test_unmodeled_shell_artifact_is_none_for_a_modeled_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", None))
 
-    assert client.native_benign_github_shell("ls | head") is False
-    assert seen == []
+    assert client.native_unmodeled_shell_artifact("ls", workspace=Path("/w"), home_dir=Path("/h")) is None
 
 
 def _finding(artifact_id: str, artifact_type: str, **metadata: object) -> GuardArtifact:
@@ -305,6 +308,24 @@ def test_compound_artifact_keeps_an_unbound_primary(monkeypatch: pytest.MonkeyPa
     finding = _finding("codex:tool:1", "tool_action_request")
 
     assert _compound([finding]) is finding
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"fingerprint": "f"},
+        {"fingerprint": 1, "metadata": []},
+        {"fingerprint": "f", "metadata": [["k"]]},
+        {"fingerprint": "f", "metadata": [[1, "v"]]},
+        {"fingerprint": "f", "metadata": {}},
+    ],
+    ids=["missing-metadata", "non-text-fingerprint", "short-pair", "non-text-key", "not-pairs"],
+)
+def test_unmodeled_shell_artifact_rejects_malformed_replies(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply))
+
+    with pytest.raises(client.NativeSensitiveRequestError):
+        client.native_unmodeled_shell_artifact("ls", workspace=None, home_dir=Path("/h"))
 
 
 @pytest.mark.parametrize(

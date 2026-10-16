@@ -267,6 +267,33 @@ python -m ci.gauntlet run --jobs 4 \
 
 A local live inference server can be selected with `--provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider --model MODEL --provider-identity ID`. The identity must truthfully describe the actual backend. Do not label an opaque helper as DeepSeek, Codex or another model whose identity was not verified.
 
+`qualify --prepare-only` sets up the same inputs for such a run: it builds or reuses the cached SDK and wheel, installs the wheel into a fresh candidate worktree, prints the usual JSON line with `candidate` and `sdk.root`, and stops without live cases (exit 0 when setup succeeded; it never qualifies). For example, on Linux with a local OpenAI-compatible server:
+
+```sh
+set -euo pipefail
+umask 077
+sha=$(git rev-parse origin/main)
+prepared=$(mktemp)  # outside the checkout, so the trusted verifier stays clean
+python -m ci.gauntlet qualify --sha "$sha" --prepare-only > "$prepared"
+candidate=$(jq -er .candidate "$prepared")
+sdk=$(jq -er .sdk.root "$prepared")
+cd "$candidate"
+PATH="$candidate/.venv/bin:$sdk/node_modules/.bin:$PATH" .venv/bin/python -m ci.gauntlet run \
+  --expected-source-sha "$sha" \
+  --provider-url http://127.0.0.1:PORT/v1 --allow-loopback-provider \
+  --model MODEL --provider-identity 'local-server/MODEL/developer-machine' \
+  --case CASE_ID --output /absolute/path/outside-the-checkout/gauntlet-evidence
+```
+
+A `--case` run is investigation evidence, not qualification. The candidate worktree stays under the run root until you remove it with `git worktree remove`. Linux builds only the development-profile wheel: the release profile runs the published size check, which has no budget for the local `linux_x86_64` wheel, so `--release-profile-wheel` (or a candidate that predates development wheels) needs `--wheel` there.
+
+On a machine that also runs HOL Guard for everyday work, that Guard's package shims (`~/.hol-guard/package-shims/bin`) usually come first on `PATH`. The runner starts each agent as `bun <sdk>/…/omp … <prompt>`, so the host shim reviews that launch and can stop it before the agent starts (#4833). The case then fails as `harness-error` with zero inference rounds. Each case runs its own isolated Guard, so for Gauntlet runs only, leave the host shim directory out of `PATH` and put the real Bun directory after the SDK:
+
+```sh
+host_path=$(printf '%s' "$PATH" | tr ':' '\n' | grep -vx "$HOME/.hol-guard/package-shims/bin" | paste -sd:)
+PATH="$candidate/.venv/bin:$sdk/node_modules/.bin:$HOME/.bun/bin:$host_path" .venv/bin/python -m ci.gauntlet run ...
+```
+
 ### Luna high through an Oh My Pi ChatGPT login
 
 Oh My Pi's `openai-codex` lane uses the Responses API through an existing ChatGPT login, so the Chat Completions relay cannot reach it directly. `--native-luna-route` starts a small loopback adapter (`luna_adapter.ts`, run with Bun from the pinned SDK tree) that translates one streaming Chat Completions request into one `openai-codex/gpt-6-luna` request at `medium` thinking and streams the result back. Pass `--reasoning-effort high` for high or `low` for the opt-in A/B lane.
@@ -296,7 +323,7 @@ python -m ci.gauntlet qualify --sha FULL_TESTED_SOURCE_SHA \
   [--candidate-sha FULL_PR_HEAD_SHA] [--attempts 2] [--jobs 4]
 ```
 
-- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock and run under `nice`; all setup output lands in `run_root/logs/setup.log`. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required off macOS).
+- Caches under `--cache-root` (default `~/.cache/hol-guard-gauntlet`): one SDK prefix per candidate `package-lock.json` digest, and one native wheel per tested SHA and platform, built in a persistent `build-worktree` so `rust/target` stays warm. Builds serialize on a flock'd lock and run under `nice`; all setup output lands in `run_root/logs/setup.log`. Pass `--sdk-root` to skip the SDK cache or `--wheel` to skip the build (required on hosts other than macOS and Linux x86_64). On Linux the build produces the host's glibc `linux_x86_64` development wheel for local runs; the published Linux wheel is the static musl build from the nightly workflow.
 - Wheel builds default to a development profile: no LTO, 16 codegen units and workspace crates at `opt-level = 0`, with distribution size budgets skipped because the wheel is never published. Only workspace crates drop their optimization level — dependencies keep theirs but are also compiled without LTO, and Cargo keeps the dev and release variants' artifacts side by side in the warm build tree, so the first dev build compiles dependencies once and later builds of either profile reuse them. Dev wheels cache under a separate `…-dev` store key so they never shadow release wheels. Pass `--release-profile-wheel` for the production fat-LTO build; candidates whose `build-native-wheel-macos.sh` predates the dev-profile switch fall back to the release profile automatically.
 - For the release PR, the `Gauntlet full-task runtime` workflow builds the same development-profile wheel on every push to the Release Please branch and uploads it as `hol-guard-native-build-macos-arm64`; a newer head cancels the older build. Download the artifact from the run for the exact head and pass it with `--wheel`. The run still checks that the installed runtime's embedded build SHA equals `--sha`.
 - Roots are private to the calling user: the default `--run-root` is `/tmp/hol-guard-gauntlet-<uid>/<sha>-<stamp>` and the default `--work-parent` `/tmp/hol-guard-gauntlet-<uid>/w`. The run-root parent, work parent, cache root and its `locks/`, `sdk/` and `wheels/` subdirectories must be real directories owned by this user with no group or other permissions — symlinks and foreign owners are rejected, and a shared-mode directory is rejected unless it sits inside the driver's own default roots, which are tightened to `0700` instead.

@@ -154,7 +154,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "git -P -c core.quotepath=false -C . status --short",
             "echo ready && git status --short | head -1",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
-            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "gh api repos/example-org/cloud-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
             "git status --short && gh api repos/owner/repo/compare/base...main --jq '[.files[].filename] | .[]' | head -1",
             "gh api repos/owner/repo/compare/base...main; git status --short",
             "git status --short || gh api repos/owner/repo/compare/base...main",
@@ -205,7 +205,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
     let defaults = github_controls("default");
     for harness in ["omp", "zcode"] {
         for command in [
-            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "gh api repos/example-org/cloud-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
             "gh api repos/owner/repo/compare/base...main; git status --short",
         ] {

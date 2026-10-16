@@ -1383,7 +1383,7 @@ def test_tool_action_request_classifier_reviews_native_coauthored_commit_redirec
 def test_tool_action_request_classifier_allows_static_markdown_gh_pr_create_body_file(tmp_path):
     workspace = tmp_path / "workspace"
     workspace.mkdir()
-    body_file = tmp_path / "points-portal-command-builder-a11y-pr-body.md"
+    body_file = tmp_path / "cloud-portal-command-builder-a11y-pr-body.md"
     body_file.write_text("## Summary\n- Wire the capability gate.\n", encoding="utf-8")
     request = extract_sensitive_tool_action_request(
         "bash",
@@ -2367,7 +2367,7 @@ def test_tool_action_request_classifier_skips_find_exec_bounded_sed_read():
         "bash",
         {
             "command": (
-                "find /tmp/hol-guard-fixtures/hashgraph-online/hol-points-portal/.git/hooks "
+                "find /tmp/hol-guard-fixtures/hashgraph-online/cloud-portal/.git/hooks "
                 "-maxdepth 1 -type f ! -name '*.sample' -print "
                 "-exec sed -n '1,180p' {} \\; 2>/dev/null || true"
             ),
@@ -2784,7 +2784,7 @@ def test_tool_action_request_classifier_reviews_graphql_query_file_workflow(tmp_
                 "  }\n"
                 "}\n"
                 "EOF\n"
-                "gh api graphql -F owner=hashgraph-online -F name=points-portal -F number=542 "
+                "gh api graphql -F owner=hashgraph-online -F name=cloud-portal -F number=542 "
                 f'-f query="$(cat {query_path})"'
             )
         },
