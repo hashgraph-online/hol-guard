@@ -15,6 +15,7 @@ from pathlib import Path
 from .file_identity import full_stat_identity
 from .native_binary_write_lock import open_write_locked
 from .native_runtime_values import NativeRuntimeIdentity
+from .owner_private_group import trusted_owner_and_mode
 
 _MAX_IDENTITIES = 64
 _MIN_CACHE_AGE_NS = 2_000_000_000
@@ -56,9 +57,7 @@ def _trusted_regular_file(metadata: os.stat_result) -> bool:
         return False
     if os.name == "nt":
         return True
-    current_uid = os.getuid() if hasattr(os, "getuid") else None
-    owner = getattr(metadata, "st_uid", current_uid)
-    return not stat.S_IMODE(metadata.st_mode) & 0o022 and (current_uid is None or owner in {0, current_uid})
+    return trusted_owner_and_mode(metadata)
 
 
 def _cacheable(metadata: os.stat_result) -> bool:
