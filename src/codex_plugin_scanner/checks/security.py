@@ -143,6 +143,10 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
 # counts as such a mention. Files that instruct an agent never qualify.
 MARKDOWN_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
 MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
+MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
+# How much of a line before an inline code span is read for an assignment or a
+# flag. A bounded window keeps long lines with many spans linear.
+APPROVAL_CONTEXT_WINDOW = 256
 APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
 AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
 AGENT_INSTRUCTION_STEMS = {"context", "system-prompt", "system_prompt"}
@@ -954,32 +958,35 @@ def _is_agent_instruction_surface(relative_path: Path) -> bool:
 
 
 def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
-    """Whether line[start:end] is a bare value quoted alone in an inline code span of prose."""
+    """Whether line[start:end] is a bare value quoted alone in an inline code span of prose.
+
+    An assignment or a flag right before the span, in prose or at the end of an
+    earlier code span, makes it a setting rather than a mention.
+    """
     if any(separator in line[start:end] for separator in "=:"):
         return False
-    before = line[:start]
-    after = line[end:]
-    opens_span = before.endswith("`") and not before.endswith("``")
-    closes_span = after.startswith("`") and not after.startswith("``")
+    opens_span = start >= 1 and line[start - 1] == "`" and (start < 2 or line[start - 2] != "`")
+    closes_span = line[end : end + 1] == "`" and line[end + 1 : end + 2] != "`"
     if not (opens_span and closes_span):
         return False
-    return not APPROVAL_ASSIGNMENT_TAIL_RE.search(before[:-1].rstrip())
+    before = line[max(0, start - 1 - APPROVAL_CONTEXT_WINDOW) : start - 1].rstrip().rstrip("`").rstrip()
+    return not APPROVAL_ASSIGNMENT_TAIL_RE.search(before)
 
 
 def _markdown_code_lines(lines: list[str]) -> list[bool]:
     """Mark the lines of fenced or indented code, fence lines included.
 
-    Block-quote markers are removed first, so a fence inside a quote still
-    counts. An indented line starts a code block only after a blank line or a
-    heading, or continues one, because indented code cannot interrupt a
-    paragraph.
+    Block-quote and list markers are removed first, so a fence inside a quote
+    or a list item still counts. An indented line starts a code block only
+    after a blank line or a heading, or continues one, because indented code
+    cannot interrupt a paragraph.
     """
     code_lines: list[bool] = []
     fence: str | None = None
     can_start_indented_code = True
     for raw_line in lines:
         line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
-        fence_match = MARKDOWN_FENCE_RE.match(line)
+        fence_match = MARKDOWN_FENCE_RE.match(line) or MARKDOWN_FENCE_RE.match(MARKDOWN_LIST_MARKER_RE.sub("", line))
         if fence is not None:
             is_code = True
             if fence_match:

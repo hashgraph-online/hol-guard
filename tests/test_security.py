@@ -591,6 +591,10 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", "Intro.\n\n    sandbox `danger-full-access`\n"),
             ("docs/setup.md", "# Modes\n    sandbox `danger-full-access`\n"),
             ("docs/setup.md", "> ```\n> sandbox `danger-full-access`\n> ```\n"),
+            ("docs/setup.md", "- ```\n  sandbox `danger-full-access`\n  ```\n"),
+            ("docs/setup.md", '1. ```toml\n   sandbox_mode = "danger-full-access"\n   ```\n'),
+            ("docs/setup.md", "Run `codex --sandbox` `danger-full-access`.\n"),
+            ("docs/setup.md", "Set `sandbox_mode =` `danger-full-access`.\n"),
             ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
             ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
             ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
@@ -618,6 +622,12 @@ class TestNoApprovalBypassDefaults:
         assert result.passed is False
         assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
         assert result.findings[0].file_path == path
+
+    def test_many_mentions_on_one_line_stay_linear(self, tmp_path: Path):
+        """A long line full of harmless mentions is scanned without copying its prefix per match."""
+        (tmp_path / "README.md").write_text("`danger-full-access` " * 50_000 + "\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
 
     def test_declared_files_are_read_as_instructions(self, tmp_path: Path):
         """A file an ecosystem declares as package content gets no documentation exception."""
