@@ -22,7 +22,8 @@ pub(super) fn without_redirections(shell: &str) -> String {
             index += 1;
             continue;
         }
-        let word_start = index == 0 || chars[index - 1].is_whitespace();
+        let word_start =
+            index == 0 || chars[index - 1].is_whitespace() || ";&|(){}`".contains(chars[index - 1]);
         let mut operator = index;
         if word_start {
             while operator < chars.len() && chars[operator].is_ascii_digit() {
