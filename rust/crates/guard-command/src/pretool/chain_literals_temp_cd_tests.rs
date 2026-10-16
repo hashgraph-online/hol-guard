@@ -270,6 +270,25 @@ fn heredocs_and_continued_lines_keep_the_directory_opaque() {
 const WRITTEN: &str = "cat > README.md <<'EOF'\nSet `TODO_FILE` to choose the store.\nEOF\ncat >src/cli.js <<'EOF'\nconst file = process.env.TODO_FILE;\nEOF\ncat <<\"EOF\" >> notes/todo.txt\nTODO_FILE\nEOF";
 
 #[test]
+fn a_path_named_alias_or_a_quoted_operator_is_still_written_data() {
+    let t = TEMPORARY_VALUE;
+    let tail = "export TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list";
+    for prefix in [
+        "cat > alias.txt <<'EOF'\nTODO_FILE\nEOF\n",
+        "cat > function.txt <<'EOF'\nTODO_FILE\nEOF\n",
+        "echo '<<'\ncat > notes/todo.txt <<'EOF'\nTODO_FILE\nEOF\n",
+    ] {
+        let command = format!("{prefix}{tail}");
+        let expected = format!("{prefix}export TODO_FILE={t}/t.json; node src/cli.js list");
+        assert_eq!(
+            project(&command).as_deref(),
+            Some(expected.as_str()),
+            "{command:?}"
+        );
+    }
+}
+
+#[test]
 fn a_quoted_body_cat_writes_to_a_file_is_not_a_use() {
     let t = TEMPORARY_VALUE;
     let command = format!("{WRITTEN}\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list");
