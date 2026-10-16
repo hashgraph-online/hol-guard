@@ -99,6 +99,15 @@ pub(crate) fn heredoc_operators(text: &str) -> usize {
     let mut index = 0;
     let mut operators = 0;
     while index < chars.len() {
+        // Declarations are read one line at a time, with a fresh state. A
+        // quote still open at a newline is a different `<<` than the next
+        // line's, so the two counts are not the same operator.
+        if chars[index] == '\n' {
+            if !state.is_top_level() {
+                return usize::MAX;
+            }
+            state = ShellScanState::new();
+        }
         if state.is_top_level()
             && chars.get(index) == Some(&'<')
             && chars.get(index + 1) == Some(&'<')

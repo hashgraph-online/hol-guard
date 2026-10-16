@@ -320,6 +320,9 @@ fn a_body_the_shell_expands_runs_or_redirects_elsewhere_stays_a_use() {
         // `cat` may not be the program.
         "cat() { sh; }\ncat > f <<'EOF'\nTODO_FILE\nEOF",
         "alias cat=sh\ncat > f <<'EOF'\nTODO_FILE\nEOF",
+        // A quote left open at a newline makes the next line's `<<` a
+        // different operator than a scan that starts fresh on that line.
+        "export X=$(mktemp -d)\necho \"x\n<<'A'\"\ncat <<B\n$(evil)\nA\nB",
     ] {
         let command = format!("{body}{tail}");
         assert_eq!(project(&command), None, "{command:?}");
