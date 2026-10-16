@@ -3129,6 +3129,54 @@
       "expect": "allow"
     },
     {
+      "id": "cp-recursive-glob-in-workspace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "mkdir -p dist && cp -R src/* dist/"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "touch-glob-in-workspace",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "touch src/*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-cp-recursive-glob-to-ssh",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cp -R src/* ${HOME}/.ssh/"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
       "id": "queue-cp-r-sibling-node-modules",
       "fix_area": "queue",
       "harnesses": [
