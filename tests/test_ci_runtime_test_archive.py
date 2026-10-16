@@ -25,6 +25,7 @@ def test_runtime_archive_is_exact_input_only_and_saved_by_one_trusted_writer():
         "src/codex_plugin_scanner/guard/contracts/**", ".cargo/**",
         ".github/actions/setup-rust/**", ".github/actions/restore-runtime-tests/**",
         ".github/workflows/ci.yml", "scripts/**",
+        "!**/__pycache__/**", "!rust/target/**",
     ):
         assert binding in key
 
@@ -56,6 +57,8 @@ def test_literal_rust_includes_are_covered_by_the_archive_key():
     )
     restore = next(step for step in action["runs"]["steps"] if step.get("id") == "archive")
     patterns = re.findall(r"'([^']+)'", restore["with"]["key"])
+    authored = [pattern for pattern in patterns if not pattern.startswith("!")]
+    generated = [pattern[1:] for pattern in patterns if pattern.startswith("!")]
     includes = re.compile(r'include_(?:str|bytes)!\(\s*"([^"\n]+)"\s*\)', re.MULTILINE)
     checked = 0
     for source in (ROOT / "rust").rglob("*.rs"):
@@ -63,6 +66,31 @@ def test_literal_rust_includes_are_covered_by_the_archive_key():
             continue
         for included in includes.findall(source.read_text()):
             path = (source.parent / included).resolve().relative_to(ROOT).as_posix()
-            assert any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns), path
+            assert any(fnmatch.fnmatchcase(path, pattern) for pattern in authored), path
+            assert not any(fnmatch.fnmatchcase(path, pattern) for pattern in generated), path
             checked += 1
     assert checked > 100  # Exercise the compiled fixture graph, not an empty match.
+
+
+def test_generated_files_are_excluded_without_excluding_authored_fixtures():
+    action = yaml.safe_load(
+        (ROOT / ".github/actions/restore-runtime-tests/action.yml").read_text()
+    )
+    restore = next(step for step in action["runs"]["steps"] if step.get("id") == "archive")
+    patterns = re.findall(r"'([^']+)'", restore["with"]["key"])
+    assert patterns[-2:] == ["!**/__pycache__/**", "!rust/target/**"]
+
+    def included(path):
+        return any(fnmatch.fnmatchcase(path, pattern) for pattern in patterns[:-2]) and not any(
+            fnmatch.fnmatchcase(path, pattern[1:]) for pattern in patterns[-2:]
+        )
+
+    assert not included("scripts/ci/__pycache__/native_cache_environment.cpython-312.pyc")
+    assert not included("src/codex_plugin_scanner/guard/contracts/__pycache__/loaders.cpython-312.pyc")
+    assert not included("rust/target/debug/deps/runtime-generated-output")
+    for path in (
+        "scripts/ci/native_cache_environment.py", "rust/rust-toolchain.toml",
+        "rust/crates/guard-runtime/src/main.rs", "rust/crates/guard-runtime/testdata/case.json",
+        "tests/fixtures/authority/vectors.json", "spec/guard-policy/v1alpha1/schema.json",
+    ):
+        assert included(path), path
