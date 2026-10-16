@@ -320,20 +320,11 @@ class GeneratedCommandCatalog:
     def get_rule(self, rule_id: str) -> GeneratedCommandRule | None:
         return self._by_rule_id.get(rule_id.strip().lower())
 
-    def rule_for_action_class(self, action_class: str) -> GeneratedCommandRule | None:
-        return self._by_action_rule.get(action_class.strip().lower())
-
     def permission(self, permission_id: str) -> GeneratedCommandPermission | None:
         return self._by_permission_id.get(permission_id.strip().lower())
 
     def permission_for_rule_id(self, rule_id: str) -> GeneratedCommandPermission | None:
         return self._permission_by_rule_id.get(rule_id.strip().lower())
-
-    def permission_for_action_class(self, action_class: str) -> GeneratedCommandPermission | None:
-        return self._permission_by_action_class.get(action_class.strip().lower())
-
-    def permission_for_typed_capability(self, capability: str) -> GeneratedCommandPermission | None:
-        return self._permission_by_capability.get(capability.strip().lower())
 
 
 def immutable_mapping(value: Mapping[str, object]) -> Mapping[str, object]:

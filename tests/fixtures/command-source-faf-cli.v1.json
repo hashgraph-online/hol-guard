@@ -8861,6 +8861,32 @@
               ]
             },
             {
+              "action_classes": [],
+              "baseline_floor": "allow",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Creates a new private repository owned by the signed-in account, optionally adding it as a remote of the current directory without pushing.",
+              "example_command": "gh repo create todo-app --private --source=.",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "new private repository",
+              "permission_id": "command.github.permission.create-private-remote",
+              "replacement_permission_id": null,
+              "risk_tier": "low",
+              "safer_guidance": [
+                "Keep the operation read-only or limited to opening a pull-request proposal."
+              ],
+              "typed_capabilities": [
+                "create_private_remote"
+              ]
+            },
+            {
               "action_classes": [
                 "GitHub routine pull-request merge command"
               ],
@@ -9020,7 +9046,8 @@
               "replacement_permission_id": null,
               "risk_tier": "high",
               "safer_guidance": [
-                "Inspect the exact repository, resource, and operation before confirming it."
+                "Inspect the exact repository, resource, and operation before confirming it.",
+                "To publish new work without approval, create the repository with `gh repo create NAME --private --source=.` and then run `git push -u origin BRANCH`."
               ],
               "typed_capabilities": [
                 "content_remote"
@@ -9427,7 +9454,8 @@
               "rule_version": "1.0.0",
               "safe_variants": [],
               "safer_alternatives": [
-                "Inspect the exact repository, resource, and operation before confirming it."
+                "Inspect the exact repository, resource, and operation before confirming it.",
+                "To publish new work without approval, create the repository with `gh repo create NAME --private --source=.` and then run `git push -u origin BRANCH`."
               ],
               "severity": "high",
               "title": "GitHub content mutation"
@@ -10089,7 +10117,7 @@
               "example_command": "faf export --grok",
               "family": null,
               "fixed_reason": null,
-              "implementation_version": "1.0.0",
+              "implementation_version": "1.1.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
               "label": "faf-cli agent MCP configuration write",
@@ -10115,7 +10143,7 @@
               "example_command": "faf hooks --install",
               "family": null,
               "fixed_reason": null,
-              "implementation_version": "1.0.0",
+              "implementation_version": "1.1.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
               "label": "faf-cli git hook, git driver, or CI workflow change",
@@ -10142,7 +10170,7 @@
               "example_command": "faf ai analyze",
               "family": null,
               "fixed_reason": null,
-              "implementation_version": "1.0.0",
+              "implementation_version": "1.1.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
               "label": "faf-cli project context sent off the machine",
@@ -10165,17 +10193,17 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies commands that write files other coding agents load as instructions: `faf export` (AGENTS.md, .cursorrules, GEMINI.md, .github/copilot-instructions.md, llms.txt, project.html and a Server Card; a bare `faf export` writes several of these at once), `faf sync` / `bi-sync` (adds or refreshes a faf-managed block in CLAUDE.md; `--direction pull` writes into project.faf instead; with FAF_PRO=1 it also writes Claude Code's MEMORY.md under ~/.claude/projects, outside the repository), and the hidden aliases `agents`, `cursor`, `gemini` and `llms`. faf preserves content outside its own managed block and refuses to replace a file it cannot prove it wrote unless --force is given.",
+              "description": "Identifies commands that write files other coding agents load as instructions: `faf export` (AGENTS.md, .cursorrules, GEMINI.md, .github/copilot-instructions.md, llms.txt, project.html and a Server Card; a bare `faf export` writes several of these at once), `faf sync` (adds or refreshes a faf-managed block in CLAUDE.md; faf-cli 8.2.1 and earlier also had `bi-sync` and `sync --direction pull`, which wrote into project.faf, removed in 8.2.2 and still matched here; with FAF_PRO=1 it also writes Claude Code's MEMORY.md under ~/.claude/projects, outside the repository), and the hidden aliases `agents`, `cursor`, `gemini` and `llms`. faf preserves content outside its own managed block and refuses to replace a file it cannot prove it wrote unless --force is given.",
               "example_command": "faf export --agents",
               "family": null,
               "fixed_reason": null,
-              "implementation_version": "1.0.0",
+              "implementation_version": "1.1.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
               "label": "faf-cli agent instruction file write",
               "permission_id": "command.faf-cli.permission.agent-instructions-write",
               "replacement_permission_id": null,
-              "risk_tier": "medium",
+              "risk_tier": "low",
               "safer_guidance": [
                 "Review the diff of AGENTS.md, CLAUDE.md and the other instruction files before an agent loads them.",
                 "Use `faf export --output <dir>` to write into a scratch directory first."
@@ -10192,11 +10220,11 @@
               "default_enabled": true,
               "dependencies": [],
               "deprecated": false,
-              "description": "Identifies commands that create or rewrite faf's own project files: project.faf and .faf-dna (`init`, `yolo`, `auto`, `loop`, `go`, `edit`, `migrate`, `recover`, `refresh`, `conductor import`, and `git <url>`, which also clones the public repository into a temporary directory), the .fafb binary (`compile`, `refresh`), soul.fafm (`memory etch`, `memory convert`), agent cards (`cards`, `server-card`, which patches an existing server.json), project.html (`show`, which also opens a browser), .faf-bench.json (`bench grade` with --cold or --faf), and files named by --output (`decompile --output`, `taf --output`). Read-only commands such as score, check, dna, context, drift, log, diff, convert, search, share and wjttc are not matched.",
+              "description": "Identifies commands that create or rewrite faf's own project files: project.faf and .faf-dna (`init`, `yolo`, `auto`, `loop`, `go`, `edit`, `migrate`, `refresh`, `recover` on faf-cli 8.2.1 and earlier (removed in 8.2.2, still matched here), `conductor import`, and `git <url>`, which also clones the public repository into a temporary directory), the .fafb binary (`compile`, `refresh`), soul.fafm (`memory etch`, `memory convert`), agent.fafa (`card init`), agent cards (`cards`, `server-card`, which patches an existing server.json), project.html (`show`, which also opens a browser), .faf-bench.json (`bench` with --cold or --faf; the grade step writes it), and files named by --output (`decompile --output`, `taf --output`). Read-only commands such as score, check, dna, context, drift, log, diff, convert, search, share and wjttc are not matched.",
               "example_command": "faf auto",
               "family": null,
               "fixed_reason": null,
-              "implementation_version": "1.0.0",
+              "implementation_version": "1.1.0",
               "implied_permissions": [],
               "introduced_version": "2.2.0",
               "label": "faf-cli project context file write",
@@ -11163,7 +11191,7 @@
                 "execution"
               ],
               "rule_id": "command.faf-cli.agent-tool-config",
-              "rule_version": "1.0.0",
+              "rule_version": "1.1.0",
               "safe_variants": [
                 {
                   "matcher": {
@@ -11220,6 +11248,80 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--agents",
+                            "--aggregate-output",
+                            "--all",
+                            "--card",
+                            "--conductor",
+                            "--copilot",
+                            "--cursor",
+                            "--force",
+                            "--gemini",
+                            "--html",
+                            "--llms",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--output",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "export"
+                            ],
+                            [
+                              "faf",
+                              "export"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--grok",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
                             "faf",
                             "faf.cmd",
                             "faf.exe",
@@ -11236,6 +11338,66 @@
                           "options_with_values": [],
                           "paths": [
                             [
+                              "grok"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "grok"
+                            ],
+                            [
+                              "faf",
                               "grok"
                             ]
                           ],
@@ -13543,7 +13705,7 @@
                 "execution"
               ],
               "rule_id": "command.faf-cli.git-ci-persistence",
-              "rule_version": "1.0.0",
+              "rule_version": "1.1.0",
               "safe_variants": [
                 {
                   "matcher": {
@@ -13572,6 +13734,69 @@
                           "options_with_values": [],
                           "paths": [
                             [
+                              "hooks"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--install"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--silent",
+                            "--stream",
+                            "--strict",
+                            "--uninstall",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "hooks"
+                            ],
+                            [
+                              "faf",
                               "hooks"
                             ]
                           ],
@@ -13623,6 +13848,69 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--install",
+                            "--silent",
+                            "--stream",
+                            "--strict",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "hooks"
+                            ],
+                            [
+                              "faf",
+                              "hooks"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--uninstall"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
                             "faf",
                             "faf.cmd",
                             "faf.exe",
@@ -13642,6 +13930,69 @@
                           "options_with_values": [],
                           "paths": [
                             [
+                              "diff"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--install-driver"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--json",
+                            "--silent",
+                            "--stream",
+                            "--uninstall-driver",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "diff"
+                            ],
+                            [
+                              "faf",
                               "diff"
                             ]
                           ],
@@ -13693,6 +14044,69 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--install-driver",
+                            "--json",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "diff"
+                            ],
+                            [
+                              "faf",
+                              "diff"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--uninstall-driver"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
                             "faf",
                             "faf.cmd",
                             "faf.exe",
@@ -13715,6 +14129,71 @@
                           ],
                           "paths": [
                             [
+                              "taf"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--write"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--force",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--output",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "taf"
+                            ],
+                            [
+                              "faf",
                               "taf"
                             ]
                           ],
@@ -15058,7 +15537,7 @@
                 "data_flow_exfiltration"
               ],
               "rule_id": "command.faf-cli.data-egress",
-              "rule_version": "1.0.0",
+              "rule_version": "1.1.0",
               "safe_variants": [
                 {
                   "matcher": {
@@ -15088,6 +15567,80 @@
                               "analyze"
                             ],
                             [
+                              "ai",
+                              "--",
+                              "analyze"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "ai",
+                              "analyze"
+                            ],
+                            [
+                              "faf-cli",
+                              "ai",
+                              "--",
+                              "analyze"
+                            ],
+                            [
+                              "faf",
+                              "ai",
+                              "analyze"
+                            ],
+                            [
+                              "faf",
                               "ai",
                               "--",
                               "analyze"
@@ -15135,6 +15688,79 @@
                           ],
                           "paths": [
                             [
+                              "bench"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--submit"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--cold",
+                            "--faf",
+                            "--json",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--endpoint",
+                            "--file",
+                            "--filter",
+                            "--model",
+                            "--package",
+                            "--reporter",
+                            "--tokens",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--endpoint",
+                            "--file",
+                            "--model",
+                            "--tokens"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "bench"
+                            ],
+                            [
+                              "faf",
                               "bench"
                             ]
                           ],
@@ -15259,7 +15885,7 @@
                 "faf-cli agent instruction write command"
               ],
               "default_mode": "review",
-              "description": "Identifies commands that write files other coding agents load as instructions: `faf export` (AGENTS.md, .cursorrules, GEMINI.md, .github/copilot-instructions.md, llms.txt, project.html and a Server Card; a bare `faf export` writes several of these at once), `faf sync` / `bi-sync` (adds or refreshes a faf-managed block in CLAUDE.md; `--direction pull` writes into project.faf instead; with FAF_PRO=1 it also writes Claude Code's MEMORY.md under ~/.claude/projects, outside the repository), and the hidden aliases `agents`, `cursor`, `gemini` and `llms`. faf preserves content outside its own managed block and refuses to replace a file it cannot prove it wrote unless --force is given.",
+              "description": "Identifies commands that write files other coding agents load as instructions: `faf export` (AGENTS.md, .cursorrules, GEMINI.md, .github/copilot-instructions.md, llms.txt, project.html and a Server Card; a bare `faf export` writes several of these at once), `faf sync` (adds or refreshes a faf-managed block in CLAUDE.md; faf-cli 8.2.1 and earlier also had `bi-sync` and `sync --direction pull`, which wrote into project.faf, removed in 8.2.2 and still matched here; with FAF_PRO=1 it also writes Claude Code's MEMORY.md under ~/.claude/projects, outside the repository), and the hidden aliases `agents`, `cursor`, `gemini` and `llms`. faf preserves content outside its own managed block and refuses to replace a file it cannot prove it wrote unless --force is given.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -16846,7 +17472,7 @@
                 "destructive_shell"
               ],
               "rule_id": "command.faf-cli.agent-instructions-write",
-              "rule_version": "1.0.0",
+              "rule_version": "1.1.0",
               "safe_variants": [
                 {
                   "matcher": {
@@ -16909,6 +17535,131 @@
                               "gemini"
                             ],
                             [
+                              "llms"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--agents",
+                            "--aggregate-output",
+                            "--all",
+                            "--card",
+                            "--conductor",
+                            "--copilot",
+                            "--cursor",
+                            "--force",
+                            "--gemini",
+                            "--grok",
+                            "--html",
+                            "--llms",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--watch",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--direction",
+                            "--filter",
+                            "--output",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--direction",
+                            "--output"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "export"
+                            ],
+                            [
+                              "faf-cli",
+                              "sync"
+                            ],
+                            [
+                              "faf-cli",
+                              "bi-sync"
+                            ],
+                            [
+                              "faf-cli",
+                              "agents"
+                            ],
+                            [
+                              "faf-cli",
+                              "cursor"
+                            ],
+                            [
+                              "faf-cli",
+                              "gemini"
+                            ],
+                            [
+                              "faf-cli",
+                              "llms"
+                            ],
+                            [
+                              "faf",
+                              "export"
+                            ],
+                            [
+                              "faf",
+                              "sync"
+                            ],
+                            [
+                              "faf",
+                              "bi-sync"
+                            ],
+                            [
+                              "faf",
+                              "agents"
+                            ],
+                            [
+                              "faf",
+                              "cursor"
+                            ],
+                            [
+                              "faf",
+                              "gemini"
+                            ],
+                            [
+                              "faf",
                               "llms"
                             ]
                           ],
@@ -17009,7 +17760,7 @@
                 "Review the diff of AGENTS.md, CLAUDE.md and the other instruction files before an agent loads them.",
                 "Use `faf export --output <dir>` to write into a scratch directory first."
               ],
-              "severity": "medium",
+              "severity": "low",
               "title": "faf-cli agent instruction file write"
             },
             {
@@ -17017,7 +17768,7 @@
                 "faf-cli project context write command"
               ],
               "default_mode": "review",
-              "description": "Identifies commands that create or rewrite faf's own project files: project.faf and .faf-dna (`init`, `yolo`, `auto`, `loop`, `go`, `edit`, `migrate`, `recover`, `refresh`, `conductor import`, and `git <url>`, which also clones the public repository into a temporary directory), the .fafb binary (`compile`, `refresh`), soul.fafm (`memory etch`, `memory convert`), agent cards (`cards`, `server-card`, which patches an existing server.json), project.html (`show`, which also opens a browser), .faf-bench.json (`bench grade` with --cold or --faf), and files named by --output (`decompile --output`, `taf --output`). Read-only commands such as score, check, dna, context, drift, log, diff, convert, search, share and wjttc are not matched.",
+              "description": "Identifies commands that create or rewrite faf's own project files: project.faf and .faf-dna (`init`, `yolo`, `auto`, `loop`, `go`, `edit`, `migrate`, `refresh`, `recover` on faf-cli 8.2.1 and earlier (removed in 8.2.2, still matched here), `conductor import`, and `git <url>`, which also clones the public repository into a temporary directory), the .fafb binary (`compile`, `refresh`), soul.fafm (`memory etch`, `memory convert`), agent.fafa (`card init`), agent cards (`cards`, `server-card`, which patches an existing server.json), project.html (`show`, which also opens a browser), .faf-bench.json (`bench` with --cold or --faf; the grade step writes it), and files named by --output (`decompile --output`, `taf --output`). Read-only commands such as score, check, dna, context, drift, log, diff, convert, search, share and wjttc are not matched.",
               "family": null,
               "matcher": {
                 "config": {},
@@ -17047,8 +17798,11 @@
                       ],
                       "interspersed_options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17057,16 +17811,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -17075,8 +17835,11 @@
                       "leading_options_with_values": [],
                       "options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17085,16 +17848,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -17149,6 +17918,10 @@
                         ],
                         [
                           "git"
+                        ],
+                        [
+                          "card",
+                          "init"
                         ],
                         [
                           "cards"
@@ -17209,8 +17982,11 @@
                         "--a2a-url",
                         "--cache",
                         "--call",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17220,18 +17996,23 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
                         "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--reporter",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "--workspace",
                         "-C",
                         "-F",
@@ -17246,8 +18027,11 @@
                       "leading_options_with_values": [],
                       "options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17256,16 +18040,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -17335,6 +18125,11 @@
                         [
                           "faf-cli",
                           "git"
+                        ],
+                        [
+                          "faf-cli",
+                          "card",
+                          "init"
                         ],
                         [
                           "faf-cli",
@@ -17412,6 +18207,11 @@
                         [
                           "faf",
                           "git"
+                        ],
+                        [
+                          "faf",
+                          "card",
+                          "init"
                         ],
                         [
                           "faf",
@@ -17469,8 +18269,11 @@
                         "--a2a-url",
                         "--cache",
                         "--call",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17480,18 +18283,23 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
                         "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--reporter",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "--workspace",
                         "-C",
                         "-F",
@@ -17506,8 +18314,11 @@
                       "leading_options_with_values": [],
                       "options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17516,16 +18327,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -17610,6 +18427,12 @@
                           "exec",
                           "faf-cli",
                           "git"
+                        ],
+                        [
+                          "exec",
+                          "faf-cli",
+                          "card",
+                          "init"
                         ],
                         [
                           "exec",
@@ -17705,6 +18528,12 @@
                           "exec",
                           "faf",
                           "git"
+                        ],
+                        [
+                          "exec",
+                          "faf",
+                          "card",
+                          "init"
                         ],
                         [
                           "exec",
@@ -17762,8 +18591,11 @@
                         "--a2a-url",
                         "--cache",
                         "--call",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17773,18 +18605,23 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
                         "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--reporter",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "--workspace",
                         "-C",
                         "-F",
@@ -17799,8 +18636,11 @@
                       "leading_options_with_values": [],
                       "options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -17809,16 +18649,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -17903,6 +18749,12 @@
                           "x",
                           "faf-cli",
                           "git"
+                        ],
+                        [
+                          "x",
+                          "faf-cli",
+                          "card",
+                          "init"
                         ],
                         [
                           "x",
@@ -17998,6 +18850,12 @@
                           "x",
                           "faf",
                           "git"
+                        ],
+                        [
+                          "x",
+                          "faf",
+                          "card",
+                          "init"
                         ],
                         [
                           "x",
@@ -18055,8 +18913,11 @@
                         "--a2a-url",
                         "--cache",
                         "--call",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -18066,18 +18927,23 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
                         "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--reporter",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "--workspace",
                         "-C",
                         "-F",
@@ -18092,8 +18958,11 @@
                       "leading_options_with_values": [],
                       "options_with_values": [
                         "--a2a-url",
+                        "--description",
                         "--dir",
+                        "--domain",
                         "--door-url",
+                        "--example",
                         "--faf",
                         "--faf-pointer",
                         "--fafa",
@@ -18102,16 +18971,22 @@
                         "--id",
                         "--in",
                         "--limit",
+                        "--name",
                         "--namepoint",
                         "--out",
                         "--output",
+                        "--package",
                         "--priority",
+                        "--protocol",
                         "--ref",
                         "--rounds",
                         "--set-version",
+                        "--short-name",
+                        "--skill",
                         "--tag",
                         "--target",
                         "--type",
+                        "--url",
                         "-f",
                         "-o",
                         "-r"
@@ -18196,6 +19071,12 @@
                           "dlx",
                           "faf-cli",
                           "git"
+                        ],
+                        [
+                          "dlx",
+                          "faf-cli",
+                          "card",
+                          "init"
                         ],
                         [
                           "dlx",
@@ -18291,6 +19172,12 @@
                           "dlx",
                           "faf",
                           "git"
+                        ],
+                        [
+                          "dlx",
+                          "faf",
+                          "card",
+                          "init"
                         ],
                         [
                           "dlx",
@@ -20437,6 +21324,175 @@
                       "required_flags": [],
                       "subcommands": [
                         "git"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npx",
+                        "npx.cmd",
+                        "npx.exe",
+                        "bunx",
+                        "bunx.cmd",
+                        "bunx.exe",
+                        "pnpx",
+                        "pnpx.cmd",
+                        "pnpx.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--aggregate-output",
+                        "--force",
+                        "--silent",
+                        "--stream",
+                        "--use-stderr",
+                        "--workspace-root",
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--cache",
+                        "--call",
+                        "--description",
+                        "--dir",
+                        "--domain",
+                        "--example",
+                        "--filter",
+                        "--name",
+                        "--out",
+                        "--package",
+                        "--protocol",
+                        "--reporter",
+                        "--set-version",
+                        "--short-name",
+                        "--skill",
+                        "--url",
+                        "--workspace",
+                        "-C",
+                        "-F",
+                        "-c",
+                        "-p",
+                        "-w"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "faf-cli",
+                      "required_flags": [],
+                      "subcommands": [
+                        "card",
+                        "init"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "npm",
+                        "npm.cmd",
+                        "npm.exe",
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--aggregate-output",
+                        "--force",
+                        "--silent",
+                        "--stream",
+                        "--use-stderr",
+                        "--workspace-root",
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--cache",
+                        "--call",
+                        "--description",
+                        "--dir",
+                        "--domain",
+                        "--example",
+                        "--filter",
+                        "--name",
+                        "--out",
+                        "--package",
+                        "--protocol",
+                        "--reporter",
+                        "--set-version",
+                        "--short-name",
+                        "--skill",
+                        "--url",
+                        "--workspace",
+                        "-C",
+                        "-F",
+                        "-c",
+                        "-p",
+                        "-w"
+                      ],
+                      "leading_subcommands": [
+                        "exec"
+                      ],
+                      "package": "faf-cli",
+                      "required_flags": [],
+                      "subcommands": [
+                        "card",
+                        "init"
+                      ]
+                    },
+                    "op": "versioned-package-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "pnpm",
+                        "pnpm.cmd",
+                        "pnpm.exe",
+                        "yarn",
+                        "yarn.cmd",
+                        "yarn.exe"
+                      ],
+                      "interspersed_flags": [
+                        "--aggregate-output",
+                        "--force",
+                        "--silent",
+                        "--stream",
+                        "--use-stderr",
+                        "--workspace-root",
+                        "--yes",
+                        "-y"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--cache",
+                        "--call",
+                        "--description",
+                        "--dir",
+                        "--domain",
+                        "--example",
+                        "--filter",
+                        "--name",
+                        "--out",
+                        "--package",
+                        "--protocol",
+                        "--reporter",
+                        "--set-version",
+                        "--short-name",
+                        "--skill",
+                        "--url",
+                        "--workspace",
+                        "-C",
+                        "-F",
+                        "-c",
+                        "-p",
+                        "-w"
+                      ],
+                      "leading_subcommands": [
+                        "dlx"
+                      ],
+                      "package": "faf-cli",
+                      "required_flags": [],
+                      "subcommands": [
+                        "card",
+                        "init"
                       ]
                     },
                     "op": "versioned-package-subcommand.v1"
@@ -22521,7 +23577,7 @@
                 "destructive_shell"
               ],
               "rule_id": "command.faf-cli.project-context-write",
-              "rule_version": "1.0.0",
+              "rule_version": "1.1.0",
               "safe_variants": [
                 {
                   "matcher": {
@@ -22552,8 +23608,11 @@
                           ],
                           "interspersed_options_with_values": [
                             "--a2a-url",
+                            "--description",
                             "--dir",
+                            "--domain",
                             "--door-url",
+                            "--example",
                             "--faf",
                             "--faf-pointer",
                             "--fafa",
@@ -22562,16 +23621,22 @@
                             "--id",
                             "--in",
                             "--limit",
+                            "--name",
                             "--namepoint",
                             "--out",
                             "--output",
+                            "--package",
                             "--priority",
+                            "--protocol",
                             "--ref",
                             "--rounds",
                             "--set-version",
+                            "--short-name",
+                            "--skill",
                             "--tag",
                             "--target",
                             "--type",
+                            "--url",
                             "-f",
                             "-o",
                             "-r"
@@ -22580,8 +23645,11 @@
                           "leading_options_with_values": [],
                           "options_with_values": [
                             "--a2a-url",
+                            "--description",
                             "--dir",
+                            "--domain",
                             "--door-url",
+                            "--example",
                             "--faf",
                             "--faf-pointer",
                             "--fafa",
@@ -22590,16 +23658,22 @@
                             "--id",
                             "--in",
                             "--limit",
+                            "--name",
                             "--namepoint",
                             "--out",
                             "--output",
+                            "--package",
                             "--priority",
+                            "--protocol",
                             "--ref",
                             "--rounds",
                             "--set-version",
+                            "--short-name",
+                            "--skill",
                             "--tag",
                             "--target",
                             "--type",
+                            "--url",
                             "-f",
                             "-o",
                             "-r"
@@ -22656,12 +23730,305 @@
                               "git"
                             ],
                             [
+                              "card",
+                              "init"
+                            ],
+                            [
                               "cards"
                             ],
                             [
                               "server-card"
                             ],
                             [
+                              "show"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--check",
+                            "--dry-run",
+                            "--force",
+                            "--json",
+                            "--quick",
+                            "--resume",
+                            "--silent",
+                            "--stdout",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "--yolo",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--a2a-url",
+                            "--cache",
+                            "--call",
+                            "--description",
+                            "--dir",
+                            "--domain",
+                            "--door-url",
+                            "--example",
+                            "--faf",
+                            "--faf-pointer",
+                            "--fafa",
+                            "--file",
+                            "--filter",
+                            "--generated",
+                            "--id",
+                            "--in",
+                            "--limit",
+                            "--name",
+                            "--namepoint",
+                            "--out",
+                            "--output",
+                            "--package",
+                            "--priority",
+                            "--protocol",
+                            "--ref",
+                            "--reporter",
+                            "--rounds",
+                            "--set-version",
+                            "--short-name",
+                            "--skill",
+                            "--tag",
+                            "--target",
+                            "--type",
+                            "--url",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-f",
+                            "-o",
+                            "-p",
+                            "-r",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--a2a-url",
+                            "--description",
+                            "--dir",
+                            "--domain",
+                            "--door-url",
+                            "--example",
+                            "--faf",
+                            "--faf-pointer",
+                            "--fafa",
+                            "--file",
+                            "--generated",
+                            "--id",
+                            "--in",
+                            "--limit",
+                            "--name",
+                            "--namepoint",
+                            "--out",
+                            "--output",
+                            "--package",
+                            "--priority",
+                            "--protocol",
+                            "--ref",
+                            "--rounds",
+                            "--set-version",
+                            "--short-name",
+                            "--skill",
+                            "--tag",
+                            "--target",
+                            "--type",
+                            "--url",
+                            "-f",
+                            "-o",
+                            "-r"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "init"
+                            ],
+                            [
+                              "faf-cli",
+                              "yolo"
+                            ],
+                            [
+                              "faf-cli",
+                              "auto"
+                            ],
+                            [
+                              "faf-cli",
+                              "loop"
+                            ],
+                            [
+                              "faf-cli",
+                              "go"
+                            ],
+                            [
+                              "faf-cli",
+                              "edit"
+                            ],
+                            [
+                              "faf-cli",
+                              "migrate"
+                            ],
+                            [
+                              "faf-cli",
+                              "recover"
+                            ],
+                            [
+                              "faf-cli",
+                              "refresh"
+                            ],
+                            [
+                              "faf-cli",
+                              "compile"
+                            ],
+                            [
+                              "faf-cli",
+                              "conductor",
+                              "import"
+                            ],
+                            [
+                              "faf-cli",
+                              "conductor",
+                              "--",
+                              "import"
+                            ],
+                            [
+                              "faf-cli",
+                              "memory",
+                              "etch"
+                            ],
+                            [
+                              "faf-cli",
+                              "memory",
+                              "convert"
+                            ],
+                            [
+                              "faf-cli",
+                              "git"
+                            ],
+                            [
+                              "faf-cli",
+                              "card",
+                              "init"
+                            ],
+                            [
+                              "faf-cli",
+                              "cards"
+                            ],
+                            [
+                              "faf-cli",
+                              "server-card"
+                            ],
+                            [
+                              "faf-cli",
+                              "show"
+                            ],
+                            [
+                              "faf",
+                              "init"
+                            ],
+                            [
+                              "faf",
+                              "yolo"
+                            ],
+                            [
+                              "faf",
+                              "auto"
+                            ],
+                            [
+                              "faf",
+                              "loop"
+                            ],
+                            [
+                              "faf",
+                              "go"
+                            ],
+                            [
+                              "faf",
+                              "edit"
+                            ],
+                            [
+                              "faf",
+                              "migrate"
+                            ],
+                            [
+                              "faf",
+                              "recover"
+                            ],
+                            [
+                              "faf",
+                              "refresh"
+                            ],
+                            [
+                              "faf",
+                              "compile"
+                            ],
+                            [
+                              "faf",
+                              "conductor",
+                              "import"
+                            ],
+                            [
+                              "faf",
+                              "conductor",
+                              "--",
+                              "import"
+                            ],
+                            [
+                              "faf",
+                              "memory",
+                              "etch"
+                            ],
+                            [
+                              "faf",
+                              "memory",
+                              "convert"
+                            ],
+                            [
+                              "faf",
+                              "git"
+                            ],
+                            [
+                              "faf",
+                              "card",
+                              "init"
+                            ],
+                            [
+                              "faf",
+                              "cards"
+                            ],
+                            [
+                              "faf",
+                              "server-card"
+                            ],
+                            [
+                              "faf",
                               "show"
                             ]
                           ],
@@ -22701,6 +24068,79 @@
                               "decompile"
                             ],
                             [
+                              "taf"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--help",
+                            "--output"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--force",
+                            "--silent",
+                            "--stream",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--write",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--filter",
+                            "--package",
+                            "--reporter",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--output"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "decompile"
+                            ],
+                            [
+                              "faf-cli",
+                              "taf"
+                            ],
+                            [
+                              "faf",
+                              "decompile"
+                            ],
+                            [
+                              "faf",
                               "taf"
                             ]
                           ],
@@ -22763,6 +24203,79 @@
                         "config": {
                           "allow_leading_options": false,
                           "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--faf",
+                            "--json",
+                            "--silent",
+                            "--stream",
+                            "--submit",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--endpoint",
+                            "--file",
+                            "--filter",
+                            "--model",
+                            "--package",
+                            "--reporter",
+                            "--tokens",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--endpoint",
+                            "--file",
+                            "--model",
+                            "--tokens"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "bench"
+                            ],
+                            [
+                              "faf",
+                              "bench"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--cold",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
                             "faf",
                             "faf.cmd",
                             "faf.exe",
@@ -22793,6 +24306,79 @@
                           ],
                           "paths": [
                             [
+                              "bench"
+                            ]
+                          ],
+                          "required_flags": [
+                            "--faf",
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": []
+                        },
+                        "op": "executable-path-set.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "npx",
+                            "npx.cmd",
+                            "npx.exe",
+                            "bunx",
+                            "bunx.cmd",
+                            "bunx.exe",
+                            "pnpx",
+                            "pnpx.cmd",
+                            "pnpx.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--aggregate-output",
+                            "--cold",
+                            "--json",
+                            "--silent",
+                            "--stream",
+                            "--submit",
+                            "--use-stderr",
+                            "--workspace-root",
+                            "--yes",
+                            "-y"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--cache",
+                            "--call",
+                            "--dir",
+                            "--endpoint",
+                            "--file",
+                            "--filter",
+                            "--model",
+                            "--package",
+                            "--reporter",
+                            "--tokens",
+                            "--workspace",
+                            "-C",
+                            "-F",
+                            "-c",
+                            "-p",
+                            "-w"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--endpoint",
+                            "--file",
+                            "--model",
+                            "--tokens"
+                          ],
+                          "paths": [
+                            [
+                              "faf-cli",
+                              "bench"
+                            ],
+                            [
+                              "faf",
                               "bench"
                             ]
                           ],
@@ -22840,8 +24426,11 @@
                           ],
                           "interspersed_options_with_values": [
                             "--a2a-url",
+                            "--description",
                             "--dir",
+                            "--domain",
                             "--door-url",
+                            "--example",
                             "--faf",
                             "--faf-pointer",
                             "--fafa",
@@ -22850,16 +24439,22 @@
                             "--id",
                             "--in",
                             "--limit",
+                            "--name",
                             "--namepoint",
                             "--out",
                             "--output",
+                            "--package",
                             "--priority",
+                            "--protocol",
                             "--ref",
                             "--rounds",
                             "--set-version",
+                            "--short-name",
+                            "--skill",
                             "--tag",
                             "--target",
                             "--type",
+                            "--url",
                             "-f",
                             "-o",
                             "-r"
@@ -22868,8 +24463,11 @@
                           "leading_options_with_values": [],
                           "options_with_values": [
                             "--a2a-url",
+                            "--description",
                             "--dir",
+                            "--domain",
                             "--door-url",
+                            "--example",
                             "--faf",
                             "--faf-pointer",
                             "--fafa",
@@ -22878,16 +24476,22 @@
                             "--id",
                             "--in",
                             "--limit",
+                            "--name",
                             "--namepoint",
                             "--out",
                             "--output",
+                            "--package",
                             "--priority",
+                            "--protocol",
                             "--ref",
                             "--rounds",
                             "--set-version",
+                            "--short-name",
+                            "--skill",
                             "--tag",
                             "--target",
                             "--type",
+                            "--url",
                             "-f",
                             "-o",
                             "-r"
@@ -22942,6 +24546,10 @@
                             ],
                             [
                               "git"
+                            ],
+                            [
+                              "card",
+                              "init"
                             ],
                             [
                               "cards"
@@ -24433,7 +26041,7 @@
             "Commit before running a faf write so every change is a reviewable diff."
           ],
           "source": "built-in",
-          "version": "1.0.0"
+          "version": "1.1.0"
         },
         "schema": "guard.command-extension-source.v1"
       }
@@ -24441,26 +26049,86 @@
     "trust": {
       "classes": {
         "external": [
+          "command.agentbridge",
+          "command.agi-memory",
+          "command.ai-dev",
+          "command.answerloops",
+          "command.appimg",
           "command.blitcp",
+          "command.blkcp",
           "command.cloudg",
+          "command.codesage",
           "command.cogext",
+          "command.cs",
           "command.ctty",
           "command.digline",
+          "command.dispat",
+          "command.errand",
           "command.faf-cli",
+          "command.formicx",
           "command.genclave",
           "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.macscope",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-fetchsandbox",
           "command.mcp-filesystem",
+          "command.mcp-ftp",
+          "command.mcp-google-workspace.gmail",
           "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-mail-server",
+          "command.mcp-musiccontext",
           "command.mcp-pr-ui-compare",
           "command.mcp-reaper",
+          "command.mcp-run",
+          "command.mcp-setup-doctor",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
           "command.noodle",
           "command.ollama",
+          "command.omairc",
           "command.probe",
+          "command.pyrig",
           "command.remote.essh",
           "command.repo2nb",
+          "command.repopy",
+          "command.repro-surgeon",
+          "command.routed",
+          "command.rungs",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
           "command.skill-base",
           "command.skill-sunset",
-          "command.uivoid"
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vaultsync",
+          "command.vttforge",
+          "command.where-are-we",
+          "command.xencode",
+          "command.xrpl-muse-skill"
         ],
         "first-party": [
           "command.container-runtime",
@@ -24494,6 +26162,7 @@
           "command.cicd.gitlab",
           "command.cloud.aws",
           "command.cloud.azure",
+          "command.cloud.digitalocean",
           "command.cloud.gcp",
           "command.database.mongodb",
           "command.database.mysql",
@@ -24970,6 +26639,19 @@
         0
       ],
       "id": "project-context-write-git",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
+      "command": "faf card init --name \"Weather Agent\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "project-context-write-card-init",
       "rule_id": "command.faf-cli.project-context-write"
     },
     {
@@ -25519,6 +27201,45 @@
       "rule_id": "command.faf-cli.project-context-write"
     },
     {
+      "command": "npx faf-cli card init --name demo --url https://example.com/a2a",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-card-init",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
+      "command": "npx faf-cli@latest card init --name demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "npx-versioned-card-init",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
+      "command": "faf card init --force --name demo",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "card-init-force",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
       "command": "npx -- faf-cli init",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -25667,8 +27388,21 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "npx-help-reviewed",
+      "id": "npx-short-help-reviewed",
       "rule_id": "command.faf-cli.agent-tool-config"
+    },
+    {
+      "command": "pnpm dlx faf-cli ai analyze -h",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "pnpm-dlx-help-reviewed",
+      "rule_id": "command.faf-cli.data-egress"
     },
     {
       "command": "npx faf-cli@latest migrate --dry-run",
@@ -25756,7 +27490,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "suffix-redirect-fails-closed",
+      "id": "suffix-redirect",
       "rule_id": "command.faf-cli.git-ci-persistence"
     },
     {
@@ -26208,6 +27942,61 @@
       "expected_effective_segments": [],
       "id": "ai-analyze-help",
       "rule_id": "command.faf-cli.data-egress"
+    },
+    {
+      "command": "npx faf-cli export --grok --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-help",
+      "rule_id": "command.faf-cli.agent-tool-config"
+    },
+    {
+      "command": "npx faf-cli init --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-init-help",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
+      "command": "bunx faf-cli hooks --install --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bunx-hooks-help",
+      "rule_id": "command.faf-cli.git-ci-persistence"
+    },
+    {
+      "command": "npx faf-cli card init --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "npx-card-init-help",
+      "rule_id": "command.faf-cli.project-context-write"
+    },
+    {
+      "command": "faf card",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.faf-cli"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "card-bare",
+      "rule_id": "command.faf-cli.project-context-write"
     },
     {
       "command": "npx not-faf-cli init",

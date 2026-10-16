@@ -72,6 +72,17 @@ fn devin_home() -> std::path::PathBuf {
         ".agents/skills/example/.hidden.md",
         ".agents/skills/example/credentials.md",
         ".agents/skills/example/run.py",
+        ".codex/plans/evidence/review-a/runtime-final.json",
+        ".codex/plans/evidence/review-a/notes.txt",
+        ".codex/plans/evidence/review-a/run.sh",
+        ".codex/plans/evidence/review-a/credentials.json",
+        ".codex/plans/evidence/review-a/.env",
+        ".codex/plans/evidence/.cache/state.json",
+        ".codex/auth.json",
+        ".codex/sessions/2026/rollout.json",
+        ".claude/plans/quiet-guard.md",
+        ".claude/.credentials.json",
+        ".claude/projects/session.json",
     ] {
         let path = root.join(file);
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -142,6 +153,42 @@ fn zcode_reads_skill_documents_but_not_hidden_or_sensitive_skill_files() {
             home.to_str(),
         );
         assert_eq!(result.minimum_action == "allow", allowed, "{path}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn agent_plan_notes_are_readable_but_agent_state_is_not() {
+    let home = devin_home();
+    for (path, allowed) in [
+        ("~/.codex/plans/evidence/review-a/runtime-final.json", true),
+        ("~/.codex/plans/evidence/review-a/notes.txt", true),
+        ("~/.claude/plans/quiet-guard.md", true),
+        ("~/.codex/plans/evidence/review-a/run.sh", false),
+        ("~/.codex/plans/evidence/review-a/credentials.json", false),
+        ("~/.codex/plans/evidence/review-a/.env", false),
+        ("~/.codex/plans/evidence/.cache/state.json", false),
+        ("~/.codex/plans/../auth.json", false),
+        ("~/.codex/sessions/2026/rollout.json", false),
+        ("~/.claude/.credentials.json", false),
+        ("~/.claude/projects/session.json", false),
+    ] {
+        for harness in ["zcode", "claude-code"] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name": "Read", "tool_input": {"file_path": path}}),
+                None,
+                None,
+                home.to_str(),
+                home.join("project").to_str(),
+            );
+            assert_eq!(
+                result.minimum_action == "allow",
+                allowed,
+                "{harness}: {path}"
+            );
+        }
     }
 }
 
@@ -348,5 +395,50 @@ fn skill_links_and_safety_guide_keep_their_verified_scope() {
             "{}",
             path.display()
         );
+    }
+}
+
+/// Guard's managed AGENTS.md tells Codex to read `~/.hol-support/SAFETY.md`
+/// first, and Codex often reads it together with the project README.
+#[cfg(unix)]
+#[test]
+fn codex_multi_file_cat_proves_every_operand() {
+    let home = devin_home();
+    let project = home.join("project");
+    std::fs::write(project.join("README.md"), "fixture").unwrap();
+    let decide = |command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            "codex",
+            "PreToolUse",
+            &json!({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}),
+            None,
+            None,
+            home.to_str(),
+            project.to_str(),
+        )
+    };
+    for command in [
+        "cat ~/.hol-support/SAFETY.md README.md",
+        "cat README.md ~/.hol-support/SAFETY.md",
+        "cat -n README.md pyproject.toml",
+        "cat -- README.md pyproject.toml",
+        "cat README.md pyproject.toml",
+        // The bounded print Codex uses to page the guide is the same read.
+        "sed -n '1,240p' ~/.hol-support/SAFETY.md",
+    ] {
+        assert_eq!(decide(command).minimum_action, "allow", "{command}");
+    }
+    let too_many = format!("cat{}", " README.md".repeat(17));
+    for command in [
+        "cat ~/.hol-support/SAFETY.md .env",
+        "cat README.md ~/.ssh/id_rsa",
+        "cat README.md credentials.txt",
+        "cat README.md /etc/passwd",
+        "cat README.md -",
+        "sed -n '1,240p' ~/.ssh/id_rsa",
+        "sed -n '1,240p' ~/.hol-support/../.ssh/id_rsa",
+        too_many.as_str(),
+    ] {
+        assert_ne!(decide(command).minimum_action, "allow", "{command}");
     }
 }

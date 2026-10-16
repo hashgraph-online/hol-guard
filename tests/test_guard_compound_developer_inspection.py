@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import shlex
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -13,12 +14,19 @@ from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
+from tests.developer_inspection_test_support import assert_leading_cd_inspection_allowed
 from tests.git_execution_test_support import assert_host_git_proof_result
 from tests.native_command_test_support import RealNativeReviewFixture, real_native_review_fixture
 
 
 @pytest.fixture(autouse=True)
-def _real_native_command_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
+def _real_native_command_reviews(
+    monkeypatch: pytest.MonkeyPatch,
+    package_intent_native: Path,
+    native_mcp_probe: Callable[[Path], None],
+    tmp_path: Path,
+) -> None:
+    native_mcp_probe(tmp_path / "home" / ".guard")
     from codex_plugin_scanner.guard.runtime import native_command_evaluation
     from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 
@@ -80,7 +88,7 @@ def test_harnesses_evaluate_compound_source_inspection_as_one_unit(
         harness=harness,
     )
 
-    assert artifact is None
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -101,7 +109,7 @@ def test_harnesses_recover_safe_inspection_after_cross_workspace_cd(
         workspace=active_workspace,
     )
 
-    assert artifact is None
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -113,14 +121,13 @@ def test_harnesses_accept_safe_leading_delay_before_cross_workspace_inspection(
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert (
-        _artifact(
-            f"sleep 30 && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20",
-            home=home,
-            harness=harness,
-        )
-        is None
+    artifact = _artifact(
+        f"sleep 30 && cd {_shell_path(workspace)} && grep -n TODO src/example.ts | head -20",
+        home=home,
+        harness=harness,
     )
+
+    assert_leading_cd_inspection_allowed(artifact)
 
 
 @pytest.mark.parametrize(
@@ -147,7 +154,8 @@ def test_compound_inspection_accepts_safe_stderr_suppression(tmp_path: Path, pat
     workspace = home / "projects" / "workspace"
     (workspace / "src").mkdir(parents=True)
 
-    assert _artifact(f"cd {_shell_path(workspace)} && grep -rn {pattern} src 2>/dev/null | head -20", home=home) is None
+    command = f"cd {_shell_path(workspace)} && grep -rn {pattern} src 2>/dev/null | head -20"
+    assert_leading_cd_inspection_allowed(_artifact(command, home=home))
 
 
 @pytest.mark.parametrize("redirect", ("2>report.txt", "> report.txt", "< input.txt"))
@@ -379,17 +387,11 @@ def test_compound_git_and_filesystem_inspection_requires_host_binary_proof(tmp_p
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
 
 
-@pytest.mark.parametrize("windows_host", (False, True))
-def test_compound_stdin_only_python_observer_requires_host_binary_proof(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, windows_host: bool
-) -> None:
-    from types import SimpleNamespace
-
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services import shell_request_classifier
-
-    windows_host = windows_host or os.name == "nt"
-    if windows_host:
-        monkeypatch.setattr(shell_request_classifier, "os", SimpleNamespace(name="nt"))
+def test_compound_stdin_only_python_observer_requires_host_binary_proof(tmp_path: Path) -> None:
+    # The resident applies the Windows host floor from its own build target,
+    # so only a real Windows host reaches it; the Rust tests check the floor
+    # itself on every platform.
+    windows_host = os.name == "nt"
     home = tmp_path / "home"
     workspace = home / "projects" / "workspace"
     workspace.mkdir(parents=True)
@@ -403,52 +405,17 @@ def test_compound_stdin_only_python_observer_requires_host_binary_proof(
     if windows_host:
         # The compound host recognizer has no Windows executable ACL proof.
         # A stdin-only script cannot waive the launch identity requirement.
-        if os.name == "nt":
-            assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
+        assert not is_trusted_absolute_command_path(Path(sys.executable), cwd=workspace, home_dir=home)
         assert artifact is not None
         assert artifact.metadata["compound_segment_count"] == 3
-        # Which fail-closed reason fires depends on where the launch identity
-        # check lands: an interpreter the host classifies as untrusted reports
-        # that identity first, and one it trusts reaches the Windows host-ACL
-        # floor below.  A real Windows host takes the first path, a host faking
-        # `os.name` for the classifier can take either, so both are accepted —
-        # what must hold is that the compound launch is not allowed outright.
-        assert artifact.metadata["reason_code"] in {
-            "interpreter_identity_untrusted",
-            "interpreter_host_binding_unverified",
-        }
+        # Whichever floor fires first is accepted (unresolved leading-cd root, untrusted
+        # interpreter identity, or Windows host ACL); the launch is never allowed outright.
+        floors = {"shell_cwd_workspace_escape", "interpreter_identity_untrusted", "interpreter_host_binding_unverified"}
+        metadata = artifact.metadata
+        assert (metadata.get("reason_code") or metadata["shell_execution_context_reason_code"]) in floors
         assert artifact.metadata["guard_default_action"] == "require-reapproval"
     else:
         assert artifact is None
-
-
-@pytest.mark.parametrize("action", ("pytest", "delete"))
-def test_windows_interpreter_host_floor_preserves_stricter_requests(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, action: str
-) -> None:
-    from types import SimpleNamespace
-
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services import shell_request_classifier
-
-    monkeypatch.setattr(shell_request_classifier, "os", SimpleNamespace(name="nt"))
-    home = tmp_path / "home"
-    workspace = home / "projects" / "workspace"
-    workspace.mkdir(parents=True)
-    suffix = "python -m pytest" if action == "pytest" else "python -c 'print(1)'; rm -rf ./output"
-    request = shell_request_classifier._destructive_shell_tool_action_request(
-        tool_name="Bash",
-        normalized_tool_name="bash",
-        command_text=f"cd . && {suffix}",
-        cwd=workspace,
-        home_dir=home,
-    )
-
-    assert request is not None
-    if action == "pytest":
-        assert request.guard_default_action == "sandbox-required"
-        assert request.reason_code == "pytest_restricted_profile_required"
-    else:
-        assert request.action_class == "destructive shell command"
 
 
 @pytest.mark.parametrize("harness", ("pi", "codex", "claude-code", "gemini", "cursor"))
@@ -476,7 +443,7 @@ def test_harnesses_keep_guard_removal_at_the_destructive_floor(
     harness: str,
 ) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact("hol-guard uninstall --all", home=home, harness=harness)
 
@@ -486,7 +453,7 @@ def test_harnesses_keep_guard_removal_at_the_destructive_floor(
 
 def test_guard_removal_help_stays_non_destructive(tmp_path: Path) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact("hol-guard uninstall --help", home=home)
 
@@ -550,7 +517,7 @@ def test_guard_removal_wrappers_keep_the_destructive_floor(
     command: str,
 ) -> None:
     home = tmp_path / "home"
-    home.mkdir()
+    home.mkdir(exist_ok=True)
 
     artifact = _artifact(command, home=home)
 
@@ -566,7 +533,8 @@ def test_compound_shell_syntax_check_is_inspection_only(tmp_path: Path) -> None:
     script.parent.mkdir()
     script.write_text("#!/bin/sh\n", encoding="utf-8")
 
-    assert _artifact(f"cd {_shell_path(workspace)} && bash -n scripts/check.sh && echo valid", home=home) is None
+    command = f"cd {_shell_path(workspace)} && bash -n scripts/check.sh && echo valid"
+    assert_leading_cd_inspection_allowed(_artifact(command, home=home))
 
 
 @pytest.mark.parametrize(

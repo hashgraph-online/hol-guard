@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
+from .native_policy_bundle import PolicyBundleNativeError, native_rejection_code
 from .policy_bundle_parser import (
     policy_bundle_is_enforceable,
     policy_bundle_is_version_downgrade,
@@ -48,14 +49,19 @@ def cached_policy_bundle_validation(
     )
     if policy_bundle is None:
         return None, _rejection_reason or "invalid_policy_bundle"
-    if not policy_bundle_is_enforceable(policy_bundle):
-        return None, "inactive_rollout_state"
-    acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
-    if isinstance(acceptance_checkpoint, dict) and policy_bundle_is_version_downgrade(
-        acceptance_checkpoint,
-        policy_bundle,
-    ):
-        return None, "bundle_version_downgrade"
+    try:
+        if not policy_bundle_is_enforceable(policy_bundle):
+            return None, "inactive_rollout_state"
+        acceptance_checkpoint = store.get_sync_payload("policy_bundle_acceptance_checkpoint")
+        if isinstance(acceptance_checkpoint, dict) and policy_bundle_is_version_downgrade(
+            acceptance_checkpoint,
+            policy_bundle,
+        ):
+            return None, "bundle_version_downgrade"
+    except PolicyBundleNativeError as error:
+        # No verdict is not a verdict: the cached bundle stays unusable until the
+        # resident can decide, and callers see a distinct outage code.
+        return None, native_rejection_code(error)
     return policy_bundle, None
 
 

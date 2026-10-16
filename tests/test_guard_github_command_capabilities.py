@@ -500,6 +500,17 @@ GITHUB_REVIEW_FLOORS: Final[tuple[tuple[str, str], ...]] = (
             "propose_remote",
             "github.command.pr-proposal",
         ),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--remote", "origin"),
+            "create_private_remote",
+            "github.command.private-repository-creation",
+        ),
+        (("repo", "create", "todo-app", "--public"), "content_remote", "github.command.content-mutation"),
+        (
+            ("repo", "create", "todo-app", "--private", "--source=.", "--push"),
+            "content_remote",
+            "github.command.content-mutation",
+        ),
         (("pr", "create", "--title", "Ready"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "--fill"), "content_remote", "github.command.content-mutation"),
         (("pr", "create", "-f"), "content_remote", "github.command.content-mutation"),
@@ -781,7 +792,7 @@ def test_guard_keeps_routine_review_thread_resolution_prompt_free(selection: str
     assert match is None
 
 
-@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",)))
+@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",), ("-q", ".data"), ("-q.data",)))
 def test_guard_keeps_routine_review_thread_resolution_with_data_projection_prompt_free(
     jq_arguments: tuple[str, ...],
 ) -> None:
@@ -813,7 +824,13 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
 
 @pytest.mark.parametrize(
     "jq_arguments",
-    (("--jq", ".data.viewer"), ("--jq=@filter.jq",), ("--jq", ".data", "--jq", ".data")),
+    (
+        ("--jq", ".data.viewer"),
+        ("--jq=@filter.jq",),
+        ("--jq", ".data", "--jq", ".data"),
+        ("-q", ".data.viewer"),
+        ("-q", ".data", "--jq", ".data"),
+    ),
 )
 def test_guard_reviews_routine_review_thread_resolution_with_other_jq_projections(
     jq_arguments: tuple[str, ...],
@@ -862,6 +879,8 @@ def test_guard_reviews_unbounded_review_thread_response_selections(selection: st
             "'repos/example/project/contents/ci/baseline.json?ref=main'"
         ),
         "gh api graphql -f 'query=query { viewer { login } }' | jq -r '.data.viewer.login'",
+        "gh repo create todo-app --private --source=. --remote origin",
+        'gh repo create todo-app --private -d "A small todo app"',
         (
             "gh api graphql -f 'query=query { viewer { login } }' 2>&1 | "
             "python3 -c \"import json,sys; print(json.load(sys.stdin)['data']['viewer']['login'])\""
@@ -1058,6 +1077,9 @@ def test_guard_keeps_proven_github_reads_prompt_free(tmp_path: Path, command: st
         ('gh issue lock "$ISSUE" --repo "$REPO"', "Unverified GitHub command capability"),
         ('gh pr ready "$(cat number)" -R "$REPO"', "Unverified GitHub command capability"),
         ('gh issue pin "${NUMBER}"', "Unverified GitHub command capability"),
+        ("gh repo create todo-app --public --source=.", "GitHub content mutation command"),
+        ("gh repo create todo-app --private --source=. --push", "GitHub content mutation command"),
+        ("gh repo create example-org/todo-app --private", "GitHub content mutation command"),
     ),
 )
 def test_guard_requires_confirmation_for_github_mutations_and_unverified_compositions(
@@ -1070,3 +1092,30 @@ def test_guard_requires_confirmation_for_github_mutations_and_unverified_composi
     assert match is not None
     assert match.action_class == action_class
     assert "confirm" in match.reason.lower()
+
+
+def test_native_classification_is_memoized_but_failures_are_not(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard import native_github_cli
+    from codex_plugin_scanner.guard.runtime import github_command_capabilities as bridge
+
+    answers: list[native_github_cli.NativeGitHubCliClassification | None] = [
+        None,
+        native_github_cli.NativeGitHubCliClassification("read_remote", "github.read", "ok", ("read_remote",), None),
+    ]
+    calls: list[tuple[str, ...]] = []
+
+    def fake(
+        args: tuple[str, ...] | list[str], **_kwargs: object
+    ) -> native_github_cli.NativeGitHubCliClassification | None:
+        calls.append(tuple(args))
+        return answers[min(len(calls), len(answers)) - 1]
+
+    monkeypatch.setattr(native_github_cli, "github_cli_classify_native", fake)
+    monkeypatch.setattr(bridge, "_NATIVE_CACHE", {})
+    args = ("pr", "view", "1")
+
+    assert bridge.classify_github_cli(args).capability == "unknown"
+    assert bridge.classify_github_cli(args).capability == "read_remote"
+    assert bridge.classify_github_cli(args).capability == "read_remote"
+    assert bridge.static_markdown_pr_body_file_operand(args) is None
+    assert len(calls) == 2

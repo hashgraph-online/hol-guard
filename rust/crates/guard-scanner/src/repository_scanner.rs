@@ -10,14 +10,14 @@
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::error::Error;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-use crate::git_read::{run_git, GIT_TIMEOUT_SECONDS};
+use crate::git_read::{run_git, run_git_os, GIT_TIMEOUT_SECONDS};
 use crate::secret_detection::{
     detector_version, scan_secret_text, EmptyFingerprintKeyError, PublicFinding, SecretFinding,
 };
@@ -249,20 +249,46 @@ fn decode_text<'a>(path: &str, data: &'a [u8]) -> Option<&'a str> {
 
 /// Python `_safe_relative`. `canonical_root` is the already-resolved scan root
 /// (Python recomputes `root.resolve()` per call; the result is identical).
-fn safe_relative(path: &Path, canonical_root: &Path) -> String {
+fn safe_relative(path: &Path, canonical_root: &Path) -> PathBuf {
     if let Ok(resolved) = path.canonicalize() {
         if let Ok(relative) = resolved.strip_prefix(canonical_root) {
-            return relative.to_string_lossy().into_owned();
+            return relative.to_path_buf();
         }
     }
-    path.file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+    path.file_name().map(PathBuf::from).unwrap_or_default()
+}
+
+/// A candidate file. `path` is the exact name used to read the file or Git
+/// object, so names that are not valid UTF-8 are still scanned, as the
+/// Python `surrogateescape` paths were; `display` is the reported form.
+struct ScanPath {
+    path: PathBuf,
+    display: String,
+}
+
+impl ScanPath {
+    fn new(path: PathBuf) -> Self {
+        let display = path.to_string_lossy().into_owned();
+        Self { path, display }
+    }
+}
+
+/// Raw Git path bytes as an OS path: byte-exact on unix. Git prints UTF-8
+/// paths elsewhere, so the lossy decode is exact for every name it emits.
+#[cfg(unix)]
+fn os_path_from_bytes(bytes: &[u8]) -> PathBuf {
+    use std::os::unix::ffi::OsStrExt;
+    PathBuf::from(OsStr::from_bytes(bytes))
+}
+
+#[cfg(not(unix))]
+fn os_path_from_bytes(bytes: &[u8]) -> PathBuf {
+    PathBuf::from(String::from_utf8_lossy(bytes).into_owned())
 }
 
 /// Python `_filesystem_paths`: `os.walk(root, followlinks=False)` with
 /// `_SKIP_DIR_NAMES` pruning, symlinks skipped, result sorted.
-fn filesystem_paths(root: &Path, canonical_root: &Path) -> Vec<String> {
+fn filesystem_paths(root: &Path, canonical_root: &Path) -> Vec<ScanPath> {
     let mut paths = Vec::new();
     let mut stack: Vec<PathBuf> = vec![root.to_path_buf()];
     while let Some(dir) = stack.pop() {
@@ -282,11 +308,11 @@ fn filesystem_paths(root: &Path, canonical_root: &Path) -> Vec<String> {
                         stack.push(path);
                     }
                 }
-                _ => paths.push(safe_relative(&path, canonical_root)),
+                _ => paths.push(ScanPath::new(safe_relative(&path, canonical_root))),
             }
         }
     }
-    paths.sort();
+    paths.sort_by(|left, right| left.display.cmp(&right.display));
     paths
 }
 
@@ -324,20 +350,19 @@ fn is_git_repository(root: &Path) -> bool {
 }
 
 /// `item.decode("utf-8", errors="surrogateescape")` over NUL-separated git
-/// output. Rust strings cannot hold surrogates, so `from_utf8_lossy` is the
-/// closest faithful decode: valid UTF-8 is byte-identical and invalid bytes
-/// become `U+FFFD` instead of lone surrogates.
-fn decode_nul_paths(stdout: &[u8]) -> Vec<String> {
+/// output. The raw bytes are kept for file and object access; the reported
+/// name uses `from_utf8_lossy` because Rust strings cannot hold surrogates.
+fn decode_nul_paths(stdout: &[u8]) -> Vec<ScanPath> {
     stdout
         .split(|byte| *byte == 0)
         .filter(|item| !item.is_empty())
-        .map(|item| String::from_utf8_lossy(item).into_owned())
+        .map(|item| ScanPath::new(os_path_from_bytes(item)))
         .collect()
 }
 
 /// `_git_working_paths`: `git ls-files -co --exclude-standard -z` split on
 /// NUL (tracked, untracked, and non-ignored files).
-fn git_working_paths(root: &Path) -> Option<Vec<String>> {
+fn git_working_paths(root: &Path) -> Option<Vec<ScanPath>> {
     let result = run_git(
         root,
         &["ls-files", "-co", "--exclude-standard", "-z"],
@@ -367,7 +392,7 @@ fn git_commits(root: &Path, max_commits: usize) -> Option<Vec<String>> {
 
 /// `_git_changed_paths`: `git diff-tree --root --no-commit-id --name-only
 /// -r -z <commit>` split on NUL.
-fn git_changed_paths(root: &Path, commit: &str) -> Option<Vec<String>> {
+fn git_changed_paths(root: &Path, commit: &str) -> Option<Vec<ScanPath>> {
     let result = run_git(
         root,
         &[
@@ -388,14 +413,11 @@ fn git_changed_paths(root: &Path, commit: &str) -> Option<Vec<String>> {
 /// `_git_blob`: size-check `git cat-file -s <commit>:<path>` against
 /// `max_file_bytes`, then `git cat-file blob <commit>:<path>` with the bound
 /// re-applied to the streamed payload.
-fn git_blob(root: &Path, commit: &str, path: &str, max_file_bytes: usize) -> Option<Vec<u8>> {
-    let spec = format!("{commit}:{path}");
-    let size_result = run_git(
-        root,
-        &["cat-file", "-s", spec.as_str()],
-        GIT_TIMEOUT_SECONDS,
-    )
-    .ok()?;
+fn git_blob(root: &Path, commit: &str, path: &Path, max_file_bytes: usize) -> Option<Vec<u8>> {
+    let mut spec = OsString::from(format!("{commit}:"));
+    spec.push(path.as_os_str());
+    let blob_args = |op: &str| [OsString::from("cat-file"), OsString::from(op), spec.clone()];
+    let size_result = run_git_os(root, &blob_args("-s"), GIT_TIMEOUT_SECONDS).ok()?;
     // Python `int(strip_bytes(&size_result.stdout))`; `from_utf8` covers any byte
     // garbage the way `ValueError` catches non-numeric output.
     let size_text = std::str::from_utf8(strip_bytes(&size_result.stdout)).ok()?;
@@ -403,12 +425,7 @@ fn git_blob(root: &Path, commit: &str, path: &str, max_file_bytes: usize) -> Opt
     if size < 0 || size > max_file_bytes as i64 {
         return None;
     }
-    let blob_result = run_git(
-        root,
-        &["cat-file", "blob", spec.as_str()],
-        GIT_TIMEOUT_SECONDS,
-    )
-    .ok()?;
+    let blob_result = run_git_os(root, &blob_args("blob"), GIT_TIMEOUT_SECONDS).ok()?;
     if blob_result.stdout.len() > max_file_bytes {
         return None;
     }
@@ -436,7 +453,7 @@ pub(crate) fn scan_blob(
 fn read_working_file(
     root: &Path,
     canonical_root: &Path,
-    relative_path: &str,
+    relative_path: &Path,
     max_file_bytes: usize,
 ) -> Option<Vec<u8>> {
     let resolved = root.join(relative_path).canonicalize().ok()?;
@@ -505,11 +522,8 @@ pub fn scan_repository_secrets(
             .parent()
             .map(Path::to_path_buf)
             .unwrap_or_else(|| PathBuf::from("/"));
-        let name = root
-            .file_name()
-            .map(|name| name.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        (scan_root, false, vec![name])
+        let name = root.file_name().map(PathBuf::from).unwrap_or_default();
+        (scan_root, false, vec![ScanPath::new(name)])
     } else {
         let scan_root = root.clone();
         let git_repo = is_git_repository(&scan_root);
@@ -547,9 +561,12 @@ pub fn scan_repository_secrets(
             truncated = true;
             break;
         }
-        let Some(data) =
-            read_working_file(&scan_root, &canonical_root, relative_path, max_file_bytes)
-        else {
+        let Some(data) = read_working_file(
+            &scan_root,
+            &canonical_root,
+            &relative_path.path,
+            max_file_bytes,
+        ) else {
             continue;
         };
         if bytes_scanned + data.len() > max_total_bytes {
@@ -557,7 +574,7 @@ pub fn scan_repository_secrets(
             truncated = true;
             break;
         }
-        let normalized = relative_path.replace('\\', "/");
+        let normalized = relative_path.display.replace('\\', "/");
         let (found, scanned_bytes) = scan_blob(
             &data,
             &normalized,
@@ -631,7 +648,8 @@ pub fn scan_repository_secrets(
                         truncated = true;
                         break;
                     }
-                    let Some(data) = git_blob(&scan_root, &commit, &relative_path, max_file_bytes)
+                    let Some(data) =
+                        git_blob(&scan_root, &commit, &relative_path.path, max_file_bytes)
                     else {
                         continue;
                     };
@@ -640,7 +658,7 @@ pub fn scan_repository_secrets(
                         truncated = true;
                         break;
                     }
-                    let normalized = relative_path.replace('\\', "/");
+                    let normalized = relative_path.display.replace('\\', "/");
                     let (found, scanned_bytes) = scan_blob(
                         &data,
                         &normalized,
@@ -839,6 +857,59 @@ mod tests {
         assert_eq!(paths, ["app.env", "sub/deep.env"]);
         assert!(result.findings.iter().all(|f| f.source == "working_tree"));
         assert!(result.findings.iter().all(|f| f.commit.is_none()));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    /// Python reads `surrogateescape` paths byte-exactly; a name that is not
+    /// valid UTF-8 must still be read from the working tree and history.
+    #[cfg(unix)]
+    #[test]
+    fn non_utf8_file_names_are_scanned() {
+        use std::os::unix::ffi::OsStrExt;
+        use std::process::Command;
+
+        let dir = temp_root("nonutf8");
+        let name = OsStr::from_bytes(b"leak-\xff.env");
+        // Some filesystems (APFS) refuse names that are not valid UTF-8.
+        if fs::write(dir.join(name), SECRET_LINE).is_err() {
+            let _ = fs::remove_dir_all(&dir);
+            return;
+        }
+        let git = |args: &[&str]| {
+            let output = Command::new("git")
+                .arg("-C")
+                .arg(&dir)
+                .args(args)
+                .env("GIT_CONFIG_GLOBAL", "/dev/null")
+                .env("GIT_CONFIG_NOSYSTEM", "1")
+                .env("GIT_AUTHOR_NAME", "Guard Test")
+                .env("GIT_AUTHOR_EMAIL", "guard@example.invalid")
+                .env("GIT_COMMITTER_NAME", "Guard Test")
+                .env("GIT_COMMITTER_EMAIL", "guard@example.invalid")
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "git {args:?}: {output:?}");
+        };
+        git(&["init", "-q"]);
+        git(&["add", "-A"]);
+        git(&["commit", "-q", "--no-verify", "-m", "leak"]);
+
+        let options = RepositoryScanOptions {
+            include_history: true,
+            ..RepositoryScanOptions::default()
+        };
+        let result = scan_repository_secrets(&dir, &options).unwrap();
+        assert!(result.errors.is_empty(), "{:?}", result.errors);
+        // One working-tree read and one history read.
+        assert_eq!(result.files_scanned, 2);
+        assert_eq!(result.commits_scanned, 1);
+        let mut sources: Vec<&str> = result.findings.iter().map(|f| f.source.as_str()).collect();
+        sources.sort_unstable();
+        assert_eq!(sources, ["git_history", "working_tree"]);
+        assert!(result
+            .findings
+            .iter()
+            .all(|f| f.path == "leak-\u{fffd}.env"));
         let _ = fs::remove_dir_all(&dir);
     }
 

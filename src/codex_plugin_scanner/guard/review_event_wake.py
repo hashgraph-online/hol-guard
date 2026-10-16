@@ -57,6 +57,11 @@ forget_in_child(_SIGNALS)
 def review_event_wake_signal(database_path: Path) -> ReviewEventWakeSignal:
     """Return the process-local wake signal for one durable store."""
     key = str(database_path.resolve())
+    return review_event_wake_signal_for_key(key)
+
+
+def review_event_wake_signal_for_key(key: str) -> ReviewEventWakeSignal:
+    """Use a canonical database key supplied by the native transaction owner."""
     with _SIGNALS_LOCK:
         signal = _SIGNALS.get(key)
         if signal is None:
@@ -69,4 +74,5 @@ __all__ = [
     "ReviewEventWake",
     "ReviewEventWakeSignal",
     "review_event_wake_signal",
+    "review_event_wake_signal_for_key",
 ]

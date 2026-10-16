@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from .native_business_source_anchor_bridge import MAX_ANCHOR_BYTES
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 from .store_base import FallbackSecretStore, SystemKeyringSecretStore
+from .store_policy_integrity_windows import WindowsPolicyIntegritySecretStore
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -25,7 +26,9 @@ def _copies(store: GuardStore) -> tuple[SecretStore, ...]:
     backend = store._policy_integrity_secret_store
     if backend is None:
         raise _invalid()
-    if isinstance(backend, FallbackSecretStore):
+    # The Windows vault is the single source of truth; Credential Manager only
+    # holds legacy keys and is unreachable from SSH and service sessions.
+    if isinstance(backend, FallbackSecretStore) and not isinstance(backend, WindowsPolicyIntegritySecretStore):
         return backend.primary, backend.fallback
     return (backend,)
 

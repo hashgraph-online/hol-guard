@@ -11,10 +11,14 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
+use fancy_regex::Regex as FancyRegex;
 use regex::Regex;
 
+use crate::codex_output_fnmatch::fnmatchcase;
 use crate::command_model::CanonicalCommand;
 use crate::home_path_text::{expand_home, normalize_path};
+use crate::runtime_read_paths::path_is_relative_to;
+use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
 use crate::shell_execution_context_support::{
     split_shell_tokens, SHELL_CWD_MISSING_DIRECTORY, SHELL_CWD_NOT_DIRECTORY,
     SHELL_CWD_UNREADABLE_DIRECTORY,
@@ -40,24 +44,22 @@ pub(crate) const MAX_INLINE_SCRIPT_BYTES: usize = 64 * 1024;
 fn python_executable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
+        Regex::new(r"^pythonw?(?:\d+(?:\.\d+)*)?(?:\.exe)?$").expect("python executable")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn literal_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn literal_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"(?:\bopen|\breadFile(?:Sync)?|\bcreateReadStream|\bBun\.file|\bload_dotenv)\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1"#,
         )
         .expect("literal read")
     })
 }
-#[allow(clippy::invalid_regex)]
-fn path_read_re() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
+fn path_read_re() -> &'static FancyRegex {
+    static RE: OnceLock<FancyRegex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(
+        FancyRegex::new(
             r#"\bPath\s*\(\s*(['"])([^'"\n\x00]{1,4096})\1\s*\)\s*\.\s*(?:read_text|read_bytes|open)\s*\("#,
         )
         .expect("path read")
@@ -72,15 +74,44 @@ const SHORT_CIRCUITING_CD_FAILURES: &[&str] = &[
 pub(crate) const FLOW_OPERATORS: &[&str] = &["&&", "||", "|", ";", "&"];
 
 /// `_literal_read_paths` (:68-71).
+///
+/// The patterns are `fancy_regex` (backreference on the quote), whose matcher
+/// can fail at run time (backtrack limit). A scan error must never read as "no
+/// literal read here": that would silently drop a secret read. It is treated
+/// as a match instead, by emitting [`FAIL_CLOSED_SENSITIVE_READ`], which the
+/// callers classify as a sensitive path like any other literal.
 pub(crate) fn literal_read_paths(source: &str) -> Vec<String> {
     let mut out = Vec::new();
     for re in [literal_read_re(), path_read_re()] {
-        for m in re.captures_iter(source) {
-            out.push(m[2].to_owned());
-        }
+        collect_literal_reads(
+            re.captures_iter(source)
+                .map(|captures| captures.map(|c| c.get(2).map(|path| path.as_str().to_owned()))),
+            &mut out,
+        );
     }
     out
 }
+
+fn collect_literal_reads(
+    matches: impl Iterator<Item = Result<Option<String>, fancy_regex::Error>>,
+    out: &mut Vec<String>,
+) {
+    for found in matches {
+        match found {
+            Ok(Some(path)) => out.push(path),
+            Ok(None) => {}
+            Err(_) => {
+                out.push(FAIL_CLOSED_SENSITIVE_READ.to_owned());
+                return;
+            }
+        }
+    }
+}
+
+/// Stand-in literal reported when a read-scan regex errors. `.env` is always
+/// classified as a sensitive local file, so the failure surfaces as a
+/// secret-read finding rather than a silent allow.
+pub(crate) const FAIL_CLOSED_SENSITIVE_READ: &str = ".env";
 
 /// `_python_executable` (:74-75). `re.IGNORECASE` is folded by lowercasing
 /// the candidate name; the Python pattern is unanchored `re.match`-style
@@ -116,6 +147,11 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
             (".pypirc", "Python package credentials"),
             (".netrc", "netrc credentials"),
             (".git-credentials", "Git credential store"),
+            (".terraform.tfvars", "Terraform variable secrets"),
+            ("terraform.tfvars", "Terraform variable secrets"),
+            ("private-key.pem", "wallet/private-key file"),
+            ("private.key", "wallet/private-key file"),
+            ("wallet.key", "wallet/private-key file"),
             (".wallet", "wallet/private-key file"),
             ("wallet.dat", "wallet/private-key file"),
             ("id_rsa", "SSH private key"),
@@ -127,7 +163,13 @@ fn sensitive_basename_labels() -> &'static BTreeMap<&'static str, &'static str> 
     })
 }
 fn sensitive_basename_keywords() -> &'static [&'static str] {
-    &["private_key", "private-key", "privatekey"]
+    &[
+        "private_key",
+        "private-key",
+        "privatekey",
+        "wallet_key",
+        "wallet-key",
+    ]
 }
 fn redacted_basename_labels() -> &'static BTreeMap<&'static str, &'static str> {
     static M: OnceLock<BTreeMap<&'static str, &'static str>> = OnceLock::new();
@@ -234,11 +276,37 @@ fn make_match(
     }
 }
 
+/// Basenames and keywords the shell-read classifier flags beyond the
+/// `secret_sensitivity.classify_secret_path` tables that the file-request
+/// classification used.
+const SHELL_READ_ONLY_BASENAMES: &[&str] =
+    &[".wallet", "wallet.dat", "id_rsa", "id_ed25519", "id_ecdsa"];
+
 /// `classify_secret_path` (:221-288).
 pub(crate) fn classify_secret_path(
     path: &str,
     cwd: Option<&Path>,
     home_dir: Option<&Path>,
+) -> Option<SecretPathMatch> {
+    classify_secret_path_profile(path, cwd, home_dir, false)
+}
+
+/// `classify_secret_path` with the tables of `secret_sensitivity.py`, which
+/// file-request classification uses: bare key basenames are only sensitive
+/// below a `.ssh` directory or after redaction.
+pub(crate) fn classify_request_secret_path(
+    path: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+) -> Option<SecretPathMatch> {
+    classify_secret_path_profile(path, cwd, home_dir, true)
+}
+
+fn classify_secret_path_profile(
+    path: &str,
+    cwd: Option<&Path>,
+    home_dir: Option<&Path>,
+    request_profile: bool,
 ) -> Option<SecretPathMatch> {
     let requested_path = path.trim().trim_matches('\'').trim_matches('"');
     if requested_path.is_empty() {
@@ -250,6 +318,7 @@ pub(crate) fn classify_secret_path(
         .replace('\\', "/")
         .to_lowercase()
         .split('/')
+        .map(guard_secure_fs::win32_name)
         .filter(|s| !s.is_empty())
         .map(str::to_owned)
         .collect();
@@ -265,7 +334,11 @@ pub(crate) fn classify_secret_path(
             "critical",
         ));
     }
-    if let Some(family) = sensitive_basename_labels().get(basename.as_str()) {
+    let shell_read_only = request_profile && SHELL_READ_ONLY_BASENAMES.contains(&basename.as_str());
+    if let Some(family) = sensitive_basename_labels()
+        .get(basename.as_str())
+        .filter(|_| !shell_read_only)
+    {
         let sensitivity = if *family == "wallet/private-key file" {
             "critical"
         } else {
@@ -280,7 +353,7 @@ pub(crate) fn classify_secret_path(
     }
     if sensitive_basename_keywords()
         .iter()
-        .any(|kw| basename.contains(kw))
+        .any(|kw| basename.contains(kw) && !(request_profile && *kw == "privatekey"))
     {
         return Some(make_match(
             requested_path,
@@ -338,8 +411,6 @@ pub(crate) fn classify_secret_path(
 // interpreter_options.py `shell_interpreter_command_payload` (:19-56).
 // ---------------------------------------------------------------------------
 
-const LONG_OPTIONS_WITH_VALUES: &[&str] = &["--init-file", "--rcfile"];
-
 /// `InterpreterFlagPayload` (:9-13).
 #[derive(Clone, Debug)]
 #[allow(dead_code)]
@@ -348,74 +419,16 @@ pub(crate) struct InterpreterFlagPayload {
     pub tokens_consumed: usize,
 }
 
-/// `_short_shell_option_cluster` (:59-69). `(has_command_flag, consumes_next)`.
-fn short_shell_option_cluster(token: &str) -> (bool, bool) {
-    let flag_text = &token[1..];
-    if flag_text.is_empty() || !flag_text.chars().all(|c| c.is_ascii_alphabetic()) {
-        return (false, false);
-    }
-    let mut has_command = false;
-    let mut consumes_next = false;
-    for flag in flag_text.chars() {
-        if flag == 'c' {
-            has_command = true;
-        } else if flag == 'o' || flag == 'O' {
-            consumes_next = true;
-        }
-    }
-    (has_command, consumes_next)
-}
-
 /// `shell_interpreter_command_payload` (:19-56).
 pub(crate) fn shell_interpreter_command_payload(
     parts: &[String],
     command_index: usize,
 ) -> Option<InterpreterFlagPayload> {
-    let mut index = command_index + 1;
-    while index < parts.len() {
-        let token = parts[index]
-            .trim()
-            .trim_start_matches('(')
-            .trim_end_matches(')')
-            .to_owned();
-        if token.is_empty() {
-            index += 1;
-            continue;
-        }
-        if token == "-" || token == "--" {
-            return None;
-        }
-        if token.starts_with("--") {
-            let option_name = token.split('=').next().unwrap_or("");
-            let has_sep = token.contains('=');
-            if LONG_OPTIONS_WITH_VALUES.contains(&option_name) && !has_sep {
-                index += 2;
-            } else {
-                index += 1;
-            }
-            continue;
-        }
-        if !token.starts_with('-') && !token.starts_with('+') {
-            return None;
-        }
-        let (has_command_flag, consumes_next_value) = short_shell_option_cluster(&token);
-        let script_index = index + 1 + usize::from(consumes_next_value);
-        if has_command_flag {
-            if script_index >= parts.len() {
-                return None;
-            }
-            let script_text = parts[script_index].trim().to_owned();
-            if script_text.is_empty() {
-                return None;
-            }
-            return Some(InterpreterFlagPayload {
-                script_text,
-                tokens_consumed: script_index - command_index,
-            });
-        }
-        index += 1 + usize::from(consumes_next_value);
-    }
-    None
+    crate::shell_command_wrappers::legacy_shell_interpreter_command_payload(parts, command_index)
+        .map(|payload| InterpreterFlagPayload {
+            script_text: payload.script_text,
+            tokens_consumed: payload.tokens_consumed,
+        })
 }
 
 // ---------------------------------------------------------------------------
@@ -602,81 +615,6 @@ fn target_is_known_skill_doc_path(target: &str, home_dir: Option<&Path>) -> bool
 // read_only_filters.py `_read_only_lookup_target_is_safe` (:376-400).
 // ---------------------------------------------------------------------------
 
-/// `_read_only_lookup_target_is_safe` (:376-400).
-#[allow(dead_code)]
-fn read_only_lookup_target_is_safe(
-    target: &str,
-    allow_dirs: bool,
-    home_dir: Option<&Path>,
-) -> bool {
-    let stripped = target.trim().trim_matches('\'').trim_matches('"');
-    if stripped.is_empty() || stripped == "." {
-        return allow_dirs;
-    }
-    if stripped == "-" {
-        return false;
-    }
-    if stripped
-        .chars()
-        .any(|c| matches!(c, '$' | '`' | '<' | '>' | '|' | ';' | '&'))
-    {
-        return false;
-    }
-    let normalized = stripped.replace('\\', "/");
-    let parts: Vec<&str> = Path::new(&normalized)
-        .components()
-        .filter_map(|c| match c {
-            std::path::Component::Normal(s) => s.to_str(),
-            _ => None,
-        })
-        .collect();
-    let lowered_parts: Vec<String> = parts.iter().map(|p| p.to_lowercase()).collect();
-    if parts.is_empty() {
-        return allow_dirs;
-    }
-    if parts.contains(&"..")
-        || stripped
-            .chars()
-            .any(|c| matches!(c, '*' | '?' | '[' | ']' | '{' | '}'))
-    {
-        return false;
-    }
-    if lowered_parts
-        .iter()
-        .any(|p| SOURCE_INSPECTION_SENSITIVE_PARTS.contains(&p.as_str()))
-    {
-        return false;
-    }
-    if target_is_known_skill_doc_path(stripped, home_dir) {
-        return true;
-    }
-    let hidden_parts: Vec<&String> = lowered_parts
-        .iter()
-        .filter(|p| p.starts_with('.'))
-        .collect();
-    if !hidden_parts.is_empty()
-        && !hidden_parts
-            .iter()
-            .all(|p| SOURCE_INSPECTION_BENIGN_DOTFILES.contains(&p.as_str()))
-    {
-        return false;
-    }
-    if lowered_parts
-        .iter()
-        .any(|p| SOURCE_INSPECTION_PARTS.contains(&p.as_str()))
-    {
-        return true;
-    }
-    let suffix = Path::new(&normalized)
-        .extension()
-        .map(|e| format!(".{}", e.to_string_lossy().to_lowercase()))
-        .unwrap_or_default();
-    if SOURCE_INSPECTION_EXTENSIONS.contains(&suffix.as_str()) {
-        return true;
-    }
-    allow_dirs
-}
-
 // ---------------------------------------------------------------------------
 // local_read_operands.py (459 lines): operand extraction + containment.
 // ---------------------------------------------------------------------------
@@ -706,8 +644,7 @@ const RG_LONG_OPTIONS_WITH_VALUE: &[&str] = &[
 ];
 
 /// `_ripgrep_args_expand_hidden_files` (:36-58).
-#[allow(dead_code)]
-fn ripgrep_args_expand_hidden_files(args: &[String]) -> bool {
+pub(crate) fn ripgrep_args_expand_hidden_files(args: &[String]) -> bool {
     let mut expect_value = false;
     for arg in args {
         if expect_value {
@@ -860,7 +797,7 @@ fn bounded_local_read_glob_is_safe(candidate: &Path, root: &Path, allow_dirs: bo
     };
     for entry in dir.flatten() {
         let name = entry.file_name().to_string_lossy().into_owned();
-        if !fnmatchcase(pattern, &name) {
+        if !fnmatchcase(&name, pattern) {
             continue;
         }
         let resolved = match entry.path().canonicalize() {
@@ -891,64 +828,8 @@ fn bounded_local_read_glob_is_safe(candidate: &Path, root: &Path, allow_dirs: bo
     true
 }
 
-/// `fnmatch.fnmatchcase` (POSIX `*`/`?`/`[seq]`, no path separator semantics).
-#[allow(dead_code)]
-fn fnmatchcase(pattern: &str, name: &str) -> bool {
-    fn rec(pat: &[char], text: &[char]) -> bool {
-        if pat.is_empty() {
-            return text.is_empty();
-        }
-        match pat[0] {
-            '*' => (0..=text.len()).any(|i| rec(&pat[1..], &text[i..])),
-            '?' => !text.is_empty() && rec(&pat[1..], &text[1..]),
-            '[' => {
-                if text.is_empty() {
-                    return false;
-                }
-                let mut index = 1;
-                let negate = pat.get(1) == Some(&'!') || pat.get(1) == Some(&'^');
-                if negate {
-                    index += 1;
-                }
-                let mut matched = false;
-                let mut prev: Option<char> = None;
-                let mut i = index;
-                while i < pat.len() && pat[i] != ']' {
-                    if pat[i] == '-' && prev.is_some() && i + 1 < pat.len() && pat[i + 1] != ']' {
-                        let lo = prev.unwrap();
-                        let hi = pat[i + 1];
-                        if lo <= text[0] && text[0] <= hi {
-                            matched = true;
-                        }
-                        i += 1;
-                    } else {
-                        if pat[i] == text[0] {
-                            matched = true;
-                        }
-                        prev = Some(pat[i]);
-                    }
-                    i += 1;
-                }
-                if i >= pat.len() {
-                    // Unclosed class: `[` is literal.
-                    return text[0] == '[' && rec(&pat[1..], &text[1..]);
-                }
-                if matched != negate {
-                    rec(&pat[i + 1..], &text[1..])
-                } else {
-                    false
-                }
-            }
-            c => !text.is_empty() && text[0] == c && rec(&pat[1..], &text[1..]),
-        }
-    }
-    let p: Vec<char> = pattern.chars().collect();
-    let t: Vec<char> = name.chars().collect();
-    rec(&p, &t)
-}
-
 /// `_cat_file_operand_tokens` (:214-230).
-fn cat_file_operand_tokens(args: &[String]) -> Vec<String> {
+pub(crate) fn cat_file_operand_tokens(args: &[String]) -> Vec<String> {
     let mut operands = Vec::new();
     let mut after_options = false;
     for arg in args {
@@ -972,7 +853,7 @@ fn cat_file_operand_tokens(args: &[String]) -> Vec<String> {
 }
 
 /// `_plain_file_operand_tokens` (:232-255).
-fn plain_file_operand_tokens(args: &[String]) -> Vec<String> {
+pub(crate) fn plain_file_operand_tokens(args: &[String]) -> Vec<String> {
     let mut operands = Vec::new();
     let mut skip_next = false;
     let mut after_options = false;
@@ -996,7 +877,7 @@ fn plain_file_operand_tokens(args: &[String]) -> Vec<String> {
         if arg.starts_with("--lines=") || arg.starts_with("--bytes=") {
             continue;
         }
-        if arg.starts_with('-') && arg.len() > 1 {
+        if arg.starts_with('-') {
             continue;
         }
         operands.push(arg.clone());
@@ -1005,7 +886,7 @@ fn plain_file_operand_tokens(args: &[String]) -> Vec<String> {
 }
 
 /// `_sed_file_operand_tokens` (:257-290).
-fn sed_file_operand_tokens(args: &[String]) -> Vec<String> {
+pub(crate) fn sed_file_operand_tokens(args: &[String]) -> Vec<String> {
     let mut operands = Vec::new();
     let mut scripts_seen = 0usize;
     let mut skip_script = false;
@@ -1052,7 +933,7 @@ fn sed_file_operand_tokens(args: &[String]) -> Vec<String> {
 }
 
 /// `_search_file_operand_tokens` (:293-295).
-fn search_file_operand_tokens(command_name: &str, args: &[String]) -> Vec<String> {
+pub(crate) fn search_file_operand_tokens(command_name: &str, args: &[String]) -> Vec<String> {
     search_file_operand_roles(command_name, args)
         .into_iter()
         .map(|(o, _)| o)
@@ -1080,13 +961,20 @@ pub(crate) fn search_operands_are_safe(
     root: Option<&Path>,
 ) -> bool {
     let roles = search_file_operand_roles(command_name, args);
-    roles.iter().all(|(operand, is_search_glob)| {
+    let lexically_safe = roles.iter().all(|(operand, is_search_glob)| {
         if *is_search_glob {
             search_glob_pattern_is_safe(operand, root)
         } else {
             read_only_lookup_target_is_safe(operand, true, root)
         }
-    })
+    });
+    if !lexically_safe {
+        return false;
+    }
+    match root {
+        None => true,
+        Some(root) => local_read_operands_resolve_safely(command_name, args, root, root),
+    }
 }
 
 const SEARCH_VALUE_OPTIONS: &[&str] = &[
@@ -1115,8 +1003,30 @@ const SEARCH_VALUE_OPTIONS: &[&str] = &[
     "--type-not",
 ];
 
+/// Flags whose `--flag=value` spelling carries a value (`search_value_flags`).
+const SEARCH_VALUE_FLAGS_EQ: [&str; 15] = [
+    "--after-context",
+    "--before-context",
+    "--context",
+    "--exclude",
+    "--exclude-dir",
+    "--file",
+    "--glob",
+    "--iglob",
+    "--include",
+    "--max-count",
+    "--max-depth",
+    "--max-filesize",
+    "--regexp",
+    "--type",
+    "--type-not",
+];
+
 /// `_search_file_operand_roles` (:319-413). `(operand, is_search_glob)`.
-fn search_file_operand_roles(command_name: &str, args: &[String]) -> Vec<(String, bool)> {
+pub(crate) fn search_file_operand_roles(
+    command_name: &str,
+    args: &[String],
+) -> Vec<(String, bool)> {
     let mut operands: Vec<(String, bool)> = Vec::new();
     let mut pattern_seen = search_command_has_no_pattern(command_name, args);
     let mut skip_next = false;
@@ -1150,15 +1060,17 @@ fn search_file_operand_roles(command_name: &str, args: &[String]) -> Vec<(String
             continue;
         }
         if let Some((prefix, value)) = arg.split_once('=') {
-            if arg.starts_with("--") {
-                if ["--include", "--glob", "--iglob"].contains(&prefix) {
-                    let is_search_glob = (["grep", "egrep", "fgrep"].contains(&command_name)
-                        && prefix == "--include")
-                        || (command_name == "rg" && ["--glob", "--iglob"].contains(&prefix));
-                    operands.push((value.to_owned(), is_search_glob));
+            if SEARCH_VALUE_FLAGS_EQ.contains(&prefix) {
+                let grep_like = ["grep", "egrep", "fgrep"].contains(&command_name);
+                if grep_like && prefix == "--include" {
+                    operands.push((value.to_owned(), true));
                     continue;
                 }
-                if arg.starts_with("--regexp=") || arg.starts_with("--file=") {
+                if command_name == "rg" && ["--glob", "--iglob"].contains(&prefix) {
+                    operands.push((value.to_owned(), true));
+                    continue;
+                }
+                if prefix == "--regexp" || prefix == "--file" {
                     pattern_seen = true;
                 }
                 continue;
@@ -1197,36 +1109,31 @@ fn search_command_has_no_pattern(command_name: &str, args: &[String]) -> bool {
 }
 
 /// `_search_glob_pattern_is_safe` (:419-445).
-#[allow(dead_code)]
-fn search_glob_pattern_is_safe(pattern: &str, root: Option<&Path>) -> bool {
+pub(crate) fn search_glob_pattern_is_safe(pattern: &str, root: Option<&Path>) -> bool {
+    let _ = root;
     let is_exclusion = pattern.starts_with('!');
     let effective_pattern = if is_exclusion { &pattern[1..] } else { pattern };
+    let path = crate::codex_output_py::PyPath::new(effective_pattern);
+    let components = path.parts();
     if effective_pattern.is_empty()
-        || effective_pattern.len() > 4096
+        || effective_pattern.chars().count() > 4096
         || effective_pattern.contains('\n')
         || effective_pattern.contains('\x00')
-        || effective_pattern
-            .chars()
-            .any(|c| matches!(c, '{') || effective_pattern.contains("**") || c == '!')
-        || Path::new(effective_pattern).is_absolute()
-        || Path::new(effective_pattern).components().any(|c| {
-            matches!(
-                c,
-                std::path::Component::CurDir | std::path::Component::ParentDir
-            )
-        })
+        || ["**", "{", "}", "!"]
+            .iter()
+            .any(|token| effective_pattern.contains(token))
+        || path.is_absolute()
+        || components
+            .iter()
+            .any(|component| matches!(component.as_str(), "" | "." | ".."))
     {
         return false;
     }
-    let _ = root;
     if is_exclusion {
         return true;
     }
-    for component in Path::new(effective_pattern).components() {
-        let std::path::Component::Normal(raw) = component else {
-            return false;
-        };
-        let folded = raw.to_string_lossy().to_lowercase();
+    for component in &components {
+        let folded = component.to_lowercase();
         if folded.starts_with('.') && !SOURCE_INSPECTION_BENIGN_DOTFILES.contains(&folded.as_str())
         {
             return false;
@@ -1440,7 +1347,7 @@ pub(crate) fn sensitive_path(
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(value, home_dir), cwd));
     let roots: Vec<&Path> = [cwd, home_dir].into_iter().flatten().collect();
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     let resolved = match lexical.canonicalize() {
@@ -1695,7 +1602,11 @@ pub(crate) fn shell_command_string(executable: &str, args: &[String]) -> (Option
     (None, false)
 }
 
-/// `_script_operand` (:308-356). `(operand, is_path)`.
+/// `_script_operand` (:308-356). `(operand, is_shell)`.
+///
+/// Mirrors the retired Python exactly: an option scan that stops at `--`
+/// (the operand after it is still the script), the Python value-taking
+/// options, a `bun <script>` launch, and a path-qualified script executable.
 pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(String, bool)> {
     let name = if executable == "." {
         ".".to_owned()
@@ -1703,48 +1614,75 @@ pub(crate) fn script_operand(executable: &str, args: &[String]) -> Option<(Strin
         basename_lower(executable)
     };
     let is_shell = SHELLS.contains(&name.as_str());
-    let is_interpreter =
-        ["node", "ruby", "perl"].contains(&name.as_str()) || python_executable(&name);
+    let is_python = python_executable(&name);
+    let is_interpreter = ["node", "ruby", "perl"].contains(&name.as_str()) || is_python;
     if is_shell || is_interpreter {
         let mut index = 0;
         while index < args.len() {
-            let arg = &args[index];
+            let arg = args[index].as_str();
+            if ["-c", "-e", "--eval", "-m", "--command"].contains(&arg)
+                || (is_shell && arg == "-s")
+                || (is_shell
+                    && arg.starts_with('-')
+                    && !arg.starts_with("--")
+                    && arg[1..].contains('c'))
+            {
+                return None;
+            }
             if arg == "--" {
-                return None;
+                index += 1;
+                break;
             }
-            if arg == "-s" && is_shell {
-                return None;
-            }
-            if is_shell && arg.starts_with('-') && !arg.starts_with("--") && arg[1..].contains('c')
-            {
-                return None;
-            }
-            if is_shell
-                && ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg.as_str())
-            {
+            if ["-o", "-O", "+o", "+O", "--rcfile", "--init-file"].contains(&arg) {
                 index += 2;
                 continue;
             }
-            if is_interpreter && ["-c", "-e", "--eval", "-p", "--print"].contains(&arg.as_str()) {
-                index += 2;
-                continue;
+            if is_interpreter && is_python {
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES.contains(&arg) {
+                    if index + 1 >= args.len() {
+                        return None;
+                    }
+                    index += 2;
+                    continue;
+                }
+                if PYTHON_INTERPRETER_OPTIONS_WITH_VALUES
+                    .iter()
+                    .any(|option| arg.starts_with(option) && arg.len() > option.len())
+                {
+                    index += 1;
+                    continue;
+                }
             }
-            if is_interpreter && (arg.starts_with("--eval=") || arg.starts_with("--print=")) {
-                index += 1;
-                continue;
+            if !arg.starts_with('-') && !arg.starts_with('+') {
+                break;
             }
-            if arg.starts_with('-') || arg.starts_with('+') {
-                index += 1;
-                continue;
+            index += 1;
+        }
+        if index < args.len() && args[index] != "-" {
+            let operand = &args[index];
+            if is_shell || is_python || script_like_operand(operand) {
+                return Some((operand.clone(), is_shell));
             }
-            if is_shell {
-                // `.`/`source` treat the first operand as the script.
-                return Some((arg.clone(), true));
-            }
-            return Some((arg.clone(), path_qualified(arg)));
+            return None;
         }
     }
+    if name == "bun" && args.first().is_some_and(|arg| ends_with_script_suffix(arg)) {
+        return Some((args[0].clone(), false));
+    }
+    if ends_with_script_suffix(executable)
+        && (executable.contains('/') || executable.starts_with('.'))
+    {
+        let is_shell_script = [".sh", ".bash", ".zsh", ".ksh", ".fish"]
+            .iter()
+            .any(|suffix| executable.ends_with(suffix));
+        return Some((executable.to_owned(), is_shell_script));
+    }
     None
+}
+
+/// Case-sensitive `str.endswith(_SCRIPT_SUFFIXES)`.
+fn ends_with_script_suffix(value: &str) -> bool {
+    SCRIPT_SUFFIXES.iter().any(|suffix| value.ends_with(suffix))
 }
 
 /// `_known_python_module_launch` (:359-370).
@@ -1847,16 +1785,16 @@ pub(crate) fn interpreter_inline_launch(executable: &str, args: &[String]) -> bo
 
 /// `_path_qualified` (:432-434).
 pub(crate) fn path_qualified(executable: &str) -> bool {
-    executable.contains('/') || executable.contains('\\')
+    !executable.is_empty()
+        && (executable.contains('/') || executable.contains('\\') || executable.starts_with('.'))
 }
 
 /// `_script_like_operand` (:436-443).
-#[allow(dead_code)]
 fn script_like_operand(operand: &str) -> bool {
-    if operand.is_empty() || operand.starts_with('-') {
+    if operand.is_empty() || operand == "-" {
         return false;
     }
-    if path_qualified(operand) {
+    if operand.to_lowercase().ends_with_any(SCRIPT_SUFFIXES) {
         return true;
     }
     unresolved_local_script_launch(operand)
@@ -1864,10 +1802,20 @@ fn script_like_operand(operand: &str) -> bool {
 
 /// `_unresolved_local_script_launch` (:446-458).
 pub(crate) fn unresolved_local_script_launch(executable: &str) -> bool {
-    if executable.is_empty() || executable.starts_with('-') {
+    if executable.is_empty() {
         return false;
     }
-    if path_qualified(executable) {
+    if executable.starts_with("./")
+        || executable.starts_with("../")
+        || executable.starts_with(".\\")
+        || executable.starts_with("..\\")
+    {
+        return true;
+    }
+    if !(executable.contains('/') || executable.contains('\\')) {
+        return false;
+    }
+    if !executable.starts_with('/') {
         return true;
     }
     executable.to_lowercase().ends_with_any(SCRIPT_SUFFIXES)
@@ -1902,7 +1850,7 @@ pub(crate) fn local_executable_operand(
         return None;
     }
     let lexical = PathBuf::from(normalize_path(&expand_home(executable, home_dir), cwd));
-    if !lexical.is_absolute() || !roots.iter().any(|r| lexical.starts_with(r)) {
+    if !lexical.is_absolute() || !roots.iter().any(|r| path_is_relative_to(&lexical, r)) {
         return None;
     }
     Some(executable.to_owned())
@@ -1911,4 +1859,54 @@ pub(crate) fn local_executable_operand(
 /// `_SHORT_CIRCUITING_CD_FAILURES` (:54-60).
 pub(crate) fn short_circuiting_cd_failures() -> &'static [&'static str] {
     SHORT_CIRCUITING_CD_FAILURES
+}
+
+#[cfg(test)]
+mod launch_parity_tests {
+    use super::*;
+
+    #[test]
+    fn unresolved_local_script_launch_matches_python_oracle() {
+        for (executable, expected) in [
+            ("", false),
+            ("./run", true),
+            ("../run", true),
+            (".\\run", true),
+            ("bin/run", true),
+            ("/usr/bin/stripe.exe", false),
+            ("/opt/tool/run.sh", true),
+            ("/opt/tool/RUN.PY", true),
+            ("git", false),
+            ("deploy.sh", false),
+        ] {
+            assert_eq!(
+                unresolved_local_script_launch(executable),
+                expected,
+                "{executable}"
+            );
+        }
+    }
+
+    #[test]
+    fn literal_read_paths_capture_quoted_reads() {
+        let source = "print(open(\".env\").read()); Path('a/b').read_text()";
+        assert_eq!(literal_read_paths(source), vec![".env", "a/b"]);
+    }
+
+    #[test]
+    fn literal_read_scan_error_fails_closed() {
+        use fancy_regex::{Error, RuntimeError};
+        let mut out = Vec::new();
+        collect_literal_reads(
+            vec![
+                Ok(Some("a/b".to_owned())),
+                Err(Error::RuntimeError(RuntimeError::BacktrackLimitExceeded)),
+                Ok(Some("c".to_owned())),
+            ]
+            .into_iter(),
+            &mut out,
+        );
+        assert_eq!(out, vec!["a/b", FAIL_CLOSED_SENSITIVE_READ]);
+        assert!(classify_secret_path(FAIL_CLOSED_SENSITIVE_READ, None, None).is_some());
+    }
 }

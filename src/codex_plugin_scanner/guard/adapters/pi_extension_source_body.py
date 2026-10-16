@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from .pi_extension_approval_source import APPROVAL_RESUME_HELPERS_SOURCE
+from .pi_extension_native_hook import native_hook_reply_source
 from .pi_extension_prompt_response_source import PROMPT_RESPONSE_HELPER_SOURCE
-from .pi_extension_source_body_shared_v1 import build_source_body_shared_v1
+from .pi_extension_readiness_cache_source import WORKSPACE_READINESS_CACHE_SOURCE
+from .pi_extension_source_body_shared_v2 import build_source_body_shared_v2
 
 _STRUCTURED_BLOCKED_REASON_PRELUDE = (
     '  if (reasonCode === "structured_review_deadline_exceeded") {\n'
@@ -28,6 +30,14 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
     approval_helpers = APPROVAL_RESUME_HELPERS_SOURCE.replace(
         "headers: { 'X-Guard-Token': connection.authToken },",
         "headers: { 'X-Guard-Token': connection.authToken, 'Connection': 'close' },",
+        1,
+    ).replace(
+        "  const approvalUrl = approvalUrlFromResponse(response);\n  const retryLine",
+        "  const approvalUrl = approvalUrlFromResponse(response);\n"
+        "  // Without an approval request there is nothing to approve, and the reason\n"
+        "  // already tells the agent to find a permitted alternative.\n"
+        "  if (!approvalUrl && !approvalRequestId(response)) return reason;\n"
+        "  const retryLine",
         1,
     )
     return (
@@ -122,6 +132,61 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  if (!(port > 0) || authToken.length === 0) return null;\n"
         "  return { port, authToken, stateId };\n"
         "}\n"
+        "\n" + native_hook_reply_source(harness) + "async function guardDaemonAttempt(\n"
+        "  reply: GuardDaemonReply,\n"
+        "  serializedPayload: string,\n"
+        "): Promise<GuardDaemonAttempt> {\n"
+        "  if (reply.status < 200 || reply.status > 299) {\n"
+        "    let reasonCode = `daemon_http_${reply.status}`;\n"
+        "    try {\n"
+        "      const errorBody = await reply.readBody(GUARD_TEXT_LIMIT_CHARS);\n"
+        "      if (errorBody === null) {\n"
+        '        reasonCode = "daemon_response_body_unbounded";\n'
+        "      } else {\n"
+        "        const errorPayload = JSON.parse(errorBody) as { error?: unknown };\n"
+        "        if (typeof errorPayload.error === 'string' && errorPayload.error) {\n"
+        "          reasonCode = errorPayload.error;\n"
+        "        }\n"
+        "      }\n"
+        "    } catch {}\n"
+        "    if (reply.status === 401 || reply.status === 403) {\n"
+        "      return {\n"
+        "        response: null,\n"
+        '        recoveryKind: "authenticated-control-plane-failure",\n'
+        "      };\n"
+        "    }\n"
+        "    return {\n"
+        "      response: {\n"
+        '        decision: "deny",\n'
+        "        reason: `HOL Guard could not safely review this action (${reasonCode}).`,\n"
+        "        reason_code: reasonCode,\n"
+        "      },\n"
+        "      recoveryKind: null,\n"
+        "    };\n"
+        "  }\n"
+        "  const rawResponse = await reply.readBody(GUARD_MAX_SERIALIZED_RESPONSE_CHARS);\n"
+        '  if (rawResponse === null) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  const raw = rawResponse.trim();\n"
+        '  if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  try {\n"
+        "    const parsed = JSON.parse(raw) as unknown;\n"
+        "    const normalized = normalizePromptGuardResponse(\n"
+        "      parsed, JSON.parse(serializedPayload).hook_event_name,\n"
+        "    );\n"
+        "    if (normalized !== null) {\n"
+        "      return { response: normalized, recoveryKind: null };\n"
+        "    }\n"
+        '    return { response: null, recoveryKind: "transport-failure" };\n'
+        "  } catch {}\n"
+        "  return {\n"
+        "    response: {\n"
+        '      decision: "deny",\n'
+        '      reason: "HOL Guard received an invalid response from the authenticated local daemon.",\n'
+        '      reason_code: "daemon_invalid_response",\n'
+        "    },\n"
+        "    recoveryKind: null,\n"
+        "  };\n"
+        "}\n"
         "\n"
         "async function daemonGuardResponse(\n"
         "  serializedPayload: string,\n"
@@ -129,25 +194,40 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  timeoutMs: number = GUARD_DAEMON_TIMEOUT_MS,\n"
         "  deadlineAt?: number,\n"
         "): Promise<GuardDaemonAttempt> {\n"
-        '  if (typeof fetch !== "function") {\n'
-        '    return { response: null, recoveryKind: "transport-failure" };\n'
-        "  }\n"
-        "  const connection = loadGuardDaemonConnection();\n"
-        '  if (!connection) return { response: null, recoveryKind: "transport-failure" };\n'
         '  const workspace = typeof cwd === "string" && cwd ? cwd : process.cwd();\n'
         "  const params = new URLSearchParams({ 'guard-home': GUARD_HOME });\n"
         "  if (workspace) params.set('workspace', workspace);\n"
         "  if (!GUARD_HOME_DIR_IS_DEFAULT && GUARD_HOME_DIR) params.set('home', GUARD_HOME_DIR);\n"
+        "  const remainingMs = deadlineAt === undefined ? timeoutMs : deadlineAt - Date.now();\n"
+        "  const budgetMs = Math.min(60_000, Math.max(1, Math.min(timeoutMs, remainingMs)));\n"
+        "  const bridgeBudgetMs = nativeGuardBudgetMs(budgetMs, remainingMs);\n"
+        "  const payloadWithBudget = (remaining: number): string => {\n"
+        "    try {\n"
+        "      const parsedPayload = JSON.parse(serializedPayload) as Record<string, unknown>;\n"
+        "      parsedPayload.guard_remaining_ms = remaining;\n"
+        "      return JSON.stringify(parsedPayload);\n"
+        "    } catch {\n"
+        "      return serializedPayload;\n"
+        "    }\n"
+        "  };\n"
+        "  // The bridge finds a live resident without the daemon's state or token.\n"
+        "  const nativeReply = await nativeGuardReply(\n"
+        "    params.toString(),\n"
+        "    payloadWithBudget(bridgeBudgetMs),\n"
+        "    bridgeBudgetMs,\n"
+        "  );\n"
+        '  if (nativeReply === null) return { response: null, recoveryKind: "transport-failure" };\n'
+        "  if (nativeReply !== undefined) return guardDaemonAttempt(nativeReply, serializedPayload);\n"
+        "  const connection = loadGuardDaemonConnection();\n"
+        '  if (!connection) return { response: null, recoveryKind: "transport-failure" };\n'
+        '  if (typeof fetch !== "function") {\n'
+        '    return { response: null, recoveryKind: "transport-failure" };\n'
+        "  }\n"
+        "  // A direct post keeps the whole budget; only the bridge is capped.\n"
+        "  const daemonPayload = payloadWithBudget(budgetMs);\n"
         "  const controller = typeof AbortController === 'function' ? new AbortController() : undefined;\n"
         "  const timeoutHandle = setTimeout(() => controller?.abort(), timeoutMs);\n"
         "  try {\n"
-        "    let daemonPayload = serializedPayload;\n"
-        "    try {\n"
-        "      const parsedPayload = JSON.parse(serializedPayload) as Record<string, unknown>;\n"
-        "      const remainingMs = deadlineAt === undefined ? timeoutMs : deadlineAt - Date.now();\n"
-        "      parsedPayload.guard_remaining_ms = Math.min(60_000, Math.max(1, Math.min(timeoutMs, remainingMs)));\n"
-        "      daemonPayload = JSON.stringify(parsedPayload);\n"
-        "    } catch {}\n"
         f"    const response = await fetch(`http://127.0.0.1:${{connection.port}}"
         f"/v1/hooks/{harness}?${{params.toString()}}`, {{\n"
         "      method: 'POST',\n"
@@ -160,63 +240,15 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      body: daemonPayload,\n"
         "      signal: controller?.signal,\n"
         "    });\n"
-        "    if (!response.ok) {\n"
-        "      let reasonCode = `daemon_http_${response.status}`;\n"
-        "      try {\n"
-        "        const errorBody = await boundedResponseText(response, GUARD_TEXT_LIMIT_CHARS, deadlineAt);\n"
-        "        if (errorBody === null) {\n"
-        '          reasonCode = "daemon_response_body_unbounded";\n'
-        "        } else {\n"
-        "          const errorPayload = JSON.parse(errorBody) as { error?: unknown };\n"
-        "          if (typeof errorPayload.error === 'string' && errorPayload.error) {\n"
-        "            reasonCode = errorPayload.error;\n"
-        "          }\n"
-        "        }\n"
-        "      } catch {}\n"
-        "      if (response.status === 401 || response.status === 403) {\n"
-        "        return {\n"
-        "          response: null,\n"
-        '          recoveryKind: "authenticated-control-plane-failure",\n'
-        "        };\n"
-        "      }\n"
-        "      return {\n"
-        "        response: {\n"
-        '          decision: "deny",\n'
-        "          reason: `HOL Guard could not safely review this action (${reasonCode}).`,\n"
-        "          reason_code: reasonCode,\n"
-        "        },\n"
-        "        recoveryKind: null,\n"
-        "      };\n"
-        "    }\n"
-        "    const rawResponse = await boundedResponseText(\n"
-        "      response, GUARD_MAX_SERIALIZED_RESPONSE_CHARS, deadlineAt,\n"
-        "    );\n"
-        '    if (rawResponse === null) return { response: null, recoveryKind: "transport-failure" };\n'
-        "    const raw = rawResponse.trim();\n"
-        '    if (!raw) return { response: null, recoveryKind: "transport-failure" };\n'
-        "    try {\n"
-        "      const parsed = JSON.parse(raw) as unknown;\n"
-        "      const normalized = normalizePromptGuardResponse(\n"
-        "        parsed, JSON.parse(serializedPayload).hook_event_name,\n"
-        "      );\n"
-        "      if (normalized !== null) {\n"
-        "        return { response: normalized, recoveryKind: null };\n"
-        "      }\n"
-        '      return { response: null, recoveryKind: "transport-failure" };\n'
-        "    } catch {}\n"
-        "    return {\n"
-        "      response: {\n"
-        '        decision: "deny",\n'
-        '        reason: "HOL Guard received an invalid response from the authenticated local daemon.",\n'
-        '        reason_code: "daemon_invalid_response",\n'
+        "    return await guardDaemonAttempt(\n"
+        "      {\n"
+        "        status: response.status,\n"
+        "        readBody: (limitChars) => boundedResponseText(response, limitChars, deadlineAt),\n"
         "      },\n"
-        "      recoveryKind: null,\n"
-        "    };\n"
-        "  } catch (error) {\n"
-        "    if (error instanceof Error && error.name === 'AbortError') {\n"
-        "      // Classified transport recovery preserves a live overloaded daemon.\n"
-        '      return { response: null, recoveryKind: "transport-failure" };\n'
-        "    }\n"
+        "      serializedPayload,\n"
+        "    );\n"
+        "  } catch {\n"
+        "    // Classified transport recovery preserves a live overloaded daemon.\n"
         '    return { response: null, recoveryKind: "transport-failure" };\n'
         "  } finally {\n"
         "    clearTimeout(timeoutHandle);\n"
@@ -267,9 +299,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      },\n"
         "      signal: controller?.signal,\n"
         "    });\n"
-        "    if (response.status === 404 && options.allowRecovery !== false) {\n"
+        "    const recoverAndRetry = async () => {\n"
         "      clearTimeout(timeoutHandle);\n"
-        "      try { void response.body?.cancel().catch(() => {}); } catch {}\n"
         "      const remaining = deadlineAt - GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS - Date.now();\n"
         "      let recovered = false;\n"
         "      if (remaining > 0) {\n"
@@ -280,7 +311,12 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      if (recovered && Date.now() < deadlineAt - GUARD_DAEMON_READINESS_RESPONSE_RESERVE_MS) {\n"
         "        return await daemonWorkspaceReadiness(cwd, { deadlineAt, allowRecovery: false });\n"
         "      }\n"
-        "      return { ready: false, reasonCode: 'daemon_readiness_http_404', daemonStateId: readinessStateId };\n"
+        "      return null;\n"
+        "    };\n"
+        "    if (response.status === 404 && options.allowRecovery !== false) {\n"
+        "      try { void response.body?.cancel().catch(() => {}); } catch {}\n"
+        "      return await recoverAndRetry() ??\n"
+        "        { ready: false, reasonCode: 'daemon_readiness_http_404', daemonStateId: readinessStateId };\n"
         "    }\n"
         "    let readiness = {};\n"
         "    try {\n"
@@ -294,6 +330,13 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      /^[a-z0-9_]{1,96}$/.test(readiness.reason_code)\n"
         "      ? readiness.reason_code\n"
         "      : `daemon_readiness_http_${response.status}`;\n"
+        "    // A daemon left running across an in-place upgrade cannot prepare the\n"
+        "    // replaced native policy. Recovery asks the installed CLI, which retires\n"
+        "    // only a superseded same-install daemon and keeps a current one.\n"
+        "    if (response.status === 503 && reasonCode === 'native_policy_not_ready' &&\n"
+        "      options.allowRecovery !== false) {\n"
+        "      return await recoverAndRetry() ?? { ready: false, reasonCode, daemonStateId: readinessStateId };\n"
+        "    }\n"
         "    if (!response.ok || readiness.ready !== true) {\n"
         "      return { ready: false, reasonCode, daemonStateId: readinessStateId };\n"
         "    }\n"
@@ -324,9 +367,13 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "  for (const [name, value] of Object.entries(process.env)) {\n"
         "    if (typeof value === 'string' && value.length > 0) activeEnvironment[name] = value;\n"
         "  }\n"
-        "  const environmentNames = Object.keys(activeEnvironment).sort();\n"
+        "  const environmentNames = [...new Set([\n"
+        "    ...Object.keys(activeEnvironment),\n"
+        "    ...['GIT_PAGER', 'PAGER'].filter((name) => typeof process.env[name] === 'string'),\n"
+        "  ])].sort();\n"
+        "  const environmentDigestNames = Object.keys(activeEnvironment).sort();\n"
         "  const canonicalEnvironment = JSON.stringify(\n"
-        "    Object.fromEntries(environmentNames.map((name) => [name, activeEnvironment[name]])),\n"
+        "    Object.fromEntries(environmentDigestNames.map((name) => [name, activeEnvironment[name]])),\n"
         "  )?.replace(/[^\\x00-\\x7F]/g, (character) =>\n"
         "    `\\\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`,\n"
         "  ) ?? '';\n"
@@ -343,8 +390,23 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "      git_config_no_system: typeof process.env.GIT_CONFIG_NOSYSTEM === 'string' &&\n"
         "        ['1', 'true', 'yes', 'on'].includes(process.env.GIT_CONFIG_NOSYSTEM.toLowerCase()),\n"
         "      home: typeof process.env.HOME === 'string' ? process.env.HOME : null,\n"
-        "      git_pager_disabled: process.env.GIT_PAGER === '' || process.env.GIT_PAGER === 'cat',\n"
-        "      pager_disabled: process.env.PAGER === '' || process.env.PAGER === 'cat',\n"
+        "      // Git pages through `less` by default; flags taking a file argument are excluded.\n"
+        "      git_pager_disabled: typeof process.env.GIT_PAGER === 'string' &&\n"
+        "        /^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/.test(process.env.GIT_PAGER),\n"
+        "      pager_disabled: typeof process.env.PAGER === 'string' &&\n"
+        "        /^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/.test(process.env.PAGER),\n"
+        "      library_search_paths: Object.fromEntries(\n"
+        "        [\n"
+        "          'LD_LIBRARY_PATH',\n"
+        "          'DYLD_LIBRARY_PATH',\n"
+        "          'DYLD_FALLBACK_LIBRARY_PATH',\n"
+        "          'DYLD_FRAMEWORK_PATH',\n"
+        "          'DYLD_FALLBACK_FRAMEWORK_PATH',\n"
+        "        ]\n"
+        "          .map((name) => [name, process.env[name]])\n"
+        "          .filter(([, value]) => typeof value === 'string' && value.length > 0 &&\n"
+        "            Buffer.byteLength(value, 'utf8') <= 32 * 1024),\n"
+        "      ),\n"
         "    },\n"
         "  };\n"
         "  let serializedPayload = '';\n"
@@ -360,12 +422,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         '      reason_code: "hook_payload_unbounded",\n'
         "    };\n"
         "  }\n"
-        + build_source_body_shared_v1(
+        + build_source_body_shared_v2(
             display_name=display_name, blocked_reason_prelude=_STRUCTURED_BLOCKED_REASON_PRELUDE
-        ).replace(
-            "const normalized = normalizeGuardResponse(parsed);",
-            "const normalized = normalizePromptGuardResponse(parsed, payload.hook_event_name);",
-            1,
         )
         + "function reviewedToolResult(content: unknown, details: unknown, isError?: boolean, deadlineAt?: number) {\n"
         "  let body = '';\n"
@@ -400,48 +458,8 @@ def build_extension_source_body(*, harness: str, display_name: str) -> str:
         "    invalidateToolApprovalContinuations();\n"
         "    invalidateInputApprovalResumes();\n"
         "  };\n"
-        "  let workspaceReadiness = null;\n"
-        "  const ensureGuardWorkspaceReady = (cwd, allowSetup = true) => {\n"
-        "    const workspace = typeof cwd === 'string' && cwd ? cwd : process.cwd();\n"
-        "    if (workspaceReadiness?.cwd === workspace) {\n"
-        "      const currentConnection = loadGuardDaemonConnection();\n"
-        "      if (workspaceReadiness.daemonStateId === null && !workspaceReadiness.settled) {\n"
-        "        return workspaceReadiness.result;\n"
-        "      }\n"
-        "      if (workspaceReadiness.daemonStateId !== null &&\n"
-        "        currentConnection?.stateId === workspaceReadiness.daemonStateId &&\n"
-        "        (!workspaceReadiness.settled || workspaceReadiness.ready || !allowSetup)) {\n"
-        "        return workspaceReadiness.result;\n"
-        "      }\n"
-        "      if (!allowSetup) {\n"
-        '        return Promise.resolve({ ready: false, reasonCode: "daemon_restarted_requires_session_setup" });\n'
-        "      }\n"
-        "      workspaceReadiness = null;\n"
-        "    }\n"
-        "    if (!allowSetup) {\n"
-        '      return Promise.resolve({ ready: false, reasonCode: "native_workspace_setup_required" });\n'
-        "    }\n"
-        "    const daemonStateId = loadGuardDaemonConnection()?.stateId ?? null;\n"
-        "    const result = daemonWorkspaceReadiness(workspace);\n"
-        "    const readinessEntry = { cwd: workspace, result, daemonStateId, settled: false, ready: false };\n"
-        "    workspaceReadiness = readinessEntry;\n"
-        "    void result.then((readiness) => {\n"
-        "      readinessEntry.settled = true;\n"
-        "      readinessEntry.ready = readiness.ready === true;\n"
-        "      if (workspaceReadiness === readinessEntry && typeof readiness.daemonStateId === 'string') {\n"
-        "        readinessEntry.daemonStateId = readiness.daemonStateId;\n"
-        "      }\n"
-        "    }).catch(() => { readinessEntry.settled = true; });\n"
-        "    return result;\n"
-        "  };\n"
-        "  const prepareGuardWorkspaceForTurn = async (cwd) => {\n"
-        "    workspaceReadiness = null;\n"
-        "    return ensureGuardWorkspaceReady(cwd, true);\n"
-        "  };\n"
-        "  const readinessFailureReason = (readiness) =>\n"
-        "    `HOL Guard blocked this tool call because native workspace readiness was not confirmed "
-        '(${readiness.reasonCode ?? "native_workspace_not_ready"}).`;\n'
-        "  const approvalContinuationActivity = (): ApprovalContinuationActivity => {\n"
+        + WORKSPACE_READINESS_CACHE_SOURCE
+        + "  const approvalContinuationActivity = (): ApprovalContinuationActivity => {\n"
         "    const generation = approvalContinuationGeneration;\n"
         "    return () => generation === approvalContinuationGeneration;\n"
         "  };\n"

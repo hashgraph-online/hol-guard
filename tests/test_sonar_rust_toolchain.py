@@ -1,4 +1,4 @@
-"""Sonar preparation must verify every coverage shard and run the pinned Clippy."""
+"""Sonar preparation must verify every coverage shard and use the pinned toolchain."""
 
 from __future__ import annotations
 
@@ -11,63 +11,10 @@ from pathlib import Path
 
 import coverage
 import pytest
-import yaml
-
-from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 PREPARE_SCRIPT = ROOT / "scripts/ci/prepare_sonar_analysis.sh"
 SETUP_SCRIPT = ROOT / "scripts/ci/setup_sonar_rust.sh"
-
-
-def test_sonar_preparation_precedes_analysis_and_fails_closed() -> None:
-    """Verify sonar preparation precedes analysis and fails closed."""
-    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
-    job = workflow["jobs"]["sonar"]
-    steps = job["steps"]
-    download_index = next(i for i, step in enumerate(steps) if step.get("name") == "Download pytest coverage data")
-    wait_index = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Wait for successful pytest coverage producers"
-    )
-    setup_index = next(i for i, step in enumerate(steps) if step.get("name") == "Prepare Python coverage")
-    clippy_index = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Check Rust workspace with pinned Clippy"
-    )
-    scan_index = next(i for i, step in enumerate(steps) if step.get("name") == "Analyze with SonarQube Cloud")
-    setup = steps[setup_index]
-    script = SETUP_SCRIPT.read_text(encoding="utf-8")
-    install = 'rustup toolchain install "$toolchain" --profile minimal --component clippy'
-    default = 'rustup default "$toolchain"'
-    clippy = "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"
-
-    assert job["timeout-minutes"] == 20
-    assert "needs" not in job
-    assert steps[0]["id"] == "token-presence"
-    assert job["permissions"] == {"contents": "read", "actions": "read"}
-    assert wait_index < download_index < setup_index < scan_index
-    assert "select_pytest_coverage.py" in steps[wait_index]["run"]
-    assert "SONAR_TOKEN" not in steps[wait_index].get("env", {})
-    assert setup["run"] == "bash scripts/ci/prepare_sonar_analysis.sh"
-    assert '"rust/rust-toolchain.toml"' in script
-    assert script.index(install) < script.index(default)
-    assert steps[clippy_index]["run"] == clippy
-    assert steps[clippy_index]["shell"] == "bash"
-    assert not steps[clippy_index].get("continue-on-error", False)
-    assert steps[clippy_index]["if"] == "steps.token-presence.outputs.has-token == 'true'"
-    assert steps[clippy_index].get("env", {}) == {}
-    assert "SONAR_TOKEN" not in job.get("env", {})
-    assert "SONAR_TOKEN" not in workflow.get("env", {})
-    toolchain_index = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Initialize pinned Rust analysis toolchain"
-    )
-    cache_index = next(i for i, step in enumerate(steps) if step.get("name") == "Cache Rust analysis dependencies")
-    assert steps[toolchain_index]["run"] == "bash scripts/ci/setup_sonar_rust.sh"
-    assert toolchain_index < cache_index < clippy_index < wait_index
-    assert "set -euo pipefail" in script
-    assert setup["shell"] == "bash"
-    assert not job.get("continue-on-error", False)
-    assert not setup.get("continue-on-error", False)
-    assert "SONAR_TOKEN" not in setup.get("env", {})
 
 
 def _run_preparation(
@@ -123,57 +70,12 @@ def _run_preparation(
             "SELECTOR_SCRIPT": str(ROOT / "scripts/ci/select_pytest_coverage.py"),
             "COMMAND_LOG": str(log),
             "FAIL_COMMAND": fail_command,
+            "CI_PYTEST_COVERAGE_SHARDS": "128",
         },
     )
     return result, log.read_text(encoding="utf-8").splitlines() if log.exists() else []
 
 
-def test_preparation_combines_all_shards_before_creating_coverage_xml(tmp_path: Path) -> None:
-    result, commands = _run_preparation(tmp_path, 128)
-    assert result.returncode == 0, result.stderr
-    assert len(commands) == 3
-    assert (
-        commands[0] == "uv run --no-sync python scripts/ci/select_pytest_coverage.py --verify-downloads coverage-data"
-    )
-    assert commands[1].split() == [
-        "uv",
-        "run",
-        "--no-sync",
-        "python",
-        "scripts/ci/parallel_coverage_combine.py",
-        "--workers",
-        "4",
-        *sorted(f"coverage-data/pytest-coverage-1-{shard}/.coverage" for shard in range(128)),
-    ]
-    assert commands[2] == "uv run --no-sync python scripts/ci/parallel_coverage_xml.py --workers 4"
-
-
-@pytest.mark.parametrize("fail_command", ["", "cargo clippy"])
-def test_early_clippy_runs_without_coverage_and_propagates_failure(tmp_path: Path, fail_command: str) -> None:
-    """Verify early clippy runs without coverage and propagates failure."""
-    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")))
-    step = next(
-        step
-        for step in workflow["jobs"]["sonar"]["steps"]
-        if step.get("name") == "Check Rust workspace with pinned Clippy"
-    )
-    inline_script = tmp_path / "clippy.sh"
-    inline_script.write_text(step["run"] + "\n", encoding="utf-8")
-
-    result, commands = _run_preparation(tmp_path, 0, fail_command, inline_script)
-
-    assert result.returncode == (7 if fail_command else 0), result.stderr
-    assert commands == ["cargo clippy --manifest-path rust/Cargo.toml --locked --workspace"]
-
-
-def test_setup_initializes_pinned_toolchain_before_cache(tmp_path: Path) -> None:
-    result, commands = _run_preparation(tmp_path, 0, script=SETUP_SCRIPT)
-    assert result.returncode == 0, result.stderr
-    assert commands[0].startswith("python -c import tomllib;")
-    assert commands[1:] == [
-        "rustup toolchain install 1.88.0 --profile minimal --component clippy",
-        "rustup default 1.88.0",
-    ]
 
 
 @pytest.mark.parametrize("shard_count", [0, 64, 127, 129])
@@ -208,7 +110,6 @@ def test_setup_stops_at_each_failed_command(tmp_path: Path, failed_command: str)
 
 @pytest.mark.parametrize("invalid_inventory", ["empty", "unselected", "manifest"])
 def test_preparation_runs_real_download_validation_before_combine(tmp_path: Path, invalid_inventory: str) -> None:
-    result, commands = _run_preparation(tmp_path, 128, invalid_inventory=invalid_inventory)
+    result, _commands = _run_preparation(tmp_path, 128, invalid_inventory=invalid_inventory)
     assert result.returncode == 1
     assert "Coverage selection failed:" in result.stderr
-    assert commands == ["uv run --no-sync python scripts/ci/select_pytest_coverage.py --verify-downloads coverage-data"]

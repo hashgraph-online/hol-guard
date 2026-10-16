@@ -18,6 +18,28 @@ pub(super) fn executable_basename(executable: &str) -> &str {
     executable.rsplit(['/', '\\']).next().unwrap_or(executable)
 }
 
+/// The program a Windows command names, without the image extension the
+/// shell appends. `node.exe` is the program `node`, so a scan that reads the
+/// raw name weighs the same command two different ways depending on how the
+/// harness spelled it. Elsewhere a trailing `.exe` is an ordinary part of a
+/// file name and stays.
+pub(super) fn program_basename(executable: &str) -> &str {
+    let name = executable_basename(executable);
+    if !cfg!(windows) {
+        return name;
+    }
+    match name.len().checked_sub(4) {
+        Some(stem)
+            if stem > 0
+                && name.is_char_boundary(stem)
+                && name[stem..].eq_ignore_ascii_case(".exe") =>
+        {
+            &name[..stem]
+        }
+        _ => name,
+    }
+}
+
 pub(super) fn is_shell_control_keyword(executable: &str) -> bool {
     if executable.contains('/') {
         return false;
@@ -80,6 +102,7 @@ pub(super) fn is_nested_command_executor(executable: &str, arguments: &[String])
     }
     basename == "find"
         && !is_contained_compile_check_arguments(arguments)
+        && crate::read_only_fanout::find_exec(arguments).is_none()
         && arguments
             .iter()
             .any(|argument| matches!(argument.as_str(), "-exec" | "-execdir" | "-ok" | "-okdir"))

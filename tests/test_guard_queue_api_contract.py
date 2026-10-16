@@ -19,7 +19,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.codex_app_server import _send_app_server_websocket_messages
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
@@ -541,102 +540,6 @@ def test_codex_resolution_sends_continue_prompt_to_original_thread(
     assert store.list_events(event_name="codex/thread_resume")[0]["payload"]["status"] == "sent"
 
 
-def test_codex_resume_completion_timeout_bounds_streaming_noncompletion_frames(
-    trusted_socket_path: Path,
-) -> None:
-    socket_path = trusted_socket_path
-    received_messages: list[dict[str, object]] = []
-    codex_server = _start_fake_streaming_codex_app_server(socket_path, received_messages)
-
-    response, completion_status = _send_app_server_websocket_messages(
-        socket_path=str(socket_path),
-        payloads=[
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "clientInfo": {
-                        "name": "hol-guard",
-                        "title": "HOL Guard",
-                        "version": "1.0.0",
-                    },
-                    "capabilities": {"experimentalApi": True},
-                },
-            },
-            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-            {
-                "jsonrpc": "2.0",
-                "id": 2,
-                "method": "turn/start",
-                "params": {
-                    "threadId": "thread-1",
-                    "input": [{"type": "text", "text": "continue"}],
-                },
-            },
-        ],
-        response_id=2,
-        timeout_seconds=1,
-        completion_thread_id="thread-1",
-        completion_timeout_seconds=0.03,
-    )
-    codex_server.join(timeout=2)
-    socket_path.unlink(missing_ok=True)
-
-    assert response is not None
-    assert response["id"] == 2
-    assert completion_status == "completion_timeout"
-
-
-def test_codex_resume_response_timeout_bounds_streaming_pre_ack_frames(
-    trusted_socket_path: Path,
-) -> None:
-    socket_path = trusted_socket_path
-    received_messages: list[dict[str, object]] = []
-    codex_server = _start_fake_pre_ack_streaming_codex_app_server(socket_path, received_messages)
-
-    try:
-        _send_app_server_websocket_messages(
-            socket_path=str(socket_path),
-            payloads=[
-                {
-                    "jsonrpc": "2.0",
-                    "id": 1,
-                    "method": "initialize",
-                    "params": {
-                        "clientInfo": {
-                            "name": "hol-guard",
-                            "title": "HOL Guard",
-                            "version": "1.0.0",
-                        },
-                        "capabilities": {"experimentalApi": True},
-                    },
-                },
-                {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
-                {
-                    "jsonrpc": "2.0",
-                    "id": 2,
-                    "method": "turn/start",
-                    "params": {
-                        "threadId": "thread-1",
-                        "input": [{"type": "text", "text": "continue"}],
-                    },
-                },
-            ],
-            response_id=2,
-            timeout_seconds=0.03,
-            completion_thread_id="thread-1",
-            completion_timeout_seconds=1,
-        )
-    except TimeoutError as error:
-        assert str(error) == "turn_start_timeout"
-    else:
-        raise AssertionError("expected turn_start_timeout")
-    finally:
-        codex_server.join(timeout=2)
-        socket_path.unlink(missing_ok=True)
-
-
 def test_resolving_last_item_returns_empty_queue_hint(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home")
     _populate(store, [_request("req-only")])
@@ -724,7 +627,6 @@ def test_artifact_scope_resolution_removes_same_artifact_review_from_queue(tmp_p
         store,
         [
             _request("req-active", command="cat ~/.npmrc", artifact_id=shared_artifact),
-            _request("req-covered", command="cat ~/.pypirc", artifact_id=shared_artifact),
             _request("req-unrelated", command="cat ~/.ssh/id_rsa", artifact_id="codex:project:other-tool"),
         ],
     )
@@ -741,11 +643,11 @@ def test_artifact_scope_resolution_removes_same_artifact_review_from_queue(tmp_p
     finally:
         daemon.stop()
 
-    assert payload["resolved_scope_ids"] == ["req-covered"]
+    # Retried identical actions fold into one queue row at insert time, so an
+    # artifact-scope approval clears only the decided action. A pending
+    # request for a different action must never ride along.
     assert payload["remaining_pending_count"] == 1
     assert payload["next_selectable_request_id"] == "req-unrelated"
-    assert store.get_approval_request("req-covered")["status"] == "resolved"
-    assert store.get_approval_request("req-covered")["resolution_action"] == "allow"
     assert store.get_approval_request("req-unrelated")["status"] == "pending"
 
 

@@ -10,6 +10,19 @@ export const GENERIC_ERROR_BODY = "Reload this page, or go back home and try aga
 export const DASHBOARD_RELOAD_LABEL = "Reload dashboard";
 export const DASHBOARD_GO_HOME_LABEL = "Go home";
 export const DASHBOARD_TRY_AGAIN_LABEL = "Try again";
+export const AUTO_RETRY_DELAY_MS = 1500;
+export const AUTO_RETRY_WINDOW_MS = 30_000;
+
+/**
+ * A render failure right after Guard restarts (for example after an update) is
+ * often transient: the next render sees settled data. Retry a generic failure
+ * once per window before showing the error screen. Chunk-load failures have
+ * their own reload recovery and are never retried in place.
+ */
+export function shouldAutoRetry(error: Error | null, lastAutoRetryAt: number | null, now: number): boolean {
+  if (dashboardErrorCopy(error).kind !== "generic") return false;
+  return lastAutoRetryAt === null || now - lastAutoRetryAt >= AUTO_RETRY_WINDOW_MS;
+}
 
 export function dashboardErrorCopy(error: Error | null): {
   kind: "chunk" | "generic";
@@ -40,20 +53,61 @@ interface Props {
 interface State {
   hasError: boolean;
   error: Error | null;
+  retrying: boolean;
+  retryDecided: boolean;
+}
+
+// Show the placeholder while the automatic retry is pending, or for the frame
+// between catching an error and deciding whether to retry it. Once the decision
+// is made, a declined retry keeps the error screen visible even after the
+// retry window expires.
+export function showsRetryPlaceholder(
+  state: { error: Error | null; retrying: boolean; retryDecided: boolean },
+  lastAutoRetryAt: number | null,
+  now: number,
+): boolean {
+  if (state.retrying) return true;
+  return !state.retryDecided && shouldAutoRetry(state.error, lastAutoRetryAt, now);
 }
 
 export class ErrorBoundary extends Component<Props, State> {
+  private lastAutoRetryAt: number | null = null;
+  private retryTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor(props: Props) {
     super(props);
-    this.state = { hasError: false, error: null };
+    this.state = { hasError: false, error: null, retrying: false, retryDecided: false };
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): Partial<State> {
+    return { hasError: true, error, retrying: false, retryDecided: false };
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+    const now = Date.now();
+    if (!shouldAutoRetry(error, this.lastAutoRetryAt, now)) {
+      this.setState({ retryDecided: true });
+      return;
+    }
+    this.lastAutoRetryAt = now;
+    this.setState({ retrying: true, retryDecided: true });
+    this.clearRetryTimer();
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null;
+      this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
+    }, AUTO_RETRY_DELAY_MS);
+  }
+
+  componentWillUnmount() {
+    this.clearRetryTimer();
+  }
+
+  private clearRetryTimer() {
+    if (this.retryTimer !== null) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = null;
+    }
   }
 
   private handleReload = () => {
@@ -65,17 +119,24 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   private handleGoHome = () => {
-    this.setState({ hasError: false, error: null });
+    this.clearRetryTimer();
+    this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
     this.props.onReset?.();
   };
 
   private handleTryAgain = () => {
-    this.setState({ hasError: false, error: null });
+    this.clearRetryTimer();
+    this.setState({ hasError: false, error: null, retrying: false, retryDecided: false });
   };
 
   render() {
     if (!this.state.hasError) {
       return this.props.children;
+    }
+    // Hold a quiet placeholder while the one automatic retry is pending, so a
+    // transient failure never flashes the error screen.
+    if (showsRetryPlaceholder(this.state, this.lastAutoRetryAt, Date.now())) {
+      return <div className="py-12" aria-busy="true" />;
     }
     if (this.props.fallback) {
       return this.props.fallback;

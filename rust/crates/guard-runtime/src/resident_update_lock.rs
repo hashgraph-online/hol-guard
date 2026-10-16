@@ -47,7 +47,14 @@ pub(crate) fn acquire_shared(
     })?;
     let marker = read_marker(&file)?;
     if let Some(expected_digest) = marker {
-        if expected_digest != runtime_digest {
+        // The marker names the runtime the last updater published. Another
+        // install sharing this guard home (for example a desktop-bundled core
+        // next to a package-manager install) ships a different binary but is
+        // still current; only a process whose own executable was replaced or
+        // removed by an update is a superseded runtime.
+        if expected_digest != runtime_digest
+            && crate::resident_state::runtime_superseded(runtime_digest)
+        {
             return Err("native_resident_runtime_identity_mismatch".to_owned());
         }
     }
@@ -175,6 +182,27 @@ mod tests {
             "native_resident_runtime_identity_mismatch"
         );
         assert!(acquire_shared(&state, &"b".repeat(64)).is_ok());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn marker_from_another_install_allows_current_runtime() {
+        let root = temp_root();
+        let state = root.join("native-runtime");
+        fs::create_dir_all(&state).unwrap();
+        let path = state.join(RESIDENT_UPDATE_LOCK_FILE_NAME);
+        fs::write(&path, format!("{}\n", "b".repeat(64))).unwrap();
+        #[cfg(unix)]
+        std::fs::set_permissions(&path, std::os::unix::fs::PermissionsExt::from_mode(0o600))
+            .unwrap();
+        #[cfg(windows)]
+        {
+            crate::resident_state::protect_windows_private_path(&root, true, &root).unwrap();
+            crate::resident_state::protect_windows_private_path(&state, true, &root).unwrap();
+            crate::resident_state::protect_windows_private_path(&path, false, &root).unwrap();
+        }
+        let current = crate::resident_state::runtime_digest().unwrap();
+        assert!(acquire_shared(&state, &current).is_ok());
         fs::remove_dir_all(root).unwrap();
     }
 }

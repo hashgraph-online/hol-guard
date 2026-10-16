@@ -198,9 +198,7 @@ def _export_directory(
                 "trustClass": trust_class_for(native.extension_id),
                 "claimPolicy": "provenance" if external else "project",
                 "maintainerGithubIds": listing.get("maintainerGithubIds", []),
-                "sourcePath": source[0]
-                if source
-                else "src/codex_plugin_scanner/guard/runtime/command_builtin_extension_registry.py",
+                "sourcePath": source[0] if source else f"contributions/command-sources/{native.extension_id}.json",
                 "contributionDigest": source[2] if source else None,
                 "executables": list(native.executables),
                 "actionClasses": list(native.action_classes),

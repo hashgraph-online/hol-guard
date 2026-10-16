@@ -4,6 +4,7 @@
 use std::sync::OnceLock;
 
 use regex::Regex;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -25,9 +26,21 @@ fn redirect_pattern() -> &'static Regex {
     })
 }
 
+fn decimal_digit(value: char) -> bool {
+    if value.is_ascii() {
+        return value.is_ascii_digit();
+    }
+    static DECIMAL: OnceLock<Regex> = OnceLock::new();
+    let mut bytes = [0; 4];
+    DECIMAL
+        .get_or_init(|| Regex::new(r"^\d$").expect("decimal pattern"))
+        .is_match(value.encode_utf8(&mut bytes))
+}
+
 /// `CommandRedirect` (:19-33). `start`/`end` are char offsets into the
 /// normalized source.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct CommandRedirect {
     pub operator: String,
     pub target: String,
@@ -46,7 +59,8 @@ impl CommandRedirect {
 }
 
 /// `EmbeddedCommand` (:36-51).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct EmbeddedCommand {
     /// "substitution" | "heredoc".
     pub kind: String,
@@ -68,7 +82,8 @@ impl EmbeddedCommand {
 
 /// `IdentitySegment` protocol (:54-68) — the five fields the identity digest
 /// reads off a segment.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
 pub struct IdentitySegment {
     pub tokens: Vec<String>,
     pub environment_names: Vec<String>,
@@ -127,7 +142,14 @@ pub fn extract_command_redirects(command: &str, heredocs: &[ShellHeredoc]) -> Ve
         heredocs.iter().map(|h| h.operator_start).collect();
     let mut state = ShellScanState::new();
     let mut index = 0usize;
+    let mut byte_index = 0usize;
+    let mut previous_index = 0usize;
     while index < n {
+        byte_index += chars[previous_index..index]
+            .iter()
+            .map(|c| c.len_utf8())
+            .sum::<usize>();
+        previous_index = index;
         let next_index = state.advance(&chars, index);
         if next_index != index + 1 {
             index = next_index;
@@ -138,18 +160,27 @@ pub fn extract_command_redirects(command: &str, heredocs: &[ShellHeredoc]) -> Ve
             continue;
         }
         // Emulate `pattern.match(command, index)`: lookbehind char check, then
-        // anchored regex on the char-sliced tail. Match span bytes → chars.
+        // anchored regex on a borrowed UTF-8 tail. Match span bytes → chars.
         let lookbehind_ok = index == 0 || (chars[index - 1] != '<' && chars[index - 1] != '>');
-        let tail: String = chars[index..].iter().collect();
-        let caps = if lookbehind_ok {
-            redirect_pattern().captures(&tail)
-        } else {
-            None
-        };
+        if !lookbehind_ok {
+            index += 1;
+            continue;
+        }
+        let mut operator_index = index;
+        while operator_index < n && decimal_digit(chars[operator_index]) {
+            operator_index += 1;
+        }
+        if operator_index == n || !matches!(chars[operator_index], '<' | '>') {
+            index = operator_index.max(index + 1);
+            continue;
+        }
+        let retry_index = operator_index.max(index + 1);
+        let tail = &command[byte_index..];
+        let caps = redirect_pattern().captures(tail);
         let caps = match caps {
             Some(c) => c,
             None => {
-                index += 1;
+                index = retry_index;
                 continue;
             }
         };
@@ -159,7 +190,7 @@ pub fn extract_command_redirects(command: &str, heredocs: &[ShellHeredoc]) -> Ve
         let op_end_in_tail = caps.name("operator").unwrap().end();
         let op_end_char = index + tail[..op_end_in_tail].chars().count();
         if op_end_char < n && matches!(chars[op_end_char], '<' | '>' | '&') {
-            index += 1;
+            index = retry_index;
             continue;
         }
         if heredoc_operator_starts.contains(&index) {

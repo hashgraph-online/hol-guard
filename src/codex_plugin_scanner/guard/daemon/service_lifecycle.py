@@ -8,6 +8,8 @@ import threading
 import time
 from typing import TYPE_CHECKING
 
+from .startup_phase import timed_phase
+
 _LOGGER = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
@@ -109,13 +111,15 @@ def begin_service(server: GuardDaemonServer, *, publish_before_workers: bool = F
                 server._shutdown_started.clear()
             if not startup_generation_is_current(server, generation):
                 raise RuntimeError("Guard daemon stopped during startup")
-            server._owner_lock = acquire_guard_daemon_owner_lock(server._server.store.guard_home)
-            _begin_owned_service_with_store_recovery(
-                server,
-                generation,
-                publish_before_workers=publish_before_workers,
-                continue_after_listen=not publish_before_workers,
-            )
+            with timed_phase("acquire_owner_lock"):
+                server._owner_lock = acquire_guard_daemon_owner_lock(server._server.store.guard_home)
+            with timed_phase("begin_owned_service"):
+                _begin_owned_service_with_store_recovery(
+                    server,
+                    generation,
+                    publish_before_workers=publish_before_workers,
+                    continue_after_listen=not publish_before_workers,
+                )
         if publish_before_workers:
             _complete_owned_service_after_listen_with_store_recovery(server, generation)
     except BaseException as error:
@@ -169,17 +173,6 @@ def start_serve_thread(server: GuardDaemonServer, *, already_locked: bool = Fals
         start_locked()
 
 
-def enable_full_capacity_for_generation(server: GuardDaemonServer, generation: int | None) -> None:
-    """Enable workers only while the startup generation still owns the service."""
-
-    with server._finish_service_lock:
-        if not startup_generation_is_current(server, generation):
-            raise RuntimeError("Guard daemon stopped during startup")
-        server._server.hook_process_runner.enable_full_capacity()
-        if not startup_generation_is_current(server, generation):
-            raise RuntimeError("Guard daemon stopped during startup")
-
-
 def contain_failed_service_start(
     server: GuardDaemonServer,
     error: BaseException,
@@ -219,7 +212,6 @@ def contain_failed_service_start(
 __all__ = [
     "begin_service",
     "contain_failed_service_start",
-    "enable_full_capacity_for_generation",
     "start_serve_thread",
     "startup_generation_is_current",
 ]

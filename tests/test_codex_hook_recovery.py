@@ -352,7 +352,13 @@ def test_new_owner_cannot_register_a_previous_publishers_config_inode(installed)
 
 def test_exit_after_inverse_config_replacement_retains_unknown_inode_for_recovery(installed):
     context, config, manifest = installed
-    config.write_text(config.read_text() + "\n# Preserve this original config comment during inverse.\n")
+    # Guard turns the hooks feature back on, so the next install really does
+    # rewrite this file. A stray comment alone no longer does it: Guard now
+    # edits the config in place and leaves lines like that one untouched.
+    config.write_text(
+        config.read_text().replace("hooks = true", "hooks = false")
+        + "\n# Preserve this original config comment during inverse.\n"
+    )
     crash(context, "config")
     inverse = r"""
 import os, sys

@@ -35,6 +35,12 @@ runs:
   - run: uv sync --frozen --no-dev --group ci-test --python ${{ env.CI_PYTHON_VERSION }}
     if: inputs.has-token == 'true'
     shell: bash
+  - name: Bind Sonar scan to the exact source and verified analysis context
+    if: inputs.has-token == 'true'
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.sonar_scan_context
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
   - name: Cache Sonar analyzer downloads
     uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
     with:
@@ -45,20 +51,56 @@ runs:
     shell: bash
     run: bash scripts/ci/setup_sonar_rust.sh
     if: inputs.has-token == 'true'
-  - name: Cache Rust analysis dependencies
-    uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+  - name: Select complete source-bound Rust coverage
+    id: rust-coverage-selection
+    if: inputs.has-token == 'true'
+    shell: bash
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    run: uv run --no-sync python -m scripts.ci.rust_coverage_reports select
+  - name: Download complete Rust coverage partitions
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
     with:
-      workspaces: rust
-      shared-key: sonar
-      save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      artifact-ids: ${{ steps.rust-coverage-selection.outputs.artifact-ids }}
+      path: rust-coverage-data
     if: inputs.has-token == 'true'
-  - name: Check Rust workspace with pinned Clippy
+  - name: Merge verified Rust coverage with LCOV
     shell: bash
-    run: cargo clippy --manifest-path rust/Cargo.toml --locked --workspace
+    run: |
+      if ! command -v lcov >/dev/null 2>&1; then
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends lcov
+      fi
+      uv run --no-sync pytest --noconftest -q tests/test_rust_coverage_reports.py
+      uv run --no-sync python -m scripts.ci.rust_coverage_reports merge
     if: inputs.has-token == 'true'
-  - name: Generate current-checkout Rust coverage
+  - name: Preserve merged Rust coverage evidence
+    if: inputs.has-token == 'true'
+    uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+    with:
+      name: rust-coverage-merged-${{ github.run_attempt }}
+      path: |
+        coverage-reports/rust-lcov.info
+        rust-coverage-selection.json
+      if-no-files-found: error
+      retention-days: 7
+  - name: Wait for successful current-attempt strict Clippy report
+    id: clippy-selection
     shell: bash
-    run: bash scripts/ci/prepare_sonar_rust_coverage.sh
+    run: uv run --no-sync python -m scripts.ci.clippy_report select
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    if: inputs.has-token == 'true'
+  - name: Download current-run strict Clippy report
+    uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+    with:
+      artifact-ids: ${{ steps.clippy-selection.outputs.artifact-id }}
+      path: clippy-report
+      merge-multiple: true
+    if: inputs.has-token == 'true'
+  - name: Verify strict Clippy report against analyzed checkout
+    shell: bash
+    run: uv run --no-sync python -m scripts.ci.clippy_report verify
     if: inputs.has-token == 'true'
   - name: Install pinned Sonar scanner CLI
     uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
@@ -87,17 +129,17 @@ runs:
   - name: Analyze with SonarQube Cloud
     uses: sonarsource/sonarqube-scan-action@22918119ff8e1ca75a623e15c8296b6ea4fbe28f
     with:
-      args: -Dsonar.python.analysis.threads=4
+      projectBaseDir: ""
+      args: -Dproject.settings=sonar-scan.properties -Dsonar.python.analysis.threads=4
     env:
       SONAR_USER_HOME: ${{ runner.temp }}/sonar
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
       SONAR_SCANNER_JAVA_OPTS: -Xmx6g
     if: inputs.has-token == 'true'
-  - name: Check standard Sonar gate for PRs and qualification
+  - name: Verify qualification scan identity and standard quality gate
     if: inputs.has-token == 'true' && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
-    uses: sonarsource/sonarqube-quality-gate-action@7a5fffe8e523c40e0c740b6bc2712ab503e52efa
-    with:
-      pollingTimeoutSec: 280
+    shell: bash
+    run: timeout --signal=TERM --kill-after=5s 300s python -m scripts.ci.sonar_scan_context --verify
     env:
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
   - name: SonarQube Quality Gate check
@@ -108,7 +150,7 @@ runs:
     env:
       SONAR_TOKEN: ${{ inputs.secret-sonar-token }}
   - name: Preserve analysis-specific quality evidence
-    if: always() && inputs.has-token == 'true' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: always() && inputs.has-token == 'true'
     uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
     with:
       name: sonar-quality-evidence-${{ github.run_attempt }}

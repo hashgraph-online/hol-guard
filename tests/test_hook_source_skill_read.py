@@ -11,7 +11,6 @@ import pytest
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
 from codex_plugin_scanner.guard.runtime.skill_paths import (
     PI_INLINE_RESOURCE_SCHEMES,
-    is_safe_pi_inline_resource_uri,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -151,22 +150,6 @@ def test_supported_omp_scheme_matrix_is_complete() -> None:
         "vault",
         "xd",
     } == PI_INLINE_RESOURCE_SCHEMES
-
-
-def test_omp_virtual_resource_allows_uri_query_syntax() -> None:
-    assert is_safe_pi_inline_resource_uri("MCP://https://server/resource?one=1&two=2#section")
-
-
-def test_oversized_omp_virtual_resource_is_rejected() -> None:
-    assert not is_safe_pi_inline_resource_uri(f"local://{'a' * 8193}")
-
-
-def test_deeply_encoded_omp_virtual_resource_is_rejected() -> None:
-    resource = ".."
-    for _ in range(9):
-        resource = resource.replace("%", "%25").replace(".", "%2e")
-
-    assert not is_safe_pi_inline_resource_uri(f"memory://{resource}/secret")
 
 
 def test_omp_virtual_resource_with_secret_is_blocked(context: Context) -> None:

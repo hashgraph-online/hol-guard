@@ -233,52 +233,6 @@ COMMAND_ACTIVITY_FIELDS: Final = tuple(field.name for field in fields(CommandAct
 COMMAND_ACTIVITY_MATCH_FIELDS: Final = tuple(field.name for field in fields(CommandActivityMatch))
 
 
-def validate_activity_transition(previous: CommandActivity, current: CommandActivity) -> None:
-    """Reject out-of-order, conflicting, or fact-changing lifecycle updates."""
-
-    if not isinstance(cast(object, previous), CommandActivity) or not isinstance(
-        cast(object, current), CommandActivity
-    ):
-        raise ValueError("activity transitions require exact CommandActivity values")
-    immutable_fields = (
-        "activity_id",
-        "occurred_at",
-        "harness",
-        "policy_action",
-        "decision_reason_code",
-        "controlling_rule_id",
-        "parse_confidence",
-        "uncertainty_class",
-        "match_count",
-        "prompted",
-        "approval_reuse_status",
-        "request_correlation",
-        "session_correlation",
-        "receipt_link_status",
-        "receipt_id",
-        "evaluation_latency_bucket",
-        "schema_version",
-    )
-    if any(getattr(previous, name) != getattr(current, name) for name in immutable_fields):
-        raise ValueError("activity transitions cannot change decision, identity, proof, or match facts")
-    if previous.execution_status is current.execution_status:
-        if previous != current:
-            raise ValueError("idempotent activity replay cannot change persisted fields")
-        return
-    allowed = {
-        CommandExecutionStatus.ATTEMPTED: {
-            CommandExecutionStatus.PREVENTED,
-            CommandExecutionStatus.ALLOWED_UNCONFIRMED,
-        },
-        CommandExecutionStatus.ALLOWED_UNCONFIRMED: {
-            CommandExecutionStatus.CONFIRMED_SUCCESS,
-            CommandExecutionStatus.CONFIRMED_FAILURE,
-        },
-    }
-    if current.execution_status not in allowed.get(previous.execution_status, set()):
-        raise ValueError("invalid or conflicting command activity lifecycle transition")
-
-
 def _validate_activity_state(activity: CommandActivity) -> None:
     pre_statuses = {
         CommandExecutionStatus.ATTEMPTED,

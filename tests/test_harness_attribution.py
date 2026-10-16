@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.claude_code import ClaudeCodeHarnessAdapter
 from codex_plugin_scanner.guard.runtime.harness_attribution import (
     cursor_hook_query_extras,
     cursor_runtime_detected,
@@ -71,19 +69,6 @@ def test_resolve_environment_harness_prefers_zcode_over_other_markers() -> None:
         resolve_environment_harness({"ZCODE_ENV": "production", "CLAUDECODE": "1", "CURSOR_SESSION_ID": "s-1"})
         == "zcode"
     )
-
-
-def test_claude_hook_http_url_includes_cursor_runtime_harness(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    monkeypatch.setenv("CURSOR_VERSION", "9.9.9")
-    monkeypatch.setenv("CURSOR_PROJECT_DIR", str(tmp_path / "workspace"))
-    context = HarnessContext(
-        home_dir=tmp_path / "home",
-        workspace_dir=tmp_path / "ignored",
-        guard_home=tmp_path / "guard",
-    )
-    url = ClaudeCodeHarnessAdapter._hook_http_url(context)
-    assert "runtime-harness=cursor" in url
-    assert f"workspace={tmp_path / 'workspace'}" in url.replace("%2F", "/")
 
 
 @pytest.mark.usefixtures("native_hook_force")

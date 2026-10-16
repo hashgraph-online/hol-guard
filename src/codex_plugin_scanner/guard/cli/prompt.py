@@ -202,7 +202,7 @@ def _interactive_gate_grant(
 ) -> ApprovalGateGrant | None:
     gate = public_config(store.guard_home)
     gate_input = (
-        prompt_for_approval_gate(store.guard_home)
+        prompt_for_approval_gate(store.guard_home, strict=scope == "global" or gate.strict_all_decisions)
         if gate.enabled and (action == "allow" or gate.strict_all_decisions)
         else None
     )

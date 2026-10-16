@@ -3,228 +3,53 @@
 from __future__ import annotations
 
 import base64
-import hashlib
 import json
+import logging
 import re
 import sqlite3
+from collections.abc import Sequence
+from pathlib import Path
 
 from .approval_resolution import approval_resolution_block_reason
-from .approval_scope_support import request_scope_contract_payload, supported_request_scopes
-from .decision_boundaries import canonical_approval_surfaces
-from .models import GuardApprovalRequest
-from .runtime.action_identity import normalize_command_identity
-from .runtime.browser_mcp_intent import classify_browser_operation
+from .native_approval_queue_identity import (
+    ApprovalQueueIdentityUnavailableError,
+    connection_guard_home,
+    native_approval_queue_identities,
+    queue_identity_item,
+)
+from .store_approval_projection import (
+    _optional_json_object as _optional_json_object,
+)
+from .store_approval_projection import (
+    _project_listing_rows as _project_listing_rows,
+)
+from .store_approval_projection import (
+    _row_to_approval_summary as _row_to_approval_summary,
+)
+from .store_approval_projection import (
+    _row_to_draft as _row_to_draft,
+)
+from .store_approval_projection import (
+    _row_to_payload as _row_to_payload,
+)
+from .store_approval_projection import (
+    _rows_to_payloads as _rows_to_payloads,
+)
 
-MAX_APPROVAL_PAGE_LIMIT = 200
-APPROVAL_QUEUE_PREVIEW_MAX_LENGTH = 512
+logger = logging.getLogger(__name__)
+
 APPROVAL_QUEUE_BACKFILL_BATCH_SIZE = 500
 _APPROVAL_RESOLUTION_BATCH_SIZE = 500
-_QUEUE_IDENTITY_VERSION = "v1"
-_LEGACY_BROWSER_MULTI_ELEMENT_OPERATIONS = frozenset({"drag", "drag_drop_file", "fill_form"})
-_LEGACY_BROWSER_ELEMENT_OPERATIONS = frozenset(
-    {
-        "click",
-        "fill",
-        "fill_input",
-        "focus_element",
-        "hover",
-        "select_dropdown",
-        "upload_file",
-    }
-)
-_VOLATILE_PAYLOAD_KEY_TOKENS = frozenset(
-    {
-        "callid",
-        "conversationid",
-        "messageid",
-        "model",
-        "requestid",
-        "sessionid",
-        "threadid",
-        "toolcallid",
-        "tooluseid",
-        "traceid",
-        "transcriptpath",
-        "turnid",
-    }
-)
 
 
 class InvalidApprovalCursorError(ValueError):
     pass
 
 
-def _normalized_identity_key(launch_target: str | None) -> str:
-    return normalize_command_identity(launch_target or "")
-
-
-def _browser_launch_target_for_display(value: object) -> tuple[object, str | None]:
-    """Repair legacy browser labels without changing persisted approval identity."""
-    if not isinstance(value, str):
-        return value, None
-    parts = value.split()
-    if len(parts) != 3 or parts[2] != "unknown":
-        return value, None
-    server_name, operation, _unknown = parts
-    try:
-        intent = classify_browser_operation(operation, server_name)
-    except ValueError:
-        # Display-only label repair; a native outage must not break rendering
-        # stored approvals. The decision path stays fail-closed.
-        return value, None
-    if intent is None:
-        return value, None
-
-    operation_lower = operation.lower()
-    if "network" in operation_lower:
-        target = "network request" if operation_lower.startswith(("get_", "read_")) else "network activity"
-    elif "console" in operation_lower:
-        target = "console message" if operation_lower.startswith(("get_", "read_")) else "console messages"
-    elif operation_lower in _LEGACY_BROWSER_MULTI_ELEMENT_OPERATIONS:
-        target = "page elements"
-    elif operation_lower in _LEGACY_BROWSER_ELEMENT_OPERATIONS:
-        target = "page element"
-    elif operation_lower in {"list_pages", "browser_list_pages"}:
-        target = "open pages"
-    elif operation_lower in {"select_page", "close_page", "browser_select_page", "browser_close_page"}:
-        target = "browser page"
-    else:
-        target = "current page"
-    return f"{server_name} {operation} {target}", target
-
-
-def _browser_risk_signals_for_display(signals: list[object], target: str | None) -> list[object]:
-    if target is None:
-        return signals
-    return [signal.replace("unknown target", target) if isinstance(signal, str) else signal for signal in signals]
-
-
-def _approval_queue_preview(
-    action_envelope: dict[str, object] | None,
-    launch_target: object,
-) -> str | None:
-    command = action_envelope.get("command") if action_envelope is not None else None
-    candidate = command if isinstance(command, str) and command.strip() else launch_target
-    if not isinstance(candidate, str) or not candidate.strip():
-        return None
-    normalized = candidate.strip()
-    if len(normalized) <= APPROVAL_QUEUE_PREVIEW_MAX_LENGTH:
-        return normalized
-    return f"{normalized[: APPROVAL_QUEUE_PREVIEW_MAX_LENGTH - 1]}…"
-
-
-def _approval_queue_command_category(action_envelope: dict[str, object] | None) -> str | None:
-    value = action_envelope.get("command_category") if action_envelope is not None else None
-    return value if isinstance(value, str) and value.startswith("command.") else None
-
-
 def _begin_immediate(connection: sqlite3.Connection) -> None:
     if connection.in_transaction:
         return
     connection.execute("begin immediate")
-
-
-def approval_queue_identity_for_request(request: GuardApprovalRequest) -> tuple[str, str]:
-    action_identity = request.action_identity or _build_action_identity(
-        launch_target=request.launch_target,
-        action_envelope=request.action_envelope_json,
-    )
-    queue_group_id = request.queue_group_id or _build_queue_group_id(
-        harness=request.harness,
-        workspace=request.workspace,
-        artifact_id=request.artifact_id,
-        action_identity=action_identity,
-        browser_intent=request.browser_intent,
-    )
-    return action_identity, queue_group_id
-
-
-def _build_action_identity(
-    *,
-    launch_target: str | None,
-    action_envelope: dict[str, object] | None,
-) -> str:
-    envelope = action_envelope or {}
-    command = _optional_text(envelope.get("command")) or launch_target or ""
-    payload = {
-        "version": _QUEUE_IDENTITY_VERSION,
-        "action_type": _optional_text(envelope.get("action_type")),
-        "tool_name": _optional_text(envelope.get("tool_name")),
-        "command": normalize_command_identity(command),
-        "prompt_excerpt": _optional_text(envelope.get("prompt_excerpt")),
-        "target_paths": _string_sequence(envelope.get("target_paths")),
-        "network_hosts": _string_sequence(envelope.get("network_hosts")),
-        "mcp_server": _optional_text(envelope.get("mcp_server")),
-        "mcp_tool": _optional_text(envelope.get("mcp_tool")),
-        "package_manager": None,
-        "package_name": None,
-        "script_name": _optional_text(envelope.get("script_name")),
-        "raw_payload_redacted": _stable_identity_payload(envelope.get("raw_payload_redacted")),
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
-
-
-def _build_queue_group_id(
-    *,
-    harness: str,
-    workspace: str | None,
-    artifact_id: str,
-    action_identity: str,
-    browser_intent: dict[str, object] | None = None,
-) -> str:
-    # Include browser intent identity in dedupe key when present
-    browser_identity_hash = None
-    if browser_intent is not None:
-        from .runtime.action_identity import normalize_browser_mcp_identity
-
-        browser_identity_hash = normalize_browser_mcp_identity(browser_intent)
-    payload = json.dumps(
-        {
-            "version": _QUEUE_IDENTITY_VERSION,
-            "harness": harness,
-            "workspace": workspace,
-            "artifact_id": artifact_id,
-            "action_identity": action_identity,
-            "browser_identity_hash": browser_identity_hash,
-        },
-        sort_keys=True,
-        separators=(",", ":"),
-    )
-    digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()
-    return f"approval-group:{_QUEUE_IDENTITY_VERSION}:{digest}"
-
-
-def _optional_text(value: object) -> str | None:
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _string_sequence(value: object) -> list[str]:
-    if not isinstance(value, list | tuple):
-        return []
-    return sorted(str(item) for item in value if isinstance(item, str) and item.strip())
-
-
-def _stable_identity_payload(value: object) -> object:
-    if isinstance(value, dict):
-        normalized: dict[str, object] = {}
-        for key, item in sorted(value.items()):
-            if not isinstance(key, str):
-                continue
-            if _identity_payload_key_token(key) in _VOLATILE_PAYLOAD_KEY_TOKENS:
-                continue
-            normalized[key] = _stable_identity_payload(item)
-        return normalized
-    if isinstance(value, list | tuple):
-        return [_stable_identity_payload(item) for item in value]
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
-    return str(value)
-
-
-def _identity_payload_key_token(key: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", key.lower())
 
 
 def approval_schema_statement() -> str:
@@ -267,6 +92,7 @@ def approval_schema_statement() -> str:
           desktop_notified_at text,
           raw_command_text text,
           continuation_snapshot_json text,
+          extension_allow_hint_json text,
           guard_version text,
           first_seen_guard_version text,
           last_seen_guard_version text,
@@ -283,17 +109,25 @@ def approval_schema_statement() -> str:
         """
 
 
-def add_approval_request(
-    connection: sqlite3.Connection,
-    request: GuardApprovalRequest,
-    now: str,
-    *,
-    oauth_source: str = "default",
-) -> str:
-    """Compatibility facade for the focused approval write service."""
-    from .store_approval_writes import add_approval_request as persist_approval_request
-
-    return persist_approval_request(connection, request, now, oauth_source=oauth_source)
+_APPROVAL_COLUMNS = """
+    request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
+    recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace, launch_target,
+    normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
+    risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
+    launch_summary, risk_headline, action_envelope_json, decision_v2_json,
+    fallback_cli_command, scanner_evidence_json, watch_only_observation,
+    browser_intent_json, continuation_snapshot_json, review_command,
+    approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
+    raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
+"""
+_SUMMARY_COLUMNS = """
+    request_id, harness, artifact_id, artifact_name, artifact_type, policy_action, decision_v2_json,
+    action_envelope_json, changed_fields_json, source_scope, config_path, workspace, launch_target,
+    risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count, raw_command_text,
+    fallback_cli_command, watch_only_observation, review_command, created_at, last_seen_at, status
+"""
+_REMAINING_SUMMARIES = 10
+_SUPERSEDED_PREFIX = "superseded_by_fresh_review:"
 
 
 def list_approval_requests(
@@ -302,64 +136,25 @@ def list_approval_requests(
     status: str | None = "pending",
     harness: str | None = None,
     limit: int | None = 50,
-    before_cursor: str | None = None,
-    cursor: str | None = None,
-    search: str | None = None,
-    created_after: str | None = None,
-    created_before: str | None = None,
 ) -> list[dict[str, object]]:
-    clauses = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if before_cursor is not None:
-        clauses.append("last_seen_at < ?")
-        params.append(before_cursor)
-    if cursor is not None:
-        marker = _decode_page_cursor(cursor)
-        if marker is None:
-            raise InvalidApprovalCursorError("invalid approval queue cursor")
-        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
-        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
-    if created_after is not None:
-        clauses.append("created_at > ?")
-        params.append(created_after)
-    if created_before is not None:
-        clauses.append("created_at < ?")
-        params.append(created_before)
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    query = f"""
-        select request_id, harness, artifact_id, artifact_name, artifact_type, artifact_hash, publisher, policy_action,
-               recommended_scope, changed_fields_json, source_scope, oauth_source, config_path, workspace,
-                launch_target,
-                normalized_identity_key, action_identity, queue_group_id, dedupe_count, last_seen_at, transport,
-                risk_summary, risk_signals_json, artifact_label, source_label, trigger_summary, why_now,
-                launch_summary, risk_headline, action_envelope_json, decision_v2_json,
-                fallback_cli_command, scanner_evidence_json, watch_only_observation,
-                browser_intent_json, continuation_snapshot_json,
-                review_command,
-                approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at,
-                raw_command_text, guard_version, first_seen_guard_version, last_seen_guard_version
-        from approval_requests
-        {where_clause}
-        order by last_seen_at desc, request_id desc
-    """
-    if limit is None:
-        rows = connection.execute(query, params).fetchall()
-    else:
-        rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
-    return [_row_to_payload(row) for row in rows]
+    """Queue payloads read inside a caller's transaction; `GuardStore` reads natively."""
+
+    filters = [(column, value) for column, value in (("status", status), ("harness", harness)) if value is not None]
+    where_clause = f"where {' and '.join(f'{column} = ?' for column, _ in filters)}" if filters else ""
+    params: list[object] = [value for _, value in filters]
+    query = (
+        f"select {_APPROVAL_COLUMNS} from approval_requests {where_clause} order by last_seen_at desc, request_id desc"
+    )
+    if limit is not None:
+        query += " limit ?"
+        params.append(limit)
+    rows = connection.execute(query, params).fetchall()
+    return _rows_to_payloads(rows, guard_home=connection_guard_home(connection))
 
 
-def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dict[str, object] | None:
+def get_approval_request(
+    connection: sqlite3.Connection, request_id: str, *, derive_scope: bool = True
+) -> dict[str, object] | None:
     columns = _approval_columns(connection)
     row = connection.execute(
         f"""
@@ -383,6 +178,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
                 {_column_expr(columns, "watch_only_observation", "0")},
                 {_column_expr(columns, "browser_intent_json", "NULL")}, review_command,
                 {_column_expr(columns, "continuation_snapshot_json", "NULL")},
+                {_column_expr(columns, "extension_allow_hint_json", "NULL")},
                 approval_url, status, resolution_action, resolution_scope, reason, created_at, resolved_at
         from approval_requests
         where request_id = ?
@@ -391,7 +187,13 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
     ).fetchone()
     if row is None:
         return None
-    payload = _row_to_payload(row)
+    guard_home = connection_guard_home(connection)
+    if derive_scope:
+        payload = _row_to_payload(row, guard_home=guard_home)
+    else:
+        payload, contract_error = _row_to_draft(row, _project_listing_rows([row], guard_home=guard_home)[0])
+        if contract_error is not None:
+            payload["decision_contract_error"] = contract_error
     reason = row["reason"]
     if (
         row["status"] == "expired"
@@ -416,13 +218,7 @@ def get_approval_request(connection: sqlite3.Connection, request_id: str) -> dic
             ).fetchone()
             if (
                 candidate is not None
-                and canonical_approval_surfaces(
-                    candidate[0],
-                    _optional_json_object(candidate[1]) or candidate[1],
-                    _optional_json_object(candidate[2]) or candidate[2],
-                    reject_contradiction=False,
-                ).contract_error
-                is None
+                and _project_listing_rows([candidate], guard_home=guard_home)[0].contract_error is None
             ):
                 payload["superseded_by_request_id"] = replacement
     return payload
@@ -437,200 +233,6 @@ def _column_expr(existing: set[str], column_name: str, fallback_sql: str) -> str
     if column_name in existing:
         return column_name
     return f"{fallback_sql} as {column_name}"
-
-
-def _approval_search_clause(search: str) -> tuple[str, list[object]]:
-    pattern = f"%{search}%"
-    columns = [
-        "artifact_name",
-        "artifact_id",
-        "risk_summary",
-        "risk_headline",
-        "trigger_summary",
-        "why_now",
-        "launch_summary",
-        "launch_target",
-        "raw_command_text",
-        "fallback_cli_command",
-        "review_command",
-        "action_identity",
-        "action_envelope_json",
-        "decision_v2_json",
-        "config_path",
-    ]
-    return (
-        "(" + " or ".join(f"lower(coalesce({column}, '')) like lower(?)" for column in columns) + ")",
-        [pattern] * len(columns),
-    )
-
-
-def resolve_approval_request(
-    connection: sqlite3.Connection,
-    request_id: str,
-    *,
-    resolution_action: str,
-    resolution_scope: str,
-    reason: str | None,
-    resolved_at: str,
-) -> None:
-    connection.execute(
-        """
-        update approval_requests
-        set status = 'resolved',
-            resolution_action = ?,
-            resolution_scope = ?,
-            reason = ?,
-            resolved_at = ?
-        where request_id = ?
-        """,
-        (resolution_action, resolution_scope, reason, resolved_at, request_id),
-    )
-
-
-def count_approval_requests(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    harness: str | None = None,
-    search: str | None = None,
-    resolved_at_from: str | None = None,
-    resolved_at_before: str | None = None,
-    exclude_watch_only: bool = False,
-) -> int:
-    clauses = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    if resolved_at_from is not None:
-        clauses.append("resolved_at >= ?")
-        params.append(resolved_at_from)
-    if resolved_at_before is not None:
-        clauses.append("resolved_at < ?")
-        params.append(resolved_at_before)
-    if exclude_watch_only:
-        clauses.append("watch_only_observation = 0")
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    row = connection.execute(f"select count(*) as total from approval_requests {where_clause}", params).fetchone()
-    return int(row["total"]) if row is not None else 0
-
-
-def _row_to_payload(row: sqlite3.Row) -> dict[str, object]:
-    parsed_decision_v2 = _optional_json_object(row["decision_v2_json"])
-    parsed_action_envelope = _optional_json_object(row["action_envelope_json"])
-    canonical_decision = canonical_approval_surfaces(
-        row["policy_action"],
-        parsed_decision_v2 if parsed_decision_v2 is not None else row["decision_v2_json"],
-        parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
-        reject_contradiction=False,
-    )
-    launch_target, browser_target = _browser_launch_target_for_display(row["launch_target"])
-    risk_signals = _browser_risk_signals_for_display(_safe_json_list(row["risk_signals_json"]), browser_target)
-    payload: dict[str, object] = {
-        "request_id": str(row["request_id"]),
-        "harness": str(row["harness"]),
-        "artifact_id": str(row["artifact_id"]),
-        "artifact_name": str(row["artifact_name"]),
-        "artifact_type": str(row["artifact_type"]),
-        "artifact_hash": str(row["artifact_hash"]),
-        "publisher": row["publisher"],
-        "policy_action": canonical_decision.policy_action,
-        "recommended_scope": str(row["recommended_scope"]),
-        "changed_fields": _safe_json_list(row["changed_fields_json"]),
-        "source_scope": str(row["source_scope"]),
-        "oauth_source": row["oauth_source"],
-        "config_path": str(row["config_path"]),
-        "workspace": row["workspace"],
-        "launch_target": launch_target,
-        "normalized_identity_key": row["normalized_identity_key"],
-        "action_identity": row["action_identity"],
-        "queue_group_id": row["queue_group_id"],
-        "dedupe_count": int(row["dedupe_count"] or 1),
-        "last_seen_at": row["last_seen_at"],
-        "display_status": str(row["status"]),
-        "resolution_intent": row["resolution_action"],
-        "transport": row["transport"],
-        "risk_summary": row["risk_summary"],
-        "risk_signals": risk_signals,
-        "artifact_label": row["artifact_label"],
-        "source_label": row["source_label"],
-        "trigger_summary": row["trigger_summary"],
-        "why_now": row["why_now"],
-        "launch_summary": row["launch_summary"],
-        "risk_headline": row["risk_headline"],
-        "action_envelope_json": canonical_decision.action_envelope_json,
-        "decision_v2_json": canonical_decision.decision_v2_json,
-        "fallback_cli_command": row["fallback_cli_command"],
-        "raw_command_text": row["raw_command_text"],
-        "guard_version": row["guard_version"],
-        "first_seen_guard_version": row["first_seen_guard_version"],
-        "last_seen_guard_version": row["last_seen_guard_version"],
-        "watch_only_observation": bool(row["watch_only_observation"]),
-        "scanner_evidence": _json_object_list(row["scanner_evidence_json"]),
-        "browser_intent": _json_object(row["browser_intent_json"]),
-        "continuation_snapshot": _json_object(row["continuation_snapshot_json"]),
-        "review_command": str(row["review_command"]),
-        "approval_url": str(row["approval_url"]),
-        "status": str(row["status"]),
-        "resolution_action": row["resolution_action"],
-        "resolution_scope": row["resolution_scope"],
-        "reason": row["reason"],
-        "created_at": str(row["created_at"]),
-        "resolved_at": row["resolved_at"],
-    }
-    payload.update(request_scope_contract_payload(payload))
-    if canonical_decision.contract_error is not None:
-        payload["decision_contract_error"] = canonical_decision.contract_error
-    payload["allowed_scopes"] = list(supported_request_scopes(payload))
-    recommendations = payload["recommended_scope_by_action"]
-    if isinstance(recommendations, dict):
-        payload["recommended_scope"] = recommendations.get("allow")
-    decision_v2 = payload.get("decision_v2_json")
-    if isinstance(decision_v2, dict):
-        payload["decision_v2_json"] = {
-            **decision_v2,
-            "approval_scopes": list(payload["allowed_scopes"]),
-        }
-    return payload
-
-
-def _safe_json_list(value: object) -> list[object]:
-    if value is None:
-        return []
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return []
-    return list(parsed) if isinstance(parsed, list) else []
-
-
-def _json_object(value: object) -> dict[str, object] | None:
-    if value is None:
-        return None
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
-    return dict(parsed) if isinstance(parsed, dict) else None
-
-
-def _json_object_list(value: object) -> list[dict[str, object]]:
-    if value is None:
-        return []
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return []
-    if not isinstance(parsed, list):
-        return []
-    return [dict(item) for item in parsed if isinstance(item, dict)]
 
 
 def approval_index_statements() -> list[str]:
@@ -668,224 +270,19 @@ def approval_index_statements() -> list[str]:
     ]
 
 
-def list_pending_approval_summaries(
-    connection: sqlite3.Connection,
-    *,
-    limit: int = 50,
-    cursor: str | None = None,
-    harness: str | None = None,
-    search: str | None = None,
-    include_totals: bool = True,
-    exclude_watch_only: bool = False,
-) -> dict[str, object]:
-    return list_approval_request_page(
-        connection,
-        status="pending",
-        limit=limit,
-        cursor=cursor,
-        harness=harness,
-        search=search,
-        include_totals=include_totals,
-        exclude_watch_only=exclude_watch_only,
-    )
+def _pending_summaries(connection: sqlite3.Connection) -> tuple[list[dict[str, object]], int]:
+    """The first pending summaries and the pending count, read inside a caller's transaction."""
 
-
-def _approval_summary_where_clause(
-    *,
-    status: str | None,
-    harness: str | None,
-    cursor: str | None,
-    search: str | None,
-    exclude_watch_only: bool,
-) -> tuple[str, list[object]]:
-    clauses: list[str] = []
-    params: list[object] = []
-    if status is not None:
-        clauses.append("status = ?")
-        params.append(status)
-    if harness is not None:
-        clauses.append("harness = ?")
-        params.append(harness)
-    if cursor is not None:
-        marker = _decode_page_cursor(cursor)
-        if marker is None:
-            raise InvalidApprovalCursorError("invalid approval queue cursor")
-        clauses.append("(last_seen_at < ? or (last_seen_at = ? and request_id < ?))")
-        params.extend([marker["last_seen_at"], marker["last_seen_at"], marker["request_id"]])
-    if search is not None:
-        search_clause, search_params = _approval_search_clause(search)
-        clauses.append(search_clause)
-        params.extend(search_params)
-    if exclude_watch_only:
-        clauses.append("watch_only_observation = 0")
-    where_clause = f"where {' and '.join(clauses)}" if clauses else ""
-    return where_clause, params
-
-
-def _row_to_approval_summary(row: sqlite3.Row) -> dict[str, object]:
-    parsed_decision_v2 = _optional_json_object(row["decision_v2_json"])
-    parsed_action_envelope = _optional_json_object(row["action_envelope_json"])
-    canonical_decision = canonical_approval_surfaces(
-        row["policy_action"],
-        parsed_decision_v2 if parsed_decision_v2 is not None else row["decision_v2_json"],
-        parsed_action_envelope if parsed_action_envelope is not None else row["action_envelope_json"],
-        reject_contradiction=False,
-    )
-    launch_target, _browser_target = _browser_launch_target_for_display(row["launch_target"])
-    action_envelope = canonical_decision.action_envelope_json
-    payload: dict[str, object] = {
-        "request_id": str(row["request_id"]),
-        "harness": str(row["harness"]),
-        "artifact_id": str(row["artifact_id"]),
-        "artifact_name": str(row["artifact_name"]),
-        "artifact_type": str(row["artifact_type"]),
-        "policy_action": canonical_decision.policy_action,
-        "changed_fields": _safe_json_list(row["changed_fields_json"]),
-        "source_scope": str(row["source_scope"]),
-        "config_path": str(row["config_path"]),
-        "workspace": row["workspace"],
-        "launch_target": launch_target,
-        "queue_preview": _approval_queue_preview(action_envelope, launch_target),
-        "queue_command_category": _approval_queue_command_category(action_envelope),
-        "risk_summary": row["risk_summary"],
-        "risk_headline": row["risk_headline"],
-        "raw_command_text": row["raw_command_text"],
-        "fallback_cli_command": row["fallback_cli_command"],
-        "review_command": str(row["review_command"]),
-        "action_identity": row["action_identity"],
-        "queue_group_id": row["queue_group_id"],
-        "dedupe_count": int(row["dedupe_count"] or 1),
-        "watch_only_observation": bool(row["watch_only_observation"]),
-        "created_at": str(row["created_at"]),
-        "last_seen_at": row["last_seen_at"],
-        "display_status": str(row["status"]),
-    }
-    if canonical_decision.contract_error is not None:
-        payload["decision_contract_error"] = canonical_decision.contract_error
-    return payload
-
-
-def list_approval_request_summary_rows(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    harness: str | None = None,
-    limit: int | None = 50,
-    cursor: str | None = None,
-    search: str | None = None,
-    exclude_watch_only: bool = False,
-) -> list[dict[str, object]]:
-    where_clause, params = _approval_summary_where_clause(
-        status=status,
-        harness=harness,
-        cursor=cursor,
-        search=search,
-        exclude_watch_only=exclude_watch_only,
-    )
-    query = f"""
-        select request_id, harness, artifact_id, artifact_name, artifact_type, policy_action,
-               decision_v2_json, action_envelope_json,
-               changed_fields_json, source_scope, config_path, workspace, launch_target,
-               risk_summary, risk_headline, action_identity, queue_group_id, dedupe_count,
-               raw_command_text, fallback_cli_command, watch_only_observation,
-               review_command, created_at, last_seen_at, status
-        from approval_requests
-        {where_clause}
-        order by last_seen_at desc, request_id desc
-    """
-    if limit is None:
-        rows = connection.execute(query, params).fetchall()
-    else:
-        rows = connection.execute(f"{query}\nlimit ?", (*params, limit)).fetchall()
-    return [_row_to_approval_summary(row) for row in rows]
-
-
-def list_approval_request_page(
-    connection: sqlite3.Connection,
-    *,
-    status: str | None = "pending",
-    limit: int = 50,
-    cursor: str | None = None,
-    harness: str | None = None,
-    search: str | None = None,
-    include_totals: bool = True,
-    exclude_watch_only: bool = False,
-) -> dict[str, object]:
-    page_limit = min(MAX_APPROVAL_PAGE_LIMIT, max(1, limit))
-    rows = list_approval_request_summary_rows(
-        connection,
-        status=status,
-        harness=harness,
-        limit=page_limit + 1,
-        cursor=cursor,
-        search=search,
-        exclude_watch_only=exclude_watch_only,
-    )
-    items = rows[:page_limit]
-    next_cursor = _encode_page_cursor(items[-1]) if len(rows) > page_limit and items else None
-    payload: dict[str, object] = {
-        "items": items,
-        "next_cursor": next_cursor,
-        "status": status or "all",
-    }
-    if include_totals:
-        if status == "pending":
-            pending_total = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_pending_count"] = pending_total
-            payload["total_count"] = pending_total
-        elif status == "resolved":
-            resolved_total = count_approval_requests(
-                connection,
-                status="resolved",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_count"] = resolved_total
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-        elif status is None:
-            payload["total_count"] = count_approval_requests(
-                connection,
-                status=None,
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-        else:
-            payload["total_pending_count"] = count_approval_requests(
-                connection,
-                status="pending",
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-            payload["total_count"] = count_approval_requests(
-                connection,
-                status=status,
-                harness=harness,
-                search=search,
-                exclude_watch_only=exclude_watch_only,
-            )
-    return payload
+    rows = connection.execute(
+        f"select {_SUMMARY_COLUMNS} from approval_requests where status = 'pending' "
+        "order by last_seen_at desc, request_id desc limit ?",
+        (_REMAINING_SUMMARIES + 1,),
+    ).fetchall()
+    # Every fetched row is projected, as the page read that came before did.
+    projections = _project_listing_rows(rows, guard_home=connection_guard_home(connection))
+    summaries = [_row_to_approval_summary(row, projection) for row, projection in zip(rows, projections, strict=True)]
+    total = connection.execute("select count(*) from approval_requests where status = 'pending'").fetchone()
+    return summaries[:_REMAINING_SUMMARIES], int(total[0])
 
 
 def get_next_pending_request(
@@ -967,69 +364,175 @@ def resolve_request_with_queue_result(
     )
     updated = get_approval_request(connection, request_id)
     next_request = get_next_pending_request(connection, exclude_ids={request_id, *duplicate_ids})
-    remaining_page = list_pending_approval_summaries(connection, limit=10)
-    remaining_count_value = remaining_page.get("total_pending_count")
-    remaining_count = int(remaining_count_value) if isinstance(remaining_count_value, int) else 0
+    remaining_summaries, remaining_count = _pending_summaries(connection)
     return {
         "resolved": True,
         "item": updated,
         "resolved_request": updated,
         "remaining_pending_count": remaining_count,
         "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_page["items"],
+        "remaining_pending_summaries": remaining_summaries,
         "resolved_duplicate_ids": duplicate_ids,
         "resolution_summary": _resolution_summary(remaining_count),
         "retry_hint": "Retry the action in your AI assistant if you approved it.",
     }
 
 
-def backfill_approval_queue_columns(connection: sqlite3.Connection) -> None:
-    while True:
-        rows = connection.execute(
-            """
+def _backfill_queue_counters(connection: sqlite3.Connection) -> None:
+    """Fill the counters that need no identity when the resident cannot serve one."""
+
+    connection.execute(
+        """
+        update approval_requests
+        set dedupe_count = case when dedupe_count is null or dedupe_count < 1 then 1 else dedupe_count end,
+            last_seen_at = coalesce(last_seen_at, created_at)
+        where last_seen_at is null
+           or dedupe_count is null
+           or dedupe_count < 1
+        """
+    )
+
+
+def _legacy_queue_rows(connection: sqlite3.Connection, *, after: tuple[str, str] | None) -> list[sqlite3.Row]:
+    predicate = ""
+    parameters: list[object] = []
+    if after is not None:
+        predicate = "and (created_at > ? or (created_at = ? and request_id > ?))"
+        parameters.extend((after[0], after[0], after[1]))
+    parameters.append(APPROVAL_QUEUE_BACKFILL_BATCH_SIZE)
+    return list(
+        connection.execute(
+            f"""
             select request_id, harness, artifact_id, workspace, launch_target, action_envelope_json,
                    action_identity, queue_group_id, dedupe_count, last_seen_at, created_at
             from approval_requests
-            where action_identity is null
-               or queue_group_id is null
-               or last_seen_at is null
-               or dedupe_count is null
-               or dedupe_count < 1
+            where (
+                action_identity is null
+                or queue_group_id is null
+                or last_seen_at is null
+                or dedupe_count is null
+                or dedupe_count < 1
+            )
+            {predicate}
             order by created_at asc, request_id asc
             limit ?
             """,
-            (APPROVAL_QUEUE_BACKFILL_BATCH_SIZE,),
+            parameters,
         ).fetchall()
+    )
+
+
+def _identity_items(rows: list[sqlite3.Row]) -> list[dict[str, object]]:
+    return [
+        queue_identity_item(
+            launch_target=row["launch_target"],
+            harness=str(row["harness"]),
+            workspace=row["workspace"],
+            artifact_id=str(row["artifact_id"]),
+            envelope=_optional_json_object(row["action_envelope_json"]),
+            browser_intent=None,
+            action_identity=row["action_identity"],
+            queue_group_id=row["queue_group_id"],
+        )
+        for row in rows
+    ]
+
+
+def _queue_identities_for_rows(rows: list[sqlite3.Row], guard_home: Path) -> tuple[dict[str, tuple[str, str]], bool]:
+    """Identify ``rows``. The bool is true when the resident never answered.
+
+    A rejected batch is halved and then tried one row at a time. A row that is
+    still rejected is omitted. An unavailable resident stops the split so a
+    down runtime is not retried once per legacy row.
+    """
+
+    if not rows:
+        return {}, False
+    try:
+        derived = native_approval_queue_identities(
+            _identity_items(rows),
+            guard_home=guard_home,
+            provision=False,
+        )
+    except ApprovalQueueIdentityUnavailableError as error:
+        if error.reason != "rejected":
+            return {}, True
+        if len(rows) == 1:
+            return {}, False
+        midpoint = len(rows) // 2
+        left, left_unavailable = _queue_identities_for_rows(rows[:midpoint], guard_home)
+        if left_unavailable:
+            return left, True
+        right, right_unavailable = _queue_identities_for_rows(rows[midpoint:], guard_home)
+        left.update(right)
+        return left, right_unavailable
+    return {
+        str(row["request_id"]): (identity.action_identity, identity.queue_group_id)
+        for row, identity in zip(rows, derived, strict=True)
+    }, False
+
+
+def _apply_backfill_updates(
+    connection: sqlite3.Connection,
+    rows: list[sqlite3.Row],
+    identities: dict[str, tuple[str, str]],
+) -> None:
+    for row in rows:
+        action_identity, queue_group_id = identities.get(
+            str(row["request_id"]), (row["action_identity"], row["queue_group_id"])
+        )
+        connection.execute(
+            """
+            update approval_requests
+            set action_identity = ?,
+                queue_group_id = ?,
+                dedupe_count = ?,
+                last_seen_at = ?
+            where request_id = ?
+            """,
+            (
+                action_identity,
+                queue_group_id,
+                max(1, int(row["dedupe_count"] or 1)),
+                row["last_seen_at"] or row["created_at"],
+                row["request_id"],
+            ),
+        )
+
+
+def backfill_approval_queue_columns(connection: sqlite3.Connection) -> bool:
+    """Fill legacy queue identities inside the schema migration's transaction.
+
+    Returns True when every selected row was identified, or the only rows left
+    unidentified were rejected. Returns False when the resident was unavailable
+    or no home could be resolved; the resident's queue write fills the rest. A
+    rejected row stays unidentified and is skipped; later rows still run.
+    """
+
+    complete = True
+    after: tuple[str, str] | None = None
+    while True:
+        rows = _legacy_queue_rows(connection, after=after)
         if not rows:
-            return
-        for row in rows:
-            action_identity = row["action_identity"] or _build_action_identity(
-                launch_target=row["launch_target"],
-                action_envelope=_optional_json_object(row["action_envelope_json"]),
-            )
-            queue_group_id = row["queue_group_id"] or _build_queue_group_id(
-                harness=str(row["harness"]),
-                workspace=row["workspace"],
-                artifact_id=str(row["artifact_id"]),
-                action_identity=str(action_identity),
-            )
-            connection.execute(
-                """
-                update approval_requests
-                set action_identity = ?,
-                    queue_group_id = ?,
-                    dedupe_count = ?,
-                    last_seen_at = ?
-                where request_id = ?
-                """,
-                (
-                    action_identity,
-                    queue_group_id,
-                    max(1, int(row["dedupe_count"] or 1)),
-                    row["last_seen_at"] or row["created_at"],
-                    row["request_id"],
-                ),
-            )
+            return complete
+        missing = [row for row in rows if not row["action_identity"] or not row["queue_group_id"]]
+        identities: dict[str, tuple[str, str]] = {}
+        if missing:
+            # The identity is derived natively. Without a resident the rows keep
+            # their legacy shape, which the duplicate lookup already handles.
+            resolved_home = connection_guard_home(connection)
+            if resolved_home is None:
+                _backfill_queue_counters(connection)
+                return False
+            found, unavailable = _queue_identities_for_rows(missing, resolved_home)
+            identities = found
+            _apply_backfill_updates(connection, rows, identities)
+            if unavailable:
+                _backfill_queue_counters(connection)
+                return False
+        else:
+            _apply_backfill_updates(connection, rows, identities)
+        after = (str(rows[-1]["created_at"]), str(rows[-1]["request_id"]))
 
 
 def resolve_matching_duplicate_requests(
@@ -1058,15 +561,7 @@ def resolve_matching_duplicate_requests(
         """,
         (queue_group_id, oauth_source, request_id),
     ).fetchall()
-    resolvable_ids = [
-        str(row["request_id"])
-        for row in rows
-        if approval_request_surfaces_are_resolvable(
-            row["policy_action"],
-            row["decision_v2_json"],
-            row["action_envelope_json"],
-        )
-    ]
+    resolvable_ids = resolvable_approval_request_ids(connection, rows)
     _resolve_request_ids(
         connection,
         resolvable_ids,
@@ -1078,25 +573,23 @@ def resolve_matching_duplicate_requests(
     return resolvable_ids
 
 
-def approval_request_surfaces_are_resolvable(
-    policy_action: object,
-    decision_v2_json: object,
-    action_envelope_json: object,
-) -> bool:
-    """Return whether raw persisted approval surfaces form a resolvable row."""
+def resolvable_approval_request_ids(connection: sqlite3.Connection, rows: Sequence[sqlite3.Row]) -> list[str]:
+    """Return, in order, the pending rows whose persisted surfaces are resolvable.
 
-    parsed_decision_v2 = _optional_json_object(decision_v2_json)
-    parsed_action_envelope = _optional_json_object(action_envelope_json)
-    canonical_decision = canonical_approval_surfaces(
-        policy_action,
-        parsed_decision_v2 if parsed_decision_v2 is not None else decision_v2_json,
-        parsed_action_envelope if parsed_action_envelope is not None else action_envelope_json,
-        reject_contradiction=False,
-    )
-    request: dict[str, object] = {"policy_action": canonical_decision.policy_action}
-    if canonical_decision.contract_error is not None:
-        request["decision_contract_error"] = canonical_decision.contract_error
-    return approval_resolution_block_reason(request) is None
+    One batched projection in the connection's Guard home covers every row, so a
+    scope sweep holds the write lock for a bounded number of resident calls and an
+    unreadable row reads as inconsistent instead of aborting the sweep.
+    """
+
+    projections = _project_listing_rows(list(rows), guard_home=connection_guard_home(connection))
+    resolvable: list[str] = []
+    for row, projection in zip(rows, projections, strict=True):
+        request: dict[str, object] = {"policy_action": projection.policy_action}
+        if projection.contract_error is not None:
+            request["decision_contract_error"] = projection.contract_error
+        if approval_resolution_block_reason(request) is None:
+            resolvable.append(str(row["request_id"]))
+    return resolvable
 
 
 def _resolve_request_ids(
@@ -1124,38 +617,6 @@ def _resolve_request_ids(
             """,
             (resolution_action, resolution_scope, reason, resolved_at, *chunk),
         )
-
-
-def _approval_summary(item: dict[str, object]) -> dict[str, object]:
-    return {
-        "request_id": item["request_id"],
-        "harness": item["harness"],
-        "artifact_id": item["artifact_id"],
-        "artifact_name": item["artifact_name"],
-        "artifact_type": item["artifact_type"],
-        "policy_action": item["policy_action"],
-        "source_scope": item["source_scope"],
-        "config_path": item["config_path"],
-        "workspace": item["workspace"],
-        "launch_target": item["launch_target"],
-        "risk_summary": item["risk_summary"],
-        "risk_headline": item["risk_headline"],
-        "action_identity": item["action_identity"],
-        "queue_group_id": item["queue_group_id"],
-        "dedupe_count": item["dedupe_count"],
-        "created_at": item["created_at"],
-        "last_seen_at": item["last_seen_at"],
-        "display_status": item["display_status"],
-    }
-
-
-def _encode_page_cursor(item: dict[str, object]) -> str:
-    raw = json.dumps(
-        {"last_seen_at": item["last_seen_at"], "request_id": item["request_id"]},
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
 def _decode_page_cursor(cursor: str) -> dict[str, str] | None:
@@ -1188,16 +649,15 @@ def _unresolved_queue_result(
     error: str,
     item: dict[str, object] | None = None,
 ) -> dict[str, object]:
-    remaining_page = list_pending_approval_summaries(connection, limit=10)
+    remaining_summaries, remaining_count = _pending_summaries(connection)
     next_request = get_next_pending_request(connection)
-    remaining_count_value = remaining_page.get("total_pending_count")
     return {
         "resolved": False,
         "error": error,
         "item": item,
-        "remaining_pending_count": int(remaining_count_value) if isinstance(remaining_count_value, int) else 0,
+        "remaining_pending_count": remaining_count,
         "next_selectable_request_id": next_request["request_id"] if next_request is not None else None,
-        "remaining_pending_summaries": remaining_page["items"],
+        "remaining_pending_summaries": remaining_summaries,
         "resolved_duplicate_ids": [],
         "resolution_summary": "Request was not resolved.",
         "retry_hint": "Refresh the approval queue and choose an active request.",
@@ -1229,72 +689,3 @@ def bulk_resolve_approval_requests(
         """,
         [resolution_action, resolution_scope, reason, resolved_at, *request_ids],
     )
-
-
-def clear_approval_requests_by_harness(connection: sqlite3.Connection, harness: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where harness = ? and status = 'resolved'",
-        (harness,),
-    )
-    return cursor.rowcount
-
-
-def clear_approval_requests_by_workspace(connection: sqlite3.Connection, workspace: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where workspace = ? and status = 'resolved'",
-        (workspace,),
-    )
-    return cursor.rowcount
-
-
-def clear_approval_requests_by_scope(connection: sqlite3.Connection, source_scope: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where source_scope = ? and status = 'resolved'",
-        (source_scope,),
-    )
-    return cursor.rowcount
-
-
-def clear_resolved_approval_requests_before(connection: sqlite3.Connection, before_timestamp: str) -> int:
-    cursor = connection.execute(
-        "delete from approval_requests where status = 'resolved' and resolved_at < ?",
-        (before_timestamp,),
-    )
-    return cursor.rowcount
-
-
-def compact_approval_requests(connection: sqlite3.Connection) -> int:
-    rows = connection.execute(
-        """
-        select artifact_id, max(created_at) as latest_created
-        from approval_requests
-        where status = 'resolved'
-        group by artifact_id
-        having count(*) > 1
-        """
-    ).fetchall()
-    total_removed = 0
-    for row in rows:
-        cursor = connection.execute(
-            """
-            delete from approval_requests
-            where artifact_id = ?
-              and status = 'resolved'
-              and created_at < ?
-            """,
-            (row["artifact_id"], row["latest_created"]),
-        )
-        total_removed += cursor.rowcount
-    return total_removed
-
-
-def _optional_json_object(value: object) -> dict[str, object] | None:
-    if value is None:
-        return None
-    try:
-        parsed = json.loads(str(value))
-    except (json.JSONDecodeError, TypeError, ValueError):
-        return None
-    if isinstance(parsed, dict):
-        return {str(key): item for key, item in parsed.items() if isinstance(key, str)}
-    return None

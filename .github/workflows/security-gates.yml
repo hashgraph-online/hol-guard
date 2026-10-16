@@ -27,7 +27,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -53,7 +53,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -79,7 +79,7 @@ jobs:
           docker run --rm
           -v "$PWD/.github/tools/mcpb-cli:/workdir:ro"
           -v "$RUNNER_TEMP/mcpb-forge-openvex.json:/verified-openvex.json:ro"
-          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
@@ -92,7 +92,7 @@ jobs:
         run: >
           docker run --rm
           -v "$PWD:/workdir"
-          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
@@ -197,6 +197,7 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: >-
           gitleaks git
+          --verbose
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
           --no-banner
           --redact

@@ -6,9 +6,9 @@ from __future__ import annotations
 
 import importlib
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
-from ..local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
+from ..native_hook_authority_state import flag_field, hook_authority_state, keys_field, object_field
 
 if TYPE_CHECKING:
     from ._commands_shared import (
@@ -88,12 +88,6 @@ def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None 
         output_stream.write("")
 
 
-def _claude_permission_notice_state_key(session_id: str, tool_name: str | None = None) -> str:
-    if tool_name is not None:
-        return f"claude_permission_notice:{session_id}:{tool_name}"
-    return f"claude_permission_notice:{session_id}"
-
-
 def _claude_pending_permission_index_key(session_id: str) -> str:
     return f"claude_pending_permissions:{session_id}"
 
@@ -103,248 +97,8 @@ def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> s
     return f"claude_pending_permission:{session_id}:{fingerprint}"
 
 
-_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS = 30 * 60
-_CLAUDE_NOTICE_INTEGRITY_PURPOSE = "claude-permission-notice"
-_CLAUDE_PENDING_INTEGRITY_PURPOSE = "claude-pending-permission"
-_CLAUDE_PENDING_INDEX_INTEGRITY_PURPOSE = "claude-pending-permission-index"
-_CURSOR_PENDING_INTEGRITY_PURPOSE = "cursor-pending-shell"
-_CURSOR_PENDING_INDEX_INTEGRITY_PURPOSE = "cursor-pending-shell-index"
-
-
-def _hook_authority_state_is_fresh(
-    payload: Mapping[str, object],
-    *,
-    now: str,
-    max_age_seconds: int,
-) -> bool:
-    saved_at = _optional_string(payload.get("saved_at"))
-    if saved_at is None:
-        return False
-    try:
-        saved_time = datetime.fromisoformat(saved_at.replace("Z", "+00:00"))
-        current_time = datetime.fromisoformat(now.replace("Z", "+00:00"))
-    except ValueError:
-        return False
-    if saved_time.tzinfo is None:
-        saved_time = saved_time.replace(tzinfo=timezone.utc)
-    if current_time.tzinfo is None:
-        current_time = current_time.replace(tzinfo=timezone.utc)
-    age_seconds = (current_time - saved_time).total_seconds()
-    return 0 <= age_seconds <= max_age_seconds
-
-
-def _record_hook_authority_integrity_failure(
-    store: GuardStore,
-    *,
-    harness: str,
-    source: str,
-    state_key: str,
-    artifact_id: object,
-    integrity_status: str,
-    message: str | None,
-    now: str,
-) -> None:
-    with suppress(OSError, sqlite3.Error):
-        store.add_event(
-            "rule.ignored.local_integrity",
-            {
-                "decision_id": None,
-                "harness": harness,
-                "artifact_id": artifact_id,
-                "scope": "session",
-                "source": source,
-                "integrity_status": integrity_status,
-                "message": message,
-                "state_key_fingerprint": hashlib.sha256(state_key.encode("utf-8")).hexdigest()[:16],
-            },
-            now,
-        )
-
-
-def _delete_hook_authority_state(store: GuardStore, state_key: str) -> None:
-    with suppress(OSError, sqlite3.Error):
-        store.delete_sync_payload(state_key)
-
-
-def _signed_hook_authority_payload(
-    store: GuardStore,
-    *,
-    state_key: str,
-    payload: Mapping[str, object],
-    purpose: str,
-    now: str,
-) -> dict[str, object] | None:
-    key, key_id = store._policy_integrity_secret_material(create=True)
-    if key is None or key_id is None:
-        return None
-    signed_payload = {name: value for name, value in payload.items() if name != "integrity"}
-    signed_payload["state_key"] = state_key
-    signed_payload["integrity"] = sign_local_authority_payload(
-        signed_payload,
-        key=key,
-        key_id=key_id,
-        purpose=purpose,
-        signed_at=now,
-    )
-    return signed_payload
-
-
-def _store_signed_hook_authority_payload(
-    store: GuardStore,
-    *,
-    state_key: str,
-    payload: Mapping[str, object],
-    purpose: str,
-    now: str,
-) -> bool:
-    signed_payload = _signed_hook_authority_payload(
-        store,
-        state_key=state_key,
-        payload=payload,
-        purpose=purpose,
-        now=now,
-    )
-    if signed_payload is None:
-        return False
-    try:
-        store.set_sync_payload(state_key, signed_payload, now)
-    except (OSError, sqlite3.Error):
-        return False
-    return True
-
-
-def _load_verified_hook_authority_payload(
-    store: GuardStore,
-    *,
-    state_key: str,
-    purpose: str,
-    harness: str,
-    source: str,
-    now: str,
-    max_age_seconds: int,
-) -> dict[str, object] | None:
-    try:
-        persisted = store.get_sync_payload(state_key)
-    except (json.JSONDecodeError, TypeError, ValueError):
-        _record_hook_authority_integrity_failure(
-            store,
-            harness=harness,
-            source=source,
-            state_key=state_key,
-            artifact_id=None,
-            integrity_status="tampered",
-            message="local_authority_integrity_payload_invalid_json",
-            now=now,
-        )
-        _delete_hook_authority_state(store, state_key)
-        return None
-    except (OSError, sqlite3.Error):
-        return None
-    if persisted is None:
-        return None
-    if not isinstance(persisted, dict):
-        _record_hook_authority_integrity_failure(
-            store,
-            harness=harness,
-            source=source,
-            state_key=state_key,
-            artifact_id=None,
-            integrity_status="missing_integrity",
-            message="local_authority_integrity_metadata_missing",
-            now=now,
-        )
-        _delete_hook_authority_state(store, state_key)
-        return None
-    raw_integrity = persisted.get("integrity")
-    integrity: Mapping[str, object] = (
-        cast(Mapping[str, object], raw_integrity) if isinstance(raw_integrity, Mapping) else {}
-    )
-    signed_payload = {name: value for name, value in persisted.items() if name != "integrity"}
-    key, key_id = store._policy_integrity_secret_material(create=False)
-    integrity_result = verify_local_authority_payload(
-        signed_payload,
-        integrity,
-        key=key,
-        key_id=key_id,
-        purpose=purpose,
-    )
-    context_matches = persisted.get("state_key") == state_key
-    if integrity_result.status != "valid" or not context_matches:
-        integrity_status = integrity_result.status if integrity_result.status != "valid" else "tampered"
-        message = (
-            integrity_result.message
-            if integrity_result.status != "valid"
-            else "local_authority_integrity_state_key_mismatch"
-        )
-        _record_hook_authority_integrity_failure(
-            store,
-            harness=harness,
-            source=source,
-            state_key=state_key,
-            artifact_id=persisted.get("artifact_id"),
-            integrity_status=integrity_status,
-            message=message,
-            now=now,
-        )
-        _delete_hook_authority_state(store, state_key)
-        return None
-    if not _hook_authority_state_is_fresh(persisted, now=now, max_age_seconds=max_age_seconds):
-        with suppress(OSError, sqlite3.Error):
-            store.add_event(
-                "approval.pending_state_expired",
-                {
-                    "harness": harness,
-                    "source": source,
-                    "artifact_id": persisted.get("artifact_id"),
-                    "state_key_fingerprint": hashlib.sha256(state_key.encode("utf-8")).hexdigest()[:16],
-                },
-                now,
-            )
-        _delete_hook_authority_state(store, state_key)
-        return None
-    return persisted
-
-
-def _invalidate_hook_authority_context(
-    store: GuardStore,
-    *,
-    state_key: str,
-    payload: Mapping[str, object],
-    harness: str,
-    source: str,
-    message: str,
-    now: str,
-) -> None:
-    _record_hook_authority_integrity_failure(
-        store,
-        harness=harness,
-        source=source,
-        state_key=state_key,
-        artifact_id=payload.get("artifact_id"),
-        integrity_status="tampered",
-        message=message,
-        now=now,
-    )
-    _delete_hook_authority_state(store, state_key)
-
-
-def _append_claude_pending_permission_key(
-    store: GuardStore,
-    *,
-    session_id: str,
-    pending_key: str,
-    now: str,
-) -> bool:
-    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id, now=now)
-    if pending_key in pending_keys:
-        return True
-    pending_keys.append(pending_key)
-    return _store_claude_pending_permission_index(
-        store,
-        session_id=session_id,
-        pending_keys=pending_keys,
-        now=now,
-    )
+def _state_now(now: str | None) -> str:
+    return now or _now()
 
 
 def _load_claude_pending_permission_index(
@@ -353,62 +107,8 @@ def _load_claude_pending_permission_index(
     session_id: str,
     now: str | None = None,
 ) -> list[str]:
-    current_time = now or _now()
-    index_key = _claude_pending_permission_index_key(session_id)
-    persisted = _load_verified_hook_authority_payload(
-        store,
-        state_key=index_key,
-        purpose=_CLAUDE_PENDING_INDEX_INTEGRITY_PURPOSE,
-        harness="claude-code",
-        source="claude-pending-permission-index",
-        now=current_time,
-        max_age_seconds=_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS,
-    )
-    if persisted is None:
-        return []
-    pending_keys_value = persisted.get("pending_keys")
-    expected_prefix = f"claude_pending_permission:{session_id}:"
-    context_matches = (
-        persisted.get("session_id") == session_id
-        and isinstance(pending_keys_value, list)
-        and all(isinstance(item, str) and item.startswith(expected_prefix) for item in pending_keys_value)
-    )
-    if not context_matches:
-        _invalidate_hook_authority_context(
-            store,
-            state_key=index_key,
-            payload=persisted,
-            harness="claude-code",
-            source="claude-pending-permission-index",
-            message="local_authority_integrity_pending_index_context_mismatch",
-            now=current_time,
-        )
-        return []
-    return list(dict.fromkeys(cast(list[str], pending_keys_value)))
-
-
-def _store_claude_pending_permission_index(
-    store: GuardStore,
-    *,
-    session_id: str,
-    pending_keys: Sequence[str],
-    now: str,
-) -> bool:
-    index_key = _claude_pending_permission_index_key(session_id)
-    if not pending_keys:
-        _delete_hook_authority_state(store, index_key)
-        return True
-    return _store_signed_hook_authority_payload(
-        store,
-        state_key=index_key,
-        payload={
-            "session_id": session_id,
-            "pending_keys": list(dict.fromkeys(pending_keys)),
-            "saved_at": now,
-        },
-        purpose=_CLAUDE_PENDING_INDEX_INTEGRITY_PURPOSE,
-        now=now,
-    )
+    reply = hook_authority_state(store, "claude_load_index", now=_state_now(now), session_id=session_id)
+    return keys_field(reply, "pending_keys")
 
 
 def _claude_guard_approval_question_text(approval_code: str) -> str:
@@ -434,44 +134,17 @@ def _load_verified_claude_pending_permission(
     expected_command: str | None = None,
     now: str | None = None,
 ) -> dict[str, object] | None:
-    current_time = now or _now()
-    persisted = _load_verified_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=pending_key,
-        purpose=_CLAUDE_PENDING_INTEGRITY_PURPOSE,
-        harness="claude-code",
-        source="claude-pending-permission",
-        now=current_time,
-        max_age_seconds=_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS,
+        "claude_load_pending",
+        now=_state_now(now),
+        session_id=session_id,
+        pending_key=pending_key,
+        expected_artifact_id=expected_artifact_id,
+        expected_artifact_hash=expected_artifact_hash,
+        expected_command=expected_command,
     )
-    if persisted is None:
-        return None
-    artifact_id = _optional_string(persisted.get("artifact_id"))
-    artifact_hash = _optional_string(persisted.get("artifact_hash"))
-    command = _optional_string(persisted.get("command"))
-    expected_key = _claude_pending_permission_state_key(session_id, artifact_id) if artifact_id is not None else None
-    context_matches = (
-        persisted.get("session_id") == session_id
-        and artifact_id is not None
-        and artifact_hash is not None
-        and command is not None
-        and pending_key == expected_key
-        and (expected_artifact_id is None or artifact_id == expected_artifact_id)
-        and (expected_artifact_hash is None or artifact_hash == expected_artifact_hash)
-        and (expected_command is None or command == expected_command)
-    )
-    if context_matches:
-        return persisted
-    _invalidate_hook_authority_context(
-        store,
-        state_key=pending_key,
-        payload=persisted,
-        harness="claude-code",
-        source="claude-pending-permission",
-        message="local_authority_integrity_pending_context_mismatch",
-        now=current_time,
-    )
-    return None
+    return object_field(reply, "pending")
 
 
 def _record_claude_permission_notice(
@@ -513,32 +186,15 @@ def _record_claude_permission_notice(
         notice_payload["wrapper_chain"] = [item for item in wrapper_chain if isinstance(item, str) and item]
     if tool_name is not None:
         notice_payload["tool_name"] = tool_name
-    notice_key = _claude_permission_notice_state_key(session_id, tool_name)
-    pending_key = _claude_pending_permission_state_key(session_id, artifact.artifact_id)
-    if not _store_signed_hook_authority_payload(
+    hook_authority_state(
         store,
-        state_key=pending_key,
-        payload=notice_payload,
-        purpose=_CLAUDE_PENDING_INTEGRITY_PURPOSE,
+        "claude_record_notice",
         now=saved_at,
-    ):
-        return
-    if not _append_claude_pending_permission_key(
-        store,
+        create_key=True,
         session_id=session_id,
-        pending_key=pending_key,
-        now=saved_at,
-    ):
-        _delete_hook_authority_state(store, pending_key)
-        return
-    if not _store_signed_hook_authority_payload(
-        store,
-        state_key=notice_key,
+        tool_name=tool_name,
         payload=notice_payload,
-        purpose=_CLAUDE_NOTICE_INTEGRITY_PURPOSE,
-        now=saved_at,
-    ):
-        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
+    )
 
 
 def _load_verified_claude_permission_notice(
@@ -548,72 +204,14 @@ def _load_verified_claude_permission_notice(
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
-    tool_name = _claude_notification_tool_name(payload)
-    now = _now()
-    selected_tool_name = tool_name
-    selected_key = _claude_permission_notice_state_key(session_id, selected_tool_name)
-    persisted = _load_verified_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=selected_key,
-        purpose=_CLAUDE_NOTICE_INTEGRITY_PURPOSE,
-        harness="claude-code",
-        source="claude-permission-notice",
-        now=now,
-        max_age_seconds=_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS,
-    )
-    if persisted is None and tool_name is not None:
-        selected_tool_name = None
-        selected_key = _claude_permission_notice_state_key(session_id)
-        persisted = _load_verified_hook_authority_payload(
-            store,
-            state_key=selected_key,
-            purpose=_CLAUDE_NOTICE_INTEGRITY_PURPOSE,
-            harness="claude-code",
-            source="claude-permission-notice",
-            now=now,
-            max_age_seconds=_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS,
-        )
-    if persisted is None:
-        return None
-    artifact_id = _optional_string(persisted.get("artifact_id"))
-    artifact_hash = _optional_string(persisted.get("artifact_hash"))
-    command = _optional_string(persisted.get("command"))
-    stored_tool_name = _optional_string(persisted.get("tool_name"))
-    context_matches = (
-        persisted.get("session_id") == session_id
-        and artifact_id is not None
-        and artifact_hash is not None
-        and command is not None
-        and stored_tool_name == selected_tool_name
-    )
-    if not context_matches:
-        _invalidate_hook_authority_context(
-            store,
-            state_key=selected_key,
-            payload=persisted,
-            harness="claude-code",
-            source="claude-permission-notice",
-            message="local_authority_integrity_notice_context_mismatch",
-            now=now,
-        )
-        return None
-    assert artifact_id is not None
-    assert artifact_hash is not None
-    assert command is not None
-    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
-    pending = _load_verified_claude_pending_permission(
-        store,
+        "claude_load_notice",
+        now=_now(),
         session_id=session_id,
-        pending_key=pending_key,
-        expected_artifact_id=artifact_id,
-        expected_artifact_hash=artifact_hash,
-        expected_command=command,
-        now=now,
+        tool_name=_claude_notification_tool_name(payload),
     )
-    if pending is None:
-        _delete_hook_authority_state(store, selected_key)
-        return None
-    return persisted
+    return object_field(reply, "notice")
 
 
 def _load_claude_permission_notice(store: GuardStore, payload: dict[str, object]) -> dict[str, object] | None:
@@ -634,32 +232,18 @@ def _mark_claude_pending_permission_prompt_seen(
     artifact_id = _optional_string((notice or {}).get("artifact_id"))
     if session_id is None or artifact_id is None:
         return
-    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     artifact_hash = _optional_string((notice or {}).get("artifact_hash"))
     command = _optional_string((notice or {}).get("command"))
     if artifact_hash is None or command is None:
         return
-    now = _now()
-    pending = _load_verified_claude_pending_permission(
+    hook_authority_state(
         store,
+        "claude_mark_prompt_seen",
+        now=_now(),
         session_id=session_id,
-        pending_key=pending_key,
-        expected_artifact_id=artifact_id,
-        expected_artifact_hash=artifact_hash,
-        expected_command=command,
-        now=now,
-    )
-    if pending is None:
-        return
-    updated = dict(pending)
-    updated["permission_prompt_seen"] = True
-    updated["permission_prompt_seen_at"] = now
-    _store_signed_hook_authority_payload(
-        store,
-        state_key=pending_key,
-        payload=updated,
-        purpose=_CLAUDE_PENDING_INTEGRITY_PURPOSE,
-        now=now,
+        artifact_id=artifact_id,
+        artifact_hash=artifact_hash,
+        command=command,
     )
 
 
@@ -670,24 +254,12 @@ def _load_single_claude_pending_permission(
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return None
-    now = _now()
-    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id, now=now)
-    pending_items: list[tuple[str, dict[str, object]]] = []
-    for pending_key in pending_keys:
-        pending = _load_verified_claude_pending_permission(
-            store,
-            session_id=session_id,
-            pending_key=pending_key,
-            now=now,
-        )
-        if pending is not None:
-            pending_items.append((pending_key, pending))
-    prompt_seen_items = [item for item in pending_items if item[1].get("permission_prompt_seen") is True]
-    if len(prompt_seen_items) == 1:
-        return prompt_seen_items[0]
-    if len(pending_items) != 1:
+    reply = hook_authority_state(store, "claude_load_single_pending", now=_now(), session_id=session_id)
+    pending = object_field(reply, "pending")
+    pending_key = reply.get("pending_key") if reply is not None else None
+    if pending is None or not isinstance(pending_key, str):
         return None
-    return pending_items[0]
+    return pending_key, pending
 
 
 def _load_claude_pending_permission(
@@ -716,18 +288,12 @@ def _remove_claude_pending_permission(
     session_id: str,
     pending_key: str,
 ) -> None:
-    now = _now()
-    _delete_hook_authority_state(store, pending_key)
-    remaining = [
-        key
-        for key in _load_claude_pending_permission_index(store, session_id=session_id, now=now)
-        if key != pending_key
-    ]
-    _store_claude_pending_permission_index(
+    hook_authority_state(
         store,
+        "claude_remove_pending",
+        now=_now(),
         session_id=session_id,
-        pending_keys=remaining,
-        now=now,
+        pending_key=pending_key,
     )
 
 
@@ -771,10 +337,6 @@ def _cursor_shell_command_fingerprint(command: str) -> str:
     return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
 
 
-def _cursor_pending_shell_index_key(conversation_id: str) -> str:
-    return f"cursor_pending_shells:{conversation_id}"
-
-
 def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
     return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
@@ -786,16 +348,15 @@ def _append_cursor_pending_shell_key(
     pending_key: str,
     now: str,
 ) -> bool:
-    pending_keys = _load_cursor_pending_shell_index(store, conversation_id=conversation_id, now=now)
-    if pending_key in pending_keys:
-        return True
-    pending_keys.append(pending_key)
-    return _store_cursor_pending_shell_index(
+    reply = hook_authority_state(
         store,
-        conversation_id=conversation_id,
-        pending_keys=pending_keys,
+        "cursor_append_key",
         now=now,
+        create_key=True,
+        conversation_id=conversation_id,
+        pending_key=pending_key,
     )
+    return flag_field(reply, "stored")
 
 
 def _load_cursor_pending_shell_index(
@@ -804,38 +365,13 @@ def _load_cursor_pending_shell_index(
     conversation_id: str,
     now: str | None = None,
 ) -> list[str]:
-    current_time = now or _now()
-    index_key = _cursor_pending_shell_index_key(conversation_id)
-    persisted = _load_verified_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=index_key,
-        purpose=_CURSOR_PENDING_INDEX_INTEGRITY_PURPOSE,
-        harness="cursor",
-        source="cursor-pending-shell-index",
-        now=current_time,
-        max_age_seconds=_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS,
+        "cursor_load_index",
+        now=_state_now(now),
+        conversation_id=conversation_id,
     )
-    if persisted is None:
-        return []
-    pending_keys_value = persisted.get("pending_keys")
-    expected_prefix = f"cursor_pending_shell:{conversation_id}:"
-    context_matches = (
-        persisted.get("conversation_id") == conversation_id
-        and isinstance(pending_keys_value, list)
-        and all(isinstance(item, str) and item.startswith(expected_prefix) for item in pending_keys_value)
-    )
-    if not context_matches:
-        _invalidate_hook_authority_context(
-            store,
-            state_key=index_key,
-            payload=persisted,
-            harness="cursor",
-            source="cursor-pending-shell-index",
-            message="local_authority_integrity_pending_index_context_mismatch",
-            now=current_time,
-        )
-        return []
-    return list(dict.fromkeys(cast(list[str], pending_keys_value)))
+    return keys_field(reply, "pending_keys")
 
 
 def _store_cursor_pending_shell_index(
@@ -845,21 +381,15 @@ def _store_cursor_pending_shell_index(
     pending_keys: Sequence[str],
     now: str,
 ) -> bool:
-    index_key = _cursor_pending_shell_index_key(conversation_id)
-    if not pending_keys:
-        _delete_hook_authority_state(store, index_key)
-        return True
-    return _store_signed_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=index_key,
-        payload={
-            "conversation_id": conversation_id,
-            "pending_keys": list(dict.fromkeys(pending_keys)),
-            "saved_at": now,
-        },
-        purpose=_CURSOR_PENDING_INDEX_INTEGRITY_PURPOSE,
+        "cursor_store_index",
         now=now,
+        create_key=bool(pending_keys),
+        conversation_id=conversation_id,
+        pending_keys=list(pending_keys),
     )
+    return flag_field(reply, "stored")
 
 
 def _store_cursor_pending_shell_state(
@@ -870,14 +400,16 @@ def _store_cursor_pending_shell_state(
     payload: Mapping[str, object],
     now: str,
 ) -> bool:
-    state_key = _cursor_pending_shell_state_key(conversation_id, command)
-    return _store_signed_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=state_key,
-        payload=payload,
-        purpose=_CURSOR_PENDING_INTEGRITY_PURPOSE,
+        "cursor_store_pending_state",
         now=now,
+        create_key=True,
+        conversation_id=conversation_id,
+        state_key=_cursor_pending_shell_state_key(conversation_id, command),
+        payload=dict(payload),
     )
+    return flag_field(reply, "stored")
 
 
 def _load_verified_cursor_pending_shell_state(
@@ -890,59 +422,22 @@ def _load_verified_cursor_pending_shell_state(
 ) -> dict[str, object] | None:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command
 
-    current_time = now or _now()
     normalized_command = normalize_cursor_shell_command(command)
     expected_key = _cursor_pending_shell_state_key(conversation_id, normalized_command)
-    selected_key = state_key or expected_key
-    persisted = _load_verified_hook_authority_payload(
+    reply = hook_authority_state(
         store,
-        state_key=selected_key,
-        purpose=_CURSOR_PENDING_INTEGRITY_PURPOSE,
-        harness="cursor",
-        source="cursor-pending-shell",
-        now=current_time,
-        max_age_seconds=_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS,
+        "cursor_load_pending_state",
+        now=_state_now(now),
+        conversation_id=conversation_id,
+        command=normalized_command,
+        state_key=state_key or expected_key,
+        expected_key=expected_key,
     )
-    if persisted is None:
-        return None
-    artifact_id = _optional_string(persisted.get("artifact_id"))
-    artifact_hash = _optional_string(persisted.get("artifact_hash"))
-    stored_command = _optional_string(persisted.get("command"))
-    context_matches = (
-        selected_key == expected_key
-        and persisted.get("conversation_id") == conversation_id
-        and artifact_id is not None
-        and artifact_hash is not None
-        and stored_command == normalized_command
-    )
-    if context_matches:
-        return persisted
-    _invalidate_hook_authority_context(
-        store,
-        state_key=selected_key,
-        payload=persisted,
-        harness="cursor",
-        source="cursor-pending-shell",
-        message="local_authority_integrity_pending_context_mismatch",
-        now=current_time,
-    )
-    return None
+    return object_field(reply, "pending")
 
 
 def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> str:
     return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
-
-
-_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS = 30 * 60
-_CURSOR_NATIVE_ALLOW_INTEGRITY_PURPOSE = "cursor-native-shell-allow"
-
-
-def _cursor_pending_shell_is_fresh(pending: Mapping[str, object], *, now: str) -> bool:
-    return _hook_authority_state_is_fresh(
-        pending,
-        now=now,
-        max_age_seconds=_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS,
-    )
 
 
 def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
@@ -969,69 +464,19 @@ def _record_cursor_native_shell_allow_state(
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command
 
     normalized_command = normalize_cursor_shell_command(command)
-    state_key = _cursor_native_shell_allow_state_key(conversation_id, normalized_command)
-    allow_payload: dict[str, object] = {
-        "state_key": state_key,
-        "conversation_id": conversation_id,
-        "saved_at": now,
-        "action": "allow",
-        "artifact_id": artifact.artifact_id,
-        "artifact_hash": artifact_hash,
-        "artifact_name": artifact.name,
-        "command": normalized_command,
-        "native_source": "cursor-native",
-    }
-    key, key_id = store._policy_integrity_secret_material(create=True)
-    if key is None or key_id is None:
-        return False
-    allow_payload["integrity"] = sign_local_authority_payload(
-        allow_payload,
-        key=key,
-        key_id=key_id,
-        purpose=_CURSOR_NATIVE_ALLOW_INTEGRITY_PURPOSE,
-        signed_at=now,
+    reply = hook_authority_state(
+        store,
+        "cursor_record_allow",
+        now=now,
+        create_key=True,
+        conversation_id=conversation_id,
+        state_key=_cursor_native_shell_allow_state_key(conversation_id, normalized_command),
+        command=normalized_command,
+        artifact_id=artifact.artifact_id,
+        artifact_hash=artifact_hash,
+        artifact_name=artifact.name,
     )
-    try:
-        store.set_sync_payload(
-            state_key,
-            allow_payload,
-            now,
-        )
-    except (OSError, sqlite3.Error):
-        return False
-    return True
-
-
-def _cursor_native_shell_allowance_is_fresh(approved: Mapping[str, object], *, now: str) -> bool:
-    if not isinstance(approved, dict) or approved.get("action") != "allow":
-        return False
-    return _cursor_pending_shell_is_fresh(approved, now=now)
-
-
-def _record_cursor_native_allow_integrity_failure(
-    store: GuardStore,
-    *,
-    state_key: str,
-    artifact_id: object,
-    integrity_status: str,
-    message: str | None,
-    now: str,
-) -> None:
-    with suppress(OSError, sqlite3.Error):
-        store.add_event(
-            "rule.ignored.local_integrity",
-            {
-                "decision_id": None,
-                "harness": "cursor",
-                "artifact_id": artifact_id,
-                "scope": "session",
-                "source": "cursor-native-session",
-                "integrity_status": integrity_status,
-                "message": message,
-                "state_key_fingerprint": hashlib.sha256(state_key.encode("utf-8")).hexdigest()[:16],
-            },
-            now,
-        )
+    return flag_field(reply, "stored")
 
 
 def _load_cursor_native_shell_allowance(
@@ -1042,69 +487,15 @@ def _load_cursor_native_shell_allowance(
     command = _cursor_shell_command_from_payload(payload)
     if conversation_id is None or command is None:
         return None
-    state_key = _cursor_native_shell_allow_state_key(conversation_id, command)
-    now = _now()
-    try:
-        approved = store.get_sync_payload(state_key)
-    except json.JSONDecodeError:
-        _record_cursor_native_allow_integrity_failure(
-            store,
-            state_key=state_key,
-            artifact_id=None,
-            integrity_status="tampered",
-            message="local_authority_integrity_payload_invalid_json",
-            now=now,
-        )
-        with suppress(OSError, sqlite3.Error):
-            store.delete_sync_payload(state_key)
-        return None
-    except (OSError, sqlite3.Error):
-        approved = None
-    if not isinstance(approved, dict):
-        return None
-    raw_integrity = approved.get("integrity")
-    integrity: Mapping[str, object] = (
-        cast(Mapping[str, object], raw_integrity) if isinstance(raw_integrity, Mapping) else {}
-    )
-    signed_payload = {key: value for key, value in approved.items() if key != "integrity"}
-    integrity_key: bytes | None = None
-    integrity_key_id: str | None = None
-    if integrity:
-        integrity_key, integrity_key_id = store._policy_integrity_secret_material(create=False)
-    integrity_result = verify_local_authority_payload(
-        signed_payload,
-        integrity,
-        key=integrity_key,
-        key_id=integrity_key_id,
-        purpose=_CURSOR_NATIVE_ALLOW_INTEGRITY_PURPOSE,
-    )
-    context_matches = (
-        approved.get("state_key") == state_key
-        and approved.get("conversation_id") == conversation_id
-        and approved.get("command") == command
-    )
-    allowance_is_fresh = _cursor_native_shell_allowance_is_fresh(approved, now=now)
-    if integrity_result.status == "valid" and context_matches and allowance_is_fresh:
-        return approved
-    if integrity_result.status == "valid" and context_matches:
-        with suppress(OSError, sqlite3.Error):
-            store.delete_sync_payload(state_key)
-        return None
-    integrity_status = integrity_result.status if integrity_result.status != "valid" else "tampered"
-    integrity_message = (
-        integrity_result.message if integrity_result.status != "valid" else "local_authority_integrity_context_mismatch"
-    )
-    _record_cursor_native_allow_integrity_failure(
+    reply = hook_authority_state(
         store,
-        state_key=state_key,
-        artifact_id=approved.get("artifact_id"),
-        integrity_status=integrity_status,
-        message=integrity_message,
-        now=now,
+        "cursor_load_allowance",
+        now=_now(),
+        conversation_id=conversation_id,
+        command=command,
+        state_key=_cursor_native_shell_allow_state_key(conversation_id, command),
     )
-    with suppress(OSError, sqlite3.Error):
-        store.delete_sync_payload(state_key)
-    return None
+    return object_field(reply, "allowance")
 
 
 def _cursor_native_shell_is_approved(
@@ -1115,21 +506,14 @@ def _cursor_native_shell_is_approved(
 
 
 __all__ = [
-    "_CLAUDE_PENDING_PERMISSION_MAX_AGE_SECONDS",
-    "_CURSOR_PENDING_SHELL_MAX_AGE_SECONDS",
-    "_append_claude_pending_permission_key",
     "_append_cursor_pending_shell_key",
     "_claude_guard_approval_question_text",
     "_claude_pending_permission_index_key",
     "_claude_pending_permission_state_key",
-    "_claude_permission_notice_state_key",
     "_cursor_after_shell_observed",
     "_cursor_conversation_id",
     "_cursor_native_shell_allow_state_key",
-    "_cursor_native_shell_allowance_is_fresh",
     "_cursor_native_shell_is_approved",
-    "_cursor_pending_shell_index_key",
-    "_cursor_pending_shell_is_fresh",
     "_cursor_pending_shell_state_key",
     "_cursor_shell_command_fingerprint",
     "_cursor_shell_command_from_payload",

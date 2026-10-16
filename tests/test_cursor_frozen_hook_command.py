@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import cursor_hook_command_tokens
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     FROZEN_CURSOR_HOOK_COMMAND,
     HOOK_SCRIPT_NAME,
@@ -25,13 +26,13 @@ def _disable_isolated_python(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
-def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, str]]]:
+def _blocking_cursor_hooks(command: str) -> dict[str, list[dict[str, object]]]:
     entry = [{"command": command}]
     return {
         "beforeShellExecution": entry,
         "beforeMCPExecution": entry,
         "beforeReadFile": entry,
-        "beforeWriteFile": entry,
+        "preToolUse": [{"command": command, "failClosed": True}],
     }
 
 
@@ -83,7 +84,7 @@ def test_frozen_cursor_hook_command_prefers_isolated_python(monkeypatch, tmp_pat
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:3] == ["/usr/bin/python3", "-I", str(script.resolve())]
     assert FROZEN_CURSOR_HOOK_COMMAND not in command
     assert tokens[-2:] == ["--cursor-hook-event", "beforeReadFile"]
@@ -102,7 +103,7 @@ def test_frozen_cursor_hook_command_uses_supported_launcher(monkeypatch, tmp_pat
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == "/Applications/HOL Guard.app/Contents/MacOS/hol-guard"
     assert tokens[1] == FROZEN_CURSOR_HOOK_COMMAND
     assert tokens[2].endswith(HOOK_SCRIPT_NAME)
@@ -126,7 +127,7 @@ def test_frozen_cursor_hook_command_prefers_current_hol_guard_shim(monkeypatch, 
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(shim)
     assert tokens[1] == FROZEN_CURSOR_HOOK_COMMAND
 
@@ -157,7 +158,7 @@ def test_frozen_cursor_hook_command_prefers_macos_bundle_without_shim(monkeypatc
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(bundle)
 
 
@@ -183,7 +184,7 @@ def test_frozen_cursor_hook_command_keeps_versioned_executable_without_shim(monk
         script_path=script,
         event_name="beforeReadFile",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[0] == str(versioned)
 
 
@@ -198,7 +199,7 @@ def test_unfrozen_cursor_hook_command_uses_current_interpreter(monkeypatch, tmp_
         event_name="beforeReadFile",
     )
     assert FROZEN_CURSOR_HOOK_COMMAND not in command
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:2] == ["/usr/bin/python3", "-I"]
 
 
@@ -207,11 +208,11 @@ def test_managed_python_executable_runs_isolated(tmp_path: Path) -> None:
     command = _managed_hook_command(
         python_executable=Path("/opt/guard/bin/python"),
         script_path=script,
-        event_name="beforeWriteFile",
+        event_name="preToolUse",
     )
-    tokens = shlex.split(command)
+    tokens = cursor_hook_command_tokens(command)
     assert tokens[:3] == ["/opt/guard/bin/python", "-I", str(script.resolve())]
-    assert tokens[-2:] == ["--cursor-hook-event", "beforeWriteFile"]
+    assert tokens[-2:] == ["--cursor-hook-event", "preToolUse"]
 
 
 def test_run_frozen_cursor_hook_executes_managed_script(tmp_path: Path) -> None:
@@ -287,3 +288,65 @@ def test_live_cursor_hook_script_path_accepts_regular_managed_script(tmp_path: P
     assert _live_cursor_hook_script_path(python_command) == script
     assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(frozen_command)) is True
     assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(python_command)) is True
+
+
+def _durable_runtime(tmp_path: Path) -> Path:
+    return tmp_path / "guard-home" / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
+
+
+def test_frozen_cursor_hook_runs_behind_the_durable_native_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard.adapters import cursor_hook_config
+
+    runtime = _durable_runtime(tmp_path)
+    requested: list[Path | None] = []
+
+    def durable(guard_home: Path | None = None) -> Path:
+        requested.append(guard_home)
+        return runtime
+
+    monkeypatch.setattr("sys.frozen", True, raising=False)
+    _disable_isolated_python(monkeypatch)
+    monkeypatch.setattr(cursor_hook_config, "native_cursor_hook_bridge", durable)
+    monkeypatch.setattr(cursor_hook_config, "_frozen_cursor_hook_launcher", lambda: "/app/hol-guard")
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+
+    command = _managed_hook_command(
+        python_executable=None,
+        script_path=script,
+        event_name="preToolUse",
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert requested == [tmp_path / "guard-home"]
+    tokens = cursor_hook_command_tokens(command)
+    assert tokens[:4] == [str(runtime), "cursor-hook-bridge", "/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND]
+    assert _live_cursor_hook_script_path(command) == script.resolve()
+    assert live_guard_cursor_hooks_intercept(_blocking_cursor_hooks(command)) is True
+    assert live_cursor_hooks_use_frozen_control_plane(_blocking_cursor_hooks(command)) is True
+
+
+def test_rebind_moves_direct_cursor_clients_behind_the_native_bridge(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import cursor_hook_rebind
+
+    script = tmp_path / ".cursor" / "hooks" / HOOK_SCRIPT_NAME
+    script.parent.mkdir(parents=True)
+    script.write_text("raise SystemExit(0)\n", encoding="utf-8")
+    runtime = _durable_runtime(tmp_path)
+    direct = shlex.join(["/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)])
+    bridged = shlex.join(
+        [str(runtime), "cursor-hook-bridge", "/app/hol-guard", FROZEN_CURSOR_HOOK_COMMAND, str(script)]
+    )
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: runtime)
+
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is True
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(bridged), guard_home) is False
+
+    monkeypatch.setattr(cursor_hook_rebind, "native_cursor_hook_bridge", lambda home=None: None)
+    assert cursor_hook_rebind._live_hooks_skip_native_bridge(_blocking_cursor_hooks(direct), guard_home) is False

@@ -4,7 +4,7 @@ INPUT_HANDLER_SOURCE = r"""  async function inputWorkspaceReadiness(cwd, deadlin
     let timeout;
     try {
       return await Promise.race([
-        ensureGuardWorkspaceReady(cwd),
+        ensureGuardWorkspaceReady(cwd, true, true),
         new Promise((resolve) => {
           timeout = setTimeout(() => resolve({ready: false, reasonCode: 'prompt_setup_pending'}),
             Math.max(1, deadlineAt - Date.now()));
@@ -20,15 +20,16 @@ INPUT_HANDLER_SOURCE = r"""  async function inputWorkspaceReadiness(cwd, deadlin
   pi.on("input", async (event, ctx) => {
     if (event.source === "extension") return { action: "continue" };
     invalidateInputApprovalResumes();
-    const inputBinding = captureInputApprovalResumeBinding(ctx);
-    const generation = inputApprovalResumeGeneration;
     const prompt = event.text;
     const cwd = ctx.cwd;
     const deadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;
+    const workspaceSetup = inputWorkspaceReadiness(cwd, deadlineAt);
+    const inputBinding = captureInputApprovalResumeBinding(ctx);
+    const generation = inputApprovalResumeGeneration;
     const isActive = () => generation === inputApprovalResumeGeneration &&
       ctx.cwd === cwd && event.text === prompt && !handlerAbortSignal(ctx)?.aborted &&
       (inputBinding === null || inputApprovalResumeBindingIsActive(ctx, inputBinding));
-    const readiness = await inputWorkspaceReadiness(cwd, deadlineAt);
+    const readiness = await workspaceSetup;
     if (!isActive()) return { action: "handled", handled: true };
     if (readiness.reasonCode === 'prompt_setup_pending') {
       if (inputBinding === null) {
@@ -36,7 +37,7 @@ INPUT_HANDLER_SOURCE = r"""  async function inputWorkspaceReadiness(cwd, deadlin
         return { action: "handled", handled: true };
       }
       ctx.ui.notify("HOL Guard is preparing protection. This prompt will resume when ready.", "info");
-      void ensureGuardWorkspaceReady(cwd).then(async (prepared) => {
+      void ensureGuardWorkspaceReady(cwd, true, true).then(async (prepared) => {
         if (!isActive()) return;
         if (!prepared.ready) {
           ctx.ui.notify("HOL Guard could not prepare protection for this prompt. "

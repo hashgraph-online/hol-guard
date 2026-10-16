@@ -1,5 +1,4 @@
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 
@@ -97,6 +96,48 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             repository.to_str(),
         );
         assert_eq!(alias.minimum_action, "require-reapproval");
+        // A configured verification program alone cannot run for a read that
+        // requests no signature, so it must not block ordinary history reads.
+        std::fs::write(
+            home.join(".gitconfig"),
+            "[gpg]\n\tprogram = /tmp/synthetic-never-execute\n[gpg \"ssh\"]\n\tprogram = /tmp/synthetic-never-execute\n",
+        )
+        .unwrap();
+        for command in [
+            "git log --no-ext-diff --no-textconv -1",
+            "git show --no-ext-diff --no-textconv HEAD",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_eq!(
+                result.decision, "allow",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+        for command in [
+            "git log --no-ext-diff --no-textconv --show-signature -1",
+            "git log --no-ext-diff --no-textconv --format=%G? -1",
+            "git -c core.hooksPath=.githooks branch --list",
+        ] {
+            let result = evaluate_pre_tool_envelope_with_context(
+                harness,
+                "PreToolUse",
+                &json!({"tool_name":"bash", "tool_input":{"command":command}}),
+                Some(&enabled),
+                None,
+                home.to_str(),
+                repository.to_str(),
+            );
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
         // Reset for each harness so the negative assertion tests this config,
         // not leftovers from the preceding harness or an explicit CLI flag.
         std::fs::write(
@@ -108,10 +149,12 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
             "git status --short",
             "git -c core.quotepath=false status --short",
             "git -c core.fsmonitor=false status --short",
+            "git -c core.hooksPath=/dev/null -c core.fsmonitor=false status --short",
+            "git -c core.fsmonitor=false -c core.hooksPath=/tmp/no-hooks status --porcelain",
             "git -P -c core.quotepath=false -C . status --short",
             "echo ready && git status --short | head -1",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
-            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "gh api repos/example-org/cloud-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
             "git status --short && gh api repos/owner/repo/compare/base...main --jq '[.files[].filename] | .[]' | head -1",
             "gh api repos/owner/repo/compare/base...main; git status --short",
             "git status --short || gh api repos/owner/repo/compare/base...main",
@@ -126,10 +169,15 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
                 home.to_str(),
                 repository.to_str(),
             );
+            // Windows resolves a driveless hooks path other than `/dev/null`
+            // below a root Guard does not prove, so it stays reviewed there.
+            let unproven = cfg!(windows) && command.contains("/tmp/no-hooks");
             assert_eq!(
-                result.decision, "allow",
+                result.decision == "allow",
+                !unproven,
                 "{harness}: {command}: safe configuration must stay quiet: {} / {}",
-                result.reason_code, result.reason
+                result.reason_code,
+                result.reason
             );
         }
         for command in [
@@ -157,7 +205,7 @@ fn configured_fsmonitor_cannot_be_admitted_as_a_benign_read() {
     let defaults = github_controls("default");
     for harness in ["omp", "zcode"] {
         for command in [
-            "gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
+            "gh api repos/example-org/cloud-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test(\"protection|protect-page|protect-resource|guard-protect-asset\"))) | .[]'",
             "git status --short && gh api repos/owner/repo/compare/base...main | head -1",
             "gh api repos/owner/repo/compare/base...main; git status --short",
         ] {

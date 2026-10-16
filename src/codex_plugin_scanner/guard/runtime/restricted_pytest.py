@@ -14,6 +14,7 @@ import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from ..native_restricted_pytest import decode_native_plan, restricted_native
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
     PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE,
@@ -30,19 +31,12 @@ from .restricted_pytest_sandbox import (
     _backend_argv as _build_backend_argv,
 )
 from .restricted_pytest_sandbox import (
-    _macos_profile as _build_macos_profile,
-)
-from .restricted_pytest_sandbox import (
+    _link_user_site,
     _restricted_environment,
     _run_backend_process,
 )
-from .restricted_pytest_validation import (
-    _allowed_executables,
-    _normalized_command,
-    _resolve_cwd,
-    _resolve_pytest_executable,
-    _resolve_workspace,
-    _select_backend,
+from .restricted_pytest_sandbox import (
+    _macos_profile as _build_macos_profile,
 )
 
 
@@ -55,55 +49,21 @@ def prepare_restricted_pytest(
     backend_executable: Path | None = None,
     read_only_workspace: bool = False,
 ) -> RestrictedPytestPlan:
-    """Validate and resolve a pytest argv without executing repository code."""
-
-    normalized_command = _normalized_command(command)
-    selected_backend, selected_backend_executable = _select_backend(
-        platform=platform or sys.platform,
-        backend_executable=backend_executable,
+    """Present the native validated launch plan without recalculating authority."""
+    result = restricted_native(
+        "prepare",
+        {
+            "command": [str(item) for item in command],
+            "workspace": workspace,
+            "cwd": cwd or Path.cwd(),
+            "platform": platform or sys.platform,
+            "backend_executable": backend_executable,
+            "read_only_workspace": read_only_workspace,
+        },
+        dict,
     )
-    if read_only_workspace and selected_backend not in {"macos-seatbelt", "linux-bubblewrap"}:
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
-            "The read-only pytest profile requires enforced workspace credential filtering; "
-            "this backend does not yet provide it. Execution was not started.",
-        )
-    resolved_workspace = _resolve_workspace(workspace)
-    resolved_cwd = _resolve_cwd(cwd or Path.cwd(), workspace=resolved_workspace)
-    launch_executable, executable = _resolve_pytest_executable(
-        normalized_command,
-        cwd=resolved_cwd,
-        workspace=resolved_workspace,
-    )
-    allowed_executables = _allowed_executables(
-        executable,
-        launch_executable,
-        normalized_command,
-        cwd=resolved_cwd,
-        workspace=resolved_workspace,
-    )
-    return RestrictedPytestPlan(
-        profile_version=(
-            PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION
-        ),
-        backend=selected_backend,
-        backend_executable=selected_backend_executable,
-        workspace=resolved_workspace,
-        cwd=resolved_cwd,
-        command=(str(launch_executable), *normalized_command[1:]),
-        executable=executable,
-        allowed_executables=allowed_executables,
-        denied_capabilities=(
-            "host-home-read",
-            "host-secret-environment",
-            "network",
-            "docker-socket",
-            "write-outside-workspace-and-private-temp",
-            "unapproved-process-exec",
-            "privileged-operation",
-        )
-        + (("workspace-write", "workspace-credential-read") if read_only_workspace else ()),
-    )
+    profile = PYTEST_READ_ONLY_PROFILE_VERSION if read_only_workspace else PYTEST_RESTRICTED_PROFILE_VERSION
+    return decode_native_plan(result, (profile,))
 
 
 def run_restricted_pytest(
@@ -116,6 +76,7 @@ def run_restricted_pytest(
     platform: str | None = None,
     backend_executable: Path | None = None,
     read_only_workspace: bool = False,
+    merge_stderr: bool = False,
 ) -> int:
     """Run pytest inside the default restricted profile, with no fallback."""
 
@@ -138,31 +99,35 @@ def run_restricted_pytest(
         private_tmp = private_root / "tmp"
         private_home.mkdir(mode=0o700)
         private_tmp.mkdir(mode=0o700)
+        source = env if env is not None else os.environ
+        user_site_root = _link_user_site(source, private_home)
         launch_env = _restricted_environment(
-            env if env is not None else os.environ,
+            source,
             workspace=plan.workspace,
             cwd=plan.cwd,
             private_home=private_home,
             private_tmp=private_tmp,
             allowed_executables=plan.allowed_executables,
+            user_site_root=user_site_root,
         )
         if read_only_workspace:
             # Normal pytest caches belong to this run, not the protected source tree.
             launch_env["PYTHONDONTWRITEBYTECODE"] = "1"
             launch_env["PYTEST_ADDOPTS"] = f"-o cache_dir={shlex.quote(str(private_tmp / 'pytest-cache'))}"
-        backend_argv = _backend_argv(plan, private_root=private_root)
+        backend_argv = _backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
         return _run_backend_process(
             backend_argv,
             env=launch_env,
             timeout_seconds=timeout_seconds,
             cwd=plan.cwd,
+            merge_stderr=merge_stderr,
         )
 
 
-def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path) -> list[str]:
+def _backend_argv(plan: RestrictedPytestPlan, *, private_root: Path, user_site_root: Path | None = None) -> list[str]:
     """Compatibility wrapper for focused profile tests."""
 
-    return _build_backend_argv(plan, private_root=private_root)
+    return _build_backend_argv(plan, private_root=private_root, user_site_root=user_site_root)
 
 
 def _macos_profile(plan: RestrictedPytestPlan, *, private_root: Path) -> str:

@@ -80,10 +80,6 @@ def test_hook_worker_returns_native_allow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: {
             "event_name": "PreToolUse",
@@ -117,12 +113,13 @@ def test_hook_worker_native_review_does_not_escape_to_python_semantics(
         return {"event_name": "PreToolUse", "harness": "codex", "result": native_review}
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         review_with_resident_receipt,
+    )
+    # The approval wait is offered only for a review the agent's retry can match.
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_native_review_approval.native_review_binding",
+        lambda *_args, **_kwargs: f"native-review-v4:{'ab' * 32}:ask:review:review:r",
     )
     reset_native_hook_route()
     store = GuardStore(tmp_path / "guard-home")
@@ -215,10 +212,6 @@ def test_hook_worker_fails_closed_when_forced_native_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "force",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -249,10 +242,6 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -278,42 +267,10 @@ def test_hook_worker_fails_closed_when_auto_pretool_native_is_unavailable(
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
-def test_hook_worker_falls_back_when_native_mode_is_off(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "off",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
-        lambda *_args, **_kwargs: None,
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_runtime_status",
-        lambda: NativeRuntimeStatus(mode="off", available=True, compatible=True, reason="off"),
-    )
-    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-        params={},
-        default_harness="pi",
-        home_dir=tmp_path / "home",
-        guard_home=tmp_path / "guard-home",
-        workspace=tmp_path / "workspace",
-    )
-    assert result["reason_code"] == "native_hook_disabled"
-
-
 def test_hook_worker_denies_unreviewed_non_command_pretool_without_native_result(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -336,10 +293,6 @@ def test_hook_worker_pauses_secret_read_without_native_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -361,26 +314,23 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
     worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
     result = worker.review_http_payload(
-        # Claude permission dialogs have their own passthrough route; Codex
-        # permission events still reach the native fail-safe.
+        # Claude, Codex, Copilot, Devin and ZCode permission dialogs have
+        # their own passthrough routes; other harnesses' permission events
+        # still reach the native fail-safe.
         payload={"hook_event_name": "PermissionRequest", "tool_input": {"command": "pwd"}},
         params={},
-        default_harness="codex",
+        default_harness="kimi",
         home_dir=tmp_path / "home",
         guard_home=tmp_path / "guard-home",
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_hook_event_unavailable"
-    assert result["continue"] is True
+    assert result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     grok_session = worker.review_http_payload(
         payload={"hookEventName": "session_start"},
         params={},
@@ -390,3 +340,33 @@ def test_hook_worker_routes_out_of_scope_events_to_native_fail_safe(
         workspace=tmp_path / "workspace",
     )
     assert grok_session == {}
+
+
+def test_hook_worker_leaves_permission_requests_to_the_harness_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unexpected_review(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("passthrough permission requests must not reach the edge")
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
+        unexpected_review,
+    )
+    worker = HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    cases = [
+        (harness, event_name)
+        for harness in ("codex", "copilot", "devin", "zcode")
+        for event_name in ("PermissionRequest", "permission_request", "permissionRequestV2")
+    ]
+    for harness, event_name in cases:
+        result = worker.review_http_payload(
+            payload={"hook_event_name": event_name, "tool_name": "Bash", "tool_input": {"command": "pwd"}},
+            params={},
+            default_harness=harness,
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=tmp_path / "workspace",
+        )
+        # No decision: the harness shows its normal approval prompt.
+        assert result == {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}

@@ -58,6 +58,7 @@ from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
     approval_prompt_flow,
+    approvals_queued_before,
     attach_primary_approval_link,
     build_approval_browser_url,
     canonical_local_approval_url,
@@ -117,10 +118,7 @@ from ..local_supply_chain import (
     _resolve_guard_sync_auth_context,
     apply_stored_package_policy_override,
     build_local_supply_chain_posture,
-    build_supply_chain_explain_payload,
     build_supply_chain_status_payload,
-    build_workspace_audit_payload,
-    build_workspace_scan_payload,
     evaluate_package_request_artifact,
     package_request_policy_hash,
     resolve_package_firewall_entitlement_with_refresh,
@@ -134,6 +132,13 @@ from ..mcp_tool_calls import (
     evaluate_tool_call,
 )
 from ..models import GUARD_ACTION_VALUES, SEVERITY_RANK, GuardArtifact, HarnessDetection, PolicyDecision
+from ..native_cisco_preflight import (
+    build_cisco_deep_scan_payload,
+    cisco_risk_signal_v3_to_v2,
+    policy_action_for_cisco_signals,
+    scan_action_for_cisco_evidence,
+)
+from ..native_prompt import extract_prompt_requests
 from ..package_firewall_entitlement import (
     package_firewall_action_states,
     package_firewall_available_actions,
@@ -142,39 +147,25 @@ from ..package_firewall_entitlement import (
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
+from ..risk import artifact_risk_profile, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
-from ..runtime.cisco_preflight import (
-    build_cisco_deep_scan_payload,
-    cisco_risk_signal_v3_to_v2,
-    policy_action_for_cisco_signals,
-    scan_action_for_cisco_evidence,
-)
-from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
-from ..runtime.data_flow_rules import detect_data_flow_exfiltration
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_arg_requests_exec,
-    fd_args_follow_symlinks,
-    fd_exec_token_is_plain_sed,
-    fd_search_targets,
-    split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from ..runtime.github_capability_interaction import github_capability_requires_confirmation
+from ..runtime.guard_run_evaluation import prompt_requests_to_artifacts
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
-from ..runtime.package_intent import build_package_request_artifact, extract_package_intent_request
+from ..runtime.package_intent_common import build_package_request_artifact
+from ..runtime.package_intent_parser import extract_package_intent_request
 from ..runtime.runner import (
     GuardSyncAuthorizationExpiredError,
     GuardSyncEndpointUntrustedError,
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
-    extract_prompt_requests,
-    guard_run,
-    prompt_requests_to_artifacts,
     sync_local_guard_cloud_proof,
     sync_receipts,
     sync_runtime_session,
@@ -184,15 +175,11 @@ from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_file_write_request_artifact,
     build_tool_action_request_artifact,
-    classify_github_shell_capabilities,
     extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
     literal_cd_execution_context,
-    low_risk_compound_developer_execution_context,
-    shell_execution_context_starts_with_literal_cd,
 )
 from ..runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -203,9 +190,16 @@ from ..runtime.secret_sensitivity import (
 from ..runtime.sed_scripts import sed_script_is_bounded_print
 from ..runtime.signals import RiskSignalV2
 from ..runtime.surface_server import GuardSurfaceRuntime
-from ..shims import activate_package_shims, package_shim_status, uninstall_package_shims
+from ..runtime.wrapper_run import guard_run
+from ..shims import (
+    activate_package_shims,
+    package_shim_status,
+    probe_package_shim_intercepts,
+    uninstall_package_shims,
+)
 from ..store import GuardStore
 from .approval_gate_prompt import approval_gate_cli_payload, prompt_for_approval_gate
+from .commands_parser_constants import _GUARD_HELP_GROUPS, _SERVICE_RUNTIME_CHOICES, _guard_risk_action_key
 from .connect_flow import (
     CONNECT_SYNC_AUTH_CONTEXT_KEY,
     DEFAULT_GUARD_CONNECT_URL,
@@ -232,8 +226,8 @@ from .install_commands import (
 from .install_dry_run import build_managed_install_plan
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
-from .uninstall_commands import run_guard_self_uninstall
-from .update_commands import run_guard_update
+from .uninstall_commands import retire_native_resident_after_last_harness, run_guard_self_uninstall
+from .update_commands import bundled_native_runtime_report, repair_native_runtime_if_missing, run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
 
@@ -244,78 +238,9 @@ class GuardBrowserOpener(Protocol):
 
 _GUARD_CLIENT_VERSION = "2.0.0"
 _SERVICE_RUNTIME_PROFILE_STATE_KEY = "service_runtime_profile"
-_SERVICE_RUNTIME_CHOICES = ("hermes", "openclaw", "custom")
-_SERVICE_RUNTIME_SURFACE = "agent-sdk"
 _NAMED_SECURITY_LEVELS = {"relaxed", "balanced", "strict", "gentle", "paranoid"}
-_HOOK_DAEMON_FAILURE_STATUSES = frozenset({"unreachable", "error", "failed", "404"})
-_HOOK_DAEMON_FAIL_MODES = frozenset({"strict", "permissive"})
 _HOOK_DAEMON_UNREACHABLE_REASON_MARKER = "daemon was unreachable"
-_HOOK_DAEMON_STRICT_REASON = (
-    "HOL Guard fail safe: the local Guard daemon was unreachable, so this hook blocked the action."
-)
-_HOOK_DAEMON_PERMISSIVE_REASON = (
-    "HOL Guard daemon was unreachable; permissive mode allowed this action and recorded the degraded state."
-)
-_HOOK_DAEMON_PRESERVED_DENY_REASON = (
-    "HOL Guard daemon was unreachable; preserving the existing deny decision for this action."
-)
 _CODEX_BROWSER_APPROVAL_WAIT_MAX_SECONDS = 8
-_GUARD_HELP_GROUPS = (
-    "HOL Guard AI Antivirus command center:\n"
-    "  start        First-run protection setup for one local AI harness\n"
-    "  status       Home: current protection state, proof, and next action\n"
-    "  dashboard    Open local Home, Protect, Inbox, Evidence, and Settings\n"
-    "  apps         Protect: connect, test, repair, or disconnect AI tools\n"
-    "  run          Enforce Guard before a harness launch\n"
-    "  approvals    Inbox: approve, block, or scope requests needing judgment\n"
-    "  receipts     Evidence: review local decisions and proof receipts\n"
-    "\n"
-    "Team and cloud coordination:\n"
-    "  connect      Pair this machine to Guard Cloud\n"
-    "  disconnect   Revoke local Guard Cloud auth and optionally revoke cloud grant state\n"
-    "  login        Compatibility alias for browser pairing\n"
-    "  sync         Send local decisions, receipts, and policy memory to Guard Cloud\n"
-    "  service      Manage hosted-runtime Guard Cloud login and sync\n"
-    "  device       Inspect or rotate this machine identity\n"
-    "  bridge       Forward Guard signals to external channels\n"
-    "\n"
-    "Advanced and diagnostics:\n"
-    "  detect       Discover harnesses and managed artifacts\n"
-    "  protect      Wrap installs before they land\n"
-    "  preflight    Scan a target before you add it\n"
-    "  scan         Run a consumer-mode artifact scan\n"
-    "  diff         Compare current artifacts to stored snapshots\n"
-    "  inventory    Inspect tracked artifacts\n"
-    "  abom         Export the local artifact bill of materials\n"
-    "  aibom        Export the local AIBOM with trust and source metadata\n"
-    "  explain      Show evidence for one artifact\n"
-    "  policies     Inspect local Guard policy state\n"
-    "  settings     Settings: show or update local Guard rules\n"
-    "  exceptions   Inspect active exception windows\n"
-    "  advisories   Inspect cached Guard Cloud advisories\n"
-    "  events       Review Guard lifecycle events\n"
-    "  doctor       Run local diagnostics\n"
-    "  bootstrap    Detect, install, and launch the approval center\n"
-    "  install      Enable Guard management for a harness\n"
-    "  uninstall    Disable Guard management or remove hol-guard entirely\n"
-    "  update       Update hol-guard in the current environment\n"
-    "\n"
-    "Command selection:\n"
-    "  Use status for Home posture and the next safe step\n"
-    "  Use apps for Protect install, repair, status, and first protected action proof\n"
-    "  Use approvals for Inbox decisions and receipts for Evidence\n"
-    "  Use doctor for setup and runtime probes\n"
-    "  Use diff for changed artifacts after a blocked launch\n"
-    "  Use explain for detailed artifact evidence\n"
-    "  Use events for the local timeline"
-)
-
-
-def _guard_risk_action_key(value: str) -> str:
-    normalized = value.strip().lower().replace("-", "_")
-    if normalized not in VALID_RISK_ACTION_KEYS:
-        raise argparse.ArgumentTypeError(f"invalid risk class: {value}")
-    return normalized
 
 
 def _hook_command_text(payload: Mapping[str, object]) -> str | None:

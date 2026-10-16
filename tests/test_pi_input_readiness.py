@@ -34,6 +34,7 @@ const pi = { on(name, callback) { callbacks[name] = callback; } };
 let connection = {stateId: 'daemon-a'}, ready = true, setupCalls = 0;
 function loadGuardDaemonConnection() { return connection; }
 function invalidateInputApprovalResumes() { inputApprovalResumeGeneration++; }
+function invalidateApprovalContinuations() {}
 function handlerAbortSignal(ctx) { return ctx.signal; }
 function captureInputApprovalResumeBinding() { return null; }
 function approvalBlockedReason(_response, reason) { return reason; }

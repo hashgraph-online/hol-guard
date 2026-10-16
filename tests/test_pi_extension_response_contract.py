@@ -5,10 +5,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import (
-    harness_json_from_native_pre_tool,
-    observe_lifecycle_fail_safe_response,
-)
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool
 from tests.pi_extension_response_callback_support import (
     _run_generated_callback_payload,
     _run_generated_source_ref_fixture,
@@ -19,13 +16,19 @@ from tests.pi_extension_response_runtime_support import (
 )
 from tests.pi_extension_response_source_support import _generated_source
 
+UNAVAILABLE = {
+    "decision": "deny",
+    "reason": "HOL Guard could not reach its local review service before the deadline. Retry the action.",
+    "reason_code": "daemon_unavailable",
+}
+
 
 def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
-    allow = harness_json_from_native_pre_tool(
+    allow = render_pre_tool(
         "omp",
         {"decision": "allow", "minimum_action": "allow", "reason_code": "fixture_allow"},
     )
-    deny = harness_json_from_native_pre_tool(
+    deny = render_pre_tool(
         "omp",
         {
             "decision": "deny",
@@ -34,19 +37,9 @@ def test_canonical_omp_allow_deny_and_lifecycle_shapes() -> None:
             "reason_code": "fixture_block",
         },
     )
-    lifecycle = observe_lifecycle_fail_safe_response(
-        "omp",
-        event_name="UserPromptSubmit",
-        reason_code="fixture_lifecycle",
-    )
 
     assert allow["decision"] == "allow"
     assert deny["decision"] == "deny"
-    assert lifecycle == {
-        "decision": "allow",
-        "policy_action": "allow",
-        "reason_code": "fixture_lifecycle",
-    }
 
 
 def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(tmp_path: Path) -> None:
@@ -78,23 +71,17 @@ def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(t
         "recoveryKind": "transport-failure",
     }
 
-    assert result["retry_still_malformed"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
+    # A daemon that still answers with an unusable shape after recovery denies
+    # the hook. No Python CLI reviews it instead.
+    assert result["retry_still_malformed"] == UNAVAILABLE
     assert result["retry_still_malformed_daemon_calls"] == 2
     assert result["retry_still_malformed_recovery_calls"] == 1
-    assert result["retry_still_malformed_cli_calls"] == 1
+    assert result["retry_still_malformed_cli_calls"] == 0
 
-    assert result["retry_malformed_reason"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
+    assert result["retry_malformed_reason"] == UNAVAILABLE
     assert result["retry_malformed_reason_daemon_calls"] == 2
     assert result["retry_malformed_reason_recovery_calls"] == 1
-    assert result["retry_malformed_reason_cli_calls"] == 1
+    assert result["retry_malformed_reason_cli_calls"] == 0
 
     assert result["retry_valid"] == {"decision": "allow"}
     assert result["retry_valid_daemon_calls"] == 2
@@ -107,40 +94,37 @@ def test_generated_omp_rejects_ambiguous_success_and_preserves_retry_semantics(t
     assert result["posttool_daemon_allow_daemon_calls"] == 1
     assert result["posttool_daemon_allow_recovery_calls"] == 0
     assert result["posttool_daemon_allow_cli_calls"] == 0
-    assert result["stale_daemon_cli_success"] == {"decision": "allow"}
-    assert result["stale_daemon_cli_daemon_calls"] == 1
-    assert result["stale_daemon_cli_recovery_calls"] == 0
+    assert result["stale_daemon_success"] == {"decision": "allow"}
+    assert result["stale_daemon_daemon_calls"] == 1
+    assert result["stale_daemon_recovery_calls"] == 0
     assert result["stale_daemon_cli_calls"] == 0
 
-    assert result["cli_missing_decision"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
+    assert result["unreachable_pre"] == UNAVAILABLE
+    assert result["unreachable_prompt"] == UNAVAILABLE
+    assert result["unreachable_post"] == UNAVAILABLE
+    assert result["unreachable_recovery_calls"] == 3
+    assert result["unreachable_cli_calls"] == 0
+
+
+def test_generated_omp_reads_native_bridge_replies_as_daemon_responses(tmp_path: Path) -> None:
+    result = _run_generated_fixture(_generated_source(tmp_path))
+
+    assert result["native_allow"] == {"decision": "allow"}
+    assert result["native_deny"] == {"decision": "deny", "reason": "block"}
+    assert result["native_refused"] == {
+        "response": None,
+        "recoveryKind": "authenticated-control-plane-failure",
     }
-    assert result["cli_empty_prompt"] == {
+    assert result["native_malformed"] == {
         "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
+        "reason": "HOL Guard received an invalid response from the authenticated local daemon.",
+        "reason_code": "daemon_invalid_response",
     }
-    assert result["cli_empty_post"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
-    assert result["cli_malformed_reason"] == {
-        "decision": "deny",
-        "reason": "HOL Guard fallback did not return a valid decision. Retry the action.",
-        "reason_code": "guard_cli_invalid_response",
-    }
-    assert result["cli_null_reason"] == {"decision": "deny", "reason": None}
-    assert result["cli_omitted_reason"] == {"decision": "deny"}
-    assert result["cli_lifecycle_allow"] == {"decision": "allow", "policy_action": "allow"}
-    assert result["cli_allow"] == {"decision": "allow"}
-    assert result["cli_deny"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_block_prompt"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_block_post"] == {"decision": "deny", "reason": "fixture block"}
-    assert result["cli_nonzero_allow"] == {"decision": "deny", "reason": "cli failed"}
-    assert result["cli_signal_allow"] == {"decision": "deny", "reason": "Blocked by HOL Guard."}
+    for case in ("native_no_reply", "native_failed", "native_missing_body"):
+        assert result[case] == {"response": None, "recoveryKind": "transport-failure"}, case
+    # Every native reply, including no reply, stands in for the daemon request.
+    assert result["native_fetch_calls"] == 0
+    assert result["native_query_has_workspace"] is True
 
 
 def test_generated_omp_tool_result_preserves_daemon_allow_without_hash(tmp_path: Path) -> None:
@@ -255,6 +239,40 @@ def test_generated_omp_directory_result_stays_inline_not_source_ref(tmp_path: Pa
     assert legacy_file_handler["preserved"] is True
     assert legacy_file_handler["payload"]["guard_source_ref"]["kind"] == "source_file"
     assert legacy_file_handler["payload"]["guard_source_ref"]["path"] == str(tmp_path / "legacy.py")
+
+
+def test_generated_omp_json_query_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": '{"ok": true}'}]
+
+    for path in (f"{tmp_path / 'queries.json'}?q=.queries", "data.NDJSON?q=.a&raw=true"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    for path in (tmp_path / "queries.json", f"{tmp_path / 'notes.md'}?q=.a"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is not None
+
+
+def test_generated_omp_read_list_result_stays_inline_not_source_ref(tmp_path: Path) -> None:
+    source = _generated_source(tmp_path)
+    content = [{"type": "text", "text": "1#AB:export const a = 1;"}]
+
+    for path in (f"{tmp_path / 'a.ts'}; {tmp_path / 'b.ts'}", "src/a.ts:1-5;src/b.ts"):
+        assert _run_generated_source_ref_fixture(source, content, path)["sourceRef"] is None
+    assert _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts")["sourceRef"] is not None
+
+    # OMP splits a comma or space list too, and names each part it read.
+    comma_path = "src/a.ts:1-5,src/b.ts:2-3"
+    split = {"displayReadTargets": ["src/a.ts", "src/b.ts"]}
+    assert _run_generated_source_ref_fixture(source, content, comma_path, details=split)["sourceRef"] is None
+    single = {"displayReadTargets": ["src/a.ts"]}
+    assert (
+        _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=single)["sourceRef"] is not None
+    )
+    # Details that are present but not an object cannot vouch for one file.
+    for malformed in ("src/a.ts", ["src/a.ts", "src/b.ts"], 1):
+        assert (
+            _run_generated_source_ref_fixture(source, content, tmp_path / "a.ts", details=malformed)["sourceRef"]
+            is None
+        )
 
 
 def test_generated_omp_selector_review_uses_host_resolved_source_path(tmp_path: Path) -> None:

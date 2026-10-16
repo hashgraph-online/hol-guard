@@ -28,8 +28,12 @@ POLICY_SNAPSHOT_UNAVAILABLE_ERRORS = frozenset(
         "native_policy_snapshot_ack_mismatch",
     }
 )
-POLICY_SNAPSHOT_V3_VERSION = 3
-POLICY_SNAPSHOT_PROTOCOL_VERSION = 1
+# Errors the installed files cannot recover from on their own. A runtime and
+# a command catalog that came from different builds reject every snapshot the
+# publisher sends, so retrying only spends the publish timeout on each hook
+# call. The install has to be repaired.
+POLICY_SNAPSHOT_PERSISTENT_ERRORS = frozenset({"native_command_program_binding_mismatch"})
+POLICY_SNAPSHOT_UNRECOVERABLE_ERRORS = POLICY_SNAPSHOT_UNAVAILABLE_ERRORS | POLICY_SNAPSHOT_PERSISTENT_ERRORS
 POLICY_SNAPSHOT_MAX_BYTES = 256 * 1024
 POLICY_SNAPSHOT_MAX_STRING_BYTES = 4 * 1024
 POLICY_SNAPSHOT_MAX_MAP_ENTRIES = 256
@@ -39,7 +43,6 @@ POLICY_SNAPSHOT_MAX_JSON_DEPTH = 32
 POLICY_SNAPSHOT_MAX_JSON_COLLECTION_ITEMS = 4_096
 POLICY_SNAPSHOT_MAX_JSON_STRING_BYTES = 1024 * 1024
 POLICY_SNAPSHOT_MAX_EXPIRY_MS = 24 * 60 * 60 * 1000
-POLICY_SNAPSHOT_INTEGRITY_ALGORITHM = "hmac-sha256"
 
 # Keep these bytes byte-for-byte aligned with guard-policy-snapshot. Rust's
 # HMAC helper authenticates ``domain || message`` rather than using a second
@@ -63,6 +66,9 @@ _VERIFIER_KEY_BYTES = 32
 _PUBLISH_RETRY_SECONDS = 0.25
 _PUBLISH_TIMEOUT_SECONDS = 8.0 if sys.platform == "win32" else 2.0
 _PUBLISH_STARTUP_TIMEOUT_SECONDS = 9.0
+# One business-policy native exchange: runtime probe plus compile or codec call.
+# A cold native start on a slow Windows host can use most of the 5 s budget alone.
+BUSINESS_NATIVE_TIMEOUT_SECONDS = 15.0 if sys.platform == "win32" else 5.0
 _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0
@@ -104,49 +110,7 @@ _VALID_RISK_ACTION_KEYS = frozenset(
         "policy_bypass",
     }
 )
-_SNAPSHOT_FIELDS = frozenset(
-    {
-        "schema",
-        "version",
-        "generation",
-        "policy_digest",
-        "config_digest",
-        "rule_digest",
-        "runtime_identity",
-        "protocol_version",
-        "mode",
-        "scope_contract",
-        "effective_policy",
-        "issued_at_ms",
-        "expires_at_ms",
-        "integrity",
-    }
-)
-_OPTIONAL_SNAPSHOT_FIELDS = frozenset({"command_extensions"})
-_SCOPE_FIELDS = frozenset({"schema", "kind", "scope_digest", "workspace_binding"})
-_EFFECTIVE_POLICY_FIELDS = frozenset(
-    {
-        "protection_posture",
-        "security_level",
-        "default_action",
-        "unknown_publisher_action",
-        "changed_hash_action",
-        "new_network_domain_action",
-        "subprocess_action",
-        "risk_actions",
-        "harness_risk_actions",
-        "harness_actions",
-        "publisher_actions",
-        "artifact_actions",
-        "sandbox_analysis",
-        "receipt_redaction_level",
-    }
-)
-_INTEGRITY_FIELDS = frozenset({"algorithm", "key_id", "mac"})
-_PUSH_ENVELOPE_FIELDS = frozenset({"operation", "deadline_budget_ms", "request"})
-_PUSH_REQUEST_FIELDS = frozenset({"schema", "snapshot"})
 _VALID_INPUT_MODES = frozenset({"observe", "prompt", "enforce"})
-_MAX_U16 = (1 << 16) - 1
 _MAX_U64 = (1 << 64) - 1
 
 # Windows verifier state uses the same protected explicit owner+SYSTEM DACL

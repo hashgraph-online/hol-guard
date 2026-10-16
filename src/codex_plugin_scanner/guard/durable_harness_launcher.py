@@ -83,7 +83,17 @@ def build_harness_shim(
             "            pythonpath_entries.append(normalized)",
             "    combined_env['PYTHONPATH'] = os.pathsep.join(pythonpath_entries)",
             'extra_args = [f"--arg={arg}" for arg in sys.argv[1:]]',
-            "os.execvpe(base_command[0], [*base_command, *extra_args], combined_env)",
+            "argv = [*base_command, *extra_args]",
+            # Windows has no exec. os.execvpe spawns a second process, joins argv
+            # with a quoting rule the child's C runtime does not undo, and returns
+            # 0 to the caller whatever the child did. The loader passed to -c comes
+            # back split on its own whitespace, so the child dies on a fragment of
+            # Guard's own source while the harness reads success. subprocess keeps
+            # the argument boundaries and the exit code.
+            "if os.name == 'nt':",
+            "    import subprocess",
+            "    sys.exit(subprocess.run(argv, env=combined_env, check=False).returncode)",
+            "os.execvpe(argv[0], argv, combined_env)",
             "",
         )
     )
@@ -105,7 +115,13 @@ def build_windows_script(executable: str, posix_path: Path, *, source: str | Non
         command = [guard_cli, "run-shim", *context_args, harness, "--"]
         command_line = " ".join(_cmd_quote_fixed_argument(value) for value in command)
         return "\r\n".join(("@echo off", "setlocal DisableDelayedExpansion", f"{command_line} %*", ""))
-    return "\r\n".join(("@echo off", f'"{executable}" "{posix_path}" %*', ""))
+    # A .cmd returns the errorlevel of its last command, and the Python shim it
+    # calls is the last command, so the harness sees the hook's own exit code.
+    # `exit /b` without a number returns the status of the command above it.
+    # Writing `%ERRORLEVEL%` there would expand an inherited environment
+    # variable of that name instead, and a launching shell that exports
+    # ERRORLEVEL=0 would report every denied hook to the harness as success.
+    return "\r\n".join(("@echo off", f'"{executable}" "{posix_path}" %*', "exit /b", ""))
 
 
 def _cmd_quote_fixed_argument(value: str) -> str:

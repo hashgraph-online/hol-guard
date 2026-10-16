@@ -12,12 +12,16 @@ pub fn shell_tokens_without_redirects(
 ) -> Vec<String> {
     let mut masked: Vec<char> = command.chars().collect();
     for redirect in redirects {
-        let local_start = redirect.start as isize - source_offset as isize;
-        let local_end = redirect.end as isize - source_offset as isize;
-        if local_start < 0 || local_end > masked.len() as isize {
+        let Some(local_start) = redirect.start.checked_sub(source_offset) else {
+            continue;
+        };
+        let Some(local_end) = redirect.end.checked_sub(source_offset) else {
+            continue;
+        };
+        if local_start > local_end || local_end > masked.len() {
             continue;
         }
-        for slot in masked[local_start as usize..local_end as usize].iter_mut() {
+        for slot in masked[local_start..local_end].iter_mut() {
             *slot = ' ';
         }
     }

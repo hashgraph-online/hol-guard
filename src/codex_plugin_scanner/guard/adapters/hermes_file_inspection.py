@@ -258,23 +258,6 @@ def parse_hermes_yaml_mapping(content: str) -> dict[str, object] | None:
     return parsed if isinstance(parsed, dict) else None
 
 
-def file_inspection_metadata(inspection: HermesFileInspection) -> dict[str, object]:
-    """Return non-content metadata suitable for artifact identity and UI."""
-
-    metadata: dict[str, object] = {
-        "analysis_truncated": inspection.analysis_truncated,
-        "inspection_complete": inspection.complete,
-        "inspection_readable": inspection.readable,
-        "preview_bytes": len(inspection.preview.encode("utf-8")),
-        "size_bytes": inspection.size_bytes,
-    }
-    if inspection.content_hash is not None:
-        metadata["content_hash"] = inspection.content_hash
-    if inspection.reason is not None:
-        metadata["inspection_reason"] = inspection.reason
-    return metadata
-
-
 def _load_yaml(content: str) -> object:
     alias_count = 0
     depth = 0
@@ -408,7 +391,6 @@ __all__ = [
     "HermesConfigInspectionReason",
     "HermesFileInspection",
     "HermesFileInspectionReason",
-    "file_inspection_metadata",
     "inspect_hermes_config",
     "inspect_hermes_text_file",
     "parse_hermes_yaml_mapping",

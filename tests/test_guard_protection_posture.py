@@ -360,9 +360,11 @@ def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> No
     assert loaded.protection_posture == "watch"
 
 
-def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path: Path) -> None:
+def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-        _apply_explicit_posture_action,
+        _runtime_artifact_policy_action,
     )
     from codex_plugin_scanner.guard.models import GuardArtifact
 
@@ -376,10 +378,11 @@ def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path:
         source_scope="project",
         config_path="/workspace/repo/.guard/config.toml",
         metadata={
+            "risk_classes": ["credential_exfiltration"],
             "risk_signals": [{"confidence": "strong", "category": "secret"}],
         },
     )
-    action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
+    action = _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
     assert action == "block"
 
 

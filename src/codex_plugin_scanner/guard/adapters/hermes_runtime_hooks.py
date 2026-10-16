@@ -8,10 +8,9 @@ from __future__ import annotations
 
 import json
 import shlex
-import sys
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, TextIO
+from typing import Any
 
 from codex_plugin_scanner.safe_output import write_text_atomic_no_follow
 
@@ -236,20 +235,6 @@ def hermes_allowlist_path(hermes_home: Path) -> Path:
     return hermes_home.expanduser().resolve(strict=False) / _ALLOWLIST_NAME
 
 
-def prepare_hermes_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:
-    """Normalize Hermes stdin onto Guard envelope keys."""
-
-    normalized = dict(payload)
-    event_name = normalized.get("hook_event_name")
-    if isinstance(event_name, str) and event_name.replace("_", "").replace("-", "").lower() == "pretoolcall":
-        normalized["hook_event_name"] = "PreToolUse"
-    if not isinstance(normalized.get("tool_input"), Mapping):
-        args = normalized.get("args")
-        if isinstance(args, Mapping):
-            normalized["tool_input"] = dict(args)
-    return normalized
-
-
 def hermes_native_decision(*, policy_action: str, reason: str) -> dict[str, object]:
     if policy_action in {"allow", "warn"}:
         return {"decision": "allow", "reason": reason}
@@ -272,18 +257,6 @@ def hermes_bridge_response(
     payload = hermes_native_decision(policy_action=policy_action, reason=reason)
     stdout = json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
     return stdout, "", 2 if hermes_should_exit_block(policy_action) else 0
-
-
-def emit_hermes_hook_response(
-    *,
-    policy_action: str,
-    reason: str,
-    output_stream: TextIO | None = None,
-) -> None:
-    stream = output_stream if output_stream is not None else sys.stdout
-    payload = hermes_native_decision(policy_action=policy_action, reason=reason)
-    stream.write(json.dumps(payload, separators=(",", ":")) + "\n")
-    stream.flush()
 
 
 def apply_hermes_doctor_protection_label(payload: dict[str, object]) -> None:

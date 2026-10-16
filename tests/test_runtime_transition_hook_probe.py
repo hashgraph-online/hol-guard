@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import time
 import uuid
 
 import pytest
@@ -126,39 +125,3 @@ def test_observation_package_identity_requires_complete_new_roles_and_preserves_
             trust._verify_transport(identities, manifest)
     else:
         assert set(trust._verified_packaged_files(manifest)) == set(paths)
-
-
-@pytest.mark.usefixtures("native_hook_force")
-@pytest.mark.parametrize("command,decision", [("pwd", "allow"), ("rm -rf /", "deny")])
-def test_actual_native_hook_worker_binds_observation_to_fresh_probe_id(tmp_path, capsys, command, decision):
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home, workspace = tmp_path / "guard-home", tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(home)
-    deadline = time.monotonic() + 10
-    worker = HookWorker(store=store)
-    payload = probe_payload(command)
-    try:
-        result = worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness="codex",
-            home_dir=tmp_path,
-            guard_home=home,
-            workspace=workspace,
-            deadline=deadline,
-        )
-        receipt = worker.last_native_decision_receipt
-        assert receipt is not None and receipt["decision"] == decision
-        observation = transition_hook_observation(payload, receipt)
-        assert observation is not None
-        assert observation["request_id"] == payload[PROBE_FIELD]["request_id"]
-        result[OBSERVATION_FIELD] = observation
-        bridge._write_transition_observation(json.dumps(payload), result)
-        assert json.loads(capsys.readouterr().err) == observation
-    finally:
-        assert worker.close(deadline_monotonic=deadline)
-        assert close_native_residents(guard_home=home, deadline_monotonic=deadline)

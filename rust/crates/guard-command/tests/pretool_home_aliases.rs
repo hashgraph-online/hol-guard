@@ -3,8 +3,7 @@ use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 use std::path::Path;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 #[test]
 fn aliased_home_root_allows_ordinary_files_but_not_redirected_targets() {

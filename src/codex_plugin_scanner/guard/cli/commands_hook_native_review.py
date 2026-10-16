@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 from ..action_lattice import is_guard_action, most_restrictive_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
+from ..harness_posture import harness_is_recording_only
 from ..models import GuardAction
 from ..retry_lineage import capture_retry_lineage
 from ._commands_shared import *
@@ -201,7 +202,7 @@ def review_native_artifact_hook(
         policy_action=policy_action,
         guard_payload=response_payload,
     )
-    observe_mode = config.mode == "observe"
+    observe_mode = harness_is_recording_only(config, args.harness)
     from ..blocked_request_mode import asks_for_approval
 
     if (
@@ -362,7 +363,8 @@ def review_native_artifact_hook(
             }
             try:
                 daemon_client: GuardSurfaceDaemonClient | None = load_guard_surface_daemon_client(guard_home)
-            except RuntimeError:
+            except (RuntimeError, OSError):
+                # A daemon start past its lifecycle deadline raises TimeoutError, an OSError.
                 daemon_client = None
             browser_wait_metadata, browser_approval_wait_bound = _browser_wait_binding(
                 args=args,
@@ -423,21 +425,25 @@ def review_native_artifact_hook(
                 )
                 browser_approval_daemon_client = daemon_client
             except RuntimeError:
-                queued = queue_blocked_approvals(
-                    redaction_level=config.receipt_redaction_level,
-                    detection=runtime_detection,
-                    evaluation=evaluation_payload,
-                    store=store,
-                    approval_center_url=approval_center_url,
-                    now=_now(),
-                    continuation_operation={
-                        "created_at": _now(),
-                        "harness": args.harness,
-                        "metadata": hook_metadata,
-                        "status": "waiting_on_approval",
-                        "updated_at": _now(),
-                    },
-                )
+                try:
+                    queued = queue_blocked_approvals(
+                        redaction_level=config.receipt_redaction_level,
+                        detection=runtime_detection,
+                        evaluation=evaluation_payload,
+                        store=store,
+                        approval_center_url=approval_center_url,
+                        now=_now(),
+                        continuation_operation={
+                            "created_at": _now(),
+                            "harness": args.harness,
+                            "metadata": hook_metadata,
+                            "status": "waiting_on_approval",
+                            "updated_at": _now(),
+                        },
+                    )
+                except (RuntimeError, OSError) as queue_error:
+                    # A local queue past a native or store deadline (TimeoutError) keeps the native deny.
+                    queued = approvals_queued_before(queue_error)
                 _bind_hook_blocked_operation_queue(
                     harness=args.harness,
                     approval_center_url=approval_center_url,

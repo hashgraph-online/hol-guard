@@ -3,7 +3,7 @@
 //! Delegates to `guard_command::local_mcp_stdio::run_mcp_stdio_probe`, which
 //! reproduces `runtime/local_mcp_stdio.py`: launch-argv resolution,
 //! `server/discover` → `initialize` negotiation, bounded `tools/list` cursor
-//! pagination, declared-skills listing, and process-group teardown. Returns the
+//! pagination, declared-skills listing, and process-tree teardown. Returns the
 //! `McpCatalogResult.to_dict()` payload. Missing authority is terminal;
 //! bounded negotiation failures remain explicit native evidence.
 
@@ -12,14 +12,14 @@ use guard_contracts::{
     MCP_STDIO_PROBE_RESULT_SCHEMA,
 };
 use std::collections::HashMap;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 static PROBES: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn probe_cancellation(request_id: &str) -> Result<Arc<AtomicBool>, String> {
     if request_id.is_empty() || request_id.len() > 128 {
         return Err("invalid_mcp_request_id".to_owned());
@@ -50,10 +50,10 @@ pub(crate) fn cancel_mcp_stdio_probe(request_id: &str) -> Result<Vec<u8>, String
     crate::encode_response(&serde_json::json!({"status":"ok", "cancelled":cancellation.is_some()}))
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct ProbeRegistration<'a>(&'a str);
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl Drop for ProbeRegistration<'_> {
     fn drop(&mut self) {
         if let Some(probes) = PROBES.get() {
@@ -70,7 +70,7 @@ pub(crate) fn evaluate_mcp_stdio_probe(
     if request.schema != MCP_STDIO_PROBE_REQUEST_SCHEMA {
         return Err(format!("schema_mismatch:{}", request.schema));
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
         let cwd = PathBuf::from(&request.cwd);
         let home_dir = request.home_dir.as_deref().map(Path::new);
@@ -135,7 +135,7 @@ pub(crate) fn evaluate_mcp_stdio_probe(
             result: Some(catalog.to_payload()),
         })
     }
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = request;
         crate::encode_response(&McpStdioProbeResultV1 {

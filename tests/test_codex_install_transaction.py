@@ -569,7 +569,7 @@ def test_uninstall_preserves_key_needed_by_other_authenticated_target(tmp_path: 
     # public install gate for an absent manifest beside an existing key.
     config = second.home_dir / ".codex/config.toml"
     payload = {"features": {"hooks": True}}
-    adapter._install_config_hooks(payload, second)
+    adapter._install_config_hooks(payload, second, config_path=config)
     with codex_install_transaction(guard_home, config, actor="fixture-second-target"):
         state = adapter._write_authenticated_hook_config(
             second, config_path=config, payload=payload, previous_manifest=None

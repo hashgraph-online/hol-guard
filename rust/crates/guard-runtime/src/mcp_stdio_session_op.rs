@@ -8,44 +8,45 @@
 //! surfaced to the control plane as `event_kind:"child_request"`; the verdict
 //! is relayed back as a `send` op. These ops never decide allow/deny.
 //!
-//! `#[cfg(unix)]`: the session owner is unix-only.
+//! Unix and Windows: the child's process tree is a process group on unix and a
+//! kill-on-close JobObject on Windows (`guard_command::local_mcp_stdio::ChildTree`).
 
 use guard_contracts::{
     McpStdioSessionCloseRequestV1, McpStdioSessionOpenRequestV1, McpStdioSessionRecvRequestV1,
     McpStdioSessionResultV1, McpStdioSessionSendRequestV1,
 };
 use serde_json::Value;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::collections::HashMap;
 #[cfg(unix)]
 use std::os::unix::process::ExitStatusExt;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::path::PathBuf;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::process::Child;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::sync::atomic::{AtomicBool, Ordering};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::sync::{Arc, Mutex, OnceLock};
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use std::time::Duration;
 
-#[cfg(unix)]
-use guard_command::mcp_stdio_session::{LiveMcpSession, SessionEvent};
+#[cfg(any(unix, windows))]
+use guard_command::mcp_stdio_session::{LiveMcpSession, QuietEdge, SessionEvent};
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const MAX_SESSIONS: usize = 64;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const MAX_SESSION_ID: usize = 128;
 
 /// A live session: the framing owner plus the spawned child for teardown.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct SessionEntry {
     session: LiveMcpSession,
     child: Child,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl Drop for SessionEntry {
     fn drop(&mut self) {
         self.session.close(&mut self.child);
@@ -53,7 +54,7 @@ impl Drop for SessionEntry {
 }
 
 /// Cancellation is reachable without taking the I/O mutex.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 struct SessionHandle {
     state: Mutex<SessionEntry>,
     cancellation: Arc<AtomicBool>,
@@ -61,13 +62,13 @@ struct SessionHandle {
     owner_start: String,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 type SessionRegistryGuard<'a> = std::sync::MutexGuard<'a, HashMap<String, Arc<SessionHandle>>>;
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 static SESSIONS: OnceLock<Mutex<HashMap<String, Arc<SessionHandle>>>> = OnceLock::new();
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn sessions() -> Result<SessionRegistryGuard<'static>, String> {
     SESSIONS
         .get_or_init(|| Mutex::new(HashMap::new()))
@@ -77,7 +78,7 @@ fn sessions() -> Result<SessionRegistryGuard<'static>, String> {
 
 /// Look up a session's `Arc` under the registry lock, then drop the guard so a
 /// blocking `recv` doesn't serialize ops across other sessions.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn lookup(session_id: &str) -> Result<Arc<SessionHandle>, String> {
     validate_session_id(session_id)?;
     sessions()?
@@ -86,7 +87,7 @@ fn lookup(session_id: &str) -> Result<Arc<SessionHandle>, String> {
         .ok_or_else(|| "mcp_session_not_found".to_owned())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn validate_session_id(session_id: &str) -> Result<(), String> {
     if session_id.is_empty() || session_id.len() > MAX_SESSION_ID {
         return Err("invalid_mcp_session_id".to_owned());
@@ -104,29 +105,29 @@ fn err_result(code: &str) -> Result<Vec<u8>, String> {
     encode(r)
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn child_exit_code(child: &mut Child) -> Result<Option<i32>, String> {
     child
         .try_wait()
         .map(|status| {
             status.map(|status| {
-                status
-                    .code()
-                    .or_else(|| status.signal().map(|signal| -signal))
-                    .unwrap_or(-1)
+                let code = status.code();
+                #[cfg(unix)]
+                let code = code.or_else(|| status.signal().map(|signal| -signal));
+                code.unwrap_or(-1)
             })
         })
         .map_err(|_| "mcp_child_status_unavailable".to_owned())
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn exited_result(exit_code: i32) -> Result<Vec<u8>, String> {
     let mut r = McpStdioSessionResultV1::status("exited");
     r.exit_code = Some(exit_code);
     encode(r)
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn close_handle(handle: Arc<SessionHandle>) {
     handle.cancellation.store(true, Ordering::Release);
     // A poisoned entry still owns a child and must be torn down.
@@ -135,7 +136,7 @@ fn close_handle(handle: Arc<SessionHandle>) {
     session.close(child);
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn owner_gone(handle: &SessionHandle) -> bool {
     use crate::resident_process_identity::{process_is_definitively_gone, process_start_marker};
     if process_is_definitively_gone(handle.owner_pid).unwrap_or(false) {
@@ -146,7 +147,7 @@ fn owner_gone(handle: &SessionHandle) -> bool {
 
 /// Only dead owners may lose queued output. A live owner's exited child retains
 /// its final frames until recv/close, even if another proxy opens a session.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn reap_orphaned_sessions() {
     let snapshot: Vec<_> = match sessions() {
         Ok(registry) => registry
@@ -178,7 +179,7 @@ fn reap_orphaned_sessions() {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn start_reaper() -> Result<(), String> {
     static STARTED: OnceLock<Result<(), String>> = OnceLock::new();
     STARTED
@@ -196,7 +197,7 @@ fn start_reaper() -> Result<(), String> {
 }
 
 pub(crate) fn close_all_sessions() {
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     if let Ok(mut registry) = sessions() {
         let handles: Vec<_> = registry.drain().map(|(_, handle)| handle).collect();
         drop(registry);
@@ -207,12 +208,13 @@ pub(crate) fn close_all_sessions() {
 }
 
 /// `mcp_stdio_session_open` — spawn + register a live session.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn session_open(request: &McpStdioSessionOpenRequestV1) -> Result<Vec<u8>, String> {
     if validate_session_id(&request.session_id).is_err() {
         return err_result("invalid_mcp_session_id");
     }
-    if request.owner_pid == 0 || request.owner_pid > i32::MAX as u32 {
+    // A unix pid_t is signed; Windows process IDs use the full u32 range.
+    if request.owner_pid == 0 || (cfg!(unix) && request.owner_pid > i32::MAX as u32) {
         return err_result("invalid_mcp_session_owner");
     }
     let owner_start =
@@ -285,7 +287,7 @@ pub(crate) fn session_open(request: &McpStdioSessionOpenRequestV1) -> Result<Vec
 }
 
 /// `mcp_stdio_session_send` — frame a client→child message onto stdin.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn session_send(request: &McpStdioSessionSendRequestV1) -> Result<Vec<u8>, String> {
     let entry = match lookup(&request.session_id) {
         Ok(e) => e,
@@ -295,15 +297,107 @@ pub(crate) fn session_send(request: &McpStdioSessionSendRequestV1) -> Result<Vec
         Ok(g) => g,
         Err(_) => return err_result("mcp_session_unavailable"),
     };
+    if let Some(exchange) = request.exchange.as_ref() {
+        return exchange_locked(&mut guard, &request.message, exchange);
+    }
     match guard.session.write(&request.message) {
         Ok(()) => encode(McpStdioSessionResultV1::status("sent")),
         Err(code) => err_result(&code),
     }
 }
 
+#[cfg(any(unix, windows))]
+const MAX_QUIET_MS: u64 = 1_000;
+#[cfg(any(unix, windows))]
+const MAX_RESPONSE_MS: u64 = 120_000;
+
+#[cfg(any(unix, windows))]
+fn exchange_outcome(
+    outcome: &str,
+    written: bool,
+    kind: Option<&str>,
+    frame: Option<Value>,
+    exit_code: Option<i32>,
+) -> Result<Vec<u8>, String> {
+    let mut r = McpStdioSessionResultV1::status("sent");
+    r.payload = Some(serde_json::json!({
+        "outcome": outcome,
+        "written": written,
+        "event_kind": kind,
+        "frame": frame,
+        "exit_code": exit_code,
+    }));
+    encode(r)
+}
+
+#[cfg(any(unix, windows))]
+fn event_parts(event: SessionEvent) -> (&'static str, Value) {
+    match event {
+        SessionEvent::ChildResponse(frame) => ("child_response", frame),
+        SessionEvent::ChildRequest(frame) => ("child_request", frame),
+        SessionEvent::ChildNotification(frame) => ("child_notification", frame),
+    }
+}
+
+/// Fused `send`: quiet edge, write, correlated response. The quiet edge is the
+/// pre-write drain the proxy performs so a catalog change announced by the
+/// child is seen before a guarded call is written; any frame seen first is
+/// handed back unwritten (`boundary`) and the caller re-validates. Frames other
+/// than the awaited response are returned, never buffered here, because the
+/// proxy owns correlation of everything but its own response.
+#[cfg(any(unix, windows))]
+fn exchange_locked(
+    entry: &mut SessionEntry,
+    message: &Value,
+    exchange: &guard_contracts::McpStdioSessionExchangeV1,
+) -> Result<Vec<u8>, String> {
+    let Some(request_id) = message.get("id").filter(|id| !id.is_null()) else {
+        return err_result("mcp_exchange_requires_request_id");
+    };
+    let quiet = Duration::from_millis(exchange.quiet_ms.min(MAX_QUIET_MS));
+    match entry.session.next_event_quiet(quiet) {
+        Ok(QuietEdge::Silent) => {}
+        Ok(QuietEdge::Event(event)) => {
+            let (kind, frame) = event_parts(event);
+            return exchange_outcome("boundary", false, Some(kind), Some(frame), None);
+        }
+        Ok(QuietEdge::Busy) => {
+            return err_result("mcp_exchange_quiet_edge_busy");
+        }
+        Err(guard_command::mcp_stdio_session::SessionReadError::Eof) => {
+            return exchange_eof(&mut entry.child, false);
+        }
+    }
+    if let Err(code) = entry.session.write(message) {
+        return err_result(&code);
+    }
+    let remaining = Duration::from_millis(exchange.response_timeout_ms.min(MAX_RESPONSE_MS));
+    match entry.session.next_event(remaining) {
+        Ok(None) => exchange_outcome("timeout", true, None, None, None),
+        Err(guard_command::mcp_stdio_session::SessionReadError::Eof) => {
+            exchange_eof(&mut entry.child, true)
+        }
+        Ok(Some(SessionEvent::ChildResponse(frame))) if frame.get("id") == Some(request_id) => {
+            exchange_outcome("response", true, Some("child_response"), Some(frame), None)
+        }
+        Ok(Some(event)) => {
+            let (kind, frame) = event_parts(event);
+            exchange_outcome("event", true, Some(kind), Some(frame), None)
+        }
+    }
+}
+
+#[cfg(any(unix, windows))]
+fn exchange_eof(child: &mut Child, written: bool) -> Result<Vec<u8>, String> {
+    match child_exit_code(child) {
+        Ok(code) => exchange_outcome("eof", written, None, None, code),
+        Err(code) => err_result(&code),
+    }
+}
+
 /// `mcp_stdio_session_recv` — drain the next inbound child frame, optionally
 /// correlated to `await_request_id` (out-of-order frames are buffered).
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn session_recv(request: &McpStdioSessionRecvRequestV1) -> Result<Vec<u8>, String> {
     let entry = match lookup(&request.session_id) {
         Ok(e) => e,
@@ -382,7 +476,7 @@ pub(crate) fn session_recv(request: &McpStdioSessionRecvRequestV1) -> Result<Vec
 }
 
 /// `mcp_stdio_session_close` — cancel + teardown + deregister.
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) fn session_close(request: &McpStdioSessionCloseRequestV1) -> Result<Vec<u8>, String> {
     if validate_session_id(&request.session_id).is_err() {
         return err_result("invalid_mcp_session_id");
@@ -406,21 +500,21 @@ pub(crate) fn session_close(request: &McpStdioSessionCloseRequestV1) -> Result<V
     }
 }
 
-// Non-unix: the data plane is unsupported — fail closed with an explicit error
+// Elsewhere the data plane is unsupported — fail closed with an explicit error
 // rather than silently degrading (ADR 0006).
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn session_open(_r: &McpStdioSessionOpenRequestV1) -> Result<Vec<u8>, String> {
     err_result("native_mcp_stdio_session_unsupported")
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn session_send(_r: &McpStdioSessionSendRequestV1) -> Result<Vec<u8>, String> {
     err_result("native_mcp_stdio_session_unsupported")
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn session_recv(_r: &McpStdioSessionRecvRequestV1) -> Result<Vec<u8>, String> {
     err_result("native_mcp_stdio_session_unsupported")
 }
-#[cfg(not(unix))]
+#[cfg(not(any(unix, windows)))]
 pub(crate) fn session_close(_r: &McpStdioSessionCloseRequestV1) -> Result<Vec<u8>, String> {
     err_result("native_mcp_stdio_session_unsupported")
 }

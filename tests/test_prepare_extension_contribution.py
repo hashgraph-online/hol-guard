@@ -129,11 +129,3 @@ def test_prepare_checks_fixture_without_executing_a_target(
     assert calls[0][0][-1] == "test"
     assert calls[0][1] == fixture_path.read_bytes()
     assert all("--check" in command for command, _ in calls[1:])
-
-
-def test_authoring_workflow_compares_every_pr_source_change_to_its_base() -> None:
-    workflow = (REPOSITORY / ".github/workflows/extension-builder-ci.yml").read_text(encoding="utf-8")
-    assert "fetch-depth: 0" in workflow
-    assert '--changed-from "$COMPARISON_BASE"' in workflow
-    assert "scripts/ci/pr_merge_base.py --head" in workflow
-    assert "${{ steps.contribution-base.outputs.sha }}" in workflow

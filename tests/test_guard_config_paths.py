@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import bridge as bridge_module
 from codex_plugin_scanner.guard import config as guard_config_module
 from codex_plugin_scanner.guard.config import (
     GuardHomeMigrationError,
@@ -19,6 +18,11 @@ from codex_plugin_scanner.guard.config import (
     update_guard_settings,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
@@ -328,7 +332,7 @@ def test_dashboard_settings_update_preserves_existing_float_config_values(tmp_pa
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["score_threshold"] == 0.75
@@ -348,7 +352,7 @@ def test_dashboard_settings_update_preserves_existing_array_config_values(tmp_pa
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["trusted_harnesses"] == ["codex", "claude-code"]
@@ -367,7 +371,7 @@ def test_dashboard_settings_update_preserves_existing_inline_table_array_config_
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["rules"] == [{"name": "canary", "action": "review", "weight": 0.5}]
@@ -696,25 +700,6 @@ def test_load_guard_config_preserves_home_action_aliases_when_workspace_tries_to
     config = load_guard_config(guard_home, workspace_dir)
 
     assert config.harness_actions == {"codex": "review"}
-
-
-def test_run_bridge_uses_resolved_guard_home_by_default(tmp_path, monkeypatch):
-    expected_guard_home = tmp_path / ".hol-guard"
-    captured: dict[str, Path] = {}
-
-    class _FakeGuardBridge:
-        def __init__(self, *, config, store, backend):
-            captured["guard_home"] = store.guard_home
-
-        def run(self) -> None:
-            return
-
-    monkeypatch.setattr(bridge_module, "resolve_guard_home", lambda: expected_guard_home)
-    monkeypatch.setattr(bridge_module, "GuardBridge", _FakeGuardBridge)
-
-    bridge_module.run_bridge(dry_run=True)
-
-    assert captured["guard_home"] == expected_guard_home
 
 
 def test_sandbox_analysis_default_is_off(tmp_path: Path) -> None:

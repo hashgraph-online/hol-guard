@@ -1,0 +1,801 @@
+{
+  "build": {
+    "base": "packaged",
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Storage Clearer cleanup command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews Storage Clearer's run and app-run cleanup entry points while leaving audit, explain, reason, and plan read-only.",
+          "ecosystem_ids": [
+            "storage-clearer"
+          ],
+          "executables": [
+            "storage-clearer.sh"
+          ],
+          "extension_id": "command.storage-clearer",
+          "homepage": "https://github.com/khiemnd777/storage-clearer",
+          "icon": {
+            "kind": "none"
+          },
+          "license": "MIT",
+          "name": "Storage Clearer command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Storage Clearer cleanup command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies Storage Clearer run and app-run cleanup sessions, which can invoke Docker prune commands, xcrun simctl deletion, or tmutil snapshot thinning. Inline shell invocations such as `bash -c` are already blocked outright by Guard.",
+              "example_command": "./storage-clearer.sh run B",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Storage Clearer cleanup execution",
+              "permission_id": "command.storage-clearer.permission.cleanup",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run audit and review the generated plan before starting cleanup.",
+                "Keep Storage Clearer's approval and target-revalidation gates in place."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.storage-clearer",
+            "url": "https://github.com/khiemnd777/storage-clearer"
+          },
+          "reference_urls": [
+            "https://github.com/khiemnd777/storage-clearer/blob/main/storage-clearer.sh"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Storage Clearer cleanup command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies Storage Clearer run and app-run cleanup sessions, which can invoke Docker prune commands, xcrun simctl deletion, or tmutil snapshot thinning. Inline shell invocations such as `bash -c` are already blocked outright by Guard.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "executables": [
+                        "storage-clearer.sh"
+                      ],
+                      "subcommands": [
+                        "run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "bash",
+                        "sh"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--command",
+                        "-c",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "+O",
+                        "+o",
+                        "--init-file",
+                        "--rcfile",
+                        "-O",
+                        "-o"
+                      ],
+                      "subcommands": [
+                        "storage-clearer.sh",
+                        "run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "bash",
+                        "sh"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--command",
+                        "-c",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "+O",
+                        "+o",
+                        "--init-file",
+                        "--rcfile",
+                        "-O",
+                        "-o"
+                      ],
+                      "subcommands": [
+                        "./storage-clearer.sh",
+                        "run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "storage-clearer.sh"
+                      ],
+                      "subcommands": [
+                        "app-run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "bash",
+                        "sh"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--command",
+                        "-c",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "+O",
+                        "+o",
+                        "--init-file",
+                        "--rcfile",
+                        "-O",
+                        "-o"
+                      ],
+                      "subcommands": [
+                        "storage-clearer.sh",
+                        "app-run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  },
+                  {
+                    "config": {
+                      "executables": [
+                        "bash",
+                        "sh"
+                      ],
+                      "forbidden_flags_before_delimiter": [
+                        "--command",
+                        "-c",
+                        "-s"
+                      ],
+                      "options_with_values": [
+                        "+O",
+                        "+o",
+                        "--init-file",
+                        "--rcfile",
+                        "-O",
+                        "-o"
+                      ],
+                      "subcommands": [
+                        "./storage-clearer.sh",
+                        "app-run"
+                      ]
+                    },
+                    "op": "leading-subcommand.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.storage-clearer.permission.cleanup",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.storage-clearer.cleanup",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run audit and review the generated plan before starting cleanup.",
+                "Keep Storage Clearer's approval and target-revalidation gates in place."
+              ],
+              "severity": "high",
+              "title": "Storage Clearer cleanup execution"
+            }
+          ],
+          "safer_alternatives": [
+            "Run audit and review the generated plan before starting cleanup."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "classes": {
+        "external": [
+          "command.agentbridge",
+          "command.answerloops",
+          "command.appimg",
+          "command.blitcp",
+          "command.blkcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.cs",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.faf-cli",
+          "command.genclave",
+          "command.gitsync",
+          "command.google-workspace.gog",
+          "command.google-workspace.gws",
+          "command.keibidrop",
+          "command.kim",
+          "command.kranz",
+          "command.librarybridge",
+          "command.mcp-agenthub",
+          "command.mcp-asdecided",
+          "command.mcp-authyouragent",
+          "command.mcp-clipugc",
+          "command.mcp-contribos",
+          "command.mcp-enola",
+          "command.mcp-evernode-mcp",
+          "command.mcp-fablecut",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-insumer",
+          "command.mcp-kranz",
+          "command.mcp-lattice-talk",
+          "command.mcp-loomdesk",
+          "command.mcp-musiccontext",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.mcp-tether",
+          "command.mcp-vome-home-assistant",
+          "command.mcp-x-reader",
+          "command.mcp-xahau-mcp",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.repopy",
+          "command.routed",
+          "command.salesforce.sf",
+          "command.shellroute",
+          "command.showtime",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.storage-clearer",
+          "command.syngraphe",
+          "command.theourgia",
+          "command.tui-runner",
+          "command.uivoid",
+          "command.vttforge",
+          "command.xencode",
+          "command.xrpl-muse-skill"
+        ],
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ]
+      },
+      "publishers": {
+        "hol": {
+          "displayName": "Hashgraph Online",
+          "id": "hol"
+        },
+        "hol-curated": {
+          "displayName": "HOL curated library",
+          "id": "hol-curated"
+        }
+      },
+      "schemaVersion": "guard.extension-trust-class-map.v1"
+    }
+  },
+  "cases": [
+    {
+      "command": "./storage-clearer.sh run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "direct-run",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "direct-run-b",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "run-b",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "storage-clearer.sh app-run A",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "app-run",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh app-run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "app-run-b",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "'/Applications/Storage Clearer.app/Contents/Resources/storage-clearer.sh' app-run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "app-path",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "bash-run",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "bash-dot-run",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "sh storage-clearer.sh app-run A",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "sh-app-run",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -x ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-x",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash --login ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-login",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -O extglob ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-o",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash --init-file /dev/null ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-init",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -- ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "bash-delim",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -c './storage-clearer.sh run B'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-c",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "sh -c './storage-clearer.sh app-run A'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "sh-c",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -O extglob -c './storage-clearer.sh run B'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-o-c",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash --init-file /dev/null -c './storage-clearer.sh run B'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-init-c",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "fish --command './storage-clearer.sh run B'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "fish-command",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash -s ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "bash-stdin",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "exec ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "exec",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "xargs -n1 ./storage-clearer.sh run B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "xargs",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bare",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh audit",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "audit",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh explain all",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "explain",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh reason docker-build-cache",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "reason",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh plan A",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plan-a",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh plan B",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "plan-b",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh explore docker",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "explore",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh app-data",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "app-data",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "help",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "./storage-clearer.sh version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "version",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash ./storage-clearer.sh audit",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bash-audit",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "bash ./storage-clearer.sh plan A",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "bash-plan",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "grep 'storage-clearer.sh run|storage-clearer.sh app-run' docs",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "grep",
+      "rule_id": "command.storage-clearer.cleanup"
+    },
+    {
+      "command": "echo storage-clearer.sh run",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.storage-clearer"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "echo",
+      "rule_id": "command.storage-clearer.cleanup"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

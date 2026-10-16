@@ -290,10 +290,6 @@ class RuntimeHookScheduler:
             self._active_limit = active_limit
             self._dispatch()
 
-    def set_queue_listener(self, listener: Callable[[], None]) -> None:
-        with self._condition:
-            self._queue_listener = listener
-
     def _reject(self, reason_code: RuntimeHookAdmissionReason) -> RuntimeHookAdmission:
         self._rejected[reason_code] = self._rejected.get(reason_code, 0) + 1
         return RuntimeHookAdmission(None, reason_code)

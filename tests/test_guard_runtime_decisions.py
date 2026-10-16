@@ -12,6 +12,8 @@ from codex_plugin_scanner.guard.runtime.decisions import (
 )
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 
+pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
+
 
 def _signal() -> RiskSignalV2:
     return RiskSignalV2(

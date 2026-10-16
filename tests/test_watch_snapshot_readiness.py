@@ -47,7 +47,7 @@ def test_watch_command_control_churn_keeps_the_acknowledged_snapshot(
     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
     publisher._snapshot = _ready_snapshot(clock, "observe")
     publisher._acked = True
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     try:
         assert publisher.is_ready()
@@ -76,7 +76,7 @@ def test_protected_command_control_churn_still_withdraws_readiness(
     publisher._observed_policy_fingerprint = publisher._published_policy_fingerprint
     publisher._snapshot = _ready_snapshot(clock, "enforce")
     publisher._acked = True
-    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda: policy)
+    monkeypatch.setattr(publisher, "_compiled_effective_policy", lambda **_: policy)
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     try:
         assert publisher._policy_input_changed({str(publisher.guard_home / "guard.db-wal")})
@@ -99,7 +99,7 @@ def test_publish_command_control_race_follows_posture(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {"revision": 1}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {"revision": 1}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 2})
     monkeypatch.setattr(
@@ -135,7 +135,7 @@ def test_watch_publish_survives_resident_file_churn_for_the_acknowledged_generat
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(
@@ -169,7 +169,7 @@ def test_protected_publish_still_rejects_resident_file_churn(
     monkeypatch.setattr(
         publisher,
         "_publication_context",
-        lambda: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
+        lambda **_: (None, None, b"key", {}, {}, lambda **_kwargs: b"unused"),
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {})
     monkeypatch.setattr(
@@ -247,7 +247,7 @@ def test_resident_mtime_churn_withdraws_watch_when_policy_moves_to_enforce(
     monkeypatch.setattr(
         publisher,
         "_compiled_effective_policy",
-        lambda: {"mode": "enforce", "blocked_capabilities": ["network"]},
+        lambda **_: {"mode": "enforce", "blocked_capabilities": ["network"]},
     )
     monkeypatch.setattr(publisher, "_compiled_command_extensions", lambda: {"revision": 1})
     try:

@@ -76,10 +76,6 @@ def test_hook_worker_watch_native_block_records_without_stopping(
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     captured: dict[str, object] = {}
 
     def native_block_edge(*_args: object, **kwargs: object) -> dict[str, object]:
@@ -88,6 +84,14 @@ def test_hook_worker_watch_native_block_records_without_stopping(
             "event_name": "PreToolUse",
             "harness": "cursor",
             "result": _native_generic_block(),
+            "harness_response": {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "permissionDecisionReason": "HOL Guard recorded this action under Watch.",
+                },
+                "policy_action": "warn",
+            },
         }
 
     monkeypatch.setattr(
@@ -114,16 +118,12 @@ def test_hook_worker_watch_native_block_records_without_stopping(
     assert result["policy_action"] == "warn"
 
 
-def test_hook_worker_watch_native_unavailable_continues_without_cli_escape(
+def test_hook_worker_watch_native_unavailable_denies_without_cli_escape(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -148,22 +148,18 @@ def test_hook_worker_watch_native_unavailable_continues_without_cli_escape(
         workspace=tmp_path / "workspace",
     )
     assert result["reason_code"] == "native_pre_tool_unavailable"
-    assert result["policy_action"] == "warn"
+    assert result["policy_action"] == "block"
     hook_output = result["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
-    assert hook_output["permissionDecision"] == "allow"
+    assert hook_output["permissionDecision"] == "deny"
 
 
-def test_hook_worker_watch_native_unavailable_allows_network(
+def test_hook_worker_watch_native_unavailable_denies_network(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
@@ -178,8 +174,8 @@ def test_hook_worker_watch_native_unavailable_allows_network(
         guard_home=guard_home,
         workspace=tmp_path / "workspace",
     )
-    assert result["decision"] == "allow"
-    assert result["policy_action"] == "warn"
+    assert result["decision"] == "deny"
+    assert result["policy_action"] == "block"
     assert result["reason_code"] == "native_pre_tool_unavailable"
 
 
@@ -192,10 +188,6 @@ def test_hook_worker_enforce_native_unavailable_still_pauses_network(
     (guard_home / "config.toml").write_text(
         'mode = "enforce"\nprotection_posture = "protected"\n',
         encoding="utf-8",
-    )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
     )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
@@ -221,10 +213,6 @@ def test_hook_worker_watch_native_allow_still_allows(
 ) -> None:
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: {
@@ -255,10 +243,6 @@ def test_hook_worker_watch_posttool_native_unavailable_continues(
     guard_home = tmp_path / "guard-home"
     _write_watch_config(guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
-    monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.hook_worker.review_raw_hook_native",
         lambda *_args, **_kwargs: None,
     )
@@ -277,28 +261,3 @@ def test_hook_worker_watch_posttool_native_unavailable_continues(
     )
     assert result["policy_action"] == "allow"
     assert result["reason_code"] == "native_post_tool_unavailable"
-
-
-def test_hook_worker_watch_edit_without_snapshot_cannot_allow_native_off_pretool(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    _write_watch_config(guard_home)
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "off",
-    )
-    worker = HookWorker(store=GuardStore(guard_home))
-    result = worker.review_http_payload(
-        payload={"hook_event_name": "PreToolUse", "tool_input": {"command": "pwd"}},
-        params={},
-        default_harness="codex",
-        home_dir=tmp_path / "home",
-        guard_home=guard_home,
-        workspace=tmp_path / "workspace",
-    )
-    assert result["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert result["reason_code"] == "native_hook_disabled"
-
-    assert result.get("continue") is not False

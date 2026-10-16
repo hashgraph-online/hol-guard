@@ -17,10 +17,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
+from codex_plugin_scanner.guard.native_data_flow import detect_data_flow_exfiltration
+from codex_plugin_scanner.guard.native_prompt import extract_prompt_requests
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.data_flow_rules import detect_data_flow_exfiltration
-from codex_plugin_scanner.guard.runtime.detectors import DetectorContext, SafeDecodeDetector, SecretPathDetector
-from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
+from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
+from tests.native_detector_support import NativeDetector
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 
@@ -65,6 +66,7 @@ class TestCodexCliSmoke:
         assert real_aws_key_re.search(source) is None, "Canary fixture must not contain real-looking AWS access keys"
         assert real_npm_token_re.search(source) is None, "Canary fixture must not contain real-looking npm tokens"
 
+    @pytest.mark.usefixtures("native_data_flow_runtime")
     def test_canary_exfil_script_triggers_exfil_detection(self) -> None:
         """Verify canary exfil patterns trigger data-flow detection via a simulated shell action."""
         source = _fixture_text(CANARY_SCRIPT)
@@ -185,6 +187,7 @@ class TestClaudeCodeSmoke:
 class TestOpenCodeSmoke:
     """T595-T596: OpenCode offline guard checks."""
 
+    @pytest.mark.usefixtures("native_runtime_detectors_runtime")
     def test_mcp_secret_read_prompt_classified_as_sensitive(self) -> None:
         mcp_prompt = _fixture_text(PROMPT_MCP_SECRET_READ)
         assert "~/.aws/credentials" in mcp_prompt or "secret" in mcp_prompt.lower(), (
@@ -224,8 +227,8 @@ class TestOpenCodeSmoke:
             threat_intel={},
             redaction_settings={},
         )
-        signals = SecretPathDetector().detect(action, ctx)
-        assert len(signals) > 0, "SecretPathDetector must flag ~/.aws/credentials as a high-risk file read"
+        signals = NativeDetector("secret.path").detect(action, ctx)
+        assert len(signals) > 0, "The secret-path detector must flag ~/.aws/credentials as a high-risk file read"
 
     @pytest.mark.skipif(not _has_harness("opencode"), reason="opencode CLI not installed")
     def test_live_opencode_mcp_dangerous_tool_shows_guard_attribution(self) -> None:
@@ -236,6 +239,7 @@ class TestOpenCodeSmoke:
 class TestCopilotSmoke:
     """T597-T599: Copilot CLI and IDE offline guard checks."""
 
+    @pytest.mark.usefixtures("native_runtime_detectors_runtime")
     def test_canary_encoded_script_detected(self) -> None:
         source = _fixture_text(CANARY_ENCODED_SCRIPT)
         requests = extract_prompt_requests(source)
@@ -269,10 +273,10 @@ class TestCopilotSmoke:
             threat_intel={},
             redaction_settings={},
         )
-        signals = SafeDecodeDetector().detect(action, ctx)
+        signals = NativeDetector("safe-decode.content").detect(action, ctx)
         signal_ids = {s.signal_id for s in signals}
         assert "encoded.code-execution" in signal_ids, (
-            "Encoded canary script must trigger SafeDecodeDetector with encoded.code-execution signal"
+            "Encoded canary script must trigger the safe-decode detector with encoded.code-execution signal"
         )
 
     @pytest.mark.skipif(not _has_harness("gh"), reason="gh CLI not available")

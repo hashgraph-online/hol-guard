@@ -129,7 +129,8 @@ def test_verifier_preserves_original_compiler_target_without_rebuilding(
     calls = []
     monkeypatch.setattr(verifier, "_run", calls.append)
     assert verifier.main() == 0
-    assert len(calls) == 2
+    assert len(calls) == 3
+    assert calls[0][-1] == "--check-public-descriptors"
     assert all(command[command.index("--compiler") + 1] == compiler for command in calls)
     assert all(command[0] != "cargo" for command in calls)
 
@@ -160,8 +161,9 @@ def test_preparation_retains_generated_outputs_and_checks_without_rebuild(verifi
     monkeypatch.setattr(verifier, "_run", commands.append)
     assert verifier.main() == 0
     assert commands[-1][-1] == "--check"
-    assert len(commands) == 2
-    assert "--check" not in commands[0]
+    assert len(commands) == 3
+    assert commands[0][-1] == "--check-public-descriptors"
+    assert "--check" not in commands[1]
     assert all(command[0] != "cargo" for command in commands)
     assert all(command[0] != "git" for command in commands)
 
@@ -170,7 +172,7 @@ def test_preparation_retains_generated_outputs_and_checks_without_rebuild(verifi
 def test_wheel_rebuild_preserves_identity_and_precedes_packaging(job_name):
     """Verify wheel rebuild preserves identity and precedes packaging."""
     root = Path(__file__).parents[1]
-    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/native-wheel-ci.yml").read_text()))
+    workflow = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/nightly-native.yml").read_text()))
     steps = workflow["jobs"][job_name]["steps"]
     verification = next(step for step in steps if "scripts/ci/verify_native_command_program.py" in step.get("run", ""))
     assert verification["env"]["HOL_GUARD_BUILD_SHA"] == "${{ github.sha }}"

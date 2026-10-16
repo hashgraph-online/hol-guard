@@ -26,6 +26,10 @@ pub enum EvalError {
     /// so `_evaluate_with_cloud` can branch on 401/403/400/404/other. The
     /// transport surface that produces this is `guard_sync.urlopen_json_with_timeout_retry`.
     HttpStatus(u16, String),
+    /// A cached `cloud_validation_error` evaluation is waiting on a saved-policy
+    /// lookup only the caller can hydrate (it owns the integrity keyring and the
+    /// approval-identity hash). Carries the cached evaluation the lookup keys on.
+    SavedPolicyProbeRequired(Box<Map<String, Value>>),
 }
 
 impl EvalError {
@@ -44,6 +48,7 @@ impl std::fmt::Display for EvalError {
         match self {
             Self::Validation(m) | Self::NotFound(m) | Self::Internal(m) => f.write_str(m),
             Self::HttpStatus(code, m) => write!(f, "HTTP {code}: {m}"),
+            Self::SavedPolicyProbeRequired(_) => f.write_str("saved_policy_probe_required"),
         }
     }
 }

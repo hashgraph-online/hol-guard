@@ -71,16 +71,6 @@ def containment_repair_outcome(
     return repaired, failed, reasons
 
 
-def confirmed_containment_repair_signals(
-    load_health: Callable[[], Mapping[str, object] | None],
-    *,
-    attempts: int = 3,
-) -> tuple[list[str], list[str]]:
-    """Return confirmed repairable pass/fail checks after bounded retries."""
-    repaired, failed, _reasons = containment_repair_outcome(load_health, attempts=attempts)
-    return repaired, failed
-
-
 def incomplete_protection_repair_payload(
     *,
     repaired_check_ids: list[str],

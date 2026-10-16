@@ -2,6 +2,10 @@
 
 use super::{contract::*, matcher::SourceGraph, *};
 
+/// Bound on the compiled catalog array. The packaged artifact envelope around it has its own
+/// budget, checked by the build script. Tested against `contracts/catalog-delivery/limits.json`.
+pub(super) const MAX_NATIVE_CATALOG_PROJECTION_BYTES: usize = 8_000_000;
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct TrustMap {
@@ -314,7 +318,7 @@ pub(super) fn lower_catalog(
     let catalog = Value::Array(catalog);
     let catalog_bytes =
         serde_json::to_vec(&catalog).map_err(|_| "command_source_encoding_failed")?;
-    if catalog_bytes.len() > 1_000_000 {
+    if catalog_bytes.len() > MAX_NATIVE_CATALOG_PROJECTION_BYTES {
         return Err("command_source_catalog_projection_exceeded");
     }
     let nodes = graph.finish()?;
@@ -381,8 +385,8 @@ pub fn compile_addition_with_mcp(
     trust: &[u8],
 ) -> Result<CompiledSourceCatalog, &'static str> {
     let mut output = lower_catalog(sources, mcp_sources, trust)?;
-    NativeCommandProgram::from_packaged_bytes(EMBEDDED_PROGRAM)?;
-    let mut base: Value = serde_json::from_slice(EMBEDDED_PROGRAM)
+    NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
+    let mut base: Value = serde_json::from_slice(packaged_command_program_bytes())
         .map_err(|_| "command_source_packaged_base_invalid")?;
     let base_digest = base["program_digest"].as_str().unwrap().to_owned();
     let existing: BTreeSet<_> = base["extensions"]
@@ -473,6 +477,18 @@ mod tests {
         assert_eq!(
             output.catalog_projection_kind,
             "addition-only-not-release-catalog"
+        );
+    }
+
+    #[test]
+    fn catalog_projection_budget_matches_delivery_manifest() {
+        let manifest: Value = serde_json::from_str(include_str!(
+            "../../../../contracts/catalog-delivery/limits.json"
+        ))
+        .unwrap();
+        assert_eq!(
+            manifest["max_native_catalog_projection_bytes"].as_u64(),
+            Some(MAX_NATIVE_CATALOG_PROJECTION_BYTES as u64)
         );
     }
 }

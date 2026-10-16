@@ -26,7 +26,7 @@ fn ownership_boundary_preserves_frozen_json_and_fingerprints_private_response() 
     let frozen = owned(&input);
     let body = frozen.primary_bytes().to_vec();
     let expected = crate::binding(
-        &input.resolved.directory.namespace_key,
+        &input.resolved.directory.identity_key,
         b"hol-guard.google-send-acknowledgement.v1\0",
         &[
             input

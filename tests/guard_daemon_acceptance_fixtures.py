@@ -14,7 +14,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
+from contextlib import ExitStack
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TypedDict, cast
@@ -59,10 +61,14 @@ class ClientSpec(TypedDict):
     concurrency: int
 
 
-class WorkloadSpec(TypedDict):
+class _WorkloadRequired(TypedDict):
     id: str
     clients: list[ClientSpec]
     secret_stride: int
+
+
+class WorkloadSpec(_WorkloadRequired, total=False):
+    event: str
 
 
 class SoakSpec(TypedDict):
@@ -131,240 +137,331 @@ def assert_adversarial_nodeids_resolve() -> None:
             raise AssertionError(f"missing adversarial nodeid: {nodeid}")
 
 
+def _run_client_reviews(
+    clients: list[ClientSpec],
+    review: Callable[[str, str, int], None],
+    *,
+    timeout_seconds: float,
+) -> None:
+    """Keep each client bounded while starting their review streams together."""
+
+    start = threading.Event()
+
+    def review_when_ready(client: ClientSpec, index: int) -> None:
+        _ = start.wait()
+        review(client["harness"], client["client"], index)
+
+    with ExitStack() as stack:
+        futures: list[Future[None]] = []
+        try:
+            for client in clients:
+                executor = stack.enter_context(ThreadPoolExecutor(max_workers=client["concurrency"]))
+                futures.extend(executor.submit(review_when_ready, client, index) for index in range(client["requests"]))
+        finally:
+            # Prime every client before releasing any timed request; one client's
+            # queued work must not consume another client's declared concurrency.
+            start.set()
+        for future in futures:
+            future.result(timeout=timeout_seconds)
+
+
+def _prime_resident_client_pool(
+    *,
+    port: int,
+    auth_token: str,
+    query: str,
+    concurrency: int,
+    deadline_monotonic: float,
+) -> None:
+    """Send one burst of concurrent benign requests so every pool slot spawns once."""
+
+    def prime(index: int) -> bool:
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/hooks/pi?{query}",
+            data=json.dumps(
+                {
+                    "hook_event_name": "PostToolUse",
+                    "tool_name": "Read",
+                    "tool_input": {"path": "docs/prime.md"},
+                    "tool_response": [{"type": "text", "text": "routine documentation"}],
+                    "stdout": "routine documentation",
+                    "session_id": f"prime-{index}",
+                    "guard_remaining_ms": 30_000,
+                }
+            ).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "X-Guard-Token": auth_token,
+                "X-Guard-Remaining-Ms": "30000",
+            },
+            method="POST",
+        )
+        while True:
+            remaining = deadline_monotonic - time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                with urllib.request.urlopen(request, timeout=min(30, remaining)) as response:
+                    result = cast(dict[str, object], json.loads(response.read()))
+            except TRANSIENT_HOOK_EXCEPTIONS:
+                time.sleep(0.1)
+                continue
+            if time.monotonic() >= deadline_monotonic:
+                return False
+            if result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES:
+                return True
+            time.sleep(0.1)
+
+    with ThreadPoolExecutor(max_workers=concurrency) as executor:
+        warmed = list(executor.map(prime, range(concurrency)))
+    if not all(warmed):
+        raise RuntimeError("resident client pool did not warm")
+
+
+def _mark_resident_request_log() -> None:
+    """Separate warmup resident calls from the measured workload."""
+
+    path = os.environ.get("HOL_GUARD_RESIDENT_REQUEST_LOG")
+    if not path:
+        return
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(descriptor, b"W\n")
+    finally:
+        os.close(descriptor)
+
+
 def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
     """Run a bounded workload through authenticated production hook endpoints."""
 
     request_count = sum(client["requests"] for client in spec["clients"])
-    max_workers = sum(client["concurrency"] for client in spec["clients"])
     guard_home = root / "guard-home"
     workspace = root / "workspace"
     workspace.mkdir(parents=True)
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     daemon.start()
-    daemon_state = cast(
-        dict[str, object],
-        json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
-    )
-    target = max(1, int(daemon._server.hook_process_runner.stats()["target"]))
-    if not daemon._server.hook_process_runner.wait_for_capacity(
-        minimum_workers=target,
-        timeout_seconds=15,
-    ):
-        raise RuntimeError("production hook workers did not become ready")
-    # Worker-capacity readiness does not cover native policy prep: under
-    # HOL_GUARD_NATIVE=force the resident edge still compiles its snapshot on
-    # first use, and early requests would race it. Production callers retry
-    # `native_policy_not_ready` until the edge answers, so prime the same way
-    # before the measured workload begins.
-    warmup_query = (
-        f"guard-home={urllib.parse.quote(str(guard_home))}&"
-        f"home={urllib.parse.quote(str(root))}&"
-        f"workspace={urllib.parse.quote(str(workspace))}"
-    )
-    warmup_deadline = time.monotonic() + 60 * under_coverage_scale(1.0)
-    while time.monotonic() < warmup_deadline:
-        warmup_request = urllib.request.Request(
-            f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{warmup_query}",
-            data=json.dumps(
-                {
-                    "hook_event_name": "PostToolUse",
-                    "tool_name": "Read",
-                    "tool_input": {"path": "docs/warmup.md"},
-                    "tool_response": [{"type": "text", "text": "warmup"}],
-                    "stdout": "warmup",
-                    "session_id": "warmup",
-                    "guard_remaining_ms": 30_000,
-                }
-            ).encode(),
-            headers={
-                "Content-Type": "application/json",
-                "X-Guard-Token": daemon._server.auth_token,
-                "X-Guard-Remaining-Ms": "30000",
-            },
-            method="POST",
+    try:
+        daemon_state = cast(
+            dict[str, object],
+            json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8")),
         )
-        try:
-            with urllib.request.urlopen(warmup_request, timeout=30) as response:
-                warmup_result = cast(dict[str, object], json.loads(response.read()))
-        except TRANSIENT_HOOK_EXCEPTIONS:
-            time.sleep(0.1)
-            continue
-        if warmup_result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES:
-            break
-        time.sleep(0.1)
-    else:
-        raise RuntimeError("native policy did not become ready")
-    initial_pid = os.getpid()
-    initial_workers = threading.active_count()
-    initial_rss = _rss_bytes()
-    initial_inbox = len(store.list_approval_requests(status=None, limit=None))
-    outcomes: Counter[str] = Counter()
-    dispatch: Counter[str] = Counter()
-    failure_reasons: Counter[str] = Counter()
-    latencies_ms: list[float] = []
-    lock = threading.Lock()
-    remaining_ms = str(int(10_000 * under_coverage_scale(3.0)))
-    review_timeout_seconds = 30 * under_coverage_scale(3.0)
-
-    def review(harness: str, client: str, index: int) -> None:
-        started = time.monotonic()
-        secret_request = index % spec["secret_stride"] == 0
-        output = (
-            "token=sk-proj-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE" if secret_request else "routine documentation"
-        )
-        payload = {
-            "hook_event_name": "PostToolUse",
-            "tool_name": "Read",
-            "tool_input": {"path": "src/secret.txt" if secret_request else "docs/readme.md"},
-            "tool_response": [{"type": "text", "text": output}],
-            "stdout": output,
-            "session_id": client,
-            "guard_remaining_ms": int(remaining_ms),
-        }
-        query = (
+        # Worker-capacity readiness does not cover native policy prep: under
+        # HOL_GUARD_NATIVE=force the resident edge still compiles its snapshot on
+        # first use, and early requests would race it. Production callers retry
+        # `native_policy_not_ready` until the edge answers, so prime the same way
+        # before the measured workload begins. Neither readiness signal covers the
+        # resident client pool, which spawns one Rust client process per concurrent
+        # stream on first use; production daemons reach that size after their first
+        # concurrent burst, so prime the pool before the measured window too.
+        warmup_query = (
             f"guard-home={urllib.parse.quote(str(guard_home))}&"
             f"home={urllib.parse.quote(str(root))}&"
             f"workspace={urllib.parse.quote(str(workspace))}"
         )
-
-        def _transient_error(error: Exception) -> bool:
-            if isinstance(error, http.client.RemoteDisconnected):
-                return True
-            if isinstance(error, urllib.error.HTTPError) and error.code == 503:
-                return True
-            return isinstance(error, urllib.error.URLError) and isinstance(
-                getattr(error, "reason", None), http.client.RemoteDisconnected
-            )
-
-        def _submit_once() -> dict[str, object]:
-            if harness in {"codex", "claude-code"}:
-                result = None
-                for attempt in range(2):
-                    nonce = secrets.token_hex(32)
-                    connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=12)
-                    try:
-                        connection.request(
-                            "POST",
-                            "/v1/daemon/identity-challenge",
-                            body=json.dumps(
-                                {
-                                    "protocol_version": 1,
-                                    "nonce": nonce,
-                                    "state_id": daemon_state["state_id"],
-                                    "hook_event": "PostToolUse",
-                                }
-                            ).encode(),
-                            headers={"Content-Type": "application/json", "Connection": "keep-alive"},
-                        )
-                        challenge_response = connection.getresponse()
-                        challenge_body = challenge_response.read()
-                        if challenge_response.status == 503 and attempt == 0:
-                            time.sleep(0.025 + (index % 6) * 0.01)
-                            continue
-                        if challenge_response.status != 200:
-                            raise RuntimeError(f"challenge-status-{challenge_response.status}")
-                        challenge = cast(dict[str, object], json.loads(challenge_body))
-                        connection.request(
-                            "POST",
-                            f"/v1/hooks/{harness}?{query}",
-                            body=json.dumps(payload).encode(),
-                            headers={
-                                "Connection": "close",
-                                "Content-Type": "application/json",
-                                "X-Guard-Token": daemon._server.auth_token,
-                                "X-Guard-Daemon-Nonce": nonce,
-                                "X-Guard-Daemon-Proof": str(challenge["proof"]),
-                                "X-Guard-Remaining-Ms": remaining_ms,
-                            },
-                        )
-                        hook_response = connection.getresponse()
-                        hook_body = hook_response.read()
-                        if hook_response.status != 200:
-                            raise RuntimeError(f"hook-status-{hook_response.status}")
-                        result = cast(dict[str, object], json.loads(hook_body))
-                        break
-                    finally:
-                        connection.close()
-                if result is None:
-                    raise RuntimeError("codex-review-unavailable")
-                return result
-            request = urllib.request.Request(
-                f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
-                data=json.dumps(payload).encode(),
+        warmup_deadline = time.monotonic() + 60 * under_coverage_scale(1.0)
+        while time.monotonic() < warmup_deadline:
+            warmup_request = urllib.request.Request(
+                f"http://127.0.0.1:{daemon.port}/v1/hooks/pi?{warmup_query}",
+                data=json.dumps(
+                    {
+                        "hook_event_name": "PostToolUse",
+                        "tool_name": "Read",
+                        "tool_input": {"path": "docs/warmup.md"},
+                        "tool_response": [{"type": "text", "text": "warmup"}],
+                        "stdout": "warmup",
+                        "session_id": "warmup",
+                        "guard_remaining_ms": 30_000,
+                    }
+                ).encode(),
                 headers={
                     "Content-Type": "application/json",
                     "X-Guard-Token": daemon._server.auth_token,
-                    "X-Guard-Remaining-Ms": remaining_ms,
+                    "X-Guard-Remaining-Ms": "30000",
                 },
                 method="POST",
             )
-            with urllib.request.urlopen(request, timeout=12) as response:
-                return cast(dict[str, object], json.loads(response.read()))
+            try:
+                with urllib.request.urlopen(warmup_request, timeout=30) as response:
+                    warmup_result = cast(dict[str, object], json.loads(response.read()))
+            except TRANSIENT_HOOK_EXCEPTIONS:
+                time.sleep(0.1)
+                continue
+            if warmup_result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES:
+                break
+            time.sleep(0.1)
+        else:
+            raise RuntimeError("native policy did not become ready")
+        _prime_resident_client_pool(
+            port=daemon.port,
+            auth_token=daemon._server.auth_token,
+            query=warmup_query,
+            concurrency=sum(client["concurrency"] for client in spec["clients"]),
+            deadline_monotonic=time.monotonic() + 60 * under_coverage_scale(1.0),
+        )
+        _mark_resident_request_log()
+        initial_pid = os.getpid()
+        initial_workers = threading.active_count()
+        initial_rss = _rss_bytes()
+        initial_inbox = len(store.list_approval_requests(status=None, limit=None))
+        outcomes: Counter[str] = Counter()
+        dispatch: Counter[str] = Counter()
+        failure_reasons: Counter[str] = Counter()
+        latencies_ms: list[float] = []
+        lock = threading.Lock()
+        remaining_ms = str(int(10_000 * under_coverage_scale(3.0)))
+        review_timeout_seconds = 30 * under_coverage_scale(3.0)
 
-        try:
-            # The server advertises bounded transient signals while a resident
-            # worker warms up or sheds load, and an overloaded listener can drop
-            # a connection mid-request. Production callers retry every one of
-            # these "review did not finish" signals, so mirror that here instead
-            # of counting them as denials.
-            for transient_attempt in range(5):
-                try:
-                    result = _submit_once()
-                except Exception as transient_error:
-                    if not _transient_error(transient_error) or transient_attempt == 4:
-                        raise
-                    time.sleep(0.05 * (transient_attempt + 1))
-                    continue
-                if result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES or transient_attempt == 4:
-                    break
-                time.sleep(0.05 * (transient_attempt + 1))
-            blocked = _response_blocks_action(result)
-            reason_code = result.get("reason_code")
-            outcome = (
-                str(reason_code)
-                if isinstance(reason_code, str) and reason_code.startswith("daemon_hook_")
-                else "secret_denied"
-                if secret_request and blocked
-                else "routine_allowed"
-                if not secret_request and not blocked
-                else "generic_failure"
+        def review(harness: str, client: str, index: int) -> None:
+            started = time.monotonic()
+            secret_request = spec["secret_stride"] > 0 and index % spec["secret_stride"] == 0
+            output = "routine documentation"
+            if secret_request:
+                output = "token=sk-proj-FAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKEFAKE"
+            hook_event = spec.get("event", "PostToolUse")
+            payload = {
+                "hook_event_name": hook_event,
+                "tool_name": "Read",
+                "tool_input": {"path": "src/secret.txt" if secret_request else "docs/readme.md"},
+                "session_id": client,
+                "guard_remaining_ms": int(remaining_ms),
+            }
+            if hook_event == "PostToolUse":
+                payload["tool_response"] = [{"type": "text", "text": output}]
+                payload["stdout"] = output
+            query = (
+                f"guard-home={urllib.parse.quote(str(guard_home))}&"
+                f"home={urllib.parse.quote(str(root))}&"
+                f"workspace={urllib.parse.quote(str(workspace))}"
             )
-            with lock:
-                dispatch[harness] += 1
-                if outcome == "generic_failure" or outcome.startswith("daemon_hook_"):
-                    failure_reasons[str(result.get("reason_code", result.get("decision", "unexpected-response")))] += 1
-        except Exception as error:
-            outcome = "generic_failure"
-            with lock:
-                error_key = (
-                    f"HTTPError:{error.code}"
-                    if isinstance(error, urllib.error.HTTPError)
-                    else f"{type(error).__name__}:{error}"
-                )
-                failure_reasons[error_key] += 1
-        elapsed_ms = (time.monotonic() - started) * 1000
-        with lock:
-            outcomes[outcome] += 1
-            latencies_ms.append(elapsed_ms)
 
-    browser_calls: list[str] = []
-    try:
-        with (
-            patch(
-                "codex_plugin_scanner.guard.daemon.server.open_browser_url",
-                side_effect=lambda url: browser_calls.append(str(url)) or False,
-            ),
-            ThreadPoolExecutor(max_workers=max_workers) as executor,
+            def _transient_error(error: Exception) -> bool:
+                if isinstance(error, http.client.RemoteDisconnected):
+                    return True
+                if isinstance(error, urllib.error.HTTPError) and error.code == 503:
+                    return True
+                return isinstance(error, urllib.error.URLError) and isinstance(
+                    getattr(error, "reason", None), http.client.RemoteDisconnected
+                )
+
+            def _submit_once() -> dict[str, object]:
+                if harness in {"codex", "claude-code"}:
+                    result = None
+                    for attempt in range(2):
+                        nonce = secrets.token_hex(32)
+                        connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=12)
+                        try:
+                            connection.request(
+                                "POST",
+                                "/v1/daemon/identity-challenge",
+                                body=json.dumps(
+                                    {
+                                        "protocol_version": 1,
+                                        "nonce": nonce,
+                                        "state_id": daemon_state["state_id"],
+                                        "hook_event": hook_event,
+                                    }
+                                ).encode(),
+                                headers={"Content-Type": "application/json", "Connection": "keep-alive"},
+                            )
+                            challenge_response = connection.getresponse()
+                            challenge_body = challenge_response.read()
+                            if challenge_response.status == 503 and attempt == 0:
+                                time.sleep(0.025 + (index % 6) * 0.01)
+                                continue
+                            if challenge_response.status != 200:
+                                raise RuntimeError(f"challenge-status-{challenge_response.status}")
+                            challenge = cast(dict[str, object], json.loads(challenge_body))
+                            connection.request(
+                                "POST",
+                                f"/v1/hooks/{harness}?{query}",
+                                body=json.dumps(payload).encode(),
+                                headers={
+                                    "Connection": "close",
+                                    "Content-Type": "application/json",
+                                    "X-Guard-Token": daemon._server.auth_token,
+                                    "X-Guard-Daemon-Nonce": nonce,
+                                    "X-Guard-Daemon-Proof": str(challenge["proof"]),
+                                    "X-Guard-Remaining-Ms": remaining_ms,
+                                },
+                            )
+                            hook_response = connection.getresponse()
+                            hook_body = hook_response.read()
+                            if hook_response.status != 200:
+                                raise RuntimeError(f"hook-status-{hook_response.status}")
+                            result = cast(dict[str, object], json.loads(hook_body))
+                            break
+                        finally:
+                            connection.close()
+                    if result is None:
+                        raise RuntimeError("codex-review-unavailable")
+                    return result
+                request = urllib.request.Request(
+                    f"http://127.0.0.1:{daemon.port}/v1/hooks/{harness}?{query}",
+                    data=json.dumps(payload).encode(),
+                    headers={
+                        "Content-Type": "application/json",
+                        "X-Guard-Token": daemon._server.auth_token,
+                        "X-Guard-Remaining-Ms": remaining_ms,
+                    },
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=12) as response:
+                    return cast(dict[str, object], json.loads(response.read()))
+
+            try:
+                # The server advertises bounded transient signals while a resident
+                # worker warms up or sheds load, and an overloaded listener can drop
+                # a connection mid-request. Production callers retry every one of
+                # these "review did not finish" signals, so mirror that here instead
+                # of counting them as denials.
+                for transient_attempt in range(5):
+                    try:
+                        result = _submit_once()
+                    except Exception as transient_error:
+                        if not _transient_error(transient_error) or transient_attempt == 4:
+                            raise
+                        time.sleep(0.05 * (transient_attempt + 1))
+                        continue
+                    if result.get("reason_code") not in TRANSIENT_HOOK_REASON_CODES or transient_attempt == 4:
+                        break
+                    time.sleep(0.05 * (transient_attempt + 1))
+                blocked = _response_blocks_action(result)
+                reason_code = result.get("reason_code")
+                outcome = (
+                    str(reason_code)
+                    if isinstance(reason_code, str) and reason_code.startswith("daemon_hook_")
+                    else "secret_denied"
+                    if secret_request and blocked
+                    else "routine_allowed"
+                    if not secret_request and not blocked
+                    else "generic_failure"
+                )
+                with lock:
+                    dispatch[harness] += 1
+                    if outcome == "generic_failure" or outcome.startswith("daemon_hook_"):
+                        reason = str(result.get("reason_code", result.get("decision", "unexpected-response")))
+                        failure_reasons[reason] += 1
+            except Exception as error:
+                outcome = "generic_failure"
+                with lock:
+                    error_key = (
+                        f"HTTPError:{error.code}"
+                        if isinstance(error, urllib.error.HTTPError)
+                        else f"{type(error).__name__}:{error}"
+                    )
+                    failure_reasons[error_key] += 1
+            elapsed_ms = (time.monotonic() - started) * 1000
+            with lock:
+                outcomes[outcome] += 1
+                latencies_ms.append(elapsed_ms)
+
+        browser_calls: list[str] = []
+        with patch(
+            "codex_plugin_scanner.guard.daemon.server.open_browser_url",
+            side_effect=lambda url: browser_calls.append(str(url)) or False,
         ):
-            futures = [
-                executor.submit(review, client["harness"], client["client"], index)
-                for client in spec["clients"]
-                for index in range(client["requests"])
-            ]
-            for future in futures:
-                future.result(timeout=review_timeout_seconds)
-        worker_stats = daemon._server.hook_process_runner.stats()
+            _run_client_reviews(spec["clients"], review, timeout_seconds=review_timeout_seconds)
         scheduler_stats = daemon._server.runtime_hook_scheduler.stats()
         final_inbox = len(store.list_approval_requests(status=None, limit=None))
     finally:
@@ -380,9 +477,7 @@ def run_workload(spec: WorkloadSpec, *, root: Path) -> WorkloadResult:
         generic_failures=outcomes["generic_failure"],
         pid_stable=os.getpid() == initial_pid,
         workers_stable=(
-            worker_stats["workers"] <= worker_stats["configured"]
-            and worker_stats["failures"] == 0
-            and worker_stats["restarts"] == 0
+            scheduler_stats["active"] <= scheduler_stats["active_limit"]
             and threading.active_count() <= initial_workers + 1
         ),
         queue_bounded=(

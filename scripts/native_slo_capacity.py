@@ -15,8 +15,10 @@ from scripts.bench_guard_native_installed_slo_runtime import _require
 from scripts.native_slo_adapter import Observation, process_rss_bytes, route_counts
 from scripts.native_slo_baseline import steady_state_rss_baseline as _steady_state_rss_baseline
 from scripts.native_slo_capacity_support import (
+    _baseline_capacity,
     _classify_native_overloads,
     _diagnostic_route_counters,
+    _hook_capacity_view,
     _prime_load_executor,
     _reconcile_wave_routes,
     _stabilize_ready_hook_workers,
@@ -161,13 +163,10 @@ def _prewarm_ready_hook_workers(
 
 
 def _require_ready_hook_workers(session: AdapterSession, ready_workers: int) -> None:
-    stats = session.daemon._server.hook_process_runner.stats()
+    capacity = _hook_capacity_view(session)
     _require(
-        stats["target"] == ready_workers
-        and stats["workers"] == ready_workers
-        and stats["ready"] == ready_workers
-        and stats["busy"] == 0,
-        "hook worker capacity was not steady after prewarm",
+        capacity["busy"] == 0 and capacity["ready"] >= ready_workers,
+        "hook scheduler capacity was not steady after prewarm",
     )
 
 
@@ -388,9 +387,16 @@ def _measure_rss_and_c64(
                 on_submitted=progress.submit,
                 on_cancelled=progress.cancel,
             )
+        if include_capacity:
+            # 16-client waves reuse a few lazily started resident client streams; the 64-client wave fills the
+            # pool to its fixed cap. Fill it first so the baseline holds that bounded pool, not just the c64 delta.
+            _, burst_errors = _run_concurrent(
+                session, routes, load_concurrency, executor, stage="rss_baseline_requests", **baseline_kwargs
+            )
+            _require(burst_errors == 0, "resident stream pool burst returned request errors")
         rss_baseline = _steady_state_rss_baseline(
             lambda: _prewarm_ready_hook_workers(session, routes, ready_workers, executor, **baseline_kwargs),
-            sample_capacity=session.daemon._server.hook_process_runner.stats,
+            sample_capacity=lambda: _baseline_capacity(session, ready_workers),
             expected_warmup_count=ready_workers,
         )
         baseline_completed = True

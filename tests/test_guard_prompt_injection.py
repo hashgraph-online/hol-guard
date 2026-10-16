@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.prompt_injection import detect_prompt_injection_requests
-from codex_plugin_scanner.guard.runtime.runner import extract_prompt_requests
+from codex_plugin_scanner.guard.native_prompt import detect_prompt_injection_requests, extract_prompt_requests
 
 pytestmark = pytest.mark.usefixtures("native_prompt_runtime")
 

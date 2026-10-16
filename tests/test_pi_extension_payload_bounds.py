@@ -41,6 +41,7 @@ const metadata = {{
   home: "/outer/home",
   git_pager_disabled: true,
   pager_disabled: false,
+  library_search_paths: {{ LD_LIBRARY_PATH: "/usr/local/cuda/lib64" }},
 }};
 const payload = {{
   hook_event_name: "PostToolUse",
@@ -264,6 +265,7 @@ def test_generated_reference_wrapper_preserves_caller_environment_metadata(tmp_p
         "home": "/outer/home",
         "git_pager_disabled": True,
         "pager_disabled": False,
+        "library_search_paths": {"LD_LIBRARY_PATH": "/usr/local/cuda/lib64"},
     }
     assert result["keys"] == [
         "config_path",

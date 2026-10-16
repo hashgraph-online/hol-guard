@@ -13,10 +13,8 @@ Scenarios:
 
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.runtime.mcp_protection import (
-    build_mcp_server_identity,
-    build_mcp_tool_identity,
-)
+from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+from tests.mcp_tool_identity_helper import build_mcp_tool_identity
 
 _HASHNET_CONFIG_PATH = "~/.codex/config.toml"
 

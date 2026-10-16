@@ -1,28 +1,23 @@
-"""Draft transport bounds; Rust still owns business semantics and enforcement."""
+"""Present native business-selector draft bounds without their contents."""
 
 from __future__ import annotations
 
-import json
+from .native_policy_document import NativePolicyDocumentError, policy_query
 
-# guard-policy-snapshot::business_match::BUSINESS_POLICY_MATCH_MAX_BYTES.
 MAX_BUSINESS_SELECTOR_BYTES = 64 * 1024
 
 
 def oversized_business_selector_path(value: dict[str, object]) -> tuple[str | int, ...] | None:
-    """Inspect schema-validated selectors without returning their content."""
-    spec = value.get("spec")
-    if not isinstance(spec, dict):
+    result = policy_query("bounds", {"value": value})
+    if result is None:
         return None
-    rules = spec.get("rules")
-    if not isinstance(rules, list):
-        return None
-    for index, rule in enumerate(rules):
-        if not isinstance(rule, dict):
-            continue
-        match = rule.get("match")
-        if not isinstance(match, dict) or not isinstance(match.get("business"), dict):
-            continue
-        encoded = json.dumps(match["business"], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        if len(encoded) > MAX_BUSINESS_SELECTOR_BYTES:
-            return ("spec", "rules", index, "match", "business")
-    return None
+    if (
+        not isinstance(result, list)
+        or len(result) != 5
+        or result[:2] != ["spec", "rules"]
+        or type(result[2]) is not int
+        or result[2] < 0
+        or result[3:] != ["match", "business"]
+    ):
+        raise NativePolicyDocumentError("native_policy_document_bounds_malformed")
+    return tuple(result)

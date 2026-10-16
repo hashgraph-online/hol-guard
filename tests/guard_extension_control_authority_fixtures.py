@@ -171,9 +171,10 @@ def _rule_version_registry() -> tuple[CommandSafetyExtensionRegistry, str]:
     rule = extension.rules[0]
     versioned_rule = replace(rule, rule_version="99.0.0")
     versioned_extension = replace(extension, rules=(versioned_rule, *extension.rules[1:]))
-    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), extension.permissions[
-        0
-    ].permission_id
+    permission_id = next(
+        permission.permission_id for permission in extension.permissions if rule.rule_id in permission.rule_ids
+    )
+    return CommandSafetyExtensionRegistry((versioned_extension, *extensions[1:])), permission_id
 
 
 def _matcher_contract_registry() -> tuple[CommandSafetyExtensionRegistry, str]:

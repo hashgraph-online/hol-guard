@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
 
 from ..adapters.diagnostic_probes import without_command_probes
+from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
@@ -213,7 +214,11 @@ def _run_guard_policy_action_command(
         approval_gate_grant = None
         if _policy_write_requires_approval_gate(store, action=args.policy_action, scope=args.scope):
             gate_input = (
-                prompt_for_approval_gate(store.guard_home, use_cooldown=True)
+                prompt_for_approval_gate(
+                    store.guard_home,
+                    use_cooldown=True,
+                    strict=str(args.scope) == "global",
+                )
                 if _policy_write_needs_approval_gate(store, action=args.policy_action, scope=args.scope)
                 else None
             )
@@ -275,7 +280,10 @@ def _run_guard_doctor_command(
         guidance = macos_notification_guidance(result.notifier_path) if result.platform == "Darwin" else None
         _emit(
             "doctor",
-            {"desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance)},
+            {
+                "desktop_notifications": desktop_notification_setup_payload(result, guidance=guidance),
+                "approval_gate": approval_gate_posture(guard_home, passive=True),
+            },
             getattr(args, "json", False),
         )
         return 0
@@ -296,7 +304,11 @@ def _run_guard_doctor_command(
             }
             for c in HARNESS_CONTRACTS
         ]
-        _emit("doctor", {"harnesses": contracts_payload}, getattr(args, "json", False))
+        _emit(
+            "doctor",
+            {"harnesses": contracts_payload, "approval_gate": approval_gate_posture(guard_home, passive=True)},
+            getattr(args, "json", False),
+        )
         return 0
     if args.harness:
         adapter = get_adapter(args.harness)
@@ -364,20 +376,60 @@ def _run_guard_doctor_command(
     if getattr(args, "repair", False):
         command_queue_payload["repair"] = repair_command_queue_state(store)
     payload["command_queue"] = command_queue_payload
+    if getattr(args, "repair", False):
+        # `doctor --repair` and `hol-guard repair` share one engine. Shims and
+        # the queue were repaired above with doctor's own payload shape.
+        from ..repair_engine import run_repair
+
+        payload["guard_repair"] = run_repair(
+            guard_home=guard_home,
+            context=context,
+            store=store,
+            skip_steps=frozenset({"package_shims", "command_queue"}),
+            harness=args.harness or None,
+        )
+    native_runtime_repair: dict[str, object] | None = None
+    if getattr(args, "repair", False):
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
         availability = doctor_native_availability()
-    payload["native_runtime"] = {
+    native_runtime: dict[str, object] = {
         "availability": availability,
         "admission": native_resident_admission_snapshot(),
         "daemon_http": daemon_admission_snapshot(),
     }
+    bundled_runtime = bundled_native_runtime_report()
+    if bundled_runtime is not None:
+        native_runtime["bundled"] = bundled_runtime
+    if native_runtime_repair is not None:
+        native_runtime["repair"] = native_runtime_repair
+    payload["native_runtime"] = native_runtime
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     with nullcontext() if args.harness else without_command_probes():
         payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
+    from ..harness_posture import harness_posture_summary
+    from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    # A doctor run that reports a broken or partial registration must not also
+    # report the posture as though something were applying it. Judge the one
+    # harness this run inspected, or every harness the global run detected.
+    adapter_rows = payload.get("adapters")
+    payload["protection_in_effect"] = protection_is_in_effect(
+        adapter_rows if isinstance(adapter_rows, list) else [payload]
+    )
+    payload.update(harness_posture_summary(config))
+    # Doctor stays passive: read the gate state file, never the native resident.
+    payload["approval_gate"] = approval_gate_posture(guard_home, passive=True)
     _emit("doctor", payload, getattr(args, "json", False))
     return 0
 

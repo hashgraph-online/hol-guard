@@ -2,22 +2,55 @@
 
 use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 
-pub(super) fn unwrap_sudo(
+/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes.
+///
+/// `sudo` changes who runs the program, so it stays in the wrapper chain.
+/// A bare `timeout 30 pytest -q` runs the program this text already names,
+/// as this user and in this directory, and signals that one child when the
+/// clock runs out: it bounds how long the work may take, not what it may do,
+/// so it leaves no wrapper behind. `./timeout` and `bin/timeout` are not that
+/// clock. They stay in the wrapper chain, and the duration is still skipped
+/// so the program they name stays the executable. `command` and `time` run
+/// the next word as the program.
+/// `env` does that only when every assignment is inert; those names join
+/// `environment_names`. A non-inert name leaves `env` as the executable.
+/// Any option on a prefix leaves it as the executable, which keeps
+/// `command -v`, `time -p` and `env -i` on their existing paths.
+pub(super) fn unwrap_wrappers(
     tokens: &[String],
     mut index: usize,
+    environment_names: &mut Vec<String>,
 ) -> Result<(usize, Vec<String>), &'static str> {
     let mut wrappers = Vec::new();
-    while tokens
-        .get(index)
-        .is_some_and(|token| matches!(executable_basename(token), "sudo" | "timeout"))
-    {
-        if wrappers.len() == 4 {
+    let mut prefixes = 0usize;
+    loop {
+        if let Some((next, names)) = transparent_prefix(tokens, index) {
+            if wrappers.len() + prefixes == 4 {
+                return Err("command_wrapper_limit_exceeded");
+            }
+            prefixes += 1;
+            environment_names.extend(names);
+            index = next;
+            continue;
+        }
+        if !tokens
+            .get(index)
+            .is_some_and(|token| matches!(executable_basename(token), "sudo" | "timeout"))
+        {
+            break;
+        }
+        if wrappers.len() + prefixes == 4 {
             return Err("command_wrapper_limit_exceeded");
         }
+        let clock = trusted_timeout(&tokens[index]);
         let wrapper = executable_basename(&tokens[index]);
-        wrappers.push(wrapper.to_owned());
         index += 1;
         if wrapper == "timeout" {
+            if clock {
+                prefixes += 1;
+            } else {
+                wrappers.push(wrapper.to_owned());
+            }
             if tokens.get(index).is_some_and(|value| value == "--") {
                 index += 1;
             }
@@ -34,6 +67,7 @@ pub(super) fn unwrap_sudo(
             }
             continue;
         }
+        wrappers.push(wrapper.to_owned());
         while let Some(option) = tokens.get(index) {
             match option.as_str() {
                 "--" => {
@@ -69,8 +103,74 @@ pub(super) fn unwrap_sudo(
     Ok((index, wrappers))
 }
 
+/// `command X`, `time X` and `env NAME=value... X` run `X` with no other
+/// change. Bare `env X` is left alone: it only bypasses shell functions, and
+/// extension floors key on that spelling. An `env` prefix is transparent only
+/// when every assignment is inert. Any other name can retarget the program,
+/// so the `env` executable stays in place and the command remains uncertain.
+fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usize, Vec<String>)> {
+    let mut next = index + 1;
+    let mut names = Vec::new();
+    match tokens.get(index)?.as_str() {
+        "command" | "time" => {}
+        "env" | "/usr/bin/env" | "/bin/env" => {
+            while let Some(name) = tokens.get(next).and_then(|value| assignment_name(value)) {
+                if !crate::command_compatibility::inert_environment_name(name) {
+                    return None;
+                }
+                names.push(name.to_owned());
+                next += 1;
+            }
+            if names.is_empty() {
+                return None;
+            }
+        }
+        _ => return None,
+    }
+    let program = tokens.get(next)?;
+    (!program.is_empty() && !program.starts_with('-') && assignment_name(program).is_none())
+        .then_some((next, names))
+}
+
+/// Whether this word is the system clock rather than a file that happens to
+/// be named for it. The shell resolves a bare `timeout` on `PATH`, and the
+/// two system paths name the same program; `./timeout`, `bin/timeout` and
+/// `/tmp/timeout` are whatever that file holds, so they stay wrappers and
+/// keep the command under review.
+fn trusted_timeout(token: &str) -> bool {
+    matches!(token, "timeout" | "/usr/bin/timeout" | "/bin/timeout")
+}
+
+/// A duration `timeout` reads: a number of seconds, or one carrying an `s`,
+/// `m`, `h` or `d` unit. `timeout 5m npm run build` bounds the same single
+/// child that `timeout 300 npm run build` bounds, so the unit a person writes
+/// cannot be what decides whether the command is read at all.
 fn timeout(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 10 && value.bytes().all(|byte| byte.is_ascii_digit())
+    let number = value.strip_suffix(['s', 'm', 'h', 'd']).unwrap_or(value);
+    let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+    number.len() <= 10
+        && !whole.is_empty()
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.bytes().all(|byte| byte.is_ascii_digit())
+}
+
+/// `command -v NAME` reports a path or a name and runs nothing, so the segment
+/// stays a plain `command` segment. `command -V` prints a function body, so it
+/// is not a lookup and stays unproven.
+pub(super) fn is_command_lookup(executable: Option<&str>, arguments: &[String]) -> bool {
+    let options = arguments
+        .iter()
+        .take_while(|argument| argument.starts_with('-') && argument.as_str() != "--")
+        .collect::<Vec<_>>();
+    executable.is_some_and(|value| executable_basename(value) == "command")
+        && !options.is_empty()
+        && options.iter().all(|option| {
+            option.len() > 1
+                && option[1..]
+                    .chars()
+                    .all(|letter| matches!(letter, 'p' | 'v'))
+        })
+        && options.iter().any(|option| option.contains('v'))
 }
 
 pub(super) fn is_file_shell_invocation(executable: Option<&str>, arguments: &[String]) -> bool {
@@ -230,5 +330,63 @@ mod tests {
             assert!(model.segments.is_empty(), "{source}");
         }
         assert_eq!(parse("printf %s '${COMMAND}'").confidence, "exact");
+    }
+
+    #[test]
+    fn command_time_and_env_assignment_prefixes_expose_the_program() {
+        for (command, executable, names) in [
+            ("command bun run build", "bun", &[][..]),
+            ("time bun run build", "bun", &[]),
+            ("command git push origin main", "git", &[]),
+            (
+                "CI=1 env NODE_ENV=production command bun run build",
+                "bun",
+                &["CI", "NODE_ENV"],
+            ),
+        ] {
+            let model = parse(command);
+            assert_eq!(model.confidence, "exact", "{command}");
+            assert!(model.wrapper_chain.is_empty(), "{command}");
+            assert!(!model.path_overridden, "{command}");
+            let segment = &model.segments[0];
+            assert_eq!(segment.executable.as_deref(), Some(executable), "{command}");
+            assert_eq!(segment.environment_names, names, "{command}");
+        }
+        for command in ["env PATH=/tmp/x bun run build", "env NODE_PATH=x bun s.ts"] {
+            let model = parse(command);
+            assert_eq!(model.confidence, "uncertain", "{command}");
+            assert!(!model.path_overridden, "{command}");
+        }
+        let model = parse("sudo env CI=1 rm -rf build");
+        assert_eq!(model.confidence, "exact");
+        assert_eq!(model.wrapper_chain, ["sudo"]);
+        assert_eq!(model.segments[0].executable.as_deref(), Some("rm"));
+        assert_eq!(model.segments[0].environment_names, ["CI"]);
+    }
+
+    #[test]
+    fn prefixes_with_options_or_shells_stay_unmodeled() {
+        for command in [
+            "command -p bun run build",
+            "time -p bun run build",
+            "env bun run build",
+            "env -i bun run build",
+            "env -u HOME -i bun run build",
+            "env -S 'bun run build'",
+            "env CI=1 sh -c 'rm -rf x'",
+            "command sh -c 'rm -rf x'",
+            "command env",
+            "env CI=1",
+            "command command command command command bun run build",
+        ] {
+            let model = parse(command);
+            assert!(
+                model.confidence != "exact"
+                    || model.segments[0].executable.as_deref() != Some("bun")
+                        && model.segments[0].executable.as_deref() != Some("rm"),
+                "{command}: {:?}",
+                model.segments.first().map(|segment| &segment.executable)
+            );
+        }
     }
 }

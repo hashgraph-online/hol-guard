@@ -3,12 +3,12 @@ import { ActionButton, SectionLabel } from "../approval-center-primitives";
 export function resolveApprovalPasswordSectionCopy(wasConfigured: boolean, enabled = true): string {
   if (wasConfigured) {
     if (!enabled) {
-      return "Your approval password is set. Turn on Ask for proof above to change it or connect an authenticator.";
+      return "Local approval is off. Choose a password to enable it again. Your authenticator stays connected.";
     }
     return "Guard asks for this password before allow or trust changes stick. Save settings to confirm changes, or change the password when needed.";
   }
   if (!enabled) {
-    return "Set an approval password to require proof before allow or trust changes stick. Setting one turns on Ask for proof.";
+    return "Choose a password to protect approvals and permission changes on this device. Setup turns on password checks.";
   }
   return "Set an approval password before allow or trust changes stick. Use the setup action below to choose it.";
 }
@@ -39,7 +39,7 @@ export function ApprovalPasswordSection(props: {
           </button>
         </div>
       ) : null}
-      {!props.wasConfigured ? (
+      {!props.wasConfigured || !props.gateActive ? (
         <ApprovalPasswordSetupAction onClick={() => props.onOpenPasswordChangeModal("setup-gate")} />
       ) : null}
     </div>

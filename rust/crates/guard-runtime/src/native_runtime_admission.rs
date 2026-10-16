@@ -292,6 +292,8 @@ pub fn isolated_environment(
     const ALLOWED: &[&str] = &[
         "COMSPEC",
         "HOME",
+        "HOL_GUARD_NATIVE_DIAGNOSTIC",
+        "HOL_GUARD_RESIDENT_TEST_SEAMS",
         "LANG",
         "PATHEXT",
         "SYSTEMROOT",
@@ -799,7 +801,19 @@ mod tests {
         base.insert("HOME".to_string(), "/u".to_string());
         base.insert("LC_ALL".to_string(), "C".to_string());
         base.insert("TMPDIR".to_string(), "/tmp".to_string());
+        base.insert("HOL_GUARD_RESIDENT_TEST_SEAMS".to_string(), "1".to_string());
+        base.insert("HOL_GUARD_NATIVE_DIAGNOSTIC".to_string(), "1".to_string());
+        base.insert("HOL_GUARD_NATIVE_BINARY".to_string(), "/evil".to_string());
         let env = isolated_environment(&base, None, Path::new("/bundled"));
+        assert!(!env.contains_key("HOL_GUARD_NATIVE_BINARY"));
+        assert_eq!(
+            env.get("HOL_GUARD_RESIDENT_TEST_SEAMS").map(String::as_str),
+            Some("1")
+        );
+        assert_eq!(
+            env.get("HOL_GUARD_NATIVE_DIAGNOSTIC").map(String::as_str),
+            Some("1")
+        );
         assert!(!env.contains_key("PATH") || cfg!(windows));
         assert!(!env.contains_key("LD_PRELOAD"));
         assert!(!env.contains_key("AWS_SECRET"));

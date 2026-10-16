@@ -1,11 +1,11 @@
 //! Rust port of `runtime/command_launcher_floors.py`.
 //!
 //! Bounded-grammar launcher expansion: `xargs`/`parallel`/`find` children are
-//! `shlex.join`ed and re-parsed through the resident `parse_command`. Python
+//! `shlex.join`ed and re-parsed through the rich native shell model. Python
 //! `shlex` semantics are reproduced locally (`split` posix, `join` quoting).
 
 use crate::canonical_command::CanonicalCommand;
-use crate::{parse_command, CommandModelRequestV1};
+use crate::critical_floor_context::parse_floor_command;
 
 const XARGS_VALUE_OPTIONS: &[&str] = &[
     "--arg-file",
@@ -51,9 +51,13 @@ const PARALLEL_VALUE_OPTIONS: &[&str] = &[
 const FIND_MARKERS: &[&str] = &["-exec", "-execdir", "-ok", "-okdir"];
 
 const MAX_OPTION_PARSE_STATES: usize = 256;
+pub(crate) const MAX_LAUNCHER_CHILDREN: usize = 256;
 
 /// `launcher_child_commands` (:57).
-pub fn launcher_child_commands(executable: &str, arguments: &[String]) -> Vec<CanonicalCommand> {
+pub fn launcher_child_commands(
+    executable: &str,
+    arguments: &[String],
+) -> Result<Vec<CanonicalCommand>, &'static str> {
     let children: Vec<Vec<String>> = if executable == "xargs" {
         possible_children(arguments, XARGS_VALUE_OPTIONS)
     } else if executable == "parallel" {
@@ -63,20 +67,14 @@ pub fn launcher_child_commands(executable: &str, arguments: &[String]) -> Vec<Ca
     } else {
         Vec::new()
     };
-    children
+    if children.len() > MAX_LAUNCHER_CHILDREN {
+        return Err("critical.launcher-expansion-limit");
+    }
+    Ok(children
         .iter()
         .filter(|child| !child.is_empty())
-        .map(|child| {
-            parse_command(&CommandModelRequestV1 {
-                command: shlex_join(child),
-                dialect: "posix".to_owned(),
-                transport: "shell_string".to_owned(),
-                extraction_provenance: "guard-shell".to_owned(),
-            })
-            .map(|v1| CanonicalCommand::from_v1(&v1))
-            .expect("launcher children are generated tokens; parse must not fail")
-        })
-        .collect()
+        .map(|child| parse_floor_command(&shlex_join(child), None, None))
+        .collect())
 }
 
 /// `_possible_children` (:70). DFS over option-parse states.
@@ -93,6 +91,7 @@ fn possible_children(arguments: &[String], value_options: &[&str]) -> Vec<Vec<St
                 .iter()
                 .enumerate()
                 .filter(|(_, item)| !item.starts_with('-'))
+                .take(MAX_LAUNCHER_CHILDREN + 1)
                 .map(|(cursor, _)| arguments[cursor..].to_vec())
                 .collect();
         }

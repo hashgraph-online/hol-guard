@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,17 @@ def _write_artifacts(root: Path) -> dict[str, str]:
         source = root / source_name
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text(source_name, encoding="utf-8")
+    binding = root / "contracts/extensions/trust/command.example.v1.json"
+    binding.parent.mkdir(parents=True, exist_ok=True)
+    binding.write_text(
+        json.dumps(
+            {
+                "schemaVersion": "guard.extension-trust-binding.v1",
+                "extension": "command.example",
+                "trustClass": "external",
+            }
+        )
+    )
     return artifacts
 
 
@@ -46,6 +58,9 @@ def test_stage_artifacts_copies_every_canonical_artifact(tmp_path: Path) -> None
     assert (data_root / "extensions" / "__init__.py").is_file()
     assert (data_root / "extensions" / "contributions" / "__init__.py").is_file()
     assert (data_root / "extensions" / "trust-class-map.v1.json").is_file()
+    assert not (tmp_path / "contracts/extensions/trust-class-map.v1.json").exists()
+    trust = json.loads((data_root / "extensions/trust-class-map.v1.json").read_text())
+    assert trust["classes"]["external"] == ["command.example"]
     assert not (data_root / "guard-cloud-review" / "__init__.py").exists()
 
 

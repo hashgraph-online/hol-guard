@@ -11,28 +11,7 @@ import yaml
 
 from tests.support.ci_workflow import expand_ci_job_actions
 
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import tomli as tomllib
-
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def test_ci_group_preserves_dev_tools_except_the_type_checker() -> None:
-    project = tomllib.loads((ROOT / "pyproject.toml").read_text())
-    dev = project["project"]["optional-dependencies"]["dev"]
-    group = project["dependency-groups"]["ci-test"]
-    assert set(group) == {requirement for requirement in dev if not requirement.startswith("basedpyright")}
-    assert any(requirement.startswith("basedpyright") for requirement in dev)
-    lock = tomllib.loads((ROOT / "uv.lock").read_text())
-    package = next(package for package in lock["package"] if package["name"] == "hol-guard")
-    assert {item["name"] for item in package["dev-dependencies"]["ci-test"]} == {
-        "build",
-        "pytest",
-        "pytest-cov",
-        "ruff",
-    }
 
 
 def test_test_workers_select_the_frozen_group_without_default_dev_dependencies() -> None:
@@ -42,8 +21,8 @@ def test_test_workers_select_the_frozen_group_without_default_dev_dependencies()
         commands = "\n".join(step.get("run", "") for step in action["runs"]["steps"])
         assert "uv sync --frozen --no-dev --group ci-test" in commands
         assert "--extra dev" not in commands
-    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text()))
-    for job in ("wheel-contracts", "linux-build", "linux-proof", "windows-build", "windows-proof"):
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))
+    for job in ("linux-build", "linux-proof", "windows-build", "windows-proof"):
         commands = "\n".join(step.get("run", "") for step in workflow["jobs"][job]["steps"])
         assert "uv sync --frozen --no-dev --group ci-test" in commands
     proof_setup = (ROOT / "scripts/ci/install-native-proof-dependencies.sh").read_text()
@@ -51,7 +30,7 @@ def test_test_workers_select_the_frozen_group_without_default_dev_dependencies()
     assert "--frozen --no-dev --no-install-project" in proof_setup
 
 
-@pytest.mark.parametrize("job", ["compatibility", "deep-compatibility", "cross-platform", "windows-updater"])
+@pytest.mark.parametrize("job", ["compatibility", "cross-platform"])
 def test_compatibility_workers_select_the_frozen_test_group(job: str) -> None:
     """Verify compatibility workers select the frozen test group."""
     workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
@@ -70,9 +49,8 @@ def test_reporting_and_optional_workers_preserve_their_dependency_boundaries() -
         "uv sync --frozen --no-dev --group ci-test --extra cisco --group cisco-mcp --python 3.13"
         in commands["cisco-full"]
     )
-    assert "uv sync --frozen --no-dev --group ci-test --extra mdm-build" in commands["cross-platform"]
+    assert "uv sync --frozen --no-dev --group ci-test --extra mdm-build" in commands["windows-packaged-daemon"]
     assert "uv sync --frozen --extra dev" in commands["quality"]
-    assert "uv sync --frozen --extra dev" in commands["mutation-baseline"]
 
 
 def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source_project() -> None:
@@ -85,6 +63,26 @@ def test_staged_evaluator_wheel_selects_test_tools_without_installing_the_source
     assert "--no-deps evaluation-dist/*.whl" in commands
 
 
+def test_staged_evaluator_compiler_uses_a_fast_non_shipping_profile() -> None:
+    workflow = yaml.safe_load((ROOT / ".github/workflows/evaluation-wheel-ci.yml").read_text())
+    environment = workflow["env"]
+    assert environment["CARGO_PROFILE_RELEASE_OPT_LEVEL"] == "0"
+    assert environment["CARGO_PROFILE_RELEASE_LTO"] == "false"
+    assert environment["CARGO_PROFILE_RELEASE_CODEGEN_UNITS"] == "16"
+    job = workflow["jobs"]["staged-evaluator-wheel"]
+    assert job["timeout-minutes"] == 15
+    assert job["strategy"]["fail-fast"] is False
+    assert set(job["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "macos-15"}
+    verification = next(step for step in job["steps"] if step.get("name", "").startswith("Verify installed"))
+    assert "-I scripts/ci/check_evaluation_wheel.py" in verification["run"]
+    assert not verification.get("continue-on-error", False)
+    # The distribution profile and its independent size gate remain authoritative.
+    release = (ROOT / "rust/Cargo.toml").read_text().split("[profile.release]", 1)[1].split("[", 1)[0]
+    assert 'opt-level = "s"' in release
+    assert 'lto = "fat"' in release
+    assert "codegen-units = 1" in release
+
+
 def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     """Verify coverage cache keeps prebuilt wheels for read only workers."""
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/setup-ci-python/action.yml").read_text()))
@@ -95,7 +93,8 @@ def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     assert action["inputs"]["save-cache"]["default"] == "false"
     jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
     producer = next(
-        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/setup-ci-python"
+        step for step in jobs["native-command-evaluators"]["steps"]
+        if step.get("uses") == "./.github/actions/setup-ci-python"
     )
     consumer = next(
         step for step in jobs["coverage"]["steps"] if step.get("uses") == "./.github/actions/setup-ci-python"
@@ -104,7 +103,7 @@ def test_coverage_cache_keeps_prebuilt_wheels_for_read_only_workers() -> None:
     assert consumer["with"].get("save-cache", "false") == "false"
     assert producer["with"]["python-version"] == consumer["with"]["python-version"]
     assert producer["with"]["cache-dependency-glob"] == consumer["with"]["cache-dependency-glob"]
-    assert "coverage-plan" in jobs["coverage"]["needs"]
+    assert "native-command-evaluators" in jobs["coverage"]["needs"]
 
 
 @pytest.mark.skipif(os.name == "nt", reason="macOS proof setup executes in Bash")

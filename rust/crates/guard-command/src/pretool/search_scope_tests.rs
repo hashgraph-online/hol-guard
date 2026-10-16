@@ -12,6 +12,9 @@ fn fixture() -> (PathBuf, PathBuf) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target")
         .join(format!("guard-search-scope-{}-{nonce}", std::process::id()));
+    // A cached target directory can hold a fixture from an earlier run whose
+    // process id this run reuses; start from an empty tree.
+    let _ = std::fs::remove_dir_all(&root);
     let home = root.join("home");
     let project = home.join("project");
     std::fs::create_dir_all(project.join(".git").join("info")).unwrap();
@@ -204,6 +207,7 @@ fn basename_globs_narrow_the_scope_conservatively() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn links_are_not_followed_but_sensitive_link_targets_keep_review() {
     let (home, project) = fixture();
@@ -438,4 +442,105 @@ fn proven_scopes_still_honor_command_control_lockdown() {
         project.to_str(),
     );
     assert_eq!(result.minimum_action, "block");
+}
+
+/// A linked worktree beside `project` whose `.git` names an admin entry under
+/// the main checkout, as `git worktree add` writes it.
+#[cfg(unix)]
+fn linked_worktree(home: &Path, project: &Path) -> PathBuf {
+    let worktree = home.join("project-feature");
+    let admin = project.join(".git/worktrees/project-feature");
+    std::fs::create_dir_all(&admin).unwrap();
+    std::fs::create_dir_all(&worktree).unwrap();
+    std::fs::write(admin.join("commondir"), "../..\n").unwrap();
+    std::fs::write(
+        admin.join("gitdir"),
+        format!("{}\n", worktree.join(".git").display()),
+    )
+    .unwrap();
+    std::fs::write(
+        worktree.join(".git"),
+        format!("gitdir: {}\n", admin.display()),
+    )
+    .unwrap();
+    write(worktree.join("scripts/check.sh"), "#!/bin/sh\n");
+    worktree
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_glob_walks_a_worktree_link_into_its_main_checkout() {
+    let (home, project) = fixture();
+    let worktree = linked_worktree(&home, &project);
+    write(
+        project.join("dashboard/node_modules/vite/bin/vite"),
+        "#!/bin/sh\n",
+    );
+    std::os::unix::fs::symlink("../vite/bin/vite", {
+        std::fs::create_dir_all(project.join("dashboard/node_modules/.bin")).unwrap();
+        project.join("dashboard/node_modules/.bin/vite")
+    })
+    .unwrap();
+    std::fs::create_dir_all(worktree.join("dashboard")).unwrap();
+    let link = worktree.join("dashboard/node_modules");
+    std::os::unix::fs::symlink(project.join("dashboard/node_modules"), &link).unwrap();
+    let proven = |gitignore| {
+        super::omp_glob_scope_proven(
+            worktree.to_str().unwrap(),
+            home.to_str(),
+            worktree.to_str(),
+            gitignore,
+        )
+    };
+    assert!(proven(false));
+
+    // The target is held to the rules for a walk outside the workspace.
+    write(
+        project.join("dashboard/node_modules/.env"),
+        "TOKEN=fixture\n",
+    );
+    assert!(!proven(false));
+    std::fs::remove_file(project.join("dashboard/node_modules/.env")).unwrap();
+
+    // A link back to the whole main checkout, or anywhere else, still fails.
+    std::fs::remove_file(&link).unwrap();
+    std::os::unix::fs::symlink(&project, &link).unwrap();
+    assert!(!proven(false));
+    std::fs::remove_file(&link).unwrap();
+    std::fs::create_dir_all(home.join("elsewhere")).unwrap();
+    std::os::unix::fs::symlink(home.join("elsewhere"), &link).unwrap();
+    assert!(!proven(false));
+}
+
+#[cfg(unix)]
+#[test]
+fn omp_glob_walks_a_virtualenv_interpreter_link() {
+    let (home, project) = fixture();
+    let worktree = linked_worktree(&home, &project);
+    let interpreter = home.join("toolchains/cpython-3.12/bin/python3.12");
+    write(interpreter.clone(), "#!/bin/sh\n");
+    let venv = worktree.join(".venv/bin");
+    std::fs::create_dir_all(&venv).unwrap();
+    write(venv.join("pytest"), "#!/bin/sh\n");
+    std::os::unix::fs::symlink(&interpreter, venv.join("python")).unwrap();
+    let proven = || {
+        super::omp_glob_scope_proven(
+            worktree.to_str().unwrap(),
+            home.to_str(),
+            worktree.to_str(),
+            false,
+        )
+    };
+    // The link reaches one regular file, so it adds no name from outside.
+    assert!(proven());
+
+    // A link standing in for a credential file keeps the review, and so does
+    // one that opens a directory outside the worktree.
+    write(home.join("toolchains/.env"), "TOKEN=fixture\n");
+    std::fs::remove_file(venv.join("python")).unwrap();
+    std::os::unix::fs::symlink(home.join("toolchains/.env"), venv.join("python")).unwrap();
+    assert!(!proven());
+    std::fs::remove_file(venv.join("python")).unwrap();
+    std::os::unix::fs::symlink(home.join("toolchains"), venv.join("python")).unwrap();
+    assert!(!proven());
 }

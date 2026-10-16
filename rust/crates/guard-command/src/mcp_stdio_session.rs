@@ -14,8 +14,8 @@
 //! opaque authority request and the verdict is applied here — this module
 //! never decides allow/deny itself.
 //!
-//! `#[cfg(unix)]`: launch attributes and process-group teardown are unix-only,
-//! matching `local_mcp_stdio.rs`.
+//! The child runs as the root of a `ChildTree`, as in `local_mcp_stdio.rs`:
+//! its own process group on unix, a kill-on-close JobObject on Windows.
 
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -23,7 +23,6 @@ use std::io::Read;
 
 #[path = "mcp_stdio_writer.rs"]
 mod writer;
-use std::os::unix::process::CommandExt;
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -33,9 +32,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use writer::SessionWriter;
 
-use crate::local_mcp_stdio::{
-    is_rpc_message, kill_process_group, pop_json_message, probe_search_path,
-};
+use crate::local_mcp_stdio::{is_rpc_message, pop_json_message, probe_search_path, ChildTree};
 
 /// Per-frame JSON cap for the persistent pump: a single frame may not exceed
 /// this; oversized/undecodable bytes are discarded without killing the pump.
@@ -48,6 +45,9 @@ const SESSION_FRAME_LIMIT: usize = 1_000_000;
 /// a fast child blocks the reader instead of the pump dying at a fixed count.
 const SESSION_QUEUE: usize = 256;
 
+/// How long an unfinished child frame may extend the pre-write quiet edge.
+const QUIET_EXTENSION_LIMIT: Duration = Duration::from_secs(1);
+
 /// Maximum cross-correlated buffered responses held per response key.
 const MAX_BUFFERED_PER_KEY: usize = 8;
 
@@ -56,6 +56,16 @@ const MAX_BUFFERED_PER_KEY: usize = 8;
 pub enum SessionReadError {
     /// The drain pump hung up: child stdout closed or the pump thread died.
     Eof,
+}
+
+/// Outcome of a pre-write quiet edge.
+pub enum QuietEdge {
+    /// The child stayed silent for the whole quiet window.
+    Silent,
+    /// A complete child frame arrived before the write could proceed.
+    Event(SessionEvent),
+    /// The child still holds an unfinished frame past `QUIET_EXTENSION_LIMIT`.
+    Busy,
 }
 
 /// Persistent stdout pump for the session data plane. Unlike the probe
@@ -67,6 +77,7 @@ fn session_pump(
     mut stdout: std::process::ChildStdout,
     tx: mpsc::SyncSender<Value>,
     cancel: Arc<AtomicBool>,
+    partial: Arc<AtomicBool>,
 ) {
     let mut buffer: Vec<u8> = Vec::new();
     loop {
@@ -78,6 +89,9 @@ fn session_pump(
             Ok(0) | Err(_) => return,
             Ok(n) => n,
         };
+        // Visible before the frame completes, so a pre-write quiet edge can tell
+        // that the child has started a frame it has not finished yet.
+        partial.store(true, Ordering::Release);
         buffer.extend_from_slice(&chunk[..n]);
         // A single in-flight frame may not exceed the cap; drop undecodable
         // head bytes so one malformed frame cannot wedge the session.
@@ -95,6 +109,19 @@ fn session_pump(
         if buffer.len() > SESSION_FRAME_LIMIT {
             buffer.clear();
         }
+        partial.store(!buffer.is_empty(), Ordering::Release);
+    }
+}
+
+/// The temp dir, resolved through symlinks on unix (`/tmp` -> `/private/tmp`
+/// on macOS). Windows keeps the plain form: `canonicalize` returns a `\\?\`
+/// path, which `cmd.exe`-launched servers cannot use as a working directory.
+fn default_working_dir() -> std::path::PathBuf {
+    let temp = std::env::temp_dir();
+    if cfg!(unix) {
+        temp.canonicalize().unwrap_or(temp)
+    } else {
+        temp
     }
 }
 
@@ -117,7 +144,7 @@ fn npm_cache_dir(env: &BTreeMap<String, String>, home_dir: Option<&Path>) -> Opt
 // ---------------------------------------------------------------------------
 
 /// `_is_request` — `{"method", "id"}` both present.
-fn is_request(message: &Value) -> bool {
+pub fn is_request(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("method") && m.contains_key("id"),
         _ => false,
@@ -125,7 +152,7 @@ fn is_request(message: &Value) -> bool {
 }
 
 /// `_is_response` — an `id` and no `method`.
-fn is_response(message: &Value) -> bool {
+pub fn is_response(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("id") && !m.contains_key("method"),
         _ => false,
@@ -133,7 +160,7 @@ fn is_response(message: &Value) -> bool {
 }
 
 /// `_is_notification` — a `method` and no `id`.
-fn is_notification(message: &Value) -> bool {
+pub fn is_notification(message: &Value) -> bool {
     match message {
         Value::Object(m) => m.contains_key("method") && !m.contains_key("id"),
         _ => false,
@@ -143,7 +170,7 @@ fn is_notification(message: &Value) -> bool {
 /// `_response_key` — `json.dumps(value, sort_keys=True, separators=(",",":"))`
 /// canonical key used to correlate a response to its request id. `None` →
 /// `None` (a non-object/id-less message is not correlated).
-fn response_key(value: Option<&Value>) -> Option<String> {
+pub fn response_key(value: Option<&Value>) -> Option<String> {
     let value = value?;
     // serde_json serializes map keys in insertion order; canonicalize to match
     // Python's sort_keys compact dump for correlation keys.
@@ -183,9 +210,12 @@ pub enum SessionEvent {
 /// the native runtime. The caller (resident op) drives `write`/`next_event`
 /// while Python supplies policy verdicts out-of-band.
 pub struct LiveMcpSession {
-    writer: SessionWriter,
-    child_pid: i32,
+    /// `None` once `close_input` dropped the writer (graceful child EOF).
+    writer: Option<SessionWriter>,
+    tree: ChildTree,
     inbox: mpsc::Receiver<Value>,
+    /// True while the drain pump holds the start of a frame that has not completed.
+    partial: Arc<AtomicBool>,
     cancellation: Arc<AtomicBool>,
     _drain: Option<thread::JoinHandle<()>>,
     /// Buffered child responses keyed by `response_key(id)` that arrived while
@@ -202,12 +232,13 @@ pub struct LiveMcpSession {
 /// `_buffered_child_responses`/`_buffered_client_responses`): a FIFO queue of
 /// payloads per `response_key(id)`, capped per key.
 #[derive(Default)]
-struct ResponseBuffers {
+pub struct ResponseBuffers {
     map: BTreeMap<String, Vec<Value>>,
 }
 
 impl ResponseBuffers {
-    fn buffer(&mut self, payload: Value) {
+    /// Queue `payload` under its id correlation key; overflow is dropped.
+    pub fn buffer(&mut self, payload: Value) {
         if let Some(key) = response_key(payload.get("id")) {
             let bucket = self.map.entry(key).or_default();
             if bucket.len() < MAX_BUFFERED_PER_KEY {
@@ -216,7 +247,8 @@ impl ResponseBuffers {
         }
     }
 
-    fn pop(&mut self, request_id: &Value) -> Option<Value> {
+    /// Remove the oldest payload buffered for `request_id`.
+    pub fn pop(&mut self, request_id: &Value) -> Option<Value> {
         let key = response_key(Some(request_id))?;
         let pending = self.map.get_mut(&key)?;
         if pending.is_empty() {
@@ -268,11 +300,9 @@ impl LiveMcpSession {
                 .or_insert_with(|| dir.clone());
             env.entry("NPM_CONFIG_CACHE".to_owned()).or_insert(dir);
         }
-        let working_dir = cwd.map(Path::to_path_buf).unwrap_or_else(|| {
-            std::env::temp_dir()
-                .canonicalize()
-                .unwrap_or_else(|_| std::env::temp_dir())
-        });
+        let working_dir = cwd
+            .map(Path::to_path_buf)
+            .unwrap_or_else(default_working_dir);
         let mut cmd = Command::new(&argv[0]);
         cmd.args(&argv[1..])
             .current_dir(working_dir)
@@ -281,30 +311,30 @@ impl LiveMcpSession {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit());
-        let mut child = cmd
-            .process_group(0)
-            .spawn()
-            .map_err(|_| "transport_failed".to_owned())?;
+        let (mut child, tree) =
+            ChildTree::spawn(&mut cmd).map_err(|_| "transport_failed".to_owned())?;
         let stdin = child.stdin.take().ok_or("transport_failed")?;
         let stdout = child.stdout.take().ok_or("transport_failed")?;
         let writer = match SessionWriter::spawn(stdin) {
             Ok(writer) => writer,
             Err(code) => {
-                kill_process_group(child.id() as i32);
+                tree.kill();
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err(code);
             }
         };
-        let child_pid = child.id() as i32;
         let (tx, rx) = mpsc::sync_channel::<Value>(SESSION_QUEUE);
         let cancel_tx = Arc::clone(&cancellation);
-        let drain = thread::spawn(move || session_pump(stdout, tx, cancel_tx));
+        let partial = Arc::new(AtomicBool::new(false));
+        let partial_tx = Arc::clone(&partial);
+        let drain = thread::spawn(move || session_pump(stdout, tx, cancel_tx, partial_tx));
         Ok((
             LiveMcpSession {
-                writer,
-                child_pid,
+                writer: Some(writer),
+                tree,
                 inbox: rx,
+                partial,
                 cancellation,
                 _drain: Some(drain),
                 buffered_child: ResponseBuffers::default(),
@@ -328,14 +358,15 @@ impl LiveMcpSession {
             return Err("child_frame_too_large".to_owned());
         }
         framed.push(b'\n');
-        let result = self
-            .writer
-            .write(framed, &self.cancellation, Duration::from_secs(5));
+        let Some(writer) = self.writer.as_ref() else {
+            return Err("session_input_closed".to_owned());
+        };
+        let result = writer.write(framed, &self.cancellation, Duration::from_secs(5));
         if result.is_err() {
             // A timed-out write may have delivered part of a frame. Retire the
             // transport rather than retrying and corrupting JSON-RPC framing.
             self.cancel();
-            kill_process_group(self.child_pid);
+            self.tree.kill();
         }
         result
     }
@@ -397,6 +428,32 @@ impl LiveMcpSession {
         }
     }
 
+    /// Pre-write quiet edge: like `next_event(quiet)`, but while the child has
+    /// started a frame it has not finished, keep waiting (bounded by
+    /// `QUIET_EXTENSION_LIMIT`) so a catalog-change notification that is
+    /// mid-flight is seen before a guarded call is written. A child still
+    /// holding a frame open when the extension expires yields `Busy` — the
+    /// caller must not treat it as silence and write anyway.
+    pub fn next_event_quiet(&mut self, quiet: Duration) -> Result<QuietEdge, SessionReadError> {
+        let limit = Instant::now() + quiet + QUIET_EXTENSION_LIMIT;
+        loop {
+            if let Some(event) = self.next_event(quiet)? {
+                return Ok(QuietEdge::Event(event));
+            }
+            if !self.partial.load(Ordering::Acquire) {
+                // The pump can finish and enqueue a frame between the read
+                // timing out and this load — drain it before calling silence.
+                if let Some(event) = self.next_event(Duration::ZERO)? {
+                    return Ok(QuietEdge::Event(event));
+                }
+                return Ok(QuietEdge::Silent);
+            }
+            if Instant::now() >= limit {
+                return Ok(QuietEdge::Busy);
+            }
+        }
+    }
+
     /// `_buffer_child_response` — stash a child response under its correlation
     /// key while servicing an interleaved request.
     pub fn buffer_child_response(&mut self, payload: Value) {
@@ -420,21 +477,25 @@ impl LiveMcpSession {
         self.buffered_client.pop(request_id)
     }
 
+    /// Drop the stdin writer so the child observes EOF on its input, the
+    /// graceful shutdown `runtime_mcp.py` performs before waiting for exit.
+    /// Later writes fail with `session_input_closed`. Idempotent.
+    pub fn close_input(&mut self) {
+        self.writer = None;
+    }
+
     /// Signal cooperative cancellation to the drain pump.
     pub fn cancel(&self) {
         self.cancellation.store(true, Ordering::Release);
     }
 
-    /// `stop_child` — kill the process group then reap the child. Idempotent.
+    /// `stop_child` — kill the process tree then reap the child. Idempotent.
     pub fn close(&mut self, child: &mut Child) {
         if self.closed {
             return;
         }
         self.cancel();
-        let pid = child.id() as i32;
-        if pid > 0 {
-            kill_process_group(pid);
-        }
+        self.tree.kill();
         let _ = child.kill();
         let _ = child.wait();
         self.closed = true;
@@ -466,6 +527,6 @@ impl LiveMcpSession {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "mcp_stdio_session_tests.rs"]
 mod tests;

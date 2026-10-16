@@ -1,0 +1,79 @@
+name: MCP amd64 native managed-resident validation
+
+# Validates the published linux/amd64 managed-resident publish + recovery path
+# on REAL x86_64 hardware (ubuntu-latest), removing the Docker-Desktop Rosetta
+# variable. The amd64 wheel is a public release asset; the runner drives the
+# wheel's own CLI in a python:3.12-slim container, native arch, no emulation.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: hol-guard version (release tag suffix) to validate
+        required: true
+        default: '3.16.4'
+
+permissions:
+  contents: read        # checkout + gh release download of the public wheel
+
+env:
+  VERSION: ${{ inputs.version }}
+  RELEASE_REPO: hashgraph-online/hol-guard   # wheel release source
+
+jobs:
+  amd64-native-resident:
+    runs-on: ubuntu-latest        # real x86_64 — no Rosetta, no qemu-user
+    timeout-minutes: 20
+    steps:
+      - name: Check out validation runner
+        uses: actions/checkout@v4
+
+      - name: Fetch published amd64 wheel
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$PWD/lab/wheel"
+          gh release download "v${VERSION}" \
+            --repo "$RELEASE_REPO" \
+            --pattern "hol_guard-${VERSION}-py3-none-manylinux_2_17_x86_64.whl" \
+            --dir "$PWD/lab/wheel"
+          ls -la "$PWD/lab/wheel"
+
+      - name: Run managed-resident publish + recovery probe (native amd64)
+        run: |
+          set -euo pipefail
+          mkdir -p "$PWD/lab" "$PWD/out"
+          # Capture everything to host-visible out/ so we don't need log perms.
+          set +e
+          {
+            echo "== docker version =="; docker version 2>&1 | sed -n '1,3p' || true
+            echo "== wheel dir =="; ls -la "$PWD/lab/wheel"
+            echo "== docker run =="
+            docker run --rm \
+              --platform linux/amd64 \
+              -v "$PWD/lab:/lab" \
+              -v "$PWD/lab/wheel:/wheel:ro" \
+              -v "$PWD/scripts/ci/mcp_managed_runtime_native_probe.py:/runner.py:ro" \
+              -v "$PWD/out:/output" \
+              -e HOME=/lab/home \
+              -e VERIFY_MCP_PERMISSIONS=1 \
+              -e EXTENDED_SLICE_2=1 \
+              python:3.12-slim \
+              sh -c 'apt-get -qq update && apt-get -qq install -y strace procps >/dev/null 2>&1 || true; python /runner.py; rc=$?; chmod -R a+r /output; exit $rc'
+            echo $? > "$PWD/out/docker_rc"
+          } 2>&1 | tee "$PWD/out/runner-console.log"
+          set -e
+          docker_rc=$(cat "$PWD/out/docker_rc" 2>/dev/null || true)
+          case "$docker_rc" in ''|*[!0-9]*) docker_rc=1 ;; esac
+          echo "== out contents =="; ls -la "$PWD/out" | tee -a "$PWD/out/runner-console.log"
+          # Fail the step when the probe itself failed (tee masks docker's rc).
+          if [ "$docker_rc" -ne 0 ]; then echo "probe failed: docker_rc=$docker_rc" >&2; exit "$docker_rc"; fi
+
+      - name: Upload resident + publish diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: amd64-native-resident-${{ inputs.version }}
+          path: out/
+          if-no-files-found: ignore

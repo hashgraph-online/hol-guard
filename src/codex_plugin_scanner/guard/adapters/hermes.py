@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -16,8 +15,9 @@ from typing import Any
 import yaml as _yaml  # type: ignore[import-untyped]
 
 from ...safe_output import write_text_atomic_no_follow
-from ..aibom_detection import enrich_mcp_server_metadata
-from ..models import GuardArtifact, HarnessDetection
+from ..aibom_detection import native_adapter_detection_with_warnings
+from ..models import HarnessDetection
+from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, remove_guard_shim
 from ..skill_directory_identity import (
     inspect_skill_directory,
@@ -31,11 +31,7 @@ from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 from .hermes_file_inspection import (
     HermesConfigInspection,
-    HermesFileInspection,
-    file_inspection_metadata,
     inspect_hermes_config,
-    inspect_hermes_text_file,
-    parse_hermes_yaml_mapping,
 )
 from .hermes_state_paths import (
     hermes_cleanup_values,
@@ -47,30 +43,6 @@ from .hermes_state_paths import (
     remove_hermes_managed_files,
     validated_hermes_managed_paths,
 )
-
-# Subdirectories within a skill that may contain executable or injectable content.
-_SKILL_SUBDIRS = ("references", "templates", "scripts", "assets")
-
-# File extensions whose content is scanned for risk signals.
-_SCANNABLE_EXTENSIONS = {
-    ".md",
-    ".txt",
-    ".py",
-    ".sh",
-    ".bash",
-    ".js",
-    ".ts",
-    ".yaml",
-    ".yml",
-    ".json",
-    ".toml",
-    ".cfg",
-    ".ini",
-    ".env",
-}
-
-# Filenames (no extension) that should be scanned in skill subdirectories.
-_SCANNABLE_NAMES = {".env", "Makefile", "Dockerfile", "Procfile"}
 
 _HERMES_MANAGED_APPROVAL_TIER = "native-or-center"
 _HERMES_MANAGED_PROMPT_CHANNEL = "native"
@@ -366,464 +338,75 @@ class HermesHarnessAdapter(HarnessAdapter):
         }
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        hermes_home = _hermes_home(context)
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-        warnings: list[str] = []
-
-        # Detect Hermes installation signals.
-        for config_name in ("config.yaml", "config.toml"):
-            config_path = hermes_home / config_name
-            if config_path.is_file():
-                found_paths.append(str(config_path))
-
-        # Discover skills in ~/.hermes/skills/<category>/<skill>/
-        skills_dir = hermes_home / "skills"
-        artifacts.extend(self._scan_skills_dir(skills_dir, found_paths, warnings))
-
-        # Discover MCP servers from both config.yaml and mcp_servers.json.
-        artifacts.extend(
-            self._scan_mcp_servers(
-                hermes_home,
-                found_paths,
-                warnings,
-                managed_names=frozenset(_read_managed_server_names(context)),
-            )
-        )
-
-        # Container fallback: use an explicit or persisted host-home mirror
-        # when the sandbox has only empty skills and trivial config.
+        # The native resident owns skill, MCP and config discovery, the host-home
+        # mirror fallback and the manifest fallback. Python resolves the homes and
+        # the managed server names and fails closed without the resident.
+        hermes_home = anchor_to_process_directory(_hermes_home(context))
         host_home = _hermes_host_home(context)
-        if host_home and host_home.resolve() != hermes_home.resolve() and not _hermes_home_has_artifacts(hermes_home):
-            artifacts.extend(self._scan_host_home(host_home, found_paths, warnings))
-
-        # Manifest fallback: when no MCP servers were discovered from config
-        # files, fall back to the Guard-managed manifest.json.  This covers
-        # containers where install() ran on the host and wrote the manifest,
-        # but the container's config.yaml has no mcp_servers.
-        if not any(a.artifact_type == "mcp_server" for a in artifacts):
-            artifacts.extend(self._scan_manifest_mcp_servers(context, found_paths))
-
+        request: dict[str, object] = {
+            "harness": self.harness,
+            "hermes_home": hermes_home,
+            "host_home": None if host_home is None else anchor_to_process_directory(host_home),
+            "managed_names": _read_managed_server_names(context),
+            "manifest_path": anchor_to_process_directory(_managed_root(context) / "manifest.json"),
+        }
+        if _native_cannot_walk_skills():
+            roots = [hermes_home] if host_home is None else [hermes_home, anchor_to_process_directory(host_home)]
+            request["skill_identities"] = _portable_skill_identities(roots)
+        artifacts, found_paths, warnings = native_adapter_detection_with_warnings("hermes_detect", request)
+        command_available = _command_available(self.executable)
         return HarnessDetection(
             harness=self.harness,
-            installed=bool(found_paths) or _command_available(self.executable),
-            command_available=_command_available(self.executable),
-            artifacts=tuple(artifacts),
-            config_paths=tuple(found_paths),
-            warnings=tuple(dict.fromkeys(warnings)),
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
+            artifacts=artifacts,
+            config_paths=found_paths,
+            warnings=warnings,
         )
-
-    # ------------------------------------------------------------------
-    # Skill scanning
-    # ------------------------------------------------------------------
-
-    def _scan_skills_dir(
-        self,
-        skills_dir: Path,
-        found_paths: list[str],
-        warnings: list[str],
-    ) -> list[GuardArtifact]:
-        """Discover skills under <home>/skills/<category>/<skill>/SKILL.md."""
-        artifacts: list[GuardArtifact] = []
-        if skills_dir.is_dir():
-            try:
-                category_dirs = sorted(skills_dir.iterdir())
-            except (PermissionError, OSError):
-                category_dirs = []
-            for category_dir in category_dirs:
-                if not category_dir.is_dir():
-                    continue
-                try:
-                    skill_dirs = sorted(category_dir.iterdir())
-                except (PermissionError, OSError):
-                    continue
-                for skill_dir in skill_dirs:
-                    if not skill_dir.is_dir():
-                        continue
-                    skill_md = skill_dir / "SKILL.md"
-                    if not skill_md.is_file():
-                        continue
-                    found_paths.append(str(skill_md))
-                    artifacts.extend(
-                        self._scan_skill(
-                            category_dir,
-                            skill_dir,
-                            skill_md,
-                            identity_scope_root=skills_dir,
-                            warnings=warnings,
-                        )
-                    )
-        return artifacts
-
-    def _scan_skill(
-        self,
-        category_dir: Path,
-        skill_dir: Path,
-        skill_md: Path,
-        *,
-        identity_scope_root: Path,
-        warnings: list[str],
-    ) -> list[GuardArtifact]:
-        """Produce artifacts for SKILL.md and any scannable subdirectory files."""
-        artifacts: list[GuardArtifact] = []
-
-        inspection = inspect_hermes_text_file(skill_md, scope_root=skill_dir)
-        content = inspection.preview
-        frontmatter = _parse_frontmatter(content)
-        code_blocks = _extract_code_blocks(content)
-
-        skill_name_value = frontmatter.get("name")
-        skill_name = skill_name_value if isinstance(skill_name_value, str) and skill_name_value else skill_dir.name
-        description_value = frontmatter.get("description")
-        description = description_value if isinstance(description_value, str) else ""
-        # related_skills may be top-level or nested under metadata.hermes
-        related_value = frontmatter.get("related_skills")
-        related = related_value if isinstance(related_value, str) else ""
-        if not related:
-            meta = frontmatter.get("metadata", {})
-            if isinstance(meta, str):
-                # Fallback parser returns strings; try to extract from it
-                pass
-            elif isinstance(meta, dict):
-                hermes_meta = meta.get("hermes", {})
-                if isinstance(hermes_meta, dict):
-                    hermes_related = hermes_meta.get("related_skills")
-                    if isinstance(hermes_related, str):
-                        related = hermes_related
-
-        env_mentions = _extract_env_mentions(content)
-        identity = inspect_skill_directory(skill_md, scope_root=identity_scope_root)
-        metadata = skill_directory_identity_metadata(
-            identity,
-            version_label=f"{category_dir.name}/{skill_dir.name}",
-        )
-        metadata.update(
-            {
-                "category": category_dir.name,
-                "description": description[:200] if description else "",
-                "has_code_blocks": bool(code_blocks),
-                "related_skills": related,
-                "env_mentions": sorted(env_mentions),
-                **file_inspection_metadata(inspection),
-            }
-        )
-        signals = _inspection_signals(inspection, label="Hermes skill")
-        if identity.status != "complete":
-            signals.append("Hermes skill directory identity is incomplete; review is required.")
-            warnings.append(
-                f"Hermes skill directory identity is incomplete ({identity.failure_reason or 'unknown'}); "
-                "approval reuse is disabled."
-            )
-        if signals:
-            metadata["runtime_request_signals"] = signals
-
-        # Include both fenced code blocks AND non-fenced plain text for risk
-        # analysis.  Mixed files may have a benign fenced snippet plus malicious
-        # plain-markdown instructions; dropping either would miss signals.
-        risk_args: tuple[str, ...] = tuple(code_blocks)
-        plain_text = _extract_plain_markdown(content)
-        if plain_text:
-            risk_args = (*risk_args, plain_text)
-
-        artifacts.append(
-            GuardArtifact(
-                artifact_id=f"hermes:skill:{category_dir.name}:{skill_dir.name}",
-                name=skill_name,
-                harness=self.harness,
-                artifact_type="skill",
-                source_scope="global",
-                config_path=str(skill_md),
-                command=str(skill_md),
-                url=None,
-                transport=None,
-                args=risk_args,
-                metadata=metadata,
-            )
-        )
-
-        # Scan subdirectory files (references, templates, scripts, assets).
-        for subdir_name in _SKILL_SUBDIRS:
-            subdir = skill_dir / subdir_name
-            if not subdir.is_dir():
-                continue
-            try:
-                sub_files = sorted(subdir.rglob("*"))
-            except (PermissionError, OSError):
-                continue
-            for file_path in sub_files:
-                if not file_path.is_file():
-                    continue
-                if not _is_scannable(file_path):
-                    continue
-                file_inspection = inspect_hermes_text_file(file_path, scope_root=skill_dir)
-                file_content = file_inspection.preview
-                file_blocks = _extract_code_blocks(file_content)
-                file_env = _extract_env_mentions(file_content)
-                rel_path = file_path.relative_to(skill_dir)
-
-                # Include both fenced code blocks AND non-fenced plain text for
-                # risk analysis.  Plain scripts (.sh/.py) without fences get their
-                # raw content included.  Truncate to avoid oversized artifacts.
-                file_risk_args: tuple[str, ...] = tuple(file_blocks)
-                file_plain = _extract_plain_markdown(file_content)
-                if file_plain:
-                    file_risk_args = (*file_risk_args, file_plain)
-
-                file_metadata: dict[str, object] = {
-                    "parent_skill": skill_name,
-                    "subdir": subdir_name,
-                    "has_code_blocks": bool(file_blocks),
-                    "env_mentions": sorted(file_env),
-                    **file_inspection_metadata(file_inspection),
-                }
-                file_signals = _inspection_signals(file_inspection, label="Hermes skill file")
-                if file_signals:
-                    file_metadata["runtime_request_signals"] = file_signals
-                artifacts.append(
-                    GuardArtifact(
-                        artifact_id=(f"hermes:skill:{category_dir.name}:{skill_dir.name}:{rel_path}"),
-                        name=f"{skill_name}/{rel_path}",
-                        harness=self.harness,
-                        artifact_type="skill_file",
-                        source_scope="global",
-                        config_path=str(file_path),
-                        command=str(file_path),
-                        url=None,
-                        transport=None,
-                        args=file_risk_args,
-                        metadata=file_metadata,
-                    )
-                )
-
-        return artifacts
-
-    # ------------------------------------------------------------------
-    # MCP server scanning
-    # ------------------------------------------------------------------
-
-    def _scan_mcp_servers(
-        self,
-        hermes_home: Path,
-        found_paths: list[str],
-        warnings: list[str],
-        *,
-        managed_names: frozenset[str] = frozenset(),
-    ) -> list[GuardArtifact]:
-        """Read MCP server configs from config.yaml and mcp_servers.json."""
-        artifacts: list[GuardArtifact] = []
-
-        # Source 1: config.yaml (primary Hermes config).
-        yaml_path = hermes_home / "config.yaml"
-        if yaml_path.is_file():
-            found_paths.append(str(yaml_path))
-            inspection = inspect_hermes_config(yaml_path, syntax="yaml")
-            if inspection.complete and inspection.payload is not None:
-                yaml_servers = {
-                    name: config
-                    for name, config in _mcp_servers_from_payload(inspection.payload).items()
-                    if name not in managed_names
-                }
-                artifacts.extend(self._mcp_artifacts(yaml_servers, str(yaml_path), source="yaml"))
-            else:
-                artifacts.append(_config_failure_artifact(yaml_path, source="yaml", inspection=inspection))
-                warnings.append(_config_failure_warning(yaml_path, inspection))
-
-        # Source 2: mcp_servers.json (legacy / alternative).
-        json_path = hermes_home / "mcp_servers.json"
-        if json_path.is_file():
-            found_paths.append(str(json_path))
-            inspection = inspect_hermes_config(json_path, syntax="json")
-            if inspection.complete and inspection.payload is not None:
-                json_servers = {
-                    name: config
-                    for name, config in inspection.payload.items()
-                    if isinstance(name, str) and isinstance(config, dict)
-                }
-                artifacts.extend(self._mcp_artifacts(json_servers, str(json_path), source="json"))
-            else:
-                artifacts.append(_config_failure_artifact(json_path, source="json", inspection=inspection))
-                warnings.append(_config_failure_warning(json_path, inspection))
-
-        return artifacts
-
-    def _scan_host_home(
-        self,
-        host_home: Path,
-        found_paths: list[str],
-        warnings: list[str],
-    ) -> list[GuardArtifact]:
-        """Scan the host's real Hermes home when running inside a container.
-
-        This mirrors the container-side detect() logic but targets the host's
-        installation.  Skills and MCP servers discovered here are attributed
-        to the Hermes harness — they belong to the agent even though the
-        container can't see them directly.
-        """
-        artifacts: list[GuardArtifact] = []
-
-        # Discover skills from the host's skills directory.
-        skills_dir = host_home / "skills"
-        artifacts.extend(self._scan_skills_dir(skills_dir, found_paths, warnings))
-
-        # Discover MCP servers from the host's config files.
-        artifacts.extend(self._scan_mcp_servers(host_home, found_paths, warnings))
-
-        return artifacts
-
-    def _scan_manifest_mcp_servers(
-        self,
-        context: HarnessContext,
-        found_paths: list[str],
-    ) -> list[GuardArtifact]:
-        """Fall back to Guard-managed manifest.json for MCP server discovery.
-
-        When the container's config.yaml has no mcp_servers (common in
-        sandbox configs), the Guard-managed manifest.json written by
-        install() may contain the server definitions.  This covers the case
-        where install() ran on the host and the manifest was mounted or
-        copied into the container.
-        """
-        manifest_path = _managed_root(context) / "manifest.json"
-        if not manifest_path.is_file():
-            return []
-
-        payload = _json_payload(manifest_path)
-        servers = payload.get("servers")
-        if not isinstance(servers, dict) or not servers:
-            return []
-
-        found_paths.append(str(manifest_path))
-        # Manifest stores servers keyed as "yaml:<name>" / "json:<name>".
-        # Re-key by the real server name so artifacts report the correct name.
-        real_servers: dict[str, dict[str, object]] = {}
-        for _key, server_config in servers.items():
-            if not isinstance(server_config, dict):
-                continue
-            real_name = server_config.get("name")
-            if isinstance(real_name, str) and real_name:
-                real_servers[real_name] = server_config
-            elif isinstance(_key, str):
-                real_servers[_key] = server_config
-        return self._mcp_artifacts(real_servers, str(manifest_path), source="manifest")
-
-    def _mcp_artifacts(
-        self,
-        servers: dict[str, dict[str, object]],
-        config_path: str,
-        *,
-        source: str,
-    ) -> list[GuardArtifact]:
-        """Convert parsed MCP server dicts into GuardArtifacts."""
-        artifacts: list[GuardArtifact] = []
-        for name, server_config in servers.items():
-            if not isinstance(name, str) or not isinstance(server_config, dict):
-                continue
-
-            # Skip disabled MCP servers unless explicitly enabled (default True).
-            enabled = server_config.get("enabled", True)
-            if enabled is False:
-                continue
-
-            command = server_config.get("command")
-            url = server_config.get("url")
-            args = server_config.get("args", [])
-            env = server_config.get("env", {})
-            headers = server_config.get("headers", {})
-            sampling = server_config.get("sampling")
-
-            if not isinstance(args, list):
-                args = []
-            if not isinstance(env, dict):
-                env = {}
-            if not isinstance(headers, dict):
-                headers = {}
-
-            args_tuple = tuple(str(a) for a in args if isinstance(a, str))
-            transport = "http" if isinstance(url, str) else "stdio"
-
-            # Filter non-string keys before sorting to avoid TypeError.
-            header_keys = [k for k in headers if isinstance(k, str)]
-            auth_header_keys = [
-                k for k in header_keys if any(t in k.lower() for t in ("auth", "token", "key", "secret", "bearer"))
-            ]
-
-            sampling_enabled = None
-            sampling_model = None
-            if isinstance(sampling, dict):
-                sampling_enabled = sampling.get("enabled", True)
-                sampling_model = sampling.get("model")
-
-            # Filter env keys to strings before sorting.
-            env_str_keys = sorted(k for k in env if isinstance(k, str))
-            configured_environment = {
-                key.strip(): value
-                for key, value in env.items()
-                if isinstance(key, str) and key.strip() and isinstance(value, str)
-            }
-            configured_headers = {
-                key.strip(): value
-                for key, value in headers.items()
-                if isinstance(key, str) and key.strip() and isinstance(value, str)
-            }
-
-            metadata: dict[str, object] = {
-                "source": source,
-                "env_keys": env_str_keys,
-                "header_keys": sorted(header_keys),
-                "headers_keys": sorted(header_keys),
-                "auth_header_keys": sorted(auth_header_keys),
-                "sampling_enabled": sampling_enabled,
-                "sampling_model": sampling_model,
-                "envConfigurationPresent": bool(env),
-                "has_auth_headers": bool(auth_header_keys),
-            }
-
-            env_value_hints = [
-                k for k, v in env.items() if isinstance(k, str) and isinstance(v, str) and _looks_like_secret(v)
-            ]
-            if env_value_hints:
-                metadata["env_value_secret_keys"] = sorted(env_value_hints)
-
-            header_value_hints = [
-                k for k, v in headers.items() if isinstance(k, str) and isinstance(v, str) and _looks_like_secret(v)
-            ]
-            if header_value_hints:
-                metadata["header_value_secret_keys"] = sorted(header_value_hints)
-
-            metadata = enrich_mcp_server_metadata(
-                metadata,
-                command=command if isinstance(command, str) else None,
-                args=args_tuple,
-                url=url if isinstance(url, str) else None,
-                transport=transport,
-                configured_environment=configured_environment,
-                configured_headers=configured_headers,
-            )
-
-            # Include source in artifact_id to prevent collisions when the
-            # same server name appears in both config.yaml and mcp_servers.json.
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=f"hermes:mcp:{source}:{name}",
-                    name=name,
-                    harness=self.harness,
-                    artifact_type="mcp_server",
-                    source_scope="global",
-                    config_path=config_path,
-                    command=command if isinstance(command, str) else None,
-                    url=url if isinstance(url, str) else None,
-                    transport=transport,
-                    args=args_tuple,
-                    metadata=metadata,
-                )
-            )
-
-        return artifacts
 
 
 # ------------------------------------------------------------------
 # Module-level helpers (no dependency on adapter instance)
 # ------------------------------------------------------------------
+
+
+def _native_cannot_walk_skills() -> bool:
+    """Whether the resident's unix file-descriptor skill walk cannot serve this host."""
+
+    return os.name == "nt"
+
+
+def _sorted_children(directory: Path) -> list[Path]:
+    try:
+        return sorted(directory.iterdir())
+    except OSError:
+        return []
+
+
+def _portable_skill_identities(homes: list[str]) -> dict[str, dict[str, object]]:
+    """Finished skill directory identities, keyed by SKILL.md path, for hosts the resident cannot walk."""
+
+    identities: dict[str, dict[str, object]] = {}
+    for home in homes:
+        skills_dir = Path(home) / "skills"
+        if not skills_dir.is_dir():
+            continue
+        for category_dir in _sorted_children(skills_dir):
+            if not category_dir.is_dir():
+                continue
+            for skill_dir in _sorted_children(category_dir):
+                skill_md = skill_dir / "SKILL.md"
+                if not (skill_dir.is_dir() and skill_md.is_file()):
+                    continue
+                identity = inspect_skill_directory(skill_md, scope_root=skills_dir)
+                identities[str(skill_md)] = {
+                    "metadata": skill_directory_identity_metadata(
+                        identity, version_label=f"{category_dir.name}/{skill_dir.name}"
+                    ),
+                    "complete": identity.status == "complete",
+                    "failure_reason": identity.failure_reason,
+                }
+    return identities
 
 
 class _HermesConfigInspectionError(ValueError):
@@ -833,165 +416,11 @@ class _HermesConfigInspectionError(ValueError):
         self.inspection = inspection
 
 
-def _inspection_signals(inspection: HermesFileInspection, *, label: str) -> list[str]:
-    if not inspection.complete:
-        reason = inspection.reason or "unknown"
-        return [f"{label} inspection is incomplete ({reason}); unseen content cannot be treated as safe."]
-    if inspection.analysis_truncated:
-        return [f"{label} risk preview is truncated; review the complete content before approval."]
-    return []
-
-
-def _config_failure_artifact(
-    path: Path,
-    *,
-    source: str,
-    inspection: HermesConfigInspection,
-) -> GuardArtifact:
-    reason = inspection.reason or "config_parse_error"
-    metadata = {
-        **file_inspection_metadata(inspection.file),
-        "config_parse_complete": False,
-        "config_reason": reason,
-        "runtime_request_signals": [
-            f"Hermes {source.upper()} configuration inspection is incomplete ({reason}); review is required."
-        ],
-    }
-    return GuardArtifact(
-        artifact_id=f"hermes:config:{source}:incomplete",
-        name=f"Incomplete Hermes {source.upper()} configuration",
-        harness="hermes",
-        artifact_type="configuration",
-        source_scope="global",
-        config_path=str(path),
-        metadata=metadata,
-    )
-
-
-def _config_failure_warning(path: Path, inspection: HermesConfigInspection) -> str:
-    reason = inspection.reason or "config_parse_error"
-    return f"Hermes config {path.name} was not accepted ({reason}); no partial configuration was applied."
-
-
 def _mcp_servers_from_payload(payload: dict[str, object]) -> dict[str, dict[str, object]]:
     mcp = payload.get("mcp_servers")
     if not isinstance(mcp, dict):
         return {}
     return {name: config for name, config in mcp.items() if isinstance(name, str) and isinstance(config, dict)}
-
-
-def _is_scannable(file_path: Path) -> bool:
-    """Check whether a file should be scanned based on extension or name."""
-    if file_path.suffix.lower() in _SCANNABLE_EXTENSIONS:
-        return True
-    # Extensionless files with known names (e.g. .env, Makefile, deploy).
-    if not file_path.suffix:
-        name = file_path.name
-        if name in _SCANNABLE_NAMES:
-            return True
-        # Files in scripts/ subdirs without extension are likely shell scripts.
-        for subdir in ("scripts",):
-            if subdir in file_path.parts:
-                return True
-    return False
-
-
-def _parse_frontmatter(content: str) -> dict[str, object]:
-    """Parse complete, bounded YAML frontmatter from the retained preview."""
-    if not content.startswith("---"):
-        return {}
-    parts = content[3:].split("---", 1)
-    if len(parts) != 2:
-        return {}
-    raw = parts[0].strip()
-
-    parsed = parse_hermes_yaml_mapping(raw)
-    if parsed is not None:
-        # Flatten values to strings for consistent downstream handling.
-        return {key: _flatten_yaml_value(value) for key, value in parsed.items()}
-    return {}
-
-
-def _flatten_yaml_value(value: object) -> str:
-    """Convert a parsed YAML value to a flat string for frontmatter metadata."""
-    if isinstance(value, str):
-        return value
-    if isinstance(value, (list, tuple)):
-        return ", ".join(str(v) for v in value)
-    if isinstance(value, dict):
-        return str(value)
-    return str(value)
-
-
-def _extract_code_blocks(content: str) -> list[str]:
-    """Extract code blocks from markdown for risk analysis."""
-    blocks: list[str] = []
-    pattern = r"```[^\n]*\n(.*?)\n?```"
-    for match in re.finditer(pattern, content, re.DOTALL):
-        code = match.group(1).strip()
-        if code:
-            blocks.append(code)
-    return blocks
-
-
-def _extract_plain_markdown(content: str, max_len: int = 2048) -> str:
-    """Extract non-fenced plain text from markdown for risk analysis.
-
-    Strips code fences and frontmatter, returning the remaining plain
-    text truncated to max_len.  Returns empty string if nothing remains.
-    """
-    # Remove fenced code blocks.
-    stripped = re.sub(r"```[^\n]*\n.*?\n?```", "", content, flags=re.DOTALL)
-    # Remove frontmatter.
-    if stripped.startswith("---"):
-        parts = stripped[3:].split("---", 1)
-        if len(parts) == 2:
-            stripped = parts[1]
-    text = stripped.strip()
-    if not text:
-        return ""
-    return text[:max_len]
-
-
-def _extract_env_mentions(content: str) -> list[str]:
-    """Find environment variable references like ${VAR}, os.environ['VAR'], process.env.VAR."""
-    mentions: set[str] = set()
-    for m in re.finditer(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}", content):
-        mentions.add(m.group(1))
-    # os.environ.get('VAR') and os.getenv('VAR')
-    for m in re.finditer(r"os\.(?:environ(?:\.get)?|getenv)\(['\"]([A-Za-z_][A-Za-z0-9_]*)['\"]\)", content):
-        mentions.add(m.group(1))
-    # os.environ['VAR'] and os.environ["VAR"]
-    for m in re.finditer(r"os\.environ\[(['\"])([A-Za-z_][A-Za-z0-9_]*)\1\]", content):
-        mentions.add(m.group(2))
-    for m in re.finditer(r"process\.env\.([A-Za-z_][A-Za-z0-9_]*)", content):
-        mentions.add(m.group(1))
-    return sorted(mentions)
-
-
-def _looks_like_secret(value: str) -> bool:
-    """Heuristic: does this value look like a secret/token?"""
-    if len(value) < 8:
-        return False
-    lower = value.lower()
-    secret_prefixes = (
-        "ghp_",
-        "gho_",
-        "ghu_",
-        "ghs_",
-        "sk-",
-        "sk_",
-        "xai-",
-        "key-",
-        "key_",
-        "tok_",
-        "token_",
-    )
-    return bool(
-        any(lower.startswith(p) for p in secret_prefixes)
-        or lower.startswith("bearer ")
-        or re.fullmatch(r"[A-Za-z0-9+/=_-]{20,}", value)
-    )
 
 
 def _parse_mcp_from_yaml(yaml_path: Path) -> dict[str, dict[str, object]]:

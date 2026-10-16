@@ -2,8 +2,7 @@
 
 use serde_json::json;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::evaluate_pre_tool_envelope_with_context;
 
 #[test]

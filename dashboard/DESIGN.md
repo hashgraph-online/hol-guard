@@ -57,6 +57,10 @@ Controls use rounded corners and touch targets of at least 44px. Group related r
 
 ## Components
 
+### Native Business Review
+
+The native business review is display-only: show the request title, `From` line, `Read-only` status and factual saved-request summary without a `Saved request` kicker. Keep queue search, filter and pagination controls at least 44px. On phones, keep Inbox in its dedicated scroll pane above the fixed bottom navigation. Error and recovery states use truthful copy such as `Request details are unavailable` and `Review is not connected yet`, with refresh/retry affordances; neither state certifies provider-account verification or execution.
+
 Use the existing segmented radio controls for mutually exclusive permission settings, including keyboard navigation and visible selected states. Search fields filter the visible catalog without discarding choices. Preserve the existing local approval confirmation before saving authority changes.
 
 ## Do's and Don'ts

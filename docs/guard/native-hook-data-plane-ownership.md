@@ -3,8 +3,8 @@
 Status: executable migration contract for `main`.
 
 The machine-readable source of truth is
-`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The always-selected
-`Rust authority ownership` workflow rejects protected hook/data-plane changes
+`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The
+nightly native workflow (`nightly-native.yml`) rejects protected hook/data-plane changes
 that do not match a declared ownership node.
 
 ## Pinned baselines
@@ -175,12 +175,13 @@ Installed native artifacts must prove all listed environment variables are absen
 
 Unset mode selects `auto`; an invalid mode also selects `auto`. Auto mode uses
 only the package-bound, manifest-attested runtime and ignores a binary override.
-Unset fast-path configuration enables the resident worker. No production path
-searches `PATH` or downloads a runtime. Native unavailability produces a
+Unset fast-path configuration enables the resident worker. No hook or daemon path
+searches `PATH` or downloads a runtime; only the explicit `update`, `install` and
+`doctor --repair` commands fetch a missing GitHub-only native wheel. Native unavailability produces a
 deterministic fail-safe result.
 
-The stable native-wheel matrix exercises Linux x64, macOS x64, macOS arm64, and
-Windows x64. Desktop Core stages the runtime from an attested native wheel,
+The stable native-wheel matrix exercises Linux x64, macOS x64, macOS arm64,
+Windows x64, and Windows arm64. Desktop Core stages the runtime from an attested native wheel,
 binds version and target, refreshes the manifest after signing changes the
 binary, and verifies the frozen sidecar.
 
