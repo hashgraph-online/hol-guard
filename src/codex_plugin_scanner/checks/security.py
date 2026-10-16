@@ -142,8 +142,10 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
 # span, outside fenced and indented code and not after an assignment or a flag,
 # counts as such a mention. Files that instruct an agent never qualify.
 MARKDOWN_FENCE_RE = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
 APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
 AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
+AGENT_INSTRUCTION_STEMS = {"context", "system-prompt", "system_prompt"}
 AGENT_INSTRUCTION_PATH_HINTS = {
     ".agents",
     ".claude",
@@ -941,8 +943,12 @@ def check_mcp_transport_security(plugin_dir: Path) -> CheckResult:
 
 
 def _is_agent_instruction_surface(relative_path: Path) -> bool:
+    """Whether an agent loads this file as instructions, judged by its name and directories."""
     directories = {part.lower() for part in relative_path.parts[:-1]}
     if relative_path.name.lower() in AGENT_INSTRUCTION_FILENAMES:
+        return True
+    stem = relative_path.stem.lower()
+    if stem in AGENT_INSTRUCTION_STEMS or stem in AGENT_INSTRUCTION_PATH_HINTS:
         return True
     return bool(directories & AGENT_INSTRUCTION_PATH_HINTS)
 
@@ -961,23 +967,48 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
 
 
 def _markdown_code_lines(lines: list[str]) -> list[bool]:
-    """Mark the lines of fenced or indented code, fence lines included."""
+    """Mark the lines of fenced or indented code, fence lines included.
+
+    Block-quote markers are removed first, so a fence inside a quote still
+    counts. An indented line starts a code block only after a blank line or a
+    heading, or continues one, because indented code cannot interrupt a
+    paragraph.
+    """
     code_lines: list[bool] = []
     fence: str | None = None
-    for line in lines:
+    can_start_indented_code = True
+    for raw_line in lines:
+        line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
         fence_match = MARKDOWN_FENCE_RE.match(line)
-        if fence is None and fence_match:
+        if fence is not None:
+            is_code = True
+            if fence_match:
+                marker = fence_match.group(1)
+                if marker[0] == fence[0] and len(marker) >= len(fence) and not line.strip()[len(marker) :]:
+                    fence = None
+        elif fence_match:
             fence = fence_match.group(1)
-        elif fence is not None and fence_match:
-            marker = fence_match.group(1)
-            if marker[0] == fence[0] and len(marker) >= len(fence) and not line.strip()[len(marker) :]:
-                fence = None
-        code_lines.append(fence is not None or fence_match is not None or line.startswith(("    ", "\t")))
+            is_code = True
+        else:
+            is_code = line.startswith(("    ", "\t")) and can_start_indented_code
+        code_lines.append(is_code)
+        stripped = line.strip()
+        can_start_indented_code = is_code or not stripped or stripped.startswith("#")
     return code_lines
 
 
-def _has_risky_approval_default(relative_path: Path, content: str) -> bool:
-    if relative_path.suffix.lower() not in DOCUMENTATION_EXTS or _is_agent_instruction_surface(relative_path):
+def _has_risky_approval_default(relative_path: Path, content: str, *, declared: bool = False) -> bool:
+    """Whether the file sets a risky approval or sandbox default.
+
+    Documentation may name a value in an inline code span without setting it.
+    A file an ecosystem declares as package content (``declared``), an agent
+    instruction file, and every non-Markdown file are matched as before.
+    """
+    if (
+        declared
+        or relative_path.suffix.lower() not in DOCUMENTATION_EXTS
+        or _is_agent_instruction_surface(relative_path)
+    ):
         return any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS)
     lines = content.split("\n")
     line_starts = [0]
@@ -996,6 +1027,11 @@ def _has_risky_approval_default(relative_path: Path, content: str) -> bool:
 
 
 def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+    """Report files that default to bypassed approvals or an unrestricted sandbox.
+
+    ``files`` names the package content an ecosystem declared, such as a
+    manifest's system prompt or commands; those are read as instructions.
+    """
     findings: list[str] = []
     resolved_plugin_dir = plugin_dir.resolve()
     try:
@@ -1016,7 +1052,7 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            if _has_risky_approval_default(relative_path, content):
+            if _has_risky_approval_default(relative_path, content, declared=files is not None):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(

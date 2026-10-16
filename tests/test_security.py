@@ -546,6 +546,7 @@ class TestScanAllFiles:
 
 class TestNoApprovalBypassDefaults:
     def test_flags_shipped_config(self, tmp_path: Path):
+        """A shipped config that sets the sandbox default is reported on its path."""
         (tmp_path / ".codex").mkdir()
         (tmp_path / ".codex" / "config.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
 
@@ -565,9 +566,11 @@ class TestNoApprovalBypassDefaults:
             ),
             ("CHANGELOG.md", "Codex runs with sandbox `danger-full-access` are now reported.\n"),
             ("README.md", "```\nexample\n```\n\nNever ship `danger-full-access` as a default.\n"),
+            ("docs/setup.md", "The sandbox modes are listed below,\n    and `danger-full-access` is one of them.\n"),
         ],
     )
     def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
+        """Prose that only names the value in an inline code span is not reported."""
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -585,6 +588,9 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", "````\n```\nsandbox `danger-full-access`\n````\n"),
             ("docs/setup.md", "```\nunclosed fence\nsandbox `danger-full-access`\n"),
             ("docs/setup.md", "    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "Intro.\n\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "# Modes\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> sandbox `danger-full-access`\n> ```\n"),
             ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
             ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
             ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
@@ -598,9 +604,11 @@ class TestNoApprovalBypassDefaults:
             ("commands/deploy.md", "Use sandbox `danger-full-access`.\n"),
             ("AGENTS.md", "Use sandbox `danger-full-access`.\n"),
             (".claude/rules/shell.md", "Use sandbox `danger-full-access`.\n"),
+            ("system-prompt.md", "Use sandbox `danger-full-access`.\n"),
         ],
     )
     def test_documentation_that_sets_or_instructs_still_fails(self, tmp_path: Path, path: str, content: str):
+        """Code, settings, flags, prose without a code span and instruction files are still reported."""
         target = tmp_path / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
@@ -610,6 +618,17 @@ class TestNoApprovalBypassDefaults:
         assert result.passed is False
         assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
         assert result.findings[0].file_path == path
+
+    def test_declared_files_are_read_as_instructions(self, tmp_path: Path):
+        """A file an ecosystem declares as package content gets no documentation exception."""
+        target = tmp_path / "guide.md"
+        target.write_text("Run with sandbox `danger-full-access`.\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
+        result = check_no_approval_bypass_defaults(tmp_path, (target,))
+
+        assert result.passed is False
+        assert result.findings[0].file_path == "guide.md"
 
 
 class TestRunSecurityChecks:
