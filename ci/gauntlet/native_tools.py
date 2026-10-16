@@ -24,6 +24,76 @@ SCRATCH_NAME = "scratch-notes.txt"
 # /private/tmp; the evidence redacts both spellings to ``{{scratch}}``.
 TMP_ALIAS_READ_CASE = "omp-native-read-tmp-alias-worktree-file"
 SCRATCH_READ_TARGET = "{{scratch}}/notes.md"
+# Keys of the default delegated report; `files` entries are checked against the lookup path.
+REPORT_KEYS = frozenset({"summary", "report", "architecture", "files"})
+
+
+def _schema_properties(schema: Any) -> frozenset[str] | None:
+    """Property names of one ``outputSchema``, or None when it declares none."""
+    if not isinstance(schema, dict):
+        return None
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        return None
+    return frozenset(name for name in properties if isinstance(name, str))
+
+
+def _subtask_schemas(args: dict[str, Any]) -> list[frozenset[str]]:
+    """Property names each subtask of one ``task`` call may report.
+
+    A subtask uses its own ``outputSchema``. One that omits a schema inherits the
+    call-level schema. Names are not combined across subtasks.
+    """
+    call_level = _schema_properties(args.get("outputSchema"))
+    tasks = args.get("tasks")
+    if not isinstance(tasks, list):
+        return [call_level] if call_level is not None else []
+    schemas: list[frozenset[str]] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        own = _schema_properties(task.get("outputSchema"))
+        if own is not None:
+            schemas.append(own)
+        elif call_level is not None:
+            schemas.append(call_level)
+        else:
+            schemas.append(frozenset())
+    if schemas:
+        return schemas
+    return [call_level] if call_level is not None else []
+
+
+def _declared_keys_by_yield(calls: list[dict[str, Any]], delegated: set[str]) -> dict[str, frozenset[str]]:
+    """Declared keys for each delegated ``yield``, bound to one parent subtask.
+
+    The yield belongs to the preceding parent ``task`` call. Its first report must
+    fit that call's first subtask. A later report that no longer fits moves to the
+    next subtask only after the previous one has reported and only when the new
+    keys fit the next schema. A field declared for a different subtask stays out.
+    """
+    schemas: list[frozenset[str]] = []
+    index = 0
+    reported = False
+    bound: dict[str, frozenset[str]] = {}
+    for call in calls:
+        if call["id"] not in delegated and call["name"] == "task" and isinstance(call.get("args"), dict):
+            schemas = _subtask_schemas(call["args"])
+            index = 0
+            reported = False
+            continue
+        if call["id"] not in delegated or call["name"] != "yield":
+            continue
+        schema = schemas[index] if index < len(schemas) else frozenset()
+        data = call["args"].get("data") if isinstance(call.get("args"), dict) else None
+        extra = set(data) - REPORT_KEYS if isinstance(data, dict) else set()
+        if not extra <= schema and reported and index + 1 < len(schemas) and extra <= schemas[index + 1]:
+            index += 1
+            schema = schemas[index]
+        if extra <= schema:
+            reported = True
+        bound[call["id"]] = schema - REPORT_KEYS
+    return bound
 
 
 def _write_path(args: dict[str, Any]) -> str:
@@ -170,6 +240,7 @@ def native_tools_scope_error(
     if delegated and delegated_file is None:
         return "unexpected delegated work"
     delegated_paths = {delegated_file, f"{{{{workspace}}}}/{delegated_file}"}
+    declared_by_yield = _declared_keys_by_yield(calls, set(delegated))
     for call in calls:
         if call["id"] not in delegated:
             continue
@@ -195,8 +266,12 @@ def native_tools_scope_error(
             if not isinstance(data, (dict, str)):
                 return "delegated result report was missing"
             if isinstance(data, dict):
-                if set(data) - {"summary", "report", "architecture", "files"}:
-                    return "delegated result report contained extra operations"
+                declared = declared_by_yield.get(call["id"], frozenset())
+                if set(data) - REPORT_KEYS - declared:
+                    return "delegated result report used keys outside its declared schema"
+                # A declared field carries the looked-up answer, never a list of further work.
+                if any(not isinstance(data[key], (str, int, float, bool)) for key in set(data) & declared):
+                    return "delegated result report declared a non-scalar field"
                 files = data.get("files", [])
                 if not isinstance(files, list) or any(
                     not isinstance(file, dict) or file.get("path") not in delegated_paths for file in files

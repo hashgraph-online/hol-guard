@@ -15,7 +15,12 @@ from pathlib import Path
 from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .contained_authority import settled_authority
-from .contained_command_prefix import _assignments_applied, _peel_for_receipt, _split_command_prefix
+from .contained_command_prefix import (
+    _assignments_applied,
+    _peel_for_receipt,
+    _split_command_prefix,
+    peel_timeout_clock,
+)
 from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
@@ -391,6 +396,14 @@ def run_authorized_contained_test(
             command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
         except ValueError as error:
             raise _reject() from error
+        # Native authority reads a system `timeout` through to the program it
+        # bounds, so the planners below are handed that program. The clock
+        # still bounds this run: it only ever shortens the deadline.
+        timed, clock = peel_timeout_clock(command)
+        if timed != command:
+            command, _ = _split_command_prefix(timed)
+        if clock is not None:
+            timeout_seconds = min(timeout_seconds, clock)
         package_test = is_package_test(command)
         if package_test:
             command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))

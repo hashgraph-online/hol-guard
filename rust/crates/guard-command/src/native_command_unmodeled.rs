@@ -18,7 +18,15 @@
 //!
 //! An interpreter is unbounded unless it is the whole command and the program
 //! it runs, inline or fed on standard input, was read; it then runs only that
-//! program, as it would run a script file.
+//! program, as it would run a script file. `xargs` is the exception that
+//! names its program in the text: standard input supplies arguments, not the
+//! program, so `cat list.txt | xargs rm -f` owns what `rm` owns. A literal
+//! input redirect is not read yet, so `xargs rm -f < list.txt` stays an
+//! evaluation failure. An active
+//! extension with trust class `external` that owns a program named in the
+//! text is not read through, and an unknown name set fails closed: its rules
+//! judge arguments standard input supplies, which this text does not hold.
+//! A built-in owner of the program `xargs` names still supplies its floor.
 
 use std::collections::BTreeSet;
 use std::time::Instant;
@@ -35,10 +43,13 @@ mod link_makers;
 mod redirections;
 #[path = "native_command_unmodeled_shapes.rs"]
 mod shapes;
+#[path = "native_command_unmodeled_xargs.rs"]
+mod xargs;
 use link_makers::creates_links;
 use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
+use xargs::{xargs_input_is_named, xargs_names_its_program, xargs_programs};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
 const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
@@ -209,10 +220,29 @@ impl CompiledNativeCommandControls {
         for source in sourced.iter().flatten() {
             named.extend(named_words(source));
         }
-        if INTERPRETERS
-            .iter()
-            .any(|name| interpreted.contains(*name) && !(sourced_resolved && *name == "source"))
-        {
+        let xargs_programs = xargs_programs(shell);
+        // An `xargs` is read only when the text also says where it reads its
+        // operands. A bare one takes the caller's standard input, so the
+        // arguments it hands the program are not in this text.
+        let xargs_bounded = xargs_programs.is_some() && xargs_input_is_named(shell);
+        // No command-position `xargs` is `None`, not an empty program set.
+        let xargs_names_program = shell.contains("xargs")
+            && xargs_bounded
+            && xargs_names_its_program(shell)
+            && xargs_programs
+                .as_ref()
+                .is_some_and(|programs| !programs.is_empty());
+        if INTERPRETERS.iter().any(|name| {
+            interpreted.contains(*name)
+                && !(sourced_resolved && *name == "source")
+                && !(xargs_bounded && *name == "xargs")
+        }) {
+            // An `xargs` whose operands are not in the text is not bounded by
+            // reading a script file. `2>/dev/null xargs gh` still takes its
+            // arguments from the caller.
+            if interpreted.contains("xargs") && !xargs_bounded {
+                return None;
+            }
             // A program read from a file names the tools it may launch
             // outside the command text, so it counts toward the owners.
             match crate::pretool::sole_program_sources(command, context) {
@@ -229,6 +259,16 @@ impl CompiledNativeCommandControls {
                 None => return None,
             }
         }
+        // Reading the program out of an `xargs` leaves the operands standard
+        // input supplies unread. An active external command source that owns
+        // a program named here, or whose names are unknown, judges arguments
+        // this text does not hold, so the evaluation failure stays. Those
+        // extensions are inactive until enabled. A pipe such as
+        // `cat list.txt | xargs rm -f` keeps the review its built-in owner
+        // gives it. A literal input redirect is not read yet.
+        if xargs_names_program && self.external_source_names_a_program(&named) {
+            return None;
+        }
         let mut floor = "review";
         for (index, extension) in self.program.extensions.iter().enumerate() {
             if !self.active_extensions.contains(&extension.extension_id) {
@@ -238,15 +278,56 @@ impl CompiledNativeCommandControls {
                 .iter()
                 .find(|(id, _)| *id == extension.extension_id)
                 .map(|(_, executables)| *executables);
-            let owns = self
-                .program
-                .extension_names(index, compatibility)
+            let extension_names = self.program.extension_names(index, compatibility);
+            let owns = extension_names
+                .as_ref()
                 .is_none_or(|names| names.is_empty() || !names.is_disjoint(&named));
-            if owns && rank(self.extension_floor(index)) > rank(floor) {
+            if !owns {
+                continue;
+            }
+            // A contributed extension with a known program list is not read
+            // through when that list includes the program `xargs` names.
+            // `gh` is one, so `xargs gh pr merge` stays an evaluation
+            // failure. An unknown or empty name set is not that list: treating
+            // it as one refused `xargs rm` along with every other unmodeled
+            // command. The required owner of `rm` still reviews it.
+            if xargs_names_program && !extension.required {
+                if let (Some(programs), Some(names)) = (&xargs_programs, &extension_names) {
+                    if !names.is_empty() && !names.is_disjoint(programs) {
+                        return None;
+                    }
+                }
+            }
+            if rank(self.extension_floor(index)) > rank(floor) {
                 floor = self.extension_floor(index);
             }
         }
         Some(floor)
+    }
+
+    /// An active extension with trust class `external` owns a program the
+    /// command names. An unknown name set fails closed: that extension can
+    /// match without a known program, so it is treated as owning the command.
+    fn external_source_names_a_program(&self, named: &BTreeSet<String>) -> bool {
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                if extension.trust_class != "external"
+                    || !self.active_extensions.contains(&extension.extension_id)
+                {
+                    return false;
+                }
+                let compatibility = COMPATIBILITY_EXECUTABLES
+                    .iter()
+                    .find(|(id, _)| *id == extension.extension_id)
+                    .map(|(_, executables)| *executables);
+                let extension_names = self.program.extension_names(index, compatibility);
+                extension_names
+                    .as_ref()
+                    .is_none_or(|names| names.is_empty() || !names.is_disjoint(named))
+            })
     }
 
     /// The floor the extension would apply to its strongest rule, as an
@@ -278,6 +359,17 @@ impl CompiledNativeCommandControls {
             .max_by_key(|floor| rank(floor))
             .unwrap_or("review")
     }
+}
+
+/// A pipeline whose only data movement is a pipe into an `xargs` that names
+/// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
+fn named_xargs_pipeline(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    text.contains("xargs")
+        && xargs_names_its_program(text)
+        && xargs_input_is_named(text)
+        && !text.contains(['<', '>', '`', '$', '\n'])
+        && !moves_data(&literal)
 }
 
 /// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
@@ -352,8 +444,17 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
                 && (!moves_data(&literal) || literal_redirects_only(&command.normalized_text))
         }
         Some("compound_shell_not_yet_supported") => {
-            !moves_data(&unquoted_literal(&command.normalized_text))
+            let literal = unquoted_literal(&command.normalized_text);
+            !moves_data(&literal)
                 || literal_redirects_only(&command.normalized_text)
+                || named_xargs_pipeline(&command.normalized_text)
+        }
+        // `cat list.txt | xargs -0 rm -f` is a nested executor because `xargs`
+        // is one, and the pipe carries arguments into the program the text
+        // names. `find -exec`, `eval`, and `xargs sh` stay an evaluation
+        // failure: those do not name a bounded program.
+        Some("nested_command_executor_not_yet_supported") => {
+            named_xargs_pipeline(&command.normalized_text)
         }
         Some("command_redirect_not_yet_supported") => {
             let text = without_lookups(&command.normalized_text);
@@ -911,3 +1012,7 @@ mod tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_sourced_tests.rs"]
 mod sourced_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_bounded_tests.rs"]
+mod bounded_tests;

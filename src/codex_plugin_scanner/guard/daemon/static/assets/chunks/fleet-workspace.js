@@ -1,6 +1,6 @@
 import { Y as isUnsupportedPlatformCheck, i as harnessDisplayName, j as jsxRuntimeExports, Z as RECHECK_UNAVAILABLE_SIGNATURE, _ as protectionReasonText, r as reactExports, A as ActionButton, $ as HiMiniExclamationCircle, a0 as hasRepairableProtectionGap, a1 as remainingProtectionRepairParts, a2 as protectionGapSignature, a3 as repairOutcomeIsStalled, a4 as ProtectionRepairFlowError, a5 as nextProtectionRepairOutcome, a6 as waitForAuthorizeUrl, a7 as startOrRecoverCloudConnect, a8 as safeCloudConnectUrl, a9 as openPackageFirewallAuthorizeFallback, aa as waitForCloudConnection, ab as activeFailedHarnesses, ac as resetRepairOutcomeTracker, ad as HiMiniWrenchScrewdriver, s as HiMiniCheckCircle, L as HiMiniChevronDown, ae as fetchSettings, af as harnessPostureRows, ag as selectHarnessPosture, ah as harnessPosturePatch, e as updateSettings, ai as harnessRowTone, S as SectionLabel, aj as harnessPostureOptions, ak as HiMiniEye, y as HiMiniShieldCheck, al as harnessRowStatus, am as PROTECTION_POSTURE_COPY, an as globalPosture, k as isConnectableAppHarness, p as protectionHealthFor, l as useProtectionPresentationState, v as GuardHero, ao as ProofStrip, n as EmptyState, c as HiMiniChevronRight, ap as HiMiniXCircle, aq as HiMiniClipboardDocumentCheck, ar as HiMiniClipboard } from "../guard-dashboard.js";
 import { S as SUPPORTED_APPS_BRIEF, d as defaultConnectHarness, G as GuardRepairControl, H as HarnessPostureChoiceLabel, a as SettingsSaveProofModal, A as APP_STATUS_LABELS } from "./settings-save-proof-modal.js";
-import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus } from "./harness-detection.js";
+import { u as useHarnessDetection, d as detectedHarnesses, v as visibleHarnessesFor, r as resolveDetectedAppStatus, a as versionCompatibilityFor, H as HarnessVersionLabel } from "./harness-version-label.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button.js";
 const SUPPORTED_APPS_COPY = SUPPORTED_APPS_BRIEF;
 function resolveFleetHeroCopy(cloudState, activeInstallCount, protectionState, urls) {
@@ -881,7 +881,7 @@ function StatusBadge({ status }) {
   if (installStatus === "observed") return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-slate-500", children: label });
   return /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs text-slate-400", children: label });
 }
-function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail }) {
+function AppRow({ harness, status, inventoryCount, policyCount, versionCompatibility, onOpenAppDetail }) {
   const isClickable = onOpenAppDetail !== void 0;
   const handleClick = reactExports.useCallback(() => {
     onOpenAppDetail?.(harness);
@@ -913,7 +913,8 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
               " actions · ",
               formatCount(policyCount),
               " decisions"
-            ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessVersionLabel, { compatibility: versionCompatibility ?? null })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
@@ -1029,6 +1030,7 @@ function FleetWorkspace(props) {
               status,
               inventoryCount: harnessInventory.length,
               policyCount: harnessPolicies.length,
+              versionCompatibility: versionCompatibilityFor(harnessDetection, harness),
               onOpenAppDetail: props.onOpenAppDetail
             },
             harness

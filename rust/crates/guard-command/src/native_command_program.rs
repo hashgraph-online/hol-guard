@@ -30,7 +30,7 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 const PROGRAM_SCHEMA: &str = "guard.native-command-program.v1";
 const PROGRAM_DOMAIN: &[u8] = b"hol-guard.native-command-program.v1\0";
 const NODE_DOMAIN: &[u8] = b"hol-guard.native-command-matcher.v1\0";
-const MAX_PROGRAM_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PROGRAM_BYTES: usize = 6 * 1024 * 1024;
 const MAX_RULES: usize = 1_024;
 const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;

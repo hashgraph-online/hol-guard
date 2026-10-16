@@ -265,6 +265,13 @@ replacement/withholding transport.
 
 <!-- END GENERATED HARNESS CAPABILITY REPORT: cline -->
 
+## Harness Version Coverage
+
+The dashboard shows whether the installed app version has been tested with the
+running Guard release. Coverage is display-only and never changes enforcement.
+See [Harness version coverage](harness-version-coverage.md) for the states,
+supported apps, and the maintainer evidence-promotion procedure.
+
 ## Rust Authority Boundary
 
 Every supported harness routes security semantics through the bundled,

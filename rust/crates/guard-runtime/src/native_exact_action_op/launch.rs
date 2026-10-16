@@ -14,7 +14,10 @@ use serde_json::{json, Value};
 
 use super::context::Ctx;
 use super::fs_path;
+#[cfg(not(windows))]
 use super::git_identity::git_readonly_identity;
+#[cfg(windows)]
+use super::launch_windows;
 use super::launcher_sets::{is_destructive, is_python_launcher, loads_unbound_code};
 #[cfg(not(windows))]
 use super::node_script::node_script;
@@ -22,14 +25,14 @@ use super::node_script::NODE_LAUNCHERS;
 use super::operands::{argument_value, file_operand_hashes};
 #[cfg(not(windows))]
 use super::python_script::python_script;
+#[cfg(windows)]
+use super::reasons::GIT_HELPER_CONFIG;
 use super::reasons::{
     Proof, COMPOUND_COMMAND, DESTRUCTIVE_COMMAND, MUTABLE_LAUNCHER, SENSITIVE_PATH, UNPROVEN_LAUNCH,
 };
 #[cfg(not(windows))]
 use super::runner_bin::runner_local_bin;
 use super::runner_bin::LOCAL_BIN_RUNNERS;
-#[cfg(windows)]
-use super::{git_windows, launch_windows};
 
 const MAX_COMPOUND_SEGMENTS: usize = 8;
 
@@ -266,8 +269,11 @@ fn platform_segment(
     Ok(json!({"kind": "direct", "identity": reusable_identity()?, "operands": operands}))
 }
 
-/// A Windows segment: a read-only git from a Git for Windows install, or a
-/// native image that loads no code it names elsewhere.
+/// A Windows segment: a native image that loads no code it names elsewhere.
+///
+/// Git reads repository config, attributes, hooks and PATH helpers that no
+/// digest binds on Windows, so a git launch, by spelling or by bound image,
+/// always stays once-only there.
 #[cfg(windows)]
 fn platform_segment(
     segment: &CommandSegment,
@@ -286,7 +292,10 @@ fn platform_segment(
             || is_python_launcher(name)
             || loads_unbound_code(name, arguments)
     };
-    if name != "git" && launches_code(name) {
+    if is_git(name) {
+        return Err(GIT_HELPER_CONFIG);
+    }
+    if launches_code(name) {
         return Err(MUTABLE_LAUNCHER);
     }
     let identity = ctx
@@ -295,16 +304,8 @@ fn platform_segment(
     let identity = launch_windows::native_launch(identity, executable, cwd, ctx)?;
     // The bound image's own name is checked as well as the spelled one.
     let stem = launch_windows::image_stem(&identity);
-    if name == "git" {
-        if stem != "git" {
-            return Err(UNPROVEN_LAUNCH);
-        }
-        let image = identity["executable"]["path"].as_str().unwrap_or("");
-        let system = git_windows::system_files(image, ctx)?;
-        let git = git_readonly_identity(arguments, cwd, &system, ctx)?;
-        return Ok(
-            json!({"kind": "direct", "identity": identity, "git": git, "operands": operands}),
-        );
+    if is_git(&stem) {
+        return Err(GIT_HELPER_CONFIG);
     }
     if is_destructive(&stem) {
         return Err(DESTRUCTIVE_COMMAND);
@@ -313,4 +314,11 @@ fn platform_segment(
         return Err(MUTABLE_LAUNCHER);
     }
     Ok(json!({"kind": "direct", "identity": identity, "operands": operands}))
+}
+
+/// Git and the Git for Windows programs that run it on the repository
+/// (`git-*` helpers, `gitk`, `scalar`).
+#[cfg(windows)]
+fn is_git(name: &str) -> bool {
+    name == "git" || name.starts_with("git-") || matches!(name, "gitk" | "scalar")
 }

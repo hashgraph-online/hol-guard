@@ -36,10 +36,11 @@ const PROMPT_RISK_CLASSES: [&str; 7] = [
     "guard_bypass_intent",
     "prompt_injection_intent",
 ];
-const OPTIONAL_FIELDS: [&str; 5] = [
+const OPTIONAL_FIELDS: [&str; 6] = [
     "command_extensions",
     "origin_authentication",
     "execution_intent_digest",
+    "review_anchor_digest",
     "prompt_risk_classes",
     "business_review_binding",
 ];
@@ -261,6 +262,7 @@ fn valid_policy(receipt: &Json) -> bool {
         && [
             "origin_authentication",
             "execution_intent_digest",
+            "review_anchor_digest",
             "business_review_binding",
         ]
         .iter()

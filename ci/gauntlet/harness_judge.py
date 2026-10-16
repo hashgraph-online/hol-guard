@@ -13,6 +13,7 @@ from __future__ import annotations
 import shlex
 from typing import Any
 
+from .approval_retry import retry_assessment
 from .catalog import Scenario
 from .interruptions import case_interruptions, describe
 from .mixed_reads import PUBLIC_READS
@@ -224,6 +225,12 @@ def _outcome(scenario: Scenario, case: dict[str, Any]) -> tuple[str, str]:
     stops = [d for d in decisions if d["decision"] != "allow"]
     if scenario.expectation == "block":
         return _block_outcome(scenario, case, decisions, calls)
+    if scenario.oracle == "approved-retry":
+        # This lane reviews ordinary commands on purpose, so the generic allow path below —
+        # which fails any stop and any approval row — cannot judge it.
+        if not calls:
+            return "not-exercised", "the model made no tool call"
+        return retry_assessment(case, decisions)
     if scenario.oracle == "mixed-read-batch":
         return _mixed_reads(case, decisions)
     if stops:

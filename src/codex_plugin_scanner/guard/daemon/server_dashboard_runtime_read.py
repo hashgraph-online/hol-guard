@@ -17,6 +17,7 @@ from ..runtime.network_status import build_network_status
 from ..store import GuardStore
 from .dashboard_update import merge_dashboard_update_progress
 from .extension_control_api import ExtensionControlApiError
+from .harness_version_api import attach_version_compatibility
 from .local_cli_http import handle_local_cli_list
 from .server_common import _now, _ServerProxy, _settings_export_payload, _settings_response_payload
 from .server_control_cloud_sync import _managed_controls_publish_for, _maybe_queue_first_cloud_sync
@@ -110,7 +111,8 @@ class _DashboardRuntimeReadRoutes:
             return True
         if parsed.path == "/v1/harnesses":
             context = self._harness_context({})
-            self._write_json({"items": list_harness_setup_items(context, self.server.store)})  # type: ignore[attr-defined]
+            items = list_harness_setup_items(context, self.server.store)  # type: ignore[attr-defined]
+            self._write_json({"items": attach_version_compatibility(items, context)})
             return True
         if parsed.path == "/v1/supply-chain/package-shims":
             self._handle_supply_chain_package_firewall_status()

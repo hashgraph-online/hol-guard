@@ -48,9 +48,13 @@ SOURCE_FILES = {
 @lru_cache(maxsize=1)
 def _scenario_indices() -> dict[str, int]:
     # Deferred: catalog.py already imports fixtures.py at module load.
+    from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
     from .catalog import load_catalog
 
-    return {scenario.id: index for index, scenario in enumerate(load_catalog(), start=1)}
+    # The core catalog numbers first so its fixture directories keep their names, and each
+    # lane catalog that runs through run_harness_case follows it with distinct numbers.
+    scenarios = load_catalog() + load_catalog(APPROVAL_RETRY_CATALOG)
+    return {scenario.id: index for index, scenario in enumerate(scenarios, start=1)}
 
 
 def scenario_fixture_name(scenario_id: str) -> str:

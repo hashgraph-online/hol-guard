@@ -7,11 +7,15 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Map, Value};
 
 use crate::local_supply_chain::{
-    apply_stored_package_policy_override, ApprovalContextApi, PackageEvalApi,
-    PackageIntentParserApi, PackageRequestEvaluation, PathSupportApi, PolicyDecisionLookup,
-    SupplyChainStore,
+    apply_stored_package_policy_override, final_package_protect_authority, ApprovalContextApi,
+    PackageEvalApi, PackageIntentParserApi, PackageProtectAuthority, PackageRequestEvaluation,
+    PathSupportApi, PolicyDecisionLookup, RuntimeLaunchIdentityApi, SupplyChainStore,
+    LOCAL_SUPPLY_CHAIN_HARNESS,
 };
-use crate::package_intent_common::{GuardArtifact, PackageIntent};
+use crate::package_execution_context::PackageExecutionContext;
+use crate::package_intent_common::{
+    build_package_request_artifact, GuardArtifact, PackageIntent, PackageIntentTarget,
+};
 
 const ARTIFACT_HASH: &str = "guard-approval-context:v1:abc";
 
@@ -27,6 +31,11 @@ struct SavedApprovalStore {
     claim_succeeds: bool,
     claimed: RefCell<Vec<(Value, String)>>,
     looked_up: RefCell<Vec<LookedUpCall>>,
+    lookup_error: Option<String>,
+    events: RefCell<Vec<(String, Value, String)>>,
+    lookup_calls: RefCell<u32>,
+    /// When set, lookups after this 1-based call return a store error.
+    fail_lookup_after: Option<u32>,
 }
 
 impl SupplyChainStore for SavedApprovalStore {
@@ -79,9 +88,27 @@ impl SupplyChainStore for SavedApprovalStore {
             artifact_hash.map(str::to_string),
             workspace.to_string(),
         ));
+        let call = {
+            let mut calls = self.lookup_calls.borrow_mut();
+            *calls += 1;
+            *calls
+        };
+        if self.fail_lookup_after.is_some_and(|after| call > after) {
+            return PolicyDecisionLookup {
+                error: Some("native_policy_decision_lookup_query_failed".to_string()),
+                ..PolicyDecisionLookup::default()
+            };
+        }
+        if let Some(code) = &self.lookup_error {
+            return PolicyDecisionLookup {
+                error: Some(code.clone()),
+                ..PolicyDecisionLookup::default()
+            };
+        }
         PolicyDecisionLookup {
             decision: self.decision.clone(),
             ignored_local_integrity: None,
+            error: None,
         }
     }
     fn approval_reuse_diagnostic(
@@ -114,7 +141,11 @@ impl SupplyChainStore for SavedApprovalStore {
     }
     fn add_receipt(&self, _receipt: &Value) {}
     fn set_receipt_action_envelope(&self, _receipt_id: &str, _metadata: &Value) {}
-    fn add_event(&self, _kind: &str, _payload: &Value, _now: &str) {}
+    fn add_event(&self, kind: &str, payload: &Value, now: &str) {
+        self.events
+            .borrow_mut()
+            .push((kind.to_string(), payload.clone(), now.to_string()));
+    }
 }
 
 /// The seams the claim path never reaches for a saved row it can read.
@@ -130,7 +161,7 @@ impl PackageEvalApi for Seams {
         _external_archive_network_authorized: bool,
         _retain_external_archive_blob: bool,
     ) -> Result<PackageRequestEvaluation, String> {
-        Err("not evaluated".to_string())
+        Ok(evaluation())
     }
     fn supply_chain_user_copy(
         &self,
@@ -151,7 +182,23 @@ impl PackageIntentParserApi for Seams {
         _workspace: &Path,
         _environment: &BTreeMap<String, String>,
     ) -> Option<PackageIntent> {
-        None
+        Some(install_intent())
+    }
+}
+
+impl RuntimeLaunchIdentityApi for Seams {
+    fn build_runtime_launch_identity(
+        &self,
+        _artifact: &GuardArtifact,
+        _command: &[String],
+    ) -> Value {
+        Value::Null
+    }
+    fn resolved_runtime_launch_argv(&self, command: &[String]) -> Vec<String> {
+        command.to_vec()
+    }
+    fn runtime_launch_identity_is_reusable(&self, _saved: &Value, _current: &Value) -> bool {
+        false
     }
 }
 
@@ -262,6 +309,10 @@ fn resolve_recording(
         claim_succeeds,
         claimed: RefCell::new(Vec::new()),
         looked_up: RefCell::new(Vec::new()),
+        lookup_error: None,
+        events: RefCell::new(Vec::new()),
+        lookup_calls: RefCell::new(0),
+        fail_lookup_after: None,
     };
     let seams = Seams;
     let resolved = apply_stored_package_policy_override(
@@ -278,7 +329,8 @@ fn resolve_recording(
         &seams,
         &seams,
         &seams,
-    );
+    )
+    .evaluation;
     let claimed = store.claimed.borrow().clone();
     let looked_up = store.looked_up.borrow().clone();
     (resolved, claimed, looked_up)
@@ -356,6 +408,57 @@ fn no_saved_row_leaves_the_evaluation_alone() {
 }
 
 #[test]
+fn a_failed_lookup_keeps_the_review_and_records_its_code() {
+    let store = SavedApprovalStore {
+        home: PathBuf::from("/tmp/guard-home"),
+        decision: Some(json!({
+            "decision_id": 7,
+            "action": "allow",
+            "artifact_hash": ARTIFACT_HASH,
+        })),
+        claim_succeeds: true,
+        claimed: RefCell::new(Vec::new()),
+        looked_up: RefCell::new(Vec::new()),
+        lookup_error: Some("native_policy_decision_lookup_query_failed".to_string()),
+        events: RefCell::new(Vec::new()),
+        lookup_calls: RefCell::new(0),
+        fail_lookup_after: None,
+    };
+    let seams = Seams;
+    let applied = apply_stored_package_policy_override(
+        &evaluation(),
+        &store,
+        &artifact(),
+        ARTIFACT_HASH,
+        Path::new("/tmp/proj"),
+        NOW,
+        None,
+        None,
+        true,
+        &seams,
+        &seams,
+        &seams,
+        &seams,
+    );
+    let resolved = &applied.evaluation;
+    assert!(store.claimed.borrow().is_empty());
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
+    assert_eq!(resolved.value.get("saved_approval_applied"), None);
+    assert_eq!(
+        applied.lookup_error.as_deref(),
+        Some("native_policy_decision_lookup_query_failed")
+    );
+    assert_eq!(
+        store.events.borrow().as_slice(),
+        [(
+            "package_policy_lookup_failed".to_string(),
+            json!({ "code": "native_policy_decision_lookup_query_failed" }),
+            NOW.to_string(),
+        )]
+    );
+}
+
+#[test]
 fn a_saved_row_recording_another_action_is_not_claimed_as_an_approval() {
     for action in ["block", "review", "require-reapproval"] {
         let (unchanged, claims) = resolve_with_claim(
@@ -408,4 +511,134 @@ fn the_saved_row_is_looked_up_under_the_artifacts_harness_and_workspace_identity
         workspace.starts_with("package-request-workspace"),
         "{workspace}"
     );
+}
+
+fn install_intent() -> PackageIntent {
+    PackageIntent {
+        package_manager: "npm".to_string(),
+        intent_kind: "install",
+        command_tokens: vec![
+            "npm".to_string(),
+            "install".to_string(),
+            "left-pad".to_string(),
+        ],
+        redacted_command: "npm install left-pad".to_string(),
+        targets: vec![PackageIntentTarget {
+            ecosystem: "npm".to_string(),
+            package_name: Some("left-pad".to_string()),
+            raw_spec: "left-pad".to_string(),
+            requested_specifier: None,
+            source_url: None,
+            source_kind: None,
+            source_repository: None,
+            source_revision_kind: None,
+            source_identity: None,
+            source_invalid_reason: None,
+            alias: None,
+            dependency_group: None,
+            extras: Vec::new(),
+            editable: false,
+        }],
+        manifest_paths: Vec::new(),
+        lockfile_paths: Vec::new(),
+        flags: Vec::new(),
+        notes: Vec::new(),
+        local_executions: Vec::new(),
+        execution_context_hashes: Vec::new(),
+        execution_context_cwds: Vec::new(),
+        execution_context_reason_codes: Vec::new(),
+    }
+}
+
+#[test]
+fn a_failed_refresh_after_a_consumed_claim_keeps_the_review() {
+    let home = std::env::temp_dir().join(format!(
+        "hol-guard-refresh-lookup-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos(),
+    ));
+    std::fs::create_dir_all(home.join("package-shims").join("bin")).unwrap();
+    let workspace = home.join("proj");
+    std::fs::create_dir_all(&workspace).unwrap();
+    let built = build_package_request_artifact(
+        LOCAL_SUPPLY_CHAIN_HARNESS,
+        &install_intent(),
+        "hol-guard.toml",
+        "project",
+    );
+    let store = SavedApprovalStore {
+        home: home.clone(),
+        decision: Some(json!({
+            "decision_id": 7,
+            "action": "allow",
+            "artifact_hash": ARTIFACT_HASH,
+        })),
+        claim_succeeds: true,
+        claimed: RefCell::new(Vec::new()),
+        looked_up: RefCell::new(Vec::new()),
+        lookup_error: None,
+        events: RefCell::new(Vec::new()),
+        lookup_calls: RefCell::new(0),
+        fail_lookup_after: Some(1),
+    };
+    let initial = PackageProtectAuthority {
+        intent: install_intent(),
+        artifact: built,
+        evaluation: evaluation(),
+        current_action: Some(json!("review")),
+        execution_context: PackageExecutionContext {
+            digest: "d".repeat(64),
+            portable: false,
+            components: Vec::new(),
+            non_portable_reason: None,
+        },
+        artifact_hash: ARTIFACT_HASH.to_string(),
+        launch_identity: Value::Null,
+        launch_cwd: workspace.clone(),
+        launch_environment: BTreeMap::new(),
+        additional_current_action: None,
+        additional_policy_context: None,
+        observe_mode: false,
+        invoking_harness: LOCAL_SUPPLY_CHAIN_HARNESS.to_string(),
+    };
+    let seams = Seams;
+    let bind = |_home: Option<&Path>| {};
+    let (_authority, resolved) = final_package_protect_authority(
+        initial,
+        &evaluation(),
+        true,
+        &[
+            "npm".to_string(),
+            "install".to_string(),
+            "left-pad".to_string(),
+        ],
+        &store,
+        &workspace,
+        NOW,
+        None,
+        None,
+        None,
+        &seams,
+        &seams,
+        &seams,
+        &bind,
+        &seams,
+        &seams,
+    )
+    .expect("the refresh runs");
+    assert_eq!(store.claimed.borrow().len(), 1);
+    assert_eq!(*store.lookup_calls.borrow(), 2);
+    assert_eq!(resolved.policy_action().as_deref(), Some("review"));
+    assert_eq!(resolved.value.get("saved_approval_applied"), None);
+    assert_eq!(
+        resolved
+            .value
+            .get("package_policy_lookup_error")
+            .and_then(Value::as_str),
+        Some("native_policy_decision_lookup_query_failed")
+    );
+    let _ = std::fs::remove_dir_all(&home);
 }

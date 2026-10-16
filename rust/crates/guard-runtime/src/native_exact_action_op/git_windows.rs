@@ -132,24 +132,65 @@ fn drive_rooted(value: &str) -> Proof<String> {
     }
 }
 
+/// A git dir git itself takes: `HEAD`, with `objects` and `refs` in the
+/// common dir. Git walks past a `.git` directory without them, and a
+/// `commondir` in one points config and hooks elsewhere, so either leaves
+/// the read once-only.
+pub(super) fn git_dir_is_plain(git_dir: &str, common_dir: &str, directory: bool) -> Proof<()> {
+    let redirected = directory && exists(&fs_path::join(git_dir, "commondir"));
+    let valid = fs_path::is_file(&fs_path::join(git_dir, "HEAD"))
+        && fs_path::is_dir(&fs_path::join(common_dir, "objects"))
+        && fs_path::is_dir(&fs_path::join(common_dir, "refs"));
+    match valid && !redirected {
+        true => Ok(()),
+        false => Err(UNPROVEN_LAUNCH),
+    }
+}
+
+/// Shaped enough like a repository that git, which checks each directory
+/// for a bare repository before it looks further up, could take it as one.
+pub(super) fn may_be_git_dir(dir: &str) -> bool {
+    exists(&fs_path::join(dir, "HEAD"))
+        && ["objects", "refs", "commondir"]
+            .iter()
+            .any(|name| exists(&fs_path::join(dir, name)))
+}
+
+fn exists(path: &str) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
 /// Git for Windows runs `astextplain` (and the converters it calls) and
-/// `git-lfs` through a `PATH` lookup the digest cannot bind, so a reusable
-/// invocation must never start them: no text conversion while the
-/// `astextplain` driver is configured, and no worktree hashing while the LFS
-/// filter is configured and an attribute could route a path to it.
-pub(super) fn path_helpers_stay_idle(
+/// `git-lfs` through a `PATH` lookup the digest cannot bind, and a child git
+/// for each populated submodule with config, hooks and attributes the digest
+/// never reads, so a reusable invocation must never start one: no submodule
+/// in the index or the arguments, no text conversion while the `astextplain`
+/// driver is configured, and no worktree hashing while the LFS filter is
+/// configured and an attribute could route a path to it.
+pub(super) fn helpers_stay_idle(
     found: &Found,
     invocation: &[String],
     root: &str,
     git_dir: &str,
 ) -> Proof<()> {
     let (subcommand, rest) = invocation.split_first().ok_or(GIT_HELPER_CONFIG)?;
+    let entries = index_entries(git_dir)?;
+    let names_submodule = invocation
+        .iter()
+        .any(|argument| argument.to_ascii_lowercase().contains("submodule"));
+    if names_submodule
+        || entries
+            .iter()
+            .any(|entry| entry.mode & 0o170000 == 0o160000)
+    {
+        return Err(GIT_HELPER_CONFIG);
+    }
     if found.astextplain && may_textconv(subcommand, rest) {
         return Err(GIT_HELPER_CONFIG);
     }
     let hashes_worktree = found.lfs_filter && WORKTREE_READERS.contains(&subcommand.as_str());
     if hashes_worktree
-        && (found.attributes_name_lfs || index_supplies_attributes(root, git_dir, &found.unwalked)?)
+        && (found.attributes_name_lfs || index_supplies_attributes(root, &entries, &found.unwalked))
     {
         return Err(GIT_HELPER_CONFIG);
     }
@@ -193,12 +234,39 @@ fn may_textconv(subcommand: &str, rest: &[String]) -> bool {
 /// Whether git could take attributes the digest never read: from an indexed
 /// `.gitattributes` whose worktree copy is missing or skip-worktree, or from
 /// one inside a folder the attribute walk skipped (`unwalked`) that holds a
-/// tracked path. An index this parser cannot read (version 4, SHA-256, a
-/// split or sparse index, damaged) fails closed.
-fn index_supplies_attributes(root: &str, git_dir: &str, unwalked: &[String]) -> Proof<bool> {
+/// tracked path. Git opens an index name as spelled, so once a folder is
+/// skipped a name a lowercase prefix may not match (a short name, a trimmed
+/// trailing dot or space, a non-ASCII case fold) counts as inside it.
+fn index_supplies_attributes(root: &str, entries: &[IndexEntry], unwalked: &[String]) -> bool {
+    entries.iter().any(|entry| {
+        let name = entry.name.to_ascii_lowercase();
+        let attributes = (name == ".gitattributes" || name.ends_with("/.gitattributes"))
+            && (entry.extended || !fs_path::is_file(&fs_path::join(root, &name)));
+        let skipped = !unwalked.is_empty()
+            && (unwalked
+                .iter()
+                .any(|prefix| name.starts_with(prefix.as_str()))
+                || !name.split('/').all(compares_as_spelled));
+        attributes || skipped
+    })
+}
+
+fn compares_as_spelled(part: &str) -> bool {
+    part.is_ascii() && !part.contains(['~', ':', '\\']) && !part.ends_with(['.', ' '])
+}
+
+struct IndexEntry {
+    name: String,
+    mode: u32,
+    extended: bool,
+}
+
+/// The entries of the index. An index this parser cannot read (version 4,
+/// SHA-256, a split or sparse index, damaged) fails closed.
+fn index_entries(git_dir: &str) -> Proof<Vec<IndexEntry>> {
     let path = fs_path::join(git_dir, "index");
     if !fs_path::is_file(&path) {
-        return Ok(false);
+        return Ok(Vec::new());
     }
     let data = fs_path::read_bounded(&path, MAX_INDEX_BYTES).ok_or(UNPROVEN_LAUNCH)?;
     let word = |at: usize| {
@@ -210,6 +278,7 @@ fn index_supplies_attributes(root: &str, git_dir: &str, unwalked: &[String]) -> 
     if !data.starts_with(b"DIRC") || !(2..=3).contains(&version) {
         return Err(UNPROVEN_LAUNCH);
     }
+    let mut entries = Vec::new();
     let mut at = 12;
     for _ in 0..word(8)? {
         let flags = data
@@ -227,16 +296,11 @@ fn index_supplies_attributes(root: &str, git_dir: &str, unwalked: &[String]) -> 
         }
         let name =
             std::str::from_utf8(&data[start..start + length]).map_err(|_| UNPROVEN_LAUNCH)?;
-        let name = name.to_ascii_lowercase();
-        let attributes = (name == ".gitattributes" || name.ends_with("/.gitattributes"))
-            && (extended || !fs_path::is_file(&fs_path::join(root, &name)));
-        if attributes
-            || unwalked
-                .iter()
-                .any(|prefix| name.starts_with(prefix.as_str()))
-        {
-            return Ok(true);
-        }
+        entries.push(IndexEntry {
+            name: name.to_owned(),
+            mode: word(at + 24)?,
+            extended,
+        });
         at += (start - at + length + 8) & !7;
     }
     // Extensions follow, then the SHA-1. A split (`link`) or sparse (`sdir`)
@@ -253,7 +317,7 @@ fn index_supplies_attributes(root: &str, git_dir: &str, unwalked: &[String]) -> 
             .ok_or(UNPROVEN_LAUNCH)?;
     }
     match at == end {
-        true => Ok(false),
+        true => Ok(entries),
         false => Err(UNPROVEN_LAUNCH),
     }
 }

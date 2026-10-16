@@ -149,7 +149,9 @@ pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
-pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub use git_push::{
+    install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
+};
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;

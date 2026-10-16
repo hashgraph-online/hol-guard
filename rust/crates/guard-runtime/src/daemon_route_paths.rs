@@ -39,6 +39,9 @@ const HEADLESS_APP_ACTIONS: &[&str] = &["connect", "repair", "disconnect", "stat
 const HARNESS_ACTIONS: &[&str] = &["install", "verify", "repair", "uninstall"];
 
 const TOKEN_REQUIRED_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
     "/v1/clients/attach",
     "/v1/clients/heartbeat",
@@ -77,6 +80,9 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
 ];
 
 const HOSTED_API_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/capabilities",
     "/v1/connect/complete",
     "/v1/inventory",
@@ -123,6 +129,9 @@ const HOSTED_API_PATHS: &[&str] = &[
 ];
 
 const LOCAL_SURFACE_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
     "/v1/capabilities",
     "/v1/sessions",

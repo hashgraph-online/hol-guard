@@ -45,8 +45,14 @@ pub(super) fn answer(
     let NativeExactActionQueryV1::ExactAction { tool_name, .. } = exact else {
         return Err(HookDirectDefer::SavedDecision);
     };
-    let identity = crate::native_exact_action_op::review_binding_for(exact, receipt)
-        .ok_or(HookDirectDefer::SavedDecision)?;
+    let identity = crate::native_exact_action_op::review_binding_for(
+        exact,
+        receipt,
+        context
+            .recorded_payload
+            .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD),
+    )
+    .ok_or(HookDirectDefer::SavedDecision)?;
     let launch_target = launch_target(context.payload)?;
     let mut allowed = result.clone();
     for key in ["decision", "minimum_action", "policy_action"] {

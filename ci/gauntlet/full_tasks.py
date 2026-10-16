@@ -27,6 +27,7 @@ from .fixtures import Fixture, digest_file, file_metadata
 from .full_task_git import blob as _blob
 from .full_task_git import git_lines
 from .full_task_git import tree as _tree
+from .full_task_environment import ENVIRONMENT_CHECKS, ENVIRONMENT_SEEDS
 from .full_task_local_checks import (
     LOCAL_APP_CHECKS,
     _passes,
@@ -198,6 +199,9 @@ def create_full_task_fixture(
             url = f"https://github.com/{owner}/{seed_repo}.git"
             _run(["git", "remote", "add", "origin", url], workspace, environment)
             _run(["git", "push", "--quiet", "-u", "origin", "HEAD:main"], workspace, environment)
+    elif task_id in ENVIRONMENT_SEEDS:
+        # Ordinary developer state around the project: the work needs what sits outside it.
+        ENVIRONMENT_SEEDS[task_id](root, home, workspace, environment)
     elif task_id in LOCAL_APP_CHECKS:
         # An empty repository: the agent builds the app from nothing and makes the first commit.
         _run(["git", "init", "--quiet", "--initial-branch=main"], workspace, environment)
@@ -226,6 +230,8 @@ def full_task_checks(fixture: Fixture, task_id: str) -> dict[str, bool]:
         checks["task:committed-python-source"] = "celsius" in text and "fahrenheit" in text
         checks["task:committed-tests"] = imports
         checks["task:tests-pass"] = _ran_python_tests(workspace, home)
+    elif task_id in ENVIRONMENT_CHECKS:
+        checks.update(ENVIRONMENT_CHECKS[task_id](workspace, home, fixture.root))
     elif task_id in LOCAL_APP_CHECKS:
         checks.update(LOCAL_APP_CHECKS[task_id](workspace, home))
     elif task_id == "fix-failing-node-test":

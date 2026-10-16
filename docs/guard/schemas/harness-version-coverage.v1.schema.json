@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol.org/schemas/guard/harness-version-coverage.v1.schema.json",
+  "title": "HOL Guard harness version coverage v1",
+  "description": "Shape of the bundled coverage manifest. The runtime validator in codex_plugin_scanner.guard.harness_versions.manifest also enforces suite eligibility, adapter-declared events, and duplicate claims.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "revision", "harnesses"],
+  "properties": {
+    "schema_version": {"const": "hol-guard-harness-version-coverage.v1"},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 64},
+    "harnesses": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/harness"}}
+  },
+  "$defs": {
+    "exactVersion": {
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^v?(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["harness", "version_source", "limitations", "remediation", "records"],
+      "properties": {
+        "harness": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"},
+        "version_source": {"enum": ["package-metadata", "unavailable"]},
+        "limitations": {"type": "array", "maxItems": 8, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 400}},
+        "remediation": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["label", "url"],
+            "properties": {
+              "label": {"type": "string", "minLength": 1, "maxLength": 80},
+              "url": {"type": "string", "maxLength": 400, "pattern": "^https://(github\\.com|www\\.npmjs\\.com|omp\\.sh)([/?#].*)?$"}
+            }
+          }
+        },
+        "records": {"type": "array", "maxItems": 128, "items": {"$ref": "#/$defs/record"}}
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "harness_version",
+        "guard_version",
+        "platforms",
+        "transport",
+        "events",
+        "suite",
+        "evidence_level",
+        "evidence_reference",
+        "observed_at"
+      ],
+      "properties": {
+        "harness_version": {"$ref": "#/$defs/exactVersion"},
+        "guard_version": {"$ref": "#/$defs/exactVersion"},
+        "platforms": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"enum": ["darwin-arm64", "darwin-x86_64", "linux-arm64", "linux-x86_64", "windows-arm64", "windows-x86_64"]}
+        },
+        "transport": {"type": "string", "minLength": 1, "maxLength": 64},
+        "events": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 64}},
+        "suite": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "result"],
+          "properties": {
+            "id": {"enum": ["pi-exact-continuation", "guard-gauntlet-full-task"]},
+            "result": {"const": "passed"}
+          }
+        },
+        "evidence_level": {"enum": ["unit_test", "live_block"]},
+        "evidence_reference": {"type": "string", "pattern": "^https://github\\.com/hashgraph-online/hol-guard/"},
+        "observed_at": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

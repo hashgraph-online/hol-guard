@@ -14,7 +14,11 @@ if TYPE_CHECKING:
 
 from ._commands_shared import *
 from .approval_gate_prompt import print_approval_gate_error
-from .commands_lifecycle_gate import enforce_lifecycle_gate
+from .commands_lifecycle_gate import (
+    enforce_lifecycle_gate,
+    explain_missing_native_runtime,
+    restore_missing_native_runtime,
+)
 from .commands_parser_helpers import *
 
 _EARLY_HANDLERS = {
@@ -237,9 +241,19 @@ def _dispatch_guard_command(
 
         return run_codex_incident_export(args, context, output_stream=output_stream)
     try:
-        enforce_lifecycle_gate(args, guard_home=guard_home)
+        try:
+            enforce_lifecycle_gate(args, guard_home=guard_home)
+        except ApprovalGateError as error:
+            if not restore_missing_native_runtime(error, context=context, guard_home=guard_home):
+                raise
+            # The authority can answer now; the command still needs the gate's approval.
+            enforce_lifecycle_gate(args, guard_home=guard_home)
     except ApprovalGateError as error:
-        return print_approval_gate_error(error, as_json=bool(getattr(args, "json", False)), output_stream=output_stream)
+        return print_approval_gate_error(
+            explain_missing_native_runtime(error),
+            as_json=bool(getattr(args, "json", False)),
+            output_stream=output_stream,
+        )
 
     handler = _resolve_guard_handler(_PRESTORE_HANDLERS, args.guard_command)
     if callable(handler):

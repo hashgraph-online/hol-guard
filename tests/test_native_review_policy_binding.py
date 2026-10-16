@@ -28,7 +28,11 @@ def _binding(result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
 
 def _resign_identity(receipt: dict[str, Any]) -> None:
     identity = {
-        **{key: value for key, value in receipt.items() if key not in {"authority", "decision_id"}},
+        **{
+            key: value
+            for key, value in receipt.items()
+            if key not in {"authority", "decision_id", "review_anchor_digest"}
+        },
         "schema": "guard-native-hook-decision-identity.v1",
     }
     receipt["decision_id"] = hashlib.sha256(
@@ -41,11 +45,28 @@ def test_review_binding_captures_verified_domain_without_aliasing_receipt() -> N
     result, receipt = _fixture()
     binding = _binding(result, receipt)
     assert binding == {
-        "schema": "guard.native-review-policy-binding.v1",
-        **{key: receipt[key] for key in ("policy_digest", "rule_digest", "runtime_identity", "command_extensions")},
+        "schema": "guard.native-review-policy-binding.v2",
+        **{key: receipt[key] for key in ("rule_digest", "runtime_identity", "command_extensions")},
     }
     receipt["command_extensions"]["control_revision"] += 1
     assert binding["command_extensions"]["control_revision"] == 3
+
+
+def test_review_binding_omits_the_republishing_snapshot_digest() -> None:
+    """``policy_digest`` is ``H(config_digest, rule_digest)`` over the whole
+    compiled snapshot, so it moves on a republish that recorded observed state
+    and nothing else. Binding a retry to it strands the approval that retry
+    needs. The receipt must still carry a well-formed one."""
+
+    result, receipt = _fixture()
+    assert "policy_digest" not in _binding(result, receipt)
+    republished = dict(receipt)
+    republished["policy_digest"] = "9" * 64
+    _resign_identity(republished)
+    assert _binding(result, republished) == _binding(result, receipt)
+    del republished["policy_digest"]
+    with pytest.raises(ValueError, match="native_review_policy_binding_invalid"):
+        native_review_policy_binding(harness="claude-code", native_result=result, verified_receipt=republished)
 
 
 @pytest.mark.parametrize("missing", ["receipt", "result", "receipt-domain", "result-domain"])

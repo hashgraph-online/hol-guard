@@ -15,9 +15,8 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 ARTIFACT_SETS: Final = ("full", "wheels", "pure")
 # Stable native wheels for these platforms ship on the GitHub release only. Few installs use them, and keeping
 # them off PyPI keeps each release inside the project storage quota; clients fetch them from the release and
-# verify them against the digest manifest embedded in the PyPI pure wheel. Intel macOS joins this set once
-# clients that can repair a pure-wheel install from the release have shipped.
-GITHUB_ONLY_PLATFORM_TAGS: Final = frozenset({"win_arm64"})
+# verify them against the digest manifest embedded in the PyPI pure wheel.
+GITHUB_ONLY_PLATFORM_TAGS: Final = frozenset({"macosx_13_0_x86_64", "win_arm64"})
 
 
 class ArtifactSetError(RuntimeError):

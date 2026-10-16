@@ -5,7 +5,9 @@
 pub(super) enum Token {
     Ident(String),
     Str(String),
-    Num,
+    /// A number literal, with its value when it is a plain integer that
+    /// fits in a `u32`.
+    Num(Option<u32>),
     Punct(char),
 }
 
@@ -38,9 +40,11 @@ pub(super) fn tokenize(code: &str) -> Option<Vec<Token>> {
             tokens.push(Token::Ident(ident));
         } else if c.is_ascii_digit() {
             let mut seen_dot = false;
+            let mut digits = String::new();
             while let Some(&c) = chars.peek() {
                 if c.is_ascii_digit() || (c == '.' && !seen_dot) {
                     seen_dot |= c == '.';
+                    digits.push(c);
                     chars.next();
                 } else {
                     break;
@@ -52,7 +56,7 @@ pub(super) fn tokenize(code: &str) -> Option<Vec<Token>> {
             {
                 return None;
             }
-            tokens.push(Token::Num);
+            tokens.push(Token::Num(digits.parse().ok()));
         } else if matches!(c, '\'' | '"' | '`') {
             chars.next();
             let mut value = String::new();
@@ -211,7 +215,10 @@ pub(super) fn page_token(tokens: &[Token], index: usize) -> bool {
             !matches!(
                 at(-1),
                 Some(Token::Ident(_) | Token::Str(_) | Token::Punct(')' | ']'))
-            ) || matches!((at(1), at(2)), (Some(Token::Num), Some(Token::Punct(']'))))
+            ) || matches!(
+                (at(1), at(2)),
+                (Some(Token::Num(_)), Some(Token::Punct(']')))
+            )
         }
         Token::Punct('=') => {
             matches!(at(1), Some(Token::Punct('=' | '>')))
@@ -221,6 +228,44 @@ pub(super) fn page_token(tokens: &[Token], index: usize) -> bool {
         }
         _ => true,
     }
+}
+
+/// The position after `new Promise(r => setTimeout(r, MS))` starting at
+/// `start`: a pause whose timer callback is the promise's own resolver.
+pub(super) fn timer_pause(tokens: &[Token], start: usize) -> Option<usize> {
+    let rest = tokens.get(start..)?;
+    let word = |i: usize, w: &str| matches!(rest.get(i), Some(Token::Ident(n)) if n == w);
+    if !(word(0, "new") && word(1, "Promise") && rest.get(2) == Some(&Token::Punct('('))) {
+        return None;
+    }
+    let (param, at) = match (rest.get(3), rest.get(4), rest.get(5)) {
+        (Some(Token::Punct('(')), Some(Token::Ident(p)), Some(Token::Punct(')'))) => (p, 6),
+        (Some(Token::Ident(p)), _, _) => (p, 4),
+        _ => return None,
+    };
+    if RESERVED.contains(&param.as_str()) || param == "setTimeout" {
+        return None;
+    }
+    let tail = [
+        Token::Punct('='),
+        Token::Punct('>'),
+        Token::Ident("setTimeout".to_owned()),
+        Token::Punct('('),
+        Token::Ident(param.clone()),
+        Token::Punct(','),
+        Token::Num(None),
+        Token::Punct(')'),
+        Token::Punct(')'),
+    ];
+    let same = |(token, expected): (&Token, &Token)| match expected {
+        Token::Num(_) => matches!(token, Token::Num(_)),
+        _ => token == expected,
+    };
+    rest.get(at..at + tail.len())?
+        .iter()
+        .zip(&tail)
+        .all(same)
+        .then_some(start + at + tail.len())
 }
 
 /// Tab methods that read or reset the page when called with no arguments.

@@ -746,6 +746,9 @@ jobs:
           uv run --no-sync twine check dist/*
           python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir dist
           python3 scripts/verify_guard_wheel_entrypoints.py dist
+          for wheel in dist/*.whl; do
+            uv run --no-sync python scripts/ci/validate_harness_version_coverage.py --wheel "$wheel"
+          done
       - name: Record immutable distribution hashes
         run: |
           find dist -maxdepth 1 -type f -print0 | sort -z | xargs -0 sha256sum > distribution-sha256.txt
