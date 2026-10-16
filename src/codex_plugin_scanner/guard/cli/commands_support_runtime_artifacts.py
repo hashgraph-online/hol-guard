@@ -10,7 +10,7 @@ from ..native_codex_tool_output import codex_tool_output_native
 from ..native_context import bound_context_digest_home
 from ..native_path_anchor import anchor_to_process_directory
 from ..native_rich_command_model import NativeCommandModelError
-from ..native_sensitive_request import NativeSensitiveRequestError
+from ..native_sensitive_request import NativeSensitiveRequestError, native_benign_github_shell
 from ..runtime.command_extensions import risk_classes_for_command_action
 from ..runtime.command_model import parse_shell_command
 from ..runtime.direct_vitest import (
@@ -18,14 +18,10 @@ from ..runtime.direct_vitest import (
     direct_local_vitest_execution_context,
 )
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
-from ..runtime.github_actions_read_workflow import is_nonexecuting_github_actions_read_workflow
 from ..runtime.jsonc import loads_jsonc
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
 from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
 from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
-from ..runtime.secret_file_request_services.github_pr_ephemeral_body import (
-    gh_pr_create_uses_safe_ephemeral_body,
-)
 from ..runtime.shell_execution_context import (
     model_shell_execution_context,
     shell_execution_context_metadata,
@@ -292,13 +288,11 @@ def _unmodeled_shell_runtime_artifact(
     workspace: Path | None,
     home_dir: Path,
 ) -> GuardArtifact | None:
-    if is_nonexecuting_github_actions_read_workflow(command_text) or gh_pr_create_uses_safe_ephemeral_body(
-        command_text
-    ):
-        return None
     canonical_command = parse_shell_command(command_text, cwd=workspace, home_dir=home_dir)
     execution_context = model_shell_execution_context(command_text, cwd=workspace, workspace_root=workspace)
     if canonical_command.confidence == "exact" and execution_context.complete:
+        return None
+    if native_benign_github_shell(command_text):
         return None
     if canonical_command.confidence == "exact" and not execution_context.complete:
         home_execution_context = (

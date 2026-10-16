@@ -59,7 +59,7 @@ _OPTIONAL_TEXT = frozenset(
 )
 _SENSITIVITIES = frozenset({"high", "critical"})
 # Names the native classifiers read that neither shared snapshot carries.
-_CLASSIFIER_ENVIRONMENT_NAMES = ("GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH")
+_CLASSIFIER_ENVIRONMENT_NAMES = ("GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH", "TMPDIR", "TEMP", "TMP")
 
 
 class NativeSensitiveRequestError(RuntimeError):
@@ -320,6 +320,15 @@ def native_command_list_candidate_texts(values: list[str], *, preserve_items: bo
 
 def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path | None, home_dir: Path | None) -> bool:
     return _bool(_ask("benign_file_read", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir))
+
+
+def native_benign_github_shell(command_text: str) -> bool:
+    """A read-only Actions workflow or a static ephemeral PR body (resident-owned)."""
+
+    # Both shapes run a `gh` command, so text without one never needs the resident.
+    if "gh" not in command_text:
+        return False
+    return _bool(_ask("benign_github_shell", {"command_text": command_text}, cwd=None, home_dir=None))
 
 
 def native_read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:

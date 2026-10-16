@@ -516,10 +516,9 @@
       {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/data_flow.py",
-          "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
           "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
         ],
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts imports these at module load to recognise non-executing GitHub Actions reads when it builds runtime artifacts. github_actions_read_workflow imports github_command_capabilities, which returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
+        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts reaches these at module load when it builds runtime artifacts; the resident now recognises non-executing GitHub Actions reads. github_command_capabilities returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach them eagerly now run in the resident, so they are reached through that lazily loaded artifact module and stay counted."
       },
       {
         "path": "src/codex_plugin_scanner/guard/runtime/node_semver.py",
@@ -798,7 +797,7 @@
         "path": [
           "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
         ],
-        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_actions_read_workflow.py and github_shell_capabilities.py classify gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
+        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_shell_capabilities.py classifies gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
       },
       {
         "path": [

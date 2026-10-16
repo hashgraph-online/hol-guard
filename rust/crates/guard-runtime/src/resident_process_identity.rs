@@ -285,8 +285,12 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
 
 #[cfg(all(test, unix))]
 mod direct_lane_identity_tests {
-    use super::{process_start_marker, validate_direct_lane_process_identity};
+    use super::{
+        process_executable_path, process_start_marker, validate_direct_lane_process_identity,
+    };
+    use std::path::{Path, PathBuf};
     use std::process::{Child, Command, Stdio};
+    use std::time::{Duration, Instant};
 
     const DIGEST: &str = "c29d7715f8a2bcfc00112233445566778899aabbccddeeff0011223344556677";
     const OTHER: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -300,11 +304,29 @@ mod direct_lane_identity_tests {
         }
     }
 
-    // Run `sleep` directly: `spawn` returns once its own exec finishes, while
-    // `sh -c "sleep 30"` execs a second time afterwards and the executable
-    // path can be unreadable while the tests look at it.
+    fn wait_for_executable(
+        expected: &Path,
+        timeout: Duration,
+        mut executable: impl FnMut() -> Result<PathBuf, String>,
+    ) {
+        let deadline = Instant::now() + timeout;
+        loop {
+            let actual = executable();
+            if actual.as_deref() == Ok(expected) {
+                return;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "child executable did not become ready: {actual:?}"
+            );
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    // Process metadata can still expose the forked test executable after spawn.
+    // Require the final executable before making identity assertions.
     fn sleeper() -> Sleeper {
-        Sleeper(
+        let sleeper = Sleeper(
             Command::new("/bin/sleep")
                 .arg("30")
                 .stdin(Stdio::null())
@@ -312,7 +334,38 @@ mod direct_lane_identity_tests {
                 .stderr(Stdio::null())
                 .spawn()
                 .expect("spawn a process running another executable"),
-        )
+        );
+        let expected = std::fs::canonicalize("/bin/sleep").expect("resolve sleep executable");
+        wait_for_executable(&expected, Duration::from_secs(2), || {
+            process_executable_path(sleeper.0.id())
+        });
+        sleeper
+    }
+
+    #[test]
+    fn readiness_waits_for_the_final_executable_after_transient_metadata() {
+        let expected = PathBuf::from("final-executable");
+        let mut states = std::collections::VecDeque::from([
+            Err("executable not visible yet".to_owned()),
+            Ok(PathBuf::from("inherited-executable")),
+            Ok(expected.clone()),
+        ]);
+        wait_for_executable(&expected, Duration::from_secs(2), || {
+            states
+                .pop_front()
+                .expect("polled beyond the final executable")
+        });
+        assert!(states.is_empty());
+    }
+
+    #[test]
+    fn readiness_refuses_to_succeed_when_the_executable_never_matches() {
+        let result = std::panic::catch_unwind(|| {
+            wait_for_executable(Path::new("final-executable"), Duration::ZERO, || {
+                Ok(PathBuf::from("inherited-executable"))
+            });
+        });
+        assert!(result.is_err());
     }
 
     #[test]

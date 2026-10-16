@@ -18,6 +18,8 @@ use crate::command_model::{parse_shell_command, CanonicalCommand};
 use crate::hook_adapter_value::OValue;
 use crate::sfrs_dispatcher::{extract_sensitive_tool_action_request, ExtractInputs};
 use crate::sfrs_dispatcher_request::{NativeEvaluationView, ToolActionRequestMatch};
+use crate::sfrs_gh_actions_read::is_nonexecuting_github_actions_read_workflow;
+use crate::sfrs_gh_ephemeral_body::gh_pr_create_uses_safe_ephemeral_body;
 use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
 use crate::sfrs_requests::{
     classify_sensitive_path, command_list_candidate_texts, extract_sensitive_file_read_request,
@@ -41,6 +43,7 @@ pub const QUERIES: &[&str] = &[
     "benign_file_read",
     "benign_tool_action",
     "read_only_lookup_target_is_safe",
+    "benign_github_shell",
 ];
 
 /// Answer one query. `controls` is the extension-control snapshot the
@@ -122,6 +125,15 @@ pub fn evaluate(
             Ok(json!(read_only_lookup_target_is_safe(
                 target, allow_dirs, home
             )))
+        }
+        // A read-only Actions workflow or a static ephemeral PR body needs no
+        // unmodeled-shell review.
+        "benign_github_shell" => {
+            let command = field("command_text").as_str().ok_or(INVALID)?;
+            Ok(json!(
+                is_nonexecuting_github_actions_read_workflow(command, None, ctx)
+                    || gh_pr_create_uses_safe_ephemeral_body(command, ctx)
+            ))
         }
         _ => Err("native_sensitive_request_query_unknown"),
     }

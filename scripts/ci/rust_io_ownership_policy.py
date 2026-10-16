@@ -387,7 +387,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py",
         "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py",
         "src/codex_plugin_scanner/guard/runtime/git_index_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",

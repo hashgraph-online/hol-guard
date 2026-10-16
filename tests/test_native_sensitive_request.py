@@ -242,3 +242,20 @@ def test_command_list_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.Mo
 def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPatch) -> None:
     _answer(monkeypatch, _reply("command_list_candidate_texts", ["cat README.md"]))
     assert secret_file_requests.command_list_candidate_texts(["cat", "README.md"]) == ("cat README.md",)
+
+
+def test_benign_github_shell_forwards_the_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: list[dict[str, Any]] = []
+    _answer(monkeypatch, _reply("benign_github_shell", True), seen)
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+
+    assert client.native_benign_github_shell("gh run view 1 --log") is True
+    assert seen[0]["body"]["facts"]["environment"]["TMPDIR"] == str(tmp_path)
+
+
+def test_benign_github_shell_skips_the_resident_without_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, Any]] = []
+    _answer(monkeypatch, _reply("benign_github_shell", True), seen)
+
+    assert client.native_benign_github_shell("ls | head") is False
+    assert seen == []
