@@ -25,6 +25,11 @@ from typing import Any, TypeGuard
 
 from .directory_path_authority import canonical_guard_home_path
 from .fork_safety import forget_in_child
+from .native_context_budget import (
+    bind_context_digest_lifecycle_budget,
+    context_digest_timeout_floor,
+    reset_context_digest_budget,
+)
 from .native_resident_client import (
     native_resident_client_failure_code,
     native_resident_client_ready,
@@ -440,6 +445,11 @@ def native_context_digest(
     """
 
     _LAST_DIGEST_FAILURE.set(None)
+    # A lifecycle command's floor only ever lengthens a budget, and never
+    # revives a call whose caller disabled it with a non-positive one.
+    floor = context_digest_timeout_floor()
+    if floor is not None and timeout_seconds > 0:
+        timeout_seconds = max(timeout_seconds, floor)
     status = _native_runtime_status_memo()
     if (
         not status.available
@@ -894,8 +904,25 @@ def context_mcp_identity(kind: str, request: dict[str, Any]) -> dict[str, Any] |
         {"request": request},
         guard_home=_resolve_digest_home(None),
     )
-    identity = result.get(kind) if isinstance(result, dict) and result.get("status") == "ok" else None
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        # The runtime answered and refused.  Its own code is the only thing
+        # that says why, and a caller with no fallback aborts an install on
+        # this; without it the person reading the error is told the identity
+        # was unavailable and nothing about the answer that said so.
+        _record_refusal(result)
+        return None
+    identity = result.get(kind)
     return identity if isinstance(identity, dict) else None
+
+
+def _record_refusal(result: object) -> None:
+    """Keep an error-status answer's own code as the failure reason."""
+
+    if not isinstance(result, dict) or _LAST_DIGEST_FAILURE.get() is not None:
+        return
+    code = result.get("code")
+    if isinstance(code, str) and code:
+        _digest_failed(code)
 
 
 _MCP_RISK_CATEGORIES = frozenset(
@@ -947,6 +974,7 @@ def context_mcp_redact_json(value: object) -> object:
 
 __all__ = [
     "bind_context_digest_home",
+    "bind_context_digest_lifecycle_budget",
     "bound_context_digest_home",
     "context_browser_mcp",
     "context_digest_guard_home",
@@ -961,5 +989,6 @@ __all__ = [
     "context_sha256_digest",
     "is_unbound_context_digest",
     "native_context_digest",
+    "reset_context_digest_budget",
     "reset_context_digest_home",
 ]
