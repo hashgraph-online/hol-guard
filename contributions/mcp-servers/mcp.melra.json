@@ -11,7 +11,7 @@
     "displayName": "XAGI Labs",
     "url": "https://github.com/XAGI-Lab/melra"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniShieldCheck", "background": "#1D4ED8" },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#1D4ED8" },
   "homepage": "https://github.com/XAGI-Lab/melra",
   "license": "Apache-2.0",
   "launch": {
