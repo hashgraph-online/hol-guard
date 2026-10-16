@@ -969,7 +969,17 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
     closes_span = line[end : end + 1] == "`" and line[end + 1 : end + 2] != "`"
     if not (opens_span and closes_span):
         return False
-    before = line[max(0, start - 1 - APPROVAL_CONTEXT_WINDOW) : start - 1].rstrip().rstrip("`").rstrip()
+    # Step back over the padding and an earlier span's closing backticks first,
+    # then read a bounded window: padding cannot push a flag out of it, and
+    # each step covers only the gap since the previous span.
+    cut = start - 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    while cut > 0 and line[cut - 1] == "`":
+        cut -= 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    before = line[max(0, cut - APPROVAL_CONTEXT_WINDOW) : cut]
     return not APPROVAL_ASSIGNMENT_TAIL_RE.search(before)
 
 

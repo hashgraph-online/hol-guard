@@ -595,6 +595,8 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", '1. ```toml\n   sandbox_mode = "danger-full-access"\n   ```\n'),
             ("docs/setup.md", "Run `codex --sandbox` `danger-full-access`.\n"),
             ("docs/setup.md", "Set `sandbox_mode =` `danger-full-access`.\n"),
+            ("docs/setup.md", "--sandbox" + " " * 300 + "`danger-full-access`\n"),
+            ("docs/setup.md", "sandbox_mode =" + " " * 300 + "`danger-full-access`\n"),
             ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
             ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
             ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
