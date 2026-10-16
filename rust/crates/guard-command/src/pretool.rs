@@ -148,6 +148,7 @@ pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
 pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
 pub use safe_scalar::PsqlEnvironment;
+pub(crate) use script_content::sole_program_sources;
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;

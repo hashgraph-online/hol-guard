@@ -98,6 +98,7 @@ pub mod pretool_home_cd;
 pub mod pretool_home_dotdir_listing;
 pub mod pretool_home_layout_reads;
 pub mod pretool_hooks_path_writes;
+pub mod pretool_inline_content;
 pub mod pretool_installed_package_source;
 pub mod pretool_jq_sibling_filters;
 pub mod pretool_link_chains;

@@ -857,6 +857,19 @@ fn evaluate_envelope(
                     })
         })
         && contained_test_reason.is_some()
+        // Inline source that needs the network would only fail in a sandbox
+        // that withholds it; it keeps its review.
+        && command_model.is_none_or(|model| {
+            !super::script_content::inline_uses_network(
+                model,
+                signals.command.as_deref(),
+                super::PathContext {
+                    home_dir,
+                    cwd,
+                    ..context
+                },
+            )
+        })
     {
         result.minimum_action = "sandbox-required".into();
         result.policy_action = "sandbox-required".into();

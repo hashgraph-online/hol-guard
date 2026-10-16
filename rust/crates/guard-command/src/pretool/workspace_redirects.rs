@@ -214,6 +214,11 @@ pub(super) fn contained(
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let stripped = project(command)?;
+    // Removing an input redirect drops the program it feeds, so a program
+    // that needs the network keeps the review of the text as sent.
+    if crate::pretool::script_content::text_uses_network(command, context) {
+        return None;
+    }
     let direct = super::redirect_projection::project(command, context);
     // A later read of a written file spelled from the root names what the
     // projection's relative spelling names, so both earn the same floor.
