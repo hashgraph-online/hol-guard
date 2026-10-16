@@ -14,8 +14,12 @@ import {
   type JoinedDiscoveryCard,
 } from "./extensions-discover-model";
 import {
+  allCardsActive,
   buildSpotlight,
+  protectionLine,
+  ruleCountLabel,
   SHELF_SLOT_PRODUCTS,
+  slotInventoryLabel,
   slotStartingPrice,
   slotState,
   spotlightHeading,
@@ -117,11 +121,22 @@ function PaidSpotlightCard(props: {
 
 function OrganicSpotlightCard(props: {
   card: SpotlightCard;
+  /** Whether this extension is already protecting the device, right now. */
+  active: boolean;
   onOpen: (extension: ExtensionCatalogSummary) => void;
 }) {
   const { catalog, reason, basis } = props.card;
+  // Everything below comes from the catalog entry itself: what its rules look
+  // at, and how many there are. No score, no ranking, no invented popularity.
+  const protection = protectionLine(catalog);
+  const rules = ruleCountLabel(catalog);
   return (
-    <article className="guard-spotlight-card" data-testid="spotlight-organic-card" data-basis={basis}>
+    <article
+      className="guard-spotlight-card"
+      data-testid="spotlight-organic-card"
+      data-basis={basis}
+      data-active={props.active ? "true" : "false"}
+    >
       <div className="flex items-start gap-3">
         <ExtensionBrandMark
           extension_id={catalog.extension_id}
@@ -131,18 +146,33 @@ function OrganicSpotlightCard(props: {
           size="md"
         />
         <div className="min-w-0 flex-1">
-          <h3 className="text-base font-semibold leading-snug tracking-tight text-brand-dark">{catalog.name}</h3>
+          <div className="flex items-start justify-between gap-2">
+            <h3 className="text-base font-semibold leading-snug tracking-tight text-brand-dark">{catalog.name}</h3>
+            <span
+              className={props.active ? "guard-spotlight-state guard-spotlight-state-on" : "guard-spotlight-state"}
+              data-testid="spotlight-organic-state"
+            >
+              {props.active ? "On" : "Off"}
+            </span>
+          </div>
           {reason ? (
             <p className="mt-1 font-mono text-xs tabular-nums text-brand-dark/55">{reason}</p>
+          ) : rules ? (
+            <p className="mt-1 text-xs text-brand-dark/55">{rules} in the built-in catalog</p>
           ) : (
             <p className="mt-1 text-xs text-brand-dark/55">Built-in coverage, ready to review</p>
           )}
         </div>
       </div>
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-brand-dark/75">{catalog.description}</p>
+      {protection ? (
+        <p className="mt-3 text-sm leading-6 text-brand-dark/85" data-testid="spotlight-organic-protection">
+          {protection}
+        </p>
+      ) : null}
+      <p className="mt-2 line-clamp-2 text-sm leading-6 text-brand-dark/65">{catalog.description}</p>
       <div className="mt-auto pt-5">
         <button type="button" className="guard-discover-cta" onClick={() => props.onOpen(catalog)}>
-          Review protection
+          {props.active ? "Review protection" : "Set it up"}
           <HiMiniArrowRight className="size-4" aria-hidden="true" />
         </button>
       </div>
@@ -154,7 +184,12 @@ function OrganicSpotlightCard(props: {
  * The slot offered for sale, rendered at the size of a paid cell so a maker
  * sees exactly what the money buys. Shown only on an authoritative vacancy.
  */
-function VacantSlotCard(props: { state: Exclude<SlotState, "hidden">; price: string | null }) {
+function VacantSlotCard(props: {
+  state: Exclude<SlotState, "hidden">;
+  price: string | null;
+  /** Live remaining inventory, present only when the server stated it. */
+  inventory: string | null;
+}) {
   const soldOut = props.state === "sold-out";
   return (
     <article
@@ -172,19 +207,20 @@ function VacantSlotCard(props: { state: Exclude<SlotState, "hidden">; price: str
             {soldOut ? "Fully booked" : "This slot is open"}
           </p>
           <h3 id="spotlight-slot-heading" className="mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark">
-            {soldOut ? "Every placement here is taken." : "Put your extension in this spot."}
+            {soldOut ? "Every placement here is taken." : "Put your extension on this shelf."}
           </h3>
         </div>
       </div>
       <p className="mt-3 text-sm leading-6 text-brand-dark/75">
         {soldOut
           ? "Windows free up as placements end. See the schedule to book the next one."
-          : "Developers land here before they open anything else. Placements are labeled Sponsored, carry your own headline, and never change anyone’s protection."}
+          : "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection."}
+        {props.inventory ? <span className="font-semibold text-brand-dark"> {props.inventory}</span> : null}
       </p>
       <div className="mt-auto pt-5">
         <a
           className="guard-discover-cta"
-          href={advertiseUrl("extensions_feed")}
+          href={advertiseUrl("extensions_header")}
           target="_blank"
           rel="noopener noreferrer"
           referrerPolicy="no-referrer"
@@ -192,27 +228,45 @@ function VacantSlotCard(props: { state: Exclude<SlotState, "hidden">; price: str
           {soldOut ? "See the schedule" : props.price ? `Get this spot · from ${props.price}/mo` : "Get this spot"}
           <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
         </a>
-        <p className="mt-3 text-xs text-brand-dark/50">
-          {soldOut ? (
-            "Checkout always shows the live quote before payment."
-          ) : (
-            <>
-              Built an extension and not listed yet?{" "}
-              <a
-                className="font-semibold text-brand-blue hover:underline"
-                href="https://github.com/hashgraph-online/hol-guard/blob/main/CONTRIBUTING.md"
-                target="_blank"
-                rel="noopener noreferrer"
-                referrerPolicy="no-referrer"
-              >
-                Submit it free
-              </a>
-              .
-            </>
-          )}
-        </p>
+        <SlotFreePath placement="extensions_header" soldOut={soldOut} />
       </div>
     </article>
+  );
+}
+
+/**
+ * The paths that cost nothing, said out loud next to the paid one. A maker
+ * already in the built-in catalog claims their entry instead of buying it,
+ * and a maker who is not in it yet submits the extension the usual way.
+ */
+function SlotFreePath(props: { placement: "extensions_feed" | "extensions_header"; soldOut?: boolean }) {
+  if (props.soldOut) {
+    return <p className="mt-3 text-xs text-brand-dark/50">Checkout always shows the live quote before payment.</p>;
+  }
+  return (
+    <p className="mt-3 text-xs text-brand-dark/50">
+      Already listed?{" "}
+      <a
+        className="font-semibold text-brand-blue hover:underline"
+        href={advertiseUrl(props.placement, undefined, "claim")}
+        target="_blank"
+        rel="noopener noreferrer"
+        referrerPolicy="no-referrer"
+      >
+        Claim it free
+      </a>
+      . Not listed yet?{" "}
+      <a
+        className="font-semibold text-brand-blue hover:underline"
+        href="https://github.com/hashgraph-online/hol-guard/blob/main/CONTRIBUTING.md"
+        target="_blank"
+        rel="noopener noreferrer"
+        referrerPolicy="no-referrer"
+      >
+        Submit it free
+      </a>
+      .
+    </p>
   );
 }
 
@@ -235,20 +289,24 @@ export function ExtensionsSpotlight(props: {
   status: DiscoveryFeedStatus;
   snapshotId: string | null;
   settled: boolean;
+  /** Whether an extension is protecting this device right now. */
+  isExtensionActive: (extension: ExtensionCatalogSummary) => boolean;
   onOpenExtension: (extension: ExtensionCatalogSummary) => void;
 }) {
+  const { isExtensionActive } = props;
   const spotlight = useMemo(
     () => buildSpotlight({
       featured: props.featured,
       sponsored: props.sponsored,
       activity: props.activity,
       catalog: props.catalogExtensions,
+      isActive: isExtensionActive,
     }),
-    [props.activity, props.catalogExtensions, props.featured, props.sponsored],
+    [isExtensionActive, props.activity, props.catalogExtensions, props.featured, props.sponsored],
   );
   const slot = slotState({ status: props.status, offers: props.offers, products: SHELF_SLOT_PRODUCTS });
   const price = useMemo(() => slotStartingPrice(props.offers, SHELF_SLOT_PRODUCTS), [props.offers]);
-  const heading = spotlightHeading(spotlight.lead);
+  const inventory = useMemo(() => slotInventoryLabel(props.offers, SHELF_SLOT_PRODUCTS), [props.offers]);
 
   // The shelf would otherwise flip heading and contents as the feed and the
   // activity query land a moment apart; hold one skeleton until both settle.
@@ -258,6 +316,9 @@ export function ExtensionsSpotlight(props: {
   // offers it: a sold-out claim beside organic cards contradicts itself.
   const showSlot = spotlight.vacant && slot === "open";
   const cards = showSlot ? spotlight.cards.slice(0, SPOTLIGHT_CELL_COUNT - 1) : spotlight.cards;
+  // Read the heading off the cards that survive that slice: a card the slot
+  // pushed out of view must not decide what the shelf claims about this device.
+  const heading = spotlightHeading(spotlight.lead, allCardsActive(cards, isExtensionActive));
 
   if (props.catalogExtensions.length === 0) return null;
 
@@ -285,10 +346,15 @@ export function ExtensionsSpotlight(props: {
                 onOpen={props.onOpenExtension}
               />
             ) : (
-              <OrganicSpotlightCard key={card.catalog.extension_id} card={card} onOpen={props.onOpenExtension} />
+              <OrganicSpotlightCard
+                key={card.catalog.extension_id}
+                card={card}
+                active={isExtensionActive(card.catalog)}
+                onOpen={props.onOpenExtension}
+              />
             )
           ))}
-          {showSlot ? <VacantSlotCard state={slot} price={price} /> : null}
+          {showSlot ? <VacantSlotCard state={slot} price={price} inventory={inventory} /> : null}
         </div>
       )}
       <SpotlightStatusLine status={props.status} />
@@ -339,17 +405,20 @@ function SpotlightStatusLine(props: { status: DiscoveryFeedStatus }) {
  * authoritative open slot in an unfiltered list long enough that one promo
  * row cannot crowd the results out.
  */
-export function CatalogSlotRow(props: { price: string | null }) {
+export function CatalogSlotRow(props: { price: string | null; inventory: string | null }) {
   return (
     <div className="guard-catalog-slot-row" data-testid="catalog-slot-row">
       <span className="guard-spotlight-slot-mark" aria-hidden="true">
         <HiMiniPlus className="size-5" />
       </span>
       <div className="min-w-0 flex-[1_1_16rem]">
-        <p className="text-sm font-semibold text-brand-dark">Your extension could be listed here.</p>
+        <p className="text-sm font-semibold text-brand-dark">Put your extension in this list.</p>
         <p className="mt-0.5 text-sm leading-6 text-brand-dark/65">
-          A sponsored listing keeps its real protection state and its Sponsored label. Position is all it buys.
+          Sponsored listings sit inside the catalog, keep their real protection state and their Sponsored label.
+          Position is all they buy.
+          {props.inventory ? <span className="font-semibold text-brand-dark"> {props.inventory}</span> : null}
         </p>
+        <SlotFreePath placement="extensions_feed" />
       </div>
       <a
         className="guard-discover-cta shrink-0"
@@ -358,7 +427,7 @@ export function CatalogSlotRow(props: { price: string | null }) {
         rel="noopener noreferrer"
         referrerPolicy="no-referrer"
       >
-        {props.price ? `Get a listing · from ${props.price}/mo` : "Get a listing"}
+        {props.price ? `Get this spot · from ${props.price}/mo` : "Get this spot"}
         <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
       </a>
     </div>

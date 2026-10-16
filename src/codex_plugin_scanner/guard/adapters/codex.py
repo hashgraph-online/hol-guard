@@ -19,7 +19,7 @@ from ..aibom_detection import (
     extend_detection_with_workspace_aibom,
     native_adapter_detection_with_warnings,
 )
-from ..codex_config import dump_toml, read_toml_payload
+from ..codex_config import dump_toml, read_config_bytes, read_toml_payload
 from ..codex_hook_command_line import encode_hook_config_argument, render_hook_command
 from ..codex_hook_compatibility import NATIVE_CODEX_HOOK_COMMAND, NATIVE_CODEX_HOOK_FEATURE, python_bridge_argv
 from ..codex_hook_file_integrity import validate_regular_file
@@ -755,7 +755,7 @@ def prepare_codex_hook_migration(
         TransitionFile(
             config_path,
             before_config,
-            dump_toml(config).encode("utf-8") if changed else before_config,
+            dump_toml(config, original=before_config).encode("utf-8") if changed else before_config,
             before_mode=config_mode,
             after_mode=0o600 if changed else config_mode,
             no_follow=True,
@@ -784,7 +784,11 @@ def prepare_codex_main_backup(
     after = (
         before
         if before is not None
-        else (dump_toml(migrated_payload).encode("utf-8") if migrated_payload is not None else original or b"")
+        else (
+            dump_toml(migrated_payload, original=original).encode("utf-8")
+            if migrated_payload is not None
+            else original or b""
+        )
     )
     change = TransitionFile(path, before, after, before_mode=mode, after_mode=mode, no_follow=True)
     RuntimeTransition._compare({"files": [change.payload()]}, "before")
@@ -895,7 +899,7 @@ def prepare_codex_alternate_cleanup(
     change = TransitionFile(
         config_path,
         before,
-        dump_toml(rendered).encode("utf-8") if changed else before,
+        dump_toml(rendered, original=before).encode("utf-8") if changed else before,
         before_mode=mode,
         after_mode=0o600 if hooks_changed else mode,
         no_follow=True,
@@ -1351,7 +1355,7 @@ class CodexHarnessAdapter(HarnessAdapter):
         )
         publication = prepare_authenticated_hook_publication(
             spec,
-            rendered_config=dump_toml(payload),
+            rendered_config=dump_toml(payload, original=contents[spec.config_path]),
             previous_manifest=previous_manifest,
         )
         if publication.config_change.before != contents[spec.config_path]:
@@ -1385,7 +1389,15 @@ class CodexHarnessAdapter(HarnessAdapter):
                     TransitionFile(
                         before_change.path,
                         before_change.before,
-                        dump_toml(candidate).encode("utf-8") if changed else before_change.before,
+                        # An ordinary install writes the hook migration first and
+                        # then renders the cleanup onto that file, so render onto
+                        # the migrated text here too; otherwise the plan and the
+                        # install disagree over spacing the migration introduced.
+                        dump_toml(candidate, original=before_change.after if migrated else before_change.before).encode(
+                            "utf-8"
+                        )
+                        if changed
+                        else before_change.before,
                         before_mode=before_change.before_mode,
                         after_mode=mode,
                         no_follow=True,
@@ -1648,6 +1660,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             backup_path.unlink()
         elif target_config_path.is_file() and owned_bindings:
             target_payload = read_toml_payload(target_config_path)
+            target_original = read_config_bytes(target_config_path)
             target_hooks = target_payload.get("hooks")
             if isinstance(target_hooks, dict):
                 cleaned_hooks, managed_removed = _remove_manifest_bound_hook_events(target_hooks, owned_bindings)
@@ -1656,7 +1669,11 @@ class CodexHarnessAdapter(HarnessAdapter):
                         target_payload["hooks"] = cleaned_hooks
                     else:
                         target_payload.pop("hooks", None)
-                    atomic_write_text(target_config_path, dump_toml(target_payload), mode=0o600)
+                    atomic_write_text(
+                        target_config_path,
+                        dump_toml(target_payload, original=target_original),
+                        mode=0o600,
+                    )
         hooks_path = self._remove_hooks(context)
         self._remove_managed_hooks_from_alternate_configs(context, skip_config_path=target_config_path)
         self._remove_managed_mcp_servers_from_alternate_configs(
@@ -1987,7 +2004,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             ) from error
         if second_snapshot_identity != original_config_identity:
             raise RuntimeError("codex_hook_config_invalid: Codex configuration changed during its snapshot.")
-        rendered_config = dump_toml(payload)
+        rendered_config = dump_toml(payload, original=original_config)
         written_config_identity: tuple[int, int, int, int, int] | None = None
 
         def remember_written_config(identity: tuple[int, int, int, int, int]) -> None:
@@ -1998,7 +2015,7 @@ class CodexHarnessAdapter(HarnessAdapter):
             record_owned_hook_config_publication(context.guard_home, config_path, identity)
 
         try:
-            rendered_config = dump_toml(payload)
+            rendered_config = dump_toml(payload, original=original_config)
             spec = _hook_manifest_spec(context)
             if config_path.resolve(strict=False) != spec.config_path.resolve(strict=False):
                 raise RuntimeError("Codex authenticated publication requires its canonical config target.")

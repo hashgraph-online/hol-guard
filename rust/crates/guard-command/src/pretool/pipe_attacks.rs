@@ -8,7 +8,7 @@
 //! with a reason that names the attack; a pipeline it cannot split keeps its
 //! existing decision.
 
-use crate::parser_segments::{shell_tokens, split_execution_segments};
+use crate::parser_segments::{shell_tokens, split_pipelines_including_background};
 use crate::{assignment_name, executable_basename, CanonicalCommandV1};
 
 #[path = "pipe_stdin_programs.rs"]
@@ -33,7 +33,7 @@ pub(super) fn pipe_attack(model: &CanonicalCommandV1) -> Option<(&'static str, &
     }
     let raw = model.normalized_text.as_str();
     let preserve_backslash = cfg!(windows);
-    let segments = split_execution_segments(raw, preserve_backslash).ok()?;
+    let segments = split_pipelines_including_background(raw, preserve_backslash).ok()?;
     if segments.len() > MAX_STEPS {
         return None;
     }

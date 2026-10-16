@@ -188,8 +188,19 @@ impl CompiledNativeCommandControls {
         if INTERPRETERS.iter().any(|name| interpreted.contains(*name)) {
             // A program read from a file names the tools it may launch
             // outside the command text, so it counts toward the owners.
-            for source in crate::pretool::sole_program_sources(command, context)? {
-                named.extend(named_words(&source));
+            match crate::pretool::sole_program_sources(command, context) {
+                Some(sources) => {
+                    for source in sources {
+                        named.extend(named_words(&source));
+                    }
+                }
+                // Backgrounding leaves no segments, so a module launch such as
+                // `python3 -m http.server` looks like a script that was never
+                // read. The module name is already in the command.
+                None if command.uncertainty_reason.as_deref()
+                    == Some("background_job_not_yet_supported")
+                    && !interpreter_launch_reads_a_file(shell) => {}
+                None => return None,
             }
         }
         let mut floor = "review";
@@ -251,6 +262,15 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
         return false;
     }
     match command.uncertainty_reason.as_deref() {
+        // Backgrounding runs the same programs the foreground text names, so
+        // `npm start &` owns exactly what `npm start` owns. Without this arm a
+        // trailing `&` blocked outright while the same command with a redirect
+        // reached review, because the redirect reason wins the parser's scan.
+        Some("background_job_not_yet_supported") => {
+            let literal = unquoted_literal(&command.normalized_text);
+            !background_pipeline(&command.normalized_text)
+                && (!moves_data(&literal) || literal_redirects_only(&command.normalized_text))
+        }
         Some("compound_shell_not_yet_supported") => {
             !moves_data(&unquoted_literal(&command.normalized_text))
                 || literal_redirects_only(&command.normalized_text)
@@ -289,6 +309,17 @@ fn literal_redirects_only(text: &str) -> bool {
         let literal = unquoted_literal(&projected);
         !(moves_data(&literal) || (names_files && creates_links(&literal)))
     })
+}
+
+/// A backgrounded pipeline stays out of the review floor. The pipe check
+/// names a remote-code or exfiltration attack before this runs; anything it
+/// cannot classify, including a benign pipe, keeps the evaluation failure.
+fn background_pipeline(text: &str) -> bool {
+    let preserve_backslash = cfg!(windows);
+    match crate::parser_segments::split_pipelines_including_background(text, preserve_backslash) {
+        Ok(segments) => segments.iter().any(|segment| segment.pipeline_index > 0),
+        Err(_) => text.contains('|'),
+    }
 }
 
 /// Whether shell text redirects, substitutes or sets the environment of a
@@ -454,6 +485,76 @@ fn joined_quotes(text: &str) -> String {
         return text.to_owned();
     }
     joined
+}
+
+/// Whether a backgrounded interpreter still names a program file this scan
+/// did not read. A `python -m` module launch does not: the module is an
+/// argument, same as the foreground command.
+fn interpreter_launch_reads_a_file(shell: &str) -> bool {
+    shell
+        .split(|character: char| {
+            matches!(
+                character,
+                ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
+            )
+        })
+        .any(command_reads_a_program_file)
+}
+
+fn command_reads_a_program_file(piece: &str) -> bool {
+    let words: Vec<&str> = piece
+        .split_whitespace()
+        .map(|word| word.trim_matches(['\'', '"']))
+        .filter(|word| !word.is_empty() && !is_assignment(word))
+        .skip_while(|word| SHELL_PREFIXES.contains(word))
+        .collect();
+    let Some(program) = words.first() else {
+        return false;
+    };
+    let program = command_basename(program);
+    if !is_python(program.as_str()) {
+        return INTERPRETERS.contains(&program.as_str());
+    }
+    !python_module_launch(&words[1..])
+}
+
+fn command_basename(word: &str) -> String {
+    let base = word.rsplit(['/', '\\']).next().unwrap_or(word);
+    base.strip_suffix(".exe")
+        .unwrap_or(base)
+        .to_ascii_lowercase()
+}
+
+fn is_python(name: &str) -> bool {
+    name.strip_prefix("python").is_some_and(|version| {
+        version
+            .split('.')
+            .all(|part| part.is_empty() || part.bytes().all(|byte| byte.is_ascii_digit()))
+    })
+}
+
+/// `python -m module` before any script path, inline source, or stdin.
+fn python_module_launch(arguments: &[&str]) -> bool {
+    let mut index = 0;
+    while index < arguments.len() {
+        let argument = arguments[index];
+        if argument == "-m" {
+            return arguments.get(index + 1).is_some();
+        }
+        if argument == "-c" || argument == "-" || argument == "--" {
+            return false;
+        }
+        if matches!(argument, "-W" | "-X" | "--check-hash-based-pycs") {
+            index += 2;
+            continue;
+        }
+        if argument.starts_with('-') {
+            index += 1;
+            continue;
+        }
+        return false;
+    }
+    false
 }
 
 /// Whether a command position holds an expansion, glob or `.` source, which

@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 
-import { catalog, extension, initialize, mount } from "./extension-control-fixtures";
+import { catalog, effective, extension, initialize, mount } from "./extension-control-fixtures";
 
 /**
  * The Extensions surface sells placement without ever lying about inventory.
@@ -23,8 +23,18 @@ const STARTER_IDS = [
   "command.filesystem",
 ];
 
+/** Two starters left off, so the shelf has something to actually suggest. */
+const OFF_BY_DEFAULT = ["command.cloud.aws", "command.package.python"];
+
 function wideCatalog() {
   return { ...catalog(), extensions: STARTER_IDS.map((id) => extension(id, "")) };
+}
+
+/** Effective controls that turn the named starters off on this device. */
+function withStartersOff(off: readonly string[] = OFF_BY_DEFAULT) {
+  return effective({
+    controls: off.map((id) => ({ target: { kind: "extension", target_id: id }, state: "disabled" })),
+  });
 }
 
 function placement(id: string, product: "always" | "sponsored", brandName: string) {
@@ -43,11 +53,30 @@ function placement(id: string, product: "always" | "sponsored", brandName: strin
 
 type Availability = "open" | "sold_out" | "unknown";
 
-function offer(product: string, availability: Availability, cents: number | null) {
-  return { product, availability, indicativeAmountCents: cents, currency: "USD", checkedAt: "2026-01-01T00:00:00Z", quoteRequired: true };
+function offer(
+  product: string,
+  availability: Availability,
+  cents: number | null,
+  slots?: { open: number; total: number } | null,
+) {
+  return {
+    product,
+    availability,
+    indicativeAmountCents: cents,
+    currency: "USD",
+    checkedAt: "2026-01-01T00:00:00Z",
+    quoteRequired: true,
+    ...(slots ? { openSlots: slots.open, totalSlots: slots.total } : {}),
+  };
 }
 
-function projection(options: { placements?: unknown[]; shelf?: Availability; listing?: Availability } = {}) {
+function projection(options: {
+  placements?: unknown[];
+  shelf?: Availability;
+  listing?: Availability;
+  shelfSlots?: { open: number; total: number } | null;
+  listingSlots?: { open: number; total: number } | null;
+} = {}) {
   return {
     remainingLeaseMs: 600_000,
     policyAllowed: true,
@@ -61,8 +90,8 @@ function projection(options: { placements?: unknown[]; shelf?: Availability; lis
       leaseExpiresAt: "2099-01-01T00:00:00Z",
       placements: options.placements ?? [],
       offers: [
-        offer("always", options.shelf ?? "open", 19_900),
-        offer("sponsored", options.listing ?? "open", 4_900),
+        offer("always", options.shelf ?? "open", 19_900, options.shelfSlots),
+        offer("sponsored", options.listing ?? "open", 4_900, options.listingSlots),
       ],
     },
   };
@@ -110,8 +139,11 @@ async function expectRendersAtBothSizes(page: Page, check: () => Promise<void>) 
 
 test.describe("extensions spotlight", () => {
   test("empty paid inventory leads with local activity and offers the open slot", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
-    await routeDiscovery(page, projection());
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
+    await routeDiscovery(page, projection({
+      shelfSlots: { open: 3, total: 4 },
+      listingSlots: { open: 2, total: 6 },
+    }));
     await routeAnalytics(page, [
       { value: "command.cloud.aws", count: 184 },
       { value: "command.git", count: 97 },
@@ -131,17 +163,39 @@ test.describe("extensions spotlight", () => {
     await expect(slot).toContainText("This slot is open");
     // The shelf cell quotes the product that buys the shelf, not the cheaper listing.
     await expect(slot.getByRole("link", { name: /Get this spot · from \$199\/mo/ })).toBeVisible();
-    // Vacant shelf must not also run the in-feed ask.
-    await expect(page.getByTestId("catalog-slot-row")).toHaveCount(0);
+    // Live inventory, exactly as the server stated it for this product.
+    await expect(slot).toContainText("3 of 4 open.");
+    // The free path keeps the campaign tag and reports its own surface, so
+    // the two asks stay apart in attribution.
+    const shelfClaim = slot.getByRole("link", { name: "Claim it free" });
+    await expect(shelfClaim).toBeVisible();
+    await expect(shelfClaim).toHaveAttribute(
+      "href",
+      /intent=extension-promotion.*placement=extensions_header.*action=claim/,
+    );
+
+    // With nothing sold, the in-feed ask runs too: it is a different product
+    // with its own inventory, and a maker scrolling the list must see it.
+    const inFeed = page.getByTestId("catalog-slot-row");
+    await expect(inFeed).toHaveCount(1);
+    await expect(inFeed).toContainText("2 of 6 open.");
+    await expect(inFeed.getByRole("link", { name: /Get this spot · from \$49\/mo/ })).toBeVisible();
+    const feedClaim = inFeed.getByRole("link", { name: "Claim it free" });
+    await expect(feedClaim).toBeVisible();
+    await expect(feedClaim).toHaveAttribute(
+      "href",
+      /intent=extension-promotion.*placement=extensions_feed.*action=claim/,
+    );
 
     await expectRendersAtBothSizes(page, async () => {
       await expect(spotlight).toBeVisible();
       await expect(slot).toBeVisible();
+      await expect(inFeed).toBeVisible();
     });
   });
 
   test("a fresh device falls back to the starter set without inventing metrics", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({ shelf: "unknown", listing: "unknown" }));
     await routeAnalytics(page, []);
     await initialize(page);
@@ -149,13 +203,42 @@ test.describe("extensions spotlight", () => {
     await expect(page.getByRole("heading", { name: "Good places to start" })).toBeVisible();
     await expect(page.getByTestId("spotlight-basis")).toContainText("Not a ranking or a popularity measure");
     await expect(page.getByTestId("spotlight-organic-card")).toHaveCount(3);
-    await expect(page.getByTestId("spotlight-organic-card").first()).toHaveAttribute("data-basis", "starter");
-    // Availability the server could not confirm never becomes a sales pitch.
+    const first = page.getByTestId("spotlight-organic-card").first();
+    await expect(first).toHaveAttribute("data-basis", "starter");
+    // The starter tier leads with what is still off, says what the extension
+    // watches for in the catalog's own words, and offers the setup path.
+    await expect(first).toHaveAttribute("data-active", "false");
+    await expect(first.getByTestId("spotlight-organic-state")).toHaveText("Off");
+    await expect(first.getByTestId("spotlight-organic-protection")).toContainText(
+      "Watches for irreversible deletes and overwrites.",
+    );
+    await expect(first.getByRole("button", { name: "Set it up" })).toBeVisible();
+    // Availability the server could not confirm never becomes a sales pitch,
+    // in either surface.
     await expect(page.getByTestId("spotlight-slot-card")).toHaveCount(0);
+    await expect(page.getByTestId("catalog-slot-row")).toHaveCount(0);
+
+    await expectRendersAtBothSizes(page, async () => {
+      await expect(first).toBeVisible();
+    });
+  });
+
+  test("a device that already runs every starter is told so, not asked again", async ({ page }) => {
+    await mount(page, { catalog: wideCatalog() });
+    await routeDiscovery(page, projection({ shelf: "unknown", listing: "unknown" }));
+    await routeAnalytics(page, []);
+    await initialize(page);
+
+    await expect(page.getByRole("heading", { name: "Already covering the basics" })).toBeVisible();
+    await expect(page.getByTestId("spotlight-basis")).toContainText("Not a ranking or a popularity measure");
+    const cards = page.getByTestId("spotlight-organic-card");
+    await expect(cards).toHaveCount(3);
+    await expect(cards.first().getByTestId("spotlight-organic-state")).toHaveText("On");
+    await expect(cards.first().getByRole("button", { name: "Review protection" })).toBeVisible();
   });
 
   test("sold placement leads the shelf, stays labeled, and opens the in-feed ask", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({
       placements: [
         placement("command.cloud.aws", "always", "Northwind Tools"),
@@ -174,8 +257,10 @@ test.describe("extensions spotlight", () => {
     // With inventory proven to exist, the one inline ask appears in the list.
     const inFeed = page.getByTestId("catalog-slot-row");
     await expect(inFeed).toHaveCount(1);
-    await expect(inFeed).toContainText("Position is all it buys.");
-    await expect(inFeed.getByRole("link", { name: /Get a listing · from \$49\/mo/ })).toBeVisible();
+    await expect(inFeed).toContainText("Position is all they buy.");
+    await expect(inFeed.getByRole("link", { name: /Get this spot · from \$49\/mo/ })).toBeVisible();
+    // No counts were sent, so none are shown.
+    await expect(inFeed).not.toContainText(" open.");
 
     await expectRendersAtBothSizes(page, async () => {
       await expect(featured).toBeVisible();
@@ -184,7 +269,7 @@ test.describe("extensions spotlight", () => {
   });
 
   test("a sold-out shelf is silent, and a sold-out listing never borrows an open price", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({ shelf: "sold_out", listing: "sold_out", placements: [placement("command.cloud.aws", "always", "Northwind Tools")] }));
     await routeAnalytics(page, [{ value: "command.git", count: 41 }]);
     await initialize(page);
@@ -197,7 +282,7 @@ test.describe("extensions spotlight", () => {
   });
 
   test("a sponsored placement past the shelf still gets its labeled catalog row", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({
       placements: [
         placement("command.cloud.aws", "always", "Northwind Tools"),
@@ -217,7 +302,7 @@ test.describe("extensions spotlight", () => {
   });
 
   test("a sponsored row ordered ahead of the featured ones is still rendered once each", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({
       placements: [
         placement("command.github", "always", "Northwind Tools"),
@@ -237,7 +322,7 @@ test.describe("extensions spotlight", () => {
   });
 
   test("one surface: no tab strip, and searching hides the shelf", async ({ page }) => {
-    await mount(page, { catalog: wideCatalog() });
+    await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection());
     await routeAnalytics(page, [{ value: "command.git", count: 12 }]);
     await initialize(page);

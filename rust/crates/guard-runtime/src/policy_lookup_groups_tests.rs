@@ -6,7 +6,8 @@ use flate2::read::GzDecoder;
 use guard_contracts::PolicyLookupProbeGroupsV1;
 use serde_json::{json, Value};
 
-use super::{compose_groups, with_current_token};
+use super::{compose_groups, with_current_token, with_memory_candidates};
+use crate::memory_pattern::{verdict, MemoryRequest};
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/generic_saved_decision_vectors.json.gz");
 
@@ -111,4 +112,59 @@ fn current_token_fills_groups_and_drops_a_repeated_legacy_group() {
         [(Some("token"), 2), (Some("token"), 1), (Some("legacy"), 2)]
     );
     assert!(with_current_token(&groups, None).is_err());
+}
+
+#[test]
+fn memory_inputs_append_each_direct_ids_remembered_candidates() {
+    let groups: PolicyLookupProbeGroupsV1 = serde_json::from_value(json!({
+        "groups": [
+            {"candidate_artifact_ids": ["claude-code:session:Bash"]},
+            {"artifact_hash": "legacy", "candidate_artifact_ids": ["policy:Bash"]},
+        ],
+        "memory": {
+            "command": "git status",
+            "artifact_type": "tool_action_request",
+            "artifact_name": "Bash",
+            "harness": "claude-code",
+        },
+    }))
+    .unwrap();
+    let expanded = with_memory_candidates(&groups).unwrap();
+    assert!(expanded.memory.is_none());
+    for (group, direct) in expanded
+        .groups
+        .iter()
+        .zip(["claude-code:session:Bash", "policy:Bash"])
+    {
+        let remembered = verdict(&MemoryRequest {
+            command: Some("git status"),
+            artifact_type: Some("tool_action_request"),
+            artifact_id: Some(direct),
+            artifact_name: Some("Bash"),
+            harness: Some("claude-code"),
+        });
+        let mut expected = vec![direct.to_owned()];
+        expected.extend(remembered.exact_artifact_ids);
+        expected.extend(remembered.memory_artifact_id);
+        assert!(expected.len() > 1, "{direct}: no remembered candidates");
+        assert_eq!(group.candidate_artifact_ids, expected);
+    }
+    assert_eq!(expanded.groups[1].artifact_hash.as_deref(), Some("legacy"));
+    let unexpanded = with_memory_candidates(&PolicyLookupProbeGroupsV1 {
+        memory: None,
+        ..groups.clone()
+    })
+    .unwrap();
+    assert_eq!(
+        unexpanded,
+        PolicyLookupProbeGroupsV1 {
+            memory: None,
+            ..groups.clone()
+        }
+    );
+    let mut two_ids = groups;
+    two_ids.groups[0]
+        .candidate_artifact_ids
+        .push("extra".to_owned());
+    assert!(with_memory_candidates(&two_ids).is_err());
 }

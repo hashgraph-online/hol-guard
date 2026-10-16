@@ -43,13 +43,12 @@ from ..daemon.update_refresh_program import DAEMON_REFRESH_SCRIPT
 from ..mdm.contracts import ManagedNetworkPolicy, ManagedPolicy
 from ..mdm.network import ManagedNetworkError, managed_urlopen
 from ..mdm.policy import load_managed_policy
-from ..native_resident_client import retire_native_resident_for_update
 from ..native_resident_update_lock import (
     NativeResidentUpdateLock,
     NativeResidentUpdateLockError,
     hold_native_resident_update_lock,
 )
-from ..native_runtime import _bundled_runtime_candidate, _isolated_environment
+from ..native_runtime import _bundled_runtime_candidate
 from ..redaction import redact_sensitive_text
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_authority import AuthorityHealth
@@ -91,7 +90,7 @@ from .update_install_verify import verify_installed_distribution
 from .update_opencode import _refresh_opencode_pretool_plugin
 from .update_release_candidates import newest_live_pypi_version, newest_pypi_version, select_live_release
 from .update_repair_notes import attach_repair_notes
-from .update_retirement import retire_with_retry
+from .update_retirement import retire_native_resident_for_home
 from .update_subprocess import (
     InstalledDistribution,
     TrustedUpdateContext,
@@ -219,19 +218,7 @@ print(json.dumps({"before": before, "repair": repair, "after": after}))
 def _retire_native_resident_before_update(guard_home: Path) -> bool:
     """Stop shared native state while the installed runtime is still intact."""
 
-    try:
-        return retire_with_retry(
-            lambda timeout_seconds: retire_native_resident_for_update(
-                executable=_bundled_runtime_candidate(),
-                guard_home=guard_home,
-                environment=_isolated_environment(),
-                timeout_seconds=timeout_seconds,
-            ),
-            sleep=time.sleep,
-        )
-    except Exception:
-        # A failed preflight must leave the current package untouched.
-        return False
+    return retire_native_resident_for_home(guard_home)
 
 
 _DAEMON_REFRESH_TIMEOUT_SECONDS = 75.0

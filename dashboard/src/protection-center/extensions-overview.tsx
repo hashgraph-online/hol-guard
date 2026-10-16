@@ -4,6 +4,7 @@ import { HiMiniFunnel, HiMiniGlobeAlt } from "react-icons/hi2";
 import {
   catalogRowSecondLine,
   extensionDisplayName,
+  extensionEffectiveState,
   extensionStateLabel,
 } from "../extension-control-center-model";
 import type { CatalogReadModel } from "../extension-catalog-v2";
@@ -20,7 +21,12 @@ import {
   type JoinedDiscoveryCard,
 } from "./extensions-discover-model";
 import { CatalogSlotRow, ExtensionsSpotlight } from "./extensions-spotlight";
-import { CATALOG_SLOT_PRODUCTS, slotStartingPrice, slotState } from "./extensions-spotlight-model";
+import {
+  CATALOG_SLOT_PRODUCTS,
+  slotInventoryLabel,
+  slotStartingPrice,
+  slotState,
+} from "./extensions-spotlight-model";
 import { useExtensionPopularity } from "./use-extension-popularity";
 import { useDiscoveryMeasurement } from "./discovery-measurement";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
@@ -394,12 +400,12 @@ export function ExtensionsOverview(props: {
     );
     return [...featuredVisible, ...rest];
   }, [joinedDiscovery.featured, joinedDiscovery.sponsored, visibleCatalog]);
-  // One ask per surface. The spotlight already offers the empty cell when no
-  // placement is sold, so the catalog row only appears once inventory exists
-  // and a maker can see the format working beside real buyers.
-  const paidPresent = joinedDiscovery.featured.length + joinedDiscovery.sponsored.length > 0;
-  const catalogSlotOpen = paidPresent
-    && !searching
+  // Both surfaces ask, because they sell different things: the shelf cell and
+  // the in-feed listing are separate products with their own availability, and
+  // a maker who scrolls the catalog should never have to scroll back up to
+  // find out the listing is for sale. Each is still gated on its own
+  // authoritative "open".
+  const catalogSlotOpen = !searching
     && !filtering
     && visibleCatalog.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED
     && slotState({ status: discoveryFeed.status, offers: discoveryOffers, products: CATALOG_SLOT_PRODUCTS }) === "open";
@@ -407,7 +413,19 @@ export function ExtensionsOverview(props: {
     () => slotStartingPrice(discoveryOffers, CATALOG_SLOT_PRODUCTS),
     [discoveryOffers],
   );
+  const catalogSlotInventory = useMemo(
+    () => slotInventoryLabel(discoveryOffers, CATALOG_SLOT_PRODUCTS),
+    [discoveryOffers],
+  );
   const catalogSlotIndex = Math.min(6, Math.max(1, orderedCatalog.length - 1));
+  // The shelf states whether each extension is protecting this device right
+  // now; it reads the same effective controls the rows below it read, and it
+  // only ever reports that state - nothing on the shelf changes protection.
+  const effective = props.effective;
+  const isExtensionActive = useCallback(
+    (extension: ExtensionCatalogSummary) => extensionEffectiveState(effective, extension) === "enabled",
+    [effective],
+  );
 
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
@@ -474,6 +492,7 @@ export function ExtensionsOverview(props: {
           status={discoveryFeed.status}
           snapshotId={discoverySnapshotId}
           settled={popularity.settled}
+          isExtensionActive={isExtensionActive}
           onOpenExtension={props.onOpenExtension}
         />
       )}
@@ -576,7 +595,7 @@ export function ExtensionsOverview(props: {
                   if (!catalogSlotOpen || index !== catalogSlotIndex) return row;
                   return (
                     <Fragment key={extension.extension_id}>
-                      <CatalogSlotRow price={catalogSlotPrice} />
+                      <CatalogSlotRow price={catalogSlotPrice} inventory={catalogSlotInventory} />
                       {row}
                     </Fragment>
                   );

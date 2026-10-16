@@ -146,6 +146,24 @@
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
 }
 
+/* The on/off pill reports effective protection state and nothing else; it is
+   a label, never a control. */
+.guard-spotlight-state {
+  flex: none;
+  border-radius: 999px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: rgb(63 65 116 / 0.6);
+  background: rgb(63 65 116 / 0.07);
+}
+
+.guard-spotlight-state-on {
+  color: color-mix(in srgb, var(--brand-blue) 80%, #1b1c33);
+  background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
 .guard-spotlight-skeleton {
   border-color: transparent;
   background: linear-gradient(100deg, rgb(63 65 116 / 0.05) 30%, rgb(63 65 116 / 0.1) 50%, rgb(63 65 116 / 0.05) 70%);

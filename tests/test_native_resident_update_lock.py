@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import native_resident_update_lock as lock_module
-from codex_plugin_scanner.guard.cli import update_commands
+from codex_plugin_scanner.guard.cli import update_commands, update_retirement
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicyState
 from codex_plugin_scanner.guard.native_resident_update_lock import (
     NativeResidentUpdateLock,
@@ -285,9 +285,9 @@ def test_update_retirement_fails_closed_on_unexpected_client_error(
     def raise_retirement_error(**_kwargs: object) -> bool:
         raise RuntimeError("resident client failed")
 
-    monkeypatch.setattr(update_commands, "retire_native_resident_for_update", raise_retirement_error)
-    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
-    monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(update_retirement, "retire_native_resident_for_update", raise_retirement_error)
+    monkeypatch.setattr(update_retirement, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(update_retirement, "_isolated_environment", lambda: {})
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is False
 
 
@@ -302,10 +302,10 @@ def test_update_retirement_retries_a_transient_failure(
         calls.append(float(kwargs["timeout_seconds"]))
         return next(results)
 
-    monkeypatch.setattr(update_commands, "retire_native_resident_for_update", retire)
-    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
-    monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
-    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(update_retirement, "retire_native_resident_for_update", retire)
+    monkeypatch.setattr(update_retirement, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(update_retirement, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(update_retirement.time, "sleep", lambda _seconds: None)
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is True
     assert calls == [6.0, 6.0]
 
@@ -320,10 +320,10 @@ def test_update_retirement_fails_closed_after_bounded_attempts(
         calls.append(kwargs)
         return False
 
-    monkeypatch.setattr(update_commands, "retire_native_resident_for_update", retire)
-    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
-    monkeypatch.setattr(update_commands, "_isolated_environment", lambda: {})
-    monkeypatch.setattr(update_commands.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(update_retirement, "retire_native_resident_for_update", retire)
+    monkeypatch.setattr(update_retirement, "_bundled_runtime_candidate", lambda: tmp_path / "runtime")
+    monkeypatch.setattr(update_retirement, "_isolated_environment", lambda: {})
+    monkeypatch.setattr(update_retirement.time, "sleep", lambda _seconds: None)
     assert update_commands._retire_native_resident_before_update(tmp_path / "guard-home") is False
     assert len(calls) == 3
 

@@ -38,6 +38,14 @@ export interface DiscoveryOffer {
   currency: string | null;
   checkedAt: string | null;
   quoteRequired: true;
+  /**
+   * How much of this product is still for sale, when the server says so.
+   * Both numbers travel together or not at all: a count is only ever shown
+   * because the server sent a consistent pair, never inferred from a
+   * placement list or from availability alone.
+   */
+  openSlots: number | null;
+  totalSlots: number | null;
 }
 
 export interface DiscoverySnapshot {
@@ -69,6 +77,54 @@ export type DiscoveryFeedStatus =
 export interface JoinedDiscoveryCard {
   placement: DiscoveryPlacement;
   catalog: ExtensionCatalogSummary;
+}
+
+function integerOrNull(value: unknown): number | null {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
+/**
+ * Normalizes the offers a snapshot carries. An offer the dashboard cannot read
+ * is dropped rather than rendered half-known, and a slot count survives only
+ * as a complete, self-consistent pair that agrees with the availability it
+ * arrived with - an "open" product with nothing left, or more open than exist,
+ * is a contradiction the dashboard refuses to repeat to a buyer.
+ */
+export function parseDiscoveryOffers(value: unknown): DiscoveryOffer[] {
+  if (!Array.isArray(value)) return [];
+  const offers: DiscoveryOffer[] = [];
+  for (const entry of value) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const candidate = entry as Partial<DiscoveryOffer>;
+    if (candidate.product !== "always" && candidate.product !== "time_slot" && candidate.product !== "sponsored") continue;
+    if (
+      candidate.availability !== "open"
+      && candidate.availability !== "sold_out"
+      && candidate.availability !== "unknown"
+    ) continue;
+    if (candidate.quoteRequired !== true) continue;
+    const open = integerOrNull(candidate.openSlots);
+    const total = integerOrNull(candidate.totalSlots);
+    const paired = open !== null && total !== null
+      && total >= 1
+      && open <= total
+      && candidate.availability !== "unknown"
+      && (candidate.availability === "open" ? open >= 1 : open === 0);
+    offers.push({
+      product: candidate.product,
+      availability: candidate.availability,
+      indicativeAmountCents:
+        typeof candidate.indicativeAmountCents === "number" && Number.isFinite(candidate.indicativeAmountCents)
+          ? candidate.indicativeAmountCents
+          : null,
+      currency: typeof candidate.currency === "string" ? candidate.currency : null,
+      checkedAt: typeof candidate.checkedAt === "string" ? candidate.checkedAt : null,
+      quoteRequired: true,
+      openSlots: paired ? open : null,
+      totalSlots: paired ? total : null,
+    });
+  }
+  return offers;
 }
 
 export function parseDiscoveryProjection(value: unknown): DiscoveryProjection | null {
@@ -103,7 +159,7 @@ export function parseDiscoveryProjection(value: unknown): DiscoveryProjection | 
       generatedAt: String(snapshot.generatedAt ?? ""),
       leaseExpiresAt: String(snapshot.leaseExpiresAt ?? ""),
       placements: snapshot.placements as DiscoveryPlacement[],
-      offers: Array.isArray(snapshot.offers) ? (snapshot.offers as DiscoveryOffer[]) : [],
+      offers: parseDiscoveryOffers(snapshot.offers),
     },
     remainingLeaseMs: record.remainingLeaseMs,
     policyAllowed: record.policyAllowed,
@@ -113,9 +169,18 @@ export function parseDiscoveryProjection(value: unknown): DiscoveryProjection | 
 export function advertiseUrl(
   placement: "extensions_feed" | "extensions_header",
   extensionId?: string,
+  // "claim" is the free path for a maker whose extension is already in the
+  // built-in catalog; it buys nothing and is labeled that way. It travels
+  // under its own key: "intent" already carries the campaign the advertise
+  // page uses to recognize Guard traffic, and overwriting it would strand
+  // every one of these links outside that campaign.
+  action?: "buy" | "claim",
 ): string {
   const url = new URL(GUARD_DISCOVERY_CLOUD_ORIGIN + GUARD_DISCOVERY_ADVERTISE_PATH);
   url.searchParams.set("placement", placement);
+  if (action) {
+    url.searchParams.set("action", action);
+  }
   if (extensionId) {
     // Only an explicitly chosen extension id ever leaves the device.
     url.searchParams.set("extension", extensionId);

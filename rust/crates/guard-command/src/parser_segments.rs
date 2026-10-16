@@ -4,6 +4,24 @@ pub(super) fn split_execution_segments(
     command: &str,
     preserve_unquoted_backslash: bool,
 ) -> Result<Vec<RawSegment>, &'static str> {
+    split_execution_segments_inner(command, preserve_unquoted_backslash, false)
+}
+
+/// Like [`split_execution_segments`], but a background `&` separates commands
+/// the way `;` does. Pipe checks use this so `curl … | sh &` is still the
+/// pipe, not an unparsed background job.
+pub(super) fn split_pipelines_including_background(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
+    split_execution_segments_inner(command, preserve_unquoted_backslash, true)
+}
+
+fn split_execution_segments_inner(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+    allow_background: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
     let chars: Vec<char> = command.chars().collect();
     let mut quote = Quote::None;
     let mut escaped = false;
@@ -83,20 +101,42 @@ pub(super) fn split_execution_segments(
                     continue;
                 }
                 if chars.get(index + 1) != Some(&'&') {
-                    return Err("background_job_not_yet_supported");
+                    if !allow_background {
+                        return Err("background_job_not_yet_supported");
+                    }
+                    push_segment(
+                        &chars,
+                        segment_start,
+                        index,
+                        group_index,
+                        pipeline_index,
+                        &mut segments,
+                    )?;
+                    let rest_blank = chars[index + 1..].iter().all(|value| value.is_whitespace());
+                    if rest_blank {
+                        return if segments.is_empty() {
+                            Err("background_job_not_yet_supported")
+                        } else {
+                            Ok(segments)
+                        };
+                    }
+                    segment_start = index + 1;
+                    group_index += 1;
+                    pipeline_index = 0;
+                } else {
+                    push_segment(
+                        &chars,
+                        segment_start,
+                        index,
+                        group_index,
+                        pipeline_index,
+                        &mut segments,
+                    )?;
+                    index += 1;
+                    segment_start = index + 1;
+                    group_index += 1;
+                    pipeline_index = 0;
                 }
-                push_segment(
-                    &chars,
-                    segment_start,
-                    index,
-                    group_index,
-                    pipeline_index,
-                    &mut segments,
-                )?;
-                index += 1;
-                segment_start = index + 1;
-                group_index += 1;
-                pipeline_index = 0;
             }
             '|' => {
                 let logical_or = chars.get(index + 1) == Some(&'|');

@@ -72,6 +72,11 @@ APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON = "approval_reuse_integrity_failure
 POLICY_DECISION_LOOKUP_FEATURE = "policy-decision-lookup-v1"
 # The runtime saved-decision lookup also answers the hook's ``saved_reuse``.
 RUNTIME_SAVED_REUSE_FEATURE = "runtime-saved-reuse-v1"
+# The resident expands a probe group's direct id into its exact-command and
+# memory-pattern candidates. A request carrying ``probe_groups.memory`` sends
+# the unexpanded group with it, and the probe-groups contract denies unknown
+# fields, so a runtime that does not advertise this must not be sent one.
+POLICY_LOOKUP_MEMORY_FEATURE = "policy-decision-lookup-memory-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
 _DEGRADED_AUTHORITY_REVISION = -1
 
