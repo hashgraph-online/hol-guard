@@ -14,12 +14,15 @@
 //! followed by a literal relative path. The variable only carries the private
 //! path into later programs, which the sandbox already bounds. Its name must
 //! be ordinary, never one that steers loading, startup or lookup, and appear
-//! nowhere else, so no later word expands, rebinds or unsets it.
+//! nowhere else, so no later word expands, rebinds or unsets it. The body of
+//! a quoted heredoc that a line of its own, `cat > PATH <<'EOF'`, only writes
+//! to a file is data the shell never expands, so a mention there is not a use.
 
 use super::super::{lex::identifier, listed, ordinary_name};
 use super::{
     project as with_stand_ins, stand_in, substitution_spans, TEMPORARY_ROOT, TEMPORARY_VALUE,
 };
+use crate::shell_structure::{extract_heredocs, mask_heredoc_bodies, ShellHeredoc, ShellScanState};
 
 /// List operators around a `cd` or assignment that runs as a command of its
 /// own. A line break outside quotes and heredoc bodies ends a command as `;`
@@ -197,12 +200,100 @@ fn assignable(name: &str) -> bool {
 }
 
 /// Whether `text` names `name` exactly once as a whole word, so nothing else
-/// in the command expands, sets, exports or unsets the variable.
+/// in the command expands, sets, exports or unsets the variable. Bodies that
+/// `cat` only writes to a file are not read.
 fn named_once(text: &str, name: &str) -> bool {
-    text.split(|c: char| c != '_' && !c.is_ascii_alphanumeric())
+    written_data_masked(text)
+        .split(|c: char| c != '_' && !c.is_ascii_alphanumeric())
         .filter(|word| *word == name)
         .count()
         == 1
+}
+
+/// `text` with the body of each heredoc that `written_data` accepts blanked.
+/// Unchanged when a `<<` is not a heredoc the shared parser reads, or when the
+/// command could define `cat` as something other than the program.
+fn written_data_masked(text: &str) -> String {
+    let heredocs = extract_heredocs(text);
+    let masked = mask_heredoc_bodies(text, &heredocs);
+    let operators = crate::shell_structure::heredoc_operators(&masked);
+    if operators != heredocs.len() || redefines_cat(&masked) {
+        return text.to_owned();
+    }
+    let chars: Vec<char> = masked.chars().collect();
+    let written: Vec<ShellHeredoc> = heredocs
+        .into_iter()
+        .filter(|heredoc| written_data(&chars, heredoc))
+        .collect();
+    mask_heredoc_bodies(text, &written)
+}
+
+/// Whether `heredoc` has a quoted delimiter, closes, and is the first heredoc
+/// on a top-level line that is exactly `cat > PATH`, `cat >> PATH` or the
+/// same with the path joined to the operator, so its body is data written to
+/// a plain relative or absolute path. `chars` is the command with every
+/// heredoc body blanked.
+fn written_data(chars: &[char], heredoc: &ShellHeredoc) -> bool {
+    if !heredoc.quoted || heredoc.body_end >= chars.len() {
+        return false;
+    }
+    let line_start = chars[..heredoc.operator_start]
+        .iter()
+        .rposition(|&c| c == '\n')
+        .map_or(0, |at| at + 1);
+    let line_end = chars[heredoc.declaration_end..]
+        .iter()
+        .position(|&c| c == '\n')
+        .map_or(chars.len(), |at| heredoc.declaration_end + at);
+    if line_end + 1 != heredoc.body_start || (line_start >= 2 && chars[line_start - 2] == '\\') {
+        return false;
+    }
+    let mut state = ShellScanState::new();
+    let mut index = 0;
+    while index < line_start {
+        index = state.advance(chars, index);
+    }
+    if index != line_start || !state.is_top_level() {
+        return false;
+    }
+    let declaration: String = chars[line_start..heredoc.operator_start]
+        .iter()
+        .chain(&chars[heredoc.declaration_end..line_end])
+        .collect();
+    let words: Vec<&str> = declaration.split_whitespace().collect();
+    match words.as_slice() {
+        ["cat", ">" | ">>", path] => plain_path(path),
+        ["cat", redirect] => redirect
+            .strip_prefix(">>")
+            .or_else(|| redirect.strip_prefix('>'))
+            .is_some_and(plain_path),
+        _ => false,
+    }
+}
+
+/// A path spelled with letters, digits, `.`, `_`, `-` and `/` only, so the
+/// shell neither expands nor splits it, that is no option.
+fn plain_path(path: &str) -> bool {
+    !path.is_empty()
+        && !path.starts_with('-')
+        && path
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '/'))
+}
+
+/// Whether `text` might make `cat` an alias or a function. A `.` stays inside
+/// a word, so a path such as `alias.txt` is a file name rather than `alias`.
+fn redefines_cat(text: &str) -> bool {
+    let words: Vec<&str> = text
+        .split(|c: char| c != '_' && c != '.' && !c.is_ascii_alphanumeric())
+        .collect();
+    words.contains(&"alias")
+        || words.contains(&"function")
+        || text.match_indices("cat").any(|(at, _)| {
+            text[at + 3..]
+                .trim_start_matches([' ', '\t'])
+                .starts_with('(')
+        })
 }
 
 /// Whether `head`, the text before a command, is empty or ends a list item.

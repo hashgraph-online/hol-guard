@@ -75,11 +75,20 @@ impl Fixture {
         }
     }
 
+    /// `guard.db` joined as a path: Windows reads `/` literally after the
+    /// `\\?\` prefix that canonicalizing the temporary home leaves.
+    fn store_path(&self) -> String {
+        std::path::Path::new(&self.home)
+            .join("guard.db")
+            .to_string_lossy()
+            .into_owned()
+    }
+
     fn request(&self, command: &str, action: &str, grant_allowed: bool) -> LocalCliHookRequestV1 {
         LocalCliHookRequestV1 {
             schema: LOCAL_CLI_HOOK_REQUEST_SCHEMA.to_owned(),
             request_id: "hook-test".to_owned(),
-            store_path: format!("{}/guard.db", self.home),
+            store_path: self.store_path(),
             guard_home: self.home.clone(),
             source: "test-source".to_owned(),
             busy_timeout_ms: 5_000,
@@ -170,7 +179,7 @@ impl Fixture {
         let request = GuardStoreRequestV1 {
             schema: GUARD_STORE_REQUEST_SCHEMA.to_owned(),
             request_id: "hook-test".to_owned(),
-            store_path: format!("{}/guard.db", self.home),
+            store_path: self.store_path(),
             guard_home: self.home.clone(),
             method: method.to_owned(),
             source: "test-source".to_owned(),

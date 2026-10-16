@@ -47,6 +47,9 @@ fn input<'a>(vector: &'a Value, environment: &'a BTreeMap<String, String>) -> Re
     }
 }
 
+/// The vectors were recorded where `os.path.expanduser` reads `HOME`; the
+/// Windows expansion from `USERPROFILE` has its own CPython comparison below.
+#[cfg(unix)]
 #[test]
 fn envelope_query_matches_the_daemon() {
     for vector in vectors() {
@@ -119,6 +122,7 @@ fn hint_candidates_match_the_daemon() {
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn the_adapter_answers_a_shell_review() {
     let vector = vectors().into_iter().next().expect("a vector");
@@ -133,6 +137,7 @@ fn the_adapter_answers_a_shell_review() {
 }
 
 /// Which stage answers `None` for the first vector after `edit`.
+#[cfg(unix)]
 #[derive(Debug, PartialEq)]
 enum Deferred {
     Query,
@@ -141,6 +146,7 @@ enum Deferred {
     No,
 }
 
+#[cfg(unix)]
 fn deferred_at(edit: impl Fn(&mut Value, &mut BTreeMap<String, String>)) -> Deferred {
     let mut vector = vectors().into_iter().next().expect("a vector");
     let mut environment = environment(&vector);
@@ -160,6 +166,7 @@ fn deferred_at(edit: impl Fn(&mut Value, &mut BTreeMap<String, String>)) -> Defe
     }
 }
 
+#[cfg(unix)]
 #[test]
 fn unanswerable_shapes_defer() {
     assert_eq!(deferred_at(|_, _| {}), Deferred::No);

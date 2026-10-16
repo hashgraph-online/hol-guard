@@ -1,5 +1,7 @@
+#[cfg(unix)]
 use super::super::tests::{binding, bound_query, local_store, vectors, workspace};
 use super::*;
+#[cfg(unix)]
 use rusqlite::Connection;
 
 /// `_native_review_launch_target` (`hook_native_review_approval.py`) on each
@@ -102,12 +104,15 @@ fn store_files_stay_owner_only() {
     assert_eq!(mode, 0o600);
 }
 
+/// The bound `Read` vector needs a POSIX workspace, as the lane does.
+#[cfg(unix)]
 const CONSUME_VECTORS: &str =
     include_str!("../testdata/guard_store/native_review_consume_vectors.json");
 
 /// The inbox tables the daemon spends an approve-once from, the storage gate
 /// it creates, and a request resolved as "allow once" for the bound `Read`
 /// vector just now.
+#[cfg(unix)]
 fn seed_approval(path: &std::path::Path, connection: &Connection, identity: &str, workspace: &str) {
     let vectors: Value = serde_json::from_str(CONSUME_VECTORS).unwrap();
     connection
@@ -142,6 +147,7 @@ fn seed_approval(path: &std::path::Path, connection: &Connection, identity: &str
     std::fs::write(path.parent().unwrap().join("storage-access.lock"), b"").unwrap();
 }
 
+#[cfg(unix)]
 fn consume_with(
     tag: &str,
     seed: bool,
@@ -186,6 +192,7 @@ fn consume_with(
     )
 }
 
+#[cfg(unix)]
 #[test]
 fn an_approve_once_answers_one_retry() {
     let (first, second) = consume_with("consume-once", true, false);
@@ -201,6 +208,7 @@ fn an_approve_once_answers_one_retry() {
     assert!(matches!(second, Err(HookDirectDefer::ReviewQueue)));
 }
 
+#[cfg(unix)]
 #[test]
 fn a_review_without_an_approval_defers() {
     let (first, second) = consume_with("consume-none", false, false);
@@ -208,6 +216,7 @@ fn a_review_without_an_approval_defers() {
     assert!(matches!(second, Err(HookDirectDefer::SavedDecision)));
 }
 
+#[cfg(unix)]
 #[test]
 fn a_keep_blocked_answers_repeated_retries_without_queueing() {
     let (first, second) = consume_with("consume-block", true, true);

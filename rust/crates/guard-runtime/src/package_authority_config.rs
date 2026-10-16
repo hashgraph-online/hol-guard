@@ -140,6 +140,11 @@ fn reject_symlinked_ancestors(workspace: &Path) -> EvalResult<()> {
     let mut walked = PathBuf::new();
     for component in workspace.components() {
         walked.push(component);
+        // A bare Windows drive (`C:`, `\\?\C:`) names no directory entry: it is
+        // the drive's current directory, or no path at all once verbatim.
+        if matches!(component, Component::Prefix(_)) {
+            continue;
+        }
         match fs::symlink_metadata(&walked) {
             Ok(metadata) if metadata.file_type().is_symlink() => {
                 return Err(config_error("config_file_unavailable_or_changed"));

@@ -513,7 +513,8 @@ mod tests {
         assert_ne!(first, stdin_digest(command, &directory));
         let absolute = format!(
             "kubectl exec -i api-0 -- node - < {}",
-            script.to_string_lossy()
+            // The shell reads `\` as an escape; `C:/...` is still absolute.
+            script.to_string_lossy().replace('\\', "/")
         );
         assert!(payload_reuse(&absolute, None).is_some());
         assert!(payload_reuse(

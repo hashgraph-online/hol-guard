@@ -264,3 +264,67 @@ fn heredocs_and_continued_lines_keep_the_directory_opaque() {
         assert_eq!(project(&command), None, "{command:?}");
     }
 }
+
+/// Files an agent wrote before its smoke test: documentation and a program
+/// that both name the variable the test then sets.
+const WRITTEN: &str = "cat > README.md <<'EOF'\nSet `TODO_FILE` to choose the store.\nEOF\ncat >src/cli.js <<'EOF'\nconst file = process.env.TODO_FILE;\nEOF\ncat <<\"EOF\" >> notes/todo.txt\nTODO_FILE\nEOF";
+
+#[test]
+fn a_path_named_alias_or_a_quoted_operator_is_still_written_data() {
+    let t = TEMPORARY_VALUE;
+    let tail = "export TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list";
+    for prefix in [
+        "cat > alias.txt <<'EOF'\nTODO_FILE\nEOF\n",
+        "cat > function.txt <<'EOF'\nTODO_FILE\nEOF\n",
+        "echo '<<'\ncat > notes/todo.txt <<'EOF'\nTODO_FILE\nEOF\n",
+    ] {
+        let command = format!("{prefix}{tail}");
+        let expected = format!("{prefix}export TODO_FILE={t}/t.json; node src/cli.js list");
+        assert_eq!(
+            project(&command).as_deref(),
+            Some(expected.as_str()),
+            "{command:?}"
+        );
+    }
+}
+
+#[test]
+fn a_quoted_body_cat_writes_to_a_file_is_not_a_use() {
+    let t = TEMPORARY_VALUE;
+    let command = format!("{WRITTEN}\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list");
+    let expected = format!("{WRITTEN}\nexport TODO_FILE={t}/t.json; node src/cli.js list");
+    assert_eq!(project(&command).as_deref(), Some(expected.as_str()));
+    assert!(private_assignment(
+        &format!("export TODO_FILE={t}/t.json"),
+        &command
+    ));
+}
+
+#[test]
+fn a_body_the_shell_expands_runs_or_redirects_elsewhere_stays_a_use() {
+    let tail = "\nexport TODO_FILE=$(mktemp -d)/t.json; node src/cli.js list";
+    for body in [
+        // The delimiter is unquoted, so the shell expands the body.
+        "cat > f <<EOF\n$TODO_FILE\nEOF",
+        // The body goes to a program, or the line runs one after `cat`.
+        "cat <<'EOF' | sh\nrm -rf \"$TODO_FILE\"\nEOF",
+        "sh <<'EOF'\nrm -rf \"$TODO_FILE\"\nEOF",
+        "cat > f <<'EOF' && unset TODO_FILE\nTODO_FILE\nEOF",
+        "tee f <<'EOF'\nTODO_FILE\nEOF",
+        // The target is not a plain path.
+        "cat > \"$TODO_FILE\" <<'EOF'\nx\nEOF",
+        "cat > f$TODO_FILE <<'EOF'\nx\nEOF",
+        // The line continues another command, or sits inside quotes.
+        "echo \\\ncat > f <<'EOF'\nTODO_FILE\nEOF",
+        "echo \"\ncat > f <<'EOF'\nTODO_FILE\nEOF\n\"",
+        // `cat` may not be the program.
+        "cat() { sh; }\ncat > f <<'EOF'\nTODO_FILE\nEOF",
+        "alias cat=sh\ncat > f <<'EOF'\nTODO_FILE\nEOF",
+        // A quote left open at a newline makes the next line's `<<` a
+        // different operator than a scan that starts fresh on that line.
+        "export X=$(mktemp -d)\necho \"x\n<<'A'\"\ncat <<B\n$(evil)\nA\nB",
+    ] {
+        let command = format!("{body}{tail}");
+        assert_eq!(project(&command), None, "{command:?}");
+    }
+}
