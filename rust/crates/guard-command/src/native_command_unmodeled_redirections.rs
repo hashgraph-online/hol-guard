@@ -56,7 +56,7 @@ pub(super) fn without_redirections(shell: &str) -> String {
                 Some(open) if next == open => target_quote = None,
                 Some(_) => {}
                 None if matches!(next, '\'' | '"') => target_quote = Some(next),
-                None if next.is_whitespace() || ";&|()<>".contains(next) => break,
+                None if next.is_whitespace() || ";&|()<>`".contains(next) => break,
                 None => {}
             }
             end += 1;

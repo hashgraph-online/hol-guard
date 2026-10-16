@@ -191,6 +191,8 @@ fn a_loopback_base_bound_once_may_be_fetched() {
     for source in [
         // A binding that can change, or one read anywhere but `fetch`.
         TODO_SMOKE.replace("const base=", "let base="),
+        // A declaration's parameter is not a call of the global fetch.
+        "const base='http://localhost:3000'; function fetch(base){}".to_owned(),
         TODO_SMOKE.replace(
             "const page=await fetch(base)",
             "const url=base; const page=await fetch(url)",

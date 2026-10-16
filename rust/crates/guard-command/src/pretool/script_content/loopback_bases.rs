@@ -26,6 +26,18 @@ static FETCH_CALL: LazyLock<Regex> =
 pub(super) static FETCH_BASE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^fetch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:[),]|\+\s*["'`][/?#])"#).unwrap()
 });
+/// `fetch(base)` calls the global. `function fetch(base)` declares a
+/// parameter and does not.
+fn calls_fetch(prefix: &str) -> bool {
+    if !FETCH_CALL.is_match(prefix) {
+        return false;
+    }
+    let head = prefix.trim_end();
+    let head =
+        head.trim_end_matches(|character: char| character == '(' || character.is_whitespace());
+    !head.ends_with("function fetch")
+}
+
 /// Names `const`-bound to a loopback URL with a port ([`LOOPBACK_BASE`]) and
 /// read nowhere else but as the first argument of `fetch`, so no other code
 /// can rebind, shadow or pass them on. The URL scan grants the port.
@@ -43,7 +55,7 @@ pub(super) fn loopback_bases<'a>(code: &'a str, masked: &str) -> BTreeSet<&'a st
             .get(name.start())
             .is_some_and(|byte| *byte != b' ')
             && word.find_iter(masked).all(|found| {
-                found.start() == name.start() || FETCH_CALL.is_match(&masked[..found.start()])
+                found.start() == name.start() || calls_fetch(&masked[..found.start()])
             });
         if fetched_only {
             bases.insert(name.as_str());

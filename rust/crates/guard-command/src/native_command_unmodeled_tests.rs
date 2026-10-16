@@ -505,6 +505,11 @@ fn a_looked_up_program_in_command_position_keeps_its_owner() {
 }
 
 #[test]
+fn a_backtick_in_a_redirect_target_does_not_hide_the_interpreter() {
+    assert!(super::unread_file_interpreter("echo hi >`python3 evil.py`"));
+}
+
+#[test]
 fn a_redirect_before_an_awk_program_does_not_hide_it() {
     let controls = controls(serde_json::json!([]), false);
     let command =
