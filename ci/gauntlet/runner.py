@@ -59,6 +59,7 @@ from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
+from .script_cases import stage_script_cases
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
@@ -88,6 +89,7 @@ def run_case(
         scenario_id=scenario.id,
     )
     stage_supply_chain(fixture.workspace, scenario.id)
+    stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"

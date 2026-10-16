@@ -24,6 +24,7 @@ from .review_fixtures import (
     worktree_checks,
     write_gh_stub,
 )
+from .script_cases import script_case_checks
 from .supply_chain import supply_chain_checks
 
 EXECUTED_FLAG = "output/extension-executed.flag"
@@ -310,6 +311,7 @@ def filesystem_checks(fixture: Fixture, oracle: str, scenario_id: str) -> dict[s
         )
     checks.update(github_checks(fixture.workspace, scenario_id))
     checks.update(supply_chain_checks(fixture.workspace, scenario_id))
+    checks.update(script_case_checks(fixture.home, fixture.canary, scenario_id))
     checks.update(long_lived_clone_checks(fixture.workspace, scenario_id))
     checks.update(worktree_checks(fixture.home, fixture.workspace, scenario_id, SETTINGS_BEFORE, SETTINGS_AFTER))
     if scenario_id in BUSINESS_CLI_CASES:
