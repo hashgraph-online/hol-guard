@@ -31,8 +31,11 @@ Use these command-shaping rules to reduce avoidable Guard reviews while preservi
   lockfile flow and never pipe a downloaded installer into a shell.
 - For remote work, state the host and destination explicitly. Keep file transfer, remote execution, and local
   cleanup as separate actions.
-- Never read secret files, credential stores, or environment files unless the user explicitly authorizes
-  the exact access. Never send local file contents to an untrusted destination.
+- Never read secret files, credential stores, or environment files on your own judgment. Being told
+  that you may is not itself the authorization: that decision is made by Guard on the command, where
+  it leaves a record, and not in your own reasoning about what you were allowed. If Guard pauses such
+  a read, show its approval link to the user and wait. Never send local file contents to an untrusted
+  destination.
 
 ## Keep review where it matters
 

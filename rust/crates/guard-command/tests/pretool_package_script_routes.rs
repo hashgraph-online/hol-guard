@@ -26,7 +26,13 @@ fn root() -> PathBuf {
         std::process::id()
     ));
     std::fs::create_dir_all(&root).unwrap();
-    root.canonicalize().unwrap()
+    let root = root.canonicalize().unwrap();
+    let home = root.join("home");
+    std::fs::create_dir_all(&home).unwrap();
+    HOME.with(|declared| {
+        *declared.borrow_mut() = Some(home.to_str().unwrap().to_owned());
+    });
+    root
 }
 
 /// A repository with `scripts` as its manifest scripts and the given
@@ -45,14 +51,27 @@ fn project(root: &Path, name: &str, scripts: serde_json::Value, entries: &[&str]
     project
 }
 
+thread_local! {
+    /// macOS keeps the temporary directory under `/private/var`, a screened
+    /// system root these fixtures only leave through the private-temporary
+    /// workspace proof, which reads the declared home to learn whose temporary
+    /// directory it is. A home that does not exist has no owner, so every
+    /// absolute operand under the fixture root would stay unproved there while
+    /// the Linux `/tmp` root proves it without the home. The proof reads only
+    /// the home's owner, so the home sits inside the fixture root this test
+    /// built and goes away with it.
+    static HOME: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
 fn classify(cwd: &Path, harness: &str, command: &str) -> PreToolResultV1 {
+    let home = HOME.with(|declared| declared.borrow().clone());
     evaluate_pre_tool_envelope_with_context(
         harness,
         "PreToolUse",
         &json!({"tool_name": "bash", "tool_input": {"command": command}}),
         None,
         None,
-        Some("/Users/nobody"),
+        home.as_deref(),
         cwd.to_str(),
     )
 }

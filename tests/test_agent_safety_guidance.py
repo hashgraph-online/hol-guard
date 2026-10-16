@@ -281,11 +281,20 @@ _PREVIOUS_SAFETY_BODY = (Path(__file__).parent / "fixtures" / "agent-safety-guid
 )
 
 
+_SECRET_CARVEOUT_SAFETY_BODY = (
+    Path(__file__).parent / "fixtures" / "agent-safety-guidance-secret-carveout.md"
+).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     "legacy",
     [
         pytest.param(_PREVIOUS_SAFETY_BODY, id="unprefixed"),
         pytest.param(f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_PREVIOUS_SAFETY_BODY}", id="v2"),
+        pytest.param(
+            f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_SECRET_CARVEOUT_SAFETY_BODY}",
+            id="secret-carveout",
+        ),
     ],
 )
 def test_install_migrates_known_previous_safety_document(tmp_path: Path, legacy: str) -> None:
@@ -301,6 +310,28 @@ def test_install_migrates_known_previous_safety_document(tmp_path: Path, legacy:
     assert result["changed"] is True
     assert safety_path.read_text(encoding="utf-8") == current
     assert "Never approve, deny, or resolve your own Guard approval requests." in current
+
+
+def test_safety_document_leaves_secret_reads_to_guard(tmp_path: Path) -> None:
+    """A Windows tester watched Codex read a `.env` and cite this document for it.
+
+    The old wording excepted access "the user explicitly authorizes", which the
+    agent is in no position to establish: it decided it had been authorized and
+    read the file. Nothing here may give an agent that call to make.
+    """
+
+    home_dir = tmp_path / "home"
+    _ = install_agent_safety_guidance(home_dir)
+    safety = (home_dir / ".hol-support" / "SAFETY.md").read_text(encoding="utf-8")
+
+    assert (
+        "Never read secret files, credential stores, or environment files on your own judgment."
+        in safety
+    )
+    assert "unless the user explicitly authorizes" not in safety
+    # The bullet must not end on an imperative to go ahead: an agent weighing
+    # two sentences against each other takes the concrete one.
+    assert "Run the read" not in safety
 
 
 def test_safety_document_forbids_self_approval(tmp_path: Path) -> None:
