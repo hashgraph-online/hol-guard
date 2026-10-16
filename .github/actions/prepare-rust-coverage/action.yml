@@ -2,7 +2,7 @@ name: Prepare instrumented Rust coverage partition
 description: Run one complete package group with checked codegen and fresh LLVM profiles.
 inputs:
   partition:
-    description: One of core, command or runtime.
+    description: One of core, command, runtime-1 or runtime-2.
     required: true
 runs:
   using: composite
@@ -17,14 +17,38 @@ runs:
       shell: bash
       run: bash scripts/ci/setup_sonar_rust.sh
     - name: Cache Rust analysis dependencies
+      id: coverage-cache
       uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
       with:
         workspaces: rust
         # Keep group dependency sets separate so concurrent partial writers
         # cannot replace another group's cache.
-        shared-key: sonar-${{ inputs.partition }}-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
-        cache-on-failure: true
+        # This version is populated only after successful coverage generation,
+        # so failed first builds cannot leave immutable tools-only archives.
+        shared-key: sonar-v2-${{ inputs.partition }}-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
+        cache-on-failure: false
         save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    - name: Check for restored instrumented dependencies
+      id: restored-dependencies
+      shell: bash
+      # Exact and partial archives can contain only tools. Never unpack an older
+      # archive over real restored instrumented dependencies.
+      run: |
+        restored=false
+        target=rust/target/llvm-cov-target
+        if [ -d "$target" ] && [ -n "$(find "$target" -type f \( -name '*.rlib' -o -name '*.rmeta' \) -print -quit)" ]; then
+          restored=true
+        fi
+        echo "restored=$restored" >> "$GITHUB_OUTPUT"
+    - name: Seed instrumented dependencies from the compatible workspace cache
+      if: steps.restored-dependencies.outputs.restored != 'true'
+      uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+      with:
+        workspaces: rust
+        # Same compiler recipe and archive path set as the previous producer.
+        # This fallback is a reader; only the partition cache above may save.
+        shared-key: sonar-${{ hashFiles('scripts/ci/sonar_rust_profile.sh', 'scripts/ci/rust_test_compiler.sh', 'rust/Cargo.toml') }}
+        save-if: 'false'
     - uses: ./.github/actions/setup-bubblewrap
     - name: Provision the checked test linker
       shell: bash

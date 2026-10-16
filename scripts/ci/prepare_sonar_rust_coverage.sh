@@ -8,11 +8,15 @@ toolchain="$(python -c 'import tomllib; print(tomllib.load(open("rust-toolchain.
 coverage_version="0.6.21"
 source "$repo_root/scripts/ci/sonar_rust_profile.sh"
 partition="${1:-all}"
+test_options=(--profile ci --test-threads 4 --retries 0 --no-fail-fast --no-report)
 case "$partition" in
     all) packages=(--workspace) ;;
     core) packages=(--workspace --exclude guard-command --exclude hol-guard-runtime) ;;
     command) packages=(--package guard-command) ;;
-    runtime) packages=(--package hol-guard-runtime) ;;
+    runtime-1|runtime-2)
+        packages=(--package hol-guard-runtime)
+        test_options+=(--partition "hash:${partition#runtime-}/2")
+        ;;
     *) echo "Unknown Rust coverage partition" >&2; exit 64 ;;
 esac
 # LLVM locks and merges concurrent processes into bounded per-binary pools.
@@ -33,7 +37,7 @@ mkdir -p "$(dirname "$report")"
 rm -f "$report"
 cargo +"$toolchain" llvm-cov clean --workspace
 PATH="$nextest_bin:$PATH" cargo +"$toolchain" llvm-cov nextest --locked "${packages[@]}" --all-targets \
-    --profile ci --test-threads 4 --retries 0 --no-fail-fast --no-report
+    "${test_options[@]}"
 # Include workspace dependency coverage from each group's tests, not just the
 # selected package: runtime tests also exercise command and core libraries.
 cargo +"$toolchain" llvm-cov report --locked --lcov --output-path "$report"

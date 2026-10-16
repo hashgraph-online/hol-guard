@@ -14,7 +14,7 @@ from pathlib import Path
 from scripts.ci import select_pytest_coverage as provenance
 from scripts.ci import wait_for_pytest_shards as api
 
-PARTITIONS = ("core", "command", "runtime")
+PARTITIONS = ("core", "command", "runtime-1", "runtime-2")
 SCHEMA = "hol-guard.rust-coverage.v1"
 REPORT = "rust-lcov.info"
 

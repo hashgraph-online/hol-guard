@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 
 from scripts.ci import rust_coverage_reports as reports
 
@@ -72,8 +73,8 @@ def test_selection_binds_every_current_or_proven_inherited_execution(attempt):
     result = reports.select("example/repo", RUN_ID, attempt, fetch=fetch)
     assert result["source_sha"] == SOURCE
     assert [part["partition"] for part in result["partitions"]] == list(reports.PARTITIONS)
-    assert [part["attempt"] for part in result["partitions"]] == [1, 1, 1]
-    assert [part["artifact_id"] for part in result["partitions"]] == [20, 21, 22]
+    assert [part["attempt"] for part in result["partitions"]] == [1] * len(reports.PARTITIONS)
+    assert [part["artifact_id"] for part in result["partitions"]] == list(range(20, 20 + len(reports.PARTITIONS)))
 
 
 def test_selector_only_retries_transient_inventory_not_tests():
@@ -88,17 +89,24 @@ def test_selector_only_retries_transient_inventory_not_tests():
         return fetch(path, timeout)
 
     result = reports.select_with_retries("example/repo", RUN_ID, 1, fetch=eventual, sleep=sleeps.append)
-    assert len(result["partitions"]) == 3
+    assert len(result["partitions"]) == len(reports.PARTITIONS)
     assert sleeps == [1]
 
 
-def test_failed_latest_producer_is_not_retried_or_replaced_by_earlier_success():
+@pytest.mark.parametrize("partition", reports.PARTITIONS)
+def test_failed_latest_producer_is_not_retried_or_replaced_by_earlier_success(partition):
     _, jobs, _, fetch = _api_fixture(2)
-    jobs[0]["conclusion"] = "failure"
+    next(job for job in jobs if job["name"] == f"Rust coverage ({partition})")["conclusion"] = "failure"
     with pytest.raises(ValueError, match="did not succeed"):
         reports.select_with_retries(
             "example/repo", RUN_ID, 2, fetch=fetch, sleep=lambda _: pytest.fail("Failed tests were retried")
         )
+
+
+def test_workflow_and_report_selector_require_both_runtime_halves():
+    workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / ".github/workflows/ci.yml").read_text())
+    matrix = workflow["jobs"]["sonar-rust-coverage"]["strategy"]["matrix"]["partition"]
+    assert tuple(matrix) == reports.PARTITIONS == ("core", "command", "runtime-1", "runtime-2")
 
 
 @pytest.mark.parametrize(
@@ -200,7 +208,7 @@ def test_merge_preserves_standard_lcov_branch_processing_and_propagates_failure(
 
     def fail(arguments, *, check):
         assert arguments[0:2] == ["lcov", "--branch-coverage"]
-        assert arguments.count("--add-tracefile") == 3
+        assert arguments.count("--add-tracefile") == len(reports.PARTITIONS)
         assert check is True
         assert not output.exists()
         raise subprocess.CalledProcessError(3, arguments)
@@ -215,4 +223,15 @@ def test_real_lcov_merges_line_function_and_branch_counters_losslessly(downloads
     selection, directory, output = downloads
     reports.merge(selection, directory, output)
     lines = set(output.read_text().splitlines())
-    assert {"DA:1,6", "FNDA:6,f", "BRDA:1,0,0,6", "LF:1", "LH:1", "FNF:1", "FNH:1", "BRF:1", "BRH:1"} <= lines
+    total = sum(range(1, len(reports.PARTITIONS) + 1))
+    assert {
+        f"DA:1,{total}",
+        f"FNDA:{total},f",
+        f"BRDA:1,0,0,{total}",
+        "LF:1",
+        "LH:1",
+        "FNF:1",
+        "FNH:1",
+        "BRF:1",
+        "BRH:1",
+    } <= lines
