@@ -184,12 +184,12 @@ jobs:
           cache-fallback-key: ${{ matrix.check != 'clippy' && 'ci-workspace-test' || '' }}
           components: clippy
       - name: Install content-addressed compiler cache
-        if: matrix.check != 'clippy'
+        if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.18.0
       - name: Route workspace crates through the compiler cache
-        if: matrix.check != 'clippy'
+        if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         # rust-cache restores third-party crates only; fresh checkout mtimes make
         # every workspace crate stale. sccache keys on content, so crates a PR did
         # not touch are restored instead of recompiled.
@@ -209,7 +209,7 @@ jobs:
         env:
           SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
       - name: Provision the Linux test linker
-        if: matrix.check != 'clippy'
+        if: matrix.check != 'clippy' && steps.runtime-archive.outputs.cache-hit != 'true'
         # The checked test wrapper links with lld. Reuse the runner's linker
         # when present instead of refreshing apt for an installed tool.
         run: |

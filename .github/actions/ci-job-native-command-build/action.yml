@@ -10,7 +10,7 @@ runs:
       id: evaluator-platform
       shell: bash
       run: |
-        echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:?}" >> "$GITHUB_OUTPUT"
         python3 -m scripts.ci.native_cache_environment >> "$GITHUB_OUTPUT"
     - name: Restore exact native command evaluators
       id: evaluator-cache

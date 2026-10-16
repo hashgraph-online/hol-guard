@@ -17,10 +17,10 @@ runs:
       id: runtime-platform
       shell: pwsh
       run: |
-        if (-not $env:ImageOS -or -not $env:ImageVersion) {
+        if (-not $env:ImageOS) {
           throw "Windows runner image identity is required for native cache reuse"
         }
-        "image=$($env:ImageOS)-$($env:ImageVersion)" >> $env:GITHUB_OUTPUT
+        "image=$($env:ImageOS)" >> $env:GITHUB_OUTPUT
         python -m scripts.ci.native_cache_environment >> $env:GITHUB_OUTPUT
         if ($LASTEXITCODE -ne 0) {
           throw "Windows compiler environment fingerprint failed"

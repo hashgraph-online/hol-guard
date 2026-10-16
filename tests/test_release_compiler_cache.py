@@ -83,12 +83,11 @@ def test_release_compilation_is_content_addressed_and_feature_unified():
         assert steps.index(installer) < steps.index(step)
         assert step["env"]["SCCACHE_GHA_ENABLED"] == "on"
         assert step["env"]["SCCACHE_IGNORE_SERVER_IO_ERROR"] == "1"
-    (prepare_steps, prepare), _ = _release_compile_steps()
-    # Workspace-only wrapping keeps third-party crates in rust-cache and sccache entries small.
-    assert prepare["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
-    assert "RUSTC_WRAPPER" not in prepare["env"]
+        assert step["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
+        assert "RUSTC_WRAPPER" not in step["env"]
+    (prepare_steps, prepare), (publish_steps, _) = _release_compile_steps()
     wheel_steps = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]["build-native-guard-wheels"]["steps"]
-    for steps in (prepare_steps, wheel_steps):
+    for steps in (prepare_steps, publish_steps, wheel_steps):
         cache = next(item for item in steps if "rust-cache@" in item.get("uses", ""))
         # The prepare workflow adds "-fast" only for alpha fast-codegen builds; wheel jobs and
         # every stable build keep the shared fat-profile key.

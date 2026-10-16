@@ -13,7 +13,7 @@ runs:
       id: runtime-platform
       shell: bash
       run: |
-        echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+        echo "image=${ImageOS:?}" >> "$GITHUB_OUTPUT"
         python -m scripts.ci.native_cache_environment >> "$GITHUB_OUTPUT"
     - name: Restore the exact macOS native runtime
       id: runtime-cache

@@ -7,7 +7,13 @@ from pathlib import Path
 
 import yaml
 
-from scripts.ci.prune_superseded_caches import cache_family, idle_compiler_entries, main, superseded
+from scripts.ci.prune_superseded_caches import (
+    cache_family,
+    idle_compiler_entries,
+    main,
+    overlay_status_entries,
+    superseded,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -27,6 +33,23 @@ def test_only_known_families_are_prunable() -> None:
     assert cache_family("setup-uv-2-x86_64-unknown-linux-gnu-ubuntu-abc") is None
     assert cache_family("v0-rust-") is None
     assert cache_family("codeql-overlay-base-database-1-a8-python-2.27.2-not-a-commit") is None
+    assert cache_family(f"macos-hol-guard-runtime-v2-ARM64-macos26-{'a' * 64}-lto-false-cgu-16-{'b' * 64}") == (
+        f"macos-hol-guard-runtime-v2-ARM64-macos26-{'a' * 64}-lto-false-cgu-16"
+    )
+    assert cache_family(f"shipped-runtime-v2-Linux-X64-ubuntu24-20261012.334.1-{'a' * 64}-{'b' * 64}") == (
+        f"shipped-runtime-v2-Linux-X64-ubuntu24-20261012.334.1-{'a' * 64}"
+    )
+
+
+def test_overlay_status_entries_selects_only_main_status_flags() -> None:
+    base_key = f"codeql-overlay-base-database-1-a8-python-2.27.2-{'b' * 40}-1-1"
+    entries = [
+        _entry(1, "codeql-overlay-status-python-2.27.2-runner-140GB", "2026-10-15T18:18:45Z"),
+        _entry(2, "codeql-overlay-status-javascript-2.27.2-runner-140GB", "2026-10-15T18:18:45Z"),
+        _entry(3, "codeql-overlay-status-python-2.27.2-runner-140GB", "2026-10-15T18:18:45Z", "refs/pull/1/merge"),
+        _entry(4, base_key, "2026-10-15T18:18:45Z"),
+    ]
+    assert overlay_status_entries(entries) == [1, 2]
 
 
 def test_keeps_newest_entry_per_family_on_main() -> None:

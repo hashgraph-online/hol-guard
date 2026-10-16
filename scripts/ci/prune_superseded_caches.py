@@ -35,7 +35,10 @@ from typing import Any
 
 MAIN_REF = "refs/heads/main"
 CODEQL_KEY = re.compile(r"^(codeql-overlay-base-database-.+)-[0-9a-f]{40}-[0-9]+-[0-9]+$")
-RUNTIME_ARCHIVE_KEY = re.compile(r"^(runtime-test-archive-v[12]-.+)-[0-9a-f]{64}$")
+CODEQL_STATUS_PREFIX = "codeql-overlay-status-"
+RUNTIME_ARCHIVE_KEY = re.compile(
+    r"^((?:runtime-test-archive-v[12]|linux-native-evaluators-v1|macos-hol-guard-runtime-v2|windows-hol-guard-runtime-v2|shipped-runtime-v[12])-.+)-[0-9a-f]{64}$"
+)
 RUST_PREFIXES = ("v0-rust-", "release-native-")
 SCCACHE_PREFIX = "sccache/"
 IDLE_HOURS = 2.0
@@ -108,6 +111,19 @@ def idle_compiler_entries(entries: Iterable[Mapping[str, Any]], idle_hours: floa
     return sorted(idle)
 
 
+def overlay_status_entries(entries: Iterable[Mapping[str, Any]]) -> list[int]:
+    """Return ids of main-branch CodeQL overlay status entries that disable incremental analysis."""
+    selected: list[int] = []
+    for entry in entries:
+        key, ref, entry_id = entry.get("key"), entry.get("ref"), entry.get("id")
+        if ref != MAIN_REF or not isinstance(key, str) or not key.startswith(CODEQL_STATUS_PREFIX):
+            continue
+        if type(entry_id) is not int or entry_id <= 0:
+            continue
+        selected.append(entry_id)
+    return sorted(selected)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     _ = parser.add_argument("caches", type=Path, help="JSON from `gh cache list --json id,key,ref,createdAt`")
@@ -126,7 +142,9 @@ def main(argv: list[str] | None = None) -> int:
         print("cache listing must be a JSON array", file=sys.stderr)
         return 2
     objects = [entry for entry in entries if isinstance(entry, dict)]
-    for entry_id in sorted({*superseded(objects), *idle_compiler_entries(objects, args.idle_hours)}):
+    for entry_id in sorted(
+        {*superseded(objects), *idle_compiler_entries(objects, args.idle_hours), *overlay_status_entries(objects)}
+    ):
         print(entry_id)
     return 0
 
