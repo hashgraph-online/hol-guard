@@ -25,7 +25,9 @@ jobs:
   staged-evaluator-wheel:
     name: Staged evaluator wheel (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 5
+    # A slow macOS compiler build has used almost all of five minutes and was
+    # cancelled during verification. Fifteen still bounds the job.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:

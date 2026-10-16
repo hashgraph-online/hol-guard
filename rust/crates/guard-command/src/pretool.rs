@@ -780,11 +780,7 @@ fn evaluate_single_command(
     if let Some((reason_code, reason)) = pipe_attacks::pipe_attack(&model) {
         return Ok(pretool_decision(model, "block", reason_code, reason));
     }
-    if model
-        .wrapper_chain
-        .iter()
-        .any(|wrapper| wrapper != "timeout")
-    {
+    if !model.wrapper_chain.is_empty() {
         return Ok(pretool_decision(
             model,
             "require-reapproval",

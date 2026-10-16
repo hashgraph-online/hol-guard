@@ -10,12 +10,13 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 import sys
 import time
 from pathlib import Path
 
 import pytest
+
+from tests.support.bounded_subprocess import run_bounded
 
 _STDIN = b""
 _FAKE_PROXY = """import json, os, sys
@@ -105,14 +106,12 @@ def test_a_down_daemon_keeps_the_session_native_and_starts_one_ensure(tmp_path: 
         sys.executable if os.name == "nt" else "/bin/cat",
     ]
     env = {**_environment(tmp_path), **fake_env}
-    completed = subprocess.run(
+    completed = run_bounded(
         [str(runtime), "mcp-relay", str(fake), *proxy_args],
         input=_STDIN,
         env=env,
         cwd=workspace,
-        capture_output=True,
         timeout=60,
-        check=False,
     )
     stderr = completed.stderr.decode("utf-8", errors="replace")
     assert "hol-guard mcp-relay: lane not ready: mcp_relay_daemon_unreachable" in stderr

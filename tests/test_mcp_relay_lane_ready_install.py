@@ -23,6 +23,8 @@ from typing import TypeVar, cast
 
 import pytest
 
+from tests.support.bounded_subprocess import run_bounded
+
 try:
     import tomllib
 except ModuleNotFoundError:
@@ -140,14 +142,12 @@ class _Install:
 
     def guard(self, *args: str, extra: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
         places = ("--home", str(self.home), "--guard-home", str(self.guard_home))
-        return subprocess.run(
+        return run_bounded(
             [sys.executable, "-c", _CLI, str(self.home), "guard", *args, *places],
             env={**self.env, **(extra or {})},
             cwd=self.workspace,
-            capture_output=True,
-            text=True,
             timeout=180,
-            check=False,
+            text=True,
         )
 
     def _relay(self) -> tuple[list[str], dict[str, str]]:
@@ -161,14 +161,12 @@ class _Install:
         """The start line of one relay session that reads no input."""
 
         argv, env = self._relay()
-        completed = subprocess.run(
+        completed = run_bounded(
             argv,
             env=env,
             cwd=self.workspace,
             stdin=subprocess.DEVNULL,
-            capture_output=True,
             timeout=60,
-            check=False,
         )
         return _start_line(completed.stderr.decode("utf-8", errors="replace"))
 
@@ -191,7 +189,11 @@ class _Install:
             for line in session.stdout:
                 if json.loads(line).get("id") == 2:
                     break
-            _, stderr = session.communicate(timeout=60)
+            try:
+                _, stderr = session.communicate(timeout=60)
+            except subprocess.TimeoutExpired:
+                session.kill()
+                raise
         return _start_line(stderr.decode("utf-8", errors="replace"))
 
     def integrity(self) -> tuple[object, list[object]]:
@@ -244,13 +246,12 @@ def test_a_fresh_install_starts_ready_and_rebinds_after_a_policy_write(installed
     state, signed = installed.integrity()
     assert isinstance(state, dict) and signed == []
 
-    written = subprocess.run(
+    written = run_bounded(
         [sys.executable, "-c", _WRITE_POLICY, str(installed.guard_home)],
         env=installed.env,
-        capture_output=True,
-        text=True,
+        cwd=installed.workspace,
         timeout=120,
-        check=False,
+        text=True,
     )
     assert written.returncode == 0, written.stderr[-2000:]
 
