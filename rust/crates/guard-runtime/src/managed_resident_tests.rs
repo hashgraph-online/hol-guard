@@ -30,6 +30,18 @@ fn client_deadline_is_bounded() {
         client_timeout(br#"{"operation":"prompt_analyze","deadline_budget_ms":60000}"#),
         Duration::from_secs(9)
     );
+    assert_eq!(
+        client_timeout(br#"{"operation":"daemon_lifecycle_decide","deadline_budget_ms":30000}"#),
+        Duration::from_secs(30)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"daemon_lifecycle_decide","deadline_budget_ms":999999}"#),
+        Duration::from_secs(30)
+    );
+    assert_eq!(
+        client_timeout(br#"{"operation":"daemon_lifecycle_decide","deadline_budget_ms":9000}"#),
+        Duration::from_secs(9)
+    );
     for operation in [
         "contained_node_execute",
         "contained_typescript_execute",

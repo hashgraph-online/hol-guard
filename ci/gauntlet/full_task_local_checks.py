@@ -55,6 +55,20 @@ _JS_JOINED = re.compile(
     r"""\b(?:join|resolve)\s*\(\s*(?:[\w$.]+\s*,\s*)?((?:['"`][^'"`]*['"`]\s*,\s*)*['"`][^'"`]*['"`])(?:\s*,)?\s*\)"""
 )
 _NODE_EVAL = frozenset({"-e", "--eval", "-p", "--print"})
+# Node options whose next word is a value, not the script. ``--require=./setup.js``
+# stays a flag because it already starts with ``-``.
+_NODE_VALUED = frozenset(
+    {
+        "-r",
+        "--require",
+        "--import",
+        "--loader",
+        "--experimental-loader",
+        "--env-file",
+        "-C",
+        "--conditions",
+    }
+)
 _LAUNCHERS = frozenset({"node", "nodejs"})
 
 
@@ -119,20 +133,148 @@ def _code(text: str, hash_comments: bool = False) -> str:
     return _uncommented(text, hash_comments).lower()
 
 
-def _spawned_script(arguments: str) -> str | None:
-    """The script a child-process call runs: the first word of its string arguments that is neither
-    the Node launcher nor a flag. Code passed with ``-e``/``-p`` runs no script.
+def _scan_js_string(source: str, index: int) -> tuple[str, int]:
+    """The contents of a quote starting at ``index``, and the index after the closer."""
+
+    quote = source[index]
+    index += 1
+    chars: list[str] = []
+    size = len(source)
+    while index < size:
+        char = source[index]
+        if char == "\\" and index + 1 < size:
+            chars.append(source[index + 1])
+            index += 2
+            continue
+        if char == quote:
+            return "".join(chars), index + 1
+        chars.append(char)
+        index += 1
+    return "".join(chars), index
+
+
+def _scan_js_array(source: str, index: int) -> tuple[list[str | None], int]:
+    """Array elements from ``[``. A non-literal element is ``None``."""
+
+    index += 1
+    slots: list[str | None] = []
+    size = len(source)
+    while index < size:
+        while index < size and source[index] in " \t\r\n,":
+            index += 1
+        if index >= size or source[index] == "]":
+            return slots, index + 1 if index < size else index
+        if source[index] in "'\"`":
+            text, index = _scan_js_string(source, index)
+            slots.append(text)
+            continue
+        depth = 0
+        start = index
+        while index < size:
+            char = source[index]
+            if char in "'\"`":
+                _, index = _scan_js_string(source, index)
+                continue
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif char == "," and depth == 0:
+                break
+            index += 1
+        if index == start:
+            index += 1
+        slots.append(None)
+    return slots, index
+
+
+def _call_argument_slots(source: str) -> list[str | None]:
+    """Node argv slots for a child-process call.
+
+    A command string contributes its words as one slot. An args array contributes one slot per
+    element, with ``None`` where the element is not a literal. An options object is not argv.
     """
-    arguments = _JS_JOINED.sub(
-        lambda match: "'" + posixpath.join(*(part for _, part in _JS_LITERAL.findall(match.group(1)))) + "'", arguments
-    )
-    for _, literal in _JS_LITERAL.findall(arguments):
-        for word in literal.split():
+
+    slots: list[str | None] = []
+    index, size, saw_array = 0, len(source), False
+    while index < size:
+        while index < size and source[index] in " \t\r\n":
+            index += 1
+        if index >= size or source[index] in "{);}":
+            break
+        if source[index] == "[":
+            elements, index = _scan_js_array(source, index)
+            saw_array = True
+            slots.extend(elements)
+        elif source[index] in "'\"`" and not saw_array:
+            text, index = _scan_js_string(source, index)
+            slots.append(text)
+        else:
+            depth = 0
+            start = index
+            while index < size:
+                char = source[index]
+                if char in "'\"`":
+                    _, index = _scan_js_string(source, index)
+                    continue
+                if char in "([{":
+                    depth += 1
+                elif char in ")]}":
+                    if depth == 0:
+                        break
+                    depth -= 1
+                elif char == "," and depth == 0:
+                    break
+                index += 1
+            if index == start:
+                index += 1
+        while index < size and source[index] in " \t\r\n":
+            index += 1
+        if index < size and source[index] == ",":
+            index += 1
+    return slots
+
+
+def _script_from_slots(slots: list[str | None]) -> str | None:
+    """The script in ``slots``. A valued option consumes the next word or the next slot."""
+
+    skip_value = False
+    for slot in slots:
+        if slot is None:
+            if skip_value:
+                skip_value = False
+                continue
+            return None
+        for word in slot.split():
+            if skip_value:
+                skip_value = False
+                continue
             if word in _NODE_EVAL:
                 return None
+            if word in _NODE_VALUED:
+                skip_value = True
+                continue
             if word not in _LAUNCHERS and not word.startswith("-"):
                 return word
     return None
+
+
+def _spawned_script(arguments: str) -> str | None:
+    """The script a child-process call runs.
+
+    The first argv word that is neither the Node launcher nor a flag. The value after an option
+    such as ``--require`` or ``--env-file`` is not the script, including when that value is a
+    variable. Literals in a later options object are not argv. Code passed with ``-e``/``-p``
+    runs no script.
+    """
+
+    arguments = _JS_JOINED.sub(
+        lambda match: "'" + posixpath.join(*(part for _, part in _JS_LITERAL.findall(match.group(1)))) + "'",
+        arguments,
+    )
+    return _script_from_slots(_call_argument_slots(arguments))
 
 
 def _defines(text: str, words: tuple[str, ...]) -> bool:
