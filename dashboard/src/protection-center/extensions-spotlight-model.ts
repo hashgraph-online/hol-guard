@@ -229,7 +229,7 @@ export function spotlightHeading(lead: SpotlightBasis, allActive = false): Spotl
   };
 }
 
-export type SlotState = "open" | "sold-out" | "hidden";
+export type SlotState = "open" | "sold-out" | "unconfirmed" | "hidden";
 export type DiscoveryProduct = DiscoveryOffer["product"];
 
 /** The products that buy the shelf cell, and the one that buys a catalog row. */
@@ -244,19 +244,23 @@ function forProducts(
 }
 
 /**
- * Whether to offer the placement for sale, and how. Vacancy is only ever
- * claimed on an authoritative "open" from the server; every other condition
- * - a failed feed, a device that turned discovery off, an unknown
- * availability - hides the offer rather than guessing.
+ * Whether to offer the placement, and what may be said about it. The offer
+ * itself does not depend on the server: a reader can always ask for the spot.
+ * What the server decides is the wording - "open" and "sold-out" are claimed
+ * only on an authoritative availability, and every other condition (a failed
+ * feed, an availability the server never checked, a server not serving the
+ * feed at all) is "unconfirmed", which asks without claiming a vacancy, a
+ * price or a count. Only a device that turned discovery off, or one still
+ * loading it, is asked nothing.
  */
 export function slotState(input: {
   status: DiscoveryFeedStatus;
   offers: readonly DiscoveryOffer[];
   products: readonly DiscoveryProduct[];
 }): SlotState {
-  if (input.status !== "ready") return "hidden";
+  if (input.status === "loading" || input.status === "opt-out") return "hidden";
   const known = forProducts(input.offers, input.products).filter((offer) => offer.availability !== "unknown");
-  if (known.length === 0) return "hidden";
+  if (known.length === 0) return "unconfirmed";
   return known.some((offer) => offer.availability === "open") ? "open" : "sold-out";
 }
 

@@ -86,6 +86,10 @@ def test_fetch_targets_the_fixed_origin_and_path_only() -> None:
     # No credential or identifier is ever attached.
     assert not request.has_header("Authorization")
     assert not request.has_header("Cookie")
+    # The product names itself; edges in front of the origin drop requests
+    # that carry only the interpreter's default agent string.
+    assert request.get_header("User-agent") == discovery.DISCOVERY_USER_AGENT
+    assert discovery.DISCOVERY_USER_AGENT.startswith("hol-guard/")
     assert cached.server_date_ms is not None
 
 
@@ -219,4 +223,5 @@ def test_relay_posts_only_the_bounded_body_to_the_fixed_origin() -> None:
     request = opener.requests[0]
     assert request.full_url == "https://hol.org/api/guard/extensions/discovery/v1/events"
     assert request.method == "POST"
+    assert request.get_header("User-agent") == discovery.DISCOVERY_USER_AGENT
     assert not request.has_header("Authorization")

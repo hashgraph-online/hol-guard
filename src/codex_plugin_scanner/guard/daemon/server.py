@@ -132,6 +132,7 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiService
 from .extension_discovery_read import (
     DISCOVERY_EVENTS_PATH,
+    DISCOVERY_OPTED_OUT,
     DISCOVERY_RENDERS_PATH,
     DISCOVERY_UNAVAILABLE,
     DiscoveryReadError,
@@ -1300,6 +1301,16 @@ class _GuardDaemonHandler(
                 return
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            # A device whose user or administrator turned sponsored discovery
+            # off answers that before anything that can fail. The rollout gate,
+            # the native capability and the upstream read all have failure
+            # modes, and a failure must never read as "no preference stated" on
+            # a device that already stated one.
+            if parsed.path == _LOCAL_DISCOVERY_PLACEMENTS and not sponsored_discovery_allowed(
+                self.server.store  # type: ignore[attr-defined]
+            ):
+                self._write_json({"error": DISCOVERY_OPTED_OUT}, status=403)
                 return
             if not discovery_rollout_enabled():
                 self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)

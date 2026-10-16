@@ -74,7 +74,7 @@ fn split(text: &str) -> Vec<&str> {
 }
 
 /// Fold `.` and `..`; `..` never climbs above a drive root.
-fn fold<'a>(root: Root, parts: Vec<&'a str>) -> Vec<&'a str> {
+fn fold(root: Root, parts: Vec<&str>) -> Vec<&str> {
     let mut folded: Vec<&str> = Vec::new();
     for part in parts {
         match part {

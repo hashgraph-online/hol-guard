@@ -7384,9 +7384,9 @@ function forProducts(offers, products) {
   return offers.filter((offer) => products.includes(offer.product));
 }
 function slotState(input) {
-  if (input.status !== "ready") return "hidden";
+  if (input.status === "loading" || input.status === "opt-out") return "hidden";
   const known = forProducts(input.offers, input.products).filter((offer) => offer.availability !== "unknown");
-  if (known.length === 0) return "hidden";
+  if (known.length === 0) return "unconfirmed";
   return known.some((offer) => offer.availability === "open") ? "open" : "sold-out";
 }
 function quotedSlotOffer(offers, products) {
@@ -7556,24 +7556,24 @@ function OrganicSpotlightCard(props) {
   );
 }
 function VacantSlotCard(props) {
-  const soldOut = props.state === "sold-out";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs(
     "article",
     {
       className: "guard-spotlight-card guard-spotlight-slot",
       "data-testid": "spotlight-slot-card",
       "data-state": props.state,
+      "data-full": props.full ? "true" : void 0,
       "aria-labelledby": "spotlight-slot-heading",
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-spotlight-slot-mark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-5" }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue", children: soldOut ? "Fully booked" : "This slot is open" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "spotlight-slot-heading", className: "mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark", children: soldOut ? "Every placement here is taken." : "Put your extension on this shelf." })
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue", children: props.state === "open" ? "This slot is open" : "Promote your extension" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "spotlight-slot-heading", className: "mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark", children: "Put your extension on this shelf." })
           ] })
         ] }),
         /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm leading-6 text-brand-dark/75", children: [
-          soldOut ? "Windows free up as placements end. See the schedule to book the next one." : "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection.",
+          "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection.",
           props.inventory ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-dark", children: [
             " ",
             props.inventory
@@ -7589,21 +7589,18 @@ function VacantSlotCard(props) {
               rel: "noopener noreferrer",
               referrerPolicy: "no-referrer",
               children: [
-                soldOut ? "See the schedule" : props.price ? `Get this spot · from ${props.price}/mo` : "Get this spot",
+                props.price ? `Take this slot · from ${props.price}/mo` : "Take this slot",
                 /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "size-4", "aria-hidden": "true" })
               ]
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(SlotFreePath, { placement: "extensions_header", soldOut })
+          /* @__PURE__ */ jsxRuntimeExports.jsx(SlotFreePath, { placement: "extensions_header" })
         ] })
       ]
     }
   );
 }
 function SlotFreePath(props) {
-  if (props.soldOut) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-brand-dark/50", children: "Checkout always shows the live quote before payment." });
-  }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-brand-dark/50", children: [
     "Already listed?",
     " ",
@@ -7637,6 +7634,15 @@ function SlotFreePath(props) {
 function SpotlightSkeleton() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-grid mt-5", "aria-hidden": "true", children: [0, 1, 2].map((cell) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-card guard-spotlight-skeleton" }, cell)) });
 }
+function withoutWeakestOrganic(cards) {
+  if (cards.length < SPOTLIGHT_CELL_COUNT) return cards;
+  let weakest = -1;
+  cards.forEach((card, index) => {
+    if (!card.placement) weakest = index;
+  });
+  if (weakest < 0) return cards;
+  return [...cards.slice(0, weakest), ...cards.slice(weakest + 1)];
+}
 function ExtensionsSpotlight(props) {
   const { isExtensionActive } = props;
   const spotlight = reactExports.useMemo(
@@ -7653,8 +7659,8 @@ function ExtensionsSpotlight(props) {
   const price = reactExports.useMemo(() => slotStartingPrice(props.offers, SHELF_SLOT_PRODUCTS), [props.offers]);
   const inventory = reactExports.useMemo(() => slotInventoryLabel(props.offers, SHELF_SLOT_PRODUCTS), [props.offers]);
   const waiting = !props.settled || props.status === "loading";
-  const showSlot = spotlight.vacant && slot === "open";
-  const cards = showSlot ? spotlight.cards.slice(0, SPOTLIGHT_CELL_COUNT - 1) : spotlight.cards;
+  const showSlot = slot === "open" || slot === "unconfirmed";
+  const cards = showSlot ? withoutWeakestOrganic(spotlight.cards) : spotlight.cards;
   const heading = spotlightHeading(spotlight.lead, allCardsActive(cards, isExtensionActive));
   if (props.catalogExtensions.length === 0) return null;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-6", "aria-labelledby": "extensions-spotlight-heading", "data-testid": "extensions-spotlight", children: [
@@ -7681,7 +7687,15 @@ function ExtensionsSpotlight(props) {
         },
         card.catalog.extension_id
       )),
-      showSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx(VacantSlotCard, { state: slot, price, inventory }) : null
+      showSlot ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+        VacantSlotCard,
+        {
+          state: slot === "open" ? "open" : "unconfirmed",
+          price,
+          inventory,
+          full: cards.length >= SPOTLIGHT_CELL_COUNT
+        }
+      ) : null
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(SpotlightStatusLine, { status: props.status })
   ] });
@@ -7695,7 +7709,7 @@ function SpotlightStatusLine(props) {
     return /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-xs text-brand-dark/45", "data-testid": "discovery-status-optout", children: "Sponsored discovery is turned off for this device. Extension management is unaffected." });
   }
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-4 text-xs text-brand-dark/45", "data-testid": `discovery-status-${props.status}`, children: [
-    "Sponsored placements are not available right now.",
+    "Paid placements could not be loaded right now.",
     " ",
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "a",
@@ -7711,7 +7725,7 @@ function SpotlightStatusLine(props) {
   ] });
 }
 function CatalogSlotRow(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-catalog-slot-row", "data-testid": "catalog-slot-row", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-catalog-slot-row", "data-testid": "catalog-slot-row", "data-state": props.state, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-spotlight-slot-mark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-5" }) }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Put your extension in this list." }),
@@ -9488,7 +9502,12 @@ function ExtensionsOverview(props) {
     );
     return [...featuredVisible, ...rest];
   }, [joinedDiscovery.featured, joinedDiscovery.sponsored, visibleCatalog]);
-  const catalogSlotOpen = !searching && !filtering && visibleCatalog.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED && slotState({ status: discoveryFeed.status, offers: discoveryOffers, products: CATALOG_SLOT_PRODUCTS }) === "open";
+  const catalogSlot = slotState({
+    status: discoveryFeed.status,
+    offers: discoveryOffers,
+    products: CATALOG_SLOT_PRODUCTS
+  });
+  const catalogSlotOpen = !searching && !filtering && visibleCatalog.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED && (catalogSlot === "open" || catalogSlot === "unconfirmed");
   const catalogSlotPrice = reactExports.useMemo(
     () => slotStartingPrice(discoveryOffers, CATALOG_SLOT_PRODUCTS),
     [discoveryOffers]
@@ -9662,7 +9681,14 @@ function ExtensionsOverview(props) {
             );
             if (!catalogSlotOpen || index !== catalogSlotIndex) return row;
             return /* @__PURE__ */ jsxRuntimeExports.jsxs(reactExports.Fragment, { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogSlotRow, { price: catalogSlotPrice, inventory: catalogSlotInventory }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                CatalogSlotRow,
+                {
+                  state: catalogSlot === "open" ? "open" : "unconfirmed",
+                  price: catalogSlotPrice,
+                  inventory: catalogSlotInventory
+                }
+              ),
               row
             ] }, extension.extension_id);
           }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(CatalogFilterEmpty, { onClear: handleClearFilters })

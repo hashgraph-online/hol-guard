@@ -400,15 +400,20 @@ export function ExtensionsOverview(props: {
     );
     return [...featuredVisible, ...rest];
   }, [joinedDiscovery.featured, joinedDiscovery.sponsored, visibleCatalog]);
-  // Both surfaces ask, because they sell different things: the shelf cell and
-  // the in-feed listing are separate products with their own availability, and
-  // a maker who scrolls the catalog should never have to scroll back up to
-  // find out the listing is for sale. Each is still gated on its own
-  // authoritative "open".
+  // Both surfaces ask, because they are different placements with their own
+  // availability, and a reader scrolling the list should never have to scroll
+  // back up to find the one that sits inside it. Neither waits for the server
+  // to confirm a vacancy before asking; an authoritative sold-out is the one
+  // answer that withdraws the row.
+  const catalogSlot = slotState({
+    status: discoveryFeed.status,
+    offers: discoveryOffers,
+    products: CATALOG_SLOT_PRODUCTS,
+  });
   const catalogSlotOpen = !searching
     && !filtering
     && visibleCatalog.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED
-    && slotState({ status: discoveryFeed.status, offers: discoveryOffers, products: CATALOG_SLOT_PRODUCTS }) === "open";
+    && (catalogSlot === "open" || catalogSlot === "unconfirmed");
   const catalogSlotPrice = useMemo(
     () => slotStartingPrice(discoveryOffers, CATALOG_SLOT_PRODUCTS),
     [discoveryOffers],
@@ -595,7 +600,11 @@ export function ExtensionsOverview(props: {
                   if (!catalogSlotOpen || index !== catalogSlotIndex) return row;
                   return (
                     <Fragment key={extension.extension_id}>
-                      <CatalogSlotRow price={catalogSlotPrice} inventory={catalogSlotInventory} />
+                      <CatalogSlotRow
+                        state={catalogSlot === "open" ? "open" : "unconfirmed"}
+                        price={catalogSlotPrice}
+                        inventory={catalogSlotInventory}
+                      />
                       {row}
                     </Fragment>
                   );

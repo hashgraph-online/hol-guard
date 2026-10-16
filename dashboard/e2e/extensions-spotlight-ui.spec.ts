@@ -162,7 +162,7 @@ test.describe("extensions spotlight", () => {
     await expect(slot).toHaveAttribute("data-state", "open");
     await expect(slot).toContainText("This slot is open");
     // The shelf cell quotes the product that buys the shelf, not the cheaper listing.
-    await expect(slot.getByRole("link", { name: /Get this spot · from \$199\/mo/ })).toBeVisible();
+    await expect(slot.getByRole("link", { name: /Take this slot · from \$199\/mo/ })).toBeVisible();
     // Live inventory, exactly as the server stated it for this product.
     await expect(slot).toContainText("3 of 4 open.");
     // The free path keeps the campaign tag and reports its own surface, so
@@ -202,7 +202,9 @@ test.describe("extensions spotlight", () => {
 
     await expect(page.getByRole("heading", { name: "Good places to start" })).toBeVisible();
     await expect(page.getByTestId("spotlight-basis")).toContainText("Not a ranking or a popularity measure");
-    await expect(page.getByTestId("spotlight-organic-card")).toHaveCount(3);
+    // Two starters and the slot: the shelf gives the weakest organic cell to
+    // the ask rather than growing a fourth.
+    await expect(page.getByTestId("spotlight-organic-card")).toHaveCount(2);
     const first = page.getByTestId("spotlight-organic-card").first();
     await expect(first).toHaveAttribute("data-basis", "starter");
     // The starter tier leads with what is still off, says what the extension
@@ -213,10 +215,19 @@ test.describe("extensions spotlight", () => {
       "Watches for irreversible deletes and overwrites.",
     );
     await expect(first.getByRole("button", { name: "Set it up" })).toBeVisible();
-    // Availability the server could not confirm never becomes a sales pitch,
-    // in either surface.
-    await expect(page.getByTestId("spotlight-slot-card")).toHaveCount(0);
-    await expect(page.getByTestId("catalog-slot-row")).toHaveCount(0);
+    // Availability the server could not confirm still gets the ask - a reader
+    // can always ask for the spot - but it buys no claim: no vacancy, no
+    // price, no count, in either surface.
+    const slot = page.getByTestId("spotlight-slot-card");
+    await expect(slot).toHaveAttribute("data-state", "unconfirmed");
+    await expect(slot).toContainText("Promote your extension");
+    await expect(slot).not.toContainText("This slot is open");
+    await expect(slot.getByRole("link", { name: "Take this slot" })).toBeVisible();
+    await expect(slot).not.toContainText("$");
+    const inFeed = page.getByTestId("catalog-slot-row");
+    await expect(inFeed).toHaveAttribute("data-state", "unconfirmed");
+    await expect(inFeed.getByRole("link", { name: "Get this spot" })).toBeVisible();
+    await expect(inFeed).not.toContainText(" open.");
 
     await expectRendersAtBothSizes(page, async () => {
       await expect(first).toBeVisible();
@@ -232,7 +243,9 @@ test.describe("extensions spotlight", () => {
     await expect(page.getByRole("heading", { name: "Already covering the basics" })).toBeVisible();
     await expect(page.getByTestId("spotlight-basis")).toContainText("Not a ranking or a popularity measure");
     const cards = page.getByTestId("spotlight-organic-card");
-    await expect(cards).toHaveCount(3);
+    await expect(cards).toHaveCount(2);
+    // The square rides along on this heading too, not only on an empty shelf.
+    await expect(page.getByTestId("spotlight-slot-card")).toHaveCount(1);
     await expect(cards.first().getByTestId("spotlight-organic-state")).toHaveText("On");
     await expect(cards.first().getByRole("button", { name: "Review protection" })).toBeVisible();
   });
@@ -275,8 +288,8 @@ test.describe("extensions spotlight", () => {
     await initialize(page);
 
     await expect(page.getByTestId("discovery-featured-card")).toHaveCount(1);
-    // Nothing is for sale, so nothing asks: no cell, no row, no sold-out claim
-    // sitting beside organic cards.
+    // An authoritative sold-out is the one answer that withdraws both asks:
+    // no cell, no row, no sold-out claim sitting beside organic cards.
     await expect(page.getByTestId("spotlight-slot-card")).toHaveCount(0);
     await expect(page.getByTestId("catalog-slot-row")).toHaveCount(0);
   });

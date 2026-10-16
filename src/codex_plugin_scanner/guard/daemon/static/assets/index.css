@@ -9673,6 +9673,9 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 
 @media (min-width: 768px) {
   .guard-spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  /* A shelf with no organic cell to give up keeps every bought card, so the
+     slot follows them across the full width instead of as a lone stub. */
+  .guard-spotlight-slot[data-full="true"] { grid-column: 1 / -1; min-height: 0; }
   /* Equal cells only once they sit side by side; stacked, a card is its own
      height so a short one never opens a well of dead space on a phone. */
   .guard-spotlight-card { min-height: 16rem; }

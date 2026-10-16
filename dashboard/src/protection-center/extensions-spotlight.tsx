@@ -181,21 +181,25 @@ function OrganicSpotlightCard(props: {
 }
 
 /**
- * The slot offered for sale, rendered at the size of a paid cell so a maker
- * sees exactly what the money buys. Shown only on an authoritative vacancy.
+ * The bookable square, drawn at the size of a paid cell so a reader sees
+ * exactly what the placement is. It is a standing offer: it renders whether
+ * or not the server confirmed an open count, because a reader can always ask
+ * for the spot. Only the numbers wait for the server.
  */
 function VacantSlotCard(props: {
-  state: Exclude<SlotState, "hidden">;
+  state: Exclude<SlotState, "hidden" | "sold-out">;
   price: string | null;
   /** Live remaining inventory, present only when the server stated it. */
   inventory: string | null;
+  /** True when the shelf kept all of its cells and the slot spans the row. */
+  full?: boolean;
 }) {
-  const soldOut = props.state === "sold-out";
   return (
     <article
       className="guard-spotlight-card guard-spotlight-slot"
       data-testid="spotlight-slot-card"
       data-state={props.state}
+      data-full={props.full ? "true" : undefined}
       aria-labelledby="spotlight-slot-heading"
     >
       <div className="flex items-start gap-3">
@@ -204,17 +208,16 @@ function VacantSlotCard(props: {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue">
-            {soldOut ? "Fully booked" : "This slot is open"}
+            {props.state === "open" ? "This slot is open" : "Promote your extension"}
           </p>
           <h3 id="spotlight-slot-heading" className="mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark">
-            {soldOut ? "Every placement here is taken." : "Put your extension on this shelf."}
+            Put your extension on this shelf.
           </h3>
         </div>
       </div>
       <p className="mt-3 text-sm leading-6 text-brand-dark/75">
-        {soldOut
-          ? "Windows free up as placements end. See the schedule to book the next one."
-          : "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection."}
+        This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own
+        headline, and never change anyone’s protection.
         {props.inventory ? <span className="font-semibold text-brand-dark"> {props.inventory}</span> : null}
       </p>
       <div className="mt-auto pt-5">
@@ -225,10 +228,10 @@ function VacantSlotCard(props: {
           rel="noopener noreferrer"
           referrerPolicy="no-referrer"
         >
-          {soldOut ? "See the schedule" : props.price ? `Get this spot · from ${props.price}/mo` : "Get this spot"}
+          {props.price ? `Take this slot · from ${props.price}/mo` : "Take this slot"}
           <HiMiniArrowTopRightOnSquare className="size-4" aria-hidden="true" />
         </a>
-        <SlotFreePath placement="extensions_header" soldOut={soldOut} />
+        <SlotFreePath placement="extensions_header" />
       </div>
     </article>
   );
@@ -239,10 +242,7 @@ function VacantSlotCard(props: {
  * already in the built-in catalog claims their entry instead of buying it,
  * and a maker who is not in it yet submits the extension the usual way.
  */
-function SlotFreePath(props: { placement: "extensions_feed" | "extensions_header"; soldOut?: boolean }) {
-  if (props.soldOut) {
-    return <p className="mt-3 text-xs text-brand-dark/50">Checkout always shows the live quote before payment.</p>;
-  }
+function SlotFreePath(props: { placement: "extensions_feed" | "extensions_header" }) {
   return (
     <p className="mt-3 text-xs text-brand-dark/50">
       Already listed?{" "}
@@ -280,6 +280,22 @@ function SpotlightSkeleton() {
   );
 }
 
+/**
+ * Room for the slot on a shelf that is already at its cell count, taken from
+ * the weakest organic cell - the last one the ranking placed. A shelf with no
+ * organic cell to give up keeps every bought card and lets the slot follow
+ * them; nothing a maker paid for is pushed out of view to make the ask fit.
+ */
+function withoutWeakestOrganic(cards: readonly SpotlightCard[]): readonly SpotlightCard[] {
+  if (cards.length < SPOTLIGHT_CELL_COUNT) return cards;
+  let weakest = -1;
+  cards.forEach((card, index) => {
+    if (!card.placement) weakest = index;
+  });
+  if (weakest < 0) return cards;
+  return [...cards.slice(0, weakest), ...cards.slice(weakest + 1)];
+}
+
 export function ExtensionsSpotlight(props: {
   catalogExtensions: readonly ExtensionCatalogSummary[];
   featured: readonly JoinedDiscoveryCard[];
@@ -311,11 +327,14 @@ export function ExtensionsSpotlight(props: {
   // The shelf would otherwise flip heading and contents as the feed and the
   // activity query land a moment apart; hold one skeleton until both settle.
   const waiting = !props.settled || props.status === "loading";
-  // The slot replaces the weakest cell rather than adding a fourth, so the
-  // row a buyer sees is the row a buyer gets. Only an authoritative "open"
-  // offers it: a sold-out claim beside organic cards contradicts itself.
-  const showSlot = spotlight.vacant && slot === "open";
-  const cards = showSlot ? spotlight.cards.slice(0, SPOTLIGHT_CELL_COUNT - 1) : spotlight.cards;
+  // The shelf carries the offer whether or not paid cards filled it, because
+  // a full shelf is exactly when a reader wants the spot; only an
+  // authoritative sold-out takes the offer away, since then there is nothing
+  // to take. It never costs a bought cell its place: the slot takes the
+  // weakest organic cell, and on a shelf that is entirely paid it simply
+  // follows the three.
+  const showSlot = slot === "open" || slot === "unconfirmed";
+  const cards = showSlot ? withoutWeakestOrganic(spotlight.cards) : spotlight.cards;
   // Read the heading off the cards that survive that slice: a card the slot
   // pushed out of view must not decide what the shelf claims about this device.
   const heading = spotlightHeading(spotlight.lead, allCardsActive(cards, isExtensionActive));
@@ -354,7 +373,18 @@ export function ExtensionsSpotlight(props: {
               />
             )
           ))}
-          {showSlot ? <VacantSlotCard state={slot} price={price} inventory={inventory} /> : null}
+          {showSlot ? (
+            <VacantSlotCard
+              state={slot === "open" ? "open" : "unconfirmed"}
+              price={price}
+              inventory={inventory}
+              // A shelf that gave up its weakest organic cell has room for the
+              // slot in the row. One that is entirely paid has none, so the
+              // slot takes the whole width underneath rather than sitting as a
+              // lone stub in a three-column row.
+              full={cards.length >= SPOTLIGHT_CELL_COUNT}
+            />
+          ) : null}
         </div>
       )}
       <SpotlightStatusLine status={props.status} />
@@ -385,7 +415,7 @@ function SpotlightStatusLine(props: { status: DiscoveryFeedStatus }) {
   }
   return (
     <p className="mt-4 text-xs text-brand-dark/45" data-testid={`discovery-status-${props.status}`}>
-      Sponsored placements are not available right now.{" "}
+      Paid placements could not be loaded right now.{" "}
       <a
         className="font-semibold text-brand-blue hover:underline"
         href={advertiseUrl("extensions_header")}
@@ -400,14 +430,19 @@ function SpotlightStatusLine(props: { status: DiscoveryFeedStatus }) {
 }
 
 /**
- * The bookable row inside the catalog list. Same height and rhythm as the
- * rows around it, clearly not an extension, and only ever shown on an
- * authoritative open slot in an unfiltered list long enough that one promo
- * row cannot crowd the results out.
+ * The bookable row inside the ranked list, drawn between real rows so a
+ * reader judges the placement in context. Same height and rhythm as the rows
+ * around it, clearly not an extension, and shown in an unfiltered list long
+ * enough that one such row cannot crowd the results out. Like the square, it
+ * is a standing offer; only its numbers wait for the server.
  */
-export function CatalogSlotRow(props: { price: string | null; inventory: string | null }) {
+export function CatalogSlotRow(props: {
+  state: Exclude<SlotState, "hidden" | "sold-out">;
+  price: string | null;
+  inventory: string | null;
+}) {
   return (
-    <div className="guard-catalog-slot-row" data-testid="catalog-slot-row">
+    <div className="guard-catalog-slot-row" data-testid="catalog-slot-row" data-state={props.state}>
       <span className="guard-spotlight-slot-mark" aria-hidden="true">
         <HiMiniPlus className="size-5" />
       </span>

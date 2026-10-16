@@ -104,7 +104,7 @@ test.describe("extensions discovery, real projections", () => {
     // product, and the capacity beside it is that same product's sixty
     // windows - never the seventy-slot sum of two products nobody sells
     // together.
-    await expect(slot.getByRole("link", { name: /Get this spot · from \$50\/mo/ })).toBeVisible();
+    await expect(slot.getByRole("link", { name: /Take this slot · from \$50\/mo/ })).toBeVisible();
     await expect(slot).toContainText("60 of 60 open.");
     await expect(slot).not.toContainText("70 open");
 
@@ -131,10 +131,16 @@ test.describe("extensions discovery, real projections", () => {
     await expect(sponsored).toHaveCount(1);
     await expect(sponsored).toContainText("Sponsored");
 
-    // Two sold cards plus local activity fill the shelf, so the shelf cell is
-    // not for sale here; the in-feed ask is, and it reports the one sponsored
-    // row left of four.
-    await expect(page.getByTestId("spotlight-slot-card")).toHaveCount(0);
+    // Two sold cards plus local activity would fill the shelf, and the slot
+    // still takes the last cell: a shelf with paid cards on it is exactly
+    // when a reader wants the spot. Each placement quotes its own product -
+    // fifty-nine time-slot windows on the shelf, one sponsored row of four
+    // in the list.
+    const slot = page.getByTestId("spotlight-slot-card");
+    await expect(slot).toHaveAttribute("data-state", "open");
+    await expect(slot).toContainText("59 of 60 open.");
+    await expect(slot.getByRole("link", { name: /Take this slot · from \$50\/mo/ })).toBeVisible();
+
     const inFeed = page.getByTestId("catalog-slot-row");
     await expect(inFeed).toHaveCount(1);
     await expect(inFeed).toContainText("1 of 4 open.");
@@ -156,15 +162,22 @@ test.describe("extensions discovery, real projections", () => {
     await expect(page.getByTestId("extensions-surface")).not.toContainText("0 of 4 open.");
   });
 
-  test("unknown sponsored availability hides that ask and never invents a count", async ({ page }) => {
+  test("unknown sponsored availability still offers the spot and never invents a count", async ({ page }) => {
     await open(page, "sponsored-unknown");
 
     // The sponsored product came back unreadable. The snapshot still projects
     // - the unknown product costs the other two nothing - the sold cards still
-    // render, and nothing is claimed about capacity nobody could read.
+    // render, and the row still asks, because a reader can always ask for the
+    // spot. What it will not do is claim a vacancy, a price or a count nobody
+    // could read.
     await expect(page.getByTestId("discovery-featured-card")).toHaveCount(1);
     await expect(page.getByTestId("discovery-sponsored-card")).toHaveCount(1);
-    await expect(page.getByTestId("catalog-slot-row")).toHaveCount(0);
+    const inFeed = page.getByTestId("catalog-slot-row");
+    await expect(inFeed).toHaveCount(1);
+    await expect(inFeed).toHaveAttribute("data-state", "unconfirmed");
+    await expect(inFeed.getByRole("link", { name: "Get this spot" })).toBeVisible();
+    await expect(inFeed).not.toContainText("open.");
+    await expect(inFeed).not.toContainText("$");
     await expect(page.getByTestId("extensions-surface")).not.toContainText("of 4 open.");
   });
 });

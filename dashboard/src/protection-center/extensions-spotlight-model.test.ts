@@ -154,17 +154,29 @@ const CATALOG = [
   assert.ok(!/popular/i.test(spotlightHeading("activity").title));
 }
 
-// Vacancy is claimed only on an authoritative open offer.
+// The offer stands on its own; only the wording waits for the server. An
+// authoritative availability decides "open" or "sold-out", everything the
+// server never stated is "unconfirmed", and only a device that turned
+// discovery off, or one still loading it, is asked nothing.
 {
   const shelf = (offers: DiscoveryOffer[], status: DiscoveryFeedStatus = "ready") =>
     slotState({ status, offers, products: SHELF_SLOT_PRODUCTS });
   assert.equal(shelf([offer({ product: "always" })]), "open");
   assert.equal(shelf([offer({ product: "always", availability: "sold_out" })]), "sold-out");
-  assert.equal(shelf([offer({ product: "always", availability: "unknown" })]), "hidden");
-  assert.equal(shelf([]), "hidden");
-  for (const status of ["loading", "unavailable", "rate-limited", "offline", "opt-out"] as const) {
+  assert.equal(shelf([offer({ product: "always", availability: "unknown" })]), "unconfirmed");
+  assert.equal(shelf([]), "unconfirmed");
+  for (const status of ["unavailable", "rate-limited", "offline"] as const) {
+    assert.equal(shelf([], status), "unconfirmed");
+    // A stale open offer carried alongside a failed feed is still authoritative
+    // about the product it describes.
+    assert.equal(shelf([offer({ product: "always" })], status), "open");
+  }
+  for (const status of ["loading", "opt-out"] as const) {
     assert.equal(shelf([offer({ product: "always" })], status), "hidden");
   }
+  // An unconfirmed slot quotes nothing: no price, no count.
+  assert.equal(slotStartingPrice([offer({ availability: "unknown" })], SHELF_SLOT_PRODUCTS), null);
+  assert.equal(slotInventoryLabel([offer({ availability: "unknown" })], SHELF_SLOT_PRODUCTS), null);
 }
 
 // Availability never crosses products: a sold-out sponsored listing is not
