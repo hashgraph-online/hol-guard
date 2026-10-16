@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib
 import inspect
 import json
 import os
 import shlex
-import stat
 import subprocess
 import threading
 import time
@@ -29,6 +27,7 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
+from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_external_archive_bind
 from .native_package_approval_hash import native_package_approval_hash
 from .native_package_audit_projection import (
     native_batch_url,
@@ -443,71 +442,28 @@ def _package_evaluation_requires_external_archive_binding(evaluation: object) ->
     )
 
 
-def _verified_external_archive_replacements(evaluation: object) -> dict[str, str] | None:
-    replacements: dict[str, str] = {}
-    for download in _external_archive_downloads(evaluation):
-        descriptor = -1
-        try:
-            path_stat = download.path.lstat()
-            descriptor = os.open(
-                download.path,
-                os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0),
-            )
-            file_stat = os.fstat(descriptor)
-            if (
-                not stat.S_ISREG(path_stat.st_mode)
-                or not stat.S_ISREG(file_stat.st_mode)
-                or path_stat.st_dev != file_stat.st_dev
-                or path_stat.st_ino != file_stat.st_ino
-                or file_stat.st_nlink != 1
-                or file_stat.st_size != download.size
-                or stat.S_IMODE(file_stat.st_mode) & (stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-            ):
-                return None
-            digest = hashlib.sha256()
-            size = 0
-            with os.fdopen(descriptor, "rb", closefd=True) as archive_file:
-                descriptor = -1
-                while True:
-                    chunk = archive_file.read(min(64 * 1024, download.size - size + 1))
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > download.size:
-                        return None
-                    digest.update(chunk)
-        except OSError:
-            return None
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        if size != download.size or digest.hexdigest() != download.sha256:
-            return None
-        replacements[download.source_url] = str(download.path)
-    return replacements
-
-
 def _bound_external_archive_launch_command(
     launch_command: Sequence[str],
     *,
     evaluation: object,
+    guard_home: Path,
 ) -> list[str] | None:
-    replacements = _verified_external_archive_replacements(evaluation)
-    if replacements is None:
+    """The launch argv bound to the resident-verified archives, or ``None`` (deny)."""
+
+    downloads = _external_archive_downloads(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
+    if not downloads:
+        return None if requires_binding else list(launch_command)
+    try:
+        bound = native_external_archive_bind(
+            [str(item) for item in launch_command],
+            downloads,
+            requires_binding=requires_binding,
+            guard_home=guard_home,
+        )
+    except NativeMcpProxyDecisionError:
         return None
-    if not replacements:
-        return None if _package_evaluation_requires_external_archive_binding(evaluation) else list(launch_command)
-    bound_command = [str(item) for item in launch_command]
-    for source_url, replacement in replacements.items():
-        replacement_count = 0
-        for index, argument in enumerate(bound_command):
-            if source_url not in argument:
-                continue
-            bound_command[index] = argument.replace(source_url, replacement)
-            replacement_count += 1
-        if replacement_count == 0:
-            return None
-    return bound_command
+    return bound if isinstance(bound, list) else None
 
 
 def _package_manager_launch_environment(
@@ -909,6 +865,7 @@ def build_package_protect_payload(
     bound_launch_command = _bound_external_archive_launch_command(
         launch_command,
         evaluation=final_evaluation,
+        guard_home=store.guard_home,
     )
     if bound_launch_command is None:
         return deny(package_external_archive_override(final_evaluation, variant="launch_unbound"))

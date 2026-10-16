@@ -228,34 +228,36 @@ const CATALOG = [
   assert.ok(spotlight.cards.every((card) => card.basis === "starter"));
 }
 
-// Remaining inventory is only ever repeated back from the server, and only
-// when every open product it sent carried a complete pair.
+// Remaining inventory is only ever repeated back from the server, and it
+// describes the same single product the quoted price describes.
 {
   assert.equal(
     slotInventoryLabel([offer({ openSlots: 3, totalSlots: 4 })], CATALOG_SLOT_PRODUCTS),
     "3 of 4 open.",
   );
-  // One product missing its counts makes the sum a guess, so nothing is said.
+  // The count follows the price onto the cheapest open product rather than
+  // summing two products a buyer cannot buy together.
   assert.equal(
     slotInventoryLabel(
       [
-        offer({ product: "always", openSlots: 1, totalSlots: 2 }),
-        offer({ product: "time_slot" }),
+        offer({ product: "always", indicativeAmountCents: 19_900, openSlots: 1, totalSlots: 2 }),
+        offer({ product: "time_slot", indicativeAmountCents: 4_900, openSlots: 2, totalSlots: 6 }),
+      ],
+      SHELF_SLOT_PRODUCTS,
+    ),
+    "2 of 6 open.",
+  );
+  // The quoted product carrying no counts says nothing, even when the other
+  // product on the placement sent a complete pair.
+  assert.equal(
+    slotInventoryLabel(
+      [
+        offer({ product: "always", indicativeAmountCents: 19_900, openSlots: 1, totalSlots: 2 }),
+        offer({ product: "time_slot", indicativeAmountCents: 4_900 }),
       ],
       SHELF_SLOT_PRODUCTS,
     ),
     null,
-  );
-  // Counts across the products that buy the same placement add up.
-  assert.equal(
-    slotInventoryLabel(
-      [
-        offer({ product: "always", openSlots: 1, totalSlots: 2 }),
-        offer({ product: "time_slot", openSlots: 2, totalSlots: 6 }),
-      ],
-      SHELF_SLOT_PRODUCTS,
-    ),
-    "3 of 8 open.",
   );
   // An unknown offer contributes nothing and is not counted as inventory.
   assert.equal(
@@ -265,8 +267,8 @@ const CATALOG = [
     ),
     null,
   );
-  // One unknown product beside a counted one hides capacity the sum would
-  // not include, so the pair reports nothing rather than an undercount.
+  // An unknown product beside a quoted one neither hides nor inflates the
+  // count: the quoted product still reports its own capacity.
   assert.equal(
     slotInventoryLabel(
       [
@@ -275,13 +277,25 @@ const CATALOG = [
       ],
       SHELF_SLOT_PRODUCTS,
     ),
-    null,
+    "1 of 2 open.",
   );
   assert.equal(slotInventoryLabel([], CATALOG_SLOT_PRODUCTS), null);
   // A sold-out product still reports honestly rather than going silent.
   assert.equal(
     slotInventoryLabel([offer({ availability: "sold_out", openSlots: 0, totalSlots: 4 })], CATALOG_SLOT_PRODUCTS),
     "0 of 4 open.",
+  );
+  // Real capacity: the shelf quotes the cheapest product's own count instead
+  // of adding ten always slots to sixty time-slot windows.
+  assert.equal(
+    slotInventoryLabel(
+      [
+        offer({ product: "always", indicativeAmountCents: 19_900, openSlots: 9, totalSlots: 10 }),
+        offer({ product: "time_slot", indicativeAmountCents: 4_900, openSlots: 59, totalSlots: 60 }),
+      ],
+      SHELF_SLOT_PRODUCTS,
+    ),
+    "59 of 60 open.",
   );
 }
 

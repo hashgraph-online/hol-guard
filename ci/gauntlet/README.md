@@ -373,6 +373,92 @@ python -m ci.gauntlet run --profile full-tasks --full-task-mode discover --full-
 - `--full-task-mode enforce` (the default) passes a task only when it completed with no approval request and no interruption under the core judge's rule, exempting only bound contained runs.
 - `--native-route PROVIDER/MODEL` runs a pinned native Oh My Pi backend through the same adapter as `--native-luna-route`. Tasks run one at a time; `--jobs`, `--fail-fast`, `--host-slots` and `--max-load` are rejected.
 
+### Installed acceptance (`installed`, never merge-qualifying)
+
+Every lane above drives Guard as a library, inside a private per-case `settings.json` that no
+harness ever reads, from a wheel, against a Guard home created moments earlier, and scores each
+case once. So four things stay invisible to them: whether `hol-guard install <harness>` really
+writes Guard's hooks into the harness's own configuration, whether the frozen bundle the Desktop
+app ships behaves like the wheel, whether the same payload gets the same verdict twice, and
+whether a home with upgrade history still ends up correct. A build can pass qualification and
+leave a machine with no protection at all.
+
+```sh
+python -m ci.gauntlet installed \
+  --runtime /absolute/path/to/hol-guard \
+  --harness claude-code codex omp \
+  --repeat 10 \
+  --output /absolute/path/outside-the-checkout/installed-acceptance
+```
+
+- **Registration is read from the harness, not from the install report.** The lane runs the
+  shipped `install` command as a subprocess into a lane-owned HOME, then opens
+  `.claude/settings.json`, `.codex/config.toml`, and the
+  Oh My Pi extension files and looks for Guard's own handlers. The expectations live in
+  `installed_contract.json`, which is the lane's, not the product's: asserting against a shipped
+  contract would let an emptied one pass. A build that reports a successful install and registers
+  nothing fails here.
+- **The frozen bundle counts as a different artifact.** `--require-frozen` refuses a wheel console
+  script. A bundle qualifies only when it carries a sibling `_internal/` with the sealed native
+  runtime and its `runtime-manifest.json`, and only when it still answers `--version` with `PATH`
+  pointing at an empty directory, so no interpreter on the host can be standing in for it.
+  The Desktop install is reached through two `/bin/sh` wrappers, the second of which computes the
+  bundle path from `current.json` at run time, so its first two bytes are `#!` even though the
+  artifact behind it is frozen. A wrapper that answers with no interpreter on `PATH` is therefore
+  accepted as `shim`: the empty-`PATH` probe is the evidence, and reading the first file's bytes
+  would refuse a real install.
+- **Disagreement is a defect, not a flake.** `--repeat N` replays each case through the argv the
+  harness itself registered, N times, with identical bytes on stdin. Verdicts are compared as
+  `decision|exit_code`, and a crashed hook that emits no envelope is recorded as `no-envelope`
+  rather than folded into `allow`, so a crash loop cannot read as silence. More than one signature
+  across the N runs fails the case.
+- **One pass uses a home with history.** The lane installs, writes the artifacts a previous
+  version would have left (a stale Claude handler pointing at a command that no longer exists, a
+  legacy `.codex/hooks.json`), installs again, and fails if a handler survives that the harness
+  would now try to run.
+- Replay covers the harnesses whose registration is a runnable argv. Oh My Pi's extension is
+  TypeScript loaded by the agent runtime, so this lane asserts its registration and records the
+  determinism gap in the evidence rather than claiming coverage it does not have.
+- The lane refuses to run on a host whose canonical approval gate owns `install`. That gate
+  resolves its home from the OS account, not from `HOME`, and has no environment seam by design;
+  CI runners have no enrolled gate. The lane never touches the operator's own `~/.claude`,
+  `~/.codex`, `~/.omp` or `~/.hol-guard`.
+- Evidence is `hol-guard-installed-acceptance.v1` in `installed-acceptance.json`, and the exit
+  status is zero only when every harness registered, every replay agreed and the aged pass left
+  nothing behind. `.github/workflows/gauntlet-installed-acceptance.yml` runs it on a weekly
+  schedule and on dispatch, against both the wheel and a PyInstaller onedir build of the same
+  commit. Like the rest of the Gauntlet it is not a required check.
+- **A pull request that changes the lane runs it with `--report-only`.** These steps assert
+  against the shipped build, so gating lane changes on them would block the lane on defects it did
+  not introduce and cannot fix from here. Report-only still writes the evidence, prints the
+  findings and puts them in the job summary; it only declines to fail the job. The scheduled and
+  dispatched runs are strict.
+
+#### What it found on installed 3.46.0
+
+The first run against a pip-installed 3.46.0 on a clean Ubuntu runner, with every replay case
+repeated five times, returned four findings that qualification had scored as a pass:
+
+- `git status --short` in an ordinary repository was **denied** and sent to the approval inbox,
+  five times out of five: "this Git read may execute a configured helper, or its effective
+  configuration could not be verified". The other two benign cases allowed quietly, and both
+  attack cases were stopped, so this is one rule misreading an ordinary repository rather than a
+  build that blocks everything.
+- `install codex` exited 1 with "The Codex hook interpreter is writable by another user; repair
+  the installation", and the harness was left with **zero** Guard hook entries. A stock runner is
+  not a damaged machine, so Guard declines to protect Codex on a default host.
+- Reinstalling over a home with upgrade history left **all six** Claude handlers still pointing at
+  the previous install's path. The install joins rather than prunes, so every event calls a
+  command that is no longer there.
+- Reinstalling Codex over that aged home exited 4 with an empty stderr.
+
+Separately, on a macOS host with no long-lived Guard process, each one-shot `hol-guard hook` call
+spawns its own native resident, uses it, and lets it exit about a second later, because the
+resident's lifetime is pinned to its owner and to a one-second client lease. Every spawn consumes
+the resident restart budget, which allows three per minute; the fourth tool call in a minute is
+refused and the harness is handed a fixed `native_hook_worker_exception` deny. The resident's own
+stderr is discarded and the Python handler logged nothing, so this surfaced as a blocked tool call
+with no recoverable cause.
 #### Local tasks on the host, through any supported harness
 
 Local tasks (`python-cli-with-tests`, `fix-failing-node-test`, `add-validation-dependency`, `worktree-report-branch`, `flappy-bird-game`, `todo-app-local`) need no GitHub, so they also run on the host without Docker against the installed Guard. `flappy-bird-game` and `todo-app-local` start from an empty Git repository and pass only when the committed app (a canvas game loop with gravity, flapping and pipes, or a todo app), committed tests that import it, and a passing test run (at least one test; `npm test`, `node --test`, `unittest` or `pytest`) all exist on a clean tree.

@@ -427,6 +427,9 @@ mod mcp_proxy_actions;
 mod mcp_proxy_archive;
 #[cfg(test)]
 mod mcp_proxy_archive_vectors_tests;
+mod mcp_proxy_archive_verify;
+#[cfg(all(test, unix))]
+mod mcp_proxy_archive_verify_tests;
 mod mcp_proxy_catalog;
 mod mcp_proxy_decision_op;
 #[cfg(test)]

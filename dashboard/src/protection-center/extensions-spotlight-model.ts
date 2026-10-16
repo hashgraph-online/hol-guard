@@ -261,54 +261,73 @@ export function slotState(input: {
 }
 
 /**
- * The cheapest indicative monthly price among the products that actually buy
- * the placement being offered. A sponsored row never quotes a featured price.
+ * The one offer a buyer is actually being quoted: the cheapest product that
+ * is open for sale among the products that buy this placement. Price and
+ * remaining capacity are both read off it so the two numbers always describe
+ * the same purchasable thing - a price for one product beside capacity summed
+ * over two is a number a buyer cannot act on.
+ */
+export function quotedSlotOffer(
+  offers: readonly DiscoveryOffer[],
+  products: readonly DiscoveryProduct[],
+): DiscoveryOffer | null {
+  const rank = (offer: DiscoveryOffer): number => products.indexOf(offer.product);
+  const priced = (offer: DiscoveryOffer): boolean => offer.indicativeAmountCents !== null && !!offer.currency;
+  const candidates = forProducts(offers, products)
+    .filter((offer) => offer.availability === "open")
+    .sort((left, right) => {
+      // A product we can name a price for leads one we cannot, then the
+      // cheapest of those, then the order the placement sells them in.
+      if (priced(left) !== priced(right)) return priced(left) ? -1 : 1;
+      if (priced(left) && priced(right)) {
+        const difference = (left.indicativeAmountCents as number) - (right.indicativeAmountCents as number);
+        if (difference !== 0) return difference;
+      }
+      return rank(left) - rank(right);
+    });
+  return candidates[0] ?? null;
+}
+
+/**
+ * The indicative monthly price of the quoted offer. A sponsored row never
+ * quotes a featured price, and a sold-out placement quotes nothing.
  */
 export function slotStartingPrice(
   offers: readonly DiscoveryOffer[],
   products: readonly DiscoveryProduct[],
 ): string | null {
-  const amounts = forProducts(offers, products)
-    .filter((offer) => offer.availability === "open" && offer.indicativeAmountCents !== null && offer.currency)
-    .map((offer) => ({ cents: offer.indicativeAmountCents as number, currency: offer.currency as string }))
-    .sort((left, right) => left.cents - right.cents);
-  const cheapest = amounts[0];
-  if (!cheapest) return null;
+  const quoted = quotedSlotOffer(offers, products);
+  if (!quoted || quoted.indicativeAmountCents === null || !quoted.currency) return null;
+  const cents = quoted.indicativeAmountCents;
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: cheapest.currency.toUpperCase(),
-      maximumFractionDigits: cheapest.cents % 100 === 0 ? 0 : 2,
-    }).format(cheapest.cents / 100);
+      currency: quoted.currency.toUpperCase(),
+      maximumFractionDigits: cents % 100 === 0 ? 0 : 2,
+    }).format(cents / 100);
   } catch {
     return null;
   }
 }
 
 /**
- * How many of these spots are still for sale, summed over the products that
- * buy this placement. Returns null unless every product the server sent for
- * this placement carried a slot pair: a partial answer would read as a
- * complete one.
+ * How many of the quoted product's spots are still for sale. Capacity is
+ * never summed across products: with real inventory that reads as "68 of 70
+ * open" beside the price of one of the two, which tells a buyer nothing about
+ * what they would be buying. When nothing is open, the one product still on
+ * sale reports its own sold-out count rather than a total nobody offered.
  */
 export function slotInventory(
   offers: readonly DiscoveryOffer[],
   products: readonly DiscoveryProduct[],
 ): { open: number; total: number } | null {
-  const relevant = forProducts(offers, products);
-  if (relevant.length === 0) return null;
-  let open = 0;
-  let total = 0;
-  for (const offer of relevant) {
-    // One unknown product makes the sum a guess about the rest, so the whole
-    // count goes away rather than quoting capacity we were never told about.
-    if (offer.availability === "unknown") return null;
-    if (offer.openSlots === null || offer.totalSlots === null) return null;
-    open += offer.openSlots;
-    total += offer.totalSlots;
-  }
-  if (total < 1) return null;
-  return { open, total };
+  const soldOut = forProducts(offers, products)
+    .filter((offer) => offer.availability === "sold_out")
+    .sort((left, right) => products.indexOf(left.product) - products.indexOf(right.product));
+  const quoted = quotedSlotOffer(offers, products) ?? soldOut[0] ?? null;
+  if (!quoted || quoted.openSlots === null || quoted.totalSlots === null) return null;
+  if (quoted.totalSlots < 1) return null;
+  return { open: quoted.openSlots, total: quoted.totalSlots };
 }
 
 /** "3 of 4 open", only when the server actually confirmed both numbers. */

@@ -29,9 +29,9 @@ from ..daemon.manager import load_guard_daemon_auth_token
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
+    _external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
     _resolve_stored_package_policy_override,
-    _verified_external_archive_replacements,
     evaluate_package_request_artifact,
     package_current_action_and_hash,
     package_external_archive_override,
@@ -101,17 +101,15 @@ def _bound_external_archive_mcp_request(
     evaluation: object,
     guard_home: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    replacements = _verified_external_archive_replacements(evaluation)
-    if replacements is None:
-        return None
+    downloads = _external_archive_downloads(evaluation)
     requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
-    if not replacements and not requires_binding:
+    if not downloads and not requires_binding:
         return message, params
     try:
-        # With no replacements the resident does not inspect params, so keep the request small.
+        # With no downloads the resident does not inspect params, so keep the request small.
         bound_params = native_external_archive_bind(
-            params if replacements else {},
-            replacements,
+            params if downloads else {},
+            downloads,
             requires_binding=requires_binding,
             guard_home=guard_home,
         )
@@ -119,7 +117,7 @@ def _bound_external_archive_mcp_request(
         return None
     if bound_params is None:
         return None
-    if not replacements:
+    if not downloads:
         return message, params
     return {**message, "params": bound_params}, bound_params
 

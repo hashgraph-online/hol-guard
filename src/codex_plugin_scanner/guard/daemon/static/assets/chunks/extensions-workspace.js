@@ -7389,33 +7389,39 @@ function slotState(input) {
   if (known.length === 0) return "hidden";
   return known.some((offer) => offer.availability === "open") ? "open" : "sold-out";
 }
+function quotedSlotOffer(offers, products) {
+  const rank = (offer) => products.indexOf(offer.product);
+  const priced = (offer) => offer.indicativeAmountCents !== null && !!offer.currency;
+  const candidates = forProducts(offers, products).filter((offer) => offer.availability === "open").sort((left, right) => {
+    if (priced(left) !== priced(right)) return priced(left) ? -1 : 1;
+    if (priced(left) && priced(right)) {
+      const difference = left.indicativeAmountCents - right.indicativeAmountCents;
+      if (difference !== 0) return difference;
+    }
+    return rank(left) - rank(right);
+  });
+  return candidates[0] ?? null;
+}
 function slotStartingPrice(offers, products) {
-  const amounts = forProducts(offers, products).filter((offer) => offer.availability === "open" && offer.indicativeAmountCents !== null && offer.currency).map((offer) => ({ cents: offer.indicativeAmountCents, currency: offer.currency })).sort((left, right) => left.cents - right.cents);
-  const cheapest = amounts[0];
-  if (!cheapest) return null;
+  const quoted = quotedSlotOffer(offers, products);
+  if (!quoted || quoted.indicativeAmountCents === null || !quoted.currency) return null;
+  const cents = quoted.indicativeAmountCents;
   try {
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: cheapest.currency.toUpperCase(),
-      maximumFractionDigits: cheapest.cents % 100 === 0 ? 0 : 2
-    }).format(cheapest.cents / 100);
+      currency: quoted.currency.toUpperCase(),
+      maximumFractionDigits: cents % 100 === 0 ? 0 : 2
+    }).format(cents / 100);
   } catch {
     return null;
   }
 }
 function slotInventory(offers, products) {
-  const relevant = forProducts(offers, products);
-  if (relevant.length === 0) return null;
-  let open = 0;
-  let total = 0;
-  for (const offer of relevant) {
-    if (offer.availability === "unknown") return null;
-    if (offer.openSlots === null || offer.totalSlots === null) return null;
-    open += offer.openSlots;
-    total += offer.totalSlots;
-  }
-  if (total < 1) return null;
-  return { open, total };
+  const soldOut = forProducts(offers, products).filter((offer) => offer.availability === "sold_out").sort((left, right) => products.indexOf(left.product) - products.indexOf(right.product));
+  const quoted = quotedSlotOffer(offers, products) ?? soldOut[0] ?? null;
+  if (!quoted || quoted.openSlots === null || quoted.totalSlots === null) return null;
+  if (quoted.totalSlots < 1) return null;
+  return { open: quoted.openSlots, total: quoted.totalSlots };
 }
 function slotInventoryLabel(offers, products) {
   const inventory = slotInventory(offers, products);
