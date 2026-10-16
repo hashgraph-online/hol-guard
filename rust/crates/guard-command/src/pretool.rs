@@ -152,7 +152,7 @@ pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::inline_loopback_ports;
-pub(crate) use script_content::sole_program_sources;
+pub(crate) use script_content::{sole_program_sources, sourced_program_sources};
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;

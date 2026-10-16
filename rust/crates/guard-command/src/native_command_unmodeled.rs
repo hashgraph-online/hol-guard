@@ -179,14 +179,33 @@ impl CompiledNativeCommandControls {
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
         let interpreted = named_words(&joined_quotes(shell));
+        // `source FILE` runs the file's words in this shell, so the file names
+        // the programs the command can run. Reading it bounds those owners the
+        // way a script file bounds an interpreter's. Until it was read, an
+        // ordinary `source .venv/bin/activate && pytest -q` had no owner set at
+        // all and was refused outright, with no approval left to give it.
+        let sources_files = interpreted.contains("source") || interpreted.contains(".");
+        let sourced = if sources_files {
+            crate::pretool::sourced_program_sources(command, context)
+                .filter(|texts| texts.iter().all(|text| bounds_its_owners(text)))
+        } else {
+            Some(Vec::new())
+        };
+        let sourced_resolved = sources_files && sourced.is_some();
         if shell.contains("$'")
             || shell.contains("$\"")
-            || synthesizes_program(&unquoted_literal(shell))
+            || synthesizes_program(&unquoted_literal(shell), sourced_resolved)
         {
             return None;
         }
         let mut named = named_words(text);
-        if INTERPRETERS.iter().any(|name| interpreted.contains(*name)) {
+        for source in sourced.iter().flatten() {
+            named.extend(named_words(source));
+        }
+        if INTERPRETERS
+            .iter()
+            .any(|name| interpreted.contains(*name) && !(sourced_resolved && *name == "source"))
+        {
             // A program read from a file names the tools it may launch
             // outside the command text, so it counts toward the owners.
             match crate::pretool::sole_program_sources(command, context) {
@@ -559,16 +578,95 @@ fn python_module_launch(arguments: &[&str]) -> bool {
     false
 }
 
-/// Whether a command position holds an expansion, glob or `.` source, which
-/// can run a program whose name appears nowhere in the text.
-fn synthesizes_program(literal: &str) -> bool {
+/// Whether a sourced file's own words name every program it runs.
+///
+/// Reading a file bounds the owners only while its text is the whole story.
+/// Text that builds a command word from an expansion or a glob, that sources
+/// a further file this scan has not read, that hands text to an interpreter,
+/// or that hides words behind an ANSI-C or locale quote can run a program
+/// whose name never appears, so the command keeps the owners it had instead.
+fn bounds_its_owners(text: &str) -> bool {
+    if text.contains("$'") || text.contains("$\"") {
+        return false;
+    }
+    let literal = mask_parameter_expansions(&unquoted_literal(text));
+    !synthesizes_program(&literal, false)
+        && !command_words(&mask_double_quoted_separators(&literal)).any(|word| {
+            let base = command_basename(&joined_quotes(word));
+            INTERPRETERS.contains(&base.as_str())
+        })
+}
+
+/// The text with `${NAME}` parameter expansions replaced by a plain word.
+///
+/// The shell expands those to a value rather than running them, and a script
+/// is full of them: `${BASH_SOURCE[0]:-$0}` inside a command substitution
+/// would otherwise read as a command word built from an expansion. Bash's
+/// `${ cmd; }` and `${| cmd; }` do run the commands they hold, so a brace
+/// followed by a space or a pipe is left exactly as it stands, and `$(...)`
+/// and backticks are never touched. A `${...}` whose body holds `$(...)` or
+/// a backtick still runs that command, so the whole expansion is left in
+/// place rather than hidden behind a plain word.
+fn mask_parameter_expansions(literal: &str) -> String {
+    let characters: Vec<char> = literal.chars().collect();
+    let mut out = String::with_capacity(literal.len());
+    let mut index = 0;
+    while index < characters.len() {
+        let expansion = characters[index] == '$'
+            && characters.get(index + 1) == Some(&'{')
+            && !matches!(
+                characters.get(index + 2),
+                Some(' ' | '\t' | '\n' | '|') | None
+            );
+        if !expansion || parameter_expansion_runs_a_command(&characters[index..]) {
+            out.push(characters[index]);
+            index += 1;
+            continue;
+        }
+        out.push('x');
+        index += 2;
+        let mut depth = 1usize;
+        while index < characters.len() && depth > 0 {
+            match characters[index] {
+                '{' => depth += 1,
+                '}' => depth -= 1,
+                _ => {}
+            }
+            index += 1;
+        }
+    }
+    out
+}
+
+/// Bash runs a command substitution nested in a default value, as in
+/// `${UNSET:-$(tool)}`. Masking the whole `${...}` would hide that program.
+fn parameter_expansion_runs_a_command(characters: &[char]) -> bool {
+    let mut depth = 1usize;
+    let mut index = 2;
+    while index < characters.len() && depth > 0 {
+        if characters[index] == '`'
+            || (characters[index] == '$' && characters.get(index + 1) == Some(&'('))
+        {
+            return true;
+        }
+        match characters[index] {
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+        index += 1;
+    }
+    false
+}
+
+fn synthesizes_program(literal: &str, sourced: bool) -> bool {
     let masked = mask_double_quoted_separators(literal);
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
     words.any(|word| {
         !matches!(
             word,
             "for" | "case" | "select" | "in" | "done" | "fi" | "esac" | "[" | "[["
-        ) && (word == "." || word.contains(['$', '*', '?', '[']))
+        ) && ((word == "." && !sourced) || word.contains(['$', '*', '?', '[']))
     })
 }
 
@@ -670,3 +768,7 @@ fn is_assignment(word: &str) -> bool {
 #[cfg(test)]
 #[path = "native_command_unmodeled_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_sourced_tests.rs"]
+mod sourced_tests;
