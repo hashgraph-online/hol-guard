@@ -1,0 +1,193 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.ai-art-team",
+  "version": "1.0.0",
+  "name": "VibeInc AI Art Team MCP",
+  "description": "Reviews VibeInc AI Art Team, Blender game-art tools (concept, 3D, materials, layout, camera, render). Tools that spend Meshy credits, send prompts, images or models to OpenAI, Google Gemini or Meshy, run long GPU jobs, or drive the user's open Blender ask first. Local headless Blender file work keeps Guard's normal policy. Off until enabled.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.vibeincstudio",
+    "displayName": "VibeInc",
+    "url": "https://github.com/VibeIncStudio"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0C10"
+  },
+  "homepage": "https://github.com/VibeIncStudio/ai-art-team",
+  "license": "MIT AND GPL-3.0-or-later",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "uvx",
+    "package": "vibeinc-ai-art-team"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "local-file-write",
+    "external-credit-spend",
+    "external-content-upload",
+    "localhost-listener"
+  ],
+  "tools": [
+    {
+      "name": "concept",
+      "state": "review"
+    },
+    {
+      "name": "image_to_mesh",
+      "state": "review"
+    },
+    {
+      "name": "autorig",
+      "state": "review"
+    },
+    {
+      "name": "animate",
+      "state": "review"
+    },
+    {
+      "name": "make_prop",
+      "state": "review"
+    },
+    {
+      "name": "review_asset",
+      "state": "review"
+    },
+    {
+      "name": "make_pack",
+      "state": "review"
+    },
+    {
+      "name": "improve_asset",
+      "state": "review"
+    },
+    {
+      "name": "live_blender",
+      "state": "review"
+    },
+    {
+      "name": "list_motion_styles",
+      "state": "inherit"
+    },
+    {
+      "name": "list_styles",
+      "state": "inherit"
+    },
+    {
+      "name": "list_providers",
+      "state": "allow"
+    },
+    {
+      "name": "connect_provider",
+      "state": "allow"
+    },
+    {
+      "name": "verify_package",
+      "state": "inherit"
+    },
+    {
+      "name": "about",
+      "state": "allow"
+    },
+    {
+      "name": "usage_stats",
+      "state": "allow"
+    },
+    {
+      "name": "job_status",
+      "state": "inherit"
+    },
+    {
+      "name": "status",
+      "state": "inherit"
+    },
+    {
+      "name": "bake_detail",
+      "state": "inherit"
+    },
+    {
+      "name": "cleanup_mesh",
+      "state": "inherit"
+    },
+    {
+      "name": "assign_material",
+      "state": "inherit"
+    },
+    {
+      "name": "list_material_presets",
+      "state": "inherit"
+    },
+    {
+      "name": "photo_to_pbr",
+      "state": "inherit"
+    },
+    {
+      "name": "greybox",
+      "state": "inherit"
+    },
+    {
+      "name": "camera_path",
+      "state": "inherit"
+    },
+    {
+      "name": "render_still",
+      "state": "inherit"
+    },
+    {
+      "name": "studio_setup",
+      "state": "inherit"
+    },
+    {
+      "name": "render_frames",
+      "state": "inherit"
+    },
+    {
+      "name": "import_asset",
+      "state": "inherit"
+    },
+    {
+      "name": "scene_report",
+      "state": "inherit"
+    },
+    {
+      "name": "import_motion",
+      "state": "inherit"
+    },
+    {
+      "name": "list_animations",
+      "state": "inherit"
+    },
+    {
+      "name": "sound_search",
+      "state": "inherit"
+    },
+    {
+      "name": "sound_generate",
+      "state": "inherit"
+    },
+    {
+      "name": "style_save",
+      "state": "inherit"
+    },
+    {
+      "name": "package_asset",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "inherit"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/VibeIncStudio/ai-art-team",
+    "https://github.com/VibeIncStudio/ai-art-team/blob/main/AGENTS.md",
+    "https://pypi.org/project/vibeinc-ai-art-team/"
+  ],
+  "saferAlternatives": [
+    "Cap Meshy spend: animate takes max_credits, improve_asset takes budget_credits, make_pack takes fix_budget_credits plus max_regenerations:0. autorig (5 credits) and Meshy image_to_mesh have no cap, so keep them on Review.",
+    "Standalone local tools (cleanup_mesh, assign_material, greybox, camera_path, render_still) upload nothing and spend no credits. make_pack and make_prop still call GPT for concepts and reviews, even with local TRELLIS.2.",
+    "Leave the Blender add-on's 'Allow live control' off; the headless tools cover the same actions without touching an open Blender."
+  ]
+}
