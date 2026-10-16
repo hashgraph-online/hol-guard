@@ -198,8 +198,8 @@ def _nested_state(depth: int) -> str:
         '{"enabled": false, "cooldown_seconds": -Infinity}',
         '{"enabled": false, "label": "\\ud800"}',
         '{"enabled": false, "label": "\\ud800", "label": "ok"}',
-        '{"enabled": true, "enabled": false}',
         _nested_state(128),
+        _nested_state(128)[:-1] + ', "pad": 1}',
         _nested_state(100_000),
     ],
 )
@@ -213,7 +213,15 @@ def test_passive_posture_reports_unknown_for_json_the_resident_refuses(
     assert approval_gate_posture(tmp_path, passive=True) == {"status": "unknown"}
 
 
-@pytest.mark.parametrize("state", [_nested_state(127), '{"enabled": false, "cooldown_seconds": 1e400}'])
+@pytest.mark.parametrize(
+    "state",
+    [
+        _nested_state(127),
+        '{"enabled": false, "cooldown_seconds": 1e400}',
+        # A repeated key keeps its last value, as serde_json does.
+        '{"enabled": true, "enabled": false}',
+    ],
+)
 def test_passive_posture_accepts_json_the_resident_accepts(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, state: str
 ) -> None:
@@ -221,6 +229,15 @@ def test_passive_posture_accepts_json_the_resident_accepts(
     _ = (tmp_path / APPROVAL_GATE_STATE_FILE).write_text(state, encoding="utf-8")
 
     assert approval_gate_posture(tmp_path, passive=True)["status"] == "not_set"
+
+
+def test_passive_posture_reads_the_last_value_of_a_repeated_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _forbid_native_gate_probe(monkeypatch)
+    _ = (tmp_path / APPROVAL_GATE_STATE_FILE).write_text('{"enabled": false, "enabled": true}', encoding="utf-8")
+
+    assert approval_gate_posture(tmp_path, passive=True)["status"] == "protected"
 
 
 def test_doctor_modes_read_gate_posture_without_native_probe(

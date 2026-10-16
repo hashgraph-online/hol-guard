@@ -24,6 +24,9 @@ struct Options {
     exits: &'static [&'static str],
     /// Words after `--` are arguments to a program read from stdin.
     args_after_dashdash: bool,
+    /// Long options that leave stdin as the program, and whether a value can
+    /// be the next word. `--name=value` is accepted for any of them.
+    long: &'static [(&'static str, bool)],
 }
 
 const PYTHON: Options = Options {
@@ -32,6 +35,7 @@ const PYTHON: Options = Options {
     attached: "",
     exits: &["-V", "-VV", "-h", "-?"],
     args_after_dashdash: false,
+    long: &[("--check-hash-based-pycs", true)],
 };
 const PERL: Options = Options {
     no_stdin: "eE",
@@ -39,6 +43,7 @@ const PERL: Options = Options {
     attached: "il0FCdDx",
     exits: &["-v", "-V", "-h"],
     args_after_dashdash: false,
+    long: &[],
 };
 const RUBY: Options = Options {
     no_stdin: "e",
@@ -46,6 +51,7 @@ const RUBY: Options = Options {
     attached: "0FiKTWx",
     exits: &["-h"],
     args_after_dashdash: false,
+    long: &[],
 };
 const NODE: Options = Options {
     no_stdin: "ep",
@@ -53,6 +59,25 @@ const NODE: Options = Options {
     attached: "",
     exits: &["-v", "-h"],
     args_after_dashdash: false,
+    long: &[
+        ("--require", true),
+        ("--import", true),
+        ("--loader", true),
+        ("--experimental-loader", true),
+        ("--input-type", true),
+        ("--conditions", true),
+        ("--title", true),
+        ("--env-file", true),
+        ("--max-old-space-size", false),
+        ("--stack-size", false),
+        ("--no-warnings", false),
+        ("--no-deprecation", false),
+        ("--trace-warnings", false),
+        ("--trace-uncaught", false),
+        ("--enable-source-maps", false),
+        ("--experimental-vm-modules", false),
+        ("--preserve-symlinks", false),
+    ],
 };
 const PHP: Options = Options {
     no_stdin: "rBREfFlswim",
@@ -60,6 +85,11 @@ const PHP: Options = Options {
     attached: "",
     exits: &["-v", "-h"],
     args_after_dashdash: true,
+    long: &[
+        ("--php-ini", true),
+        ("--no-php-ini", false),
+        ("--define", true),
+    ],
 };
 // Bun and Deno keep the original rule: only single-dash flags that name no
 // program, so `deno run -` and similar subcommands stay unclaimed.
@@ -69,6 +99,7 @@ const OTHER: Options = Options {
     attached: "",
     exits: &[],
     args_after_dashdash: false,
+    long: &[],
 };
 
 /// A shell or interpreter that takes its program from standard input.
@@ -117,10 +148,21 @@ fn interpreter_reads_stdin(options: &Options, arguments: &[String]) -> bool {
         {
             return false;
         }
-        // Long options are not modelled per interpreter; leave them to the
-        // ordinary review rather than claim an attack.
+        // Unknown long options are left to the ordinary review rather than
+        // claimed as an attack.
         if argument.starts_with("--") {
-            return false;
+            let (name, attached) = argument
+                .split_once('=')
+                .map_or((argument.as_str(), false), |(name, _)| (name, true));
+            match options.long.iter().find(|(long, _)| *long == name) {
+                Some((_, takes_value)) => {
+                    if *takes_value && !attached {
+                        index += 1;
+                    }
+                    continue;
+                }
+                None => return false,
+            }
         }
         let Some(flags) = argument.strip_prefix('-') else {
             // A script file: standard input is that script's data.

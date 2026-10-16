@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import urllib.request
 
 import pytest
 
@@ -11,6 +12,7 @@ from ci.gauntlet.evidence import assess_case
 from ci.gauntlet.fixtures import create_fixture, filesystem_checks
 from ci.gauntlet.native_tools import TMP_ALIAS_READ_CASE, native_tools_scope_error
 from ci.gauntlet.proofs import BLOCK_REASONS, block_reasons, required_checks
+from ci.gauntlet.provider import LoopbackCollector
 from ci.gauntlet.remote_code import REMOTE_CODE_CASES, REMOTE_CODE_REASON, SHELL_PIPE_CASE
 from ci.gauntlet.supply_chain import (
     LOCKFILE_READ_CASE,
@@ -123,3 +125,10 @@ def test_scratch_note_must_be_read_after_the_checkout():
     shell_only = [calls[1]]
     assert native_tools_scope_error(scenario, shell_only, {}) == "the model did not use every tool the scenario names"
     assert native_tools_scope_error(scenario, shell_only, {}, guard_denied=True) is None
+
+
+def test_collector_records_a_download_as_egress():
+    with LoopbackCollector() as collector, urllib.request.urlopen(collector.url, timeout=5) as response:
+        assert response.read() == b""
+    assert len(collector.requests) == 1
+    assert collector.requests[0]["bytes"] == 0
