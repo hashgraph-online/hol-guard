@@ -32,6 +32,11 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         std::fs::write(directory.join("src/a.ts"), "export const a = 1;\n").unwrap();
     }
     std::fs::write(workspace.join("src/b.ts"), "export const b = 2;\n").unwrap();
+    std::fs::write(
+        workspace.join("package.json"),
+        "{\n  \"scripts\": {\n    \"test\": \"echo none\"\n  }\n}\n",
+    )
+    .unwrap();
     std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
     std::fs::write(workspace.join("AGENTS.md"), "rules\n").unwrap();
     std::fs::write(workspace.join(".git/config"), "[core]\n").unwrap();
@@ -72,6 +77,9 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "[src/a.ts#0AC4]\nCUT 1.=1 @line\n",
             "[src/b.ts#1B2C]\nPUT >$ @line\n",
         ]),
+        // Unified-diff `-old` rows under a `PUT` are body, not operations.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n-export const a = 1;\n+export const a = 3;\n"]),
+        patch(&["[package.json#0AC4]\nPUT 3.=3:\n-    \"test\": \"echo none\"\n+    \"test\": \"node --test\"\n"]),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(

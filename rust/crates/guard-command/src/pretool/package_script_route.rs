@@ -20,9 +20,7 @@ use crate::sfrs_shlex::{split_with, PLAIN_LEXER, SCRIPT_LEXER};
 use crate::CanonicalCommandV1;
 #[cfg(unix)]
 use serde_json::{Map, Value};
-#[cfg(unix)]
-use std::path::Path;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(unix)]
 use super::super::contained_wrapper::sibling_project_root;
@@ -31,7 +29,6 @@ use super::super::contained_wrapper::{contained_core, package_dir};
 use super::super::executable_basename;
 use super::super::PathContext;
 
-#[cfg(unix)]
 #[path = "package_script_vite.rs"]
 mod package_script_vite;
 
@@ -39,7 +36,6 @@ mod package_script_vite;
 const PACKAGE_TEST: &str = "native_package_test_readonly_containment_required";
 #[cfg(unix)]
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
-#[cfg(unix)]
 const NODE_BUILD: &str = "native_node_build_output_containment_required";
 const GIT: &str = "native_git_readonly_containment_required";
 
@@ -70,15 +66,45 @@ fn core_cwd(model: &CanonicalCommandV1, context: PathContext<'_>) -> Option<Path
     context.cwd.map(PathBuf::from)
 }
 
-/// Windows runs no Node sink; its routes are unchanged.
+/// Windows runs only the direct Vite build sink, which stages a flat npm or
+/// Yarn classic `node_modules` from the run directory up to the session root.
+/// A package script, a pnpm store or a Plug'n'Play install keeps the review
+/// prompt. Other routes are unchanged.
 #[cfg(not(unix))]
 fn resolved(
-    _model: &CanonicalCommandV1,
+    model: &CanonicalCommandV1,
     reason: &'static str,
-    _cwd: Option<PathBuf>,
-    _context: PathContext<'_>,
+    cwd: Option<PathBuf>,
+    context: PathContext<'_>,
 ) -> Option<&'static str> {
-    Some(reason)
+    if reason != NODE_BUILD {
+        return Some(reason);
+    }
+    let segment = model.segments.first()?;
+    let arguments = segment.arguments.as_slice();
+    // The same name the build classification reads, so `npm.exe run build`
+    // is the package script `npm run build` is and keeps the review prompt.
+    if matches!(
+        crate::program_basename(segment.executable.as_deref()?),
+        "npm" | "pnpm" | "bun"
+    ) && arguments.first().is_some_and(|word| word == "run")
+    {
+        return None;
+    }
+    let session = std::fs::canonicalize(context.cwd?).ok()?;
+    let directory = std::fs::canonicalize(cwd?).ok()?;
+    if !directory.starts_with(&session)
+        || !build_output_allowed(arguments, Some((&directory, &session)))
+    {
+        return None;
+    }
+    let modules =
+        nearest(&directory, &session, "node_modules/vite/bin/vite.js").join("node_modules");
+    let installed = std::fs::canonicalize(modules).ok()?;
+    let flat = [".modules.yaml", ".pnpm"]
+        .iter()
+        .all(|marker| std::fs::symlink_metadata(installed.join(marker)).is_err());
+    (flat && installed.join("vite/bin/vite.js").is_file()).then_some(NODE_BUILD)
 }
 
 #[cfg(unix)]
@@ -152,7 +178,6 @@ fn direct_tool(
     build_output_allowed(arguments, roots).then_some(reason)
 }
 
-#[cfg(unix)]
 /// `prepare_restricted_node_tool`'s output rule for `vite build`: the last
 /// `--outDir <dir>` or `--outDir=<dir>` wins, and an empty one means the
 /// default. An explicit directory must pass `validate_build_output_root`
@@ -238,7 +263,6 @@ fn locations(cwd: &Path, context: PathContext<'_>) -> Option<(PathBuf, PathBuf)>
     Some((workspace, directory))
 }
 
-#[cfg(unix)]
 /// `nearest_project_root`: the closest directory from `directory` up to
 /// `workspace` holding `relative`, else `workspace`.
 fn nearest(directory: &Path, workspace: &Path, relative: &str) -> PathBuf {

@@ -364,7 +364,8 @@ def peel_contained_wrapper(
     A cd target must lie in the workspace or, given `home`, in a sibling
     repository (see `sibling_project_root`). A relative target is accepted only
     when it names a sibling repository's root from `cwd`, such as a linked
-    worktree beside the checkout; after a cd into a sibling root, the core may
+    worktree beside the checkout, or, on Windows, a workspace directory joined
+    by `&&`; after a cd into a sibling root, the core may
     be an `&&` list of plain commands, which is re-authorized there. Only a cd
     into a sibling repository may end in `;` or carry `2>/dev/null`: the
     directory is resolved here and nothing runs when it is gone, so the core
@@ -402,8 +403,15 @@ def peel_contained_wrapper(
             raise ValueError("relative cd target")
         inside = workspace.resolve(strict=True)
         directory = ((cwd or workspace) / target).resolve(strict=True)
-        if not target.is_absolute() and (
-            _path_is_within(directory, inside) or sibling_project_root(directory, home=home) != directory
+        # Windows has no workspace sandbox to run the text whole, so there an
+        # `&&`-joined relative cd into the workspace is peeled too.
+        peeled_inside = (
+            sys.platform == "win32" and not sequenced and quiet is None and _path_is_within(directory, inside)
+        )
+        if (
+            not target.is_absolute()
+            and not peeled_inside
+            and (_path_is_within(directory, inside) or sibling_project_root(directory, home=home) != directory)
         ):
             raise ValueError("relative cd target")
         if not directory.is_dir() or not (

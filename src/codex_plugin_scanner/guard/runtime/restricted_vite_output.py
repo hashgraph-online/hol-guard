@@ -63,15 +63,26 @@ _LITERAL = re.compile(
 )
 
 
-def declared_vite_output(cwd: Path, workspace: Path) -> Path | None:
+def declared_vite_output(cwd: Path, workspace: Path, *, config: Path | None = None) -> Path | None:
     """The config's literal output directory, None when the config names none.
 
-    Raises when the config names an output directory that cannot be verified,
-    so the build reports why instead of failing on a denied write.
+    ``config`` is the file named by ``--config``. When the command names one,
+    that file is the config Vite will load, so the default ``vite.config.*``
+    beside it is not a substitute. A missing file leaves the output to
+    ``--outDir`` or ``dist``. Raises when the config names an output directory
+    that cannot be verified, so the build reports why instead of failing on a
+    denied write.
     """
-    configs = [cwd / name for name in _CONFIG_NAMES if (cwd / name).is_file()]
-    if len(configs) != 1 or configs[0].is_symlink():
-        return None
+    if config is not None:
+        if not _path_is_within(config, workspace):
+            raise _unverified()
+        if not config.is_file() or config.is_symlink():
+            return None
+        configs = [config]
+    else:
+        configs = [cwd / name for name in _CONFIG_NAMES if (cwd / name).is_file()]
+        if len(configs) != 1 or configs[0].is_symlink():
+            return None
     try:
         raw = configs[0].read_bytes()[: _MAX_CONFIG_BYTES + 1]
     except OSError:
@@ -83,7 +94,10 @@ def declared_vite_output(cwd: Path, workspace: Path) -> Path | None:
     if len(raw) > _MAX_CONFIG_BYTES or len(matches) != 1 or len(_OUT_DIR.findall(text)) != 1:
         raise _unverified()
     spelled = matches[0].group("joined") or matches[0].group("plain")
-    output = Path(_normalized(cwd / spelled))
+    # `__dirname` is the config file's directory. A named config may not sit
+    # in `cwd`, and Vite resolves a literal outDir from that file.
+    base = configs[0].parent
+    output = Path(_normalized(base / spelled))
     if not _admissible(output, cwd=cwd, workspace=workspace):
         raise _unverified()
     return output

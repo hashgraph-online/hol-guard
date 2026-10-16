@@ -168,6 +168,7 @@ pub mod pretool_version_printenv;
 pub mod pretool_windows_agent_root_listing;
 pub mod pretool_windows_drive_cwd;
 pub mod pretool_windows_home_writes;
+pub mod pretool_windows_node_build;
 pub mod pretool_word_count;
 pub mod pretool_workspace_harness_config_writes;
 pub mod pretool_workspace_rg_grep_search;

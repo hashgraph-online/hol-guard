@@ -131,6 +131,18 @@ def test_command_line_output_or_config_overrides_the_declared_directory(monkeypa
     assert plan.output_roots[0] == app / "dist"
 
 
+def test_a_named_config_keeps_its_own_literal_output(tmp_path):
+    """`--config` selects that file. It does not discard the outDir the file names."""
+
+    app = _dashboard(tmp_path, _config("process.env.OUT_DIR"))
+    (app / "vite.alt.ts").write_text(_config('resolve(__dirname, "../src/pkg/static")'))
+    static = tmp_path / "src/pkg/static"
+    static.mkdir(parents=True)
+    (static / "index.html").write_text("<html></html>")
+    assert declared_vite_output(app, tmp_path, config=app / "vite.alt.ts") == static
+    assert declared_vite_output(app, tmp_path, config=app / "missing.config.ts") is None
+
+
 def test_an_explicit_output_still_rechecks_the_bundle_directory(tmp_path):
     app = _dashboard(tmp_path, _config("process.env.OUT_DIR"))
     (app / "node_modules").mkdir()
