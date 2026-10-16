@@ -276,6 +276,49 @@ fn a_location_resolves_against_the_current_url() {
 }
 
 #[test]
+fn a_managed_proxy_carries_the_stores_credentials_and_nothing_else() {
+    let plain = managed_proxy("http://proxy.example:3128", None).expect("proxy");
+    assert_eq!(plain.host(), "proxy.example");
+    assert_eq!(plain.port(), 3128);
+    assert_eq!(plain.username(), None);
+    assert_eq!(plain.password(), None);
+
+    let credentials = EgressProxyCredentials {
+        username: "svc".to_owned(),
+        password: "s3cret".to_owned(),
+    };
+    let authenticated =
+        managed_proxy("https://proxy.example:8443", Some(&credentials)).expect("proxy");
+    assert_eq!(authenticated.host(), "proxy.example");
+    assert_eq!(authenticated.port(), 8443);
+    assert_eq!(authenticated.username(), Some("svc"));
+    assert_eq!(authenticated.password(), Some("s3cret"));
+
+    // A bracketed IPv6 address keeps its brackets through the builder's own
+    // `scheme://user:pass@host:port` round trip.
+    let literal = managed_proxy("http://[::1]:3128", Some(&credentials)).expect("proxy");
+    assert!(literal.host().contains("::1"), "{}", literal.host());
+    assert_eq!(literal.port(), 3128);
+    assert_eq!(literal.username(), Some("svc"));
+}
+
+#[test]
+fn a_proxy_url_the_transport_cannot_express_is_no_proxy_at_all() {
+    let credentials = EgressProxyCredentials {
+        username: "svc".to_owned(),
+        password: "s3cret".to_owned(),
+    };
+    for url in [
+        // Only the two proxy protocols ureq speaks, always with an explicit port.
+        "socks5://proxy.example:1080",
+        "proxy.example:3128",
+        "http://proxy.example",
+    ] {
+        assert!(managed_proxy(url, Some(&credentials)).is_none(), "{url}");
+    }
+}
+
+#[test]
 fn a_location_resolves_the_shapes_urljoin_accepts() {
     // Protocol-relative: the host changes, the scheme is kept.
     assert_eq!(

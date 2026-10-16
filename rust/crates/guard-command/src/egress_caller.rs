@@ -21,6 +21,7 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use guard_contracts::{
@@ -66,6 +67,61 @@ pub trait EgressPolicy {
     /// `Err(code)` refuses the destination; the code reaches the resident as
     /// a `blocked` outcome.
     fn validate(&self, url: &str) -> Result<(), String>;
+
+    /// The proxy this destination is reached through. The default is the
+    /// unmanaged answer: the environment's own proxy configuration, as
+    /// `requests` does with `trust_env` set.
+    fn proxy(&self, _url: &str) -> EgressProxy {
+        EgressProxy::Environment
+    }
+
+    /// The trust anchors every exchange verifies against. The default is the
+    /// unmanaged answer: the TLS stack's own roots.
+    fn trust(&self) -> EgressTrust {
+        EgressTrust::Default
+    }
+}
+
+/// What an exchange verifies the destination's and the proxy's certificates
+/// against.
+#[derive(Clone)]
+pub enum EgressTrust {
+    /// No managed policy pins trust, so the TLS stack's own roots verify.
+    Default,
+    /// The managed trust roots. A managed policy with a private CA has the
+    /// whole set exported for it - public, system and private together, as
+    /// `export_managed_trust_roots` materialises them - so these are the only
+    /// anchors an exchange accepts. Verification is never relaxed and never
+    /// falls back to the default roots.
+    Roots(Arc<Vec<ureq::tls::Certificate<'static>>>),
+}
+
+/// How one exchange reaches its destination.
+pub enum EgressProxy {
+    /// No managed policy applies, so the environment's proxy variables are
+    /// honoured — `session.trust_env = not managed`.
+    Environment,
+    /// A managed policy applies and selects no proxy for this destination.
+    /// The environment is not consulted: a managed machine with no policy
+    /// proxy connects directly.
+    Direct,
+    /// Every hop goes through this already-validated proxy URL, with the
+    /// proxy-only credentials the managed OS credential store holds for it.
+    Url {
+        url: String,
+        credentials: Option<EgressProxyCredentials>,
+    },
+}
+
+/// `ProxyCredentials` (mdm/network_transport.py:191).
+///
+/// Authorization for the proxy itself, never for the destination and never a
+/// policy secret: the managed OS credential store holds it and it is sent on
+/// the proxy exchange alone.
+#[derive(Clone)]
+pub struct EgressProxyCredentials {
+    pub username: String,
+    pub password: String,
 }
 
 /// External archives the caller acquires for the resident, when it has that
@@ -290,7 +346,15 @@ fn fetch(need: &EgressNeedV1, policy: &dyn EgressPolicy) -> Fetched {
             });
         }
         let cross_origin = hops > 0 && origin_of(&url) != origin;
-        let response = match exchange(need, &url, body.clone(), deadline, cross_origin) {
+        let response = match exchange(
+            need,
+            &url,
+            body.clone(),
+            deadline,
+            cross_origin,
+            &policy.proxy(&url),
+            &policy.trust(),
+        ) {
             Ok(response) => response,
             Err(outcome) => return Fetched::Outcome(*outcome),
         };
@@ -315,6 +379,38 @@ fn fetch(need: &EgressNeedV1, policy: &dyn EgressPolicy) -> Fetched {
     }
 }
 
+/// The managed policy's proxy, with the proxy-only credentials the OS
+/// credential store holds for it.
+///
+/// ureq holds the credentials in the proxy's own URI and emits them as a
+/// `Proxy-Authorization` header on the proxy's CONNECT exchange, so the
+/// destination never sees them. They never reach the request URL that log lines
+/// and error outcomes carry, and `load_proxy_credentials` has already refused
+/// any credential that URI authority parsing would not carry literally.
+///
+/// The host keeps the brackets a bracketed IPv6 address arrives with: the
+/// builder assembles `scheme://user:pass@host:port` and parses it back, so a
+/// bare `::1` would not survive as an authority.
+fn managed_proxy(url: &str, credentials: Option<&EgressProxyCredentials>) -> Option<ureq::Proxy> {
+    let Some(credentials) = credentials else {
+        return ureq::Proxy::new(url).ok();
+    };
+    let (scheme, authority) = url.split_once("://")?;
+    let protocol = match scheme {
+        "http" => ureq::ProxyProtocol::Http,
+        "https" => ureq::ProxyProtocol::Https,
+        _ => return None,
+    };
+    let (host, port) = authority.rsplit_once(':')?;
+    ureq::Proxy::builder(protocol)
+        .host(host)
+        .port(port.parse().ok()?)
+        .username(&credentials.username)
+        .password(&credentials.password)
+        .build()
+        .ok()
+}
+
 struct Exchange {
     status: u16,
     headers: BTreeMap<String, String>,
@@ -331,20 +427,46 @@ fn exchange(
     body: Option<Vec<u8>>,
     deadline: Instant,
     cross_origin: bool,
+    proxy: &EgressProxy,
+    trust: &EgressTrust,
 ) -> Result<Exchange, Box<EgressOutcomeV1>> {
     let remaining = deadline.saturating_duration_since(Instant::now());
     if remaining.is_zero() {
         return Err(Box::new(EgressOutcomeV1::Timeout));
     }
     let per_read = Duration::from_secs_f64(per_read_seconds(need.timeout_seconds));
-    let config = ureq::config::Config::builder()
+    let builder = ureq::config::Config::builder()
         .timeout_global(Some(remaining))
         .timeout_connect(Some(per_read.min(remaining)))
         .timeout_recv_response(Some(per_read.min(remaining)))
         .timeout_recv_body(Some(per_read.min(remaining)))
         .http_status_as_error(false)
-        .max_redirects(0)
-        .build();
+        .max_redirects(0);
+    // A managed policy with a private certificate authority pins the anchors
+    // every certificate on the exchange is verified against, the proxy's
+    // included. The roots it supplies are the whole managed set, so pinning
+    // them does not drop the public ones.
+    let builder = match trust {
+        EgressTrust::Default => builder,
+        EgressTrust::Roots(roots) => builder.tls_config(
+            ureq::tls::TlsConfig::builder()
+                .root_certs(ureq::tls::RootCerts::Specific(roots.clone()))
+                .build(),
+        ),
+    };
+    // The default configuration reads `HTTP_PROXY` and friends. Under a
+    // managed policy the environment is not authority, so the proxy is set
+    // from the policy's answer on every exchange.
+    let config = match proxy {
+        EgressProxy::Environment => builder.build(),
+        EgressProxy::Direct => builder.proxy(None).build(),
+        EgressProxy::Url { url, credentials } => match managed_proxy(url, credentials.as_ref()) {
+            Some(proxy) => builder.proxy(Some(proxy)).build(),
+            None => {
+                return Err(Box::new(blocked("managed_proxy_url_invalid")));
+            }
+        },
+    };
     let agent = ureq::Agent::with_parts(
         config,
         ureq::unversioned::transport::DefaultConnector::default(),
