@@ -143,6 +143,8 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
 # counts as such a mention. Files that instruct an agent never qualify.
 # Any indentation opens a fence: a fence nested in a list item sits deeper than
 # three spaces, and an indented fence outside a list is code either way.
+# A closing marker counts only when it is no deeper than the fence it opened,
+# so a four-space marker does not close a top-level fence.
 MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
 MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
 MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
@@ -150,19 +152,18 @@ MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
 # flag. A bounded window keeps long lines with many spans linear.
 APPROVAL_CONTEXT_WINDOW = 256
 # Prose that tells the reader to turn the value on, checked on the sentence
-# before an inline code span, unless the sentence also warns against it.
+# before an inline code span. A negation governs that verb only when it sits
+# immediately before it ("never enable", "do not use", "avoid using"). A risk
+# word anywhere in the sentence also keeps the mention. Words such as
+# "without", "instead", or "avoid" in front of a different phrase do not.
 APPROVAL_INSTRUCTION_RE = re.compile(
     r"\b(?:select(?:ing|ed)?|set(?:ting)?|use|using|enable|enabling|switch(?:ing)? to|choose|choosing"
     r"|pick(?:ing)?|configure|configuring|pass(?:ing)?|turn(?:ing)? on|run(?:ning)? with|start(?:ing)? with"
     r"|launch(?:ing)? with|opt(?:ing)? (?:in|for)|change (?:it )?to|allow(?:ing)?)\b",
     re.I,
 )
-APPROVAL_WARNING_RE = re.compile(
-    r"\b(?:never|not|don'?t|avoid|instead|rather than|without|unsafe|insecure|dangerous|risky|risks?"
-    r"|warn(?:s|ed|ing)?|report(?:s|ed|ing)?|flag(?:s|ged|ging)?|detect(?:s|ed|ing|ion)?|forbid(?:s|den)?"
-    r"|prohibit(?:s|ed)?|disallow(?:s|ed)?|reject(?:s|ed)?|block(?:s|ed)?)\b",
-    re.I,
-)
+APPROVAL_NEGATION_RE = re.compile(r"\b(?:never|avoid|don'?t|do not|not)\s+$", re.I)
+APPROVAL_RISK_RE = re.compile(r"\b(?:unsafe|insecure|dangerous|risky|risks?)\b", re.I)
 APPROVAL_SENTENCE_END_RE = re.compile(r"[.!?;]")
 APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
 AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
@@ -979,8 +980,8 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
 
     An assignment or a flag right before the span, in prose or at the end of an
     earlier code span, makes it a setting rather than a mention. So does a
-    sentence that tells the reader to select or enable the value, unless the
-    same sentence warns against it.
+    sentence that tells the reader to select or enable the value, unless a
+    negation governs that verb or the sentence names the risk.
     """
     if any(separator in line[start:end] for separator in "=:"):
         return False
@@ -1004,32 +1005,63 @@ def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
     sentence_start = max(before.rfind(mark) for mark in ".!?;") + 1
     prefix = before[sentence_start:]
     suffix = APPROVAL_SENTENCE_END_RE.split(line[end + 1 : end + 1 + APPROVAL_CONTEXT_WINDOW], maxsplit=1)[0]
-    instructs = APPROVAL_INSTRUCTION_RE.search(prefix) and not APPROVAL_WARNING_RE.search(f"{prefix} {suffix}")
-    return not instructs
+    verb = APPROVAL_INSTRUCTION_RE.search(prefix)
+    if verb is None:
+        return True
+    negated = APPROVAL_NEGATION_RE.search(prefix[: verb.start()]) is not None
+    risky = APPROVAL_RISK_RE.search(f"{prefix} {suffix}") is not None
+    return negated or risky
+
+
+def _markdown_fence_marker(line: str) -> tuple[str, int] | None:
+    """The fence token and the column of its first character, if this line is a fence.
+
+    A list marker on the same line is skipped, so ``- ```bash`` is a fence at the
+    token's column. Closing compares that column with the opening fence.
+    """
+    match = MARKDOWN_FENCE_RE.match(line)
+    if match:
+        return match.group(1), match.start(1)
+    without_list_marker = MARKDOWN_LIST_MARKER_RE.sub("", line, count=1)
+    if without_list_marker == line:
+        return None
+    match = MARKDOWN_FENCE_RE.match(without_list_marker)
+    if match is None:
+        return None
+    column = len(line) - len(without_list_marker) + match.start(1)
+    return match.group(1), column
 
 
 def _markdown_code_lines(lines: list[str]) -> list[bool]:
     """Mark the lines of fenced or indented code, fence lines included.
 
-    Block-quote and list markers are removed first, so a fence inside a quote
-    or a list item still counts. An indented line starts a code block only
-    after a blank line or a heading, or continues one, because indented code
-    cannot interrupt a paragraph.
+    Block-quote prefixes are removed first, and a list marker on the fence line
+    is skipped, so a fence inside a quote or a list item still counts. A closing
+    marker ends the fence only when it is indented no deeper than the opening
+    marker. An indented line starts a code block only after a blank line or a
+    heading, or continues one, because indented code cannot interrupt a paragraph.
     """
     code_lines: list[bool] = []
     fence: str | None = None
+    fence_column = 0
     can_start_indented_code = True
     for raw_line in lines:
         line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
-        fence_match = MARKDOWN_FENCE_RE.match(line) or MARKDOWN_FENCE_RE.match(MARKDOWN_LIST_MARKER_RE.sub("", line))
+        marker = _markdown_fence_marker(line)
         if fence is not None:
             is_code = True
-            if fence_match:
-                marker = fence_match.group(1)
-                if marker[0] == fence[0] and len(marker) >= len(fence) and not line.strip()[len(marker) :]:
+            if marker is not None:
+                token, column = marker
+                remainder = line[column + len(token) :]
+                if (
+                    column <= fence_column
+                    and token[0] == fence[0]
+                    and len(token) >= len(fence)
+                    and not remainder.strip()
+                ):
                     fence = None
-        elif fence_match:
-            fence = fence_match.group(1)
+        elif marker is not None:
+            fence, fence_column = marker
             is_code = True
         else:
             is_code = line.startswith(("    ", "\t")) and can_start_indented_code
