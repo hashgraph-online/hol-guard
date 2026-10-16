@@ -117,6 +117,7 @@ pub mod pretool_omp_artifact_search;
 pub mod pretool_omp_bash_cwd;
 pub mod pretool_omp_eval_bash_cwd;
 pub mod pretool_omp_eval_contained_bash;
+pub mod pretool_omp_eval_content;
 pub mod pretool_omp_eval_read_helpers;
 pub mod pretool_omp_fp_proofs;
 pub mod pretool_omp_hashline_edits;

@@ -25,6 +25,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "generic_omp_eval_parser.rs"]
 mod parser;
+#[path = "generic_omp_eval_pure.rs"]
+mod pure;
 #[path = "generic_omp_eval_tokens.rs"]
 mod tokens;
 use parser::{parse_program, parse_python, Call, Lit};
@@ -119,7 +121,25 @@ pub(super) fn evaluate(
     }
     let code = input.get("code")?.as_str()?;
     let calls = if language == "py" {
-        parse_python(code)?
+        match parse_python(code) {
+            Some(calls) => calls,
+            None if pure::pure_python(code) => {
+                return Some(generic_result(
+                    generic_action(
+                        context.harness,
+                        context.event,
+                        PreToolActionTypeV1::Harness,
+                        PreToolOperationV1::Read,
+                        true,
+                        false,
+                    ),
+                    "allow",
+                    "native_omp_eval_pure_compute",
+                    "The Rust authority read this eval program and found only in-memory computation: no files, processes, network or environment.",
+                ));
+            }
+            None => return None,
+        }
     } else {
         parse_program(code)?
     };
