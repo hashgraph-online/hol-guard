@@ -381,7 +381,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
         "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
         "src/codex_plugin_scanner/guard/runtime/effect_decision.py",
-        "src/codex_plugin_scanner/guard/runtime/embedded_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
         "src/codex_plugin_scanner/guard/runtime/extension_control_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/extension_trust.py",

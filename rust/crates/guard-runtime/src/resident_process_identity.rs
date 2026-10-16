@@ -300,11 +300,13 @@ mod direct_lane_identity_tests {
         }
     }
 
+    // Run `sleep` directly: `spawn` returns once its own exec finishes, while
+    // `sh -c "sleep 30"` execs a second time afterwards and the executable
+    // path can be unreadable while the tests look at it.
     fn sleeper() -> Sleeper {
         Sleeper(
-            Command::new("/bin/sh")
-                .arg("-c")
-                .arg("sleep 30")
+            Command::new("/bin/sleep")
+                .arg("30")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
