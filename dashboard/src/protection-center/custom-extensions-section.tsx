@@ -123,6 +123,12 @@ interface CustomExtensionsSectionProps {
   onClearFilters?: () => void;
   /** Host connector discovery status and retry, owned by the catalog page. */
   discoveryControl?: ReactNode;
+  /**
+   * Set when a list switch above the section already names it and carries the
+   * Add action: the heading stays for assistive tech and the section drops its
+   * own top margin, Add button and repeated title.
+   */
+  embedded?: boolean;
 }
 
 export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
@@ -160,13 +166,18 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   // With nothing added yet the empty state carries the one Add action.
   const firstRun = all.length === 0 && search === "" && !filteredOut;
   return (
-    <section className="mt-10" aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
+    <section className={props.embedded ? "mt-4" : "mt-10"} aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
+          <h2
+            id="custom-extensions-heading"
+            className={props.embedded ? "sr-only" : "text-xl font-semibold tracking-tight text-brand-dark"}
+          >
+            Custom extensions
+          </h2>
+          <p className={props.embedded ? "max-w-xl text-sm text-slate-500" : "mt-1 max-w-xl text-sm text-slate-500"}>Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
         </div>
-        {firstRun ? null : (
+        {firstRun || props.embedded ? null : (
           <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
             <HiMiniPlus className="size-4" aria-hidden="true" />
             Add custom extension

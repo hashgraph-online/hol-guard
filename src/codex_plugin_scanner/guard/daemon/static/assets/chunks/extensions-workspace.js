@@ -7481,8 +7481,8 @@ function PaidSpotlightCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 text-xs font-medium text-white/60", children: catalog.name })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 line-clamp-3 text-sm leading-6 text-white/85", children: props.placement.creative.body }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto pt-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "line-clamp-3 text-sm leading-5 text-white/85", children: props.placement.creative.body }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "button",
             {
@@ -7498,7 +7498,7 @@ function PaidSpotlightCard(props) {
               ]
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-white/55", children: "Paid placement. Your protection settings are unchanged." })
+          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-white/55", children: "Paid placement. Your protection settings are unchanged." })
         ] })
       ]
     }
@@ -7545,9 +7545,8 @@ function OrganicSpotlightCard(props) {
             ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-xs text-brand-dark/55", children: "Built-in coverage, ready to review" })
           ] })
         ] }),
-        protection ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm leading-6 text-brand-dark/85", "data-testid": "spotlight-organic-protection", children: protection }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 line-clamp-2 text-sm leading-6 text-brand-dark/65", children: catalog.description }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto pt-5", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-discover-cta", onClick: () => props.onOpen(catalog), children: [
+        protection ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm leading-5 text-brand-dark/85", "data-testid": "spotlight-organic-protection", children: protection }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "line-clamp-2 text-sm leading-5 text-brand-dark/65", children: catalog.description }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", className: "guard-discover-cta guard-discover-cta-quiet", onClick: () => props.onOpen(catalog), children: [
           props.active ? "Review protection" : "Set it up",
           /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowRight, { className: "size-4", "aria-hidden": "true" })
         ] }) })
@@ -7572,14 +7571,14 @@ function VacantSlotCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { id: "spotlight-slot-heading", className: "mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark", children: "Put your extension on this shelf." })
           ] })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm leading-6 text-brand-dark/75", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-5 text-brand-dark/75", children: [
           "This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own headline, and never change anyone’s protection.",
           props.inventory ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "font-semibold text-brand-dark", children: [
             " ",
             props.inventory
           ] }) : null
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto pt-5", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs(
             "a",
             {
@@ -7601,7 +7600,7 @@ function VacantSlotCard(props) {
   );
 }
 function SlotFreePath(props) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-xs text-brand-dark/50", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-brand-dark/50", children: [
     "Already listed?",
     " ",
     /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -7632,7 +7631,7 @@ function SlotFreePath(props) {
   ] });
 }
 function SpotlightSkeleton() {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-grid mt-5", "aria-hidden": "true", children: [0, 1, 2].map((cell) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-card guard-spotlight-skeleton" }, cell)) });
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-grid mt-5", "aria-hidden": "true", children: [0, 1, 2].map((cell) => /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-card guard-spotlight-skeleton min-h-40" }, cell)) });
 }
 function withoutWeakestOrganic(cards) {
   if (cards.length < SPOTLIGHT_CELL_COUNT) return cards;
@@ -7727,7 +7726,7 @@ function SpotlightStatusLine(props) {
 function CatalogSlotRow(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-catalog-slot-row", "data-testid": "catalog-slot-row", "data-state": props.state, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-spotlight-slot-mark", "aria-hidden": "true", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-5" }) }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-[1_1_16rem]", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 max-w-[62ch] flex-[1_1_16rem]", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: "Put your extension in this list." }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-0.5 text-sm leading-6 text-brand-dark/65", children: [
         "Sponsored listings sit inside the catalog, keep their real protection state and their Sponsored label. Position is all they buy.",
@@ -7741,7 +7740,7 @@ function CatalogSlotRow(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "a",
       {
-        className: "guard-discover-cta shrink-0",
+        className: "guard-discover-cta shrink-0 sm:ml-auto",
         href: advertiseUrl("extensions_feed"),
         target: "_blank",
         rel: "noopener noreferrer",
@@ -8342,13 +8341,20 @@ function CustomExtensionsSection(props) {
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
   const firstRun = all.length === 0 && search === "" && !filteredOut;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "custom-extensions-heading", "data-testid": "custom-extensions-section", children: [
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: props.embedded ? "mt-4" : "mt-10", "aria-labelledby": "custom-extensions-heading", "data-testid": "custom-extensions-section", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "custom-extensions-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "Custom extensions" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 max-w-xl text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "h2",
+          {
+            id: "custom-extensions-heading",
+            className: props.embedded ? "sr-only" : "text-xl font-semibold tracking-tight text-brand-dark",
+            children: "Custom extensions"
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: props.embedded ? "max-w-xl text-sm text-slate-500" : "mt-1 max-w-xl text-sm text-slate-500", children: "Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions." })
       ] }),
-      firstRun ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
+      firstRun || props.embedded ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs("button", { type: "button", onClick: props.onAdd, className: "inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
         "Add custom extension"
       ] })
@@ -8457,6 +8463,55 @@ function CustomExtensionsSection(props) {
         )
       ] }) : null
     ] })
+  ] });
+}
+function ExtensionListSwitch(props) {
+  const options = [
+    { view: "builtin", label: "All tools", count: props.builtinCount, panelId: props.builtinPanelId, attention: 0 },
+    {
+      view: "custom",
+      label: "Custom extensions",
+      count: props.customCount,
+      panelId: props.customPanelId,
+      attention: props.customNeedsReviewCount
+    }
+  ];
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-list-switch", "data-testid": "extension-list-switch", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-list-switch-track", role: "group", "aria-label": "Extension list", children: options.map((option) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        className: "guard-list-switch-option",
+        "aria-pressed": props.view === option.view,
+        "aria-controls": option.panelId,
+        "data-view": option.view,
+        onClick: () => props.onViewChange(option.view),
+        children: [
+          option.label,
+          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-list-switch-count", children: option.count.toLocaleString() }),
+          option.attention > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-list-switch-dot", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "sr-only", children: [
+              option.attention.toLocaleString(),
+              " need review"
+            ] })
+          ] }) : null
+        ]
+      },
+      option.view
+    )) }),
+    props.onAddCustom ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
+      "button",
+      {
+        type: "button",
+        onClick: props.onAddCustom,
+        className: "guard-list-switch-add",
+        children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniPlus, { className: "size-4", "aria-hidden": "true" }),
+          "Add custom extension"
+        ]
+      }
+    ) : null
   ] });
 }
 const PROTECTION_CATEGORIES = [
@@ -9431,7 +9486,10 @@ function ExtensionsOverview(props) {
   }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = reactExports.useState(EMPTY_CATALOG_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = reactExports.useState(false);
+  const [listView, setListView] = reactExports.useState("builtin");
   const filterPanelId = reactExports.useId();
+  const builtinPanelId = reactExports.useId();
+  const customPanelId = reactExports.useId();
   const filterTriggerRef = reactExports.useRef(null);
   const filterToolbarRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
@@ -9534,6 +9592,8 @@ function ExtensionsOverview(props) {
     (item) => customItemMatchesFilters(item, filters)
   );
   const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
+  const customNeedsReviewCount = addedCustomItems.filter(customExtensionNeedsReview).length;
+  const switchOffersAdd = listView === "builtin" || allCustomItems.length > 0;
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { hidden: !props.active, inert: !props.active || void 0, children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       WorkspacePageHeader,
@@ -9629,8 +9689,22 @@ function ExtensionsOverview(props) {
       ),
       searching ? null : /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
+          ExtensionListSwitch,
+          {
+            view: listView,
+            onViewChange: setListView,
+            builtinCount: visibleCatalog.length,
+            customCount: addedCustomItems.length,
+            customNeedsReviewCount,
+            builtinPanelId,
+            customPanelId,
+            onAddCustom: switchOffersAdd ? handleAddCustom : void 0
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { id: customPanelId, hidden: listView !== "custom", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
           CustomExtensionsSection,
           {
+            embedded: true,
             items: addedCustomItems,
             onOpen: props.onOpenLocalCli,
             seededItems: addedCustomItems.filter((item) => item.seeded === true),
@@ -9649,12 +9723,12 @@ function ExtensionsOverview(props) {
               }
             ) : null
           }
-        ),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "mt-10", "aria-labelledby": "all-tools-heading", children: [
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { id: builtinPanelId, hidden: listView !== "builtin", className: "mt-4", "aria-labelledby": "all-tools-heading", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "text-xl font-semibold tracking-tight text-brand-dark", children: "All tools" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
+              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "all-tools-heading", className: "sr-only", children: "All tools" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: filtering ? "Built-in tools that match the selected trust, kind, and area filters." : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns." })
             ] }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap items-center gap-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-brand-dark/70", "data-testid": "catalog-tool-count", "aria-live": "polite", children: catalogFilterCountCopy(visibleCatalog.length, props.catalogExtensions.length, filtering) }) })
           ] }),

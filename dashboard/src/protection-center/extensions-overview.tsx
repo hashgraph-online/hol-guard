@@ -10,7 +10,13 @@ import {
 import type { CatalogReadModel } from "../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
 import { fetchExtensionDiscoveryApi } from "../guard-api";
-import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
+import {
+  connectorWorkspaceItems,
+  customExtensionNeedsReview,
+  refreshCodexHostInventory,
+  refreshMcpInventory,
+  type LocalCliItem,
+} from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { useDiscoveryFeed, useJoinedDiscovery } from "./extensions-discovery-feed";
 import {
@@ -33,6 +39,7 @@ import { LocalSkillsWorkspace } from "./local-skills-workspace";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
+import { ExtensionListSwitch, type ExtensionListView } from "./extensions-list-switch";
 import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { PatternSearchConsole } from "./components/pattern-search-console";
 import {
@@ -309,7 +316,10 @@ export function ExtensionsOverview(props: {
   }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [listView, setListView] = useState<ExtensionListView>("builtin");
   const filterPanelId = useId();
+  const builtinPanelId = useId();
+  const customPanelId = useId();
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const filterToolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -442,6 +452,10 @@ export function ExtensionsOverview(props: {
     customItemMatchesFilters(item, filters),
   );
   const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
+  const customNeedsReviewCount = addedCustomItems.filter(customExtensionNeedsReview).length;
+  // With nothing added yet, the custom list's empty state carries the Add action
+  // while it is on screen; the switch carries it on every other view.
+  const switchOffersAdd = listView === "builtin" || allCustomItems.length > 0;
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
@@ -541,7 +555,20 @@ export function ExtensionsOverview(props: {
 
       {searching ? null : (
         <>
+          <ExtensionListSwitch
+            view={listView}
+            onViewChange={setListView}
+            builtinCount={visibleCatalog.length}
+            customCount={addedCustomItems.length}
+            customNeedsReviewCount={customNeedsReviewCount}
+            builtinPanelId={builtinPanelId}
+            customPanelId={customPanelId}
+            onAddCustom={switchOffersAdd ? handleAddCustom : undefined}
+          />
+
+          <div id={customPanelId} hidden={listView !== "custom"}>
           <CustomExtensionsSection
+            embedded
             items={addedCustomItems}
             onOpen={props.onOpenLocalCli}
             seededItems={addedCustomItems.filter((item) => item.seeded === true)}
@@ -559,12 +586,13 @@ export function ExtensionsOverview(props: {
               />
             ) : null}
           />
+          </div>
 
-          <section className="mt-10" aria-labelledby="all-tools-heading">
+          <section id={builtinPanelId} hidden={listView !== "builtin"} className="mt-4" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 id="all-tools-heading" className="text-xl font-semibold tracking-tight text-brand-dark">All tools</h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <h2 id="all-tools-heading" className="sr-only">All tools</h2>
+                <p className="text-sm text-slate-500">
                   {filtering
                     ? "Built-in tools that match the selected trust, kind, and area filters."
                     : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns."}
