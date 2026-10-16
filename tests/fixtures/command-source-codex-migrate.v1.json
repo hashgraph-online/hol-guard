@@ -10510,6 +10510,7 @@
           "command.gitsync",
           "command.google-workspace.gog",
           "command.google-workspace.gws",
+          "command.hashdup",
           "command.keibidrop",
           "command.kim",
           "command.kranz",
