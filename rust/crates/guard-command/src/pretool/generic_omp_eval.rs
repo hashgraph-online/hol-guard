@@ -23,6 +23,8 @@ use crate::pretool::generic::result::{generic_action, generic_result};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 use serde_json::{json, Map, Value};
 
+#[path = "generic_omp_eval_browser.rs"]
+mod browser;
 #[path = "generic_omp_eval_parser.rs"]
 mod parser;
 #[path = "generic_omp_eval_pure.rs"]
@@ -94,6 +96,42 @@ fn standalone_payload(call: &Call, context: &OmpContext<'_>) -> Option<Value> {
         return None;
     }
     Some(json!({"tool_name": call.tool, "tool_input": Value::Object(input)}))
+}
+
+/// A JavaScript eval that only drives OMP's isolated browser against
+/// loopback pages. URLs in such a program are checked by the parser, so this
+/// runs before the generic URL bail-out.
+pub(super) fn evaluate_browser(
+    payload: &Value,
+    context: &OmpContext<'_>,
+) -> Option<PreToolResultV1> {
+    let input = strict_tool_input(payload)?;
+    let modeled = input.iter().all(|(key, value)| match key.as_str() {
+        "code" | "language" => value.is_string(),
+        "title" => value.is_string() || value.is_null(),
+        "reset" => value.is_boolean() || value.is_null(),
+        "timeout" => value.is_number() || value.is_null(),
+        _ => false,
+    });
+    if !modeled
+        || input.get("language")?.as_str()? != "js"
+        || !browser::loopback_browser_program(input.get("code")?.as_str()?)
+    {
+        return None;
+    }
+    Some(generic_result(
+        generic_action(
+            context.harness,
+            context.event,
+            PreToolActionTypeV1::Harness,
+            PreToolOperationV1::Read,
+            true,
+            false,
+        ),
+        "allow",
+        "native_omp_eval_loopback_browser",
+        "The Rust authority read this eval program and found only isolated-browser reads and interactions on loopback pages, with page functions that run inside the page: no files, processes, modules or other hosts.",
+    ))
 }
 
 pub(super) fn evaluate(

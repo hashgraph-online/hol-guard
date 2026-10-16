@@ -517,3 +517,29 @@ fn shell_eval_output_meets_the_same_floors_as_the_bash_call() {
     assert!(super::super::eval_output::bounded_output_action(&unproved).is_none());
     std::fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn loopback_browser_eval_output_meets_the_harness_floors() {
+    let mut request = post_request(json!({
+        "tool_name":"eval", "tool_input":{"language":"js","code":"const tab = await browser.open({name:'game',url:'http://localhost:4173'}); display(await tab.title()); display(await tab.errors());"},
+        "tool_response":"Flappy\n[]\n"
+    }));
+    request.harness = "omp".into();
+    assert_eq!(
+        super::super::eval_output::bounded_output_action(&request),
+        Some(PreToolActionTypeV1::Harness)
+    );
+    let mut denied = policy("allow");
+    denied.harness_actions.insert("omp".into(), "block".into());
+    let result = apply_post_tool_policy(
+        &snapshot(denied),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(result.decision, "deny");
+    request.payload["tool_input"]["code"] =
+        json!("const tab = await browser.open({name:'game',url:'https://example.com/'}); display(await tab.title());");
+    assert!(super::super::eval_output::bounded_output_action(&request).is_none());
+}
