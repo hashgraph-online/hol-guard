@@ -7,11 +7,15 @@
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
-    "id": "io.github.XAGI-Lab",
+    "id": "io.github.xagi-lab",
     "displayName": "XAGI Labs",
     "url": "https://github.com/XAGI-Lab/melra"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#1D4ED8" },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#1D4ED8"
+  },
   "homepage": "https://github.com/XAGI-Lab/melra",
   "license": "Apache-2.0",
   "launch": {
@@ -27,18 +31,54 @@
     "local-data-access"
   ],
   "tools": [
-    { "name": "melra_capabilities", "state": "inherit" },
-    { "name": "melra_plan", "state": "inherit" },
-    { "name": "melra_execute", "state": "review" },
-    { "name": "melra_task_status", "state": "inherit" },
-    { "name": "melra_task_cancel", "state": "review" },
-    { "name": "melra_receipt", "state": "inherit" },
-    { "name": "melra_workflow_plan", "state": "inherit" },
-    { "name": "melra_workflow_advance", "state": "review" },
-    { "name": "melra_workflow_status", "state": "inherit" },
-    { "name": "melra_workflow_cancel", "state": "review" },
-    { "name": "melra_workflow_control", "state": "review" },
-    { "name": "other", "state": "review" }
+    {
+      "name": "melra_capabilities",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_plan",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_execute",
+      "state": "review"
+    },
+    {
+      "name": "melra_task_status",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_task_cancel",
+      "state": "review"
+    },
+    {
+      "name": "melra_receipt",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_plan",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_advance",
+      "state": "review"
+    },
+    {
+      "name": "melra_workflow_status",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_cancel",
+      "state": "review"
+    },
+    {
+      "name": "melra_workflow_control",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
   ],
   "referenceUrls": [
     "https://github.com/XAGI-Lab/melra",
