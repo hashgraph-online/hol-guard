@@ -289,8 +289,14 @@ fn glued_redirect_runs_interpreter(text: &str) -> bool {
         if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
             continue;
         }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
         let next = chars[index + 1];
-        if matches!(next, '<' | '>') {
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
             glued = true;
             break;
         }

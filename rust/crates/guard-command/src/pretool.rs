@@ -703,8 +703,15 @@ fn separator_glued_redirect(command: &str) -> bool {
         if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
             continue;
         }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator,
+        // so `python3 app.py &>log` stays the ordinary command it was.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
         let next = chars[index + 1];
-        if matches!(next, '<' | '>') {
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
             return true;
         }
         if !next.is_ascii_digit() {

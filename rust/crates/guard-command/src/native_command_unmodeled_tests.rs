@@ -87,6 +87,8 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
     for command in [
         "git checkout main 2>/dev/null && gh pr view 12",
         "ln -s a b 2>/dev/null; gh pr view 12 >/dev/null",
+        // `&>` inside an argument is not a separator glued to the interpreter.
+        "python3 app.py \"a&>b\"",
     ] {
         assert_ne!(
             decision(&controls, command).1,
