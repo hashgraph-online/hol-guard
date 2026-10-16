@@ -30,3 +30,56 @@ def test_rows_with_string_input_are_skipped_and_reasons_are_scrubbed() -> None:
         {"tool_name": "bash", "tool_input": {"command": "ls"}, "reason_code": "review /Users/alice/proj"}, []
     )
     assert case is not None and case["observed_reason_code"] == "review ${WORKTREE}"
+
+
+def test_writes_hidden_behind_read_verbs_are_not_reads() -> None:
+    for command in (
+        "env rm -rf x",
+        "find . -delete",
+        "find . -exec rm {} +",
+        "find . -fprint out.txt",
+        "awk 'BEGIN{system(\"id\")}'",
+        "sort -o out.txt in.txt",
+        "uniq in.txt out.txt",
+        "rg --pre ./run x",
+        "git stash",
+        "git tag release-1",
+        "git diff --output=report.patch",
+        "git stash show --ext-diff",
+        "git log --unknown-flag",
+        "git -c core.pager=sh log",
+        "git branch topic",
+        "git config user.name someone",
+        "gh api -XPOST repos/o/r/issues",
+        "gh api --method=POST repos/o/r/issues",
+        "gh repo clone o/r",
+        "ls & rm x",
+        "ls &> out.txt",
+    ):
+        assert not converter.reads_only(command), command
+
+
+def test_proven_reads_still_pass() -> None:
+    for command in (
+        "cd ${WORKTREE} && git log --oneline -5 && git show --stat HEAD | head -30",
+        "find ${WORKTREE} -maxdepth 2 -name notes.md -type f 2>/dev/null",
+        "rg -c x ${WORKTREE} | sort -t: -k2 -rn | head -10",
+        "git stash list",
+        "git -C ${WORKTREE} config --get user.email",
+        "gh api repos/o/r/check-runs/1/annotations --paginate 2>&1 | head -40",
+        "gh pr view 3 --json title",
+    ):
+        assert converter.reads_only(command), command
+
+
+def test_renaming_never_touches_option_tokens_and_ids_are_scrubbed() -> None:
+    assert converter.rename_names("grep -rIl uniqueproj src", {}).startswith("grep -rIl ")
+    assert converter.option_names("git log --grep=uniqueproj")
+    assert converter.scrub("gh api repos/a/b/actions/jobs/115481239214/logs", []) == (
+        "gh api repos/o/r/actions/jobs/123456789012/logs"
+    )
+
+
+def test_verb_skips_the_directory_change() -> None:
+    assert converter.verb_of("cd sub && ls") == "ls"
+    assert converter.verb_of("cd ${WORKTREE} && git status") == "git"
