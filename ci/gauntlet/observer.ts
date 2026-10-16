@@ -2,7 +2,7 @@
 import { appendFileSync, closeSync, constants, fstatSync, openSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { createHash, randomUUID } from "node:crypto";
-import { createRequire, syncBuiltinESMExports } from "node:module";
+import { createRequire } from "node:module";
 
 const logPath = process.env.GUARD_GAUNTLET_OBSERVER_LOG;
 const guardPort = process.env.GUARD_GAUNTLET_DAEMON_PORT;
@@ -189,7 +189,6 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit): Promis
 // JSON line from its stdout. Observe that lane at the same two points, so the
 // Gauntlet exercises the transport users actually run.
 const childProcess = createRequire(import.meta.url)("node:child_process");
-const actualSpawn = childProcess.spawn;
 
 type BridgeChild = {
   stdin?: { end(chunk?: unknown, ...rest: unknown[]): unknown } | null;
@@ -268,15 +267,18 @@ function observeBridge(child: BridgeChild): void {
   });
 }
 
-childProcess.spawn = function (this: unknown, command: unknown, args: unknown, ...rest: unknown[]): BridgeChild {
-  const child = actualSpawn.call(this, command, args, ...rest) as BridgeChild;
-  if (Array.isArray(args) && args[0] === "pi-hook-bridge") observeBridge(child);
-  return child;
+// Hook the instance method every `spawn` export calls, not the export itself:
+// Bun binds a module's `import { spawn }` once, when node:child_process is
+// first imported anywhere, so a module that imported it before this observer
+// loaded never sees a replaced export. `options.args` is the full argv,
+// starting with the program, and the child's pipes exist once it returns.
+const childPrototype = childProcess.ChildProcess.prototype;
+const actualChildSpawn = childPrototype.spawn;
+childPrototype.spawn = function (this: BridgeChild, options: { args?: unknown }): unknown {
+  const result = actualChildSpawn.call(this, options);
+  if (Array.isArray(options?.args) && options.args[1] === "pi-hook-bridge") observeBridge(this);
+  return result;
 };
-// Bun binds a module's `import { spawn }` when that module is first imported
-// and never re-reads it, so this patch only reaches the generated extension
-// because the runner loads this observer as the earlier `--extension`.
-syncBuiltinESMExports();
 
 // Each argument is single-quoted with embedded apostrophes written as '\'' (canonical shell argv).
 const QUOTED = String.raw`'(?:[^']|'\\'')+'`;

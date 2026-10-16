@@ -1415,17 +1415,6 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
-def _global_runtime_scoped_exact_match_key(
-    artifact_id: str | None,
-    runtime_exact_match_context: str | None = None,
-) -> str | None:
-    family_key = _artifact_family_key(artifact_id)
-    if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
-        return None
-    canonical_artifact_id = f"global:portable:{_family_key_value(family_key)}"
-    return _runtime_scoped_exact_match_key(canonical_artifact_id, runtime_exact_match_context)
-
-
 def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
     """Return a scoped family identity for one exact runtime tool action."""
 
@@ -1484,43 +1473,6 @@ def runtime_tool_action_portable_match_context(runtime_exact_match_context: str 
         wrapper_chain=normalized_wrapper_chain,
         permission_mode=permission_mode if isinstance(permission_mode, str) and permission_mode else None,
     )
-
-
-def browser_mcp_exact_match_context(
-    *,
-    intent: str | None,
-    operation: str | None,
-    target_origin: str | None,
-    target_path_prefix: str | None,
-    profile_mode: str | None,
-    mcp_server_identity_hash: str | None,
-    mcp_tool_identity_hash: str | None,
-    mcp_schema_hash: str | None,
-    sensitive_surface_flags: Sequence[object] | None = None,
-) -> str | None:
-    """Build a browser MCP exact-match context for stable identity dedup.
-
-    The context captures security-relevant fields (intent, origin, path,
-    profile, sensitive surfaces) while volatile fields are already stripped
-    by the browser intent normalizer.
-    """
-    if not intent and not operation and not target_origin:
-        return None
-    flags: list[str] = []
-    if sensitive_surface_flags is not None:
-        flags = sorted(str(f) for f in sensitive_surface_flags if isinstance(f, str) and f)
-    payload: dict[str, object] = {
-        "intent": intent,
-        "operation": operation,
-        "target_origin": target_origin,
-        "target_path_prefix": target_path_prefix,
-        "profile_mode": profile_mode,
-        "server_identity_hash": mcp_server_identity_hash,
-        "tool_identity_hash": mcp_tool_identity_hash,
-        "schema_hash": mcp_schema_hash,
-        "sensitive_surface_flags": flags,
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:

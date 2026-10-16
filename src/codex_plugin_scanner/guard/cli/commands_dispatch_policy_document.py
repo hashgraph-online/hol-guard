@@ -88,16 +88,6 @@ def _load_and_compile(path: Path):
     return document, compile_document_for_import(document)
 
 
-def _compile_for_local_store(path: Path):
-    document = load_trusted_policy_document(path)
-    try:
-        return document, compile_document_for_import(document), None
-    except PolicyCompilationError as error:
-        if error.code != "command_expression_requires_guard_3_1_runtime":
-            raise
-        return document, (), error
-
-
 def _run_guard_policy_document_command(
     args: PolicyDocumentCommandArgs,
     *,
