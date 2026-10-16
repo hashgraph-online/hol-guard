@@ -400,9 +400,17 @@ def _run_guard_doctor_command(
     with nullcontext() if args.harness else without_command_probes():
         payload["aibom"] = build_aibom_status_payload(store, context, generated_at=_now())
     from ..harness_posture import harness_posture_summary
+    from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields
 
     payload.update(protection_status_fields(posture=config.protection_posture, mode=config.mode))
+    # A doctor run that reports a broken or partial registration must not also
+    # report the posture as though something were applying it. Judge the one
+    # harness this run inspected, or every harness the global run detected.
+    adapter_rows = payload.get("adapters")
+    payload["protection_in_effect"] = protection_is_in_effect(
+        adapter_rows if isinstance(adapter_rows, list) else [payload]
+    )
     payload.update(harness_posture_summary(config))
     # Doctor stays passive: read the gate state file, never the native resident.
     payload["approval_gate"] = approval_gate_posture(guard_home, passive=True)

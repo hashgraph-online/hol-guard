@@ -3748,12 +3748,31 @@ class GuardDaemonServer:
             if self._headless_cloud_sync_backoff_seconds > 0
             else interval_seconds
         )
+        reported_failure: str | None = None
         while not self._shutdown_started.is_set():
-            summary = _run_headless_cloud_sync_with_optional_publish(
-                store=self._server.store,
-                managed_controls_publish=_managed_controls_publish_for(self._server),
-            )
-            status = str(summary.get("status") or "")
+            try:
+                summary = _run_headless_cloud_sync_with_optional_publish(
+                    store=self._server.store,
+                    managed_controls_publish=_managed_controls_publish_for(self._server),
+                )
+            except Exception as error:
+                # Cloud sync carries receipts and bookkeeping, never admission
+                # authority, so a store that cannot record the attempt must not
+                # end the loop. An unconnected install reaches this through the
+                # not-logged-in path, where recording the outcome needs the same
+                # native store; letting that escape left the daemon printing a
+                # traceback and never syncing again, not even after a sign-in.
+                reason = f"{type(error).__name__}: {error}"
+                if reason != reported_failure:
+                    reported_failure = reason
+                    if isinstance(error, NativeGuardStoreUnavailable):
+                        _LOGGER.warning("Headless cloud sync could not complete: %s", reason)
+                    else:
+                        _LOGGER.exception("Headless cloud sync could not complete: %s", reason)
+                status = ""
+            else:
+                reported_failure = None
+                status = str(summary.get("status") or "")
             wait_seconds = interval_seconds if status == "synced" else backoff_seconds
             if self._shutdown_started.wait(wait_seconds):
                 return

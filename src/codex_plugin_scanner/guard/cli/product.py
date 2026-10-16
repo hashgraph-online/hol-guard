@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..adapters import get_adapter
-from ..adapters.base import HarnessContext
+from ..adapters.base import HarnessContext, _artifact_uses_guard
 from ..config import GuardConfig
 from ..consumer import detect_all
 from ..consumer.service import diff_artifact
@@ -112,11 +112,15 @@ def _build_guard_product_payload(
     runtime_state = store.get_runtime_state()
     approval_center_url = load_guard_daemon_endpoint_url(context.guard_home)
     from ..harness_posture import harness_posture_summary
+    from ..protection_coverage import protection_is_in_effect
     from ..protection_posture import protection_status_fields
 
     payload: dict[str, object] = {
         "generated_at": _now(),
         **protection_status_fields(posture=config.protection_posture, mode=config.mode),
+        # The posture alone cannot tell a reader whether anything is registered
+        # to apply it, so state that separately rather than leaving it implied.
+        "protection_in_effect": protection_is_in_effect(harnesses),
         **harness_posture_summary(config),
         "guard_home": _redacted_path(context.guard_home, context.home_dir),
         "workspace": _redacted_path(context.workspace_dir, context.home_dir),
@@ -147,6 +151,7 @@ def _summarize_harness(
     approval_flow = get_adapter(detection.harness).approval_flow(managed_install=managed_install)
     review_count = _count_review_artifacts(store, detection.artifacts, detection.harness)
     managed = bool(managed_install and managed_install.get("active"))
+    guard_registered = any(_artifact_uses_guard(artifact) for artifact in detection.artifacts)
     shim_path = None
     if managed_install is not None:
         manifest = managed_install.get("manifest")
@@ -158,6 +163,8 @@ def _summarize_harness(
         "installed": detection.installed,
         "command_available": detection.command_available,
         "artifact_count": len(detection.artifacts),
+        "artifacts_scanned": True,
+        "guard_registered": guard_registered,
         "review_count": review_count,
         "warning_count": len(detection.warnings),
         "managed": managed,
@@ -202,6 +209,7 @@ def _summarize_managed_install(install: dict[str, object], home_dir: Path) -> di
         "installed": managed,
         "command_available": managed,
         "artifact_count": 0,
+        "artifacts_scanned": False,
         "review_count": 0,
         "warning_count": warning_count,
         "managed": managed,

@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
 from ..harness_posture import harness_posture_line
+from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
@@ -838,10 +839,28 @@ def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[
     return _protection_display_name(payload, protection), bool(payload.get("protection_off")) or protection == "watch"
 
 
+def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) -> str:
+    """Build the panel's headline, which must not read as protected when it is not.
+
+    The posture is still worth naming when no app is registered: it is what Guard
+    will enforce once the hooks are back. What it must not do is stand alone, in
+    the calm colour, while nothing is being checked.
+    """
+
+    if protection_off:
+        return f"[bold red]protection: {name} (off)[/bold red]"
+    if not in_effect:
+        return f"[bold red]protection: {name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+    return f"protection: {name}"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
-    protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    reported = payload.get("protection_in_effect")
+    in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
+    protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+    protection_off = protection_off or not in_effect
     protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(
@@ -928,15 +947,18 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         print_approval_gate_nudge(console, payload)
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
+        adapters = _coerce_dict_list(payload.get("adapters"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(adapters)
+        protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+        protection_off = protection_off or not in_effect
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
                 border_style="red" if protection_off else "cyan",
             )
         )
-        adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(build_doctor_harness_table(adapters))
         print_approval_gate_nudge(console, payload)
     elif "harnesses" in payload and all("install_aliases" in h for h in _coerce_dict_list(payload.get("harnesses"))):
@@ -992,13 +1014,21 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 summary.add_row("Recovery", recovery_command)
         summary.add_row("Warnings", str(len(warnings)))
         name, protection_off = _protection_status_copy(payload, "")
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect([payload])
         if name:
-            value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
+            if protection_off:
+                value = f"[bold red]{name} (off)[/bold red]"
+            elif not in_effect:
+                value = f"[bold red]{name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+            else:
+                value = name
             summary.add_row("Protection", value)
             per_app = harness_posture_line(payload).strip()
             if per_app:
                 summary.add_row("Per app", per_app.removeprefix("per app: "))
-        console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
+        protection_alarm = bool(name) and (protection_off or not in_effect)
+        console.print(Panel(summary, title="Guard doctor", border_style="red" if protection_alarm else "cyan"))
         if warnings:
             warning_text = "\n".join(
                 textwrap.fill(
