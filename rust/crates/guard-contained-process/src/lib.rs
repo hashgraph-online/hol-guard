@@ -241,7 +241,7 @@ pub fn process_ceiling(additional: u64) -> io::Result<u64> {
 }
 
 #[cfg(windows)]
-pub use windows::readonly::{run_readonly_snapshot, ReadonlySnapshotRun};
+pub use windows::readonly::{run_readonly_snapshot, BuildRun, ReadonlySnapshotRun};
 #[cfg(windows)]
 pub use windows::AppContainer;
 

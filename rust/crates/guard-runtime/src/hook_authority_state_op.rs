@@ -439,6 +439,9 @@ impl Env<'_> {
                 );
                 Ok(json!({}))
             }
+            "claude_discard_session" => Ok(json!({
+                "discarded": self.claude_discard_session(required(&request.session_id)?)
+            })),
             "claude_load_index" => Ok(json!({
                 "pending_keys": self.load_index(&CLAUDE_FAMILY, required(&request.session_id)?)
             })),
@@ -476,6 +479,20 @@ impl Env<'_> {
                     required(&request.expected_key)?,
                 )
             })),
+            "cursor_find_pending" => Ok(json!({
+                "pending": self.cursor_find_pending(
+                    required(&request.conversation_id)?,
+                    required(&request.command)?,
+                    required(&request.expected_key)?,
+                )
+            })),
+            "cursor_remove_pending" => {
+                self.cursor_remove_pending(
+                    required(&request.conversation_id)?,
+                    required(&request.pending_key)?,
+                )?;
+                Ok(json!({}))
+            }
             "cursor_record_allow" => Ok(json!({
                 "stored": self.cursor_record_allow(request)?
             })),
@@ -498,3 +515,7 @@ mod store;
 #[cfg(all(test, unix))]
 #[path = "hook_authority_state_vectors_tests.rs"]
 mod vectors;
+
+#[cfg(all(test, unix))]
+#[path = "hook_authority_state_session_ops_tests.rs"]
+mod session_ops;

@@ -68,6 +68,7 @@ fn evaluate_in(
             npm_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         Some(&context),
     )

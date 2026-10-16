@@ -792,7 +792,7 @@ def test_guard_keeps_routine_review_thread_resolution_prompt_free(selection: str
     assert match is None
 
 
-@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",)))
+@pytest.mark.parametrize("jq_arguments", (("--jq", ".data"), ("--jq=.data",), ("-q", ".data"), ("-q.data",)))
 def test_guard_keeps_routine_review_thread_resolution_with_data_projection_prompt_free(
     jq_arguments: tuple[str, ...],
 ) -> None:
@@ -824,7 +824,13 @@ def test_guard_keeps_routine_review_thread_resolution_with_data_projection_promp
 
 @pytest.mark.parametrize(
     "jq_arguments",
-    (("--jq", ".data.viewer"), ("--jq=@filter.jq",), ("--jq", ".data", "--jq", ".data")),
+    (
+        ("--jq", ".data.viewer"),
+        ("--jq=@filter.jq",),
+        ("--jq", ".data", "--jq", ".data"),
+        ("-q", ".data.viewer"),
+        ("-q", ".data", "--jq", ".data"),
+    ),
 )
 def test_guard_reviews_routine_review_thread_resolution_with_other_jq_projections(
     jq_arguments: tuple[str, ...],

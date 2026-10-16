@@ -252,6 +252,25 @@ fn artifact_hash(
     .map_err(|_| invalid())
 }
 
+/// The composed action and approval-context token in process, for the resident
+/// itself rather than a request to it (`package_current_action_and_hash`,
+/// `local_supply_chain.py:1014`). The request fields the byte path validates
+/// around — the schema, the request id and the response digest — belong to that
+/// path; the fields this reads are validated the same way.
+pub(crate) fn package_current_action_and_hash(
+    request: &PackageApprovalHashRequestV1,
+) -> Result<(GuardAction, String), String> {
+    if !request.evaluation.is_object()
+        || !request.artifact.is_object()
+        || !request.config_policy.is_object()
+    {
+        return Err(invalid());
+    }
+    let current_action = compose_current_action(request);
+    let artifact_hash = artifact_hash(request, current_action)?;
+    Ok((current_action, artifact_hash))
+}
+
 pub(crate) fn evaluate_package_approval_hash(
     request: &PackageApprovalHashRequestV1,
 ) -> Result<Vec<u8>, String> {

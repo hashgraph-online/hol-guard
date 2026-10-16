@@ -20,10 +20,15 @@ from codex_plugin_scanner.guard.store_approvals import (
     InvalidApprovalCursorError,
     get_approval_request,
     list_approval_requests,
-    list_pending_approval_summaries,
     resolve_request_with_queue_result,
 )
-from tests.native_approval_writes import add_approval_request, native_approval_connection
+from tests.native_approval_writes import (
+    _store_for,
+    add_approval_request,
+    native_approval_connection,
+    native_store,
+    page_cursor,
+)
 
 
 def _connection() -> sqlite3.Connection:
@@ -371,8 +376,10 @@ def test_pending_summary_pagination_uses_stable_cursor() -> None:
             f"2026-05-08T10:0{index}:00+00:00",
         )
 
-    first_page = list_pending_approval_summaries(connection, limit=2)
-    second_page = list_pending_approval_summaries(connection, limit=2, cursor=str(first_page["next_cursor"]))
+    first_page = native_store(connection).list_pending_approval_summaries(limit=2)
+    second_page = native_store(connection).list_pending_approval_summaries(
+        limit=2, cursor=str(first_page["next_cursor"])
+    )
 
     assert [item["request_id"] for item in first_page["items"]] == ["req-2", "req-1"]
     assert [item["request_id"] for item in second_page["items"]] == ["req-0"]
@@ -390,7 +397,7 @@ def test_watch_only_observation_is_exposed_in_list_and_detail_payloads() -> None
 
     listed = list_approval_requests(connection, limit=None)
     detail = get_approval_request(connection, request.request_id)
-    summary = list_pending_approval_summaries(connection, limit=1)["items"][0]
+    summary = native_store(connection).list_pending_approval_summaries(limit=1)["items"][0]
 
     assert listed[0]["watch_only_observation"] is True
     assert detail is not None
@@ -416,7 +423,7 @@ def test_pending_summary_preserves_bounded_command_preview_and_category() -> Non
         "2026-05-08T10:01:00+00:00",
     )
 
-    items = list_pending_approval_summaries(connection, limit=2)["items"]
+    items = native_store(connection).list_pending_approval_summaries(limit=2)["items"]
     item = next(value for value in items if value["request_id"] == "req-compound")
     long_item = next(value for value in items if value["request_id"] == "req-long")
 
@@ -432,10 +439,10 @@ def test_pending_summary_rejects_invalid_cursor() -> None:
     add_approval_request(connection, _request("req-only"), "2026-05-08T10:00:00+00:00")
 
     with pytest.raises(InvalidApprovalCursorError):
-        list_pending_approval_summaries(connection, limit=2, cursor="not-a-valid-cursor")
+        native_store(connection).list_pending_approval_summaries(limit=2, cursor="not-a-valid-cursor")
 
 
-def test_before_cursor_uses_last_seen_sort_order() -> None:
+def test_cursor_uses_last_seen_sort_order() -> None:
     connection = _connection()
     add_approval_request(connection, _request("req-old", command="cat ~/.npmrc"), "2026-05-08T10:00:00+00:00")
     add_approval_request(connection, _request("req-middle", command="cat ~/.pypirc"), "2026-05-08T10:01:00+00:00")
@@ -446,7 +453,11 @@ def test_before_cursor_uses_last_seen_sort_order() -> None:
     )
     add_approval_request(connection, _request("req-old-again", command="cat ~/.npmrc"), "2026-05-08T10:05:00+00:00")
 
-    rows = list_approval_requests(connection, limit=None, before_cursor="2026-05-08T10:02:00+00:00")
+    store = _store_for(connection)
+    newest = store.get_approval_request("req-new")
+    assert newest is not None
+
+    rows = store.list_approval_requests(limit=None, cursor=page_cursor(newest))
 
     assert [row["request_id"] for row in rows] == ["req-middle"]
 

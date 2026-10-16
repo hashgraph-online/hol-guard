@@ -7,28 +7,11 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_github_workflow as workflow_hook
 from codex_plugin_scanner.guard.cli import commands_support_command_activity as activity
-from codex_plugin_scanner.guard.cli import commands_support_compound_decision as compound
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     NativeCommandControlMutationRequiredError,
 )
-
-
-def test_compound_native_unavailable_is_explicit_and_fail_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    del monkeypatch
-
-    assert compound.compound_command_decision_metadata(
-        "git push origin main",
-        native_review=None,
-        workspace=tmp_path,
-        home_dir=tmp_path,
-    ) == {
-        "command_action_floor": "require-reapproval",
-        "command_evaluation_status": "native_unavailable",
-    }
 
 
 def test_activity_read_only_authority_upgrade_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

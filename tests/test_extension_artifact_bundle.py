@@ -32,6 +32,10 @@ SHA = "a" * 40
 
 @pytest.fixture
 def snapshot(tmp_path, monkeypatch):
+    # Other collected helpers can already have bootstrapped scripts/. Test
+    # bundle cleanup from a controlled path and restore inherited state later.
+    scripts_dir = str((ROOT / "scripts").resolve())
+    monkeypatch.setattr(sys, "path", [entry for entry in sys.path if entry != scripts_dir])
     root = tmp_path / "source"
     root.mkdir()
     for name in bundle.FILES:
@@ -74,6 +78,15 @@ def test_snapshot_leaves_scripts_directory_off_the_import_path(snapshot, tmp_pat
     scripts_dir = str((ROOT / "scripts").resolve())
     bundle.create_bundle(root, tmp_path / "again", SHA)
     assert scripts_dir not in sys.path
+
+
+def test_snapshot_preserves_preexisting_scripts_path_entries(snapshot, tmp_path, monkeypatch):
+    root, _output = snapshot
+    scripts_dir = str((ROOT / "scripts").resolve())
+    inherited = [*sys.path, scripts_dir, scripts_dir]
+    monkeypatch.setattr(sys, "path", inherited.copy())
+    bundle.create_bundle(root, tmp_path / "inherited", SHA)
+    assert sys.path.count(scripts_dir) == inherited.count(scripts_dir)
 
 
 def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):

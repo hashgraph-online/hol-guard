@@ -16,6 +16,9 @@ from .trusted_local_tools import local_tool_approval_payload
 
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
 APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}7"
+# Set by the resident (approval_scope_contract.rs) when a native review has no
+# retry binding, so a one-time approval cannot let the agent's retry run.
+RETRY_CANNOT_REUSE_APPROVAL: Final = "retry_cannot_reuse_approval"
 ResolutionAction = Literal["allow", "block"]
 
 

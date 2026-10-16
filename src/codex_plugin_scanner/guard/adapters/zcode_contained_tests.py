@@ -35,6 +35,7 @@ _PROFILES = {
 _ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
 # Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
 _SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
+_WINDOWS_SINK_HARNESSES = frozenset({"claude-code", "codex"})
 
 
 def cleanup_stale_zcode_requests() -> None:
@@ -107,10 +108,15 @@ def route_zcode_containment(
     return routed if routed is not None else response
 
 
-def contained_sink_command_prefix() -> tuple[str, ...]:
+def contained_sink_command_prefix(
+    python_executable: str | None = None, package_root: Path | None = None
+) -> tuple[str, ...]:
     """The argv prefix ``route_zcode_containment`` starts the sink with."""
     return _sink_command_prefix(
-        {"python_executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+        {
+            "python_executable": python_executable or sys.executable,
+            "package_root": str(package_root or Path(__file__).resolve().parents[3]),
+        }
     )
 
 
@@ -142,12 +148,12 @@ def _request_root() -> str | None:
 
 def platform_contains(response: Mapping[str, object]) -> bool:
     """macOS runs every contained profile; Linux runs the workspace sandbox;
-    Windows runs installed Python in an AppContainer."""
+    Windows runs installed Python and Vite builds in an AppContainer."""
     profile = response.get("required_execution_profile")
     return (
         sys.platform == "darwin"
         or (sys.platform == "linux" and profile == "workspace-contained-v1")
-        or (sys.platform == "win32" and profile == "python-eval-readonly-v1")
+        or (sys.platform == "win32" and profile in {"python-eval-readonly-v1", "node-build-output-v1"})
     )
 
 
@@ -163,9 +169,10 @@ def contained_zcode_response(
     if (
         not platform_contains(response)
         or config.get("harness") not in _SINK_HARNESSES
-        # The sink command is POSIX-quoted; on Windows only Claude Code runs
-        # it through Git Bash.
-        or (sys.platform == "win32" and config.get("harness") != "claude-code")
+        # The sink command is POSIX-quoted for Git Bash and the Pi shell; on
+        # Windows Codex gets a PowerShell command. Any other harness there
+        # keeps its single review.
+        or (sys.platform == "win32" and config.get("harness") not in _WINDOWS_SINK_HARNESSES)
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True
@@ -240,13 +247,21 @@ def contained_zcode_response(
         if "--home" in cli_args:
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
         command = (*_sink_command_prefix(config), *args)
+        if sys.platform == "win32" and config.get("harness") == "codex":
+            from ..windows_powershell_quote import powershell_join
+
+            shell_command = powershell_join(command)
+        else:
+            shell_command = shlex.join(command)
+        if shell_command is None:
+            raise ValueError("sink command cannot be quoted for this shell")
         return {
             "policy_action": "allow",
             "reason_code": "native_contained_execution_routed",
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "allow",
-                "updatedInput": {**original, "command": shlex.join(command)},
+                "updatedInput": {**original, "command": shell_command},
             },
         }
     except (OSError, ValueError, KeyError, IndexError, TypeError):

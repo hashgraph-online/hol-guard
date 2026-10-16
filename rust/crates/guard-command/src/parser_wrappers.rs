@@ -2,10 +2,16 @@
 
 use crate::{assignment_name, executable_basename, CommandSegmentV1, RawSegment};
 
-/// Strips `sudo`/`timeout` wrappers and `command`/`time`/`env` prefixes.
+/// Strips `sudo` wrappers and `timeout`/`command`/`time`/`env` prefixes.
 ///
-/// `sudo` and `timeout` change how the program runs, so they stay in the
-/// wrapper chain. `command` and `time` run the next word as the program.
+/// `sudo` changes who runs the program, so it stays in the wrapper chain.
+/// A bare `timeout 30 pytest -q` runs the program this text already names,
+/// as this user and in this directory, and signals that one child when the
+/// clock runs out: it bounds how long the work may take, not what it may do,
+/// so it leaves no wrapper behind. `./timeout` and `bin/timeout` are not that
+/// clock. They stay in the wrapper chain, and the duration is still skipped
+/// so the program they name stays the executable. `command` and `time` run
+/// the next word as the program.
 /// `env` does that only when every assignment is inert; those names join
 /// `environment_names`. A non-inert name leaves `env` as the executable.
 /// Any option on a prefix leaves it as the executable, which keeps
@@ -36,10 +42,15 @@ pub(super) fn unwrap_wrappers(
         if wrappers.len() + prefixes == 4 {
             return Err("command_wrapper_limit_exceeded");
         }
+        let clock = trusted_timeout(&tokens[index]);
         let wrapper = executable_basename(&tokens[index]);
-        wrappers.push(wrapper.to_owned());
         index += 1;
         if wrapper == "timeout" {
+            if clock {
+                prefixes += 1;
+            } else {
+                wrappers.push(wrapper.to_owned());
+            }
             if tokens.get(index).is_some_and(|value| value == "--") {
                 index += 1;
             }
@@ -56,6 +67,7 @@ pub(super) fn unwrap_wrappers(
             }
             continue;
         }
+        wrappers.push(wrapper.to_owned());
         while let Some(option) = tokens.get(index) {
             match option.as_str() {
                 "--" => {
@@ -120,8 +132,26 @@ fn transparent_prefix(tokens: &[String], index: usize) -> Option<(usize, Vec<Str
         .then_some((next, names))
 }
 
+/// Whether this word is the system clock rather than a file that happens to
+/// be named for it. The shell resolves a bare `timeout` on `PATH`, and the
+/// two system paths name the same program; `./timeout`, `bin/timeout` and
+/// `/tmp/timeout` are whatever that file holds, so they stay wrappers and
+/// keep the command under review.
+fn trusted_timeout(token: &str) -> bool {
+    matches!(token, "timeout" | "/usr/bin/timeout" | "/bin/timeout")
+}
+
+/// A duration `timeout` reads: a number of seconds, or one carrying an `s`,
+/// `m`, `h` or `d` unit. `timeout 5m npm run build` bounds the same single
+/// child that `timeout 300 npm run build` bounds, so the unit a person writes
+/// cannot be what decides whether the command is read at all.
 fn timeout(value: &str) -> bool {
-    !value.is_empty() && value.len() <= 10 && value.bytes().all(|byte| byte.is_ascii_digit())
+    let number = value.strip_suffix(['s', 'm', 'h', 'd']).unwrap_or(value);
+    let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+    number.len() <= 10
+        && !whole.is_empty()
+        && whole.bytes().all(|byte| byte.is_ascii_digit())
+        && fraction.bytes().all(|byte| byte.is_ascii_digit())
 }
 
 /// `command -v NAME` reports a path or a name and runs nothing, so the segment

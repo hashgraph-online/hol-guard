@@ -3,6 +3,7 @@ use crate::local_store_read::schema_checksum;
 use crate::policy_decision_lookup_op::tests::{seed_store, tmp_store};
 use crate::policy_decision_lookup_op::{policy_row_to_json, POLICY_LOOKUP_COLUMNS};
 use crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey;
+#[cfg(unix)]
 use guard_contracts::NativeExactActionQueryV1;
 use guard_policy_snapshot::{DirectLaneEnvironmentV1, DirectLanePolicyIntegrityStateV1};
 use rusqlite::params;
@@ -350,6 +351,9 @@ pub(super) fn binding() -> DirectLaneBinding {
 }
 
 /// A real workspace for the read vector, whose token resolves its target.
+/// The lane takes only POSIX workspace text (`clean_path`), so on Windows
+/// these reviews defer to the daemon and the tests below run on Unix only.
+#[cfg(unix)]
 pub(super) fn workspace(tag: &str) -> String {
     let root =
         std::env::temp_dir().join(format!("hg-saved-workspace-{tag}-{}", std::process::id()));
@@ -359,6 +363,7 @@ pub(super) fn workspace(tag: &str) -> String {
 }
 
 /// The edge, payload and token of the bound `Read` vector in `workspace`.
+#[cfg(unix)]
 fn bound_request(
     binding: &DirectLaneBinding,
     workspace: &str,
@@ -370,6 +375,7 @@ fn bound_request(
 
 /// The edge, payload, artifact id and exact-action query of the bound
 /// `Read` vector in `workspace`.
+#[cfg(unix)]
 pub(super) fn bound_query(
     binding: &DirectLaneBinding,
     workspace: &str,
@@ -409,6 +415,7 @@ pub(super) fn bound_query(
     (edge, payload, artifact_id, exact)
 }
 
+#[cfg(unix)]
 fn answer_with(
     tag: &str,
     action: &str,
@@ -417,6 +424,7 @@ fn answer_with(
     seeded::answer_in(tag, action, answering, "")
 }
 
+#[cfg(unix)]
 #[test]
 fn a_saved_allow_answers_the_review() {
     let answered = answer_with("answer-allow", "allow", &binding()).unwrap();
@@ -424,6 +432,7 @@ fn a_saved_allow_answers_the_review() {
     assert_eq!(response["approval_reuse_status"], json!("accepted"));
 }
 
+#[cfg(unix)]
 #[test]
 fn a_saved_block_answers_the_review() {
     let answered = answer_with("answer-block", "block", &binding()).unwrap();
@@ -431,6 +440,7 @@ fn a_saved_block_answers_the_review() {
     assert_eq!(response["approval_reuse_status"], json!("blocked"));
 }
 
+#[cfg(unix)]
 #[test]
 fn a_binding_without_the_published_state_defers() {
     let mut degraded = binding();
@@ -459,8 +469,10 @@ fn a_binding_without_the_published_state_defers() {
     ));
 }
 
+#[cfg(unix)]
 #[path = "hook_direct_saved_subdirectory_tests.rs"]
 mod subdirectory;
 
+#[cfg(unix)]
 #[path = "hook_direct_saved_seeded_tests.rs"]
 mod seeded;

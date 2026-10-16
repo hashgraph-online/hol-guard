@@ -105,6 +105,7 @@ def test_python_bridge_pin_skips_native_selection_in_a_fresh_process() -> None:
 
     child = r"""
 import sys
+from pathlib import Path
 from codex_plugin_scanner.guard import native_runtime
 from codex_plugin_scanner.guard.adapters.codex import _native_bridge_executable
 
@@ -113,7 +114,7 @@ def boom(*, deadline_monotonic=None):
 
 native_runtime.native_runtime_status = boom
 try:
-    result = _native_bridge_executable()
+    result = _native_bridge_executable(Path("/nonexistent-guard-home"))
 except RuntimeError as error:
     if str(error) != "native status consulted":
         raise

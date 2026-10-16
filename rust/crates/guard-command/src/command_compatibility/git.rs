@@ -10,6 +10,7 @@ pub(crate) use git_allow_scope::{
     repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
 };
 use git_hooks_path::hooks_path_names_no_hooks;
+pub(crate) use git_hooks_path::rooted_hooks_inert;
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
@@ -242,7 +243,9 @@ fn routed<'a>(
             let boolean = value.to_ascii_lowercase();
             let safe = match key.to_ascii_lowercase().as_str() {
                 "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
-                "core.hookspath" => inspection && hooks_path_names_no_hooks(value),
+                "core.hookspath" => {
+                    inspection && hooks_path_names_no_hooks(value, context.cwd, arguments)
+                }
                 "core.quotepath" => matches!(
                     boolean.as_str(),
                     "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"

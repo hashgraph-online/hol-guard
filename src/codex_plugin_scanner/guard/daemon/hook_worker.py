@@ -90,6 +90,10 @@ _TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
         "native_policy_snapshot_expired",
     }
 )
+# Harnesses whose PermissionRequest hook gets no decision, so the harness
+# shows its own approval prompt. Each raises it only after its PreToolUse
+# hook reviewed the same call.
+_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode"})
 
 
 @final
@@ -281,11 +285,14 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
-        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "codex":
-            # Codex asks this only for an escalation of a call its PreToolUse
-            # hook, with the same matcher, already sent to Guard. A deny here
-            # would refuse every approval Codex asks for, so the decision
-            # stays with Codex's own approval prompt.
+        if (
+            event_name == "PermissionRequest"
+            and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
+        ):
+            # These harnesses ask this only for a call their PreToolUse hook
+            # already sent to Guard. A deny here would refuse every approval
+            # the harness asks for, so the decision stays with the harness's
+            # own approval prompt.
             return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this

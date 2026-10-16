@@ -1,0 +1,202 @@
+name: Gauntlet installed acceptance
+
+# Installed acceptance, not qualification. Qualification drives Guard as a library inside a
+# private per-case settings file, so it cannot see whether `hol-guard install <harness>` really
+# writes Guard's hooks into the harness's own configuration, whether the frozen bundle the
+# Desktop app installs behaves like the wheel, or whether the same payload gets the same verdict
+# twice. This lane answers those three questions and adds a home with upgrade history.
+#
+# Never a required check. Do not add it to branch protection or the required CI graph.
+on:
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: Times each replay case runs against identical input.
+        type: string
+        default: '5'
+  schedule:
+    # Weekly, Monday 07:20 UTC. The lane builds Rust, so it is deliberately infrequent.
+    - cron: '20 7 * * 1'
+  pull_request:
+    paths:
+      - 'ci/gauntlet/installed_*'
+      - 'ci/gauntlet/summarise_installed_acceptance.py'
+      - 'tests/test_gauntlet_installed_lane.py'
+      - '.github/workflows/gauntlet-installed-acceptance.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gauntlet-installed-acceptance-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TARGET: x86_64-unknown-linux-musl
+  PLATFORM_TAG: manylinux_2_17_x86_64
+  REPEAT: ${{ inputs.repeat || '5' }}
+  # A pull request that touches the lane is testing the lane, not the build it
+  # runs against. The acceptance steps assert against the shipped product, so
+  # making them a merge gate here would block lane changes on defects they did
+  # not introduce. The scheduled and dispatched runs fail loudly instead.
+  REPORT_ONLY: ${{ github.event_name == 'pull_request' && '--report-only' || '' }}
+  # The development profile the Gauntlet already builds with: no LTO, 16 codegen units. The lane
+  # tests install and hook behaviour, which the optimisation level does not change.
+  CARGO_PROFILE_RELEASE_LTO: 'false'
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '16'
+
+jobs:
+  installed-acceptance:
+    name: Installed acceptance (wheel and frozen bundle)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: 0.9.26
+          enable-cache: true
+
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      - name: Install the static Linux linker
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+
+      - name: Sync the Python environment
+        run: uv sync --frozen --extra mdm-build --group ci-test --python 3.12
+
+      - name: Build the native runtime and the source compiler
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
+            --output "$RUNNER_TEMP/dev-workspace-profile.toml"
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
+            --config "$RUNNER_TEMP/dev-workspace-profile.toml"
+          "rust/target/$TARGET/release/hol-guard-runtime" self-test --json
+          "rust/target/$TARGET/release/guard-command-source" export-trust \
+            > contracts/extensions/build-trust-class-map.v1.json
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "COMPILER=$PWD/rust/target/$TARGET/release/guard-command-source" >> "$GITHUB_ENV"
+
+      # The generated command catalog is a build output, not a checked-in file, and importing
+      # codex_plugin_scanner without it raises generated_command_catalog_unavailable. Stage it
+      # before anything imports the package, the way the pytest lanes in ci.yml do.
+      - uses: ./.github/actions/stage-command-projections
+        with:
+          compiler: ${{ env.COMPILER }}
+
+      - name: Lane tests
+        run: uv run --no-sync python -m pytest tests/test_gauntlet_installed_lane.py -q
+
+      - name: Assemble the native wheel
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          runtime="rust/target/$TARGET/release/hol-guard-runtime"
+          compiler="rust/target/$TARGET/release/guard-command-source"
+          jq -n \
+            --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
+            --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+            > source-build.json
+          "$compiler" compile < source-build.json > source-compiled.json
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv build --wheel --out-dir pure-dist
+          RULE_DIGEST=$("$runtime" capabilities --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag "$PLATFORM_TAG" \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
+            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+          WHEEL=$(find native-dist -maxdepth 1 -type f -name 'hol_guard-*.whl' -print)
+          test "$(printf '%s\n' "$WHEEL" | wc -l)" -eq 1
+          echo "WHEEL=$PWD/$WHEEL" >> "$GITHUB_ENV"
+
+      - name: Installed acceptance against the wheel
+        run: |
+          set -euo pipefail
+          python3 -m venv "$RUNNER_TEMP/wheel-venv"
+          PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --no-compile \
+            --index-url https://pypi.org/simple "$WHEEL"
+          python3 -m ci.gauntlet installed \
+            --runtime "$RUNNER_TEMP/wheel-venv/bin/hol-guard" \
+            --harness claude-code codex omp \
+            --repeat "$REPEAT" \
+            $REPORT_ONLY \
+            --output "$RUNNER_TEMP/evidence/wheel"
+
+      - name: Freeze the bundle the Desktop app installs
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/native-runtime" "$RUNNER_TEMP/pyinstaller" "$RUNNER_TEMP/spec" "$RUNNER_TEMP/dist-onedir"
+          uv run --no-sync python scripts/release/stage_native_runtime_for_desktop_core.py \
+            --wheel "$WHEEL" \
+            --destination "$RUNNER_TEMP/native-runtime" \
+            --expected-version "$VERSION" \
+            --expected-target "$TARGET"
+          uv run --no-sync python scripts/release/stage_guard_cloud_review_artifacts.py --source-root "$PWD"
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall "$WHEEL"
+          uv run --no-sync pyinstaller \
+            --clean --noconfirm --onedir --name hol-guard \
+            --collect-submodules codex_plugin_scanner --collect-data codex_plugin_scanner \
+            --add-data "$RUNNER_TEMP/native-runtime/hol-guard-runtime:codex_plugin_scanner/_native" \
+            --add-data "$RUNNER_TEMP/native-runtime/runtime-manifest.json:codex_plugin_scanner/_native" \
+            --add-data "$PWD/src/codex_plugin_scanner/version.py:." \
+            --distpath "$RUNNER_TEMP/dist-onedir" \
+            --workpath "$RUNNER_TEMP/pyinstaller" --specpath "$RUNNER_TEMP/spec" \
+            scripts/mdm/hol-guard-entry.py
+          ONEDIR="$RUNNER_TEMP/dist-onedir/hol-guard"
+          test -f "$ONEDIR/_internal/codex_plugin_scanner/_native/hol-guard-runtime"
+          python3 -I scripts/release/seal_pyinstaller_native_manifest.py --onedir "$ONEDIR"
+          python3 -I scripts/release/verify_pyinstaller_native_runtime.py --onedir "$ONEDIR"
+          test "$("$ONEDIR/hol-guard" --version | sed -E 's/^hol-guard[[:space:]]+//')" = "$VERSION"
+          echo "ONEDIR=$ONEDIR" >> "$GITHUB_ENV"
+
+      - name: Installed acceptance against the frozen bundle
+        run: |
+          set -euo pipefail
+          python3 -m ci.gauntlet installed \
+            --runtime "$ONEDIR/hol-guard" \
+            --harness claude-code codex omp \
+            --repeat "$REPEAT" \
+            --require-frozen \
+            $REPORT_ONLY \
+            --output "$RUNNER_TEMP/evidence/frozen"
+
+      - name: Summarise the findings
+        if: always()
+        run: |
+          set -euo pipefail
+          python3 -I ci/gauntlet/summarise_installed_acceptance.py "$RUNNER_TEMP/evidence" \
+            >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish the evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: installed-acceptance-evidence
+          path: ${{ runner.temp }}/evidence/**/installed-acceptance.json
+          if-no-files-found: warn

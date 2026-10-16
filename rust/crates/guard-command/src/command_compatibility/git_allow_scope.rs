@@ -345,7 +345,7 @@ fn setting_runs_program(key: &str, value: Option<&str>) -> bool {
     // Settings that switch a program off rather than name one.
     let switched_off = match key {
         "core.fsmonitor" => disabled(value),
-        "core.hookspath" => value == "/dev/null",
+        "core.hookspath" => super::git_hooks_path::null_hooks_path(value),
         "core.pager" => matches!(value, "" | "cat"),
         "credential.helper" => value.is_empty(),
         _ if section == "pager" => disabled(value) || matches!(value, "" | "cat"),

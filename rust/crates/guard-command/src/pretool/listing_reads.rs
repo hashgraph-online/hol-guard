@@ -141,7 +141,10 @@ pub(super) fn safe_listing_segment(
                 surviving += 1;
                 true
             }
-            Operand::Glob => search::safe_unmatched_glob_operand(argument, context, recursive),
+            Operand::Glob => {
+                search::safe_unmatched_glob_operand(argument, context, recursive)
+                    || (!recursive && leaf_glob_operand(argument, context))
+            }
         };
         if !allowed {
             return false;
@@ -176,22 +179,8 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     {
         return false;
     }
-    let expanded = if value.starts_with('~') {
-        let Some(expanded) = super::read_paths::expand_home_read_path(value, context.home_dir)
-        else {
-            return false;
-        };
-        std::path::PathBuf::from(expanded)
-    } else if std::path::Path::new(value).is_absolute() {
-        std::path::PathBuf::from(value)
-    } else {
-        let Some(cwd) = context.cwd.and_then(|cwd| {
-            super::read_paths::expand_home_read_path(cwd, context.home_dir)
-                .or_else(|| Some(cwd.to_owned()))
-        }) else {
-            return false;
-        };
-        std::path::Path::new(&cwd).join(value)
+    let Some(expanded) = expanded_path(value, context) else {
+        return false;
     };
     if !std::fs::symlink_metadata(&expanded)
         .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
@@ -221,6 +210,115 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
         }
     }
     false
+}
+
+/// The path an operand names, with `~` and a relative cwd resolved.
+fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::path::PathBuf> {
+    if value.starts_with('~') {
+        super::read_paths::expand_home_read_path(value, context.home_dir)
+            .map(std::path::PathBuf::from)
+    } else if std::path::Path::new(value).is_absolute() {
+        Some(std::path::PathBuf::from(value))
+    } else {
+        let cwd = context.cwd.map(|cwd| {
+            super::read_paths::expand_home_read_path(cwd, context.home_dir)
+                .unwrap_or_else(|| cwd.to_owned())
+        })?;
+        Some(std::path::Path::new(&cwd).join(value))
+    }
+}
+
+/// Upper bound on the entries a leaf glob's directory may hold.
+const MAX_LEAF_ENTRIES: usize = 4096;
+
+/// `ls /tmp/.s.PGSQL*`: a pattern in the last component only, below a literal
+/// directory that `ls` may list by name. The screened glob expansion refuses
+/// hidden and socket matches, but a listing prints only their names, as
+/// listing the directory itself would. Every entry the pattern could match
+/// under any shell option (`dotglob`, `nocaseglob`) is screened: a directory
+/// match has its entries listed, so it needs the listing proof itself, and
+/// any other match must clear the sensitive-path and credential-name screens.
+fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
+    // Windows spells the home path with `\`, so there it is a separator.
+    let separator = |c: char| c == '/' || (c == '\\' && cfg!(windows));
+    let Some((directory, pattern)) = value.rsplit_once(separator) else {
+        return false;
+    };
+    if directory.is_empty()
+        || directory.contains(['*', '?', '[', ']'])
+        || pattern.is_empty()
+        || value.contains(['$', '`', '|', ';', '&', '<', '>', '\n', '\r', '\0'])
+        || (value.contains('\\') && !cfg!(windows))
+        || value.contains(['{', '}', '(', ')', '!'])
+        // A trailing wildcard can always spell a credential name, so the
+        // pattern only screens its fixed path; every match is screened below.
+        || super::sensitive_path_argument(value)
+        || super::sensitive_read_path_argument(directory)
+        || !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
+    {
+        return false;
+    }
+    // A superset of every match: the literal text before the first wildcard
+    // and after the last one, compared without case.
+    let lowered = pattern.to_ascii_lowercase();
+    let prefix = &lowered[..lowered.find(['*', '?', '[']).unwrap_or(lowered.len())];
+    let suffix = &lowered[lowered.rfind(['*', '?', ']']).map_or(0, |at| at + 1)..];
+    let candidate = |name: &str| {
+        let name = name.to_ascii_lowercase();
+        name.len() >= prefix.len() + suffix.len()
+            && name.starts_with(prefix)
+            && name.ends_with(suffix)
+    };
+    // `.*` can match `.` and `..`, which name the directory and its parent.
+    if candidate(".") || candidate("..") {
+        return false;
+    }
+    let Some(base) = expanded_path(directory, context) else {
+        return false;
+    };
+    let Ok(entries) = std::fs::read_dir(&base) else {
+        return false;
+    };
+    let mut seen = 0_usize;
+    for entry in entries {
+        seen += 1;
+        let Some(name) = entry
+            .ok()
+            .and_then(|entry| entry.file_name().into_string().ok())
+        else {
+            return false;
+        };
+        if seen > MAX_LEAF_ENTRIES {
+            return false;
+        }
+        if !candidate(&name) {
+            continue;
+        }
+        let path = base.join(&name);
+        let Some(text) = path.to_str() else {
+            return false;
+        };
+        // A hidden directory (`.config`, `.cache`) may hold credentials whose
+        // names the listing would print, so a wildcard never reaches into one.
+        let listed = if std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_dir()) {
+            !name.starts_with('.')
+                && safe_reads::safe_listing_arguments(&[text.to_owned()], context)
+        } else {
+            !super::sensitive_read_path_argument(text)
+                && std::fs::canonicalize(&path).is_ok_and(|canonical| {
+                    super::read_paths::resolved_location_allowed(
+                        &canonical,
+                        context.home_dir,
+                        context.cwd,
+                        false,
+                    )
+                })
+        };
+        if !listed {
+            return false;
+        }
+    }
+    true
 }
 
 /// `..` may only lead a relative operand (`../sibling/missing`). A parent
@@ -283,4 +381,67 @@ fn follows_links(argument: &str) -> bool {
             | "--dereference-command-line"
             | "--dereference-command-line-symlink-to-dir"
     ) || (argument.starts_with('-') && !argument.starts_with("--") && argument.contains(['L', 'H']))
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn a_leaf_glob_lists_hidden_names_in_a_listable_directory_only() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/listing-leaf-glob")
+            .join(std::process::id().to_string());
+        let home = root.join("home");
+        let project = home.join("work/project");
+        let run = home.join("work/run");
+        for directory in [
+            project.join("src"),
+            run.join(".cache-x"),
+            run.join("data"),
+            home.join(".ssh"),
+        ] {
+            std::fs::create_dir_all(directory).unwrap();
+        }
+        for file in [
+            run.join(".s.PGSQL.5432.lock"),
+            run.join(".env"),
+            run.join("data/notes.txt"),
+            home.join(".ssh/id_rsa"),
+        ] {
+            std::fs::write(file, "synthetic\n").unwrap();
+        }
+        let (home, project) = (
+            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
+            crate::runtime_read_paths::canonicalize_text(&project).unwrap(),
+        );
+        let context = crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: project.to_str(),
+            ..Default::default()
+        };
+        let w = home.join("work").display().to_string();
+        let h = home.display().to_string();
+        for (command, allowed) in [
+            (format!("ls {w}/run/.s.PGSQL*"), true),
+            (
+                format!("ls -la {w}/run/.s.PGSQL* {w}/run/.s.MISSING*"),
+                true,
+            ),
+            (format!("ls {w}/run/d*"), true),
+            (format!("ls -R {w}/run/.s.PGSQL*"), false),
+            (format!("ls {w}/run/.c*"), false),
+            (format!("ls {w}/run/.e*"), false),
+            (format!("ls {w}/run/.*"), false),
+            (format!("ls {w}/*/.s.PGSQL*"), false),
+            (format!("ls {h}/.ssh/*"), false),
+            (format!("ls {h}/.ssh/id*"), false),
+        ] {
+            let words: Vec<String> = command.split(' ').map(str::to_owned).collect();
+            assert_eq!(
+                super::safe_listing_segment(&command, &words[1..], context),
+                allowed,
+                "{command}"
+            );
+        }
+        std::fs::remove_dir_all(root).unwrap();
+    }
 }

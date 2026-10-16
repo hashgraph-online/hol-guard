@@ -17,6 +17,7 @@ from .event_exports import public_events as public_events
 from .extension_adapters import extension_adapter
 from .interruptions import case_interruptions, describe
 from .mixed_reads import assess_mixed_reads
+from .native_routes import native_route_proof_error
 from .native_tools import native_tools_scope_error
 from .proofs import (
     block_reasons,
@@ -183,6 +184,7 @@ def _assess_observed(
     """
     guards = case["guard_observations"]
     routes = case["native_routes"]
+    resident_direct = case.get("resident_direct_answers", 0)
     rounds = case["inference"]["live_rounds"]
     if not reconcile_rounds(rounds)[0]:
         return "inference-error", "a provider round failed or ended before completion"
@@ -190,18 +192,13 @@ def _assess_observed(
         return "inference-error", "the model session aborted before completion"
     if not any(e.get("type") == "agent_end" and e.get("terminal") is True for e in case["events"]):
         return "harness-error", "missing terminal host event"
-    if (
-        not isinstance(routes, dict)
-        or not routes
-        or routes.get("native_resident", 0) <= 0
-        or any(name != "native_resident" and count for name, count in routes.items())
-    ):
-        return "harness-error", "native Guard enforcement route was not proven"
+    if route_error := native_route_proof_error(routes, resident_direct):
+        return "harness-error", route_error
     bound, contained_error = contained
     if contained_error:
         return contained_error
     calls = effective_calls(calls, bound)
-    by_id, guard_error = guard_inventory(calls, guards, routes, frozenset(bound))
+    by_id, guard_error = guard_inventory(calls, guards, routes, frozenset(bound), resident_direct)
     if guard_error:
         return "harness-error", guard_error
     guards = [g for g in guards if not is_contained_deny(g, bound)]

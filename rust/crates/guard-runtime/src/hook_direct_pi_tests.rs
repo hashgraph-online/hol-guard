@@ -1,6 +1,6 @@
 use super::{
     allowed_payload, allowing_lane, deferred, drain, lane, post_tool_payload, prompt_payload,
-    run_as, HOME,
+    run_as, Lane, HOME,
 };
 use crate::hook_direct::pi::{
     source_ref_external_allowed, structured_mediation, structured_output_unrequired,
@@ -162,9 +162,76 @@ fn a_pi_post_tool_use_is_answered_when_no_mediation_is_required() {
             records[0]["harness_response"],
             result["edge"]["harness_response"]
         );
-        let mut referenced = post_tool_payload(&lane);
-        referenced["guard_source_ref"] = json!({ "path": "/tmp/output.txt" });
-        let result = run_as(&lane, harness, Some(HOME), referenced);
+    }
+}
+
+/// A Pi `read` of `guide.txt` in the workspace, carrying the extension's
+/// source reference to the file the tool returned.
+fn source_read_payload(lane: &Lane, content: &str) -> Value {
+    let path = format!("{}/guide.txt", lane.workspace);
+    std::fs::write(&path, content).unwrap();
+    json!({
+        "hook_event_name": "PostToolUse",
+        "tool_name": "read",
+        "tool_input": { "path": path },
+        "tool_response": { "content": content },
+        "tool_response_summary": { "excerpt_truncated": false },
+        "guard_source_ref": {
+            "version": 1,
+            "path": path,
+            "tool_input_path": path,
+            "output_sha256": guard_hook_core::sha256_text(content),
+            "output_chars": content.chars().count(),
+        },
+        "cwd": lane.workspace,
+    })
+}
+
+#[test]
+fn a_pi_post_tool_use_source_reference_is_reviewed_by_the_resident() {
+    let token = format!("{}{}", ["gh", "p_"].concat(), "b".repeat(30));
+    for harness in ["pi", "omp"] {
+        // The allowing policy keeps the source scan's own reason; the default
+        // fixture's warn floor would turn a clean read into the silent warning.
+        let config = json!({ "structured_output_config": structured_output_view("absent") });
+        let lane = allowing_lane(&format!("pi-source-{harness}"), config);
+        let mut acked: Option<Value> = None;
+        for (content, reason) in [
+            ("ordinary notes\n".to_owned(), "source_full_scan_allow"),
+            (format!("token = '{token}'\n"), "source_secret_match"),
+        ] {
+            let result = run_as(
+                &lane,
+                harness,
+                Some(HOME),
+                source_read_payload(&lane, &content),
+            );
+            assert_eq!(result["outcome"], "answer", "{harness}: {result}");
+            assert_eq!(
+                result["edge"]["result"]["reason_code"], reason,
+                "{harness}: {result}"
+            );
+            let page = drain(&lane, acked.as_ref());
+            let records = page["records"].as_array().unwrap();
+            assert_eq!(records.len(), 1, "{harness} {reason}");
+            assert_eq!(
+                records[0]["harness_response"],
+                result["edge"]["harness_response"]
+            );
+            acked = Some(page);
+        }
+        let mut encrypted = post_tool_payload(&lane);
+        encrypted["guard_payload_ref"] = json!({ "path": "/tmp/payload.bin" });
+        let result = run_as(&lane, harness, Some(HOME), encrypted);
+        assert_eq!(deferred(&result), "direct_hook_payload_unsupported");
+        let before = json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "read",
+            "tool_input": { "path": "guide.txt" },
+            "guard_source_ref": { "path": "guide.txt" },
+            "cwd": lane.workspace,
+        });
+        let result = run_as(&lane, harness, Some(HOME), before);
         assert_eq!(deferred(&result), "direct_hook_payload_unsupported");
     }
 }

@@ -96,6 +96,14 @@ pub(super) fn relay_facts(
             None => None,
         },
         launcher_home: launcher_home(process.home.as_ref()?)?,
+        // `str(Path.cwd())`, which the queue write and the approval read-back
+        // both carry. A path this process cannot name stays unset, exactly as
+        // the proxy leaves it when `os.getcwd()` fails.
+        cwd: process
+            .cwd
+            .as_ref()
+            .and_then(|cwd| cwd.to_str())
+            .map(str::to_owned),
     })
 }
 
@@ -165,6 +173,7 @@ pub(super) fn decide_request(
     params: &Map<String, Value>,
     order: Option<&[String]>,
     catalog: &RelayCatalog,
+    inline: &Value,
 ) -> Option<(Vec<u8>, CatalogSnapshot)> {
     let name = params
         .get("name")
@@ -219,8 +228,10 @@ pub(super) fn decide_request(
         "launcher_path": facts.launcher_path,
         "path": facts.path,
         "launcher_home": facts.launcher_home,
+        "cwd": facts.cwd,
         "catalog_state": expected.state,
         "params": params,
+        "inline": inline,
     });
     let payload = json!({"operation": "mcp_relay_decide", "request": request});
     Some((serde_json::to_vec(&payload).ok()?, expected))

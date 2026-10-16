@@ -20,6 +20,8 @@ use crate::mcp_tool_evidence::McpToolRiskInputV1;
 pub const MCP_PROXY_DECISION_REQUEST_SCHEMA: &str = "guard-mcp-proxy-decision-request.v1";
 pub const MCP_PROXY_DECISION_RESULT_SCHEMA: &str = "guard-mcp-proxy-decision-result.v1";
 pub const MCP_PROXY_DECISION_FEATURE: &str = "mcp-proxy-decision-v1";
+/// The resident verifies the downloaded archive files of an archive binding itself.
+pub const MCP_PROXY_ARCHIVE_VERIFY_FEATURE: &str = "mcp-proxy-archive-verify-v1";
 /// Largest request the op accepts (a `tools/list` page rides inside it).
 pub const MCP_PROXY_DECISION_MAX_BYTES: usize = 5 * 1024 * 1024;
 
@@ -224,14 +226,25 @@ pub struct McpEvidenceItemQueryV1 {
     pub kind: McpEvidenceItemKindV1,
 }
 
-/// Rebind a `tools/call` to the verified local copies of its external archives.
+/// One archive the package evaluation downloaded, as it recorded it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpExternalArchiveDownloadV1 {
+    pub source_url: String,
+    pub path: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
+/// Rebind a `tools/call` (or a launch argv) to the local copies of its
+/// external archives. The resident re-verifies every download before binding.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpExternalArchiveBindQueryV1 {
-    /// The request `params` exactly as received.
+    /// The request `params` (or argv array) exactly as received.
     pub params: Value,
-    /// `(source url, verified local path)` pairs, in the order they apply.
-    pub replacements: Vec<(String, String)>,
+    /// The downloads to verify, in the order their replacements apply.
+    pub downloads: Vec<McpExternalArchiveDownloadV1>,
     /// Whether the package evaluation demands a binding at all.
     pub requires_binding: bool,
 }

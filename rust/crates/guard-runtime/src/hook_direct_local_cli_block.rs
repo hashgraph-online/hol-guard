@@ -59,7 +59,7 @@ pub(super) fn command_selector(
 }
 
 /// `match_command_id`: the longest token prefix that names a catalog command.
-pub(super) fn match_command_id(tokens: &[String], catalog: &BTreeSet<String>) -> String {
+pub(crate) fn match_command_id(tokens: &[String], catalog: &BTreeSet<String>) -> String {
     if tokens.is_empty() {
         return ROOT_COMMAND_ID.to_owned();
     }
@@ -150,7 +150,7 @@ pub(super) fn launch(
 }
 
 /// `_parse_native_scripts`' checks on the resident's package answer.
-fn valid_package(found: &PackageJsonScriptsV1) -> bool {
+pub(crate) fn valid_package(found: &PackageJsonScriptsV1) -> bool {
     let source_valid = matches!(
         &found.source,
         LocalCliIdentitySourceV1::PackageJson { content_sha256, .. } if sha256_hex(content_sha256)
@@ -161,7 +161,7 @@ fn valid_package(found: &PackageJsonScriptsV1) -> bool {
 }
 
 /// `_valid_unlisted_cli`'s checks on one unlisted CLI record.
-fn valid_unlisted(record: &UnlistedCliV1) -> bool {
+pub(crate) fn valid_unlisted(record: &UnlistedCliV1) -> bool {
     valid_identity(&LocalCliIdentityV1 {
         cli_id: record.cli_id.clone(),
         name: record.name.clone(),

@@ -80,6 +80,12 @@ pub(crate) const STRICT_LEXER: Lexer = Lexer {
     comments: false,
 };
 
+/// The package-test script lexer: punctuation `;&|<>` and no comments.
+pub(crate) const SCRIPT_LEXER: Lexer = Lexer {
+    punctuation: &[';', '&', '|', '<', '>'],
+    comments: false,
+};
+
 /// Split `text` into shlex tokens, or the lexer's `ValueError`.
 pub(crate) fn split_punctuation(text: &str) -> Result<Vec<String>, LexError> {
     split_with(COMMAND_LEXER, text)

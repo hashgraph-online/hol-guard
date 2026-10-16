@@ -69,6 +69,7 @@ fn run_python(workspace: &Path, code: &str, timeout: Duration) -> Option<Capture
                 active_processes: Some(8),
                 ..Default::default()
             },
+            build: None,
         })
         .unwrap(),
     )
@@ -212,6 +213,7 @@ fn snapshot_budget_fails_closed() {
         deadline: Instant::now() + Duration::from_secs(60),
         cancel: &cancel,
         job_limits: Default::default(),
+        build: None,
     });
     assert!(result.is_err());
 }
@@ -238,6 +240,243 @@ fn hardlinked_files_fail_closed() {
         deadline: Instant::now() + Duration::from_secs(60),
         cancel: &cancel,
         job_limits: Default::default(),
+        build: None,
     });
+    assert!(result.is_err());
+}
+
+fn node_on_path() -> Option<PathBuf> {
+    std::env::split_paths(&std::env::var_os("PATH")?)
+        .map(|directory| directory.join("node.exe"))
+        .find(|path| path.is_file())
+}
+
+fn build_limits<'a>(
+    dependencies: &'a [(PathBuf, PathBuf)],
+    outputs: &'a [PathBuf],
+    withhold_dependency: &'a dyn Fn(&Path) -> bool,
+) -> BuildRun<'a> {
+    BuildRun {
+        dependencies,
+        withhold_dependency,
+        max_dependency_entries: 100,
+        max_dependency_bytes: 1024 * 1024,
+        outputs,
+        max_output_entries: 100,
+        max_output_bytes: 1024 * 1024,
+    }
+}
+
+#[test]
+fn build_run_publishes_only_declared_output() {
+    let Some(node) = node_on_path() else {
+        eprintln!("skipped: no node.exe on PATH");
+        return;
+    };
+    let (_directory, workspace) = workspace();
+    let modules = tempfile::tempdir().unwrap();
+    fs::create_dir(modules.path().join("tool")).unwrap();
+    fs::write(
+        modules.path().join("tool").join("index.js"),
+        "module.exports = 'dependency-sentinel';",
+    )
+    .unwrap();
+    fs::write(modules.path().join(".npmrc"), "//registry/:_authToken=x").unwrap();
+    fs::create_dir(workspace.join("dist")).unwrap();
+    fs::write(workspace.join("dist").join("stale.js"), "old").unwrap();
+    fs::write(workspace.join("dist").join(".env"), "TOKEN=kept").unwrap();
+    let script = "const fs = require('fs');\
+        const value = require('./node_modules/tool');\
+        fs.mkdirSync('dist/assets', { recursive: true });\
+        fs.rmSync('dist/stale.js');\
+        fs.writeFileSync('dist/assets/out.js', value);\
+        fs.writeFileSync('cache.txt', 'not-published');\
+        fs.writeFileSync('visible.txt', 'changed');\
+        console.log(fs.existsSync('node_modules/.npmrc'), fs.existsSync('dist/.env'));";
+    // As the runtime launches Node: its JavaScript realpath cannot lstat the
+    // drive root from an LPAC token.
+    let arguments = [
+        OsString::from("--preserve-symlinks"),
+        OsString::from("-e"),
+        OsString::from(script),
+    ];
+    let environment: Vec<(OsString, OsString)> = ["SystemRoot", "PATHEXT"]
+        .iter()
+        .filter_map(|name| std::env::var_os(name).map(|value| ((*name).into(), value)))
+        .collect();
+    let withhold = |path: &Path| path.file_name().is_some_and(|name| name == ".env");
+    let withhold_dependency = |path: &Path| path.file_name().is_some_and(|name| name == ".npmrc");
+    let dependencies = [(
+        modules.path().canonicalize().unwrap(),
+        PathBuf::from("node_modules"),
+    )];
+    let outputs = [PathBuf::from("dist")];
+    let cancel = AtomicBool::new(false);
+    let output = run_readonly_snapshot(ReadonlySnapshotRun {
+        workspace: &workspace,
+        cwd: &workspace,
+        executable: &node,
+        arguments: &arguments,
+        environment: &environment,
+        withhold: &withhold,
+        max_entries: 100,
+        max_bytes: 1024 * 1024,
+        output_cap: 64 * 1024,
+        deadline: Instant::now() + Duration::from_secs(120),
+        cancel: &cancel,
+        job_limits: guard_runtime_windows_process::ResourceLimits {
+            active_processes: Some(8),
+            ..Default::default()
+        },
+        build: Some(build_limits(&dependencies, &outputs, &withhold_dependency)),
+    })
+    .unwrap();
+    assert_eq!(
+        output.exit_code,
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "false false"
+    );
+    assert_eq!(
+        fs::read_to_string(workspace.join("dist").join("assets").join("out.js")).unwrap(),
+        "dependency-sentinel"
+    );
+    assert!(!workspace.join("dist").join("stale.js").exists());
+    assert_eq!(
+        fs::read_to_string(workspace.join("dist").join(".env")).unwrap(),
+        "TOKEN=kept"
+    );
+    assert!(!workspace.join("cache.txt").exists());
+    assert_eq!(
+        fs::read_to_string(workspace.join("visible.txt")).unwrap(),
+        "visible-sentinel"
+    );
+}
+
+#[test]
+fn failed_build_publishes_nothing() {
+    let Some(node) = node_on_path() else {
+        eprintln!("skipped: no node.exe on PATH");
+        return;
+    };
+    let (_directory, workspace) = workspace();
+    let script = "require('fs').mkdirSync('dist');\
+        require('fs').writeFileSync('dist/out.js', 'partial');\
+        process.exit(3);";
+    let arguments = [OsString::from("-e"), OsString::from(script)];
+    let environment: Vec<(OsString, OsString)> = std::env::var_os("SystemRoot")
+        .map(|value| ("SystemRoot".into(), value))
+        .into_iter()
+        .collect();
+    let withhold = |_: &Path| false;
+    let outputs = [PathBuf::from("dist")];
+    let cancel = AtomicBool::new(false);
+    let output = run_readonly_snapshot(ReadonlySnapshotRun {
+        workspace: &workspace,
+        cwd: &workspace,
+        executable: &node,
+        arguments: &arguments,
+        environment: &environment,
+        withhold: &withhold,
+        max_entries: 100,
+        max_bytes: 1024 * 1024,
+        output_cap: 64 * 1024,
+        deadline: Instant::now() + Duration::from_secs(120),
+        cancel: &cancel,
+        job_limits: Default::default(),
+        build: Some(build_limits(&[], &outputs, &withhold)),
+    })
+    .unwrap();
+    assert_eq!(output.exit_code, Some(3));
+    assert!(!workspace.join("dist").exists());
+}
+
+/// A build run reads the registry so Node can start Winsock, but it still has
+/// no network capability, so even a loopback connection fails.
+#[test]
+fn build_network_is_unavailable() {
+    let Some(node) = node_on_path() else {
+        eprintln!("skipped: no node.exe on PATH");
+        return;
+    };
+    let (_directory, workspace) = workspace();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let script = format!(
+        "require('fs').mkdirSync('dist');\
+        const done = (result) => {{ console.log(result); process.exit(0); }};\
+        const socket = require('net').connect({port}, '127.0.0.1');\
+        socket.setTimeout(2000, () => done('denied'));\
+        socket.on('connect', () => done('connected'));\
+        socket.on('error', () => done('denied'));"
+    );
+    let arguments = [OsString::from("-e"), OsString::from(script)];
+    let environment: Vec<(OsString, OsString)> = std::env::var_os("SystemRoot")
+        .map(|value| ("SystemRoot".into(), value))
+        .into_iter()
+        .collect();
+    let withhold = |_: &Path| false;
+    let outputs = [PathBuf::from("dist")];
+    let cancel = AtomicBool::new(false);
+    let output = run_readonly_snapshot(ReadonlySnapshotRun {
+        workspace: &workspace,
+        cwd: &workspace,
+        executable: &node,
+        arguments: &arguments,
+        environment: &environment,
+        withhold: &withhold,
+        max_entries: 100,
+        max_bytes: 1024 * 1024,
+        output_cap: 64 * 1024,
+        deadline: Instant::now() + Duration::from_secs(120),
+        cancel: &cancel,
+        job_limits: Default::default(),
+        build: Some(build_limits(&[], &outputs, &withhold)),
+    })
+    .unwrap();
+    assert_eq!(
+        output.exit_code,
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "denied");
+}
+
+#[test]
+fn publish_refuses_a_staged_link() {
+    let (_directory, workspace) = workspace();
+    let staged = tempfile::tempdir().unwrap();
+    let snapshot = staged.path().canonicalize().unwrap();
+    let snapshot = PathBuf::from(snapshot.to_string_lossy().trim_start_matches(r"\\?\"));
+    fs::create_dir(snapshot.join("dist")).unwrap();
+    let outside = tempfile::tempdir().unwrap();
+    if std::os::windows::fs::symlink_dir(outside.path(), snapshot.join("dist").join("escape"))
+        .is_err()
+    {
+        eprintln!("skipped: symbolic links need Developer Mode");
+        return;
+    }
+    let withhold = |_: &Path| false;
+    let outputs = [PathBuf::from("dist")];
+    let build = build_limits(&[], &outputs, &withhold);
+    let result = super::super::publish::publish_outputs(&workspace, &snapshot, &build, &withhold);
+    assert!(result.is_err());
+    assert!(!workspace.join("dist").join("escape").exists());
+}
+
+#[test]
+fn publish_refuses_a_withheld_output() {
+    let (_directory, workspace) = workspace();
+    let staged = tempfile::tempdir().unwrap();
+    let withhold = |path: &Path| path.components().any(|part| part.as_os_str() == ".git");
+    let outputs = [PathBuf::from(".git").join("hooks")];
+    let build = build_limits(&[], &outputs, &withhold);
+    let result =
+        super::super::publish::publish_outputs(&workspace, staged.path(), &build, &withhold);
     assert!(result.is_err());
 }

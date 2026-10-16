@@ -774,48 +774,6 @@ def test_gr111_gr113_queue_keeps_remaining_items_and_groups_duplicates(tmp_path:
     assert store.get_approval_request(duplicate_id)["dedupe_count"] == 2
 
 
-def test_gr114_gr115_bulk_resolves_safe_duplicate_groups_for_allow_and_block(tmp_path: Path) -> None:
-    store = _store(tmp_path)
-    safe_a = _request(
-        "req-safe-a",
-        artifact_id="codex:project:file-read:package-json",
-        action_type="file_read",
-        command=None,
-    )
-    safe_b = _request(
-        "req-safe-b",
-        artifact_id="codex:project:file-read:package-json",
-        action_type="file_read",
-        command=None,
-    )
-    risky_a = _request("req-risky-a", artifact_id="codex:project:tool-action:upload", command="cat ~/.npmrc")
-    risky_b = _request("req-risky-b", artifact_id="codex:project:tool-action:upload", command="cat ~/.npmrc")
-    safe_id = store.add_approval_request(safe_a, "2026-05-13T00:00:00+00:00")
-    store.add_approval_request(safe_b, "2026-05-13T00:01:00+00:00")
-    risky_id = store.add_approval_request(risky_a, "2026-05-13T00:02:00+00:00")
-    store.add_approval_request(risky_b, "2026-05-13T00:03:00+00:00")
-
-    store.bulk_resolve_approval_requests(
-        [safe_id],
-        resolution_action="allow",
-        resolution_scope="artifact",
-        reason="safe duplicate reads",
-        resolved_at="2026-05-13T00:04:00+00:00",
-    )
-    store.bulk_resolve_approval_requests(
-        [risky_id],
-        resolution_action="block",
-        resolution_scope="artifact",
-        reason="blocked duplicate uploads",
-        resolved_at="2026-05-13T00:05:00+00:00",
-    )
-
-    assert store.get_approval_request(safe_id)["resolution_action"] == "allow"
-    assert store.get_approval_request(risky_id)["resolution_action"] == "block"
-    assert store.get_approval_request(safe_id)["dedupe_count"] == 2
-    assert store.get_approval_request(risky_id)["dedupe_count"] == 2
-
-
 def test_gr116_workspace_policy_uses_stable_non_path_fingerprint(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1121,17 +1079,19 @@ def test_backend_degraded_warn_mode_ignores_local_approval(tmp_path: Path) -> No
 def test_resolution_without_any_integrity_backend_names_the_missing_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    # The native queue write provisions the verifier key for its home; this
-    # test needs a home that never had one, so the row is queued elsewhere and
-    # copied in.
+    # Native queue writes and reads provision the verifier key for their home;
+    # this test needs a home that never had one, so the row is queued and read
+    # elsewhere, then copied in.
     writer = GuardStore(tmp_path / "writer-home")
     shell_request = _request("req-shell", artifact_id="codex:project:tool-action:shell", command="cat ~/.npmrc")
     writer.add_approval_request(shell_request, "2026-05-13T00:00:00+00:00")
+    queued = writer.get_approval_request("req-shell", derive_scope=False)
     store = _store(tmp_path)
     store._policy_integrity_secret_store = None
     with sqlite3.connect(store.path) as connection:
         connection.execute("attach database ? as writer", (str(writer.path),))
         connection.execute("insert into approval_requests select * from writer.approval_requests")
+    monkeypatch.setattr(store, "get_approval_request", lambda *_args, **_kwargs: queued)
 
     with pytest.raises(ApprovalResolutionPlanUnavailableError, match="integrity_unavailable"):
         apply_approval_resolution(

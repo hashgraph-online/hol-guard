@@ -9,9 +9,13 @@ import time
 from collections import OrderedDict
 from collections.abc import Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from .hook_native_exact_action import launch_cwd as _launch_cwd
 from .hook_request_parsing import pre_tool_command
+
+if TYPE_CHECKING:
+    from ..store import GuardStore
 
 _LOGGER = logging.getLogger(__name__)
 _MAX_PENDING = 64
@@ -84,7 +88,7 @@ def _drain() -> None:
     while True:
         store, command, cwd, home_dir = _pending.get()
         try:
-            observe_unlisted_cli(store=store, command=command, cwd=cwd, home_dir=home_dir)
+            observe_unlisted_cli(store=cast("GuardStore", store), command=command, cwd=cwd, home_dir=home_dir)
         except Exception:
             _LOGGER.warning("native CLI observation failed", exc_info=True)
         finally:

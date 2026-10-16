@@ -208,7 +208,7 @@ fn is_extension_id(value: &str) -> bool {
 /// Plain-text bound shared by creative fields and creative versions: no
 /// C0/C1 controls, no bidi/format marks, no line/paragraph separators, and
 /// no markup-significant code points. Mirrors the Cloud contract's stricter
-/// creative class (see points-portal discovery contracts).
+/// creative class (see cloud portal discovery contracts).
 fn is_safe_text(value: &str) -> bool {
     value.chars().all(|c| {
         !matches!(c,
@@ -342,9 +342,22 @@ fn validate_offer(object: &Map<String, Value>) -> Result<(), DiscoveryError> {
         "checkedAt",
         "quoteRequired",
     ];
-    if object.len() != OFFER_FIELDS.len()
-        || !OFFER_FIELDS.iter().all(|key| object.contains_key(*key))
+    // Remaining inventory is optional, and only ever travels as a pair: a
+    // count the dashboard shows a buyer must be complete and self-consistent,
+    // so half a pair is a malformed snapshot rather than a partial answer.
+    const OFFER_SLOT_FIELDS: [&str; 2] = ["openSlots", "totalSlots"];
+    if !OFFER_FIELDS.iter().all(|key| object.contains_key(*key))
+        || !object.keys().all(|key| {
+            OFFER_FIELDS.contains(&key.as_str()) || OFFER_SLOT_FIELDS.contains(&key.as_str())
+        })
     {
+        return Err(DiscoveryError::Snapshot);
+    }
+    let slots_present = OFFER_SLOT_FIELDS
+        .iter()
+        .filter(|key| object.contains_key(**key))
+        .count();
+    if slots_present == 1 {
         return Err(DiscoveryError::Snapshot);
     }
     if object.get("quoteRequired") != Some(&Value::Bool(true)) {
@@ -362,10 +375,29 @@ fn validate_offer(object: &Map<String, Value>) -> Result<(), DiscoveryError> {
     let currency = field_str(object, "currency");
     let checked = field_str(object, "checkedAt");
     if availability == "unknown" {
-        if !amount_null || currency.is_some() || checked.is_some() {
+        // An unknown offer knows nothing, inventory included.
+        if !amount_null || currency.is_some() || checked.is_some() || slots_present != 0 {
             return Err(DiscoveryError::Snapshot);
         }
         return Ok(());
+    }
+    if slots_present == 2 {
+        let open = object
+            .get("openSlots")
+            .and_then(Value::as_u64)
+            .ok_or(DiscoveryError::Snapshot)?;
+        let total = object
+            .get("totalSlots")
+            .and_then(Value::as_u64)
+            .ok_or(DiscoveryError::Snapshot)?;
+        if !(1..=10_000).contains(&total) || open > total {
+            return Err(DiscoveryError::Snapshot);
+        }
+        // The count and the availability are two statements about the same
+        // fact; a snapshot that disagrees with itself is not shown.
+        if (availability == "open") != (open >= 1) {
+            return Err(DiscoveryError::Snapshot);
+        }
     }
     if amount_null || currency.is_none() || checked.is_none() {
         return Err(DiscoveryError::Snapshot);

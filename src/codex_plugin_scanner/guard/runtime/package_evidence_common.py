@@ -153,18 +153,3 @@ def resolved_package_bin_target(package_root: Path, target: str | None) -> Path 
     except ValueError:
         return None
     return candidate
-
-
-def read_package_json(path: Path) -> dict[str, object] | None:
-    """Read a bounded, non-symlink package.json object without raising."""
-
-    try:
-        if path.is_symlink() or not path.is_file() or path.stat().st_size > _MAX_PACKAGE_JSON_BYTES:
-            return None
-        payload = cast(object, json.loads(path.read_text(encoding="utf-8")))
-    except (OSError, UnicodeError, json.JSONDecodeError):
-        return None
-    if not isinstance(payload, dict):
-        return None
-    typed = cast(dict[object, object], payload)
-    return {key: value for key, value in typed.items() if isinstance(key, str)}

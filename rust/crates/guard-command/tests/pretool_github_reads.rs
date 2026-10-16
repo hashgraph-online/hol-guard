@@ -84,7 +84,11 @@ fn explicit_github_read_permission_deny_still_wins() {
 fn github_read_capabilities_have_a_benign_floor_but_mutations_do_not() {
     for harness in ["omp", "zcode"] {
         for (command, expected) in [
-            (r#"gh api repos/hashgraph-online/points-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test("protection|protect-page|protect-resource|guard-protect-asset"))) | .[]'"#, true),
+            (r#"gh api repos/example-org/cloud-portal/compare/dc1ace862c...main --jq '[.files[].filename] | map(select(test("protection|protect-page|protect-resource|guard-protect-asset"))) | .[]'"#, true),
+            ("gh api repos/example-org/service-api/git/ref/tags/v3.45.0 -q .object.sha", true),
+            ("gh api repos/example-org/service-api/git/ref/tags/v3.45.0 -q.object.sha", true),
+            ("gh api repos/owner/repo -q env", false),
+            ("gh api -X DELETE repos/owner/repo -q .name", false),
             ("gh api -X GET repos/owner/repo/pulls/1", true),
             ("gh api --method=HEAD repos/owner/repo/commits/main", true),
             ("gh pr view 1 --json title,state", true),

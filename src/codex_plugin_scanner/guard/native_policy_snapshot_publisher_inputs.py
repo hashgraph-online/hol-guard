@@ -69,6 +69,13 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
+        # SQLite moves the database's ctime when the last mmap connection
+        # closes, without a write. Database changes are only a republish hint
+        # (the periodic reconcile compares the compiled policy), so ctime is
+        # left out for them; a real write still moves mtime or size.
+        database_paths = {
+            str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
+        }
         seen_paths: set[str] = set()
         for path in paths:
             path_key = str(path)
@@ -83,7 +90,12 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 values.append(
                     (
                         path_key,
-                        (metadata.st_mtime_ns, metadata.st_size, metadata.st_ino, metadata.st_ctime_ns),
+                        (
+                            metadata.st_mtime_ns,
+                            metadata.st_size,
+                            metadata.st_ino,
+                            0 if path_key in database_paths else metadata.st_ctime_ns,
+                        ),
                     )
                 )
         return tuple(values)

@@ -119,9 +119,10 @@ def read_case_logs(
             case["guard_observation_error"] = type(exc).__name__
     # Keep independently parsed parent evidence available for precise cleanup
     # even if the complete SDK lifecycle does not reconcile.
-    case["events"] = public_events(read_events(raw_log), replacements)
+    completed = case.get("returncode") == 0 and case.get("timed_out") is False
+    case["events"] = public_events(read_events(raw_log), replacements, completed)
     if host_log is not None:
-        case["events"], case["delegated_call_ids"] = complete_host_events(raw_log, host_log, replacements)
+        case["events"], case["delegated_call_ids"] = complete_host_events(raw_log, host_log, replacements, completed)
 
 
 def _scenario_prompt(scenario: Scenario) -> str:

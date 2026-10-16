@@ -49,6 +49,9 @@ struct Input {
     upper: PathBuf,
     work: PathBuf,
     exec_roots: Vec<PathBuf>,
+    /// Scripts outside the workspace the command launches, each one file.
+    #[serde(default)]
+    read_files: Vec<PathBuf>,
     command: Vec<String>,
     /// A linked worktree's shared Git directory, with its overlay layers.
     #[serde(default)]
@@ -279,6 +282,22 @@ fn workspace_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
         .cloned()
         .collect();
     let mut argv = base_argv(&backend, &exec_roots);
+    for file in &input.read_files {
+        let regular = std::fs::symlink_metadata(file).is_ok_and(|meta| meta.file_type().is_file());
+        if !file.is_absolute()
+            || file.starts_with(&input.workspace)
+            || file.starts_with(&input.private_root)
+            || !regular
+            || file.canonicalize().ok().as_deref() != Some(file.as_path())
+            || file.to_str().is_none_or(|text| {
+                crate::secret_path_probe::is_request_secret_path(text, None, None)
+            })
+        {
+            return Err(invalid());
+        }
+        let file = file.to_string_lossy().into_owned();
+        argv.extend(["--ro-bind".to_owned(), file.clone(), file]);
+    }
     let private = input.private_root.to_string_lossy().into_owned();
     argv.extend(["--bind".to_owned(), private.clone(), private]);
     if let Some((linked, upper, work)) = shared {

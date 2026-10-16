@@ -21,6 +21,7 @@ use super::{decide, token};
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/native_exact_action_vectors.json.gz");
 
 struct Fake {
+    #[cfg_attr(windows, allow(dead_code))]
     root: String,
     intent: Value,
 }
@@ -271,6 +272,13 @@ fn run_case(case: &Value) -> Result<(), String> {
     }
 }
 
+/// The recorded trees and requests are POSIX: `:`-separated `PATH`s, `/`-rooted
+/// paths and symlinks. The proofs model POSIX path semantics, so on Windows
+/// every launch stays one-time (`a_windows_launch_stays_a_one_time_decision`).
+#[cfg_attr(
+    not(unix),
+    ignore = "POSIX-recorded vectors; Windows launches fail closed to one-time decisions"
+)]
 #[test]
 fn matches_vectors_recorded_from_python() {
     let cases = load();
@@ -295,6 +303,42 @@ fn matches_vectors_recorded_from_python() {
             .collect::<Vec<_>>()
             .join("\n")
     );
+}
+
+/// A review on Windows never mints a persistent token: the identity proofs
+/// bind `/`-rooted spellings, so the action stays a one-time decision.
+#[cfg(windows)]
+#[test]
+fn a_windows_launch_stays_a_one_time_decision() {
+    let case = load()
+        .into_iter()
+        .find(|case| case["name"] == "gate_baseline")
+        .unwrap();
+    assert_eq!(case["expected"]["token_present"], true);
+    let scratch = Scratch::new();
+    let root = scratch.0.to_str().unwrap().trim_start_matches(r"\\?\");
+    let concrete: Value = serde_json::from_str(
+        &case
+            .to_string()
+            .replace("{ROOT}", &root.replace('\\', "\\\\")),
+    )
+    .unwrap();
+    materialize(&scratch.0, concrete["tree"].as_object().unwrap());
+    let request: NativeExactActionRequestV1 =
+        serde_json::from_value(concrete["request"].clone()).unwrap();
+    let engines = Fake {
+        root: root.to_owned(),
+        intent: concrete["intent"].clone(),
+    };
+    let NativeExactActionPayloadV1::ExactAction {
+        token,
+        once_only_reason,
+    } = decide(&request, &engines).unwrap()
+    else {
+        panic!("an exact-action query answers with an exact action");
+    };
+    assert!(token.is_none());
+    assert_eq!(once_only_reason.as_deref(), Some("unproven_launch"));
 }
 
 fn resident(request: &Value) -> Value {

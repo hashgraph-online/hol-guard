@@ -191,7 +191,9 @@ fn an_open_quote_is_named_instead_of_the_extension_controls() {
         result.reason
     );
     assert!(
-        result.reason.contains("leaves a quote open"),
+        result
+            .reason
+            .contains("has a shell syntax error: it leaves a quote open"),
         "{}",
         result.reason
     );

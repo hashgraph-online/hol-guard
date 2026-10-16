@@ -98,10 +98,21 @@ fn cwd_compounds_validate_reads_and_one_bounded_write() {
         );
     }
 
-    for target in [root.join("missing"), project.join(".."), root.join("alias")] {
-        if target == root.join("alias") {
-            std::os::unix::fs::symlink(&project, &target).unwrap();
-        }
+    // A link this user keeps in a directory only they can write names its
+    // target; missing and `..` spellings never do.
+    let alias = root.join("alias");
+    std::os::unix::fs::symlink(&project, &alias).unwrap();
+    let result = evaluate_pre_tool_envelope_with_context(
+        "omp",
+        "PreToolUse",
+        &json!({"tool_name":"bash", "tool_input":{"command":format!("cd {} && cat one.txt", alias.display())}}),
+        None,
+        None,
+        root.to_str(),
+        root.to_str(),
+    );
+    assert_eq!(result.minimum_action, "allow", "private alias");
+    for target in [root.join("missing"), project.join("..")] {
         let command = format!("cd {} && cat one.txt", target.display());
         let result = evaluate_pre_tool_envelope_with_context(
             "omp",

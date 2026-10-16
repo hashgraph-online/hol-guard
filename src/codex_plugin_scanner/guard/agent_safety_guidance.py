@@ -31,8 +31,13 @@ _SAFETY_GUIDANCE_BODY = (
 _SAFETY_GUIDANCE = f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_SAFETY_GUIDANCE_BODY}"
 _LEGACY_SAFETY_GUIDANCE_DIGESTS = frozenset(
     {
+        # Guidance before the self-approval section: unprefixed, then v2-prefixed.
         "8dfc18925c07e425e6ac5e5c4b5aba27d15e9bba4472409cf57411085f6389ed",
         "5276fa1bb1460b07d4ce2c42f732931b06744d11ad28fd9422dc2ff24be1eeda",
+        # Guidance that let an agent decide for itself that a secret read was authorized.
+        "5211684ae7093b4e0363e176ab38c3d5f2e83a88f557381cffb220b37fb36652",
+        # Guidance before it named the script-free npm install Guard lets continue.
+        "2726e5000e64235af716c767a45912d389fc522ce16748139ab309f9ffe53075",
     }
 )
 _MANAGED_PATTERN = re.compile(rf"(?ms)^{re.escape(_MANAGED_BEGIN)}\n.*?^{re.escape(_MANAGED_END)}\n?")

@@ -19,7 +19,9 @@ use serde_json::Value;
 use super::redirect_projection::{
     boundary, remove_quoted_heredoc, skip_heredoc_bodies, trailing_word,
 };
-use crate::native_command_controls::CompiledNativeCommandControls;
+use crate::native_command_controls::{
+    python_is_builtin_only, python_stdin, CompiledNativeCommandControls,
+};
 use crate::pretool::workspace_contained::Shape;
 use crate::CommandModelRequestV1;
 
@@ -31,9 +33,12 @@ enum Quote {
 }
 
 /// The command with every literal-path redirect, descriptor copy and quoted
-/// `cat` heredoc removed. `None` when nothing was removed or any redirect has
-/// another form: process substitution, a computed or home-relative target, a
-/// descriptor above 2, a herestring, or a heredoc fed to anything but `cat`.
+/// `cat` heredoc removed. A quoted heredoc may also feed `python3 -` a program
+/// that reads only builtins, which cannot start a program or load a module;
+/// the projection keeps `python3 -`, so every control still sees it. `None`
+/// when nothing was removed or any redirect has another form: process
+/// substitution, a computed or home-relative target, a descriptor above 2, a
+/// herestring, or a heredoc fed to anything else.
 pub(crate) fn project(raw: &str) -> Option<String> {
     project_scan(raw).map(|(projected, _, _)| projected)
 }
@@ -56,6 +61,8 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
     let mut out = String::with_capacity(raw.len());
     let mut map: Vec<usize> = Vec::with_capacity(raw.len());
     let mut heredocs: Vec<(String, bool)> = Vec::new();
+    // Whether each pending heredoc feeds Python its program.
+    let mut programs: Vec<bool> = Vec::new();
     let (mut quote, mut escaped, mut removed) = (Quote::None, false, false);
     let mut names_files = false;
     let mut index = 0usize;
@@ -98,15 +105,19 @@ fn project_scan(raw: &str) -> Option<(String, Vec<usize>, bool)> {
             '\\' => escaped = true,
             '\n' if !heredocs.is_empty() => {
                 out.push('\n');
-                index = skip_heredoc_bodies(&chars, index + 1, &mut heredocs)?;
+                index = skip_bodies(&chars, index + 1, &mut heredocs, &mut programs)?;
                 continue;
             }
             '<' if chars.get(index + 1) == Some(&'<') => {
-                // A heredoc is stdin. Only `cat` is known to treat it as data.
-                if current_segment(&out).trim() != "cat" {
+                // A heredoc is stdin. Only `cat` is known to treat it as data;
+                // Python runs it, so its body is checked once it is read.
+                let segment = current_segment(&out).trim();
+                let program = python_stdin(segment);
+                if segment != "cat" && !program {
                     return None;
                 }
                 index = remove_quoted_heredoc(&chars, index, &mut out, &mut heredocs)?;
+                programs.push(program);
                 index = rejoin(&chars, index, &mut out);
                 removed = true;
                 continue;
@@ -214,6 +225,11 @@ pub(super) fn contained(
     // followed by plain readers. One it declines, such as a write to
     // `.tool-versions`, or a chain beside local Git writes, runs here.
     let stripped = project(command)?;
+    // Removing an input redirect drops the program it feeds, so a program
+    // that needs the network keeps the review of the text as sent.
+    if crate::pretool::script_content::text_uses_network(command, context) {
+        return None;
+    }
     let direct = super::redirect_projection::project(command, context);
     // A later read of a written file spelled from the root names what the
     // projection's relative spelling names, so both earn the same floor.
@@ -252,10 +268,13 @@ pub(super) fn contained(
     // macOS claims package and Node tool commands with narrower profiles
     // before the workspace route runs. The redirect disqualifies those, so the
     // workspace sandbox takes the command once it passes that route's gate.
+    // A trailing `2>&1` before bounded output filters is not such a redirect:
+    // the narrower sink peels it itself, so that command keeps its profile.
     let home = context.home_dir.map(Path::new);
     let narrower = super::redirect_projection::package_profile(&projected.reason_code)
         && projected.minimum_action == "sandbox-required"
         && !projected.action.sensitive_target
+        && !narrower_sink_runs(command, context)
         && crate::pretool::workspace_contained::runner::runners_admitted(
             &stripped, &workspace, home,
         )
@@ -336,6 +355,53 @@ fn stays_offline(projected: &str, single: bool) -> bool {
                 _ => false,
             }
         })
+}
+
+/// Whether the narrower read-only sink runs `raw` as issued: its only
+/// redirect is the `2>&1` it peels from the core (`contained_core`).
+fn narrower_sink_runs(raw: &str, context: crate::pretool::PathContext<'_>) -> bool {
+    crate::parse_command(&CommandModelRequestV1 {
+        command: raw.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()
+    .is_some_and(|model| {
+        crate::pretool::contained_wrapper::contained_core(&model, context).is_some()
+            && crate::pretool::contained_wrapper::sink_peels_leading_cd(&model, context)
+    })
+}
+
+/// Skips the bodies of the pending heredocs in order, as
+/// `skip_heredoc_bodies` does. A body that feeds Python must use only its
+/// builtins, the same check the extension controls apply to such a program.
+fn skip_bodies(
+    chars: &[char],
+    mut index: usize,
+    heredocs: &mut Vec<(String, bool)>,
+    programs: &mut Vec<bool>,
+) -> Option<usize> {
+    if heredocs.len() != programs.len() {
+        return None;
+    }
+    for (heredoc, program) in heredocs.drain(..).zip(programs.drain(..)) {
+        let start = index;
+        index = skip_heredoc_bodies(chars, index, &mut vec![heredoc])?;
+        if program {
+            let text: String = chars[start..index].iter().collect();
+            let text = text.strip_suffix('\n').unwrap_or(&text);
+            // The last line is the delimiter.
+            let body: Vec<&str> = match text.rsplit_once('\n') {
+                Some((body, _)) => body.split('\n').collect(),
+                None => Vec::new(),
+            };
+            if !python_is_builtin_only(&body) {
+                return None;
+            }
+        }
+    }
+    Some(index)
 }
 
 /// The text of the simple command being written, after the last separator.

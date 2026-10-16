@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import importlib.metadata
 import logging
@@ -9,7 +10,7 @@ import threading
 import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from functools import wraps
 from pathlib import Path
@@ -24,6 +25,7 @@ from .approval_gate import ApprovalGateGrant, ApprovalGateInput, require_approva
 from .approval_once_eligibility import requires_local_once_approval
 from .approval_resolution import require_resolvable_approval_request
 from .approval_scope_support import (
+    RETRY_CANNOT_REUSE_APPROVAL,
     IneligibleApprovalScopeError,
     apply_scope_surfaces,
     package_request_portable_workspace_scope,
@@ -40,15 +42,15 @@ from .cli.connect_flow import (
     resolve_guard_cloud_state,
 )
 from .config import load_guard_config, maybe_auto_revert_watch
-from .continuation_runtime import continuation_offer_payload
+from .consumer.projection import wire_artifact
+from .continuation_payload import parse_aware_timestamp
+from .continuation_runtime import continuation_offer_facts
 from .daemon.manager import load_guard_daemon_auth_token
-from .decision_boundaries import canonical_approval_artifact
 from .desktop_notifications import (
     DesktopApprovalNotification,
     notify_pending_approval_once,
 )
 from .harness_posture import harness_posture_summary
-from .incident import build_incident_context
 from .local_dashboard_session import (
     build_approval_browser_url as build_approval_browser_url,
 )
@@ -59,7 +61,6 @@ from .local_supply_chain import build_local_supply_chain_posture
 from .managed_install_proof import verify_managed_install_proof
 from .memory_decision_outbox import enqueue_memory_decision_event
 from .models import (
-    GuardApprovalRequest,
     GuardArtifact,
     HarnessDetection,
     PolicyDecision,
@@ -73,12 +74,8 @@ from .native_approval_scope import UNAVAILABLE as APPROVAL_SCOPE_UNAVAILABLE
 from .native_approval_scope import ApprovalScopeUnavailableError
 from .package_execution_context import package_execution_context_from_scanner_evidence
 from .protection_capabilities import protection_capability_payloads
-from .redaction import redact_text
-from .risk import artifact_risk_signals, artifact_risk_summary
-from .runtime.approval_context import parse_approval_context_token
+from .risk import artifact_risk_profile
 from .runtime.command_capability import command_capability_status
-from .runtime.decisions import AUTHORITATIVE_DECISION_INCONSISTENT
-from .runtime.extension_allow_hint import validated_extension_allow_hint
 from .runtime.github_workflow_runtime import (
     issue_github_workflow_capability_for_resolution,
 )
@@ -100,6 +97,8 @@ from .trusted_local_tools import (
 from .value_coercion import coerce_non_negative_int
 
 _LOGGER = logging.getLogger(__name__)
+# Artifact metadata the resident reads for a queued request.
+_QUEUE_METADATA_KEYS = ("raw_command_text", "command_text", "command_rule_matches", "extension_allow_hint")
 
 GUARD_COMMAND = "hol-guard"
 GUARD_DASHBOARD_URL = "https://hol.org/guard"
@@ -273,154 +272,6 @@ def _parsed_url_host(parsed: ParseResult) -> str:
     return host_port
 
 
-_GENERIC_TOOL_LABELS = frozenset(
-    {
-        "Bash",
-        "Shell",
-        "shell_command",
-        "Read",
-        "Write",
-        "Edit",
-        "MultiEdit",
-        "Glob",
-        "Grep",
-        "WebFetch",
-        "TodoWrite",
-        "tool",
-        "mcp",
-        "skill",
-        "bash",
-        "rg",
-        "cat",
-        "mcp_tool",
-        "package_request",
-        "file_read_request",
-        "file_write_request",
-        "tool_action_request",
-    }
-)
-_GENERIC_TOOL_LABELS_LOWER = frozenset(label.lower() for label in _GENERIC_TOOL_LABELS)
-
-
-def _is_generic_tool_label(value: str) -> bool:
-    """Return True if the value is a generic tool name, not an actual command."""
-    stripped = value.strip()
-    return stripped in _GENERIC_TOOL_LABELS or stripped.lower() in _GENERIC_TOOL_LABELS_LOWER
-
-
-def _string_from_mapping(mapping: Mapping[str, object], key: str) -> str | None:
-    value = mapping.get(key)
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    return None
-
-
-def _first_string_from_mapping(mapping: Mapping[str, object], keys: Sequence[str]) -> str | None:
-    for key in keys:
-        value = _string_from_mapping(mapping, key)
-        if value is not None:
-            return value
-    return None
-
-
-def _string_list_from_mapping(mapping: Mapping[str, object], key: str) -> list[str]:
-    value = mapping.get(key)
-    if isinstance(value, str) and value.strip():
-        return [value.strip()]
-    if not isinstance(value, Sequence) or isinstance(value, str):
-        return []
-    return [str(item).strip() for item in value if isinstance(item, str) and item.strip()]
-
-
-def _review_action_text_from_envelope(envelope: Mapping[str, object]) -> str | None:
-    for key in ("raw_command_text", "rawCommandText", "command", "cmd"):
-        direct = _string_from_mapping(envelope, key)
-        if direct is not None and not _is_generic_tool_label(direct):
-            return direct
-
-    action_type = _string_from_mapping(envelope, "action_type")
-    action_identity = _first_string_from_mapping(envelope, ("action_identity", "actionIdentity"))
-    if action_identity is not None and not _is_generic_tool_label(action_identity):
-        return action_identity
-
-    if action_type in {"file_read", "file_write", "file_read_request", "file_write_request"}:
-        paths = _string_list_from_mapping(envelope, "target_paths") or _string_list_from_mapping(
-            envelope,
-            "targetPaths",
-        )
-        if not paths:
-            single_path = _first_string_from_mapping(
-                envelope,
-                ("target_path", "targetPath", "path", "file_path", "filePath"),
-            )
-            paths = [single_path] if single_path is not None else []
-        if paths:
-            verb = "Read" if action_type in {"file_read", "file_read_request"} else "Write"
-            return f"{verb} {', '.join(paths)}"
-
-    if action_type == "mcp_tool":
-        server = _first_string_from_mapping(envelope, ("mcp_server", "mcpServer", "server"))
-        tool = _first_string_from_mapping(envelope, ("mcp_tool", "mcpTool", "tool_name", "toolName"))
-        if server and tool:
-            return f"{server}.{tool}"
-        return server or tool
-
-    package_manager = _first_string_from_mapping(envelope, ("package_manager", "packageManager"))
-    package_name = _first_string_from_mapping(envelope, ("package_name", "packageName"))
-    if package_manager and package_name:
-        targets = _string_list_from_mapping(envelope, "package_targets") or _string_list_from_mapping(
-            envelope,
-            "packageTargets",
-        )
-        package_target = targets[0] if targets else package_name
-        if package_target.startswith(package_name):
-            return f"{package_manager} install {package_target}"
-        return f"{package_manager} install {package_name}@{package_target}"
-
-    return None
-
-
-def _review_action_text_from_item(item: Mapping[str, object], artifact: GuardArtifact | None) -> str | None:
-    candidates: list[object] = []
-    if artifact is not None:
-        candidates.extend(
-            [
-                artifact.metadata.get("raw_command_text"),
-                artifact.metadata.get("command_text"),
-                artifact.command,
-            ]
-        )
-    candidates.extend(
-        [
-            item.get("raw_command_text"),
-            item.get("rawCommandText"),
-            item.get("review_command"),
-            item.get("reviewCommand"),
-            item.get("action_identity"),
-            item.get("actionIdentity"),
-        ]
-    )
-    envelope_raw = item.get("action_envelope_json")
-    envelope = _item_action_envelope_json(item)
-    if envelope is None and isinstance(envelope_raw, str):
-        try:
-            import json as _json
-
-            parsed = _json.loads(envelope_raw)
-        except (ValueError, TypeError):
-            parsed = None
-        if isinstance(parsed, Mapping):
-            envelope = {str(key): value for key, value in parsed.items() if isinstance(key, str)}
-    if envelope is not None:
-        candidates.append(_review_action_text_from_envelope(envelope))
-    for candidate in candidates:
-        if isinstance(candidate, str) and candidate.strip():
-            stripped = candidate.strip()
-            if not _is_generic_tool_label(stripped):
-                return stripped
-    return None
-
-
 def queue_blocked_approvals(
     *,
     detection: HarnessDetection,
@@ -433,147 +284,109 @@ def queue_blocked_approvals(
     redaction_level: str = "full",
     continuation_operation: Mapping[str, object] | None = None,
 ) -> list[dict[str, object]]:
+    items = evaluation.get("artifacts")
+    if not isinstance(items, list):
+        return []
+    reviewable = [item for item in items if isinstance(item, dict) and _needs_review(item)]
+    if not reviewable:
+        return []
     timestamp = now or _now()
-    artifacts_by_id = {artifact.artifact_id: artifact for artifact in detection.artifacts}
-    queued: list[dict[str, object]] = []
-    artifacts = evaluation.get("artifacts")
-    if not isinstance(artifacts, list):
-        return queued
-    for item in artifacts:
-        if not isinstance(item, dict):
-            continue
-        normalization = normalize_guard_action_result(
-            item.get("policy_action"),
-            unknown_action="require-reapproval",
-        )
-        policy_action = normalization.action
-        if policy_action not in {"require-reapproval", "review"}:
-            continue
-        artifact_id = str(item.get("artifact_id") or "")
-        if not artifact_id:
-            continue
-        artifact = artifacts_by_id.get(artifact_id)
-        item = _item_with_command_category(item, artifact)
-        raw_action_envelope_json = item.get("action_envelope_json")
-        action_envelope_json = _item_action_envelope_json(item)
-        if raw_action_envelope_json is not None and action_envelope_json is None:
-            raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT)
-        boundary_item = {
-            **item,
-            "policy_action": policy_action,
-            "action_envelope_json": action_envelope_json,
-        }
-        try:
-            canonical_decision = canonical_approval_artifact(
-                boundary_item, guard_home=getattr(store, "guard_home", None)
+    artifacts = {artifact.artifact_id: artifact for artifact in detection.artifacts}
+    observed_at = parse_aware_timestamp(timestamp)
+    facts = continuation_offer_facts(
+        store, harness=detection.harness, operation=continuation_operation or None, observed_at=observed_at
+    )
+    try:
+        cwd: str | None = str(Path.cwd())
+    except OSError:
+        cwd = None
+    continuation = {
+        "harness": facts.harness,
+        "original_hook_attached": facts.original_hook_attached,
+        "wait_deadline": facts.wait_deadline.isoformat() if facts.wait_deadline is not None else None,
+        "opaque_target_id": facts.opaque_target_id,
+        "session_target_verified": facts.session_target_verified,
+        "now": observed_at.isoformat(),
+        "correlation_candidates": [facts.metadata.get(key) for key in ("correlationId", "correlation_id")],
+    }
+    payloads: list[dict[str, object]] = []
+    # One store write per item keeps the former order: each request is
+    # written, read back and announced before the next one is written.
+    # The resident derives the request's surfaces, incident copy and
+    # continuation snapshot; Python keeps the notices.
+    try:
+        for item in reviewable:
+            artifact = artifacts.get(str(item["artifact_id"]))
+            queued, error = store.queue_blocked_approvals(
+                {
+                    "harness": detection.harness,
+                    "items": [item],
+                    "artifacts": {} if artifact is None else {artifact.artifact_id: _queue_artifact(artifact)},
+                    "approval_center_url": approval_center_url,
+                    "now": timestamp,
+                    "prompt_shown": prompt_shown,
+                    "redaction_level": redaction_level,
+                    "guard_version": _current_guard_version(),
+                    "cwd": cwd,
+                    "continuation": continuation,
+                }
             )
-        except (TypeError, ValueError) as error:
-            raise ValueError(AUTHORITATIVE_DECISION_INCONSISTENT) from error
-        policy_action = canonical_decision.policy_action
-        scanner_evidence = _item_scanner_evidence(item)
-        if not normalization.recognized:
-            normalization_evidence: dict[str, object] = {
-                "source": "guard_action_normalizer",
-                "reason_code": normalization.reason_code,
-                "original_action": normalization.original_action,
-                "normalized_action": normalization.action,
-            }
-            scanner_evidence = (
-                *scanner_evidence,
-                normalization_evidence,
-            )
-        approval_context_hash = item.get("approval_context_hash")
-        request_artifact_hash = (
-            approval_context_hash
-            if isinstance(approval_context_hash, str)
-            and parse_approval_context_token(approval_context_hash) is not None
-            else str(item.get("artifact_hash") or "unknown")
-        )
-        request_id = uuid.uuid4().hex
-        risk_summary = _item_risk_summary(item, artifact)
-        launch_target = _launch_target(artifact, item)
-        raw_command_text: str | None = None
-        if redaction_level != "full":
-            candidate = _review_action_text_from_item(item, artifact)
-            if candidate is not None:
-                scrubbed = redact_text(candidate)
-                raw_command_text = scrubbed.text
-        incident = build_incident_context(
-            harness=detection.harness,
-            artifact=artifact,
-            artifact_id=artifact_id,
-            artifact_name=_artifact_name(item, artifact_id),
-            artifact_type=artifact.artifact_type if artifact is not None else _artifact_type(item),
-            source_scope=_source_scope(item, artifact),
-            config_path=_config_path(item, artifact),
-            changed_fields=_string_list(item.get("changed_fields")),
-            policy_action=canonical_decision.policy_action,
-            launch_target=launch_target,
-            risk_summary=risk_summary,
-            guard_home=getattr(store, "guard_home", None),
-        )
-        guard_version = _current_guard_version()
-        request = GuardApprovalRequest(
-            request_id=request_id,
-            harness=detection.harness,
-            artifact_id=artifact_id,
-            artifact_name=_artifact_name(item, artifact_id),
-            artifact_type=artifact.artifact_type if artifact is not None else "artifact",
-            artifact_hash=request_artifact_hash,
-            policy_action=policy_action,
-            recommended_scope="publisher" if artifact is not None and artifact.publisher else "artifact",
-            changed_fields=tuple(_string_list(item.get("changed_fields"))),
-            source_scope=_source_scope(item, artifact),
-            config_path=_config_path(item, artifact),
-            launch_target=launch_target,
-            transport=artifact.transport if artifact is not None else None,
-            review_command=f"{GUARD_COMMAND} approvals approve {request_id}",
-            approval_url=build_approval_request_url(approval_center_url, request_id),
-            workspace=_workspace_scope_target(item, artifact),
-            publisher=artifact.publisher if artifact is not None else None,
-            risk_summary=risk_summary,
-            risk_signals=_item_risk_signals(item, artifact),
-            artifact_label=incident["artifact_label"],
-            source_label=incident["source_label"],
-            trigger_summary=incident["trigger_summary"],
-            why_now=incident["why_now"],
-            launch_summary=incident["launch_summary"],
-            risk_headline=incident["risk_headline"],
-            action_envelope_json=canonical_decision.action_envelope_json,
-            decision_v2_json=canonical_decision.decision_v2_json,
-            scanner_evidence=scanner_evidence,
-            browser_intent=_item_browser_intent(item),
-            raw_command_text=raw_command_text,
-            guard_version=guard_version,
-            first_seen_guard_version=guard_version,
-            last_seen_guard_version=guard_version,
-            extension_allow_hint=_item_extension_allow_hint(item, artifact),
-        )
-        request = replace(
-            request,
-            continuation_snapshot=continuation_offer_payload(
-                store,
-                request_row=request.to_dict(),
-                now=timestamp,
-                headless=True,
-                operation=continuation_operation,
-            ),
-        )
-        persisted_request_id = store.add_approval_request(request, timestamp, prompt_shown=prompt_shown)
-        if persisted_request_id != request.request_id:
-            request = replace(
-                request,
-                request_id=persisted_request_id,
-                review_command=f"{GUARD_COMMAND} approvals approve {persisted_request_id}",
-                approval_url=build_approval_request_url(approval_center_url, persisted_request_id),
-            )
-        if notify:
-            _notify_pending_approval(store=store, request=request)
-        request_payload = store.get_approval_request(persisted_request_id)
-        if request_payload is None:
-            raise RuntimeError(f"Persisted approval request not found: {persisted_request_id}")
-        queued.append(request_payload)
-    return queued
+            for entry in queued:
+                request_id = str(entry["request_id"])
+                # Read back before announcing, so a failed notice still leaves
+                # the persisted request in the partial result.
+                request_payload = store.get_approval_request(request_id)
+                if request_payload is None:
+                    raise RuntimeError(f"Persisted approval request not found: {request_id}")
+                payloads.append(request_payload)
+                if notify:
+                    notice = cast(dict[str, str], entry["notice"])
+                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
+            if error is not None:
+                raise error
+    except Exception as failure:
+        # Requests written before the failure stay queued, so a caller that
+        # keeps the deny can still point the user at them.
+        failure.queued_approvals = payloads  # pyright: ignore[reportAttributeAccessIssue]
+        raise
+    return payloads
+
+
+def approvals_queued_before(error: BaseException) -> list[dict[str, object]]:
+    """Requests a failed ``queue_blocked_approvals`` call had already persisted."""
+
+    queued = getattr(error, "queued_approvals", None)
+    return list(queued) if isinstance(queued, list) else []
+
+
+def _needs_review(item: Mapping[str, object]) -> bool:
+    if not str(item.get("artifact_id") or ""):
+        return False
+    action = normalize_guard_action_result(item.get("policy_action"), unknown_action="require-reapproval").action
+    return action in {"require-reapproval", "review"}
+
+
+def _queue_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    artifact_risk = artifact_risk_profile(artifact)
+    return {
+        "wire": wire_artifact(artifact),
+        **{key: artifact.metadata.get(key) for key in _QUEUE_METADATA_KEYS},
+        "risk_summary": artifact_risk.summary,
+        "risk_signals": [signal.explanation for signal in artifact_risk.signals],
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class _QueuedNotice:
+    """The persisted request fields a desktop notice reads."""
+
+    request_id: str
+    harness: str
+    workspace: str | None
+    approval_url: str
+    artifact_name: str
+    risk_headline: str | None
+    trigger_summary: str | None
 
 
 def silent_review_center_url(guard_home: Path) -> str:
@@ -614,13 +427,6 @@ def record_unprompted_review(
         # Exception text can include tool input. Keep the class only.
         _LOGGER.warning("Silent review stayed blocked without an inbox row (%s)", type(error).__name__)
         return []
-
-
-def _item_browser_intent(item: Mapping[str, object]) -> dict[str, object] | None:
-    value = item.get("browser_intent")
-    if not isinstance(value, Mapping):
-        return None
-    return {str(key): nested for key, nested in value.items()}
 
 
 def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> bool:
@@ -914,6 +720,7 @@ def apply_approval_resolution(
             resolved_at,
             persisted_rule=persisted_rule,
             local_once_fallback=local_once_fallback,
+            retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
         )
         issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
         result.update(scope_payload_for_request(request, contract))
@@ -956,6 +763,7 @@ def apply_approval_resolution(
         resolved_at,
         persisted_rule=persisted_rule,
         local_once_fallback=local_once_fallback,
+        retry_cannot_reuse_approval=RETRY_CANNOT_REUSE_APPROVAL in contract.restrictions,
     )
     issue_github_workflow_capability_for_resolution(store, request_id, resolved_at)
     updated.update(scope_payload_for_request(request, contract))
@@ -1009,7 +817,7 @@ def _append_guard_token_to_url(url: str, auth_token: str) -> str:
     return urlunparse(parsed._replace(fragment=urlencode(fragment_pairs)))
 
 
-def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest) -> None:
+def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> None:
     try:
         config = load_guard_config(
             store.guard_home,
@@ -1019,7 +827,11 @@ def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest
         config = None
     if config is not None and not config.desktop_notifications:
         return
-    if store.approval_desktop_notified_at(request.request_id) is not None:
+    try:
+        if store.approval_desktop_notified_at(request.request_id) is not None:
+            return
+    except ApprovalScopeUnavailableError:
+        # The request is already queued; the notification is best effort.
         return
     auth_token = load_guard_daemon_auth_token(store.guard_home)
     approval_url = request.approval_url
@@ -1032,14 +844,18 @@ def _notify_pending_approval(*, store: GuardStore, request: GuardApprovalRequest
             message=_approval_notification_message(request),
             approval_url=approval_url,
         ),
-        on_success=lambda: store.mark_approval_desktop_notified(
-            request.request_id,
-            _now(),
-        ),
+        on_success=lambda: _mark_desktop_notified(store, request.request_id),
     )
 
 
-def _approval_notification_message(request: GuardApprovalRequest) -> str:
+def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
+    # This process already remembers the notification; a lost marker only
+    # lets another process notify once more.
+    with contextlib.suppress(ApprovalScopeUnavailableError):
+        store.mark_approval_desktop_notified(request_id, _now())
+
+
+def _approval_notification_message(request: _QueuedNotice) -> str:
     subject = request.risk_headline or request.trigger_summary or request.artifact_name
     harness = request.harness.replace("-", " ").title()
     message = f"{harness} wants approval: {subject}"
@@ -1063,6 +879,7 @@ def _record_resolution_event(
     *,
     persisted_rule: bool,
     local_once_fallback: bool = False,
+    retry_cannot_reuse_approval: bool = False,
 ) -> None:
     store.add_event(
         "approval.resolved",
@@ -1101,6 +918,9 @@ def _record_resolution_event(
         action=action,
         scope=scope,
         resolved_at=resolved_at,
+        # Only a saved rule lets an unbound native retry run; a one-time
+        # approval of it leaves the action blocked.
+        retry_blocked=action == "allow" and not persisted_rule and retry_cannot_reuse_approval,
     )
 
 
@@ -1111,6 +931,7 @@ def _enqueue_memory_decision_for_resolution(
     action: str,
     scope: str,
     resolved_at: str,
+    retry_blocked: bool = False,
 ) -> None:
     """Feed the local-to-cloud memory candidate pipeline for this decision.
 
@@ -1129,6 +950,7 @@ def _enqueue_memory_decision_for_resolution(
         action=action,
         scope=scope,
         resolved_at=resolved_at,
+        retry_blocked=retry_blocked,
     )
 
 
@@ -1544,127 +1366,6 @@ def wait_for_approval_requests(
         if time.monotonic() >= deadline:
             return {"resolved": False, "pending_request_ids": pending_ids, "items": resolved_items}
         time.sleep(poll_interval)
-
-
-def _artifact_name(item: dict[str, object], artifact_id: str) -> str:
-    name = item.get("artifact_name")
-    return str(name) if isinstance(name, str) and name else artifact_id
-
-
-def _config_path(item: dict[str, object], artifact) -> str:
-    if artifact is not None:
-        return artifact.config_path
-    value = item.get("config_path")
-    if isinstance(value, str) and value:
-        return value
-    return str(Path.cwd())
-
-
-def _launch_target(artifact, item: dict[str, object]) -> str | None:
-    value = item.get("launch_target")
-    if isinstance(value, str) and value:
-        return value
-    if artifact is not None:
-        if artifact.url:
-            return artifact.url
-        if artifact.command:
-            parts = [artifact.command, *artifact.args]
-            return " ".join(parts)
-    return None
-
-
-def _source_scope(item: dict[str, object], artifact) -> str:
-    if artifact is not None:
-        return artifact.source_scope
-    value = item.get("source_scope")
-    if isinstance(value, str) and value:
-        return value
-    return "project"
-
-
-def _artifact_type(item: dict[str, object]) -> str:
-    value = item.get("artifact_type")
-    if isinstance(value, str) and value:
-        return value
-    return "artifact"
-
-
-def _workspace_scope_target(item: dict[str, object], artifact) -> str | None:
-    effective_workspace = item.get("effective_workspace")
-    if isinstance(effective_workspace, str) and effective_workspace.strip():
-        return effective_workspace.strip()
-    config_path = _config_path(item, artifact)
-    if not config_path:
-        return None
-    config_file = Path(config_path)
-    parent = config_file.parent
-    workspace_root = parent.parent if parent.name.startswith(".") else parent
-    workspace_value = str(workspace_root)
-    if workspace_value:
-        return workspace_value
-    return None
-
-
-def _item_risk_summary(item: dict[str, object], artifact) -> str | None:
-    value = item.get("risk_summary")
-    if isinstance(value, str) and value:
-        return value
-    return artifact_risk_summary(artifact) if artifact is not None else None
-
-
-def _item_risk_signals(item: dict[str, object], artifact) -> tuple[str, ...]:
-    value = item.get("risk_signals")
-    if isinstance(value, list):
-        normalized = tuple(str(signal) for signal in value if isinstance(signal, str) and signal)
-        if normalized:
-            return normalized
-    return artifact_risk_signals(artifact) if artifact is not None else ()
-
-
-def _item_action_envelope_json(item: Mapping[str, object]) -> dict[str, object] | None:
-    value = item.get("action_envelope_json")
-    if isinstance(value, str) and value.strip():
-        try:
-            import json as _json
-
-            value = _json.loads(value)
-        except (TypeError, ValueError):
-            return None
-    if isinstance(value, Mapping):
-        return {str(key): item_value for key, item_value in value.items() if isinstance(key, str)}
-    return None
-
-
-def _item_with_command_category(item: dict[str, object], artifact) -> dict[str, object]:
-    envelope = _item_action_envelope_json(item)
-    if envelope is None or isinstance(envelope.get("command_category"), str):
-        return item
-    matches = artifact.metadata.get("command_rule_matches") if artifact is not None else None
-    if not isinstance(matches, list):
-        matches = item.get("command_rule_matches")
-    if not isinstance(matches, list):
-        return item
-    for match in matches:
-        if not isinstance(match, Mapping):
-            continue
-        extension_id = match.get("extension_id")
-        if isinstance(extension_id, str) and extension_id.startswith("command."):
-            return {**item, "action_envelope_json": {**envelope, "command_category": extension_id}}
-    return item
-
-
-def _item_extension_allow_hint(item: dict[str, object], artifact) -> dict[str, object] | None:
-    value = artifact.metadata.get("extension_allow_hint") if artifact is not None else None
-    if value is None:
-        value = item.get("extension_allow_hint")
-    return validated_extension_allow_hint(value)
-
-
-def _item_scanner_evidence(item: dict[str, object]) -> tuple[dict[str, object], ...]:
-    value = item.get("scanner_evidence")
-    if not isinstance(value, list | tuple):
-        return ()
-    return tuple(dict(entry) for entry in value if isinstance(entry, Mapping))
 
 
 def _string_list(value: object) -> list[str]:

@@ -2,6 +2,7 @@ use super::{custom_rule_response, launch_cwd, launches_local_cli, pre_tool_comma
 use crate::context_digest_package_scripts::package_json_scripts;
 use serde_json::{json, Map, Value};
 use std::fs;
+use std::path::Path;
 
 const SCHEMA: &str = "
 create table local_cli_grant (
@@ -28,6 +29,8 @@ fn object(value: Value) -> Map<String, Value> {
     value.as_object().unwrap().clone()
 }
 
+/// A canonical scratch directory. On Windows it carries the `\\?\` prefix,
+/// after which `/` is not a separator, so callers join paths instead.
 fn scratch(label: &str) -> String {
     let root = std::env::temp_dir().join(format!(
         "hook-direct-local-cli-{label}-{}",
@@ -78,7 +81,7 @@ impl Case {
         let workspace = scratch(&format!("{label}-work"));
         let guard_home = scratch(&format!("{label}-home"));
         fs::write(
-            format!("{workspace}/package.json"),
+            Path::new(&workspace).join("package.json"),
             br#"{"name": "demo", "scripts": {"build": "tsc", "db:migrate": "knex"}}"#,
         )
         .unwrap();
@@ -89,7 +92,8 @@ impl Case {
         let seed = seed
             .replace("{cli}", &identity.cli_id)
             .replace("{hash}", &identity.identity_hash);
-        let connection = rusqlite::Connection::open(format!("{guard_home}/guard.db")).unwrap();
+        let connection =
+            rusqlite::Connection::open(Path::new(&guard_home).join("guard.db")).unwrap();
         connection.execute_batch(SCHEMA).unwrap();
         connection.execute_batch(&seed).unwrap();
         Self {
@@ -258,7 +262,11 @@ fn gated(
 #[test]
 fn an_unreadable_store_defers() {
     let broken = Case::new("broken", "");
-    fs::write(format!("{}/guard.db", broken.guard_home), b"not a database").unwrap();
+    fs::write(
+        Path::new(&broken.guard_home).join("guard.db"),
+        b"not a database",
+    )
+    .unwrap();
     assert_eq!(broken.check("npm run build", false, false), Err(()));
 }
 

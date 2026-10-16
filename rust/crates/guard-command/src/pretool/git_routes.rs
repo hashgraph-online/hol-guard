@@ -4,6 +4,7 @@ mod temporary;
 use temporary::owned_below;
 pub(in crate::pretool) use temporary::owned_temporary_directory;
 pub(in crate::pretool) use temporary::owned_temporary_roots;
+pub(in crate::pretool) use temporary::private_temporary_parent;
 pub(in crate::pretool) use temporary::temporary_checkout_parent;
 
 pub(crate) fn git_route_within_workspace(target: &str, context: super::PathContext<'_>) -> bool {

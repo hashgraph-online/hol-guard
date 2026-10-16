@@ -3,6 +3,8 @@ use super::*;
 pub struct AppContainer {
     name: Vec<u16>,
     pub(super) sid: PSID,
+    /// The `registryRead` capability SID, once requested.
+    pub(super) registry_read: PSID,
     closed: bool,
 }
 
@@ -42,8 +44,31 @@ impl AppContainer {
         Ok(Self {
             name,
             sid,
+            registry_read: null_mut(),
             closed: false,
         })
+    }
+
+    /// Lets the container read registry keys that grant `registryRead`. Node
+    /// cannot start without it: libuv aborts when Winsock fails to start, and
+    /// the Winsock catalog is readable only by that capability or by every
+    /// AppContainer. It also exposes HKCU, so only build runs request it; the
+    /// container still has no network capability.
+    pub fn allow_registry_read(&mut self) -> io::Result<()> {
+        // The well-known SID Windows derives for the `registryRead` capability.
+        const REGISTRY_READ: &str = "S-1-15-3-1024-1065365936-1281604716-3511738428-1654721687-432734479-3232135806-4053264122-3456934681";
+        #[link(name = "advapi32")]
+        unsafe extern "system" {
+            fn ConvertStringSidToSidW(text: *const u16, sid: *mut PSID) -> i32;
+        }
+        if !self.registry_read.is_null() {
+            return Ok(());
+        }
+        let text = wide(OsStr::new(REGISTRY_READ))?;
+        if unsafe { ConvertStringSidToSidW(text.as_ptr(), &mut self.registry_read) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        Ok(())
     }
 
     /// Grants touch only newly-created private staging objects, never the live
@@ -212,6 +237,9 @@ impl Drop for AppContainer {
         }
         unsafe {
             FreeSid(self.sid);
+            if !self.registry_read.is_null() {
+                LocalFree(self.registry_read);
+            }
         }
     }
 }

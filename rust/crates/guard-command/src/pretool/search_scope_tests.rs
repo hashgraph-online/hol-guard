@@ -511,3 +511,36 @@ fn omp_glob_walks_a_worktree_link_into_its_main_checkout() {
     std::os::unix::fs::symlink(home.join("elsewhere"), &link).unwrap();
     assert!(!proven(false));
 }
+
+#[cfg(unix)]
+#[test]
+fn omp_glob_walks_a_virtualenv_interpreter_link() {
+    let (home, project) = fixture();
+    let worktree = linked_worktree(&home, &project);
+    let interpreter = home.join("toolchains/cpython-3.12/bin/python3.12");
+    write(interpreter.clone(), "#!/bin/sh\n");
+    let venv = worktree.join(".venv/bin");
+    std::fs::create_dir_all(&venv).unwrap();
+    write(venv.join("pytest"), "#!/bin/sh\n");
+    std::os::unix::fs::symlink(&interpreter, venv.join("python")).unwrap();
+    let proven = || {
+        super::omp_glob_scope_proven(
+            worktree.to_str().unwrap(),
+            home.to_str(),
+            worktree.to_str(),
+            false,
+        )
+    };
+    // The link reaches one regular file, so it adds no name from outside.
+    assert!(proven());
+
+    // A link standing in for a credential file keeps the review, and so does
+    // one that opens a directory outside the worktree.
+    write(home.join("toolchains/.env"), "TOKEN=fixture\n");
+    std::fs::remove_file(venv.join("python")).unwrap();
+    std::os::unix::fs::symlink(home.join("toolchains/.env"), venv.join("python")).unwrap();
+    assert!(!proven());
+    std::fs::remove_file(venv.join("python")).unwrap();
+    std::os::unix::fs::symlink(home.join("toolchains"), venv.join("python")).unwrap();
+    assert!(!proven());
+}

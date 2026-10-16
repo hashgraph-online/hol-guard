@@ -109,12 +109,19 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
         response.reason_code === "native_node_test_readonly_containment_required") ||
       (profile === "workspace-contained-v1" && response.reason_code === "native_workspace_containment_required")
     );
+    // Windows runs installed Python and Vite builds, in an AppContainer. Its
+    // sink starts from a fixed argv and reads requests from the profile's Temp
+    // directory, which does not follow the TEMP this process or the shell was
+    // given.
+    const windowsSink = process.platform === "win32" &&
+      (profile === "python-eval-readonly-v1" || profile === "node-build-output-v1") &&
+      GUARD_CONTAINED_SINK_COMMAND.length > 0 && GUARD_CONTAINED_REQUEST_ROOT !== "";
     if (
       response.decision !== "deny" || response.policy_action !== "sandbox-required" ||
       !profileMatches || response.observe_mode === true ||
-      (process.platform !== "darwin" && !(process.platform === "linux" && profile === "workspace-contained-v1")) ||
-      GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS ||
-      !GUARD_CLI_WRAPPER_COMMAND.startsWith("/") ||
+      (process.platform !== "darwin" && !(process.platform === "linux" && profile === "workspace-contained-v1") &&
+        !windowsSink) ||
+      (!windowsSink && (GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS || !GUARD_CLI_WRAPPER_COMMAND.startsWith("/"))) ||
       snapshot.payload.tool_name !== "bash" || !key || containedTestRequests.has(key) ||
       !input || typeof input !== "object" || Array.isArray(input) ||
       typeof (input as Record<string, unknown>).command !== "string"
@@ -123,8 +130,12 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       schema: "guard-contained-test-request.v1", workspace: snapshot.cwd, payload: snapshot.payload,
     });
     if (Buffer.byteLength(serialized, "utf8") > 1_048_576) return null;
-    const directory = mkdtempSync(join(tmpdir(), "hol-guard-contained-test-"));
+    // A request root that has since gone away denies the route like any other failure.
+    let directory: string | undefined;
     try {
+      directory = mkdtempSync(
+        join(windowsSink ? GUARD_CONTAINED_REQUEST_ROOT : tmpdir(), "hol-guard-contained-test-"),
+      );
       chmodSync(directory, 0o700);
       const requestPath = join(directory, "request.json");
       writeFileSync(requestPath, serialized, { encoding: "utf8", mode: 0o600, flag: "wx" });
@@ -135,7 +146,8 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       ];
       if (!GUARD_HOME_DIR_IS_DEFAULT) args.push("--home", GUARD_HOME_DIR);
       const quote = (value: string) => "'" + value.replace(/'/g, "'\\''") + "'";
-      const command = [GUARD_CLI_WRAPPER_COMMAND, ...args].map(quote).join(" ");
+      const prefix = windowsSink ? GUARD_CONTAINED_SINK_COMMAND : [GUARD_CLI_WRAPPER_COMMAND];
+      const command = [...prefix, ...args].map(quote).join(" ");
       containedTestRequests.set(key, directory);
       containedTestPresentations.set(key, { input: { ...(input as Record<string, unknown>) }, command });
       while (containedTestPresentations.size > 256) {
@@ -145,7 +157,9 @@ CONTAINED_TEST_HELPERS_SOURCE = r"""
       }
       return { ...(input as Record<string, unknown>), command };
     } catch {
-      try { rmSync(directory, { recursive: true, force: true }); } catch {}
+      if (directory !== undefined) {
+        try { rmSync(directory, { recursive: true, force: true }); } catch {}
+      }
       return null;
     }
   }

@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    BrowserMcpArtifactV1, ContributedMcpLayerV1, LocalMcpServerMaterialV1, McpToolArgumentsV1,
+    BrowserMcpArtifactV1, ContributedMcpLayerV1, LocalMcpServerMaterialV1, McpInlineApprovalV1,
+    McpToolArgumentsV1,
 };
 
 /// Schema discriminator for the request.
@@ -103,6 +104,11 @@ pub struct McpToolPolicyProxyInputV1 {
     pub asks_for_approval: bool,
     pub inline_available: bool,
     pub tool_name: String,
+    /// The inline prompt's answer, when the caller has already raised it.
+    /// Left out, an inline-capable route asks for the `inline_approval` fact
+    /// as before, so an existing caller's payload is unchanged.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub inline_approval: Option<McpInlineApprovalV1>,
 }
 
 /// Evidence for the saved-policy lookup, so the resident reads the store in
@@ -111,7 +117,7 @@ pub struct McpToolPolicyProxyInputV1 {
 /// The keyring-facing integrity material and the integrity state are
 /// caller-shipped exactly as for the `policy_decision_lookup` op; the resident
 /// owns everything else: the per-call request fields, the portable-workspace
-/// composition and the most-restrictive choice over `candidate_artifact_ids`.
+/// composition and the most-restrictive choice over the subject's candidate ids.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpPolicyLookupInputV1 {
@@ -119,8 +125,6 @@ pub struct McpPolicyLookupInputV1 {
     pub guard_home: String,
     /// Canonical lookup timestamp, shared by every candidate probe.
     pub now: String,
-    /// Direct artifact id first, then exact-command and memory-pattern ids.
-    pub candidate_artifact_ids: Vec<String>,
     /// Git-derived portable workspace, when the workspace has one.
     #[serde(default)]
     pub portable_workspace: Option<String>,

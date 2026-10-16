@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 pub mod action_lattice;
 pub mod approval_reuse;
+pub mod artifact_risk;
 pub mod benign_request_api;
 pub mod browser_mcp_intent;
 pub mod business_gmail_plain;
@@ -24,6 +25,7 @@ pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
+mod compound_artifact;
 pub mod cursor_shell_command;
 pub mod policy_document;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
@@ -84,6 +86,9 @@ pub use contributed_mcp_url::normalized_remote_mcp_url;
 mod data_flow;
 pub mod dep_map;
 pub mod effect_decision;
+mod embedded_script_evidence;
+#[cfg(test)]
+mod embedded_script_evidence_tests;
 mod env_wrapper;
 mod executable_flag_contract;
 pub mod extension_control;
@@ -113,6 +118,9 @@ pub mod launch_identity;
 pub mod launch_identity_binding;
 mod launch_identity_common;
 pub mod launch_identity_environment;
+#[cfg(windows)]
+mod launch_identity_windows;
+pub mod local_tool_eligibility;
 pub mod mcp_arguments;
 pub mod mcp_launch_environment;
 pub mod mcp_runtime_evidence;
@@ -317,6 +325,7 @@ pub mod shell_secret_reads;
 mod shell_structure;
 pub mod source_cli;
 pub mod typescript_launch_evidence;
+mod unmodeled_shell_artifact;
 
 pub mod package_context_environment;
 
@@ -434,8 +443,9 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
     if posix.confidence == "exact" && powershell_command::names_powershell_effect(&posix.segments) {
         return Ok(parse_explicit_powershell(request, raw));
     }
-    // Otherwise retry only input that POSIX cannot prove.
-    if posix.confidence != "exact"
+    // Otherwise retry input that POSIX cannot prove, or where it only saw a
+    // read-only cmdlet as an unknown word. Either keeps POSIX if PowerShell fails.
+    if (posix.confidence != "exact" || powershell_command::names_powershell_benign(&posix.segments))
         && raw.chars().count() <= MAX_COMMAND_BYTES
         && raw.len() <= MAX_COMMAND_BYTES
     {
@@ -458,6 +468,15 @@ fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> Cano
             model
         }
     }
+}
+
+/// `2>&1` and `>&1`. A path or a program never has this shape.
+fn is_fd_dup_redirect(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    let rest = bytes
+        .strip_prefix(b"2>&")
+        .or_else(|| bytes.strip_prefix(b">&"));
+    rest.is_some_and(|rest| !rest.is_empty() && rest.iter().all(|byte| byte.is_ascii_digit()))
 }
 
 fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
@@ -505,11 +524,18 @@ fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalComma
         let mut environment_names = Vec::new();
         let mut executable_index = 0usize;
         while executable_index < tokens.len() {
-            let Some(name) = assignment_name(&tokens[executable_index]) else {
-                break;
-            };
-            environment_names.push(name.to_owned());
-            executable_index += 1;
+            if let Some(name) = assignment_name(&tokens[executable_index]) {
+                environment_names.push(name.to_owned());
+                executable_index += 1;
+                continue;
+            }
+            // `;2>&1 python3 evil.py` tokenizes the redirect as the first word.
+            // It is not the program.
+            if is_fd_dup_redirect(&tokens[executable_index]) {
+                executable_index += 1;
+                continue;
+            }
+            break;
         }
         let (executable_index, wrapper_chain) = match parser_wrappers::unwrap_wrappers(
             &tokens,
@@ -662,6 +688,8 @@ pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
 #[cfg(test)]
+mod local_supply_chain_saved_claim_tests;
+#[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;
 pub mod package_policy_override;
@@ -690,6 +718,10 @@ pub mod detectors;
 pub mod direct_vitest;
 mod egress_archive;
 pub mod egress_broker;
+pub mod egress_caller;
+pub mod egress_caller_archive;
+pub mod egress_caller_policy;
+pub mod egress_proxy_credentials;
 mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
@@ -715,13 +747,13 @@ pub mod hook_responses;
 pub mod inventory_contract;
 pub mod js_semver;
 pub mod linux_artifact_supply_chain;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod local_mcp_stdio;
 #[cfg(all(unix, test))]
 mod local_mcp_stdio_tests;
 pub mod mcp_decision;
 mod mcp_package_sources;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub mod mcp_stdio_session;
 pub mod pep440;
 pub mod persistence_rules;

@@ -39,7 +39,7 @@ fn compare_versions(a: &[String; 3], b: &[String; 3]) -> std::cmp::Ordering {
     std::cmp::Ordering::Equal
 }
 
-pub(super) fn semver_spec_matches(specifier: &str, version: &str) -> bool {
+pub(crate) fn semver_spec_matches(specifier: &str, version: &str) -> bool {
     static EXACT: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"\A\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?\z").unwrap());
     static SPEC: LazyLock<Regex> =

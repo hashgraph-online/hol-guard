@@ -16,6 +16,10 @@
 
 use std::path::Path;
 
+#[path = "psql_reads.rs"]
+mod psql_reads;
+pub(super) use psql_reads::{psql_reads_startup_files, safe_psql_arguments};
+
 pub(super) fn safe_pg_ctl_arguments(arguments: &[String]) -> bool {
     if arguments
         .iter()

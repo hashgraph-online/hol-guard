@@ -35,6 +35,12 @@ fn read_only_loops_match_their_unrolled_form() {
             "for f in a b\ndo\n  echo ${f}\n  echo \"${f}\"\ndone",
             "echo a; echo a; echo b; echo b",
         ),
+        ("for f in src/*.ts; do echo $f; done", "echo src/*.ts"),
+        (
+            "for f in src/*.ts tests/*.ts; do echo $f; done",
+            "echo src/*.ts; echo tests/*.ts",
+        ),
+        ("for d in src/*/; do echo $d; done", "echo src/*/"),
     ] {
         assert_eq!(decide(looped), decide(unrolled), "{looped}");
         assert_eq!(decide(looped).0, "allow", "{looped}");
@@ -83,6 +89,13 @@ fn unsupported_loops_fall_back_to_review() {
     for command in [
         "for f in $(ls); do echo $f; done",
         "for f in *.ts; do echo $f; done",
+        "for f in [ab]*.ts; do echo $f; done",
+        "for f in build*; do echo $f; done",
+        "for f in ../*.ts; do echo $f; done",
+        "for f in /etc/*.conf; do echo $f; done",
+        "for f in src/../../*.ts; do echo $f; done",
+        "for f in \"src/*.ts\"; do echo $f; done",
+        "for f in 'src/*.ts'; do echo $f; done",
         "for f in a b; do $f; done",
         "for f in a b; do echo hi > $f; done",
         "for f in a b; do f=x; echo $f; done",

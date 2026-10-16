@@ -16,7 +16,7 @@ use crate::store_vectors_support_tests::gunzip_json;
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/hook_authority_state_vectors.json.gz");
 const T0: &str = "2026-10-11T12:00:00.250000+00:00";
 
-fn fresh_store(label: &str) -> (std::path::PathBuf, Connection) {
+pub(super) fn fresh_store(label: &str) -> (std::path::PathBuf, Connection) {
     let path = std::env::temp_dir().join(format!("hook-state-{label}-{}.db", std::process::id()));
     let _ = std::fs::remove_file(&path);
     let connection = Connection::open(&path).expect("open store");
@@ -29,7 +29,7 @@ fn fresh_store(label: &str) -> (std::path::PathBuf, Connection) {
     (path, connection)
 }
 
-fn owned_rows(connection: &Connection) -> BTreeMap<String, (Value, String)> {
+pub(super) fn owned_rows(connection: &Connection) -> BTreeMap<String, (Value, String)> {
     let mut statement = connection
         .prepare(
             "select state_key, payload_json, updated_at from sync_state \
@@ -54,7 +54,7 @@ fn owned_rows(connection: &Connection) -> BTreeMap<String, (Value, String)> {
         .collect()
 }
 
-fn events(connection: &Connection) -> Vec<(String, String, String)> {
+pub(super) fn events(connection: &Connection) -> Vec<(String, String, String)> {
     let mut statement = connection
         .prepare("select event_name, payload_json, occurred_at from guard_events")
         .expect("prepare");
@@ -106,9 +106,70 @@ fn recorded_rows(after: &Value) -> BTreeMap<String, (Value, String)> {
         .collect()
 }
 
+pub(super) fn recorded_vectors() -> Value {
+    gunzip_json(VECTORS)
+}
+
+/// Applies a raw store action; `false` for an `op` action.
+pub(super) fn apply_raw(connection: &Connection, action: &Value) -> bool {
+    let at = action.get("now").and_then(Value::as_str).unwrap_or(T0);
+    let key = action.get("key").and_then(Value::as_str);
+    match action["do"].as_str().expect("kind") {
+        "raw_set" => {
+            connection
+                .execute(
+                    "insert or replace into sync_state (state_key, payload_json, updated_at) values (?1, ?2, ?3)",
+                    params![key.expect("key"), action["payload"].to_string(), at],
+                )
+                .expect("raw set");
+        }
+        "raw_set_text" => {
+            connection
+                .execute(
+                    "insert or replace into sync_state (state_key, payload_json, updated_at) values (?1, ?2, ?3)",
+                    params![key.expect("key"), action["text"].as_str().expect("text"), at],
+                )
+                .expect("raw set text");
+        }
+        "raw_delete" => {
+            connection
+                .execute(
+                    "delete from sync_state where state_key = ?1",
+                    params![key.expect("key")],
+                )
+                .expect("raw delete");
+        }
+        // The key each op ran with is recorded on the op itself.
+        "key" => {}
+        _ => return false,
+    }
+    true
+}
+
+/// The resident request a recorded `op` action replays against `path`.
+pub(super) fn op_request(
+    action: &Value,
+    path: &std::path::Path,
+    key_b64: &str,
+) -> HookAuthorityStateRequestV1 {
+    let mut wire: Map<String, Value> = action["args"].as_object().expect("args").clone();
+    wire.insert("schema".into(), json!(HOOK_AUTHORITY_STATE_REQUEST_SCHEMA));
+    wire.insert("op".into(), action["op"].clone());
+    wire.insert("store_path".into(), json!(path.to_string_lossy()));
+    wire.insert(
+        "guard_home".into(),
+        json!(std::env::temp_dir().to_string_lossy()),
+    );
+    if action["key_present"].as_bool().expect("key_present") {
+        wire.insert("integrity_key_b64".into(), json!(key_b64));
+        wire.insert("integrity_key_id".into(), action["key_id"].clone());
+    }
+    serde_json::from_value(Value::Object(wire)).expect("recorded request")
+}
+
 #[test]
 fn state_transitions_match_the_retired_python() {
-    let vectors = gunzip_json(VECTORS);
+    let vectors = recorded_vectors();
     let key_b64 = vectors["key_b64"].as_str().expect("key").to_owned();
     let scenarios = vectors["scenarios"].as_array().expect("scenarios");
     assert!(scenarios.len() >= 29);
@@ -123,54 +184,14 @@ fn state_transitions_match_the_retired_python() {
             .enumerate()
         {
             let label = format!("{name} step {step}");
+            if apply_raw(&connection, action) {
+                continue;
+            }
             match action["do"].as_str().expect("kind") {
-                "raw_set" => {
-                    let at = action.get("now").and_then(Value::as_str).unwrap_or(T0);
-                    connection
-                        .execute(
-                            "insert or replace into sync_state (state_key, payload_json, updated_at) values (?1, ?2, ?3)",
-                            params![action["key"].as_str().expect("key"), action["payload"].to_string(), at],
-                        )
-                        .expect("raw set");
-                }
-                "raw_set_text" => {
-                    let at = action.get("now").and_then(Value::as_str).unwrap_or(T0);
-                    connection
-                        .execute(
-                            "insert or replace into sync_state (state_key, payload_json, updated_at) values (?1, ?2, ?3)",
-                            params![action["key"].as_str().expect("key"), action["text"].as_str().expect("text"), at],
-                        )
-                        .expect("raw set text");
-                }
-                "raw_delete" => {
-                    connection
-                        .execute(
-                            "delete from sync_state where state_key = ?1",
-                            params![action["key"].as_str().expect("key")],
-                        )
-                        .expect("raw delete");
-                }
-                // The key each op ran with is recorded on the op itself.
-                "key" => {}
                 "op" => {
                     ops += 1;
                     let op = action["op"].as_str().expect("op");
-                    let mut wire: Map<String, Value> =
-                        action["args"].as_object().expect("args").clone();
-                    wire.insert("schema".into(), json!(HOOK_AUTHORITY_STATE_REQUEST_SCHEMA));
-                    wire.insert("op".into(), json!(op));
-                    wire.insert("store_path".into(), json!(path.to_string_lossy()));
-                    wire.insert(
-                        "guard_home".into(),
-                        json!(std::env::temp_dir().to_string_lossy()),
-                    );
-                    if action["key_present"].as_bool().expect("key_present") {
-                        wire.insert("integrity_key_b64".into(), json!(key_b64));
-                        wire.insert("integrity_key_id".into(), json!(action["key_id"]));
-                    }
-                    let request: HookAuthorityStateRequestV1 =
-                        serde_json::from_value(Value::Object(wire))
-                            .unwrap_or_else(|error| panic!("{label}: {error}"));
+                    let request = op_request(action, &path, &key_b64);
                     let result =
                         evaluate(&request).unwrap_or_else(|code| panic!("{label}: {code}"));
                     if op != "claude_record_notice" {

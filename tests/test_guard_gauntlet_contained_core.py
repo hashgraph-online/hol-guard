@@ -53,21 +53,43 @@ def _capture_log(path: Path, *captures: tuple[str, bytes]) -> Path:
     return path
 
 
-def _wrapper(request_sha256: str, *, guard_home: str = "{{fixture}}/guard-home", home: str | None = "{{home}}") -> str:
+WINDOWS_SINK = [
+    "C:\\candidate\\.venv\\Scripts\\python.exe",
+    "-I",
+    "-c",
+    "import sys;sys.path.insert(0, 'C:/candidate/.venv/Lib/site-packages');"
+    "from codex_plugin_scanner.cli import main;raise SystemExit(main(sys.argv[1:]))",
+    "guard",
+]
+
+
+def _wrapper(
+    request_sha256: str,
+    *,
+    guard_home: str = "{{fixture}}/guard-home",
+    home: str | None = "{{home}}",
+    windows: bool = False,
+) -> str:
     argv = [
-        "/candidate/.venv/bin/hol-guard",
+        *(WINDOWS_SINK if windows else ["/candidate/.venv/bin/hol-guard"]),
         "execute-contained-test",
         "--guard-home",
         guard_home,
         "--workspace",
         "{{workspace}}",
         "--request-file",
-        "/tmp/hol-guard-contained-test-abc123/request.json",
+        (
+            "C:\\Users\\agent\\AppData\\Local\\Temp\\hol-guard-contained-test-abc123\\request.json"
+            if windows
+            else "/tmp/hol-guard-contained-test-abc123/request.json"
+        ),
         "--request-sha256",
         request_sha256,
         *(["--home", home] if home is not None else []),
     ]
-    return " ".join("'" + value + "'" for value in argv)
+    # Redaction folds a quoted Windows fixture path into a bare placeholder.
+    bare = {"{{workspace}}", "{{home}}"} if windows else set()
+    return " ".join(value if value in bare else "'" + value.replace("'", "'\\''") + "'" for value in argv)
 
 
 @pytest.fixture
@@ -225,6 +247,37 @@ def test_fully_bound_contained_run_passes_without_interruption(fixture, tmp_path
     assessment = assess_case(SCENARIO, _contained(fixture, tmp_path))
     assert assessment["outcome"] == "pass", assessment["reason"]
     assert assessment["interruptions"]["events"] == []
+
+
+def test_windows_sink_run_passes_and_stays_bound_to_this_installation(fixture, tmp_path):
+    """The Windows adapter runs Guard's Python with a fixed bootstrap instead of a wrapper script."""
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home")
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "pass", assessment["reason"]
+    assert assessment["interruptions"]["events"] == []
+    posix_home = _contained(fixture, tmp_path, windows=True)
+    assert assess_case(SCENARIO, posix_home)["reason"] == "contained wrapper guard-home binding is malformed"
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ("from codex_plugin_scanner.cli import main;", "import os;os.system('calc');"),
+        ("'guard' 'execute-contained-test'", "'hook' 'execute-contained-test'"),
+        ("'--request-file'", "--request-file"),
+    ],
+)
+def test_windows_sink_must_be_the_exact_bootstrap(fixture, tmp_path, old, new):
+    case = _contained(fixture, tmp_path, windows=True, guard_home="{{fixture}}\\guard-home")
+    for event in case["events"]:
+        for call in event.get("calls", []):
+            if call["id"] == CALL:
+                call["arguments"]["command"] = call["arguments"]["command"].replace(old, new)
+        if event.get("toolCallId") == CALL and "args" in event:
+            event["args"]["command"] = event["args"]["command"].replace(old, new)
+    assessment = assess_case(SCENARIO, case)
+    assert assessment["outcome"] == "harness-error"
+    assert assessment["reason"].startswith("contained wrapper")
 
 
 def test_only_a_full_task_wrapper_may_omit_the_home_binding(fixture, tmp_path):

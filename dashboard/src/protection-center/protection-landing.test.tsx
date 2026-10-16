@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 
 import type { ExtensionCatalogItem, ExtensionPermission } from "../extension-controls-api";
 import { FIXED_PROTECTION_PERMISSION, protectionModuleFixture } from "./fixtures/protection-fixtures";
-import { searchCommandPatterns } from "./model/protection-landing";
+import { searchCommandPatterns, wordMatch } from "./model/protection-landing";
 
 const hits = (extensions: readonly ExtensionCatalogItem[]) =>
   extensions.flatMap((extension) => extension.permissions.map((permission) => ({ extension, permission })));
@@ -147,6 +147,54 @@ const hits = (extensions: readonly ExtensionCatalogItem[]) =>
   const proseOnly = ranked.find((match) => match.permission.permission_id === "command.faf-cli.permission.ci-persistence");
   assert.equal(proseOnly!.score, 2, "a query term found only in prose demotes the whole match to a context match");
   assert.equal(searchCommandPatterns(hits(catalog), "github secret")[0]!.score, 0, "label matches score as identity matches");
+}
+
+// Word-start matching: "git" names Git and GitHub, not DigitalOcean, whose
+// critical settings used to outrank Git's own because "git" sits inside
+// "DigitalOcean". Whole words rank above prefixes.
+{
+  const extension = (extension_id: string, name: string, executables: string[]) =>
+    protectionModuleFixture({ extension_id, name, executables, permissions: [] }) as ExtensionCatalogItem;
+  const permission = (extensionId: string, suffix: string, label: string, example: string, risk_tier: ExtensionPermission["risk_tier"]) => ({
+    ...FIXED_PROTECTION_PERMISSION,
+    permission_id: `${extensionId}.permission.${suffix}`,
+    extension_id: extensionId,
+    label,
+    configurable: true,
+    fixed_reason: null,
+    example_command: example,
+    risk_tier,
+  });
+  const catalog = [
+    { ...extension("command.digitalocean", "DigitalOcean", ["doctl"]), permissions: [
+      permission("command.digitalocean", "delete", "DigitalOcean resource deletion", "doctl compute droplet delete", "critical"),
+    ] },
+    { ...extension("command.github", "GitHub", ["gh"]), permissions: [
+      permission("command.github", "secret-write", "GitHub secret mutation", "gh secret set TOKEN", "critical"),
+    ] },
+    { ...extension("command.git", "Git", ["git"]), permissions: [
+      permission("command.git", "force-push", "Forced Git push", "git push --force", "high"),
+    ] },
+  ];
+
+  assert.deepEqual(
+    searchCommandPatterns(hits(catalog), "Git").map((match) => match.permission.permission_id),
+    ["command.git.permission.force-push", "command.github.permission.secret-write"],
+    "a term inside a word does not match; whole-word matches outrank prefixes regardless of risk",
+  );
+  assert.deepEqual(
+    searchCommandPatterns(hits(catalog), "ocean").map((match) => match.permission.permission_id),
+    ["command.digitalocean.permission.delete"],
+    "a camelCase hump starts a word",
+  );
+  assert.deepEqual(
+    searchCommandPatterns(hits(catalog), "--force").map((match) => match.permission.permission_id),
+    ["command.git.permission.force-push"],
+    "terms that start with punctuation still match flags",
+  );
+  assert.equal(searchCommandPatterns(hits(catalog), "itocean").length, 0, "mid-word fragments do not match");
+  assert.equal(wordMatch("İstanbulGit", "git"), "exact", "a camelCase hump survives case folding that changes length");
+  assert.equal(wordMatch("İstanbulGit", "bulgit"), null, "folded text still rejects mid-word fragments");
 }
 
 console.log("protection-landing.test.tsx: all assertions passed");

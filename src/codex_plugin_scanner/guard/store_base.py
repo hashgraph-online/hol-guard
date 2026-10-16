@@ -16,6 +16,7 @@ import logging
 import os
 import re
 import sqlite3
+import stat as stat_module
 import subprocess
 import sys
 import threading
@@ -32,7 +33,6 @@ from uuid import uuid4
 from cryptography.fernet import Fernet, InvalidToken
 
 from .approval_gate import ApprovalGateGrant, require_policy_clear, require_policy_write, require_request_resolution
-from .approval_resolution import require_resolvable_approval_request
 from .cli.oauth_client import resolve_guard_oauth_client_config
 from .edge_events import build_receipt_event
 from .fork_safety import forget_in_child
@@ -70,45 +70,18 @@ from .sqlite_tuning import (
     sqlite_connect_timeout_seconds,
 )
 from .store_approvals import (
-    _json_object,
-    _json_object_list,
     approval_index_statements,
     approval_schema_statement,
     backfill_approval_queue_columns,
-    resolvable_approval_request_ids,
 )
 from .store_approvals import (
     bulk_resolve_approval_requests as persist_bulk_resolution,
 )
 from .store_approvals import (
-    count_approval_requests as count_pending_approval_requests,
-)
-from .store_approvals import (
     get_approval_request as load_approval_request,
 )
 from .store_approvals import (
-    get_approval_extension_allow_hint,
-)
-from .store_approvals import (
-    get_next_pending_request as load_next_pending_request,
-)
-from .store_approvals import (
-    list_approval_request_page as load_approval_request_page,
-)
-from .store_approvals import (
     list_approval_requests as load_approval_requests,
-)
-from .store_approvals import (
-    list_pending_approval_summaries as load_pending_approval_summaries,
-)
-from .store_approvals import (
-    resolve_approval_request as persist_approval_resolution,
-)
-from .store_approvals import (
-    resolve_matching_duplicate_requests as persist_duplicate_resolutions,
-)
-from .store_approvals import (
-    resolve_one_request_only as persist_one_resolution,
 )
 from .store_approvals import (
     resolve_request_with_queue_result as persist_queue_resolution,
@@ -229,7 +202,6 @@ _GUARD_CLOUD_RESET_STATE_KEYS = (
 
 
 _DEVICE_ROW_KEY = "local-device"
-_MAX_RESOLVED_SCOPE_IDS = 200
 _SQLITE_ID_BATCH_SIZE = 500
 _WORKSPACE_POLICY_KEY_PREFIX = "workspace:"
 _POLICY_INTEGRITY_STATE_KEY = "policy_integrity"
@@ -1147,21 +1119,68 @@ def _set_private_mode(path: Path, mode: int) -> None:
             _set_windows_private_directory(path)
         return
     try:
+        # A chmod to the current mode still moves ctime, which the policy
+        # snapshot publisher watches, so every store close would wake it.
+        if os.stat(path).st_mode & 0o7777 == mode:
+            return
         os.chmod(path, mode)
     except OSError as exc:
         _store_logger.debug("Could not set private mode %o on %s: %s", mode, path, exc)
         return
 
 
+# Binding a Windows directory opens every ancestor and re-reads the DACL. The
+# store repairs guard home after each connection closes, so a hook request paid
+# for that walk several times. Within one process, a directory bound recently
+# under the same identity is skipped; a recreated directory is bound at once.
+# A path that passes through a junction or link is bound every time, since the
+# directory it reaches can change without the final identity changing first.
+_WINDOWS_PRIVATE_DIRECTORY_RECHECK_SECONDS = 30.0
+_windows_private_directory_lock = threading.Lock()
+_windows_private_directory_bound: dict[str, tuple[int, int, float]] = {}
+
+
+def _windows_path_is_direct(path: str) -> bool:
+    """True when no component of an absolute path is a reparse point (a junction or link)."""
+    current = Path(path)
+    try:
+        for component in (current, *current.parents):
+            if getattr(os.lstat(component), "st_file_attributes", 0) & stat_module.FILE_ATTRIBUTE_REPARSE_POINT:
+                return False
+    except OSError:
+        return False
+    return True
+
+
 def _set_windows_private_directory(path: Path) -> None:
     from .native_policy_snapshot import NativePolicySnapshotError
     from .native_policy_snapshot_windows_state import _windows_ensure_private_directory
 
+    key = os.path.normcase(os.path.abspath(path))
+    try:
+        stat = os.stat(path)
+    except OSError:
+        stat = None
+    now = time.monotonic()
+    if stat is not None and _windows_path_is_direct(key):
+        with _windows_private_directory_lock:
+            bound = _windows_private_directory_bound.get(key)
+        if (
+            bound is not None
+            and bound[:2] == (stat.st_dev, stat.st_ino)
+            and now - bound[2] < _WINDOWS_PRIVATE_DIRECTORY_RECHECK_SECONDS
+        ):
+            return
     try:
         _windows_ensure_private_directory(path)
     except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError) as exc:
+        with _windows_private_directory_lock:
+            _windows_private_directory_bound.pop(key, None)
         _store_logger.debug("Could not set Windows private directory on %s: %s", path, exc)
         return
+    if stat is not None:
+        with _windows_private_directory_lock:
+            _windows_private_directory_bound[key] = (stat.st_dev, stat.st_ino, now)
 
 
 def _system_keyring_availability_cache_path(guard_home: Path) -> Path:
@@ -1324,16 +1343,6 @@ def receipt_index_statements() -> list[str]:
     ]
 
 
-def _path_within_workspace(config_path: str, workspace: str) -> bool:
-    normalized_config = _normalized_workspace_path(config_path)
-    normalized_workspace = _normalized_workspace_path(workspace)
-    if not normalized_config or not normalized_workspace:
-        return False
-    if normalized_workspace == "/":
-        return normalized_config.startswith("/")
-    return normalized_config == normalized_workspace or normalized_config.startswith(f"{normalized_workspace}/")
-
-
 def _normalized_workspace_path(value: str) -> str:
     normalized = value.strip().replace("\\", "/")
     while len(normalized) > 1 and normalized.endswith("/"):
@@ -1406,17 +1415,6 @@ def _runtime_scoped_exact_match_key(
     return f"{_RUNTIME_SCOPED_EXACT_MATCH_PREFIX}{digest}"
 
 
-def _global_runtime_scoped_exact_match_key(
-    artifact_id: str | None,
-    runtime_exact_match_context: str | None = None,
-) -> str | None:
-    family_key = _artifact_family_key(artifact_id)
-    if family_key is None or _family_key_value(family_key) not in _SCOPED_RUNTIME_EXACT_FAMILIES:
-        return None
-    canonical_artifact_id = f"global:portable:{_family_key_value(family_key)}"
-    return _runtime_scoped_exact_match_key(canonical_artifact_id, runtime_exact_match_context)
-
-
 def runtime_tool_action_policy_artifact_id(artifact_id: str | None) -> str | None:
     """Return a scoped family identity for one exact runtime tool action."""
 
@@ -1475,43 +1473,6 @@ def runtime_tool_action_portable_match_context(runtime_exact_match_context: str 
         wrapper_chain=normalized_wrapper_chain,
         permission_mode=permission_mode if isinstance(permission_mode, str) and permission_mode else None,
     )
-
-
-def browser_mcp_exact_match_context(
-    *,
-    intent: str | None,
-    operation: str | None,
-    target_origin: str | None,
-    target_path_prefix: str | None,
-    profile_mode: str | None,
-    mcp_server_identity_hash: str | None,
-    mcp_tool_identity_hash: str | None,
-    mcp_schema_hash: str | None,
-    sensitive_surface_flags: Sequence[object] | None = None,
-) -> str | None:
-    """Build a browser MCP exact-match context for stable identity dedup.
-
-    The context captures security-relevant fields (intent, origin, path,
-    profile, sensitive surfaces) while volatile fields are already stripped
-    by the browser intent normalizer.
-    """
-    if not intent and not operation and not target_origin:
-        return None
-    flags: list[str] = []
-    if sensitive_surface_flags is not None:
-        flags = sorted(str(f) for f in sensitive_surface_flags if isinstance(f, str) and f)
-    payload: dict[str, object] = {
-        "intent": intent,
-        "operation": operation,
-        "target_origin": target_origin,
-        "target_path_prefix": target_path_prefix,
-        "profile_mode": profile_mode,
-        "server_identity_hash": mcp_server_identity_hash,
-        "tool_identity_hash": mcp_tool_identity_hash,
-        "schema_hash": mcp_schema_hash,
-        "sensitive_surface_flags": flags,
-    }
-    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
 
 
 def _is_runtime_scoped_exact_match_key(value: str | None) -> bool:

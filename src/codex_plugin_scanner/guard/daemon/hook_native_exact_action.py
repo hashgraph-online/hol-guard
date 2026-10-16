@@ -177,11 +177,13 @@ def native_review_binding(
 ) -> str | None:
     """Bind a short-lived retry to Rust-owned request and decision evidence."""
 
+    raw_cwd = payload.get("cwd")
     try:
         query: dict[str, object] = {
             "kind": "review_binding",
             "harness": harness,
             "command": pre_tool_command(payload),
+            "cwd": raw_cwd if isinstance(raw_cwd, str) and raw_cwd.strip() else None,
             "workspace_bound": workspace is not None,
             "facts": _facts(native_result),
             "receipt": dict(native_receipt) if isinstance(native_receipt, Mapping) else None,

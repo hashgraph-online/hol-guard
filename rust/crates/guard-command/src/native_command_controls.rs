@@ -460,6 +460,7 @@ mod precedence;
 #[path = "native_command_unmodeled.rs"]
 mod unmodeled;
 use floor::{add_authority_repair_hint, rank, rule_floor, strengthen};
+pub(crate) use unmodeled::{python_is_builtin_only, python_stdin, unread_file_interpreter};
 
 #[cfg(test)]
 #[path = "native_command_controls_tests.rs"]

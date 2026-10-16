@@ -444,7 +444,7 @@ pub fn classify_source_path(
 
 #[path = "sensitive_path_family.rs"]
 mod sensitive;
-pub use sensitive::sensitive_path_family;
+pub use sensitive::{sensitive_path_family, win32_name};
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
 /// dotfile list or the `.github/workflows` prefix, or is a project config

@@ -9,6 +9,33 @@ use std::path::{Component, Path};
 /// Guard's own command line manages state outside any workspace.
 const GUARD_CLIS: &[&str] = &["hol-guard", "guard"];
 
+/// Database clients change a server outside any workspace, even over a local
+/// socket: `psql -c 'drop table t'` is no workspace work the sandbox could keep.
+const DATABASE_CLIENTS: &[&str] = &[
+    "psql",
+    "pg_dump",
+    "pg_dumpall",
+    "pg_restore",
+    "mysql",
+    "mariadb",
+    "mysqldump",
+    "sqlcmd",
+    "redis-cli",
+    "mongo",
+    "mongosh",
+    "cqlsh",
+];
+
+/// Guard's safety guide, which its managed agent instructions tell agents to
+/// read first. The sandbox launcher copies this one file into the private home
+/// the sandboxed shell sees, so the unquoted literal expands to the same text
+/// there. Any other home path, including one that walks out of
+/// `.hol-support`, still reaches outside.
+const SAFETY_GUIDE: &str = "~/.hol-support/SAFETY.md";
+
+/// Programs that only print the guide they are given.
+const GUIDE_READERS: &[&str] = &["cat", "head", "tail", "sed", "nl", "wc"];
+
 /// Devices every sandbox profile offers.
 const DEVICES: &[&str] = &[
     "/dev/null",
@@ -20,13 +47,18 @@ const DEVICES: &[&str] = &[
 
 /// `temp_fixed` says nothing in the command rebinds `TMPDIR`, so each
 /// `$TMPDIR` the shell expands is the one the sandbox launcher sets.
+/// `home_fixed` says nothing in the command rebinds `HOME`, so `~` is the
+/// private home the launcher seeds with the safety guide.
+/// `granted_script` is the operand of an outside script the sandbox may read.
 pub(super) fn reaches_outside(
     segment: &CommandSegmentV1,
     name: &str,
     workspace: &Path,
     temp_fixed: bool,
+    home_fixed: bool,
+    granted_script: Option<&str>,
 ) -> bool {
-    if GUARD_CLIS.contains(&name) {
+    if GUARD_CLIS.contains(&name) || DATABASE_CLIENTS.contains(&name) {
         return true;
     }
     // A variable or home path the sandbox would resolve differently. Redirect
@@ -34,10 +66,14 @@ pub(super) fn reaches_outside(
     let fixed_expansions = identity_expansions_only(segment, name)
         || exit_status_expansions_only(&segment.text)
         || (temp_fixed && private_temp_expansions_only(&segment.text));
+    let guide = home_fixed && GUIDE_READERS.contains(&name);
     if (expands_variable(&segment.text, name) && !fixed_expansions)
         || segment.text.split_whitespace().any(|word| {
-            word.trim_start_matches(['>', '<', '&', '|', '"', '\'', '='])
-                .starts_with('~')
+            // Only the bare word expands; a quoted or redirected guide does not.
+            !(guide && word == SAFETY_GUIDE)
+                && word
+                    .trim_start_matches(['>', '<', '&', '|', '"', '\'', '='])
+                    .starts_with('~')
         })
     {
         return true;
@@ -46,6 +82,9 @@ pub(super) fn reaches_outside(
         return true;
     }
     segment.arguments.iter().any(|argument| {
+        if granted_script == Some(argument.as_str()) || (guide && argument == SAFETY_GUIDE) {
+            return false;
+        }
         let value = match argument.split_once('=') {
             Some((option, value)) if option.starts_with('-') => value,
             _ if argument.starts_with('-') => return false,

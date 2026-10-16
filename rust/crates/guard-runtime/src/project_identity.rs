@@ -55,6 +55,78 @@ pub(crate) fn resolve(workspace: &str) -> PortableIdentity {
     }
 }
 
+/// The identity `resolve_portable_project_identity(workspace)` returns for a
+/// workspace the calling process names relative to its own directory, which
+/// `Path(...).resolve(strict=False)` reads against that process's `cwd`. The
+/// relay never runs in that directory, so the join is mirrored from the `cwd`
+/// the caller reports and only in the one shape a relative workspace takes:
+/// a plain name, under a directory that is already canonical, naming nothing
+/// on disk. Every other relative workspace is `Unknown`.
+pub(crate) fn resolve_relative(workspace: &str, cwd: &str) -> PortableIdentity {
+    let stripped = python_strip(workspace);
+    if is_portable_project_identity(stripped) {
+        return PortableIdentity::Identity(stripped.to_owned());
+    }
+    if stripped.is_empty() || stripped.starts_with('/') {
+        return resolve(stripped);
+    }
+    match relative_path(stripped, cwd).and_then(|path| derive_resolved(&path)) {
+        Ok(Some(identity)) => PortableIdentity::Identity(identity),
+        Ok(None) => PortableIdentity::Absent,
+        Err(Unmirrored) => PortableIdentity::Unknown,
+    }
+}
+
+/// `Path(workspace).expanduser().resolve(strict=False)` against `cwd`.
+fn relative_path(workspace: &str, cwd: &str) -> Mirror<PathBuf> {
+    if workspace.starts_with('~') || workspace.contains('/') || workspace.starts_with('.') {
+        // `expanduser` rewrites a `~` name, and a separator or a dot segment
+        // is a resolution this reader does not reproduce.
+        return Err(Unmirrored);
+    }
+    if !cfg!(unix) || !cwd.starts_with('/') {
+        return Err(Unmirrored);
+    }
+    let resolved = fs::canonicalize(cwd).map_err(|_| Unmirrored)?;
+    if resolved.as_os_str() != cwd {
+        // A directory `resolve` would rewrite resolves the name under the
+        // rewritten path, which this reader does not reproduce.
+        return Err(Unmirrored);
+    }
+    let candidate = resolved.join(workspace);
+    match status(&candidate, false)? {
+        // Only a name that is absent resolves to the join itself; one that
+        // exists may be a link `resolve` follows.
+        None => Ok(candidate),
+        Some(_) => Err(Unmirrored),
+    }
+}
+
+/// `is_portable_project_identity(value)` (`project_identity.py`): the
+/// prefix followed by exactly the 64 lowercase hex digits of a digest.
+pub(crate) fn is_portable_project_identity(value: &str) -> bool {
+    value
+        .strip_prefix(PORTABLE_PROJECT_IDENTITY_PREFIX)
+        .is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
+/// `_portable_project_workspace(workspace)`
+/// (`store_portable_project_memory.py`): the workspace itself when it
+/// already names a portable identity, and the identity its Git metadata
+/// derives otherwise.
+pub(crate) fn portable_workspace(workspace: &str) -> PortableIdentity {
+    let stripped = python_strip(workspace);
+    if is_portable_project_identity(stripped) {
+        return PortableIdentity::Identity(stripped.to_owned());
+    }
+    resolve(stripped)
+}
+
 /// The errors `pathlib._ignore_error` reads as a false predicate; Python
 /// 3.12 raises every other one (3.14 swallows them all).
 fn ignorable(error: &io::Error) -> bool {
@@ -283,6 +355,16 @@ fn identity(workspace: &Path, repository: &Repository<'_>) -> Mirror<Option<Stri
         "{PORTABLE_PROJECT_IDENTITY_PREFIX}{}",
         hex::encode(digest)
     )))
+}
+
+/// `resolve_portable_project_identity` from the resolved path alone, read
+/// without the identity cache: a relative workspace names a different
+/// directory in every process it is read from, so its text is no cache key.
+fn derive_resolved(path: &Path) -> Mirror<Option<String>> {
+    let Some(repository) = discover(path)? else {
+        return Ok(None);
+    };
+    identity(path, &repository)
 }
 
 fn derive(workspace: &str) -> Mirror<Option<String>> {

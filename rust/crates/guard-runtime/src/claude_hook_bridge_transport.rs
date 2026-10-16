@@ -202,6 +202,31 @@ pub(crate) fn hook_event_name(data: &str) -> Result<String, BridgeError> {
     Ok(name.to_owned())
 }
 
+/// Whether the daemon `state_path` names is up and proves its identity,
+/// without sending it a hook: what the bridge waits on after starting the
+/// daemon, so a hook is still delivered at most once to the new daemon.
+pub(crate) fn daemon_proves_identity(
+    state_path: &Path,
+    data: &str,
+    timeout: Duration,
+) -> Result<(), BridgeError> {
+    let deadline = Instant::now() + timeout;
+    let state = authenticated_state(state_path).map_err(BridgeError::Transport)?;
+    let hook_event = hook_event_name(data)?;
+    let nonce = new_nonce()?;
+    let mut connection = LoopbackConnection::new(state.text("host"), state.port());
+    let challenge = request_identity_challenge(
+        &mut connection,
+        state.text("state_id"),
+        &nonce,
+        &hook_event,
+        deadline,
+    )?;
+    verify_challenge_response(&challenge, &state, &nonce, &hook_event)
+        .map(|_| ())
+        .map_err(BridgeError::Value)
+}
+
 pub(crate) fn new_nonce() -> Result<String, BridgeError> {
     let mut bytes = [0_u8; 32];
     getrandom::fill(&mut bytes).map_err(|error| BridgeError::Transport(error.to_string()))?;

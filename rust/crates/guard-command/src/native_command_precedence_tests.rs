@@ -126,7 +126,14 @@ fn a_commit_message_naming_guard_keeps_the_allow() {
         &enabled,
         "git -c core.hooksPath=/dev/null commit -m 'fix(hol-guard): x'",
     );
-    assert_eq!(result.minimum_action, "allow", "{}", result.reason_code);
+    // Without a working directory Windows cannot prove `/dev/null` names no
+    // hooks, so there the configured hooks path keeps it reviewed.
+    assert_eq!(
+        result.minimum_action == "allow",
+        !cfg!(windows),
+        "{}",
+        result.reason_code
+    );
 }
 
 /// Configuration that makes Git run a program carries text the shell reads
@@ -189,8 +196,12 @@ fn an_explicit_git_allow_never_settles_configured_programs() {
         "git fetch -u origin",
     ] {
         let result = evaluate(&enabled, command);
+        // Windows cannot prove `/dev/null` names no hooks without a working
+        // directory, so there it keeps the push reviewed.
+        let unproven = cfg!(windows) && command.contains("/dev/null");
         assert_eq!(
-            result.minimum_action, "allow",
+            result.minimum_action == "allow",
+            !unproven,
             "{command}: {}",
             result.reason_code
         );

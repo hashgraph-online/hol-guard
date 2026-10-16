@@ -66,6 +66,14 @@ def _strip_generated_types(fragment: str) -> str:
   options,
 ) {""",
         "let result: GuardCliResult | null = null;": "let result = null;",
+        "function nativeGuardReplyFromLine(line: string): GuardDaemonReply | null {": (
+            "function nativeGuardReplyFromLine(line) {"
+        ),
+        "  let envelope: unknown;": "  let envelope;",
+        "(remaining: number): string =>": "(remaining) =>",
+        " as { status?: unknown; body?: unknown }": "",
+        "async (limitChars: number) =>": "async (limitChars) =>",
+        "  reply: GuardDaemonReply,\n": "  reply,\n",
         " as unknown": "",
         " as Record<string, unknown>": "",
         " as GuardResponse": "",

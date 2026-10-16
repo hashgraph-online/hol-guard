@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
@@ -153,13 +154,8 @@ def _manifest_for_bundled_identity(
             return None, "native_manifest_invalid"
         if metadata.st_size <= 0 or metadata.st_size > _MAX_MANIFEST_BYTES:
             return None, "native_manifest_invalid"
-        if os.name != "nt":
-            if stat.S_IMODE(metadata.st_mode) & 0o022:
-                return None, "native_manifest_invalid"
-            current_uid = os.getuid() if hasattr(os, "getuid") else None
-            owner = getattr(metadata, "st_uid", current_uid)
-            if current_uid is not None and owner not in {0, current_uid}:
-                return None, "native_manifest_invalid"
+        if os.name != "nt" and not _trusted_owner_and_mode(metadata, manifest_path):
+            return None, "native_manifest_invalid"
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None, "native_manifest_missing"
@@ -190,11 +186,9 @@ def _restore_bundled_runtime_execute_bit(path: Path) -> None:
     try:
         metadata = path.lstat()
         mode = stat.S_IMODE(metadata.st_mode)
-        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & 0o022 or mode & stat.S_IXUSR:
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & stat.S_IXUSR:
             return
-        current_uid = os.getuid() if hasattr(os, "getuid") else None
-        owner = getattr(metadata, "st_uid", current_uid)
-        if current_uid is not None and owner not in {0, current_uid}:
+        if not _trusted_owner_and_mode(metadata, path):
             return
         path.chmod(mode | 0o111)
     except (OSError, RuntimeError, ValueError):

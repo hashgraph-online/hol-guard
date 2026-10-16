@@ -55,3 +55,10 @@ export function requiresApprovalPasswordPrompt(
   }
   return strictAllDecisions;
 }
+
+/** The saved cooldown setting is the default; the per-dialog checkbox only opts out. */
+export function defaultUseApprovalCooldown(
+  gate: GuardApprovalGatePublicConfig | null | undefined,
+): boolean {
+  return (gate?.cooldown_seconds ?? 0) > 0 && gate?.totp_enabled !== true;
+}

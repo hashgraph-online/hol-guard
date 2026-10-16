@@ -58,6 +58,7 @@ from ..approvals import (
     approval_center_hint,
     approval_delivery_payload,
     approval_prompt_flow,
+    approvals_queued_before,
     attach_primary_approval_link,
     build_approval_browser_url,
     canonical_local_approval_url,
@@ -146,22 +147,16 @@ from ..package_firewall_entitlement import (
 from ..policy.engine import SAFE_CHANGED_HASH_ACTION, VALID_GUARD_ACTIONS, build_decision_v2, guard_action_severity
 from ..protect import build_protect_payload
 from ..receipts import build_receipt
-from ..risk import artifact_risk_signals, artifact_risk_signals_v2, artifact_risk_summary
+from ..risk import artifact_risk_profile, artifact_risk_summary
 from ..runtime.actions import GuardActionEnvelope, command_text_from_tool_payload, normalize_harness_payload
-from ..runtime.compound_git_inspection import is_low_risk_compound_git_inspection
 from ..runtime.false_positive_rules import (
     SOURCE_INSPECTION_BENIGN_DOTFILES,
     SOURCE_INSPECTION_EXTENSIONS,
     SOURCE_INSPECTION_PARTS,
     SOURCE_INSPECTION_SENSITIVE_PARTS,
     fd_arg_requests_exec,
-    fd_args_follow_symlinks,
-    fd_exec_token_is_plain_sed,
-    fd_search_targets,
-    split_fd_args_and_exec,
     target_is_known_skill_doc_path,
 )
-from ..runtime.github_capability_interaction import github_capability_requires_confirmation
 from ..runtime.guard_run_evaluation import prompt_requests_to_artifacts
 from ..runtime.harness_attribution import resolve_runtime_hook_harness
 from ..runtime.package_intent_common import build_package_request_artifact
@@ -180,14 +175,11 @@ from ..runtime.secret_file_requests import (
     build_file_read_request_artifact,
     build_file_write_request_artifact,
     build_tool_action_request_artifact,
-    classify_github_shell_capabilities,
     extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_file_write_request,
     extract_sensitive_tool_action_request,
     literal_cd_execution_context,
-    low_risk_compound_developer_execution_context,
-    shell_execution_context_starts_with_literal_cd,
 )
 from ..runtime.secret_sensitivity import (
     SecretContentMatch,
@@ -234,8 +226,8 @@ from .install_commands import (
 from .install_dry_run import build_managed_install_plan
 from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 from .remote_pair_flow import dispatch_guard_remote_pair_command
-from .uninstall_commands import run_guard_self_uninstall
-from .update_commands import run_guard_update
+from .uninstall_commands import retire_native_resident_after_last_harness, run_guard_self_uninstall
+from .update_commands import bundled_native_runtime_report, repair_native_runtime_if_missing, run_guard_update
 
 DEFAULT_GUARD_APPS_URL = "https://hol.org/guard/apps"
 

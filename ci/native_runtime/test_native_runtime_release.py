@@ -19,6 +19,7 @@ TARGETS = {
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
+    "win_arm64": "aarch64-pc-windows-msvc",
 }
 
 
@@ -28,13 +29,14 @@ def _native_wheel(
     *,
     runtime: bytes = b"native-runtime",
     target: str | None = None,
+    version: str = VERSION,
 ) -> Path:
-    wheel = root / f"hol_guard-{VERSION}-py3-none-{platform}.whl"
+    wheel = root / f"hol_guard-{version}-py3-none-{platform}.whl"
     runtime_path = release.WINDOWS_RUNTIME_PATH if platform.startswith("win") else release.RUNTIME_PATH
     manifest = {
         "schema": "hol-guard-native-runtime.v1",
         "protocol_version": 1,
-        "package_version": VERSION,
+        "package_version": version,
         "target": target or TARGETS[platform],
         "platform_tag": platform,
         "source_sha": SOURCE_SHA,
@@ -65,9 +67,16 @@ def _sdist(root: Path) -> Path:
     return sdist
 
 
+def _embed_native_manifest(pure: Path, wheels: dict[str, str], *, version: str = VERSION) -> None:
+    document = {"schema": release.NATIVE_WHEEL_MANIFEST_SCHEMA, "version": version, "wheels": wheels}
+    with zipfile.ZipFile(pure, "w") as archive:
+        archive.writestr(release.NATIVE_WHEEL_MANIFEST_PATH, json.dumps(document))
+
+
 def _guard_set(root: Path) -> tuple[Path, ...]:
     wheels = _native_set(root)
     pure = _pure_wheel(root, release.PROJECT)
+    _embed_native_manifest(pure, {path.name: release._sha256_file(path) for path in wheels.values()})
     sdist = _sdist(root)
     return (*tuple(wheels.values()), pure, sdist)
 
@@ -112,7 +121,7 @@ def test_expected_platform_targets_are_explicit() -> None:
     assert dict(release.EXPECTED_TARGETS) == TARGETS
 
 
-def test_local_native_set_requires_all_four_platforms(tmp_path: Path) -> None:
+def test_local_native_set_requires_every_platform(tmp_path: Path) -> None:
     wheels = _native_set(tmp_path / "dist")
     hashes = release.local_native_hashes(
         tmp_path / "dist",
@@ -258,7 +267,7 @@ def test_plan_upload_copies_only_missing_artifacts(
         output_dir=tmp_path / "upload",
     )
 
-    assert len(planned) == 3
+    assert len(planned) == 4
     assert set(planned) == set(by_name) - existing_names
     assert {path.name for path in (tmp_path / "upload").iterdir()} == set(planned)
 
@@ -286,7 +295,7 @@ def test_plan_upload_recovers_when_base_artifacts_are_missing(
     assert native.name not in planned
     assert f"hol_guard-{VERSION}-py3-none-any.whl" in planned
     assert f"hol_guard-{VERSION}.tar.gz" in planned
-    assert len(planned) == 5
+    assert len(planned) == 6
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX dangling-symlink regression")
@@ -482,3 +491,48 @@ def test_base_release_rejects_non_sdist_impostor(
         match="pure wheel or source distribution",
     ):
         release.assert_base_release_ready(Registry.PYPI, version=VERSION)
+
+
+def test_canary_native_set_may_omit_windows_arm64(tmp_path: Path) -> None:
+    canary = "3.0.0.dev7"
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    wheels = {
+        platform: _native_wheel(dist, platform, version=canary)
+        for platform in TARGETS
+        if platform not in release.CANARY_OPTIONAL_PLATFORMS
+    }
+    hashes = release.local_native_hashes(dist, version=canary, source_sha=SOURCE_SHA)
+    assert set(hashes) == {path.name for path in wheels.values()}
+
+    wheels["win_amd64"].unlink()
+    with pytest.raises(release.NativeReleaseError, match="platform set is incomplete"):
+        release.local_native_hashes(dist, version=canary, source_sha=SOURCE_SHA)
+
+
+def test_release_native_set_requires_windows_arm64(tmp_path: Path) -> None:
+    wheels = _native_set(tmp_path / "dist")
+    wheels["win_arm64"].unlink()
+    with pytest.raises(release.NativeReleaseError, match=r"missing=\['win_arm64'\]"):
+        release.local_native_hashes(tmp_path / "dist", version=VERSION, source_sha=SOURCE_SHA)
+
+
+@pytest.mark.parametrize("change", ["missing", "stale_digest", "missing_wheel", "wrong_version"])
+def test_local_guard_set_requires_exact_native_wheel_manifest(tmp_path: Path, change: str) -> None:
+    dist = tmp_path / "dist"
+    _guard_set(dist)
+    pure = dist / f"hol_guard-{VERSION}-py3-none-any.whl"
+    wheels = {path.name: release._sha256_file(path) for path in sorted(dist.glob("*.whl")) if path != pure}
+    version = VERSION
+    if change == "missing":
+        pure.write_bytes(b"pure-wheel-placeholder")
+    else:
+        if change == "stale_digest":
+            wheels[next(iter(wheels))] = "0" * 64
+        elif change == "missing_wheel":
+            wheels.pop(next(iter(wheels)))
+        else:
+            version = "3.0.0a98"
+        _embed_native_manifest(pure, wheels, version=version)
+    with pytest.raises(release.NativeReleaseError, match="native wheel manifest"):
+        release.local_guard_hashes(dist, version=VERSION, source_sha=SOURCE_SHA)

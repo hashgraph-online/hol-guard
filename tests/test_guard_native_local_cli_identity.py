@@ -70,27 +70,38 @@ def test_failures_are_tracked_but_not_applicability(monkeypatch: pytest.MonkeyPa
     assert failures == ["native_local_cli_identity_unavailable"]
 
 
-def test_block_rule_holds_allowed_command_when_identity_fails(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_block_rule_holds_allowed_command_when_resident_is_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     from codex_plugin_scanner.guard import local_cli_hook
 
-    def unavailable(**_kwargs: object) -> None:
-        raise module.LocalCliIdentityUnavailableError("native_local_cli_identity_unavailable")
-
-    monkeypatch.setattr(local_cli_hook, "matching_local_cli_grant", unavailable)
+    monkeypatch.setattr(local_cli_hook, "native_local_cli_hook", lambda *_args, **_kwargs: None)
 
     class Store:
+        guard_home = tmp_path
+        path = tmp_path / "guard.db"
+        guard_source = "local"
+
         def __init__(self, blocks: bool) -> None:
             self.blocks = blocks
 
         def has_local_cli_block_rules(self) -> bool:
             return self.blocks
 
-    def apply(store: object, action: str) -> str:
-        return local_cli_hook.apply_local_cli_grant(
-            store=store, command="tool", cwd=tmp_path, home_dir=tmp_path, current_action=action
+    def apply(store: object, action: str, *, grant_allowed: bool = True) -> str:
+        return local_cli_hook.local_cli_grant_action(
+            store=store,
+            command="tool",
+            cwd=tmp_path,
+            home_dir=tmp_path,
+            current_action=action,
+            grant_allowed=grant_allowed,
         )
 
     assert apply(Store(blocks=True), "allow") == "review"
     assert apply(Store(blocks=True), "warn") == "review"
     assert apply(Store(blocks=True), "block") == "block"
     assert apply(Store(blocks=False), "allow") == "allow"
+    # Without grant lookups the action stands, even with block rules stored.
+    assert apply(Store(blocks=True), "allow", grant_allowed=False) == "allow"
+    assert apply(Store(blocks=True), "warn", grant_allowed=False) == "warn"

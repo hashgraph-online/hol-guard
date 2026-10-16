@@ -193,6 +193,7 @@ fn read_only_github_predecessor_counts_as_benign_for_git_context() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
         ),
         vec![0, 1]
@@ -398,6 +399,37 @@ fn reviews_dotenv_family_shell_reads() {
         assert_eq!(
             decision.reason_code, "native_sensitive_access_review",
             "{command}"
+        );
+    }
+}
+
+#[test]
+fn windows_aliases_of_secret_paths_get_the_plain_path_decision() {
+    // Win32 drops trailing dots and spaces from each name and reads
+    // `name::$DATA` as the file's default stream.
+    for (alias, plain) in [
+        ("cat '.env::$DATA'", "cat .env"),
+        ("cat '.env::$DATA.'", "cat .env"),
+        ("cat '.ENV. '", "cat .env"),
+        ("cat ~/.npmrc.", "cat ~/.npmrc"),
+        ("cat ~/.ssh./id_rsa.", "cat ~/.ssh/id_rsa"),
+        ("cat '.aws\\credentials::$DATA'", "cat .aws/credentials"),
+        ("cat notes.md.", "cat notes.md"),
+    ] {
+        let alias_decision = evaluate_pre_tool(&request(alias)).unwrap();
+        let plain_decision = evaluate_pre_tool(&request(plain)).unwrap();
+        assert_eq!(
+            (
+                alias_decision.decision,
+                alias_decision.minimum_action,
+                alias_decision.reason_code
+            ),
+            (
+                plain_decision.decision,
+                plain_decision.minimum_action,
+                plain_decision.reason_code
+            ),
+            "{alias}"
         );
     }
 }
@@ -715,6 +747,8 @@ fn secret_selecting_globs_are_a_fixed_floor() {
         // A brace value is screened per alternative, whatever else it holds.
         "dd if={safe:dummy,.env} of=copy",
         "dd if={x\\\"y,.env} of=copy",
+        // An unterminated quote leaves no proven segment to screen.
+        "dd if='{x,.env} of=copy",
         // A `/` makes the word a path, whatever its first component holds.
         "git log -p -1 -- 'x=y/../.en*'",
         "git diff --no-index a=b/{.env,x} README.md",

@@ -153,6 +153,7 @@ impl Lab {
                 npm_config_inert: true,
                 shell_home_matches: true,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
                 ..PathContext::default()
             },
             Some(&environment),
@@ -202,6 +203,25 @@ fn frozen_script_free_installs_from_registry_lockfiles_proceed() {
         }
     }
     assert!(refused.is_empty(), "{}", refused.join("\n"));
+}
+
+/// The managed safety guide tells agents to install from a committed lockfile
+/// with this exact command (`tests/test_native_package_review.py` checks that
+/// the guide still names it), so it must stay one this proof lets continue.
+#[test]
+fn the_safety_guide_lockfile_install_proceeds() {
+    let command = "npm ci --ignore-scripts";
+    let lab = Lab::new();
+    let npm = lab.project(
+        "npm",
+        &[
+            ("package.json", PACKAGE_JSON),
+            ("package-lock.json", PACKAGE_LOCK),
+        ],
+    );
+    let result = lab.classify(&npm, command, &[]);
+    assert_eq!(result.reason_code, "native_exact_safe_lockfile_install");
+    assert_eq!(result.minimum_action, "allow");
 }
 
 #[test]

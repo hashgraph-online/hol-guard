@@ -2,7 +2,8 @@
 //!
 //! A launch identity binds the code a reviewed command would run. Anything
 //! that loads code the identity cannot bind (interpreters, task runners,
-//! wrappers) is refused with a stable once-only reason, and a compound command
+//! wrappers) is refused with a stable once-only reason unless its module graph
+//! is content-bound (`node <script>`), and a compound command
 //! is persistable only when every segment passes the same proof.
 
 use std::path::Path;
@@ -14,16 +15,51 @@ use serde_json::{json, Value};
 use super::context::Ctx;
 use super::fs_path;
 use super::git_identity::git_readonly_identity;
-use super::launcher_sets::{is_destructive, loads_unbound_code};
+use super::launcher_sets::{is_destructive, is_python_launcher, loads_unbound_code};
+#[cfg(not(windows))]
+use super::node_script::node_script;
+use super::node_script::NODE_LAUNCHERS;
 use super::operands::{argument_value, file_operand_hashes};
+#[cfg(not(windows))]
+use super::python_script::python_script;
 use super::reasons::{
     Proof, COMPOUND_COMMAND, DESTRUCTIVE_COMMAND, MUTABLE_LAUNCHER, SENSITIVE_PATH, UNPROVEN_LAUNCH,
 };
-use super::runner_bin::{runner_local_bin, LOCAL_BIN_RUNNERS};
+#[cfg(not(windows))]
+use super::runner_bin::runner_local_bin;
+use super::runner_bin::LOCAL_BIN_RUNNERS;
+#[cfg(windows)]
+use super::{git_windows, launch_windows};
 
 const MAX_COMPOUND_SEGMENTS: usize = 8;
 
+/// The launch identity of a shell command a harness tool runs.
+///
+/// On Windows only a POSIX shell is modeled: Claude Code runs `Bash` in Git
+/// Bash and the Pi family runs `bash`. PowerShell (Codex, any `PowerShell`
+/// tool) parses, aliases and profiles commands in ways the POSIX parser does
+/// not see, so its launches stay once-only.
+pub(super) fn shell_launch_identity(
+    harness: &str,
+    tool_name: &str,
+    command: &str,
+    cwd: &str,
+    ctx: &Ctx,
+) -> Proof<Value> {
+    #[cfg(windows)]
+    if !launch_windows::runs_posix_shell(harness, tool_name) {
+        return Err(UNPROVEN_LAUNCH);
+    }
+    let _ = (harness, tool_name);
+    launch_identity(command, cwd, ctx)
+}
+
 /// The launch identity of a command, or the once-only reason it has none.
+///
+/// On Windows a segment is persistable only when it starts a native image
+/// (`launch_windows`) or runs a read-only git from a Git for Windows install;
+/// interpreters, runners and batch files stay once-only because their proofs
+/// bind POSIX layouts (`bin/`, `site-packages`, shell shims).
 pub(super) fn launch_identity(command: &str, cwd: &str, ctx: &Ctx) -> Proof<Value> {
     if command.trim().is_empty() {
         return Err(UNPROVEN_LAUNCH);
@@ -126,11 +162,17 @@ fn cd_target(arguments: &[String], cwd: &str) -> Proof<String> {
     }
 }
 
-/// `executable_name(...)` lowercased, with `.exe` then `.cmd` removed.
+/// `executable_name(...)` lowercased, with `.exe` then `.cmd` removed; on
+/// Windows every extension `CreateProcessW` or `cmd.exe` starts is removed.
 fn normalized_name(executable: Option<&str>) -> String {
     let base = executable.unwrap_or("").replace('\\', "/");
     let mut name = base.rsplit('/').next().unwrap_or("").to_lowercase();
-    for suffix in [".exe", ".cmd"] {
+    let suffixes: &[&str] = if cfg!(windows) {
+        &[".exe", ".com", ".bat", ".cmd"]
+    } else {
+        &[".exe", ".cmd"]
+    };
+    for suffix in suffixes {
         if let Some(stripped) = name.strip_suffix(suffix) {
             name = stripped.to_owned();
         }
@@ -154,7 +196,6 @@ fn segment_launch(
     compound: bool,
 ) -> Proof<Value> {
     let arguments = &segment.arguments;
-    let executable = segment.executable.as_deref().unwrap_or("");
     if is_destructive(name) {
         return Err(DESTRUCTIVE_COMMAND);
     }
@@ -165,6 +206,21 @@ fn segment_launch(
         return Err(SENSITIVE_PATH);
     }
     let operands = file_operand_hashes(arguments, cwd, ctx).ok_or(UNPROVEN_LAUNCH)?;
+    platform_segment(segment, name, command, cwd, ctx, compound, operands)
+}
+
+#[cfg(not(windows))]
+fn platform_segment(
+    segment: &CommandSegment,
+    name: &str,
+    command: &str,
+    cwd: &str,
+    ctx: &Ctx,
+    compound: bool,
+    operands: Vec<Value>,
+) -> Proof<Value> {
+    let arguments = &segment.arguments;
+    let executable = segment.executable.as_deref().unwrap_or("");
     let reusable_identity = || -> Proof<Value> {
         let identity = ctx
             .engines
@@ -177,7 +233,7 @@ fn segment_launch(
     };
     if name == "git" {
         let binary = reusable_identity()?;
-        let git = git_readonly_identity(arguments, cwd, ctx)?;
+        let git = git_readonly_identity(arguments, cwd, &[ctx.engines.system_git_config()], ctx)?;
         return Ok(json!({"kind": "direct", "identity": binary, "git": git, "operands": operands}));
     }
     if LOCAL_BIN_RUNNERS.contains(&name) {
@@ -191,8 +247,70 @@ fn segment_launch(
             json!({"kind": "runner-local-bin", "runner": name, "local_bin": local_bin, "operands": operands}),
         );
     }
+    if NODE_LAUNCHERS.contains(&name) && !compound {
+        let script = node_script(arguments, cwd, ctx)?;
+        return Ok(
+            json!({"kind": "node-script", "identity": reusable_identity()?, "script": script, "operands": operands}),
+        );
+    }
+    if is_python_launcher(name) && !compound {
+        let identity = reusable_identity()?;
+        let script = python_script(arguments, cwd, ctx, &identity["executable"])?;
+        return Ok(
+            json!({"kind": "python-script", "identity": identity, "script": script, "operands": operands}),
+        );
+    }
     if loads_unbound_code(name, arguments) {
         return Err(MUTABLE_LAUNCHER);
     }
     Ok(json!({"kind": "direct", "identity": reusable_identity()?, "operands": operands}))
+}
+
+/// A Windows segment: a read-only git from a Git for Windows install, or a
+/// native image that loads no code it names elsewhere.
+#[cfg(windows)]
+fn platform_segment(
+    segment: &CommandSegment,
+    name: &str,
+    _command: &str,
+    cwd: &str,
+    ctx: &Ctx,
+    _compound: bool,
+    operands: Vec<Value>,
+) -> Proof<Value> {
+    let arguments = &segment.arguments;
+    let executable = segment.executable.as_deref().unwrap_or("");
+    let launches_code = |name: &str| {
+        LOCAL_BIN_RUNNERS.contains(&name)
+            || NODE_LAUNCHERS.contains(&name)
+            || is_python_launcher(name)
+            || loads_unbound_code(name, arguments)
+    };
+    if name != "git" && launches_code(name) {
+        return Err(MUTABLE_LAUNCHER);
+    }
+    let identity = ctx
+        .engines
+        .launch_identity(executable, arguments, cwd, ctx.home, ctx.env);
+    let identity = launch_windows::native_launch(identity, executable, cwd, ctx)?;
+    // The bound image's own name is checked as well as the spelled one.
+    let stem = launch_windows::image_stem(&identity);
+    if name == "git" {
+        if stem != "git" {
+            return Err(UNPROVEN_LAUNCH);
+        }
+        let image = identity["executable"]["path"].as_str().unwrap_or("");
+        let system = git_windows::system_files(image, ctx)?;
+        let git = git_readonly_identity(arguments, cwd, &system, ctx)?;
+        return Ok(
+            json!({"kind": "direct", "identity": identity, "git": git, "operands": operands}),
+        );
+    }
+    if is_destructive(&stem) {
+        return Err(DESTRUCTIVE_COMMAND);
+    }
+    if launches_code(stem.as_str()) {
+        return Err(MUTABLE_LAUNCHER);
+    }
+    Ok(json!({"kind": "direct", "identity": identity, "operands": operands}))
 }
