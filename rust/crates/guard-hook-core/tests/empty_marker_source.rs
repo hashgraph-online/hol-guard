@@ -39,12 +39,21 @@ impl Drop for TestRoot {
 
 /// `canonicalize` spells Windows paths in the verbatim `\\?\C:\` form, which
 /// source review refuses as a glob. Hosts send the ordinary drive form, so the
-/// fixture root uses that.
+/// fixture root uses that. A root on a share canonicalizes to `\\?\UNC\server\
+/// share\...`, whose ordinary spelling is `\\server\share\...`; without that
+/// arm the `?` survives and source classification refuses the request before
+/// the behavior under test runs.
 fn host_spelling(path: std::path::PathBuf) -> std::path::PathBuf {
-    match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
-        Some(drive) if drive.as_bytes().get(1) == Some(&b':') => drive.into(),
-        _ => path,
+    let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) else {
+        return path;
+    };
+    if let Some(share) = stripped.strip_prefix(r"UNC\") {
+        return format!(r"\\{share}").into();
     }
+    if stripped.as_bytes().get(1) == Some(&b':') {
+        return stripped.into();
+    }
+    path
 }
 
 fn request(home: &std::path::Path, path: &std::path::Path, output: &str) -> NativeHookRequestV1 {

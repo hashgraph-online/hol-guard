@@ -195,6 +195,9 @@ fn date_arguments(arguments: &[&str]) -> bool {
     true
 }
 
+#[path = "chain_literals_temp_cd.rs"]
+pub(crate) mod temp_cd;
+
 #[cfg(test)]
 #[path = "chain_literals_inert_tests.rs"]
 mod tests;

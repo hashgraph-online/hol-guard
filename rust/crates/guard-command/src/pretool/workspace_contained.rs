@@ -28,6 +28,8 @@ pub(crate) const REASON: &str = "native_workspace_containment_required";
 #[cfg(unix)]
 pub(crate) const PROFILE: &str = "workspace-contained-v1";
 
+#[path = "workspace_contained_cd.rs"]
+mod cd;
 #[path = "workspace_contained_chmod.rs"]
 mod chmod;
 #[path = "workspace_contained_git.rs"]
@@ -130,18 +132,6 @@ pub(super) const SHELL_STATE: &[&str] = &[
     "shift", "read", "getopts", "builtin", "enable", "exit", "return", "function",
 ];
 
-/// A literal directory at or below the workspace, with no parent step.
-fn below(target: &str, workspace: &Path) -> bool {
-    let path = Path::new(target);
-    !target.is_empty()
-        && !target.starts_with(['~', '-'])
-        && !target.contains('$')
-        && path
-            .components()
-            .all(|component| !matches!(component, std::path::Component::ParentDir))
-        && (path.is_relative() || path.starts_with(workspace))
-}
-
 fn branch_name(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
@@ -189,6 +179,7 @@ pub(crate) fn command_shape(
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
         || model.segments.is_empty()
+        || !cd::stand_ins_only_entered(model)
     {
         return None;
     }
@@ -227,7 +218,8 @@ pub(crate) fn command_shape(
                 script.as_ref().map(|(operand, _)| operand.as_str()),
             )
             || (matches!(name, "cd" | "pushd")
-                && !matches!(segment.arguments.as_slice(), [target] if below(target, workspace)))
+                && !matches!(segment.arguments.as_slice(),
+                    [target] if cd::bounded(target, workspace, temp_fixed)))
         {
             return None;
         }

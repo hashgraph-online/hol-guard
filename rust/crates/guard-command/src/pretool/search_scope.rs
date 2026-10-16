@@ -445,6 +445,24 @@ fn sensitive_scope_file(path: &Path) -> bool {
         || guard_secure_fs::credential_named_path(path)
 }
 
+/// Whether a link out of the walked root can only ever contribute its own
+/// name to a names-only listing.
+///
+/// A listing names paths it reaches, so a link to a directory is what lets one
+/// out: walking it would spell out entries that live outside the root. A link
+/// whose target is a regular file reaches no entries at all, so the only name
+/// it can produce is the link's own, which is inside the root already. Every
+/// Python project has one: `.venv/bin/python` points at the base interpreter,
+/// and refusing it would review a recursive listing in any such checkout.
+///
+/// The target's own name is still held to the sensitive screens, so a link
+/// that stands in for a credential file keeps the review.
+fn single_outside_name(path: &Path, target: Option<&Path>) -> bool {
+    target.is_some_and(|target| {
+        target.is_file() && !sensitive_scope_file(path) && !sensitive_scope_file(target)
+    })
+}
+
 struct PendingDirectory {
     path: PathBuf,
     depth: usize,
@@ -562,7 +580,11 @@ fn walk_scope_with(
                     // A link the ignore rules skip is never walked.
                     let skipped =
                         ignores != Ignores::None && link_ignored(&tiers, &path, target.as_deref())?;
-                    if escapes && !skipped && !target.as_deref().is_some_and(outside_link) {
+                    if escapes
+                        && !skipped
+                        && !single_outside_name(&path, target.as_deref())
+                        && !target.as_deref().is_some_and(outside_link)
+                    {
                         return Err(ScopeUnproven);
                     }
                 } else if sensitive_scope_file(&path)

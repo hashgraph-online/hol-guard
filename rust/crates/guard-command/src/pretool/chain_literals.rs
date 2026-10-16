@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 mod lex;
 use lex::{identifier, items, names_variable, opaque, tokenize, Token};
 #[path = "chain_literals_inert.rs"]
-mod inert;
+pub(crate) mod inert;
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
 

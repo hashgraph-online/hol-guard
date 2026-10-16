@@ -14,11 +14,14 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 mod launch;
+mod loopback;
 
 use super::{read_paths, PathContext};
 use crate::CanonicalCommandV1;
 use guard_contracts::PreToolResultV1;
 use launch::{Fed, Program, Stdin};
+#[cfg_attr(not(unix), allow(unused_imports))]
+pub(crate) use loopback::inline_loopback_ports;
 
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_TOTAL_BYTES: usize = 1024 * 1024;
@@ -100,6 +103,9 @@ pub(super) struct Findings {
     pub(super) network: bool,
     /// Names a credential store by path.
     pub(super) credential_store: bool,
+    /// For inline Node source whose only network use is loopback HTTP, the
+    /// literal ports the workspace sandbox grants it.
+    pub(super) loopback: Option<BTreeSet<u16>>,
     /// The program's source and the local modules read with it.
     pub(super) sources: Vec<String>,
 }
@@ -190,6 +196,7 @@ fn assess_programs(
                 .then(|| context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()))
                 .flatten()
         };
+        let inline = matches!(program, Program::Inline(_)) && !remote;
         let entry = match program {
             Program::Script(script) if scripts && !remote && reachable(script) => {
                 let Some(path) = resolve(script, context) else {
@@ -226,7 +233,7 @@ fn assess_programs(
                 _ => continue,
             },
         };
-        let Some(sources) = read_graph(language, entry) else {
+        let Some((sources, complete)) = read_graph(language, entry) else {
             continue;
         };
         let mut found = Findings::default();
@@ -237,6 +244,9 @@ fn assess_programs(
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
+        }
+        if inline && complete && language == Language::Node {
+            found.loopback = loopback::program_ports(&sources, context.home_dir);
         }
         found.sources = sources;
         findings.push(found);
@@ -257,7 +267,7 @@ pub(super) fn exfiltrates(model: &CanonicalCommandV1, context: PathContext<'_>) 
 /// workspace would be unreadable there), uses no network client, and names no
 /// credential store. An unreadable, oversized or non-UTF-8 script is not clean.
 pub(in crate::pretool) fn standalone_clean(language: Language, path: &Path) -> bool {
-    let Some(sources) = read_graph(language, Entry::File(path.to_path_buf())) else {
+    let Some((sources, _)) = read_graph(language, Entry::File(path.to_path_buf())) else {
         return false;
     };
     let [source] = sources.as_slice() else {
@@ -325,16 +335,21 @@ fn sent_model(
 }
 
 /// Keeps the review of a command whose program uses the network: the sandbox
-/// withholds it, so the program would only fail there.
+/// withholds it, so the program would only fail there. Inline Node source
+/// that only serves and fetches on literal loopback ports is the exception:
+/// the sandbox grants it exactly those ports.
 pub(super) fn keeps_network_review(
     result: &mut PreToolResultV1,
     model: &CanonicalCommandV1,
     command_text: Option<&str>,
     context: PathContext<'_>,
 ) -> bool {
-    if !uses_network(model, context)
-        && !sent_model(model, command_text).is_some_and(|sent| uses_network(&sent, context))
-    {
+    let withheld = |model: &CanonicalCommandV1| {
+        assess(model, context)
+            .iter()
+            .any(|found| found.network && found.loopback.is_none())
+    };
+    if !withheld(model) && !sent_model(model, command_text).is_some_and(|sent| withheld(&sent)) {
         return false;
     }
     result.reason = concat!(
@@ -430,8 +445,9 @@ enum Entry {
 /// first, within the file and byte bounds, or `None` when the program itself
 /// cannot be read. A module that cannot be read, or would pass the byte
 /// bound, is left out so what the rest of the graph does still counts.
-/// Packages and the standard library are not read.
-fn read_graph(language: Language, entry: Entry) -> Option<Vec<String>> {
+/// Packages and the standard library are not read. The flag says whether
+/// every local import found was read.
+fn read_graph(language: Language, entry: Entry) -> Option<(Vec<String>, bool)> {
     let (root, mut seen, first) = match entry {
         Entry::File(path) => {
             let root = path.parent()?.to_path_buf();
@@ -452,23 +468,38 @@ fn read_graph(language: Language, entry: Entry) -> Option<Vec<String>> {
     let mut queue = VecDeque::new();
     let mut sources = Vec::new();
     let mut total = 0usize;
+    let mut complete = true;
     let mut next = Some(first);
     while let Some((source, directory)) = next.take() {
         total += source.len();
         if let (Some(root), Some(directory)) = (root.as_deref(), directory.as_deref()) {
-            let imports = match language {
+            let (imports, imports_complete) = match language {
                 Language::Node => node_imports(&source, directory),
                 // Statements after a `;` import too.
-                Language::Python => python_imports(&code_lines(language, &source), root, directory),
+                Language::Python => (
+                    python_imports(&code_lines(language, &source), root, directory),
+                    true,
+                ),
             };
+            // A relative import that does not resolve is code this scan never
+            // read. Leaving `complete` set would still grant that program the
+            // loopback ports named in the file it did read.
+            if !imports_complete {
+                complete = false;
+            }
             for import in imports {
                 if seen.len() >= MAX_FILES {
+                    complete = false;
                     break;
                 }
                 if seen.insert(import.clone()) {
                     queue.push_back(import);
                 }
             }
+        } else if language == Language::Node && NODE_RELATIVE.is_match(&source) {
+            // `cd sub && node -e "require('./x.js')"` has no directory left to
+            // resolve that import against. The imported file is unread.
+            complete = false;
         }
         sources.push(source);
         while let Some(path) = queue.pop_front() {
@@ -477,9 +508,10 @@ fn read_graph(language: Language, entry: Entry) -> Option<Vec<String>> {
                 next = Some((source, Some(directory.to_path_buf())));
                 break;
             }
+            complete = false;
         }
     }
-    Some(sources)
+    Some((sources, complete))
 }
 
 fn read_text(path: &Path) -> Option<String> {
@@ -488,12 +520,21 @@ fn read_text(path: &Path) -> Option<String> {
         .and_then(|read| String::from_utf8(read.bytes).ok())
 }
 
-fn node_imports(source: &str, directory: &Path) -> Vec<PathBuf> {
-    NODE_RELATIVE
-        .captures_iter(source)
-        .filter_map(|capture| node_module(&directory.join(&capture[1])))
-        .filter_map(|path| std::fs::canonicalize(path).ok())
-        .collect()
+/// Local files a Node source imports, and whether every relative specifier
+/// resolved to a file. One that does not is left unread, so the graph is not
+/// complete.
+fn node_imports(source: &str, directory: &Path) -> (Vec<PathBuf>, bool) {
+    let mut complete = true;
+    let mut imports = Vec::new();
+    for capture in NODE_RELATIVE.captures_iter(source) {
+        match node_module(&directory.join(&capture[1]))
+            .and_then(|path| std::fs::canonicalize(path).ok())
+        {
+            Some(path) => imports.push(path),
+            None => complete = false,
+        }
+    }
+    (imports, complete)
 }
 
 /// The file Node loads for a relative specifier: the path itself, the path

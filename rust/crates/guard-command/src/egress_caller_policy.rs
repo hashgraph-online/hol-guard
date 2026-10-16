@@ -47,7 +47,7 @@ pub enum ProxyMode {
 }
 
 /// `ManagedNetworkPolicy` (mdm/contracts.py:329).
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ManagedNetworkPolicy {
     pub proxy_mode: ProxyMode,
     pub proxy_url: Option<String>,
