@@ -372,7 +372,7 @@ def run_full_tasks(
     rows: dict[str, dict[str, Any]] = {}
 
     def record(task: Scenario, case: dict[str, Any]) -> None:
-        """Publish progress in selection order, whatever order tasks finish in."""
+        """Keep summary rows in selection order; progress lines print as tasks finish."""
         cases.append(case)
         rows[task.id] = {"id": task.id, **case["assessment"], "elapsed_seconds": case["elapsed_seconds"]}
         report["cases"] = [rows[t.id] for t in selected if t.id in rows]
