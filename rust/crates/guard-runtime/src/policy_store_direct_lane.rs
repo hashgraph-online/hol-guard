@@ -26,6 +26,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
 
+/// What one store has settled about the publisher's ACK.
+#[derive(Default)]
+pub(crate) struct DirectLaneAckWait {
+    /// The newest generation whose settle wait a hook has already claimed, so
+    /// only that hook waits and every other hook defers straight away.
+    pub(crate) claimed: AtomicU64,
+    /// A settle budget, in milliseconds, that replaces the shipped one, or
+    /// zero for the shipped one. Tests that race an ACK into that window
+    /// widen it: a stalled runner can close the window before the racing
+    /// write lands, and the settled wait then reads as a mismatch.
+    #[cfg(test)]
+    pub(crate) settle_override_ms: AtomicU64,
+}
+
 /// The ACK lives in its own directory so that writing, renewing or unlinking
 /// it never changes the state directory identity the publisher fences on.
 pub(crate) const DIRECT_LANE_ACK_DIRECTORY: &str = "direct-lane";
@@ -330,13 +344,14 @@ impl PolicySnapshotStore {
         if ack.generation >= generation
             || !live_publisher_ack(&ack)
             || self
-                .direct_lane_ack_wait_claimed
+                .direct_lane_ack_wait
+                .claimed
                 .fetch_max(generation, Ordering::AcqRel)
                 >= generation
         {
             return Ok((ack, false));
         }
-        let deadline = Instant::now() + DIRECT_LANE_ACK_SETTLE;
+        let deadline = Instant::now() + self.direct_lane_ack_settle();
         loop {
             let now = Instant::now();
             if now >= deadline {
@@ -348,6 +363,22 @@ impl PolicySnapshotStore {
                 return Ok((ack, true));
             }
         }
+    }
+
+    /// How long this store's next hook waits for the ACK of the snapshot it is
+    /// bound to.
+    fn direct_lane_ack_settle(&self) -> Duration {
+        #[cfg(test)]
+        {
+            let widened = self
+                .direct_lane_ack_wait
+                .settle_override_ms
+                .load(Ordering::Acquire);
+            if widened > 0 {
+                return Duration::from_millis(widened);
+            }
+        }
+        DIRECT_LANE_ACK_SETTLE
     }
 
     fn read_direct_lane_ack(&self) -> Result<DirectLaneAckV1, DirectLaneDefer> {

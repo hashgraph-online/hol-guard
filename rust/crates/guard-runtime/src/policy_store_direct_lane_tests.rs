@@ -223,6 +223,18 @@ fn replace_with_current_ack_until(root: &Path, policy_digest: &str, lease_expire
     .unwrap();
 }
 
+/// Let this store's hook wait far longer than the shipped budget for the ACK a
+/// scoped thread is about to write. The shipped 100 ms covers one publisher
+/// write on a healthy host; a loaded CI runner can take longer to schedule the
+/// writing thread, and the hook would then read the stale ACK it started with.
+fn widen_settle_budget(fixture: &Fixture) {
+    fixture
+        .store
+        .direct_lane_ack_wait
+        .settle_override_ms
+        .store(10_000, Ordering::Release);
+}
+
 /// Returns once a hook has claimed the settle wait for `generation`, so the
 /// ACK lands while that hook is polling rather than racing its start. Gives up
 /// after ten seconds so a regression fails the test instead of hanging it.
@@ -240,7 +252,8 @@ fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
     let digest = fixture.snapshot.policy_digest.clone();
     let lease = now_ms().unwrap() + 30_000;
     write_ack(&fixture.root, 0, &digest, lease, 0o600);
-    let claimed = &fixture.store.direct_lane_ack_wait_claimed;
+    widen_settle_budget(&fixture);
+    let claimed = &fixture.store.direct_lane_ack_wait.claimed;
     std::thread::scope(|scope| {
         scope.spawn(|| {
             await_settle_wait(claimed, 1);
@@ -251,7 +264,8 @@ fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
     assert_eq!(
         fixture
             .store
-            .direct_lane_ack_wait_claimed
+            .direct_lane_ack_wait
+            .claimed
             .load(Ordering::Acquire),
         1
     );
@@ -263,7 +277,8 @@ fn an_ack_that_expires_during_the_wait_is_expired() {
     push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
     let digest = fixture.snapshot.policy_digest.clone();
     write_ack(&fixture.root, 0, &digest, now_ms().unwrap() + 30_000, 0o600);
-    let claimed = &fixture.store.direct_lane_ack_wait_claimed;
+    widen_settle_budget(&fixture);
+    let claimed = &fixture.store.direct_lane_ack_wait.claimed;
     std::thread::scope(|scope| {
         scope.spawn(|| {
             await_settle_wait(claimed, 1);
@@ -293,7 +308,8 @@ fn an_older_ack_the_publisher_stopped_renewing_is_not_awaited() {
     assert_eq!(
         fixture
             .store
-            .direct_lane_ack_wait_claimed
+            .direct_lane_ack_wait
+            .claimed
             .load(Ordering::Acquire),
         0
     );
@@ -314,7 +330,8 @@ fn an_ack_that_never_catches_up_delays_only_one_hook() {
     assert_eq!(
         fixture
             .store
-            .direct_lane_ack_wait_claimed
+            .direct_lane_ack_wait
+            .claimed
             .load(Ordering::Acquire),
         1
     );
