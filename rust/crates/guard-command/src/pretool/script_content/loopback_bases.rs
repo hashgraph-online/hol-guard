@@ -26,16 +26,22 @@ static FETCH_CALL: LazyLock<Regex> =
 pub(super) static FETCH_BASE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"^fetch\s*\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*(?:[),]|\+\s*["'`][/?#])"#).unwrap()
 });
-/// `fetch(base)` calls the global. `function fetch(base)` declares a
-/// parameter and does not.
-fn calls_fetch(prefix: &str) -> bool {
-    if !FETCH_CALL.is_match(prefix) {
+/// `function fetch(`, including a generator and any spacing before `fetch`.
+static FETCH_DECLARATION: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"\bfunction\s*\*?\s*fetch\s*\(\s*$").unwrap());
+
+/// `fetch(base)` calls the global. A declaration, generator, or method
+/// shorthand (`function fetch(base)`, `function* fetch(base)`, `{fetch(base){`)
+/// only names a parameter.
+fn calls_fetch(masked: &str, start: usize) -> bool {
+    let prefix = &masked[..start];
+    if !FETCH_CALL.is_match(prefix) || FETCH_DECLARATION.is_match(prefix) {
         return false;
     }
-    let head = prefix.trim_end();
-    let head =
-        head.trim_end_matches(|character: char| character == '(' || character.is_whitespace());
-    !head.ends_with("function fetch")
+    // `fetch(base){` is a method's parameter list, not a call.
+    let rest = &masked[start..];
+    let after = rest.find(')').map(|close| rest[close + 1..].trim_start());
+    !after.is_some_and(|tail| tail.starts_with('{'))
 }
 
 /// Names `const`-bound to a loopback URL with a port ([`LOOPBACK_BASE`]) and
@@ -54,9 +60,9 @@ pub(super) fn loopback_bases<'a>(code: &'a str, masked: &str) -> BTreeSet<&'a st
             .as_bytes()
             .get(name.start())
             .is_some_and(|byte| *byte != b' ')
-            && word.find_iter(masked).all(|found| {
-                found.start() == name.start() || calls_fetch(&masked[..found.start()])
-            });
+            && word
+                .find_iter(masked)
+                .all(|found| found.start() == name.start() || calls_fetch(masked, found.start()));
         if fetched_only {
             bases.insert(name.as_str());
         }
