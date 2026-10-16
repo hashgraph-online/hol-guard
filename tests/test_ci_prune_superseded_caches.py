@@ -81,6 +81,25 @@ def test_same_timestamp_keeps_highest_id() -> None:
     assert superseded(entries) == [10]
 
 
+def test_runtime_archives_keep_each_distinct_build_environment_and_non_main_ref() -> None:
+    family = f"runtime-test-archive-v2-X64-ubuntu24-image-{'a' * 64}-lto-false-cgu-16"
+    old_key, new_key = f"{family}-{'b' * 64}", f"{family}-{'c' * 64}"
+    assert cache_family(old_key) == family
+    entries = [
+        _entry(1, old_key, "2026-10-16T01:00:00Z"),
+        _entry(2, new_key, "2026-10-16T02:00:00Z"),
+        _entry(3, old_key.replace("cgu-16", "cgu-8"), "2026-10-16T01:00:00Z"),
+        _entry(4, old_key.replace("ubuntu24-image", "ubuntu24-other"), "2026-10-16T01:00:00Z"),
+        _entry(5, old_key.replace("a" * 64, "d" * 64), "2026-10-16T01:00:00Z"),
+        _entry(6, old_key, "2026-10-16T01:00:00Z", "refs/pull/1/merge"),
+        _entry(7, old_key.replace("-v2-", "-v1-"), "2026-10-16T01:00:00Z"),
+        _entry(8, old_key.replace("-X64-", "-ARM64-"), "2026-10-16T01:00:00Z"),
+    ]
+    assert superseded(entries) == [1]
+    for malformed in (f"{family}-short", f"{family}-{'b' * 63}", old_key + "\n", old_key.replace("-v2-", "-v3-")):
+        assert cache_family(malformed) is None
+
+
 def test_cli_prints_one_id_per_line(tmp_path: Path, capsys) -> None:
     listing = tmp_path / "caches.json"
     listing.write_text(

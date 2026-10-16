@@ -7,7 +7,8 @@ copies push out the caches the next run needs.
 
 A cache family is the key without the suffix that changes between saves: the
 commit, run id and attempt for CodeQL overlay databases, and the final lockfile
-hash for Rust target caches. Within a family on ``refs/heads/main`` only the newest entry is
+hash for Rust target caches and the source digest for runtime test archives.
+Within a family on ``refs/heads/main`` only the newest entry is
 kept. Any key outside the known families is never selected this way.
 
 Content-addressed sccache entries have no family: each main push writes objects
@@ -34,6 +35,7 @@ from typing import Any
 
 MAIN_REF = "refs/heads/main"
 CODEQL_KEY = re.compile(r"^(codeql-overlay-base-database-.+)-[0-9a-f]{40}-[0-9]+-[0-9]+$")
+RUNTIME_ARCHIVE_KEY = re.compile(r"^(runtime-test-archive-v[12]-.+)-[0-9a-f]{64}$")
 RUST_PREFIXES = ("v0-rust-", "release-native-")
 SCCACHE_PREFIX = "sccache/"
 IDLE_HOURS = 2.0
@@ -44,6 +46,9 @@ def cache_family(key: str) -> str | None:
     codeql = CODEQL_KEY.match(key)
     if codeql:
         return codeql.group(1)
+    runtime_archive = RUNTIME_ARCHIVE_KEY.fullmatch(key)
+    if runtime_archive:
+        return runtime_archive.group(1)
     if not key.startswith(RUST_PREFIXES):
         return None
     family, separator, suffix = key.rpartition("-")

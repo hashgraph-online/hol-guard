@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -27,6 +27,7 @@ from .runtime.secret_file_request_services.request_models import (
 from .runtime.secret_sensitivity import SecretPathMatch
 
 if TYPE_CHECKING:
+    from .models import GuardArtifact
     from .runtime.actions import GuardActionEnvelope
     from .runtime.command_evaluation import CompositeCommandEvaluation
     from .runtime.command_model import CanonicalCommand
@@ -329,6 +330,61 @@ def native_benign_github_shell(command_text: str) -> bool:
     if "gh" not in command_text:
         return False
     return _bool(_ask("benign_github_shell", {"command_text": command_text}, cwd=None, home_dir=None))
+
+
+# The finding fields the resident reads when it binds findings to one command.
+_COMPOUND_FINDING_FIELDS = (
+    "action_class",
+    "command_rule_matches",
+    "risk_classes",
+    "runtime_request_reason",
+    "runtime_request_signals",
+    "runtime_request_summary",
+)
+
+
+def native_compound_artifact(
+    artifacts: list[GuardArtifact],
+    *,
+    command_text: str | None,
+    decision: dict[str, object],
+    workspace: Path | None,
+    home_dir: Path,
+) -> GuardArtifact:
+    """The findings bound to the whole command, or the primary alone (resident-owned)."""
+
+    findings = [
+        {
+            "artifact_id": artifact.artifact_id,
+            "artifact_type": artifact.artifact_type,
+            "name": artifact.name,
+            "metadata": {key: artifact.metadata[key] for key in _COMPOUND_FINDING_FIELDS if key in artifact.metadata},
+        }
+        for artifact in artifacts
+    ]
+    reply = _ask(
+        "compound_artifact",
+        {"artifacts": findings, "command_text": command_text, "decision": decision},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+    index = reply.get("primary") if isinstance(reply, dict) else None
+    if type(index) is not int or not 0 <= index < len(artifacts):
+        raise _invalid()
+    primary = artifacts[index]
+    if set(reply) == {"primary", "metadata"} and reply["metadata"] is None:
+        return primary
+    pairs = reply.get("metadata")
+    if set(reply) != {"primary", "artifact_id", "name", "metadata"} or not isinstance(pairs, list):
+        raise _invalid()
+    if not all(isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in pairs):
+        raise _invalid()
+    metadata = dict(primary.metadata)
+    if len(artifacts) > 1:
+        # The hint only covers the extension evaluation; other findings keep reviewing.
+        metadata.pop("extension_allow_hint", None)
+    metadata.update((key, value) for key, value in pairs)
+    return replace(primary, artifact_id=_text(reply["artifact_id"]), name=_text(reply["name"]), metadata=metadata)
 
 
 def native_read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:
