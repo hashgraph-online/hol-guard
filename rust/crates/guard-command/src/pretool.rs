@@ -89,6 +89,7 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod postgres_reads;
+mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
@@ -694,6 +695,78 @@ fn ungrouped_decision(
     }
 }
 
+/// A redirect glued to a separator, as in `;2>&1`, `;&>/dev/null`, or `;</dev/null`.
+/// `cmd 2>&1` keeps its space, so an ordinary stderr copy is not this shape.
+fn separator_glued_redirect(command: &str) -> bool {
+    let chars: Vec<char> = command.chars().collect();
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator,
+        // so `python3 app.py &>log` stays the ordinary command it was.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
+            return true;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            return true;
+        }
+    }
+    false
+}
+
+fn interpreter_runs_unread_file(model: &CanonicalCommandV1) -> bool {
+    model.segments.iter().any(|segment| {
+        let Some(executable) = segment.executable.as_deref() else {
+            return false;
+        };
+        let base = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+        let base = base
+            .strip_suffix(".exe")
+            .unwrap_or(base)
+            .to_ascii_lowercase();
+        if !matches!(
+            base.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        ) {
+            return false;
+        }
+        for argument in &segment.arguments {
+            if matches!(argument.as_str(), "-c" | "-m" | "-e") {
+                return false;
+            }
+            if argument.starts_with('-') {
+                continue;
+            }
+            return true;
+        }
+        false
+    })
+}
+
 fn evaluate_single_command(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
@@ -894,6 +967,21 @@ fn evaluate_single_command(
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
+    // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the
+    // simple parser from naming that interpreter, and reviewing the redirect
+    // would hide the launch. Only that glued form.
+    if cwd.is_none()
+        && separator_glued_redirect(&request.command)
+        && (interpreter_runs_unread_file(&model)
+            || crate::native_command_controls::unread_file_interpreter(&request.command))
+    {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_command_extension_evaluation_failed",
+            "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
+        ));
+    }
     Ok(pretool_decision(
         model,
         "review",

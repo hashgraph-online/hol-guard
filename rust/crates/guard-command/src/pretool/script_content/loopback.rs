@@ -18,14 +18,17 @@ use std::sync::LazyLock;
 use regex::Regex;
 
 use super::launch::{launched_program, Program};
+use super::loopback_bases::{loopback_bases, FETCH_BASE};
 use super::{
     code_lines, python_network, Entry, Language, PathContext, CREDENTIAL_STORE, NODE_NETWORK,
 };
 
 /// Loopback services this grant must never reach: container and cluster
 /// control planes, service meshes, debuggers, Guard's own approval center,
-/// message brokers, and data stores that accept local clients without
-/// credentials.
+/// message brokers, data stores that accept local clients without
+/// credentials, local proxies that would carry traffic off this host,
+/// browser and device automation drivers, remote desktops, and local model
+/// and notebook servers.
 ///
 /// The sandbox opens a granted port to the whole process tree as raw outbound
 /// TCP, not as HTTP, so the question each port answers is "could something
@@ -33,17 +36,22 @@ use super::{
 /// request drive it". A smoke test fetching a page it just built reaches none
 /// of them.
 const ADMIN_PORTS: &[u16] = &[
-    1433, 1521, 2019, 2181, 2375, 2376, 2379, 2380, 3306, 4001, 4243, 4646, 4781, 5432, 5433, 5672,
-    5984, 6379, 6380, 6443, 7474, 7687, 8001, 8086, 8123, 8200, 8500, 9042, 9092, 9200, 9222, 9229,
-    9300, 11211, 15000, 15672, 26257, 33060,
+    1080, 1086, 1087, 1433, 1521, 2019, 2049, 2181, 2375, 2376, 2379, 2380, 3128, 3306, 3389, 4001,
+    4243, 4444, 4646, 4723, 4781, 5037, 5432, 5433, 5555, 5672, 5984, 6379, 6380, 6443, 6463, 7474,
+    7687, 7890, 7891, 7897, 8001, 8086, 8118, 8123, 8200, 8384, 8500, 8888, 8889, 9000, 9001, 9042,
+    9050, 9090, 9092, 9150, 9200, 9222, 9229, 9300, 9515, 10000, 10808, 10809, 11211, 11434, 15000,
+    15672, 26257, 33060,
 ];
-/// Services whose components bind a whole block of loopback ports.
-const ADMIN_PORT_RANGES: &[std::ops::RangeInclusive<u16>] = &[10248..=10256, 27017..=27019];
+/// Services whose components bind a whole block of loopback ports: VNC and
+/// X11 displays, the kubelet, and MongoDB.
+const ADMIN_PORT_RANGES: &[std::ops::RangeInclusive<u16>] =
+    &[5900..=5910, 6000..=6063, 10248..=10256, 27017..=27019];
 
 /// Whether the workspace sandbox may open `port` to the contained tree: a
-/// conventional dev-server port ([`crate::pretool::loopback_ports`]) that
-/// none of these services and no Guard daemon under `home_dir` may answer
-/// on.
+/// conventional dev-server port ([`crate::pretool::loopback_ports`]), or one
+/// the agent chose for its own server while Guard's daemon state records
+/// another, that none of these services and no Guard daemon under
+/// `home_dir` may answer on.
 ///
 /// Ports below 1024 are refused as a class: every one of them belongs to a
 /// registered service, and a dev server an agent starts to smoke-test its own
@@ -51,7 +59,8 @@ const ADMIN_PORT_RANGES: &[std::ops::RangeInclusive<u16>] = &[10248..=10256, 270
 fn grantable(port: u16, home_dir: Option<&str>) -> bool {
     port >= 1024
         && !ADMIN_PORT_RANGES.iter().any(|range| range.contains(&port))
-        && crate::pretool::loopback_ports::dev_server_port(port, ADMIN_PORTS, home_dir)
+        && (crate::pretool::loopback_ports::dev_server_port(port, ADMIN_PORTS, home_dir)
+            || crate::pretool::loopback_ports::chosen_server_port(port, ADMIN_PORTS, home_dir))
 }
 
 /// HTTP module members that open no connection of their own.
@@ -144,6 +153,7 @@ pub(super) fn node_loopback_ports(code: &str, home_dir: Option<&str>) -> Option<
         return None;
     }
     let in_code = |at: usize| masked.as_bytes().get(at).is_some_and(|byte| *byte != b' ');
+    let bases = loopback_bases(code, &masked);
     let mut http_imports = 0usize;
     for found in NODE_NETWORK.find_iter(code) {
         // A network API spelled inside a string is code something may
@@ -153,7 +163,11 @@ pub(super) fn node_loopback_ports(code: &str, home_dir: Option<&str>) -> Option<
         }
         let text = found.as_str();
         if text.starts_with("fetch") {
-            if !FETCH_LITERAL.is_match(&code[found.start()..]) {
+            let rest = &code[found.start()..];
+            let based = FETCH_BASE
+                .captures(rest)
+                .is_some_and(|call| bases.contains(&call[1]));
+            if !based && !FETCH_LITERAL.is_match(rest) {
                 return None;
             }
             continue;

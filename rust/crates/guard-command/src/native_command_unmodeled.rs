@@ -31,9 +31,12 @@ use crate::CanonicalCommandV1;
 
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_redirections.rs"]
+mod redirections;
 #[path = "native_command_unmodeled_shapes.rs"]
 mod shapes;
 use link_makers::creates_links;
+use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
 
@@ -176,9 +179,13 @@ impl CompiledNativeCommandControls {
             Some((shell, _)) => shell.clone(),
             None => shell_text(text).to_owned(),
         };
+        // A redirection such as `;2>&1` is not a program. It goes before the
+        // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
+        // and the lone fd then read as the program hiding the interpreter.
+        let bare = without_plain_awk(&without_redirections(&shell));
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
-        let interpreted = named_words(&joined_quotes(shell));
+        let interpreted = named_words(&joined_quotes(&bare));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -214,12 +221,11 @@ impl CompiledNativeCommandControls {
                         named.extend(named_words(&source));
                     }
                 }
-                // Backgrounding leaves no segments, so a module launch such as
-                // `python3 -m http.server` looks like a script that was never
-                // read. The module name is already in the command.
-                None if command.uncertainty_reason.as_deref()
-                    == Some("background_job_not_yet_supported")
-                    && !interpreter_launch_reads_a_file(shell) => {}
+                // Backgrounding or a redirect leaves no segments, so a module
+                // launch such as `python3 -m http.server` looks like a script
+                // that was never read. The module name is already in the
+                // command.
+                None if !interpreter_launch_reads_a_file(&bare) => {}
                 None => return None,
             }
         }
@@ -274,6 +280,60 @@ impl CompiledNativeCommandControls {
     }
 }
 
+/// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
+/// `cmd 2>&1` is not glued, and `python3 -` names no script file.
+fn glued_redirect_runs_interpreter(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    let mut glued = false;
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
+            glued = true;
+            break;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            glued = true;
+            break;
+        }
+    }
+    if !glued {
+        return false;
+    }
+    let words = named_words(text);
+    words.iter().any(|word| {
+        matches!(
+            word.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        )
+    }) && words.iter().any(|word| word.contains('.'))
+}
+
 /// Loops and conditionals, or one heredoc that only feeds standard input,
 /// with nothing in the shell text that substitutes or overrides `PATH` and no
 /// redirect except to a literal path.
@@ -297,9 +357,12 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
         }
         Some("command_redirect_not_yet_supported") => {
             let text = without_lookups(&command.normalized_text);
-            input_heredoc(&text)
-                || literal_redirects_only(&text)
-                || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell))
+            // `;2>&1 python3 evil.py` has no segments: the redirect is the
+            // uncertainty. Reviewing it would hide the interpreter.
+            !glued_redirect_runs_interpreter(&text)
+                && (input_heredoc(&text)
+                    || literal_redirects_only(&text)
+                    || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
         }
         // A lookup in a substitution is the only one that does not run a
         // program, so a command whose substitutions are all lookups reads
@@ -327,6 +390,9 @@ fn plain_after_heredocs(shell: &str) -> bool {
 /// `/dev/null`, makes no link that redirect could follow.
 fn literal_redirects_only(text: &str) -> bool {
     workspace_redirects::project_naming_files(text).is_some_and(|(projected, names_files)| {
+        // `2>&1>log` keeps the descriptor copy in the projected text. That
+        // copy is not a file write, so it does not by itself move data.
+        let projected = projected.replace("2>&1", " ").replace("2>/dev/null", " ");
         let literal = unquoted_literal(&projected);
         !(moves_data(&literal) || (names_files && creates_links(&literal)))
     })
@@ -335,12 +401,31 @@ fn literal_redirects_only(text: &str) -> bool {
 /// A backgrounded pipeline stays out of the review floor. The pipe check
 /// names a remote-code or exfiltration attack before this runs; anything it
 /// cannot classify, including a benign pipe, keeps the evaluation failure.
+/// A pipeline after the last backgrounded job runs in the foreground, as the
+/// `curl -fsS http://localhost:8080/ | grep title` that checks a server just
+/// started does.
 fn background_pipeline(text: &str) -> bool {
     let preserve_backslash = cfg!(windows);
-    match crate::parser_segments::split_pipelines_including_background(text, preserve_backslash) {
-        Ok(segments) => segments.iter().any(|segment| segment.pipeline_index > 0),
-        Err(_) => text.contains('|'),
-    }
+    let Ok(segments) =
+        crate::parser_segments::split_pipelines_including_background(text, preserve_backslash)
+    else {
+        return text.contains('|');
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let last_job = segments
+        .iter()
+        .filter(|segment| {
+            let mut rest = chars[segment.end..]
+                .iter()
+                .skip_while(|c| c.is_whitespace());
+            rest.next() == Some(&'&') && rest.next() != Some(&'&')
+        })
+        .map(|segment| segment.end)
+        .max()
+        .unwrap_or(chars.len());
+    segments
+        .iter()
+        .any(|segment| segment.pipeline_index > 0 && segment.start < last_job)
 }
 
 /// Whether shell text redirects, substitutes or sets the environment of a
@@ -349,7 +434,7 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            is_assignment(word)
+            (is_assignment(word) && !saves_job_pid(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
@@ -508,11 +593,50 @@ fn joined_quotes(text: &str) -> String {
     joined
 }
 
+/// An interpreter word followed by a program file, after redirections are
+/// blanked. `python3 -m` and `node -e` are not file launches.
+pub(crate) fn unread_file_interpreter(shell: &str) -> bool {
+    const FILE_INTERPRETERS: &[&str] = &[
+        "sh", "bash", "dash", "zsh", "python", "python2", "python3", "node", "ruby", "perl", "php",
+    ];
+    without_redirections(shell)
+        .split(|character: char| {
+            matches!(
+                character,
+                ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
+            )
+        })
+        .any(|piece| {
+            let words: Vec<&str> = piece
+                .split_whitespace()
+                .map(|word| word.trim_matches(['\'', '"']))
+                .filter(|word| !word.is_empty() && !is_assignment(word))
+                .skip_while(|word| SHELL_PREFIXES.contains(word))
+                .collect();
+            let Some(program) = words.first() else {
+                return false;
+            };
+            if !FILE_INTERPRETERS.contains(&command_basename(program).as_str()) {
+                return false;
+            }
+            for argument in &words[1..] {
+                if matches!(*argument, "-c" | "-m" | "-e") {
+                    return false;
+                }
+                if argument.starts_with('-') {
+                    continue;
+                }
+                return true;
+            }
+            false
+        })
+}
+
 /// Whether a backgrounded interpreter still names a program file this scan
 /// did not read. A `python -m` module launch does not: the module is an
 /// argument, same as the foreground command.
 fn interpreter_launch_reads_a_file(shell: &str) -> bool {
-    shell
+    without_redirections(shell)
         .split(|character: char| {
             matches!(
                 character,
@@ -757,6 +881,21 @@ fn command_words(literal: &str) -> impl Iterator<Item = &str> {
             }
             leading
         })
+}
+
+/// `server=$!`: the process ID of the job just backgrounded, saved so a later
+/// `kill $server` stops it. A number moves no data, unless the name is one the
+/// shell or loader reads.
+fn saves_job_pid(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, value)| {
+        value == "$!"
+            && !matches!(
+                name,
+                "PATH" | "IFS" | "HOME" | "CDPATH" | "ENV" | "BASH_ENV" | "PS4" | "PROMPT_COMMAND"
+            )
+            && !name.starts_with("LD_")
+            && !name.starts_with("DYLD_")
+    })
 }
 
 fn is_assignment(word: &str) -> bool {
