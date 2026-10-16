@@ -527,7 +527,9 @@ pub(super) fn trailing_word(out: &str) -> &str {
 }
 
 pub(super) fn boundary(value: Option<&char>) -> bool {
-    value.is_none_or(|value| value.is_whitespace() || matches!(value, ';' | '|' | '&'))
+    value.is_none_or(|value| {
+        value.is_whitespace() || matches!(value, ';' | '|' | '&' | '<' | '>')
+    })
 }
 
 #[cfg(test)]

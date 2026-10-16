@@ -390,6 +390,9 @@ fn plain_after_heredocs(shell: &str) -> bool {
 /// `/dev/null`, makes no link that redirect could follow.
 fn literal_redirects_only(text: &str) -> bool {
     workspace_redirects::project_naming_files(text).is_some_and(|(projected, names_files)| {
+        // `2>&1>log` keeps the descriptor copy in the projected text. That
+        // copy is not a file write, so it does not by itself move data.
+        let projected = projected.replace("2>&1", " ").replace("2>/dev/null", " ");
         let literal = unquoted_literal(&projected);
         !(moves_data(&literal) || (names_files && creates_links(&literal)))
     })
