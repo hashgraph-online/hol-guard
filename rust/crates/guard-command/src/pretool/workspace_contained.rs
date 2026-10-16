@@ -44,6 +44,8 @@ mod reach;
 mod removal;
 #[path = "workspace_contained_runner.rs"]
 pub(super) mod runner;
+#[path = "workspace_contained_script.rs"]
+mod script;
 #[path = "workspace_contained_settings.rs"]
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
@@ -115,6 +117,10 @@ pub(crate) struct Shape {
     pub remainder: Option<String>,
     /// Character span of the `git init` segment in the classified text.
     pub init_span: Option<(usize, usize)>,
+    /// Canonical scripts outside the workspace the sandbox may read, each
+    /// only as that one file.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub read_files: Vec<std::path::PathBuf>,
 }
 
 /// Shell-state builtins: before `git init` they run in a separate shell.
@@ -187,6 +193,7 @@ pub(crate) fn command_shape(
         return None;
     }
     let mut bootstrap = None;
+    let mut read_files = Vec::new();
     if links::unbounded_linked_writes(model, workspace) {
         return None;
     }
@@ -207,14 +214,31 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
+        // A scratch script outside the workspace is read as that one file.
+        let script = script::outside_script(segment, workspace);
         // The sandbox has no network, so a network client would only fail,
         // and it reaches no directory outside the workspace.
         if NETWORK_CLIENTS.contains(&name)
-            || reach::reaches_outside(segment, name, workspace, temp_fixed)
+            || reach::reaches_outside(
+                segment,
+                name,
+                workspace,
+                temp_fixed,
+                script.as_ref().map(|(operand, _)| operand.as_str()),
+            )
             || (matches!(name, "cd" | "pushd")
                 && !matches!(segment.arguments.as_slice(), [target] if below(target, workspace)))
         {
             return None;
+        }
+        if let Some((_, path)) = script {
+            // One script only: a second grant would let the first read it.
+            if read_files.first().is_some_and(|first| *first != path) {
+                return None;
+            }
+            if !read_files.contains(&path) {
+                read_files.push(path);
+            }
         }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
@@ -249,6 +273,7 @@ pub(crate) fn command_shape(
             prefix: None,
             remainder: None,
             init_span: None,
+            read_files,
         });
     };
     if model.segments[..init].iter().any(|segment| {
@@ -271,6 +296,7 @@ pub(crate) fn command_shape(
         prefix,
         remainder: Some(remainder),
         init_span: Some((span.start, span.end)),
+        read_files,
     })
 }
 

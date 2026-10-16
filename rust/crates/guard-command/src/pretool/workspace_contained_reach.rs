@@ -37,11 +37,13 @@ const DEVICES: &[&str] = &[
 
 /// `temp_fixed` says nothing in the command rebinds `TMPDIR`, so each
 /// `$TMPDIR` the shell expands is the one the sandbox launcher sets.
+/// `granted_script` is the operand of an outside script the sandbox may read.
 pub(super) fn reaches_outside(
     segment: &CommandSegmentV1,
     name: &str,
     workspace: &Path,
     temp_fixed: bool,
+    granted_script: Option<&str>,
 ) -> bool {
     if GUARD_CLIS.contains(&name) || DATABASE_CLIENTS.contains(&name) {
         return true;
@@ -63,6 +65,9 @@ pub(super) fn reaches_outside(
         return true;
     }
     segment.arguments.iter().any(|argument| {
+        if granted_script == Some(argument.as_str()) {
+            return false;
+        }
         let value = match argument.split_once('=') {
             Some((option, value)) if option.starts_with('-') => value,
             _ if argument.starts_with('-') => return false,

@@ -92,7 +92,7 @@ impl Launch<'_> {
                 "cwd": self.workspace_text,
                 "private_root": private_root,
                 "allowed_executables": [],
-                "read_only_roots": [],
+                "read_only_roots": self.plan.read_only_roots,
                 "output_roots": [],
                 "exec_roots": self.exec_roots,
                 "write_denials": self.write_denials,

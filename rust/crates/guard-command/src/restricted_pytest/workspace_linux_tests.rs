@@ -18,6 +18,7 @@ fn input(root: &Path, command: &[&str]) -> Input {
         upper: root.join("overlay/upper"),
         work: root.join("overlay/work"),
         exec_roots: vec![root.join("ws/.venv"), PathBuf::from("/opt/tool")],
+        read_files: Vec::new(),
         command: command.iter().map(|value| (*value).to_owned()).collect(),
         linked_git: None,
         shared_upper: None,
@@ -57,6 +58,37 @@ fn the_workspace_is_an_overlay_with_credentials_hidden() {
     let overlay = argv.iter().position(|value| value == "--overlay").unwrap();
     let mask = argv.iter().position(|value| value == "/dev/null").unwrap();
     assert!(overlay < mask, "masks mount over the overlay");
+}
+
+#[test]
+fn a_script_outside_the_workspace_is_bound_read_only_as_that_one_file() {
+    let root = root("script");
+    std::fs::create_dir_all(root.join("scratch")).unwrap();
+    let script = root.join("scratch/check.py");
+    std::fs::write(&script, "print(1)\n").unwrap();
+    let script_text = script.to_string_lossy().into_owned();
+    let mut request = input(&root, &["/bin/sh", "-c", "python3 check.py"]);
+    request.read_files = vec![script.clone()];
+    let argv = workspace_argv(&request).unwrap();
+    assert!(after(&argv, "--ro-bind", &script_text));
+    assert!(after(&argv, &script_text, &script_text));
+    assert!(!argv
+        .iter()
+        .any(|value| value == root.join("scratch").to_str().unwrap()));
+    let directory = root.join("scratch");
+    let link = root.join("scratch/link.py");
+    std::os::unix::fs::symlink(&script, &link).unwrap();
+    for refused in [
+        directory,
+        link,
+        root.join("ws/inside.py"),
+        root.join("scratch/missing.py"),
+        PathBuf::from("check.py"),
+    ] {
+        let mut request = input(&root, &["true"]);
+        request.read_files = vec![refused.clone()];
+        assert!(workspace_argv(&request).is_err(), "{}", refused.display());
+    }
 }
 
 #[test]

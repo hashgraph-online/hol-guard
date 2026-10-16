@@ -285,6 +285,19 @@ pub(super) fn compose(
         .as_ref()
         .map(|linked| linked.checked(workspace))
         .transpose()?;
+    // The only read grants a workspace run takes beyond the system and its
+    // toolchain are scripts the command launches, each one regular file.
+    if input.read_only_roots.iter().any(|root| {
+        !root.is_absolute()
+            || root.starts_with(workspace)
+            || !std::fs::symlink_metadata(root).is_ok_and(|meta| meta.file_type().is_file())
+            || root.canonicalize().ok().as_deref() != Some(root.as_path())
+            || root.to_str().is_none_or(|text| {
+                crate::secret_path_probe::is_request_secret_path(text, None, None)
+            })
+    }) {
+        return Err(invalid());
+    }
     let mut extra_reads = existing(&[
         "/bin",
         "/usr/bin",

@@ -147,7 +147,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         "command": ["/bin/sh", "-c", text],
         "command_sha256": hex::encode(Sha256::digest(text.as_bytes())),
         "allowed_executables": [],
-        "read_only_roots": [],
+        "read_only_roots": shape.read_files,
         "exec_roots": exec_roots,
         "write_denials": write_denials,
         "linked_git": linked_git,
@@ -160,6 +160,13 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
             "workspace-credential-read", "git-execution-config-write", "privileged-operation"
         ],
     }))
+}
+
+/// The scripts outside `workspace` that `text` runs and the sandbox may read,
+/// or `None` when the workspace sandbox cannot bound the command. A sink
+/// compares a plan's read grants with these, so a plan can add no other file.
+pub fn workspace_script_reads(text: &str, workspace: &Path) -> Option<Vec<PathBuf>> {
+    exact_shape(text, workspace).map(|shape| shape.read_files)
 }
 
 pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {

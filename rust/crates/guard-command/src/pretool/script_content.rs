@@ -44,7 +44,7 @@ const NODE_VALUE_OPTIONS: &[&str] = &[
 const PYTHON_VALUE_OPTIONS: &[&str] = &["-W", "-X", "--check-hash-based-pycs"];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Language {
+pub(in crate::pretool) enum Language {
     Python,
     Node,
 }
@@ -58,6 +58,14 @@ static PYTHON_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     ))
     .unwrap()
 });
+/// Stream and server calls that open a socket without importing a client.
+static PYTHON_ASYNC_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"\b(?:open_connection|open_unix_connection|start_server|start_unix_server|create_connection|create_datagram_endpoint|create_server|create_unix_connection|create_unix_server)\b").unwrap()
+});
+
+fn python_network(code: &str) -> bool {
+    PYTHON_NETWORK.is_match(code) || PYTHON_ASYNC_NETWORK.is_match(code)
+}
 static NODE_NETWORK: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
         r#"(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)["'](?:node:)?(?:https?|http2|net|tls|dgram|dns|undici|axios|node-fetch|got|ky|ws|superagent|request|socket\.io-client|ssh2|nodemailer|ftp|basic-ftp|pg|mysql2?|mongodb|ioredis|redis|openai|googleapis|google-auth-library|aws-sdk|octokit|stripe|@google-cloud/[^"']*|@google-analytics/[^"']*|@aws-sdk/[^"']*|@anthropic-ai/[^"']*|@octokit/[^"']*|@slack/[^"']*)(?:["']|/[^"']*["'])|\bfetch\s*\(|\bXMLHttpRequest\b|\bnew\s+WebSocket\b|\bEventSource\b|\bsendBeacon\b|\bBun\s*\.\s*connect\b|\bDeno\s*\.\s*connect\b"#,
@@ -225,7 +233,7 @@ fn assess_programs(
         for source in &sources {
             let code = code_lines(language, source);
             found.network |= match language {
-                Language::Python => PYTHON_NETWORK.is_match(&code),
+                Language::Python => python_network(&code),
                 Language::Node => NODE_NETWORK.is_match(&code),
             };
             found.credential_store |= CREDENTIAL_STORE.is_match(&code);
@@ -242,6 +250,25 @@ pub(super) fn exfiltrates(model: &CanonicalCommandV1, context: PathContext<'_>) 
     assess(model, context)
         .iter()
         .any(|found| found.network && found.credential_store)
+}
+
+/// Whether the script at `path` stands alone and does neither of the things
+/// the sandbox cannot serve: it imports no local module (a sibling outside the
+/// workspace would be unreadable there), uses no network client, and names no
+/// credential store. An unreadable, oversized or non-UTF-8 script is not clean.
+pub(in crate::pretool) fn standalone_clean(language: Language, path: &Path) -> bool {
+    let Some(sources) = read_graph(language, Entry::File(path.to_path_buf())) else {
+        return false;
+    };
+    let [source] = sources.as_slice() else {
+        return false;
+    };
+    let code = code_lines(language, source);
+    let network = match language {
+        Language::Python => python_network(&code),
+        Language::Node => NODE_NETWORK.is_match(&code),
+    };
+    !network && !CREDENTIAL_STORE.is_match(&code)
 }
 
 /// Whether a program this command launches uses the network.
@@ -316,6 +343,62 @@ pub(super) fn keeps_network_review(
     )
     .into();
     true
+}
+
+pub(in crate::pretool) fn launched_script(
+    segment: &crate::CommandSegmentV1,
+) -> Option<(Language, &str)> {
+    let name = super::executable_basename(segment.executable.as_deref()?);
+    let name = name.strip_suffix(".exe").unwrap_or(name);
+    let arguments = segment.arguments.as_slice();
+    let python = name.strip_prefix("python").is_some_and(|version| {
+        version
+            .split('.')
+            .all(|part| part.bytes().all(|byte| byte.is_ascii_digit()))
+    });
+    if python {
+        return first_operand(arguments, PYTHON_VALUE_OPTIONS, &["-c", "-m", "-"])
+            .map(|script| (Language::Python, script));
+    }
+    let arguments = match (name, arguments) {
+        ("bun" | "deno", [run, rest @ ..]) if run == "run" => rest,
+        ("node" | "nodejs" | "bun" | "tsx" | "deno", rest) => rest,
+        _ => return None,
+    };
+    let script = first_operand(
+        arguments,
+        NODE_VALUE_OPTIONS,
+        &["-e", "--eval", "-p", "--print", "-"],
+    )?;
+    NODE_EXTENSIONS
+        .contains(&extension(Path::new(script)).as_str())
+        .then_some((Language::Node, script))
+}
+
+/// The first argument that is not an option, unless an option that runs
+/// other code (inline source, a module, standard input) comes first.
+fn first_operand<'a>(
+    arguments: &'a [String],
+    value_options: &[&str],
+    stops: &[&str],
+) -> Option<&'a str> {
+    let mut rest = arguments.iter();
+    while let Some(argument) = rest.next() {
+        if stops.contains(&argument.as_str()) {
+            return None;
+        }
+        if argument == "--" {
+            return rest.next().map(String::as_str);
+        }
+        if value_options.contains(&argument.as_str()) {
+            rest.next()?;
+            continue;
+        }
+        if !argument.starts_with('-') {
+            return Some(argument);
+        }
+    }
+    None
 }
 
 fn resolve(script: &str, context: PathContext<'_>) -> Option<PathBuf> {

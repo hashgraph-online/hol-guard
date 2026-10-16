@@ -8402,7 +8402,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "node ${PRIVATE_TMP}/resume-phase1.mjs"
+        "command": "node ${PRIVATE_TMP}/resume-absent.mjs"
       },
       "cwd": "org_app",
       "expect": "not_allow"
@@ -11645,7 +11645,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "python3 ${PRIVATE_TMP}/scratch-repo/run.py"
+        "command": "python3 ${PRIVATE_TMP}/scratch-repo/absent.py"
       },
       "cwd": "org_app",
       "expect": "not_allow"
@@ -11661,7 +11661,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "python3 ${TMP_ORG}/app/scripts/report.py --top 40"
+        "command": "python3 ${TMP_ORG}/app/scripts/absent.py --top 40"
       },
       "cwd": "tmp_worktree",
       "expect": "not_allow"
@@ -11789,7 +11789,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "python3 ${HOME}/acme-plain/probe_py.py"
+        "command": "python3 ${HOME}/acme-plain/absent.py"
       },
       "cwd": "org_app",
       "expect": "not_allow"
@@ -11805,7 +11805,7 @@
       ],
       "tool": "shell",
       "tool_input": {
-        "command": "bun ${PRIVATE_TMP}/resume-phase1.mjs"
+        "command": "bun ${PRIVATE_TMP}/resume-absent.mjs"
       },
       "cwd": "org_app",
       "expect": "not_allow"
