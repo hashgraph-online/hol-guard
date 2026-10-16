@@ -292,7 +292,7 @@ def run_harness_full_tasks(
         "installed_source_sha": capabilities.build_sha,
         "harness": harness,
         "harness_version": version,
-        "harness_model": model or "harness default",
+        "harness_model": spec.model(model) or "harness default",
         "platform": platform.system().lower(),
         "mode": mode,
         # Vendor inference bypasses the relay's round transcript and canary backstop.

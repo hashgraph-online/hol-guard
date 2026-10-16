@@ -242,6 +242,18 @@ def test_full_task_harness_commands(tmp_path: Path) -> None:
     assert codex[codex.index("-m") + 1] == "gpt-x"
 
 
+def test_harness_lanes_default_to_their_inexpensive_models(tmp_path: Path) -> None:
+    task = next(task for task in load_full_tasks() if task.id == "todo-app-local")
+    kwargs = {"scenario": task, "prompt": task.prompt, "context": "ctx", "workspace": tmp_path, "model": None}
+    claude = adapter("claude-code").command("/opt/bin/claude", **kwargs)
+    assert claude[claude.index("--model") + 1] == "claude-sonnet-5-5"
+    codex = adapter("codex").command("/opt/bin/codex", **kwargs)
+    assert codex[codex.index("-m") + 1] == "gpt-6-luna"
+    assert 'model_reasoning_effort="medium"' in codex
+    assert adapter("codex").model(None) == "gpt-6-luna"
+    assert adapter("claude-code").model("claude-haiku-4-5-20251001") == "claude-haiku-4-5-20251001"
+
+
 def _cli(monkeypatch, capsys, *extra: str) -> tuple[int, str]:
     from ci.gauntlet import __main__
 

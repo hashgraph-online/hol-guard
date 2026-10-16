@@ -36,6 +36,8 @@ mod chmod;
 mod git_metadata;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
+#[path = "workspace_contained_kill.rs"]
+mod kill;
 #[path = "workspace_contained_links.rs"]
 mod links;
 #[path = "workspace_contained_package.rs"]
@@ -238,6 +240,7 @@ pub(crate) fn command_shape(
         }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
+            && !(name == "kill" && kill::jobs_only(&segment.arguments))
         {
             return None;
         }
