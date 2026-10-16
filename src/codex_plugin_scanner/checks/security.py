@@ -1038,23 +1038,21 @@ def _markdown_code_lines(lines: list[str]) -> list[bool]:
 
     Block-quote prefixes are removed first, and a list marker on the fence line
     is skipped, so a fence inside a quote or a list item still counts. A closing
-    marker ends the fence only when it is indented no deeper than the opening
-    marker. An indented line starts a code block only after a blank line or a
-    heading, or continues one, because indented code cannot interrupt a paragraph.
+    marker ends the fence only when it sits under the same number of quote
+    markers as the opening fence and is indented no deeper, so a marker one
+    quote level deeper, or quoted inside an unquoted fence, is text. An
+    indented line starts a code block only after a blank line or a heading, or
+    continues one, because indented code cannot interrupt a paragraph.
     """
     code_lines: list[bool] = []
     fence: str | None = None
     fence_column = 0
-    fence_quoted = False
+    fence_quote_depth = 0
     can_start_indented_code = True
     for raw_line in lines:
-        # Inside an unquoted fence, `> ``` ` is text. Stripping the quote
-        # marker would close the fence and hide the next line from the check.
-        line = (
-            raw_line
-            if fence is not None and not fence_quoted
-            else MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
-        )
+        quote_match = MARKDOWN_BLOCKQUOTE_PREFIX_RE.match(raw_line)
+        quote_depth = quote_match.group(0).count(">") if quote_match else 0
+        line = raw_line[quote_match.end() :] if quote_match else raw_line
         marker = _markdown_fence_marker(line)
         if fence is not None:
             is_code = True
@@ -1062,16 +1060,16 @@ def _markdown_code_lines(lines: list[str]) -> list[bool]:
                 token, column = marker
                 remainder = line[column + len(token) :]
                 if (
-                    column <= fence_column
+                    quote_depth == fence_quote_depth
+                    and column <= fence_column
                     and token[0] == fence[0]
                     and len(token) >= len(fence)
                     and not remainder.strip()
                 ):
                     fence = None
-                    fence_quoted = False
         elif marker is not None:
             fence, fence_column = marker
-            fence_quoted = MARKDOWN_BLOCKQUOTE_PREFIX_RE.match(raw_line) is not None
+            fence_quote_depth = quote_depth
             is_code = True
         else:
             is_code = line.startswith(("    ", "\t")) and can_start_indented_code

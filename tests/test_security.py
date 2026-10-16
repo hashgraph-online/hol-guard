@@ -575,6 +575,7 @@ class TestNoApprovalBypassDefaults:
             ("README.md", "Avoid using `danger-full-access`.\n"),
             ("README.md", "Do not enable `danger-full-access`.\n"),
             ("README.md", "Use the default sandbox and never enable `danger-full-access`.\n"),
+            ("docs/setup.md", "> ```\n> example\n> ```\n\nThe modes include `danger-full-access`.\n"),
         ],
     )
     def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
@@ -603,6 +604,7 @@ class TestNoApprovalBypassDefaults:
             ("docs/setup.md", "- outer\n  - inner\n    ```bash\n    sandbox `danger-full-access`\n    ```\n"),
             ("docs/setup.md", "```\n    ```\nsandbox `danger-full-access`\n```\n"),
             ("docs/setup.md", "```\n> ```\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> > ```\n> sandbox `danger-full-access`\n"),
             ("README.md", "Use `danger-full-access` to run without approval prompts.\n"),
             ("README.md", "Enable `danger-full-access` instead of `workspace-write`.\n"),
             ("README.md", "To avoid approval prompts, use `danger-full-access`.\n"),
