@@ -74,6 +74,8 @@ pub(super) fn assigns_private(model: &CanonicalCommandV1, segment: &CommandSegme
         && temp_cd::private_assignment(segment.text.trim(), &model.normalized_text)
 }
 
-#[cfg(test)]
+// The tests spell the workspace path inside POSIX shell text, which a
+// Windows `\\?\C:\...` path cannot be written in.
+#[cfg(all(test, unix))]
 #[path = "workspace_contained_cd_tests.rs"]
 mod tests;
