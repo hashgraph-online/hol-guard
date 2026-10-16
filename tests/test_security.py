@@ -10,6 +10,7 @@ from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
     check_mcp_transport_security,
+    check_no_approval_bypass_defaults,
     check_no_dangerous_mcp,
     check_no_hardcoded_secrets,
     check_security_md,
@@ -541,6 +542,74 @@ class TestScanAllFiles:
 
         assert result.passed is False
         assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+
+class TestNoApprovalBypassDefaults:
+    def test_flags_shipped_config(self, tmp_path: Path):
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "config.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.points == 0
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == ".codex/config.toml"
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            (
+                "docs/rules/agent-shell.md",
+                "- Codex: `--full-auto`, sandbox `danger-full-access`, or `safety-strategy: unsafe`;\n",
+            ),
+            ("CHANGELOG.md", "Codex runs with sandbox `danger-full-access` are now reported.\n"),
+            ("README.md", "```\nexample\n```\n\nNever ship `danger-full-access` as a default.\n"),
+        ],
+    )
+    def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is True
+        assert result.points == 3
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            ("docs/setup.md", '```toml\nsandbox_mode = "danger-full-access"\n```\n'),
+            ("docs/setup.md", "```\n`danger-full-access`\n```\n"),
+            ("docs/setup.md", "````\n```\nsandbox `danger-full-access`\n````\n"),
+            ("docs/setup.md", "```\nunclosed fence\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
+            ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode = `danger-full-access`.\n"),
+            ("docs/setup.md", "Set the sandbox to danger-full-access.\n"),
+            ("docs/setup.md", "sandbox ``danger-full-access``\n"),
+            ("docs/setup.md", 'Use `approval_policy = "never"`.\n'),
+            ("docs/setup.md", 'approval_policy =\n"never"\n'),
+            ("docs/setup.md", 'sandbox `danger-full-access` with `approvalMode: "bypass"`\n'),
+            ("skills/review/SKILL.md", "Run with sandbox `danger-full-access`.\n"),
+            ("commands/deploy.md", "Use sandbox `danger-full-access`.\n"),
+            ("AGENTS.md", "Use sandbox `danger-full-access`.\n"),
+            (".claude/rules/shell.md", "Use sandbox `danger-full-access`.\n"),
+        ],
+    )
+    def test_documentation_that_sets_or_instructs_still_fails(self, tmp_path: Path, path: str, content: str):
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == path
 
 
 class TestRunSecurityChecks:
