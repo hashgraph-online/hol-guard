@@ -1050,10 +1050,11 @@ def _markdown_code_lines(lines: list[str]) -> list[bool]:
     for raw_line in lines:
         # Inside an unquoted fence, `> ``` ` is text. Stripping the quote
         # marker would close the fence and hide the next line from the check.
-        if fence is not None and not fence_quoted:
-            line = raw_line
-        else:
-            line = MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
+        line = (
+            raw_line
+            if fence is not None and not fence_quoted
+            else MARKDOWN_BLOCKQUOTE_PREFIX_RE.sub("", raw_line)
+        )
         marker = _markdown_fence_marker(line)
         if fence is not None:
             is_code = True
