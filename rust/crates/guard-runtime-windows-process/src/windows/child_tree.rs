@@ -1,11 +1,14 @@
 use super::*;
 use std::process::Child;
 use winapi::um::jobapi2::{AssignProcessToJobObject, SetInformationJobObject};
+use winapi::um::processenv::GetStdHandle;
 use winapi::um::processthreadsapi::{OpenThread, ResumeThread};
 use winapi::um::tlhelp32::{
     CreateToolhelp32Snapshot, Thread32First, Thread32Next, TH32CS_SNAPTHREAD, THREADENTRY32,
 };
-use winapi::um::winbase::CREATE_NO_WINDOW;
+use winapi::um::winbase::{
+    CREATE_NO_WINDOW, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+};
 use winapi::um::winnt::{
     JobObjectExtendedLimitInformation, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
     JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE, THREAD_SUSPEND_RESUME,
@@ -63,6 +66,28 @@ impl ChildTree {
     /// Terminate every process in the tree. Idempotent.
     pub fn terminate(&self) -> io::Result<()> {
         process_lifecycle::terminate_job(&self.job)
+    }
+}
+
+/// Stop this process's standard handles from leaking into every child it
+/// creates. `std::process::Command` always creates children with handle
+/// inheritance on, so a long-lived child (a detached daemon launch) would
+/// otherwise hold the host's stdio pipes open after this process exits.
+/// `Stdio::inherit` still hands a child these handles: std duplicates them
+/// as inheritable for that one launch.
+pub fn disinherit_standard_handles() {
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: GetStdHandle takes a plain selector and returns a borrowed
+        // handle that this process keeps open.
+        let handle = unsafe { GetStdHandle(which) };
+        if handle.is_null() || handle == INVALID_HANDLE_VALUE {
+            continue;
+        }
+        // SAFETY: `handle` is a live standard handle. A console pseudo-handle
+        // that rejects the call was never inheritable, so a failure is ignored.
+        unsafe {
+            SetHandleInformation(handle, HANDLE_FLAG_INHERIT, 0);
+        }
     }
 }
 

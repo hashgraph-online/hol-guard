@@ -8,7 +8,7 @@ upstream recovery reads it unchanged. The relay asks the resident for every
 selecting it never widens what a call may do.
 
 Installers select the relay when the validated runtime advertises
-``mcp-stdio-relay-v1`` (Unix runtimes); otherwise they keep launching the
+``mcp-stdio-relay-v1``; otherwise they keep launching the
 Python proxy. A session whose calls the resident cannot decide is handed to the
 Python proxy by the relay at startup. ``HOL_GUARD_MCP_RELAY=python`` keeps the
 Python proxy, like the hook bridge overrides. ``HOL_GUARD_MCP_RELAY=native``
@@ -37,7 +37,7 @@ def native_mcp_relay() -> Path | None:
     """The validated native runtime that should launch MCP proxies, or None."""
 
     selection = os.environ.get(MCP_RELAY_SELECTION_ENV)
-    if selection == "python" or os.name == "nt" or getattr(sys, "frozen", False):
+    if selection == "python" or getattr(sys, "frozen", False):
         return None
     if selection == "native":
         return _validated_runtime(NATIVE_MCP_RELAY_DECIDE_FEATURE)

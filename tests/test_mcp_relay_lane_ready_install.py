@@ -28,8 +28,6 @@ try:
 except ModuleNotFoundError:
     import tomli as tomllib  # type: ignore[no-redef]
 
-pytestmark = pytest.mark.skipif(os.name != "posix", reason="the native MCP relay is Unix only")
-
 _LANE_READY = "hol-guard mcp-relay: lane ready: "
 _HAND_OFF = "hol-guard mcp-relay: python proxy: "
 _NOT_READY = "hol-guard mcp-relay: lane not ready: "
@@ -119,7 +117,15 @@ class _Install:
             encoding="utf-8",
         )
         keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH"}
+        if os.name == "nt":
+            keep |= {"PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP"}
         self.env = {key: value for key, value in os.environ.items() if key in keep}
+        if os.name == "nt":
+            self.env.update(
+                USERPROFILE=str(self.home),
+                APPDATA=str(self.home / "AppData" / "Roaming"),
+                LOCALAPPDATA=str(self.home / "AppData" / "Local"),
+            )
         self.env.update(
             HOME=str(self.home),
             XDG_CONFIG_HOME=str(self.home / ".config"),

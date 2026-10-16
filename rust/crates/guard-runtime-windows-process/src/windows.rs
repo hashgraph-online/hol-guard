@@ -60,7 +60,7 @@ pub use capture::{
     capture as capture_managed_child, capture_owned_child, capture_pipes, CaptureCommand,
     CapturePipes, CapturedOutput, InheritWindow,
 };
-pub use child_tree::{ChildTree, CHILD_TREE_CREATION_FLAGS};
+pub use child_tree::{disinherit_standard_handles, ChildTree, CHILD_TREE_CREATION_FLAGS};
 pub use directory_binding::{
     bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
     path_is_within, PrivateDirectoryBinding,
