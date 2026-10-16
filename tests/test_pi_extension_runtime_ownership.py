@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import pi_extension_runtime_ownership, pi_extension_source
+from codex_plugin_scanner.guard.hook_execution_environment import _DEFAULT_EQUIVALENT_PAGER
 
 
 def _source(tmp_path: Path) -> str:
@@ -23,8 +24,10 @@ def test_pi_extension_keeps_fallbacks_inside_outer_hook_deadline(tmp_path: Path)
     assert "guard_execution_environment" in source
     assert "home: typeof process.env.HOME" in source
     assert "['1', 'true', 'yes', 'on']" in source
-    assert "git_pager_disabled: process.env.GIT_PAGER" in source
-    assert "pager_disabled: process.env.PAGER" in source
+    pager_rule = "/^(?:cat|less(?: -[ABCEFGIJKLMNQRSUVWXacdefgimnqrsuw~]+)*)?$/"
+    assert f"{pager_rule}.test(process.env.GIT_PAGER)" in source
+    assert f"{pager_rule}.test(process.env.PAGER)" in source
+    assert pager_rule == f"/^{_DEFAULT_EQUIVALENT_PAGER.pattern}$/"
     assert "let payloadToSend = {" in source
     for constant in (
         "const GUARD_TIMEOUT_MS = 4250;",
@@ -53,7 +56,7 @@ def test_managed_extension_uses_official_user_install_not_appimage_mount(
     official_cli.chmod(0o755)
     transient = "/tmp/.mount_HOL-Guard123/usr/lib/hol-guard-core/hol-guard"
     monkeypatch.setattr(pi_extension_source, "__file__", f"{transient}/pi_extension_source.py")
-    monkeypatch.setattr(pi_extension_runtime_ownership.shutil, "which", lambda _command: transient)
+    monkeypatch.setattr(pi_extension_runtime_ownership, "_installing_runtime_cli_candidates", lambda: (transient,))
 
     source = _source(tmp_path)
 
@@ -80,7 +83,9 @@ def test_managed_extension_prefers_durable_desktop_shim_over_path_pipx(
     desktop_shim.chmod(0o755)
     monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.setattr(pi_extension_runtime_ownership.shutil, "which", lambda _command: str(official_cli))
+    monkeypatch.setattr(
+        pi_extension_runtime_ownership, "_installing_runtime_cli_candidates", lambda: (str(official_cli),)
+    )
 
     source = _source(tmp_path)
 
@@ -107,7 +112,9 @@ def test_managed_extension_prefers_macos_desktop_support_shim_over_path_pipx(
     monkeypatch.setattr(stable_guard_cli.sys, "platform", "darwin")
     monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
-    monkeypatch.setattr(pi_extension_runtime_ownership.shutil, "which", lambda _command: str(official_cli))
+    monkeypatch.setattr(
+        pi_extension_runtime_ownership, "_installing_runtime_cli_candidates", lambda: (str(official_cli),)
+    )
 
     source = _source(tmp_path)
 
@@ -196,9 +203,9 @@ def test_managed_extension_rejects_transient_path_when_official_cli_is_absent(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(
-        pi_extension_runtime_ownership.shutil,
-        "which",
-        lambda _command: "/tmp/.mount_HOL-Guard123/usr/lib/hol-guard-core/hol-guard",
+        pi_extension_runtime_ownership,
+        "_installing_runtime_cli_candidates",
+        lambda: ("/tmp/.mount_HOL-Guard123/usr/lib/hol-guard-core/hol-guard",),
     )
 
     source = _source(tmp_path)
@@ -206,3 +213,99 @@ def test_managed_extension_rejects_transient_path_when_official_cli_is_absent(
     assert 'const GUARD_CLI_WRAPPER_COMMAND = "hol-guard";' in source
     assert 'const GUARD_DAEMON_RECOVERY_COMMAND = "hol-guard";' in source
     assert ".mount_HOL-Guard123" not in source
+
+
+def _executable(path: Path) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_runs_the_installing_runtime_cli_not_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime_scripts = tmp_path / "venv" / "bin"
+    runtime_cli = _executable(runtime_scripts / "hol-guard")
+    path_cli = _executable(tmp_path / "other-install" / "bin" / "hol-guard")
+    monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setenv("PATH", str(path_cli.parent))
+    monkeypatch.setattr(pi_extension_runtime_ownership.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.site, "ENABLE_USER_SITE", False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.sysconfig, "get_path", lambda name, *_args: str(runtime_scripts))
+
+    source = _source(tmp_path)
+
+    assert f"const GUARD_CLI_WRAPPER_COMMAND = {json.dumps(str(runtime_cli))};" in source
+    assert f"const GUARD_DAEMON_RECOVERY_COMMAND = {json.dumps(str(runtime_cli))};" in source
+    assert str(path_cli) not in source
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX runtime ownership contract")
+def test_managed_extension_falls_back_to_the_bare_name_without_a_runtime_cli(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path_cli = _executable(tmp_path / "other-install" / "bin" / "hol-guard")
+    monkeypatch.delenv("HOL_GUARD_DESKTOP_RUNTIME_OWNER", raising=False)
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    monkeypatch.setenv("PATH", str(path_cli.parent))
+    monkeypatch.setattr(pi_extension_runtime_ownership.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.site, "ENABLE_USER_SITE", False)
+    monkeypatch.setattr(
+        pi_extension_runtime_ownership.sysconfig, "get_path", lambda name, *_args: str(tmp_path / "empty")
+    )
+
+    source = _source(tmp_path)
+
+    assert 'const GUARD_CLI_WRAPPER_COMMAND = "hol-guard";' in source
+    assert str(path_cli) not in source
+
+
+def test_frozen_runtime_owns_the_extension_through_its_own_executable(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(pi_extension_runtime_ownership.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.sys, "executable", "/opt/guard/hol-guard")
+
+    assert pi_extension_runtime_ownership._installing_runtime_cli_candidates() == ("/opt/guard/hol-guard",)
+
+
+@pytest.mark.skipif(pi_extension_runtime_ownership.os.name == "nt", reason="POSIX script names")
+def test_user_install_prefers_its_own_scripts_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    user_site = Path(pi_extension_runtime_ownership.__file__).resolve().parent
+    monkeypatch.setattr(pi_extension_runtime_ownership.sys, "frozen", False, raising=False)
+    monkeypatch.setattr(pi_extension_runtime_ownership.site, "ENABLE_USER_SITE", True)
+    monkeypatch.setattr(pi_extension_runtime_ownership.site, "getusersitepackages", lambda: str(user_site))
+    monkeypatch.setattr(
+        pi_extension_runtime_ownership.sysconfig,
+        "get_path",
+        lambda name, scheme=None: str(tmp_path / ("user-bin" if scheme else "global-bin")),
+    )
+
+    assert pi_extension_runtime_ownership._installing_runtime_cli_candidates() == (
+        str(tmp_path / "user-bin" / "hol-guard"),
+        str(tmp_path / "global-bin" / "hol-guard"),
+    )
+
+
+def test_windows_sink_uses_the_profile_temp_and_stays_off_without_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from codex_plugin_scanner.guard import windows_paths
+
+    package_root = tmp_path / "site packages"
+    monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", lambda: tmp_path / "Temp")
+    command, root = pi_extension_runtime_ownership._windows_contained_sink("python.exe", package_root)
+    assert root == str(tmp_path / "Temp")
+    assert command[:3] == ("python.exe", "-I", "-c")
+    assert command[-1] == "guard"
+
+    def unavailable() -> Path:
+        raise OSError("no profile")
+
+    monkeypatch.setattr(windows_paths, "trusted_windows_local_temp", unavailable)
+    assert pi_extension_runtime_ownership._windows_contained_sink("python.exe", package_root) == ((), "")
+    if pi_extension_runtime_ownership.os.name != "nt":
+        source = _source(tmp_path)
+        assert "const GUARD_CONTAINED_SINK_COMMAND: string[] = [];\n" in source
+        assert 'const GUARD_CONTAINED_REQUEST_ROOT = "";\n' in source

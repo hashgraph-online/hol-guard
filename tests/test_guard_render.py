@@ -1075,3 +1075,89 @@ def test_sync_render_shows_ecosystem_support_table(capsys) -> None:
     assert "Protected" in output
     assert "Beta" in output
     assert "Monitor-only" in output
+
+
+def test_status_panel_says_protection_is_not_in_effect_when_no_app_is_registered(capsys) -> None:
+    # The installed failure this guards against: every hook array in the
+    # harness settings file is empty, yet the panel still read "Protected".
+    emit_guard_payload(
+        "status",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "managed_harnesses": 1,
+            "receipt_count": 0,
+            "pending_approvals": 0,
+            "harnesses": [
+                {"harness": "claude-code", "managed": True, "artifact_count": 0},
+                {"harness": "codex", "managed": False, "artifact_count": 0},
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected (not in effect: no app has Guard hooks registered)" in output
+
+
+def test_status_panel_keeps_the_plain_protection_line_when_an_app_is_registered(capsys) -> None:
+    emit_guard_payload(
+        "status",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "managed_harnesses": 1,
+            "receipt_count": 0,
+            "pending_approvals": 0,
+            "harnesses": [{"harness": "claude-code", "managed": True, "artifact_count": 6}],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected" in output
+    assert "not in effect" not in output
+
+
+def test_doctor_panel_says_protection_is_not_in_effect_when_every_adapter_is_broken(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "tables": ["receipts"],
+            "adapters": [
+                {"harness": "claude-code", "setup_status": "partial"},
+                {"harness": "codex", "setup_status": "broken"},
+            ],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    assert "protection: Protected (not in effect: no app has Guard hooks registered)" in output
+
+
+def test_single_harness_doctor_says_protection_is_not_in_effect_when_registration_is_broken(capsys) -> None:
+    emit_guard_payload(
+        "doctor",
+        {
+            "protection": "protected",
+            "protection_label": "Protected",
+            "protection_off": False,
+            "harness": "claude-code",
+            "installed": True,
+            "setup_status": "broken",
+            "command_available": True,
+            "warnings": [],
+        },
+        False,
+    )
+
+    output = _normalize_render_output(capsys.readouterr().out)
+    # The single-harness table wraps the detail, so the box rules sit between
+    # "hooks" and "registered". The row still has to carry the lapse.
+    assert "Protection Protected (not in effect: no app has Guard hooks" in output

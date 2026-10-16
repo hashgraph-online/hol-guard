@@ -13,6 +13,7 @@
 //! `validate_guard_sync_endpoint`).
 
 use std::collections::BTreeMap;
+#[cfg(test)]
 use std::time::Duration;
 
 use base64::Engine;
@@ -21,6 +22,7 @@ use ring::signature::{EcdsaKeyPair, Signature, ECDSA_P256_SHA256_FIXED_SIGNING};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::egress_broker::{self, EgressClass};
 use crate::supply_chain_package_eval::{EvalError, EvalResult, GuardSyncRequest};
 
 /// `runner.py:_GUARD_SYNC_USER_AGENT` — single value shared with Python so
@@ -54,6 +56,9 @@ const SYNC_429_DEFAULT_WAIT_SECONDS: f64 = 60.0;
 /// `runner.py:5056` — `time.sleep(min(retry_after, 120))`.
 const SYNC_429_MAX_WAIT_SECONDS: u64 = 120;
 const SYNC_GATEWAY_MAX_WAIT_SECONDS: u64 = 8;
+/// Largest Guard Cloud or OAuth response body read. This is `ureq`'s own
+/// default body limit, so the cap is unchanged from the direct transport.
+const SYNC_RESPONSE_MAX_BYTES: u64 = 10 * 1024 * 1024;
 
 fn base64url(data: &[u8]) -> String {
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(data)
@@ -696,7 +701,7 @@ fn sync_retry_poll_interval_seconds() -> f64 {
 
 /// `runner.py:801` — `_SYNC_RETRYABLE_GATEWAY_STATUS_CODES`, including the two
 /// Cloudflare codes (522, 524) whose omission stops a bounded retry early.
-fn status_is_retryable_gateway(status: u16) -> bool {
+pub(crate) fn status_is_retryable_gateway(status: u16) -> bool {
     matches!(status, 502..=504 | 522 | 524)
 }
 
@@ -727,7 +732,7 @@ pub fn urlopen_with_sync_retries(
     let mut rate_limit_retry_count: u32 = 0;
     let mut gateway_retry_count: u32 = 0;
     loop {
-        match execute_request(&current_request, current_timeout) {
+        match execute_request(EgressClass::Cloud, &current_request, current_timeout) {
             Ok(resp) => {
                 if parse_json_response {
                     let body = resp.body_bytes;
@@ -763,9 +768,7 @@ pub fn urlopen_with_sync_retries(
                     rate_limit_retry_count += 1;
                     let wait = retry_after_seconds(&headers, SYNC_429_DEFAULT_WAIT_SECONDS)
                         .min(SYNC_429_MAX_WAIT_SECONDS as f64);
-                    std::thread::sleep(Duration::from_secs_f64(
-                        wait.max(sync_retry_poll_interval_seconds()),
-                    ));
+                    egress_broker::pause(wait.max(sync_retry_poll_interval_seconds()));
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -779,7 +782,7 @@ pub fn urlopen_with_sync_retries(
                     gateway_retry_count += 1;
                     let wait = sync_retry_poll_interval_seconds()
                         .min(SYNC_GATEWAY_MAX_WAIT_SECONDS as f64);
-                    std::thread::sleep(Duration::from_secs_f64(wait));
+                    egress_broker::pause(wait);
                     if let Some(next) = guard_sync_request_for_retry(&current_request) {
                         current_request = next;
                     }
@@ -837,14 +840,80 @@ fn sync_http_eval_error(status: u16, headers: &BTreeMap<String, String>, body: &
     EvalError::HttpStatus(status, reason)
 }
 
+/// Start of the reason reported when Cloudflare in front of Guard Cloud blocked
+/// or challenged a request. Callers match it so an edge block is not reported as
+/// an expired sign-in.
+pub const CLOUD_EDGE_BLOCK_REASON_PREFIX: &str = "Guard Cloud is unreachable from this network";
+
+/// The edge-block text inside `reason`, which a caller may have prefixed with
+/// its own context, or `None` when the reason is not an edge block.
+pub fn cloud_edge_block_reason(reason: &str) -> Option<&str> {
+    reason
+        .find(CLOUD_EDGE_BLOCK_REASON_PREFIX)
+        .map(|start| &reason[start..])
+}
+
+/// True when `reason` carries a [`cloud_edge_block_message`].
+pub fn is_cloud_edge_block_reason(reason: &str) -> bool {
+    cloud_edge_block_reason(reason).is_some()
+}
+
+/// Cloudflare's own block or challenge page instead of a Guard Cloud answer.
+/// The page is HTML a client cannot pass, so its raw text is no use as an error.
+fn cloud_edge_block_message(
+    status: u16,
+    headers: &BTreeMap<String, String>,
+    body: &[u8],
+) -> Option<String> {
+    let header = |name: &str| {
+        headers
+            .iter()
+            .find(|(key, _)| key.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    };
+    let challenged = header("cf-mitigated").is_some();
+    let from_cloudflare = header("cf-ray").is_some()
+        || header("server").is_some_and(|server| server.eq_ignore_ascii_case("cloudflare"));
+    let html = header("content-type")
+        .is_some_and(|kind| kind.to_ascii_lowercase().starts_with("text/html"));
+    let page = String::from_utf8_lossy(&body[..body.len().min(64 * 1024)]);
+    let challenge_page = page.contains("Just a moment...") || page.contains("challenge-platform");
+    let block_page = page.contains("Attention Required! | Cloudflare")
+        || page.contains("Sorry, you have been blocked");
+    if !challenged && !(from_cloudflare && html && (challenge_page || block_page)) {
+        return None;
+    }
+    let action = if challenged || challenge_page {
+        "challenged"
+    } else {
+        "blocked"
+    };
+    let ray = header("cf-ray")
+        .and_then(|ray| ray.split('-').next())
+        .filter(|ray| !ray.is_empty() && ray.bytes().all(|b| b.is_ascii_alphanumeric()));
+    let (ray_detail, ray_hint) = match ray {
+        Some(ray) => (
+            format!(", Ray ID {ray}"),
+            "; the Guard Cloud operator can look up that Ray ID",
+        ),
+        None => (String::new(), ""),
+    };
+    Some(format!(
+        "{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request (HTTP {status}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    ))
+}
+
 /// `runner.py:_sync_http_error_message` (:5162) — prefer the structured
 /// `guardError.message`/`error`/`message` fields, else the raw body, else the
 /// status line.
 fn http_error_reason_message(
     status: u16,
-    _headers: &BTreeMap<String, String>,
+    headers: &BTreeMap<String, String>,
     body: &[u8],
 ) -> String {
+    if let Some(message) = cloud_edge_block_message(status, headers, body) {
+        return message;
+    }
     let raw = String::from_utf8_lossy(body);
     if let Some(payload) = parse_json_body(body).and_then(|v| v.as_object().cloned()) {
         for key in ["guardError", "error", "message"] {
@@ -870,11 +939,13 @@ fn http_error_reason_message(
     }
 }
 
-struct SyncResponse {
-    body_bytes: Vec<u8>,
+#[derive(Debug)]
+pub(crate) struct SyncResponse {
+    pub(crate) body_bytes: Vec<u8>,
 }
 
-enum SyncHttpError {
+#[derive(Debug)]
+pub(crate) enum SyncHttpError {
     Http {
         status: u16,
         headers: BTreeMap<String, String>,
@@ -884,9 +955,26 @@ enum SyncHttpError {
     Other(String),
 }
 
+/// A Guard Cloud or OAuth exchange. It is answered by the caller that owns the
+/// managed network policy (see `egress_broker`); this process never dials out
+/// for it.
 fn execute_request(
+    class: EgressClass,
     request: &GuardSyncRequest,
     timeout_seconds: f64,
+) -> Result<SyncResponse, SyncHttpError> {
+    egress_broker::exchange(class, request, timeout_seconds, 0, SYNC_RESPONSE_MAX_BYTES)
+}
+
+/// One direct HTTP exchange with an explicit redirect budget. Only this
+/// crate's transport tests call it: the resident reaches the network solely
+/// through `egress_broker`.
+#[cfg(test)]
+pub(crate) fn execute_request_following(
+    request: &GuardSyncRequest,
+    timeout_seconds: f64,
+    max_redirects: u32,
+    max_response_bytes: u64,
 ) -> Result<SyncResponse, SyncHttpError> {
     let config = ureq::config::Config::builder()
         .timeout_global(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
@@ -894,7 +982,7 @@ fn execute_request(
         .timeout_recv_response(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .timeout_recv_body(Some(Duration::from_secs_f64(timeout_seconds.max(0.5))))
         .http_status_as_error(false)
-        .max_redirects(0)
+        .max_redirects(max_redirects)
         .build();
     let agent = ureq::Agent::with_parts(
         config,
@@ -921,6 +1009,8 @@ fn execute_request(
     }
     let body = response
         .body_mut()
+        .with_config()
+        .limit(max_response_bytes)
         .read_to_vec()
         .map_err(|e| SyncHttpError::Other(format!("read body: {e}")))?;
     if (200..300).contains(&status) {
@@ -933,6 +1023,7 @@ fn execute_request(
     })
 }
 
+#[cfg(test)]
 fn map_ureq_error(error: ureq::Error) -> SyncHttpError {
     match error {
         ureq::Error::Timeout(_) => SyncHttpError::Timeout("request timed out".to_owned()),
@@ -1106,7 +1197,7 @@ pub fn refresh_guard_oauth_access_token(req: &OAuthRefreshRequest<'_>) -> OAuthR
         dpop_nonce: req.nonce.map(str::to_owned),
         retry_context: None,
     };
-    match execute_request(&request, req.timeout_seconds) {
+    match execute_request(EgressClass::Oauth, &request, req.timeout_seconds) {
         Ok(resp) => {
             let Some(payload) =
                 parse_json_body(&resp.body_bytes).and_then(|v| v.as_object().cloned())
@@ -1290,5 +1381,97 @@ mod sync_retry_parity_tests {
             "mac".to_ascii_lowercase().as_str(),
             "bearer" | "dpop"
         ));
+    }
+}
+
+#[cfg(test)]
+mod cloud_edge_block_tests {
+    use super::*;
+
+    fn headers(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn a_cloudflare_block_page_is_an_edge_block_with_its_ray_id() {
+        let body = b"<!DOCTYPE html><html><head><title>Attention Required! | Cloudflare</title></head><body><h1>Sorry, you have been blocked</h1></body></html>";
+        let reason = http_error_reason_message(
+            403,
+            &headers(&[
+                ("server", "cloudflare"),
+                ("cf-ray", "a4a17d23bec08abe-SJC"),
+                ("content-type", "text/html; charset=UTF-8"),
+            ]),
+            body,
+        );
+        assert!(is_cloud_edge_block_reason(&reason), "{reason}");
+        assert!(
+            reason.contains("blocked the request (HTTP 403, Ray ID a4a17d23bec08abe)"),
+            "{reason}"
+        );
+        assert!(!reason.contains("<html"), "{reason}");
+    }
+
+    #[test]
+    fn a_managed_challenge_is_reported_as_challenged() {
+        let reason = http_error_reason_message(
+            403,
+            &headers(&[
+                ("Server", "cloudflare"),
+                ("CF-Mitigated", "challenge"),
+                ("Content-Type", "text/html; charset=UTF-8"),
+            ]),
+            b"<html><head><title>Just a moment...</title></head></html>",
+        );
+        assert!(is_cloud_edge_block_reason(&reason), "{reason}");
+        assert!(
+            reason.contains("challenged the request (HTTP 403)"),
+            "{reason}"
+        );
+    }
+
+    #[test]
+    fn guard_cloud_answers_and_other_html_keep_their_reason() {
+        let cloudflare_json = headers(&[
+            ("server", "cloudflare"),
+            ("cf-ray", "abc123-SJC"),
+            ("content-type", "application/json"),
+        ]);
+        assert_eq!(
+            http_error_reason_message(403, &cloudflare_json, br#"{"error":"Plan restriction"}"#),
+            "Plan restriction"
+        );
+        let origin_html = headers(&[("content-type", "text/html")]);
+        let page = b"<html><body>Sorry, you have been blocked</body></html>";
+        assert!(!is_cloud_edge_block_reason(&http_error_reason_message(
+            403,
+            &origin_html,
+            page
+        )));
+        let cloudflare_gateway = headers(&[
+            ("server", "cloudflare"),
+            ("cf-ray", "abc123-SJC"),
+            ("content-type", "text/html"),
+        ]);
+        assert!(!is_cloud_edge_block_reason(&http_error_reason_message(
+            502,
+            &cloudflare_gateway,
+            b"<html><body>Bad gateway</body></html>"
+        )));
+    }
+
+    #[test]
+    fn a_ray_id_that_is_not_plain_alphanumeric_is_left_out() {
+        let reason = http_error_reason_message(
+            403,
+            &headers(&[("cf-mitigated", "challenge"), ("cf-ray", "<script>-SJC")]),
+            b"",
+        );
+        assert!(is_cloud_edge_block_reason(&reason), "{reason}");
+        assert!(!reason.contains("Ray ID"), "{reason}");
+        assert!(!reason.contains("<script>"), "{reason}");
     }
 }

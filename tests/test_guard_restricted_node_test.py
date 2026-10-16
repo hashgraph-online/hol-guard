@@ -5,7 +5,6 @@ from __future__ import annotations
 import shutil
 import sys
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -17,6 +16,7 @@ from codex_plugin_scanner.guard.runtime.restricted_node_test import (
 from codex_plugin_scanner.guard.runtime.restricted_pytest_model import RestrictedPytestError
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_mutable_shell_entrypoint_is_not_a_node_runtime(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text("{}", encoding="utf-8")
     impostor = tmp_path / "node"
@@ -28,46 +28,43 @@ def test_mutable_shell_entrypoint_is_not_a_node_runtime(tmp_path: Path) -> None:
         )
 
 
-@pytest.mark.parametrize("output,code", [(b"1\n2\n3\n", 0), (b"bad\n", 0), (b"1\n", 1)])
-def test_desktop_process_budget_accounts_for_existing_processes(
-    monkeypatch: pytest.MonkeyPatch, output: bytes, code: int
-) -> None:
+@pytest.mark.parametrize("platform,value", [("darwin", 67), ("linux", 105)])
+def test_native_process_budget_is_presented_without_python_measurement(monkeypatch, platform, value):
+    from codex_plugin_scanner.guard import native_restricted_pytest as transport
     from codex_plugin_scanner.guard.runtime import restricted_pytest_sandbox as sandbox
 
-    monkeypatch.setattr(sandbox.sys, "platform", "darwin")
+    monkeypatch.setattr(sandbox.sys, "platform", platform)
+    calls = []
 
-    def measure(argv, **kwargs):
-        assert argv == ["/bin/ps", "-U", str(sandbox.os.getuid()), "-o", "pid="]
-        kwargs["stdout"].write(output)
-        return SimpleNamespace(returncode=code)
+    def call(action, **kwargs):
+        calls.append(action)
+        return {"value": value}
 
-    monkeypatch.setattr(sandbox.subprocess, "run", measure)
-    if code == 0 and output.startswith(b"1\n2"):
-        assert sandbox._current_user_process_ceiling() == 3 + sandbox._DEFAULT_PROCESSES
-    else:
-        with pytest.raises(RestrictedPytestError):
-            sandbox._current_user_process_ceiling()
+    monkeypatch.setattr(transport, "_call", call)
+    assert sandbox._current_user_process_ceiling() == value
+    assert calls[0]["body"]["operation"] == "process_ceiling"
 
 
-@pytest.mark.parametrize("output", [b"8\n30\n3\n", b"0\n", b"bad\n"])
-def test_linux_process_budget_counts_existing_threads(monkeypatch: pytest.MonkeyPatch, output: bytes) -> None:
+@pytest.mark.parametrize(
+    "response",
+    [
+        None,
+        {"value": True},
+        {"value": "105"},
+        {"reason_code": "pytest_restricted_sandbox_unavailable", "message": "Process measurement unavailable."},
+    ],
+)
+def test_unavailable_process_budget_cannot_start_execution(monkeypatch, response):
+    from codex_plugin_scanner.guard import native_restricted_pytest as transport
     from codex_plugin_scanner.guard.runtime import restricted_pytest_sandbox as sandbox
 
     monkeypatch.setattr(sandbox.sys, "platform", "linux")
-
-    def measure(argv, **kwargs):
-        assert argv[-1] == "nlwp="
-        kwargs["stdout"].write(output)
-        return SimpleNamespace(returncode=0)
-
-    monkeypatch.setattr(sandbox.subprocess, "run", measure)
-    if output.startswith(b"8"):
-        assert sandbox._current_user_process_ceiling() == 41 + sandbox._DEFAULT_PROCESSES
-    else:
-        with pytest.raises(RestrictedPytestError):
-            sandbox._current_user_process_ceiling()
+    monkeypatch.setattr(transport, "_call", lambda *a, **k: response)
+    with pytest.raises(RestrictedPytestError):
+        sandbox._current_user_process_ceiling()
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.parametrize(
     "argv",
     [
@@ -84,12 +81,14 @@ def test_non_test_and_shell_forms_are_not_delegated(argv: list[str], tmp_path: P
         prepare_restricted_node_test(argv, workspace=tmp_path)
 
 
+@pytest.mark.usefixtures("native_context_digest")
 def test_bounded_heap_option_is_preserved_for_direct_node_test() -> None:
     assert _node_runtime_args(["node", "--max-old-space-size=12288", "--test"]) == ("--max-old-space-size=12288",)
     with pytest.raises(RestrictedPytestError):
         _node_runtime_args(["node", "--max-old-space-size=999999", "--test"])
 
 
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("node") is None, reason="requires Node and Seatbelt")
 def test_actual_node_runner_preserves_cwd_and_denies_sensitive_effects(tmp_path: Path) -> None:
     (tmp_path / "package.json").write_text('{"type":"module"}', encoding="utf-8")

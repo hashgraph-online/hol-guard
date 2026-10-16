@@ -22,7 +22,25 @@ def test_scenario_labels_do_not_influence_fixture_path_risk():
 
     names = [scenario_fixture_name(scenario.id) for scenario in load_catalog()]
     assert len(names) == len(set(names))
-    assert all(re.fullmatch(r"case-[0-9a-f]{64}", name) for name in names)
+    assert all(re.fullmatch(r"case-[0-9]{2,}", name) for name in names)
+
+
+def test_compact_fixture_paths_preserve_absolute_command_operands(tmp_path):
+    import shlex
+
+    from ci.gauntlet.catalog import load_catalog
+    from ci.gauntlet.fixtures import scenario_fixture_name
+
+    scenario = next(case for case in load_catalog() if case.id == "absolute-recursive-source-grep")
+    workspace = tmp_path / "fixtures with spaces" / scenario_fixture_name(scenario.id) / "home" / "project"
+    rendered = scenario.render({"workspace": str(workspace)})
+    assert shlex.split(rendered.commands[0]) == [
+        "grep",
+        "-rn",
+        "ordinary",
+        str(workspace / "src"),
+        str(workspace / "docs"),
+    ]
 
 
 def test_fixture_alias_redaction_preserves_host_guard_identity(monkeypatch):
@@ -55,6 +73,28 @@ def test_fixture_alias_redaction_requires_matching_physical_path(monkeypatch):
     monkeypatch.setattr(Path, "resolve", lambda path, **kwargs: path)
     replacements = {canonical: "{{workspace}}"}
     assert fixture_path_aliases(replacements) == replacements
+
+
+def test_fixture_alias_redaction_accepts_forward_slash_drive_spelling():
+    """Git for Windows prints `C:/...`; it names the same fixture path as `C:\\...`."""
+    canonical = "C:\\Users\\runner\\fixture\\home\\project"
+    replacements = fixture_path_aliases({canonical: "{{workspace}}"})
+    assert redact_value("C:/Users/runner/fixture/home/project\n", replacements) == "{{workspace}}\n"
+    assert redact_value(canonical + "\\src", replacements) == "{{workspace}}\\src"
+    assert fixture_path_aliases({"/tmp/fixture": "{{workspace}}"}) == {"/tmp/fixture": "{{workspace}}"}
+
+
+def test_fixture_files_hold_exact_lf_bytes(tmp_path):
+    """Byte oracles need the fixture's LF endings on every host, including Windows."""
+    from ci.gauntlet.fixtures import SOURCE_FILES, create_fixture
+
+    try:
+        fixture = create_fixture(tmp_path / "fixture")
+    except RuntimeError as error:
+        pytest.skip(str(error))
+    for name, contents in SOURCE_FILES.items():
+        assert (fixture.workspace / name).read_bytes() == contents.encode("utf-8")
+    assert b"\r" not in (fixture.root / "bin/ollama").read_bytes()
 
 
 def completed(request="a" * 64):
@@ -244,6 +284,32 @@ def test_anchor_path_metadata_is_checked_instead_of_rejecting_real_omp_edits():
     assert not input_matches("edit", sibling_args, {**sibling_args, "paths": [sibling_args["path"]]})
 
 
+@pytest.mark.parametrize(("before", "after"), [(" ", ""), ("\t", "\t"), (" \t", "  ")])
+def test_native_header_padding_keeps_exact_patch_bytes_and_reviewed_target(before, after):
+    from ci.gauntlet.input_evidence import input_matches
+    from ci.gauntlet.proofs import _edit_path
+
+    target = "src/a file.ts"
+    args = {"input": f"[{before}{target}{after}#3BE2]\nPUT 1.=1:\n+changed"}
+    reviewed = {**args, "path": target, "paths": [target]}
+    assert input_matches("edit", args, reviewed)
+    assert _edit_path(args) == target
+    assert not input_matches("edit", args, {**reviewed, "path": ".env", "paths": [".env"]})
+    assert not input_matches("edit", args, {**reviewed, "input": args["input"].replace("+changed", "+different")})
+    assert not input_matches("edit", {**args, "path": "other.ts"}, reviewed)
+
+
+@pytest.mark.parametrize("header", ["[ \t#3BE2]", "[ src/a.ts#3BE2]\n[src/b.ts#1B2C]"])
+def test_empty_or_multiple_native_edit_targets_cannot_borrow_one_review(header):
+    from ci.gauntlet.input_evidence import input_matches
+    from ci.gauntlet.proofs import _edit_path
+
+    args = {"input": header + "\nPUT 1.=1:\n+changed"}
+    reviewed = {**args, "path": "src/a.ts", "paths": ["src/a.ts"]}
+    assert not input_matches("edit", args, reviewed)
+    assert _edit_path(args) is None
+
+
 @pytest.mark.parametrize("path", ["src/one.ts", "./src/one.ts", "~/other-project/one.ts"])
 def test_resolved_read_post_inputs_remain_bound_to_original_target(path):
     from ci.gauntlet.input_evidence import post_input_matches
@@ -276,6 +342,55 @@ def test_post_input_resolution_does_not_hide_mutation_or_traversal(tool, path):
     assert not post_input_matches(tool, {"path": path}, {"path": "{{workspace}}/" + path})
 
 
+def test_read_selector_resolution_requires_actual_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "README.md:1-15"}, {"path": "{{workspace}}/README.md"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", {"path": "README.md:15-1"}, post, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+
+
+def test_raw_read_selector_requires_whole_file_host_result_metadata():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    pre, post = {"path": "{{workspace}}/src/one.ts:raw"}, {"path": "{{workspace}}/src/one.ts"}
+    result = {
+        "details": {"meta": {"source": {"type": "path", "value": post["path"]}}, "displayContent": {"startLine": 1}}
+    }
+    assert post_input_matches("read", pre, post, result)
+    assert not post_input_matches("read", pre, post)
+    assert not post_input_matches("read", pre, {"path": "{{workspace}}/.env"}, result)
+    assert not post_input_matches("read", pre, {**post, "limit": 500}, result)
+    late = {"details": {**result["details"], "displayContent": {"startLine": 2}}}
+    assert not post_input_matches("read", pre, post, late)
+    for selector in ("img", "RAW", "1-5:raw", "conflicts"):
+        assert not post_input_matches("read", {"path": f"src/one.ts:{selector}"}, post, result)
+
+
+def test_windows_resolved_read_paths_bind_only_whole_backslash_form():
+    from ci.gauntlet.input_evidence import post_input_matches
+
+    reviewed = {"path": "src/settings.ts"}
+    assert post_input_matches("read", reviewed, {"path": "{{workspace}}\\src\\settings.ts"})
+    assert post_input_matches("read", {"path": "~/notes.md"}, {"path": "{{home}}\\notes.md"})
+    for altered in [
+        "{{workspace}}\\.env",
+        "{{workspace}}\\src/settings.ts",
+        "{{workspace}}\\src\\..\\settings.ts",
+        "{{workspace}}/src\\settings.ts",
+    ]:
+        assert not post_input_matches("read", reviewed, {"path": altered})
+    # On POSIX, a reviewed backslash is part of a file name, not a separator.
+    windows_form = {"path": "{{workspace}}\\src\\settings.ts"}
+    assert not post_input_matches("read", {"path": "src\\settings.ts"}, windows_form)
+
+
 def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     """Verify raw input digests before redacting paths and recomputing the public digest."""
     import hashlib
@@ -290,8 +405,8 @@ def test_public_guard_inputs_verify_original_bytes_then_share_host_redactions():
     assert exported["input_sha256"] == input_digest(exported["input"])
     assert exported["observed_input_sha256"] == observation["input_sha256"]
     assert "input_json" not in exported
-    with pytest.raises(ValueError, match="observed digest"):
-        public_observations([{**observation, "input_json": "{}"}], {})
+    tampered = public_observations([{**observation, "input_json": "{}", "tool": "read"}], {})[0]
+    assert tampered == {"tool": "read", "observer_error": True, "observer_error_code": "input_digest_mismatch"}
 
 
 @pytest.mark.parametrize("change", ["execution_error", "returncode", "timed_out", "cleanup_ok"])

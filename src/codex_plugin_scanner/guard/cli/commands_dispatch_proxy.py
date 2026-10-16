@@ -220,6 +220,9 @@ def _run_guard_uninstall_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
+    native_resident_retired = retire_native_resident_after_last_harness(context, store)
+    if native_resident_retired is not None:
+        payload["native_resident_retired"] = native_resident_retired
     _emit("uninstall", payload, getattr(args, "json", False))
     return 0
 
@@ -265,7 +268,7 @@ def _run_guard_package_shims_command(
         _emit("package-shims", payload, getattr(args, "json", False))
         return 2
     try:
-        if shim_command in {"install", "repair", "uninstall"}:
+        if shim_command in {"install", "repair", "test", "uninstall"}:
             gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
             require_high_risk(
                 store.guard_home,
@@ -282,6 +285,12 @@ def _run_guard_package_shims_command(
             )
         elif shim_command == "uninstall":
             payload = uninstall_package_shims(context, managers=requested_managers or None)
+        elif shim_command == "test":
+            payload = probe_package_shim_intercepts(
+                context,
+                managers=requested_managers or None,
+                workspace_dir=context.workspace_dir or Path.cwd().resolve(),
+            )
         else:
             payload = package_shim_status(context)
     except ApprovalGateError as error:

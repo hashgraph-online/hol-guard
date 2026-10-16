@@ -7,6 +7,8 @@ from codex_plugin_scanner.guard.local_cli_trust import matching_local_cli_grant,
 from codex_plugin_scanner.guard.runtime.local_cli_identity import identify_unlisted_cli
 from codex_plugin_scanner.guard.store import GuardStore
 
+from .local_cli_native_fixture import native_local_cli_grant_resident  # noqa: F401
+
 
 def test_grant_allows_matching_args_and_not_changed_script(tmp_path: Path) -> None:
     home = tmp_path / "home"

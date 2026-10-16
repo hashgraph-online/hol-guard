@@ -12,21 +12,15 @@ if TYPE_CHECKING:
     from .commands_support_hook_payload import _hook_action_envelope
     from .commands_support_hook_state import (
         _append_cursor_pending_shell_key,
-        _claude_pending_permission_index_key,
         _claude_pending_permission_state_key,
         _cursor_after_shell_observed,
         _cursor_conversation_id,
-        _cursor_pending_shell_is_fresh,
         _cursor_pending_shell_state_key,
-        _cursor_shell_command_fingerprint,
         _cursor_shell_command_from_payload,
         _load_claude_pending_permission,
-        _load_claude_pending_permission_index,
-        _load_cursor_pending_shell_index,
         _load_verified_cursor_pending_shell_state,
         _record_cursor_native_shell_allow_state,
         _remove_claude_pending_permission,
-        _store_cursor_pending_shell_index,
         _store_cursor_pending_shell_state,
     )
     from .commands_support_runtime_artifacts import _hook_runtime_artifact, _optional_string, _string_list
@@ -34,6 +28,12 @@ if TYPE_CHECKING:
 
 
 from ..models import GuardAction
+from ..native_hook_authority_state import (
+    HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
+    flag_field,
+    hook_authority_state,
+    object_field,
+)
 from ..runtime.approval_context import parse_approval_context_token
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ._commands_shared import *
@@ -195,34 +195,19 @@ def _load_cursor_pending_shell_permission(
     conversation_id: str,
     command: str,
 ) -> dict[str, object] | None:
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
-    now = _now()
-    pending = _load_verified_cursor_pending_shell_state(
+    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    normalized_command = normalize_cursor_shell_command(command)
+    reply = hook_authority_state(
         store,
+        "cursor_find_pending",
+        now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
-        command=command,
-        state_key=pending_key,
-        now=now,
+        command=normalized_command,
+        expected_key=_cursor_pending_shell_state_key(conversation_id, normalized_command),
     )
-    if pending is not None:
-        return pending
-    target_fingerprint = _cursor_shell_command_fingerprint(command)
-    for indexed_key in _load_cursor_pending_shell_index(store, conversation_id=conversation_id, now=now):
-        candidate = _load_verified_cursor_pending_shell_state(
-            store,
-            conversation_id=conversation_id,
-            command=command,
-            state_key=indexed_key,
-            now=now,
-        )
-        if candidate is None:
-            continue
-        stored_command = _optional_string(candidate.get("command"))
-        if stored_command is None:
-            continue
-        if _cursor_shell_command_fingerprint(stored_command) == target_fingerprint:
-            return candidate
-    return None
+    return object_field(reply, "pending")
 
 
 def _remove_cursor_pending_shell_permission(
@@ -231,58 +216,14 @@ def _remove_cursor_pending_shell_permission(
     conversation_id: str,
     pending_key: str,
 ) -> None:
-    now = _now()
-    with suppress(OSError, sqlite3.Error):
-        store.delete_sync_payload(pending_key)
-    remaining = [
-        key
-        for key in _load_cursor_pending_shell_index(store, conversation_id=conversation_id, now=now)
-        if key != pending_key
-    ]
-    _store_cursor_pending_shell_index(
+    hook_authority_state(
         store,
+        "cursor_remove_pending",
+        now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
-        pending_keys=remaining,
-        now=now,
+        pending_key=pending_key,
     )
-
-
-def _persist_cursor_native_permission_policy(
-    *,
-    store: GuardStore,
-    artifact_id: str,
-    artifact_hash: str,
-    action: str,
-    reason: str,
-    now: str,
-    source: str = "cursor-native-approval",
-) -> bool:
-    try:
-        store.upsert_policy(
-            PolicyDecision(
-                harness="cursor",
-                scope="artifact",
-                action="allow" if action == "allow" else "block",
-                artifact_id=artifact_id,
-                artifact_hash=artifact_hash,
-                reason=reason,
-                source=source,
-            ),
-            now,
-        )
-        store.add_event(
-            "cursor/native_permission_saved",
-            {
-                "artifact_id": artifact_id,
-                "artifact_hash": artifact_hash,
-                "action": action,
-                "reason": reason,
-            },
-            now,
-        )
-    except (ApprovalGateError, OSError, sqlite3.Error):
-        return False
-    return True
 
 
 def _resolve_cursor_pending_approval_requests(
@@ -324,6 +265,29 @@ def _resolve_cursor_pending_approval_requests(
             )
 
 
+_CURSOR_PENDING_MAX_AGE_SECONDS = 30 * 60
+
+
+def _cursor_pending_saved_at_is_fresh(
+    store: GuardStore,
+    pending: Mapping[str, object],
+    now: str,
+) -> bool:
+    """Whether the resident still treats ``pending`` as fresh at ``now``."""
+
+    saved_at = pending.get("saved_at")
+    if not isinstance(saved_at, str) or not saved_at.strip():
+        return False
+    reply = hook_authority_state(
+        store,
+        "state_is_fresh",
+        now=now,
+        saved_at=saved_at.strip(),
+        max_age_seconds=_CURSOR_PENDING_MAX_AGE_SECONDS,
+    )
+    return flag_field(reply, "fresh")
+
+
 def _persist_cursor_native_permission_after_shell(
     *,
     store: GuardStore,
@@ -349,9 +313,12 @@ def _persist_cursor_native_permission_after_shell(
     if pending is None:
         return False
     now = _now()
-    if not _cursor_after_shell_observed(prepared):
+    # The load checked freshness against its own earlier clock. Recheck against
+    # this clock so a pending row that expires while that load is in flight
+    # cannot become an allowance.
+    if not _cursor_pending_saved_at_is_fresh(store, pending, now):
         return False
-    if not _cursor_pending_shell_is_fresh(pending, now=now):
+    if not _cursor_after_shell_observed(prepared):
         return False
     if not cursor_after_observer_trusted(
         guard_home=guard_home,
@@ -372,6 +339,7 @@ def _persist_cursor_native_permission_after_shell(
             payload=prepared,
             home_dir=home_dir,
             workspace=workspace,
+            guard_home=guard_home,
         )
         runtime_artifact = _hook_runtime_artifact(
             harness=harness,
@@ -610,15 +578,15 @@ def _discard_claude_pending_permissions(store: GuardStore, payload: dict[str, ob
     session_id = _optional_string(payload.get("session_id"))
     if session_id is None:
         return 0
-    index_key = _claude_pending_permission_index_key(session_id)
-    pending_keys = _load_claude_pending_permission_index(store, session_id=session_id)
-    if not pending_keys:
-        return 0
-    try:
-        store.delete_sync_payloads([*pending_keys, index_key])
-    except (OSError, sqlite3.Error):
-        return 0
-    return len(pending_keys)
+    reply = hook_authority_state(
+        store,
+        "claude_discard_session",
+        now=_now(),
+        required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
+        session_id=session_id,
+    )
+    discarded = reply.get("discarded") if reply is not None else None
+    return discarded if isinstance(discarded, int) and not isinstance(discarded, bool) else 0
 
 
 __all__ = [
@@ -628,7 +596,6 @@ __all__ = [
     "_persist_claude_native_permission_for_runtime_artifact",
     "_persist_claude_native_permission_policy",
     "_persist_cursor_native_permission_after_shell",
-    "_persist_cursor_native_permission_policy",
     "_record_cursor_pending_shell_permission",
     "_remove_cursor_pending_shell_permission",
     "_resolve_cursor_pending_approval_requests",

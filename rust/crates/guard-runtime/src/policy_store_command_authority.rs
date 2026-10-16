@@ -28,7 +28,8 @@ struct CommandAuthorityMarker {
 }
 
 pub(crate) struct CommandAuthorityLease {
-    _file: File,
+    _file: Option<File>,
+    _business_source: Option<super::policy_store_business_source::BusinessSourceLease>,
 }
 
 impl PolicySnapshotStore {
@@ -36,8 +37,12 @@ impl PolicySnapshotStore {
         &self,
         snapshot: &PolicySnapshotV3,
     ) -> Result<Option<CommandAuthorityLease>, String> {
+        let business_source = self.business_source_lease(snapshot)?;
         let Some(binding) = &snapshot.command_extensions else {
-            return Ok(None);
+            return Ok(business_source.map(|lease| CommandAuthorityLease {
+                _file: None,
+                _business_source: Some(lease),
+            }));
         };
         let expected = binding
             .authority
@@ -130,11 +135,14 @@ impl PolicySnapshotStore {
             &tag,
         )
         .map_err(|_| "native_command_control_authority_mac_invalid".to_owned())?;
-        Ok(Some(CommandAuthorityLease { _file: file }))
+        Ok(Some(CommandAuthorityLease {
+            _file: Some(file),
+            _business_source: business_source,
+        }))
     }
 }
 
-fn open_mutation_lock(path: &Path, private_root: &Path) -> Result<File, String> {
+pub(super) fn open_mutation_lock(path: &Path, private_root: &Path) -> Result<File, String> {
     super::policy_store_validation::validate_private_directory(private_root)?;
     #[cfg(windows)]
     {

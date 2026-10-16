@@ -3,7 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.memory_decision_event import MEMORY_DECISION_EVENT_CONTRACT_VERSION
-from codex_plugin_scanner.guard.memory_decision_outbox import enqueue_memory_decision_event
+from codex_plugin_scanner.guard.memory_decision_outbox import (
+    APPROVAL_RETRY_BLOCKED_OVERRIDE,
+    _ensure_source_receipt_id,
+    enqueue_memory_decision_event,
+)
 from codex_plugin_scanner.guard.receipts.manager import build_receipt
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -249,3 +253,70 @@ class TestMemoryDecisionOutboxEnqueue:
         assert isinstance(payload, dict)
         source_receipt_id = payload["payload"]["source_receipt_id"]
         assert store.get_receipt(source_receipt_id) is not None
+
+
+class _ReceiptOnlyStore:
+    def __init__(self) -> None:
+        self.receipts: list[object] = []
+
+    def add_receipt(self, receipt: object) -> None:
+        self.receipts.append(receipt)
+
+
+def test_tool_call_receipt_names_the_tool_and_records_the_human_decision() -> None:
+    store = _ReceiptOnlyStore()
+    request = _approval_request(
+        request_id="req-learn",
+        review_command="hol-guard approvals approve req-learn",
+        raw_command=None,
+        artifact_id="omp:native-pretool:learn",
+        artifact_name="learn",
+        artifact_type="tool_call",
+        harness="omp",
+    )
+    receipt_id = _ensure_source_receipt_id(store, request, decision_action="approved", scope="artifact")
+    assert receipt_id is not None
+    [receipt] = store.receipts
+    assert receipt.raw_command_text is None
+    assert receipt.artifact_name == "learn"
+    assert receipt.user_override == "approval-approved"
+
+
+def _unbound_native_request() -> dict[str, object]:
+    return _approval_request(
+        request_id="req-unbound",
+        review_command="hol-guard approvals approve req-unbound",
+        raw_command="python3 jokes.py",
+        artifact_id="omp:native-pretool:bash",
+        artifact_name="bash",
+        artifact_type="tool_call",
+        harness="omp",
+    )
+
+
+def test_one_time_approval_the_retry_cannot_reuse_is_recorded_as_still_blocked() -> None:
+    store = _ReceiptOnlyStore()
+    _ensure_source_receipt_id(
+        store, _unbound_native_request(), decision_action="approved", scope="artifact", retry_blocked=True
+    )
+    [receipt] = store.receipts
+    # The user's decision stays an allow; the override says the action did not run.
+    assert receipt.policy_decision == "allow"
+    assert receipt.user_override == APPROVAL_RETRY_BLOCKED_OVERRIDE
+
+
+def test_retry_blocked_does_not_relabel_a_block_decision() -> None:
+    store = _ReceiptOnlyStore()
+    _ensure_source_receipt_id(
+        store, _unbound_native_request(), decision_action="blocked", scope="artifact", retry_blocked=True
+    )
+    [receipt] = store.receipts
+    assert receipt.user_override == "approval-blocked"
+
+
+def test_shell_receipt_keeps_the_reviewed_command() -> None:
+    store = _ReceiptOnlyStore()
+    _ensure_source_receipt_id(store, _approval_request(), decision_action="blocked", scope="harness")
+    [receipt] = store.receipts
+    assert receipt.raw_command_text == "npm install lodash"
+    assert receipt.user_override == "approval-blocked"

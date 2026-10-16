@@ -44,7 +44,9 @@ expected_team=$2
 bundle=$3
 config=$4
 fallback=$5
+proxy_required=$6
 fallback_bridge() {
+  [ "$proxy_required" = "1" ] && exit 125
   exec "$fallback" __guard-bounded-hook "$config"
 }
 verify_team() {
@@ -121,6 +123,8 @@ def _trusted_desktop_path(path: Path) -> bool:
 def _trusted_desktop_hook_proxy_command(
     python_executable: str,
     config_json: str,
+    *,
+    require_proxy: bool = False,
 ) -> tuple[str, ...] | None:
     """Return a runtime-verified signed macOS proxy command or retain Core."""
 
@@ -165,4 +169,5 @@ def _trusted_desktop_hook_proxy_command(
         str(proxy_bundle),
         config_json,
         str(core),
+        "1" if require_proxy else "0",
     )

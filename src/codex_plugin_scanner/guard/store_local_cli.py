@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from .local_cli_errors import LocalCliCatalogLimitError
 from .runtime.local_cli_commands import (
@@ -19,6 +19,7 @@ from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
 from .runtime.mcp_classification import classify_mcp_action
 from .store_custom_extension_continuity import _write_local_cli_grant
+from .store_local_cli_retention import mark_shared_enrolled_servers, utc_now_iso
 from .store_local_cli_rows import (
     _grant_from_row,
     _merge_item,
@@ -26,7 +27,8 @@ from .store_local_cli_rows import (
     _row_int,
     _row_text,
     _row_values,
-    _with_suggestable,
+    _with_suggestions,
+    local_cli_rules_exist,
 )
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
@@ -37,6 +39,10 @@ class StoreLocalCliMixin:
     if TYPE_CHECKING:
 
         def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
+
+        def _native_store_call(
+            self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+        ) -> Any: ...
 
     def record_local_cli_observation(
         self,
@@ -49,71 +55,30 @@ class StoreLocalCliMixin:
         server_identity_hash: str | None = None,
         server_command: str | None = None,
         server_args_hash: str | None = None,
+        only_if_missing: bool = False,
+        replayed_at: str | None = None,
     ) -> None:
-        if not is_local_cli_id(identity.cli_id):
-            raise ValueError("invalid local CLI id")
-        surface_value = surface if surface in {"cli", "mcp", "package-scripts"} else "cli"
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            current = connection.execute(
-                "select observed_count from local_cli_observation where cli_id = ?",
-                (identity.cli_id,),
-            ).fetchone()
-            if current is None:
-                _ = connection.execute(
-                    """
-                    insert into local_cli_observation (
-                        cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                        observed_count, last_seen_at, source_path, help_status, surface,
-                        server_identity_hash, server_command, server_args_hash
-                    ) values (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        identity.cli_id,
-                        identity.identity_hash,
-                        identity.kind,
-                        identity.name,
-                        identity.interpreter_name,
-                        identity.example_label,
-                        seen_at,
-                        source_path,
-                        help_status,
-                        surface_value,
-                        server_identity_hash,
-                        server_command,
-                        server_args_hash,
-                    ),
-                )
-                return
-            _ = connection.execute(
-                """
-                update local_cli_observation
-                set identity_hash = ?, kind = ?, name = ?, interpreter_name = ?,
-                    example_label = ?, observed_count = observed_count + 1, last_seen_at = ?,
-                    source_path = coalesce(?, source_path),
-                    help_status = coalesce(?, help_status),
-                    surface = ?,
-                    server_identity_hash = coalesce(?, server_identity_hash),
-                    server_command = coalesce(?, server_command),
-                    server_args_hash = coalesce(?, server_args_hash)
-                where cli_id = ?
-                """,
-                (
-                    identity.identity_hash,
-                    identity.kind,
-                    identity.name,
-                    identity.interpreter_name,
-                    identity.example_label,
-                    seen_at,
-                    source_path,
-                    help_status,
-                    surface_value,
-                    server_identity_hash,
-                    server_command,
-                    server_args_hash,
-                    identity.cli_id,
-                ),
-            )
+        _ = self._native_store_call(
+            "record_local_cli_observation",
+            {
+                "cli_id": identity.cli_id,
+                "identity_hash": identity.identity_hash,
+                "kind": identity.kind,
+                "name": identity.name,
+                "interpreter_name": identity.interpreter_name,
+                "example_label": identity.example_label,
+                "seen_at": seen_at,
+                "source_path": source_path,
+                "help_status": help_status,
+                "surface": surface,
+                "server_identity_hash": server_identity_hash,
+                "server_command": server_command,
+                "server_args_hash": server_args_hash,
+                "only_if_missing": only_if_missing,
+                "replayed_at": replayed_at,
+                "clock": utc_now_iso(),
+            },
+        )
 
     def list_local_cli_items(self) -> list[dict[str, object]]:
         with self._connect() as connection:
@@ -142,32 +107,32 @@ class StoreLocalCliMixin:
             cli_id = str(item["cli_id"])
             seen.add(cli_id)
             grant = grants.get(cli_id)
-            items.append(_with_suggestable(_merge_item(item, grant)))
+            items.append(_merge_item(item, grant))
         for cli_id, grant in sorted(grants.items()):
             if cli_id in seen:
                 continue
             items.append(
-                _with_suggestable(
-                    {
-                        "cli_id": cli_id,
-                        "name": cli_id.removeprefix("local-cli."),
-                        "kind": "executable",
-                        "identity_hash": grant["identity_hash"],
-                        "example_label": cli_id.removeprefix("local-cli."),
-                        "interpreter_name": None,
-                        "observed_count": 0,
-                        "last_seen_at": None,
-                        "source_path": None,
-                        "help_status": None,
-                        "surface": "cli",
-                        "server_identity_hash": None,
-                        "source_label": None,
-                        "state": grant["state"],
-                        "stale": False,
-                        "grant_revision": grant["revision"],
-                    }
-                )
+                {
+                    "cli_id": cli_id,
+                    "name": cli_id.removeprefix("local-cli."),
+                    "kind": "executable",
+                    "identity_hash": grant["identity_hash"],
+                    "example_label": cli_id.removeprefix("local-cli."),
+                    "interpreter_name": None,
+                    "observed_count": 0,
+                    "last_seen_at": None,
+                    "source_path": None,
+                    "help_status": None,
+                    "surface": "cli",
+                    "server_identity_hash": None,
+                    "source_label": None,
+                    "state": grant["state"],
+                    "stale": False,
+                    "grant_revision": grant["revision"],
+                }
             )
+        _with_suggestions(items)
+        mark_shared_enrolled_servers(items, grants)
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:
             item["authority_revision"] = authority_revision
@@ -198,15 +163,15 @@ class StoreLocalCliMixin:
         return items
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:
-        if not is_local_cli_id(cli_id):
-            return None
+        grant = self._native_store_call("read_local_cli_grant", {"cli_id": cli_id})
+        if grant is not None and not isinstance(grant, dict):
+            raise sqlite3.DatabaseError("native_local_cli_grant_invalid")
+        return grant
+
+    def has_local_cli_block_rules(self) -> bool:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
-            row = connection.execute(
-                "select cli_id, identity_hash, state, revision, updated_at from local_cli_grant where cli_id = ?",
-                (cli_id,),
-            ).fetchone()
-        return None if row is None else _grant_from_row(row)
+            return local_cli_rules_exist(connection, blocks_only=True)
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:
@@ -380,79 +345,20 @@ class StoreLocalCliMixin:
             _write_command_states(connection, cli_id, states)
 
     def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]:
-        if not is_local_cli_id(cli_id):
-            return []
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return _read_command_catalog(connection, cli_id)
+        rows = self._native_store_call("read_local_cli_command_catalog", {"cli_id": cli_id})
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise sqlite3.DatabaseError("native_local_cli_command_catalog_invalid")
+        return [LocalCliCommand(**row) for row in rows]
 
     def read_local_cli_command_states(self, cli_id: str) -> dict[str, LocalCliCommandState]:
-        if not is_local_cli_id(cli_id):
-            return {}
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return _read_command_states(connection, cli_id)
-
-
-def _command_id_filter(command_ids: Sequence[str] | None) -> tuple[str, tuple[str, ...]]:
-    if command_ids is None:
-        return "", ()
-    if not command_ids:
-        # An empty filter must never turn into a full permission read.
-        return " and 0", ()
-    return f" and command_id in ({','.join('?' for _ in command_ids)})", tuple(command_ids)
-
-
-def _read_command_catalog(
-    connection: sqlite3.Connection, cli_id: str, command_ids: Sequence[str] | None = None
-) -> list[LocalCliCommand]:
-    selection, parameters = _command_id_filter(command_ids)
-    rows = connection.execute(
-        f"""
-        select command_id, name, usage, description, parent_id
-        from local_cli_command
-        where cli_id = ?{selection}
-        order by sort_index asc, command_id asc
-        """,
-        (cli_id, *parameters),
-    ).fetchall()
-    catalog: list[LocalCliCommand] = []
-    for row in rows:
-        command_id, name, usage, description, parent_id = _row_values(row, 5)
-        if (
-            isinstance(command_id, str)
-            and isinstance(name, str)
-            and isinstance(usage, str)
-            and isinstance(description, str)
-            and (parent_id is None or isinstance(parent_id, str))
-        ):
-            catalog.append(
-                LocalCliCommand(
-                    command_id=command_id,
-                    name=name,
-                    usage=usage,
-                    description=description,
-                    parent_id=parent_id,
-                )
-            )
-    return catalog
-
-
-def _read_command_states(
-    connection: sqlite3.Connection, cli_id: str, command_ids: Sequence[str] | None = None
-) -> dict[str, LocalCliCommandState]:
-    selection, parameters = _command_id_filter(command_ids)
-    rows = connection.execute(
-        f"select command_id, state from local_cli_command_grant where cli_id = ?{selection}",
-        (cli_id, *parameters),
-    ).fetchall()
-    states: dict[str, LocalCliCommandState] = {}
-    for row in rows:
-        command_id, raw_state = _row_values(row, 2)
-        parsed_state = local_cli_command_state(raw_state)
-        if isinstance(command_id, str) and parsed_state is not None:
-            states[command_id] = parsed_state
-    return states
+        states = self._native_store_call("read_local_cli_command_states", {"cli_id": cli_id})
+        if not isinstance(states, dict):
+            raise sqlite3.DatabaseError("native_local_cli_command_states_invalid")
+        return {
+            command_id: state
+            for command_id, raw_state in states.items()
+            if (state := local_cli_command_state(raw_state)) is not None
+        }
 
 
 def _write_command_states(

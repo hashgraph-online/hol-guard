@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 import sys
+from dataclasses import replace
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
-from ..aibom_detection import enrich_mcp_server_metadata, extend_detection_with_workspace_aibom
+from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection
 from ..launcher import merge_guard_launcher_env
-from ..models import GuardArtifact, HarnessDetection
+from ..models import HarnessDetection
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from ..shims import (
     ensure_guard_shim_path_in_shell_profile,
@@ -26,6 +27,7 @@ from .base import (
     _ensure_path_within_root,
     _json_payload,
     _run_command_probe,
+    detection_request,
 )
 from .cursor_cli import (
     CURSOR_CLI_SHIM_COMMANDS,
@@ -33,7 +35,11 @@ from .cursor_cli import (
     resolve_cursor_cli_entry,
 )
 from .cursor_hook_config import detect_managed_cursor_hook_artifact
-from .cursor_hooks import cursor_hooks_path, install_cursor_hooks, prepare_cursor_hooks, uninstall_cursor_hooks
+from .cursor_hooks import cursor_hooks_path
+
+# isort: split
+from .cursor_hooks import install_cursor_hooks, prepare_cursor_hooks, uninstall_cursor_hooks
+from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (
     ManagedMcpServer,
     is_guard_proxy_command,
@@ -104,81 +110,27 @@ class CursorHarnessAdapter(HarnessAdapter):
                 return {}
             return payload if isinstance(payload, dict) else {}
 
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
+        configs = []
         for config_path in self._editor_config_paths(context):
             payload = captured_payload(config_path)
-            if not payload:
-                continue
-            found_paths.append(str(config_path))
-            scope = self._scope_for(context, config_path)
-            mcp_servers = payload.get("mcpServers")
-            if not isinstance(mcp_servers, dict):
-                continue
-            for name, server_config in mcp_servers.items():
-                if not isinstance(name, str) or not isinstance(server_config, dict):
-                    continue
-                managed_origin = self._managed_mcp_origin(context, config_path, scope, name)
-                args = tuple(str(value) for value in server_config.get("args", []) if isinstance(value, str))
-                command = server_config.get("command")
-                env_payload = server_config.get("env")
-                environment_payload = server_config.get("environment")
-                environment = env_payload if isinstance(env_payload, dict) else environment_payload
-                normalized_environment = (
-                    {
-                        key.strip(): value
-                        for key, value in environment.items()
-                        if isinstance(key, str) and key.strip() and isinstance(value, str)
-                    }
-                    if isinstance(environment, dict)
-                    else {}
-                )
-                url = server_config.get("url")
-                raw_headers = server_config.get("headers")
-                configured_headers = (
-                    {
-                        key.strip(): value
-                        for key, value in raw_headers.items()
-                        if isinstance(key, str) and key.strip() and isinstance(value, str)
-                    }
-                    if isinstance(raw_headers, dict)
-                    else {}
-                )
-                metadata = enrich_mcp_server_metadata(
-                    {
-                        "name": name,
-                        "env": normalized_environment,
-                        "env_keys": sorted(normalized_environment),
-                        "headers_keys": sorted(configured_headers),
-                        "guard_managed_proxy": is_guard_proxy_command(
-                            command if isinstance(command, str) else None,
-                            args,
-                        ),
-                    },
-                    command=command if isinstance(command, str) else None,
-                    args=args,
-                    url=url if isinstance(url, str) else None,
-                    transport="http" if isinstance(url, str) else "stdio",
-                    configured_headers=configured_headers,
-                )
-                artifacts.append(
-                    enrich_artifact_with_mcp_skill_firewall(
-                        GuardArtifact(
-                            artifact_id=f"cursor:{scope}:{name}",
-                            name=name,
-                            harness=self.harness,
-                            artifact_type="mcp_server",
-                            source_scope=scope,
-                            config_path=str(config_path),
-                            command=command if isinstance(command, str) else None,
-                            args=args,
-                            url=url if isinstance(url, str) else None,
-                            transport="http" if isinstance(url, str) else "stdio",
-                            metadata=metadata,
-                            runtime_private_metadata=dict(managed_origin),
+            if payload:
+                configs.append({"path": str(config_path), "payload": json.dumps(payload)})
+        request = {**detection_request(self.harness, context), "configs": configs}
+        native, native_paths = native_adapter_detection("cursor_detect", request)
+        artifacts = [
+            enrich_artifact_with_mcp_skill_firewall(
+                replace(
+                    artifact,
+                    runtime_private_metadata=dict(
+                        self._managed_mcp_origin(
+                            context, Path(artifact.config_path), artifact.source_scope, artifact.name
                         )
-                    )
+                    ),
                 )
+            )
+            for artifact in native
+        ]
+        found_paths = list(native_paths)
         hooks_path = cursor_hooks_path(context)
         hook_artifact = detect_managed_cursor_hook_artifact(hooks_path, captured_payload(hooks_path))
         if hook_artifact is not None:
@@ -651,9 +603,10 @@ class CursorHarnessAdapter(HarnessAdapter):
             home=str(context.home_dir) if context.home_dir.resolve() != Path.home().resolve() else None,
             workspace=str(context.workspace_dir) if context.workspace_dir is not None else None,
         )
+        command, launch_args = mcp_proxy_launch(sys.executable, args)
         entry: dict[str, object] = {
-            "command": sys.executable,
-            "args": args,
+            "command": command,
+            "args": launch_args,
             "type": "stdio",
         }
         env = merge_guard_launcher_env(proxy_process_env(getattr(server, "env", {})))
@@ -666,8 +619,8 @@ class CursorHarnessAdapter(HarnessAdapter):
         refreshed = dict(server_config)
         raw_args = server_config.get("args")
         args = tuple(str(value) for value in raw_args if isinstance(value, str)) if isinstance(raw_args, list) else ()
-        refreshed["command"] = sys.executable
-        refreshed["args"] = list(args)
+        _, python_args = python_proxy_launch(None, args)
+        refreshed["command"], refreshed["args"] = mcp_proxy_launch(sys.executable, python_args)
         return refreshed
 
     @staticmethod

@@ -8,16 +8,9 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon.hook_process_runner import HookProcessReview
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.daemon_hook_test_client import open_authenticated_claude_request
-
-_DEADLINE_REASON = "daemon_hook_process_deadline_exhausted"
-
-
-def _failed_review(**_kwargs: object) -> HookProcessReview:
-    return HookProcessReview(None, _DEADLINE_REASON)
 
 
 def _deadline_exceeded_native_review(**_kwargs: object) -> None:
@@ -68,7 +61,7 @@ def _review_request(
 
 @pytest.mark.parametrize("endpoint", ("pi", "omp", "claude-code"))
 @pytest.mark.usefixtures("native_hook_force")
-def test_observe_mode_does_not_block_failed_local_review(
+def test_observe_mode_denies_failed_local_review_with_a_fixed_response(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     endpoint: str,
@@ -80,6 +73,9 @@ def test_observe_mode_does_not_block_failed_local_review(
     (guard_home / "config.toml").write_text('mode = "observe"\n', encoding="utf-8")
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",
@@ -97,75 +93,12 @@ def test_observe_mode_does_not_block_failed_local_review(
         daemon.stop()
 
     if endpoint in {"pi", "omp"}:
-        assert payload["decision"] == "allow"
+        assert payload["decision"] == "deny"
         return
     hook_output = payload["hookSpecificOutput"]
     assert isinstance(hook_output, dict)
     assert hook_output["hookEventName"] == "PreToolUse"
-    assert hook_output["permissionDecision"] == "allow"
-
-
-@pytest.mark.parametrize(
-    ("event", "expected"),
-    (
-        (
-            "PermissionRequest",
-            {
-                "reason_code": _DEADLINE_REASON,
-                "hookSpecificOutput": {
-                    "hookEventName": "PermissionRequest",
-                    "decision": {"behavior": "allow"},
-                },
-            },
-        ),
-        (
-            "PostToolUse",
-            {
-                "continue": True,
-                "reason_code": _DEADLINE_REASON,
-                "observed_review_failure": True,
-            },
-        ),
-    ),
-)
-def test_observe_mode_uses_native_nonblocking_claude_responses(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    event: str,
-    expected: dict[str, object],
-) -> None:
-    # This contract exercises the isolated compatibility worker. The stable
-    # default fast path handles PostToolUse before that worker is consulted.
-    # Under HOL_GUARD_NATIVE=force the daemon routes runtime hooks through the
-    # native fast path regardless of the fast-path flag, so pin native off to
-    # keep the compat lane deterministic.
-    monkeypatch.setenv("HOL_GUARD_NATIVE", "off")
-    monkeypatch.setenv("HOL_GUARD_HOOK_FAST_PATH", "0")
-    guard_home = tmp_path / "guard-home"
-    workspace = tmp_path / "workspace"
-    workspace.mkdir(parents=True)
-    guard_home.mkdir(parents=True)
-    (guard_home / "config.toml").write_text('mode = "observe"\n', encoding="utf-8")
-    daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
-    daemon.start()
-    monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "review",
-        _failed_review,
-    )
-
-    try:
-        payload = _review_request(
-            daemon,
-            endpoint="claude-code",
-            event=event,
-            guard_home=guard_home,
-            workspace=workspace,
-        )
-    finally:
-        daemon.stop()
-
-    assert payload == expected
+    assert hook_output["permissionDecision"] == "deny"
 
 
 @pytest.mark.parametrize("endpoint", ("pi", "claude-code"))
@@ -180,6 +113,9 @@ def test_prompt_mode_still_blocks_failed_local_review(
     workspace.mkdir(parents=True)
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",
@@ -218,6 +154,9 @@ def test_prompt_mode_denies_unverified_inspection_when_review_cannot_complete(
     workspace.mkdir(parents=True)
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     daemon.start()
+    # The failure is injected into the daemon's review, so keep Oh My Pi
+    # hooks off the resident's direct lane, which answers them itself.
+    monkeypatch.setenv("HOL_GUARD_PI_DIRECT_HOOK", "0")
     monkeypatch.setattr(
         daemon._server.hook_worker,  # pyright: ignore[reportPrivateUsage]
         "_review_native_edge_with_snapshot",

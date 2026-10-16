@@ -17,7 +17,7 @@ from tests.native_command_test_support import real_native_command_evaluation
     ("command", "action", "reason_code", "evaluation_error"),
     [
         (
-            "env FOO=bar curl https://example.test",
+            "env NODE_OPTIONS=--inspect curl https://example.test",
             "block",
             "native.classification-block",
             "native_command_evaluation_failed",

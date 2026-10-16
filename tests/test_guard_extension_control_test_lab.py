@@ -10,7 +10,6 @@ from codex_plugin_scanner.guard.daemon.extension_control_errors import Extension
 from codex_plugin_scanner.guard.daemon.extension_control_test_api import (
     evaluate_extension_control_test,
 )
-from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
 )
@@ -19,7 +18,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
-from tests.test_guard_command_decision_routing import _synthetic_native_fixture
+from tests.native_command_test_support import real_native_command_evaluation
 
 
 def _runtime() -> ExtensionControlRuntime:
@@ -70,36 +69,32 @@ def test_test_lab_projects_a_bound_native_evaluation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    registry, snapshot, command, native_payload = _synthetic_native_fixture()
-    evaluation = evaluate_command(
-        command.normalized_text,
-        canonical_command=command,
-        registry=registry,
-        extension_control_snapshot=snapshot,
-        native_extension_evidence=native_payload,
-    )
+    command_text = "git reset --hard HEAD~1"
+    reviewed = real_native_command_evaluation(command_text)
+    evaluation = reviewed.evaluation
+    snapshot = reviewed.snapshot
     runtime = ExtensionControlRuntime(
         ExtensionControlAuthorityView(
             AuthorityHealth.PROTECTED,
             snapshot.revision,
-            registry.catalog_digest,
+            BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
             snapshot.layers,
             snapshot.managed_revision,
         )
     )
 
-    def native_evaluate(command_text: str, **kwargs: object):
-        assert command_text == command.normalized_text
+    def native_evaluate(received: str, **kwargs: object):
+        assert received == command_text
         assert kwargs["guard_home"] == tmp_path
         assert kwargs["extension_control_snapshot"] is runtime.current()
         return evaluation
 
     monkeypatch.setattr(test_api, "evaluate_command_native", native_evaluate)
     result = evaluate_extension_control_test(
-        registry=registry,
+        registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
         runtime=runtime,
         guard_home=tmp_path,
-        payload={"command": command.normalized_text, "extension_id": registry.extensions[0].extension_id},
+        payload={"command": command_text, "extension_id": "command.git"},
     )
 
     assert "status" not in result

@@ -31,11 +31,124 @@ fn facts() -> BusinessActionV1 {
     .unwrap()
 }
 
+#[test]
+fn signed_budget_declarations_require_the_durable_reservation_owner() {
+    let mut value = serde_json::to_value(binding("allow", "allow")).unwrap();
+    value["budgets"] = json!([{"schema":"guard.business-budget.v1","version":1,
+        "id":"mail.daily","scope":"account","windowMs":86400000,
+        "maximumActions":10,"maximumRecipients":20,"maximumRecords":10,"maximumBytes":1048576,
+        "match":{"schema":"guard.business-policy-match.v1","version":1,
+            "services":["google_gmail"],"operations":["mail_send"]}}]);
+    let binding: BusinessPolicyBindingV1 = serde_json::from_value(value).unwrap();
+    let policy = CompiledBusinessPolicy::new(&binding).unwrap();
+    assert_eq!(
+        policy.floor(ActionFloor::Allow, Some(&facts())).action,
+        ActionFloor::Block
+    );
+    let admitted = snapshot(Some(binding), "enforce");
+    assert_eq!(
+        super::super::ensure_business_review_permitted(admitted.snapshot(), &facts(), "review")
+            .unwrap_err(),
+        "native_business_budget_executor_unavailable"
+    );
+}
+
+#[test]
+fn expiry_equality_removes_allow_and_preserves_intrinsic_floor() {
+    let mut value = binding("block", "allow");
+    let expiry_text = "2026-07-16T12:00:00.123456789Z";
+    value.rules[0].expires_at = Some(expiry_text.into());
+    let expiry = guard_contracts::canonical_policy_timestamp_nanos(expiry_text).unwrap();
+    let policy = CompiledBusinessPolicy::new(&value).unwrap();
+    let action = facts();
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Allow, Some(&action), Some(expiry - 1))
+            .action,
+        ActionFloor::Allow
+    );
+    for now in [expiry, expiry + 1, expiry + 1_000_000_000] {
+        let result = policy.floor_at(ActionFloor::Allow, Some(&action), Some(now));
+        assert_eq!(result.action, ActionFloor::Block);
+        assert!(result.matched_rule_ids.is_empty());
+    }
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Block, Some(&action), Some(expiry - 1))
+            .action,
+        ActionFloor::Block
+    );
+    assert_eq!(
+        policy
+            .floor_at(ActionFloor::Allow, Some(&action), None)
+            .action,
+        ActionFloor::Block
+    );
+}
+
+#[test]
+fn expired_rules_do_not_mask_live_rules_and_permanent_policy_needs_no_clock() {
+    let mut value = binding("allow", "allow");
+    value.rules[0].expires_at = Some("1970-01-01T00:00:00.000000001Z".into());
+    let mut block = value.rules[0].clone();
+    block.id = "permanent.block".into();
+    block.action = "block".into();
+    block.expires_at = None;
+    value.rules.push(block);
+    let result = CompiledBusinessPolicy::new(&value).unwrap().floor_at(
+        ActionFloor::Allow,
+        Some(&facts()),
+        Some(1),
+    );
+    assert_eq!(result.action, ActionFloor::Block);
+    assert_eq!(result.matched_rule_ids, ["permanent.block"]);
+    let permanent = CompiledBusinessPolicy::new(&binding("block", "allow")).unwrap();
+    assert_eq!(
+        permanent
+            .floor_at(ActionFloor::Allow, Some(&facts()), None)
+            .action,
+        ActionFloor::Allow
+    );
+    let mut expired_block = binding("allow", "block");
+    expired_block.rules[0].expires_at = Some("1970-01-01T00:00:00Z".into());
+    let expired = CompiledBusinessPolicy::new(&expired_block).unwrap();
+    assert_eq!(
+        expired.floor(ActionFloor::Allow, Some(&facts())).action,
+        ActionFloor::Allow
+    );
+    assert_eq!(
+        expired.floor(ActionFloor::Allow, None).action,
+        ActionFloor::Block
+    );
+}
+
 fn snapshot(binding: Option<BusinessPolicyBindingV1>, mode: &str) -> AdmittedPolicySnapshot {
     let mut value = super::super::tests::snapshot(super::super::tests::policy("allow"));
     value.business_policy = binding;
     value.mode = mode.into();
     AdmittedPolicySnapshot::new(value).unwrap()
+}
+
+#[test]
+fn signed_budget_declarations_cannot_allow_before_reservation_executor_exists() {
+    let mut value = serde_json::to_value(binding("allow", "allow")).unwrap();
+    value["budgets"] = json!([{"schema":"guard.business-budget.v1","version":1,
+        "id":"mail.daily","scope":"account","windowMs":86400000,
+        "maximumActions":10,"maximumRecipients":20,"maximumRecords":10,"maximumBytes":1048576,
+        "match":{"schema":"guard.business-policy-match.v1","version":1,
+            "services":["google_gmail"],"operations":["mail_send"]}}]);
+    let binding: BusinessPolicyBindingV1 = serde_json::from_value(value).unwrap();
+    let policy = CompiledBusinessPolicy::new(&binding).unwrap();
+    assert_eq!(
+        policy.floor(ActionFloor::Allow, Some(&facts())).action,
+        ActionFloor::Block
+    );
+    let admitted = snapshot(Some(binding), "enforce");
+    assert_eq!(
+        super::super::ensure_business_review_permitted(admitted.snapshot(), &facts(), "review")
+            .unwrap_err(),
+        "native_business_budget_executor_unavailable"
+    );
 }
 
 #[test]
@@ -166,6 +279,55 @@ fn complete_nonmatches_use_default_without_weakening_intrinsic_secret_floors() {
 }
 
 #[test]
+fn workspace_local_paths_and_windows_shims_cannot_skip_business_context() {
+    let installed = snapshot(Some(binding("allow", "allow")), "enforce");
+    for command in [
+        "./gws gmail users messages send --json '{}'",
+        "./node_modules/.bin/gws gmail users messages send",
+        "/tmp/workspace/bin/gog gmail send",
+        "gws.cmd gmail users messages send",
+        "GOG.CMD gmail send",
+        "npx gws gmail users messages send",
+        "npx -y @example/gws@1.2.0 gmail users messages send",
+        "pnpm exec gog gmail send",
+        "bunx gws gmail users messages send",
+        "npx -c 'gws gmail users messages send'",
+        "npm exec --call='gws gmail users messages send'",
+        "pnpm exec sh -c 'gog gmail send'",
+        "yarn exec bash -c \"cd /tmp && gws gmail users messages send\"",
+        "npm install -c 'gws gmail users messages send'",
+        "npm --prefix install exec gws gmail users messages send",
+        "pnpm -C install exec gog gmail send",
+        "yarn --cwd install exec gws gmail users messages send",
+    ] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let result = super::super::tests::generic_result("allow");
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_eq!(output.minimum_action, "block", "{command}");
+        assert_eq!(output.decision, "deny", "{command}");
+        assert_eq!(
+            output.reason_code, "native_business_context_unavailable",
+            "{command}"
+        );
+    }
+    for command in [
+        "npx prettier --check gws.md",
+        "./gwsync status",
+        "npm install gws",
+        "pnpm add -D @example/gws@1.2.0",
+        "yarn remove gog",
+    ] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let result = super::super::tests::generic_result("allow");
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_ne!(
+            output.reason_code, "native_business_context_unavailable",
+            "{command}"
+        );
+    }
+}
+
+#[test]
 fn ordinary_hook_business_claims_and_google_cli_calls_require_native_context_even_in_observe() {
     for mode in ["enforce", "observe"] {
         let installed = snapshot(Some(binding("allow", "allow")), mode);
@@ -285,6 +447,32 @@ fn intrinsic_blocks_keep_their_reason_and_oversized_commands_fail_without_echo()
     let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
     assert_eq!(output.minimum_action, "block");
     assert_eq!(output.reason_code, "fixture_secret_floor");
+    for command in [
+        "sh -c 'gws gmail users messages send --upload outbound.eml'",
+        "bash -c \"gog gmail send\"",
+    ] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let mut result = super::super::tests::generic_result("block");
+        result.reason_code = "native_command_extension_evaluation_failed".into();
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_eq!(output.minimum_action, "block", "{command}");
+        assert_eq!(output.decision, "deny", "{command}");
+        assert_eq!(
+            output.reason_code, "native_business_context_unavailable",
+            "{command}"
+        );
+    }
+    for command in ["sh -c 'echo hi'", "npx -c 'echo hello'"] {
+        let payload = json!({"tool_name":"bash","tool_input":{"command":command}});
+        let mut result = super::super::tests::generic_result("block");
+        result.reason_code = "native_command_extension_evaluation_failed".into();
+        let output = super::super::apply_pre_tool_policy(&installed, &payload, result).unwrap();
+        assert_eq!(output.minimum_action, "block", "{command}");
+        assert_eq!(
+            output.reason_code, "native_command_extension_evaluation_failed",
+            "{command}"
+        );
+    }
     let huge = json!({"tool_name":"bash","tool_input":{"command":"x".repeat(guard_command::MAX_COMMAND_BYTES+1)}});
     assert_eq!(
         requires_business_context(&huge, PreToolActionTypeV1::Command),

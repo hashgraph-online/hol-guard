@@ -1,0 +1,97 @@
+name: CI Windows shim admin
+description: Replay the Windows package-shim admin vectors and run the native shim op on a real Windows host.
+inputs:
+  shim-gate:
+    description: Exact required Windows test family (vectors, native-op or mcp).
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: "3.12"
+    - name: Stage trust bindings the native build embeds
+      shell: pwsh
+      run: |
+        python scripts/refresh_extension_artifacts.py --trust-only
+        if ($LASTEXITCODE -ne 0) {
+          throw "Staging Windows native trust bindings failed with exit code $LASTEXITCODE"
+        }
+    - name: Validate the selected Windows shim contract gate
+      shell: pwsh
+      env:
+        SHIM_GATE: ${{ inputs.shim-gate }}
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ($env:SHIM_GATE -notin @('vectors', 'native-op', 'mcp')) {
+          throw "Unknown Windows shim contract gate: $env:SHIM_GATE"
+        }
+    - uses: ./.github/actions/setup-rust
+      with:
+        # Distinct cache writers preserve complete dependencies for each
+        # matrix child. The job's test debug profile also keys these caches;
+        # full-debug native-wheel artifacts cannot seed this profile.
+        cache-key: windows-shim-${{ inputs.shim-gate }}
+    - name: Install content-addressed compiler cache
+      uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
+      with:
+        version: v0.18.0
+    - name: Route Windows shim contract builds through the compiler cache
+      shell: pwsh
+      env:
+        SCCACHE_MODE: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') && 'READ_WRITE' || 'READ_ONLY' }}
+      run: |
+        "RUSTC_WORKSPACE_WRAPPER=sccache" >> $env:GITHUB_ENV
+        "SCCACHE_GHA_ENABLED=on" >> $env:GITHUB_ENV
+        "SCCACHE_GHA_VERSION=windows-ci-shim-admin-v1" >> $env:GITHUB_ENV
+        "SCCACHE_GHA_RW_MODE=$($env:SCCACHE_MODE)" >> $env:GITHUB_ENV
+        "SCCACHE_IGNORE_SERVER_IO_ERROR=1" >> $env:GITHUB_ENV
+        "CARGO_INCREMENTAL=0" >> $env:GITHUB_ENV
+    - name: Replay the recorded Windows shim vectors
+      if: inputs.shim-gate == 'vectors'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        $env:SHIM_VECTOR_ROOT_BASE = Join-Path $env:RUNNER_TEMP 'shim-vectors'
+        New-Item -ItemType Directory -Force $env:SHIM_VECTOR_ROOT_BASE | Out-Null
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors
+    - name: Install and report shims through the native op on Windows
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op
+    - name: Observe direct-lane policy inputs as CPython stats them
+      if: inputs.shim-gate == 'native-op'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime storage_gate
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold
+        cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime windows_expanded_home
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test process_liveness
+    - name: Contain MCP server process trees in a JobObject on Windows
+      if: inputs.shim-gate == 'mcp'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test child_tree
+    - name: Probe an MCP server catalog natively on Windows
+      if: inputs.shim-gate == 'mcp'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test mcp_stdio_probe_windows
+    - name: Verify MCP launch executables natively on Windows
+      if: inputs.shim-gate == 'mcp'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $PSNativeCommandUseErrorActionPreference = $true
+        cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test launch_identity_windows

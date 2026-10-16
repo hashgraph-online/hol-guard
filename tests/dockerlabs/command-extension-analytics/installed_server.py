@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -31,48 +32,13 @@ _GH_FIXTURE = Path("/opt/guard-lab/github-cli-fixture.sh")
 _REPOSITORY = "hashgraph-online/hol-guard"
 _VIEWER = "dashboard-reviewer"
 _WORKFLOW_COMMAND = f"{_GH_EXECUTABLE} issue lock 17 --repo {_REPOSITORY}"
-_KEYRING_MODULE = """\
-import hashlib
-import os
-from pathlib import Path
-
-from keyring.backend import KeyringBackend
-from keyring.errors import PasswordDeleteError
-
-
-class GuardLabKeyring(KeyringBackend):
-    priority = 1
-    _root = Path("/guard-home/lab-keyring")
-
-    def _path(self, service, username):
-        identity = f"{service}\\0{username}".encode("utf-8")
-        return self._root / hashlib.sha256(identity).hexdigest()
-
-    def get_password(self, service, username):
-        try:
-            return self._path(service, username).read_text(encoding="utf-8")
-        except FileNotFoundError:
-            return None
-
-    def set_password(self, service, username, password):
-        self._root.mkdir(mode=0o700, exist_ok=True)
-        path = self._path(service, username)
-        descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            stream.write(password)
-
-    def delete_password(self, service, username):
-        try:
-            self._path(service, username).unlink()
-        except FileNotFoundError as error:
-            raise PasswordDeleteError("credential unavailable") from error
-"""
+_KEYRING_FIXTURE = Path(__file__).with_name("keyring_fixture.py")
 
 
 def _safe_hook_diagnostic(value: str) -> str:
-    redacted = value.replace(SENTINEL, "[REDACTED]")
-    if len(redacted) <= _MAX_HOOK_DIAGNOSTIC_CHARS:
-        return redacted
+    redacted = re.sub(
+        r"([#&?]guard-token=)[^\s\"'&]+", r"\1[REDACTED]", value.replace(SENTINEL, "[REDACTED]")
+    )
     return redacted[-_MAX_HOOK_DIAGNOSTIC_CHARS:]
 
 
@@ -140,8 +106,11 @@ def _run_installed_hook(
     *,
     expected_status: int = 0,
     expect_denial: bool = False,
+    expect_approval: bool = False,
     policy_action: str | None = None,
 ) -> str:
+    if expect_denial and expect_approval:
+        raise ValueError("hook cannot expect both denial and approval")
     command = [
         "hol-guard",
         "hook",
@@ -170,7 +139,8 @@ def _run_installed_hook(
     if expect_denial:
         expected_status = native_hook_verdict_exit_code(harness, "block", str(payload.get("hook_event_name", "")))
     native_denial = False
-    if expect_denial and expected_status == 0 and completed.returncode == 0:
+    native_approval = False
+    if (expect_denial or expect_approval) and expected_status == 0 and completed.returncode == 0:
         try:
             response = json.loads(completed.stdout)
         except json.JSONDecodeError:
@@ -182,7 +152,16 @@ def _run_installed_hook(
                 and isinstance(hook_output, dict)
                 and hook_output.get("permissionDecision") == "deny"
             )
-    if completed.returncode != expected_status or (expect_denial and expected_status == 0 and not native_denial):
+            native_approval = harness == "claude-code" and (
+                response.get("policy_action") in {"review", "require-reapproval"}
+                and isinstance(hook_output, dict)
+                and hook_output.get("permissionDecision") == "ask"
+            )
+    if (
+        completed.returncode != expected_status
+        or (expect_denial and expected_status == 0 and not native_denial)
+        or (expect_approval and not native_approval)
+    ):
         diagnostic = (
             f"installed {harness} hook returned {completed.returncode}, expected {expected_status}; "
             + f"response={_safe_hook_response_summary(completed.stdout)}; "
@@ -227,7 +206,7 @@ def _invoke_real_harnesses() -> int:
     _run_installed_hook("codex", codex_pre)
     _run_installed_hook("codex", codex_post)
     _run_installed_hook("claude-code", claude_no_post)
-    _run_installed_hook("claude-code", claude_review, expect_denial=True)
+    _run_installed_hook("claude-code", claude_review, expect_approval=True)
     _run_installed_hook("cursor", cursor_block, expect_denial=True, policy_action="block")
     return 2
 
@@ -367,7 +346,7 @@ def _prepare_workspace() -> None:
     os.environ["PATH"] = f"{_GH_EXECUTABLE.parent}:{os.environ.get('PATH', '')}"
     os.environ["GITHUB_TOKEN"] = SENTINEL
     keyring_module = GUARD_HOME / "guard_lab_keyring.py"
-    _ = keyring_module.write_text(_KEYRING_MODULE, encoding="utf-8")
+    _ = keyring_module.write_text(_KEYRING_FIXTURE.read_text(encoding="utf-8"), encoding="utf-8")
     keyring_module.chmod(0o600)
     os.environ["PYTHONPATH"] = str(GUARD_HOME)
     os.environ["PYTHON_KEYRING_BACKEND"] = "guard_lab_keyring.GuardLabKeyring"

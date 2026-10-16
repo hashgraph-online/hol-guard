@@ -108,7 +108,7 @@ impl BusinessPolicyMatchV1 {
             return Err(Error::UnsupportedVersion);
         }
         if !valid_set(&self.services, 3)
-            || !valid_set(&self.operations, 11)
+            || !valid_set(&self.operations, 12)
             || self
                 .operations
                 .iter()

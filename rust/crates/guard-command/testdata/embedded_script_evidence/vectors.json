@@ -1,0 +1,2644 @@
+[
+ {
+  "name": "empty",
+  "command": "",
+  "entries": []
+ },
+ {
+  "name": "whitespace",
+  "command": "   \n\t",
+  "entries": []
+ },
+ {
+  "name": "no_heredoc",
+  "command": "echo hello",
+  "entries": []
+ },
+ {
+  "name": "here_string",
+  "command": "cat <<< 'not a heredoc'",
+  "entries": []
+ },
+ {
+  "name": "arithmetic_shift",
+  "command": "echo $((1 << 2))",
+  "entries": []
+ },
+ {
+  "name": "owner_ash",
+  "command": "ash <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "ash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_bash",
+  "command": "bash <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_bun",
+  "command": "bun <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bun",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_dash",
+  "command": "dash <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "dash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_deno",
+  "command": "deno <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "deno",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_node",
+  "command": "node <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "node",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_perl",
+  "command": "perl <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "perl",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_php",
+  "command": "php <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "php",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_python",
+  "command": "python <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 13,
+     "end": 25
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_python3",
+  "command": "python3 <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 14,
+     "end": 26
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_ruby",
+  "command": "ruby <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "ruby",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_sh",
+  "command": "sh <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "sh",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 9,
+     "end": 21
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_zsh",
+  "command": "zsh <<EOF\nprint('hi')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "zsh",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "caf026f25d7140209f98072605307a438914b9ce6f3c14b23d15d9667241de52",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_python_dash",
+  "command": "python - <<'PY'\nimport os\nprint(os.getcwd())\nPY",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "PY",
+    "quoted": true,
+    "executable": "python",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "f6ca1eb287971d696084b205111ccd1066ffcdcf3ea0853427a675f0d09a248d",
+    "bytes": 29,
+    "lines": 2,
+    "span": {
+     "start": 16,
+     "end": 45
+    }
+   }
+  ]
+ },
+ {
+  "name": "owner_node_stdin",
+  "command": "node --input-type=module <<'JS'\nconsole.log(1)\nJS",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "JS",
+    "quoted": true,
+    "executable": "node",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d",
+    "bytes": 15,
+    "lines": 1,
+    "span": {
+     "start": 32,
+     "end": 47
+    }
+   }
+  ]
+ },
+ {
+  "name": "single_quoted_delimiter",
+  "command": "bash <<'EOF'\necho $HOME\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": true,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "1ac6f6f43f7e7f9eb96d8d59cba572bacdd2893566615281722deff492f41c24",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 13,
+     "end": 24
+    }
+   }
+  ]
+ },
+ {
+  "name": "double_quoted_delimiter",
+  "command": "bash <<\"EOF\"\necho $HOME\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": true,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "1ac6f6f43f7e7f9eb96d8d59cba572bacdd2893566615281722deff492f41c24",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 13,
+     "end": 24
+    }
+   }
+  ]
+ },
+ {
+  "name": "partially_quoted_delimiter",
+  "command": "bash <<E'O'F\necho hi\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "E",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "8473737598d171f6237cd68775d0525c9f82052cbb8fd9f8b7b3a36c95b9fe45",
+    "bytes": 11,
+    "lines": 2,
+    "span": {
+     "start": 13,
+     "end": 24
+    }
+   }
+  ]
+ },
+ {
+  "name": "backslash_delimiter",
+  "command": "bash <<\\EOF\necho hi\nEOF",
+  "entries": []
+ },
+ {
+  "name": "strip_tabs",
+  "command": "bash <<-EOF\n\techo hi\n\t\techo there\n\tEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "38684fa976f35a7dd081b7eee7d9e502d65adac6212b785d32e576c7008618df",
+    "bytes": 22,
+    "lines": 2,
+    "span": {
+     "start": 12,
+     "end": 34
+    }
+   }
+  ]
+ },
+ {
+  "name": "strip_tabs_quoted",
+  "command": "sh <<-'END'\n\tls -la\nEND",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "END",
+    "quoted": true,
+    "executable": "sh",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "33a732c32e712cec8fbaadbbac817ce1f529652eaf77ac10da66c465f592c4db",
+    "bytes": 8,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 20
+    }
+   }
+  ]
+ },
+ {
+  "name": "space_before_delimiter",
+  "command": "bash << EOF\necho spaced\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "e6787ea54c23c2998a1675297bdca04519b896758d2087d1fbaf5261756135d9",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 24
+    }
+   }
+  ]
+ },
+ {
+  "name": "cat_to_file",
+  "command": "cat > script.sh <<EOF\n#!/bin/sh\necho hi\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "299001868fb8c02fd431c336c6d058f5558c5dff5b5af5e6fe04b870a6a9cbba",
+    "bytes": 18,
+    "lines": 2,
+    "span": {
+     "start": 22,
+     "end": 40
+    }
+   }
+  ]
+ },
+ {
+  "name": "cat_append",
+  "command": "cat >> notes.txt <<'EOF'\nline one\nline two\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": true,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "e9024f1a07d29d52ad3aa5e1a18e94db1f3a9fd32b89e39d47c472cd99071e13",
+    "bytes": 18,
+    "lines": 2,
+    "span": {
+     "start": 25,
+     "end": 43
+    }
+   }
+  ]
+ },
+ {
+  "name": "tee_file",
+  "command": "tee config.yaml <<EOF\nkey: value\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "0ddd3d77338ca222ab064e214bbec3a4547e9d33801912eaacc7b4b4e27e1a91",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 22,
+     "end": 33
+    }
+   }
+  ]
+ },
+ {
+  "name": "tee_sudo",
+  "command": "sudo tee /etc/hosts.d/x <<EOF\n127.0.0.1 x\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "30294566aa1f5d4737b6d1537e939eaa44432283994b799080132d6917180e96",
+    "bytes": 12,
+    "lines": 1,
+    "span": {
+     "start": 30,
+     "end": 42
+    }
+   }
+  ]
+ },
+ {
+  "name": "kubectl_unknown",
+  "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "kubectl",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "60146ce71c6ba57f4a4679a337a62b4c8df359d0619ea8a4f8057f2270ea0afe",
+    "bytes": 31,
+    "lines": 2,
+    "span": {
+     "start": 25,
+     "end": 56
+    }
+   }
+  ]
+ },
+ {
+  "name": "mysql_unknown",
+  "command": "mysql -u root <<SQL\nSELECT 1;\nSQL",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "SQL",
+    "quoted": false,
+    "executable": "mysql",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "b4e0497804e46e0a0b0b8c31975b062152d551bac49c3c2e80932567b4085dcd",
+    "bytes": 10,
+    "lines": 1,
+    "span": {
+     "start": 20,
+     "end": 30
+    }
+   }
+  ]
+ },
+ {
+  "name": "pipeline_cat_bash",
+  "command": "cat <<EOF | bash\necho piped\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "830202b017e56db062e45a4c2a1fc4d2216e0c65a7ca0c9c8a70c608cb5927de",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 17,
+     "end": 28
+    }
+   }
+  ]
+ },
+ {
+  "name": "pipeline_cat_python",
+  "command": "cat <<'PY' | python3\nprint(1)\nPY",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "PY",
+    "quoted": true,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 21,
+     "end": 30
+    }
+   }
+  ]
+ },
+ {
+  "name": "and_chain_second",
+  "command": "cd /tmp && python3 <<EOF\nprint(2)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "0111afd387e1ad576083c5039aa542faa2ed4a53d3e128bd03de990f9ea4255f",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 25,
+     "end": 34
+    }
+   }
+  ]
+ },
+ {
+  "name": "semicolon_chain",
+  "command": "echo start; bash <<EOF\necho two\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "7d97a50c9b1eb3b6a49320a5238fd08280240d28befc12465e493d17d8bc8d56",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 23,
+     "end": 32
+    }
+   }
+  ]
+ },
+ {
+  "name": "two_heredocs_one_line",
+  "command": "cat <<A; bash <<B\nalpha\nA\necho beta\nB",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "A",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "b6a98d9ce9a2d9149288fa3df42d377c3e42737afdcdaf714e33c0a100b51060",
+    "bytes": 6,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 24
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "B",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "eddb976330b4f3f66e4a8099e794c8ac86b778ceb2083f0d9e37ecf66a8042a6",
+    "bytes": 10,
+    "lines": 1,
+    "span": {
+     "start": 26,
+     "end": 36
+    }
+   }
+  ]
+ },
+ {
+  "name": "two_heredocs_lines",
+  "command": "cat > a.txt <<EOF\na\nEOF\npython3 <<EOF\nprint('b')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "87428fc522803d31065e7bce3cf03fe475096631e5e07bbd7a0fde60c4cf25c7",
+    "bytes": 2,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 20
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "82c7d03cf7d6e5cc3841b979771f5f96bf8027998aa39f3a800283df32b185d4",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 38,
+     "end": 49
+    }
+   }
+  ]
+ },
+ {
+  "name": "three_mixed",
+  "command": "tee a <<X\n1\nX\nnode <<Y\nconsole.log(2)\nY\nkubectl apply -f - <<Z\nk: v\nZ",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "X",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865",
+    "bytes": 2,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 12
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "Y",
+    "quoted": false,
+    "executable": "node",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "7a5499dd2b4d51216a401cb51ea0e59154c300e95047683ea2e5fb04568a68f6",
+    "bytes": 15,
+    "lines": 1,
+    "span": {
+     "start": 23,
+     "end": 38
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 2,
+    "delimiter": "Z",
+    "quoted": false,
+    "executable": "kubectl",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "26da0c20250395b95b5c55d90c9ee666440a4c7dc05208a63608297a8871e6fc",
+    "bytes": 5,
+    "lines": 1,
+    "span": {
+     "start": 63,
+     "end": 68
+    }
+   }
+  ]
+ },
+ {
+  "name": "absolute_python",
+  "command": "/usr/bin/python3 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 23,
+     "end": 32
+    }
+   }
+  ]
+ },
+ {
+  "name": "absolute_bash",
+  "command": "/bin/bash <<EOF\necho x\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "641da915aff92d2166ad038a3cf184f73b47a8b3f5a508bad472ec531d8423a7",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 16,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "relative_path_owner",
+  "command": "./venv/bin/python <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 24,
+     "end": 33
+    }
+   }
+  ]
+ },
+ {
+  "name": "uppercase_owner",
+  "command": "BASH <<EOF\necho x\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "641da915aff92d2166ad038a3cf184f73b47a8b3f5a508bad472ec531d8423a7",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 18
+    }
+   }
+  ]
+ },
+ {
+  "name": "windows_style_path",
+  "command": "C:\\Python\\python.exe <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "c:pythonpython.exe",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 27,
+     "end": 36
+    }
+   }
+  ],
+  "windows_entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python.exe",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 27,
+     "end": 36
+    }
+   }
+  ]
+ },
+ {
+  "name": "python_exe_suffix",
+  "command": "python3.exe <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3.exe",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 27
+    }
+   }
+  ]
+ },
+ {
+  "name": "python_version_suffix",
+  "command": "python3.12 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3.12",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 17,
+     "end": 26
+    }
+   }
+  ]
+ },
+ {
+  "name": "env_wrapper",
+  "command": "env python3 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 27
+    }
+   }
+  ]
+ },
+ {
+  "name": "env_assignment_wrapper",
+  "command": "env FOO=1 bash <<EOF\necho $FOO\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "95fb3fe17418a4107908eb7fe3551c4127d8a9ab2b18b57cbb6f3223a65b4b1a",
+    "bytes": 10,
+    "lines": 1,
+    "span": {
+     "start": 21,
+     "end": 31
+    }
+   }
+  ]
+ },
+ {
+  "name": "usr_bin_env_wrapper",
+  "command": "/usr/bin/env node <<EOF\nconsole.log(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "node",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d",
+    "bytes": 15,
+    "lines": 1,
+    "span": {
+     "start": 24,
+     "end": 39
+    }
+   }
+  ]
+ },
+ {
+  "name": "sudo_wrapper",
+  "command": "sudo bash <<EOF\nwhoami\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "33e7267d8409d63707706f95f3d67ee9be5fd3a2c6ffc60856c9baeca1ae3ed4",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 16,
+     "end": 23
+    }
+   }
+  ]
+ },
+ {
+  "name": "sudo_user_wrapper",
+  "command": "sudo -u nobody sh <<EOF\nid\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "sh",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "984a644ec3b56d32b0404777e1eb73390c4b0742a6a0e183f07861056b6746de",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 24,
+     "end": 27
+    }
+   }
+  ]
+ },
+ {
+  "name": "nohup_wrapper",
+  "command": "nohup bash <<EOF\necho bg\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "e5ff9681989a832d1f6819e01641f02441600a63cb045808f7a109ade89d9ef2",
+    "bytes": 8,
+    "lines": 1,
+    "span": {
+     "start": 17,
+     "end": 25
+    }
+   }
+  ]
+ },
+ {
+  "name": "timeout_wrapper",
+  "command": "timeout 5 python3 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "timeout",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 24,
+     "end": 33
+    }
+   }
+  ]
+ },
+ {
+  "name": "leading_assignment",
+  "command": "FOO=bar bash <<EOF\necho $FOO\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "95fb3fe17418a4107908eb7fe3551c4127d8a9ab2b18b57cbb6f3223a65b4b1a",
+    "bytes": 10,
+    "lines": 1,
+    "span": {
+     "start": 19,
+     "end": 29
+    }
+   }
+  ]
+ },
+ {
+  "name": "bash_c_wrapper",
+  "command": "bash -c 'python3 <<EOF\nprint(1)\nEOF'",
+  "entries": []
+ },
+ {
+  "name": "subshell",
+  "command": "(bash <<EOF\necho sub\nEOF\n)",
+  "entries": []
+ },
+ {
+  "name": "command_substitution",
+  "command": "out=\"$(python3 <<EOF\nprint(1)\nEOF\n)\"",
+  "entries": []
+ },
+ {
+  "name": "non_ascii_body",
+  "command": "python3 <<EOF\nprint('héllo wörld ✓')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "de11dc502557eb54468616bedfee81c702845de3b02e2d5e3910f76dcd485427",
+    "bytes": 27,
+    "lines": 1,
+    "span": {
+     "start": 14,
+     "end": 37
+    }
+   }
+  ]
+ },
+ {
+  "name": "non_ascii_prefix",
+  "command": "echo 'héllo ✓ 日本' && bash <<EOF\necho ok\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "4726de74e6ad02ddb5decee701960c06c6fd91a871f95238350941eed7dbb22a",
+    "bytes": 8,
+    "lines": 1,
+    "span": {
+     "start": 32,
+     "end": 40
+    }
+   }
+  ]
+ },
+ {
+  "name": "non_ascii_prefix_cat",
+  "command": "echo ünïcödé; cat > f.txt <<EOF\nü\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "599c7c0c70071ddf9568a4b07213a61a06ddb301f494a3477c69aaf04c1ad1cd",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 32,
+     "end": 34
+    }
+   }
+  ]
+ },
+ {
+  "name": "emoji_prefix",
+  "command": "echo 🎉🎉 && python3 <<EOF\nprint('🎉')\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "806c2b478a76e8070cb10b15c87d181107790c63eaafdb01867a47bb09c55256",
+    "bytes": 14,
+    "lines": 1,
+    "span": {
+     "start": 25,
+     "end": 36
+    }
+   }
+  ]
+ },
+ {
+  "name": "emoji_delimiter_body",
+  "command": "bash <<EOF\n🎉\n日本語\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "43a94ee9994c26a8e5e3e57e43c29d4d2d09b81bdc45fb4a3b1394e5b2325226",
+    "bytes": 15,
+    "lines": 2,
+    "span": {
+     "start": 11,
+     "end": 17
+    }
+   }
+  ]
+ },
+ {
+  "name": "non_ascii_wrapper_prefix",
+  "command": "FOO=ü env python3 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 24,
+     "end": 33
+    }
+   }
+  ]
+ },
+ {
+  "name": "crlf",
+  "command": "bash <<EOF\r\necho crlf\r\nEOF\r\n",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "a1b585dcbcafdcb981f33f4ad770cda29d833635f880d03a3a57d5c373765419",
+    "bytes": 16,
+    "lines": 2,
+    "span": {
+     "start": 12,
+     "end": 28
+    }
+   }
+  ]
+ },
+ {
+  "name": "crlf_body_only",
+  "command": "bash <<EOF\necho crlf\r\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "2e03c8ce75e26c76904598dd6ad425366072be5b09bf51cd1e15892d256dc47c",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "empty_body",
+  "command": "bash <<EOF\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "lines": 0,
+    "span": {
+     "start": 11,
+     "end": 11
+    }
+   }
+  ]
+ },
+ {
+  "name": "blank_line_body",
+  "command": "bash <<EOF\n\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+    "bytes": 1,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 12
+    }
+   }
+  ]
+ },
+ {
+  "name": "body_without_trailing_newline",
+  "command": "cat <<EOF\nno newline",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "84629f9a7125f5b50e9767df4fea1e93b34462b57bd35a12ebca2b52520f5c84",
+    "bytes": 10,
+    "lines": 1,
+    "span": {
+     "start": 10,
+     "end": 20
+    }
+   }
+  ]
+ },
+ {
+  "name": "unterminated",
+  "command": "python3 <<EOF\nprint(1)\nprint(2)",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "22a5a25d40baed887195ee64cc4829af234b62db7abe498a4d663bf02e5a0190",
+    "bytes": 17,
+    "lines": 2,
+    "span": {
+     "start": 14,
+     "end": 31
+    }
+   }
+  ]
+ },
+ {
+  "name": "unterminated_no_body",
+  "command": "bash <<EOF",
+  "entries": []
+ },
+ {
+  "name": "unterminated_trailing_newline",
+  "command": "bash <<EOF\n",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "lines": 0,
+    "span": {
+     "start": 11,
+     "end": 11
+    }
+   }
+  ]
+ },
+ {
+  "name": "unbalanced_quote_before",
+  "command": "echo 'unterminated && bash <<EOF\necho x\nEOF",
+  "entries": []
+ },
+ {
+  "name": "unbalanced_quote_body",
+  "command": "bash <<EOF\necho 'oops\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "ca171e1275990c2cb04efb426905cd4efd96ca9f93914fcd7b60249a650ac6e0",
+    "bytes": 11,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 22
+    }
+   }
+  ]
+ },
+ {
+  "name": "unbalanced_double_quote_after",
+  "command": "bash <<EOF\necho x\nEOF\necho \"dangling",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "641da915aff92d2166ad038a3cf184f73b47a8b3f5a508bad472ec531d8423a7",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 18
+    }
+   }
+  ]
+ },
+ {
+  "name": "heredoc_in_quotes",
+  "command": "echo '<<EOF'\nEOF",
+  "entries": []
+ },
+ {
+  "name": "heredoc_comment",
+  "command": "echo hi # <<EOF\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "echo",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0,
+    "lines": 0,
+    "span": {
+     "start": 16,
+     "end": 16
+    }
+   }
+  ]
+ },
+ {
+  "name": "delimiter_with_dash",
+  "command": "bash <<END-OF-SCRIPT\necho x\nEND-OF-SCRIPT",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "END",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "4cd75c17798e0c47cf337b66b2180500031db9eb7e311716e8d3d62934878679",
+    "bytes": 20,
+    "lines": 2,
+    "span": {
+     "start": 21,
+     "end": 41
+    }
+   }
+  ]
+ },
+ {
+  "name": "delimiter_indented_not_closed",
+  "command": "bash <<EOF\necho x\n  EOF\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "4fbc5a07a506117f77cd5d11106b553bb4749f9df84ae180656171920bab9ab0",
+    "bytes": 13,
+    "lines": 2,
+    "span": {
+     "start": 11,
+     "end": 24
+    }
+   }
+  ]
+ },
+ {
+  "name": "body_contains_heredoc_text",
+  "command": "cat > gen.sh <<'OUTER'\nbash <<INNER\necho x\nINNER\nOUTER",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "OUTER",
+    "quoted": true,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "e1c9c13a33eb0d1f744decf37836c5e1775fbfb89ec2896df4057477dc6777c3",
+    "bytes": 26,
+    "lines": 3,
+    "span": {
+     "start": 23,
+     "end": 49
+    }
+   }
+  ]
+ },
+ {
+  "name": "redirect_then_heredoc",
+  "command": "python3 >out.log 2>&1 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 28,
+     "end": 37
+    }
+   }
+  ]
+ },
+ {
+  "name": "heredoc_before_args",
+  "command": "bash <<EOF -s arg\necho $1\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "8eee63c0d113b0e6f6936b8240deb402f0422ac295a0d10620687dadd69e00b4",
+    "bytes": 8,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 26
+    }
+   }
+  ]
+ },
+ {
+  "name": "multiline_body",
+  "command": "bash <<EOF\nline1\nline2\nline3\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "66663af9c7aa341431a8ee2ff27b72abd06c9218f517bb6fef948e4803c19e03",
+    "bytes": 18,
+    "lines": 3,
+    "span": {
+     "start": 11,
+     "end": 29
+    }
+   }
+  ]
+ },
+ {
+  "name": "long_prefix_chain",
+  "command": "a && b && c && d && e; f | g | python3 <<EOF\nprint(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "python3",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cc42155088fca5730758db72b2a5bca33112a941dfaa2d43098ec422ce4ea213",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 45,
+     "end": 54
+    }
+   }
+  ]
+ },
+ {
+  "name": "deno_run",
+  "command": "deno run - <<EOF\nconsole.log(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "deno",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d",
+    "bytes": 15,
+    "lines": 1,
+    "span": {
+     "start": 17,
+     "end": 32
+    }
+   }
+  ]
+ },
+ {
+  "name": "bun_run",
+  "command": "bun run - <<EOF\nconsole.log(1)\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bun",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "3879a5d930ae1999b278a3a498f7de3fd83ba8dae59330fcfa2db31c103ac21d",
+    "bytes": 15,
+    "lines": 1,
+    "span": {
+     "start": 16,
+     "end": 31
+    }
+   }
+  ]
+ },
+ {
+  "name": "php_owner",
+  "command": "php <<'PHP'\n<?php echo 1;\nPHP",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "PHP",
+    "quoted": true,
+    "executable": "php",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "939991e874bf2bb8e22c379223273cd2b91f7369aa86836ecb43046569de591a",
+    "bytes": 14,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 26
+    }
+   }
+  ]
+ },
+ {
+  "name": "perl_owner",
+  "command": "perl <<'PL'\nprint 1;\nPL",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "PL",
+    "quoted": true,
+    "executable": "perl",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "ef5f9f37cb24c6e52c0d997711359252535c6adc7159f9dfcfe172b0c4c49639",
+    "bytes": 9,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 21
+    }
+   }
+  ]
+ },
+ {
+  "name": "ruby_owner",
+  "command": "ruby <<'RB'\nputs 1\nRB",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "RB",
+    "quoted": true,
+    "executable": "ruby",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "82be84ab06491c73799a004332cfb83dbb7005b56e22eb9e210af96bb870905a",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 19
+    }
+   }
+  ]
+ },
+ {
+  "name": "bare_heredoc",
+  "command": "<<EOF\nx\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac",
+    "bytes": 2,
+    "lines": 1,
+    "span": {
+     "start": 6,
+     "end": 8
+    }
+   }
+  ]
+ },
+ {
+  "name": "assignment_only",
+  "command": "FOO=1 <<EOF\nx\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac",
+    "bytes": 2,
+    "lines": 1,
+    "span": {
+     "start": 12,
+     "end": 14
+    }
+   }
+  ]
+ },
+ {
+  "name": "long_wrapper_shift",
+  "command": "sudo -u nobody nohup env A=1 B=2 bash <<EOF\necho\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "nohup",
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "86b0c5a1e2b73b08fd54c727f4458649ed9fe3ad1b6e8ac9460c070113509a1e",
+    "bytes": 5,
+    "lines": 1,
+    "span": {
+     "start": 44,
+     "end": 49
+    }
+   }
+  ]
+ },
+ {
+  "name": "command_builtin_wrapper",
+  "command": "command sudo /usr/bin/env -i bash <<EOF\nx\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "73cb3858a687a8494ca3323053016282f3dad39d42cf62ca4e79dda2aac7d9ac",
+    "bytes": 2,
+    "lines": 1,
+    "span": {
+     "start": 40,
+     "end": 42
+    }
+   }
+  ]
+ },
+ {
+  "name": "segment_limit",
+  "command": "true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; true; bash <<EOF\necho x\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": null,
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "641da915aff92d2166ad038a3cf184f73b47a8b3f5a508bad472ec531d8423a7",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 851,
+     "end": 858
+    }
+   }
+  ]
+ },
+ {
+  "name": "byte_limit",
+  "command": "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa; bash <<EOF\necho x\nEOF",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "EOF",
+    "quoted": false,
+    "executable": null,
+    "executed": null,
+    "execution_status": "indeterminate",
+    "sha256": "641da915aff92d2166ad038a3cf184f73b47a8b3f5a508bad472ec531d8423a7",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 33018,
+     "end": 33025
+    }
+   }
+  ]
+ },
+ {
+  "name": "exactly_eight",
+  "command": "cat > f0.txt <<E0\nbody 0\nE0\ncat > f1.txt <<E1\nbody 1\nE1\ncat > f2.txt <<E2\nbody 2\nE2\ncat > f3.txt <<E3\nbody 3\nE3\ncat > f4.txt <<E4\nbody 4\nE4\ncat > f5.txt <<E5\nbody 5\nE5\ncat > f6.txt <<E6\nbody 6\nE6\ncat > f7.txt <<E7\nbody 7\nE7",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "E0",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "3c214434aabdfcc344c945198c592b525131c95ba62ffc480fa416ba03e0c73b",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 25
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "E1",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "80f66029d24c0e5f5e706bae9694b5c54b60afd73b571600aa996b8aa268c834",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 46,
+     "end": 53
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 2,
+    "delimiter": "E2",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "73b54f4d1be1435eb71c8ac14e36499f1f2a647b92908cb2513c5e53668ee7bb",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 74,
+     "end": 81
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 3,
+    "delimiter": "E3",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "da2b492ba82db122ee55a030626d050affc49901a9319cf79f92888eff2ea9ab",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 102,
+     "end": 109
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 4,
+    "delimiter": "E4",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "0dc386b8704d3ed9ddcca7af62d7ff8b8dcf8c017ca7af1a63c223030a368d7a",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 130,
+     "end": 137
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 5,
+    "delimiter": "E5",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "c7fad4c9d0a129237e1441f1e84173687cf3076b05ea84c573e35a666535162b",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 158,
+     "end": 165
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 6,
+    "delimiter": "E6",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "e4570b322f0f85270f2b2956cc56a377b3881f3be9a524210517fd2d4b94577d",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 186,
+     "end": 193
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 7,
+    "delimiter": "E7",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "8d1cd39752c80c3cd300d2f38801ffa51a05cebd2a64934aa9a01257a012d572",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 214,
+     "end": 221
+    }
+   }
+  ]
+ },
+ {
+  "name": "nine_truncated",
+  "command": "cat > f0.txt <<E0\nbody 0\nE0\ncat > f1.txt <<E1\nbody 1\nE1\ncat > f2.txt <<E2\nbody 2\nE2\ncat > f3.txt <<E3\nbody 3\nE3\ncat > f4.txt <<E4\nbody 4\nE4\ncat > f5.txt <<E5\nbody 5\nE5\ncat > f6.txt <<E6\nbody 6\nE6\ncat > f7.txt <<E7\nbody 7\nE7\npython3 <<E8\nprint(8)\nE8",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "E0",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "3c214434aabdfcc344c945198c592b525131c95ba62ffc480fa416ba03e0c73b",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 18,
+     "end": 25
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "E1",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "80f66029d24c0e5f5e706bae9694b5c54b60afd73b571600aa996b8aa268c834",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 46,
+     "end": 53
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 2,
+    "delimiter": "E2",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "73b54f4d1be1435eb71c8ac14e36499f1f2a647b92908cb2513c5e53668ee7bb",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 74,
+     "end": 81
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 3,
+    "delimiter": "E3",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "da2b492ba82db122ee55a030626d050affc49901a9319cf79f92888eff2ea9ab",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 102,
+     "end": 109
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 4,
+    "delimiter": "E4",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "0dc386b8704d3ed9ddcca7af62d7ff8b8dcf8c017ca7af1a63c223030a368d7a",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 130,
+     "end": 137
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 5,
+    "delimiter": "E5",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "c7fad4c9d0a129237e1441f1e84173687cf3076b05ea84c573e35a666535162b",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 158,
+     "end": 165
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 6,
+    "delimiter": "E6",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "e4570b322f0f85270f2b2956cc56a377b3881f3be9a524210517fd2d4b94577d",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 186,
+     "end": 193
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 7,
+    "delimiter": "E7",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "8d1cd39752c80c3cd300d2f38801ffa51a05cebd2a64934aa9a01257a012d572",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 214,
+     "end": 221
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "summary",
+    "truncated": true,
+    "total_heredocs": 9
+   }
+  ]
+ },
+ {
+  "name": "twelve_truncated",
+  "command": "tee x <<D0\necho 0\nD0\nbash <<D1\necho 1\nD1\ntee x <<D2\necho 2\nD2\nbash <<D3\necho 3\nD3\ntee x <<D4\necho 4\nD4\nbash <<D5\necho 5\nD5\ntee x <<D6\necho 6\nD6\nbash <<D7\necho 7\nD7\ntee x <<D8\necho 8\nD8\nbash <<D9\necho 9\nD9\ntee x <<D10\necho 10\nD10\nbash <<D11\necho 11\nD11",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "D0",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "effcce8fe9c6da7e1b50cccdfc082cdf8d1b135aed519bc27cfd5cacb16269d6",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 11,
+     "end": 18
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "D1",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "c44090c3f318c724c480b810801ef2974b32e2b9ee7ca29ca861cedd6896f798",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 31,
+     "end": 38
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 2,
+    "delimiter": "D2",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "03623d0eb5add7bae44b980a4b4867e6908b38385d9bb9057ae3e3d779d303f9",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 52,
+     "end": 59
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 3,
+    "delimiter": "D3",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "cfa191fdbbd259bdfbb5d987242d11a30a148889f8038528ac09d56ad6bc875a",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 72,
+     "end": 79
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 4,
+    "delimiter": "D4",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "09286134a08b8cd0eed827651bc3b89d31f1abc020e8f4ed6e6dd50de46ee055",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 93,
+     "end": 100
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 5,
+    "delimiter": "D5",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "e5c5e61bce9fb78f1e9a8171d16a316dac0134cd04eecd22bfcb2e8984a2be2a",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 113,
+     "end": 120
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 6,
+    "delimiter": "D6",
+    "quoted": false,
+    "executable": "tee",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "85ae0bee29c31fc4a61bd0a016a8620b55d1cfe49792fbe841c97d8f061c26e1",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 134,
+     "end": 141
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 7,
+    "delimiter": "D7",
+    "quoted": false,
+    "executable": "bash",
+    "executed": true,
+    "execution_status": "executed",
+    "sha256": "09fc1e403f4f06d94d144a5aea0a0826dcf3819b85df9c88cf8c658598bbad93",
+    "bytes": 7,
+    "lines": 1,
+    "span": {
+     "start": 154,
+     "end": 161
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "summary",
+    "truncated": true,
+    "total_heredocs": 12
+   }
+  ]
+ },
+ {
+  "name": "ten_on_one_line",
+  "command": "cat <<H0 ; cat <<H1 ; cat <<H2 ; cat <<H3 ; cat <<H4 ; cat <<H5 ; cat <<H6 ; cat <<H7 ; cat <<H8 ; cat <<H9\nb0\nH0\nb1\nH1\nb2\nH2\nb3\nH3\nb4\nH4\nb5\nH5\nb6\nH6\nb7\nH7\nb8\nH8\nb9\nH9",
+  "entries": [
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 0,
+    "delimiter": "H0",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "321c7d264774f298d682321e88692b1e8cd75614da07163388b865ca74c7bae6",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 108,
+     "end": 111
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 1,
+    "delimiter": "H1",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "e10a1287bfc72ab847878fa7737ea038aa327a3920d6c8c28b8e6484e013e913",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 114,
+     "end": 117
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 2,
+    "delimiter": "H2",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "65f653bec9d0d1be6a363cb500e002c0165efdc82ed058f38b786f05dd19d87f",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 120,
+     "end": 123
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 3,
+    "delimiter": "H3",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "0a41c68fa4ffdf22e2388152154ba1dc1c63fbd43c5385c50316fe57b13c5087",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 126,
+     "end": 129
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 4,
+    "delimiter": "H4",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "36ebb8966d96175556f2d05ecc8f4df190eba1a3005b2665159f9ed5a8edf3d0",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 132,
+     "end": 135
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 5,
+    "delimiter": "H5",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "30565dcc10d7d383da79e1e7900f93efbb02d66b3f5e61e31cfb124f8f5bc332",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 138,
+     "end": 141
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 6,
+    "delimiter": "H6",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "b7e3bd75e153183ff4c53dab0d92af27da0bda1514c5ba62ce13e222664bb1c2",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 144,
+     "end": 147
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "heredoc",
+    "index": 7,
+    "delimiter": "H7",
+    "quoted": false,
+    "executable": "cat",
+    "executed": false,
+    "execution_status": "not_executed",
+    "sha256": "072d96e3192ef1c6ae56e7e55644c6d26a68481365ec72c23038a6a45a16541e",
+    "bytes": 3,
+    "lines": 1,
+    "span": {
+     "start": 150,
+     "end": 153
+    }
+   },
+   {
+    "source": "embedded_script",
+    "kind": "summary",
+    "truncated": true,
+    "total_heredocs": 10
+   }
+  ]
+ }
+]

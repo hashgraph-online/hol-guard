@@ -88,14 +88,6 @@ def coerce_loaded_protection_posture(value: object) -> str | None:
     return normalize_protection_posture(value)
 
 
-def coerce_watch_auto_revert_hours(value: object, default: int = DEFAULT_WATCH_AUTO_REVERT_HOURS) -> int:
-    if isinstance(value, bool) or not isinstance(value, int):
-        return default
-    if value < 0 or value > MAX_WATCH_AUTO_REVERT_HOURS:
-        return default
-    return value
-
-
 def derive_protection_posture(mode: object, security_level: object) -> str:
     if mode == "observe":
         return "watch"

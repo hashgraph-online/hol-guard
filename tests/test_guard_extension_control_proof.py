@@ -581,6 +581,36 @@ def test_terminal_locality_accepts_hostless_matching_login_record(
     assert _terminal_session_is_local("/dev/ttys020") is expected
 
 
+@pytest.mark.parametrize(
+    ("who_output", "expected"),
+    (
+        ("local-admin pts/7 2026-10-10 09:07\n", True),
+        ("local-admin pts/7 2026-10-10 09:07 (203.0.113.8)\n", False),
+        ("local-admin pts/8 2026-10-10 09:07\n", False),
+        ("local-admin tty7 2026-10-10 09:07\n", False),
+        ("other-user pts/7 2026-10-10 09:07\n", False),
+    ),
+)
+def test_terminal_locality_matches_linux_pts_login_records(
+    monkeypatch: pytest.MonkeyPatch,
+    who_output: str,
+    expected: bool,
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.runtime.extension_control_proof._current_login_name",
+        lambda: "local-admin",
+    )
+
+    def run(command: tuple[str, ...], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if command[0] == "/usr/bin/who":
+            return subprocess.CompletedProcess(command, 0, who_output, "")
+        raise OSError("no logind")
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    assert _terminal_session_is_local("/dev/pts/7") is expected
+
+
 def test_terminal_locality_accepts_owned_desktop_pty_without_login_record(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

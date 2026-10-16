@@ -18,7 +18,11 @@ def _run_generated_fixture(source: str) -> dict[str, object]:
     helper_end = source.index("\n\nfunction loadGuardDaemonConnection(", helper_start)
     helper = _strip_generated_types(source[helper_start:helper_end])
 
-    daemon_start = source.index("async function daemonGuardResponse(")
+    native_start = source.index("function nativeGuardReplyFromLine(")
+    native_end = source.index("\n\n// The daemon's reply through the native bridge", native_start)
+    native_reply = _strip_generated_types(source[native_start:native_end])
+
+    daemon_start = source.index("async function guardDaemonAttempt(")
     daemon_end = source.index("\n\nasync function runGuard(", daemon_start)
     daemon = _strip_generated_types(source[daemon_start:daemon_end])
 
@@ -38,7 +42,6 @@ const GUARD_TIMEOUT_MS = 4250;
 const GUARD_DEADLINE_RESERVE_MS = 250;
 const GUARD_DAEMON_RECOVERY_TIMEOUT_MS = 250;
 const GUARD_DAEMON_RETRY_TIMEOUT_MS = 150;
-const GUARD_CLI_TIMEOUT_MS = 300;
 const GUARD_SOURCE_REF_MAX_OUTPUT_CHARS = 5 * 1024 * 1024;
 const GUARD_CONTENT_ITEM_LIMIT = 24;
 const GUARD_OBJECT_KEY_LIMIT = 24;
@@ -47,14 +50,13 @@ const GUARD_MAX_SERIALIZED_PAYLOAD_CHARS = 24000;
 const GUARD_MAX_SERIALIZED_RESPONSE_CHARS = 12 * GUARD_TEXT_LIMIT_CHARS + GUARD_MAX_SERIALIZED_PAYLOAD_CHARS;
 {_generated_output_text_keys(source)}
 const GUARD_ARGS = [];
-const GUARD_CLI_WRAPPER_COMMAND = "hol-guard";
-const GUARD_CLI_WRAPPER_ARGS = [];
-const GUARD_CLI_WRAPPER_ACCEPTS_JSON_ARGS = false;
-let guardCliContainmentFailed = false;
-let guardCliEvaluationInFlight = false;
 let daemonMode = "transport";
 let fetchBodies = [];
-let cliResult = {{ status: 0, stdout: "", stderr: "" }};
+// Lines the native bridge prints, in order; none left means the runtime is
+// not used and the extension posts to the daemon itself.
+let nativeLines = [];
+let nativeQueries = [];
+let fetchCalls = 0;
 let daemonCalls = 0;
 let recoveryCalls = 0;
 let cliCalls = 0;
@@ -73,7 +75,20 @@ async function recoverGuardDaemon() {{
 
 async function runGuardCliCommand() {{
   cliCalls += 1;
-  return cliResult;
+  return {{ status: 0, stdout: '{{"decision":"allow"}}', stderr: "" }};
+}}
+
+{native_reply}
+
+function nativeGuardBudgetMs(budgetMs) {{
+  return budgetMs;
+}}
+
+async function nativeGuardReply(query) {{
+  if (nativeLines.length === 0) return undefined;
+  nativeQueries.push(query);
+  const line = nativeLines.shift();
+  return line === null ? null : nativeGuardReplyFromLine(line);
 }}
 
 function responseBody(value) {{
@@ -94,6 +109,7 @@ function responseBody(value) {{
 }}
 
 globalThis.fetch = async () => {{
+  fetchCalls += 1;
   const value = fetchBodies.shift() ?? "";
   return {{
     ok: true,
@@ -148,7 +164,6 @@ fetchBodies = ['{{"unknown":"first"}}', '{{"unknown":"second"}}'];
 daemonCalls = 0;
 recoveryCalls = 0;
 cliCalls = 0;
-cliResult = {{ status: 0, stdout: "", stderr: "" }};
 result.retry_still_malformed = await runGuard({{ hook_event_name: "PreToolUse" }});
 result.retry_still_malformed_daemon_calls = daemonCalls;
 result.retry_still_malformed_recovery_calls = recoveryCalls;
@@ -189,42 +204,42 @@ fetchBodies = ['{{"decision":"allow"}}', '{{"decision":"allow"}}'];
 daemonCalls = 0;
 recoveryCalls = 0;
 cliCalls = 0;
-cliResult = {{
-  status: 0,
-  stdout: '{{"decision":"allow","model_output_action":"allow_original","reviewed_output_sha256":"cli-digest"}}',
-  stderr: "",
-}};
-result.stale_daemon_cli_success = await runGuard({{ hook_event_name: "PostToolUse" }});
-result.stale_daemon_cli_daemon_calls = daemonCalls;
-result.stale_daemon_cli_recovery_calls = recoveryCalls;
+result.stale_daemon_success = await runGuard({{ hook_event_name: "PostToolUse" }});
+result.stale_daemon_daemon_calls = daemonCalls;
+result.stale_daemon_recovery_calls = recoveryCalls;
 result.stale_daemon_cli_calls = cliCalls;
 
 daemonMode = "transport";
 fetchBodies = [];
-cliResult = {{ status: 0, stdout: '{{"policy_action":"allow"}}', stderr: "" }};
-result.cli_missing_decision = await runGuard({{ hook_event_name: "PreToolUse" }});
-cliResult = {{ status: 0, stdout: "", stderr: "" }};
-result.cli_empty_prompt = await runGuard({{ hook_event_name: "UserPromptSubmit" }});
-result.cli_empty_post = await runGuard({{ hook_event_name: "PostToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"deny","reason":{{"nested":true}}}}', stderr: "" }};
-result.cli_malformed_reason = await runGuard({{ hook_event_name: "PostToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"deny","reason":null}}', stderr: "" }};
-result.cli_null_reason = await runGuard({{ hook_event_name: "PostToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"deny"}}', stderr: "" }};
-result.cli_omitted_reason = await runGuard({{ hook_event_name: "PostToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"allow","policy_action":"allow"}}', stderr: "" }};
-result.cli_lifecycle_allow = await runGuard({{ hook_event_name: "UserPromptSubmit" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"allow"}}', stderr: "" }};
-result.cli_allow = await runGuard({{ hook_event_name: "PreToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"deny","reason":"fixture block"}}', stderr: "" }};
-result.cli_deny = await runGuard({{ hook_event_name: "PreToolUse" }});
-cliResult = {{ status: 0, stdout: '{{"decision":"block","reason":"fixture block"}}', stderr: "" }};
-result.cli_block_prompt = await runGuard({{ hook_event_name: "UserPromptSubmit" }});
-result.cli_block_post = await runGuard({{ hook_event_name: "PostToolUse" }});
-cliResult = {{ status: 2, stdout: '{{"decision":"allow"}}', stderr: "cli failed" }};
-result.cli_nonzero_allow = await runGuard({{ hook_event_name: "PreToolUse" }});
-cliResult = {{ status: null, stdout: '{{"decision":"allow"}}', stderr: "" }};
-result.cli_signal_allow = await runGuard({{ hook_event_name: "PreToolUse" }});
+daemonCalls = 0;
+recoveryCalls = 0;
+cliCalls = 0;
+result.unreachable_pre = await runGuard({{ hook_event_name: "PreToolUse" }});
+result.unreachable_prompt = await runGuard({{ hook_event_name: "UserPromptSubmit" }});
+result.unreachable_post = await runGuard({{ hook_event_name: "PostToolUse" }});
+result.unreachable_recovery_calls = recoveryCalls;
+result.unreachable_cli_calls = cliCalls;
+
+daemonMode = "http";
+fetchBodies = [];
+fetchCalls = 0;
+nativeQueries = [];
+nativeLines = ['{{"status":200,"body":"{{\\\\"decision\\\\":\\\\"allow\\\\"}}"}}'];
+result.native_allow = (await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000)).response;
+nativeLines = ['{{"status":200,"body":"{{\\\\"decision\\\\":\\\\"deny\\\\",\\\\"reason\\\\":\\\\"block\\\\"}}"}}'];
+result.native_deny = (await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000)).response;
+nativeLines = ['{{"status":403,"body":"{{}}"}}'];
+result.native_refused = await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000);
+nativeLines = ['{{"status":200,"body":"not-json"}}'];
+result.native_malformed = (await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000)).response;
+nativeLines = ['{{"status":0}}'];
+result.native_no_reply = await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000);
+nativeLines = [null];
+result.native_failed = await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000);
+nativeLines = ['{{"status":200}}'];
+result.native_missing_body = await daemonGuardResponse("{{}}", "/tmp", 100, Date.now() + 1000);
+result.native_fetch_calls = fetchCalls;
+result.native_query_has_workspace = nativeQueries.every((query) => query.includes("workspace=%2Ftmp"));
 
 console.log(JSON.stringify(result));
 """

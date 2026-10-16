@@ -1,4 +1,4 @@
-import { type ChangeEvent, useCallback, useId, useMemo, useState } from "react";
+import { type ChangeEvent, type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { HiMiniMagnifyingGlass, HiMiniPlus, HiMiniXMark } from "react-icons/hi2";
 
 import {
@@ -8,7 +8,13 @@ import {
 } from "../local-cli-api";
 import { ProtectionModuleRow } from "./components/protection-primitives";
 import {
+  customExtensionBadge,
+  customExtensionDisplayName,
+  profileSetupCommand,
+} from "./custom-extension-profile";
+import {
   continuityCopy,
+  customExtensionActionLabel,
   customExtensionRowDescription,
   customExtensionStateLabel,
 } from "./local-cli-panel-copy";
@@ -17,20 +23,27 @@ import { mcpCatalogCopy } from "./mcp-catalog-state";
 const CUSTOM_EXTENSION_PREVIEW_COUNT = 8;
 const CUSTOM_EXTENSION_PAGE_SIZE = 25;
 
-function CustomExtensionRow(props: { item: LocalCliItem; onOpen: (cliId: string) => void }) {
-  const cliId = props.item.cli_id;
-  const onOpen = props.onOpen;
+function CustomExtensionRow(props: {
+  item: LocalCliItem; onOpen: (cliId: string) => void; onSetUp?: (command: string) => void;
+}) {
+  const { item, onOpen, onSetUp } = props;
   const handleOpen = useCallback(() => {
-    onOpen(cliId);
-  }, [cliId, onOpen]);
+    const setup = item.seeded === true ? profileSetupCommand(item) : null;
+    if (setup !== null && onSetUp) onSetUp(setup);
+    else onOpen(item.cli_id);
+  }, [item, onOpen, onSetUp]);
+  const action = customExtensionActionLabel(item);
   const continuity = continuityCopy(props.item);
   const catalog = mcpCatalogCopy(props.item);
   return (
     <ProtectionModuleRow
       extensionId={props.item.cli_id}
-      name={props.item.name}
+      name={customExtensionDisplayName(props.item)}
       description={customExtensionRowDescription(props.item, catalog?.title ?? null)}
       behavior={continuity ? `${continuity.title}. ${continuity.description}` : customExtensionStateLabel(props.item)}
+      brand={props.item.brand}
+      badge={customExtensionBadge(props.item) ?? undefined}
+      actionLabel={action ?? undefined}
       custom
       executables={[props.item.name]}
       onOpen={handleOpen}
@@ -45,9 +58,11 @@ function CustomExtensionEmptyState(props: {
   onAdd: () => void;
   onClearFilters?: () => void;
   onClearSearch: () => void;
+  /** Offer Add beside Clear search when nothing has been added to search. */
+  addWithSearch?: boolean;
 }) {
   let title = "No custom extensions yet.";
-  let detail = "Add a tool you run yourself, or connect an MCP server. Guard also detects connectors from your host apps automatically.";
+  let detail = "Add a tool you run yourself or connect an MCP server. Connectors in your host apps appear here automatically.";
   if (props.search) {
     title = "No custom extensions match this search.";
     detail = "No connectors or custom tools match this search.";
@@ -58,7 +73,7 @@ function CustomExtensionEmptyState(props: {
   }
   return (
     <div
-      className="mt-4 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6"
+      className="mt-4 rounded-2xl border border-dashed border-[rgba(63,65,116,0.2)] px-4 py-5"
       data-testid={props.filteredOut ? "custom-extensions-filter-empty" : "custom-extensions-empty"}
     >
       <p className="text-sm font-semibold text-brand-dark">{title}</p>
@@ -71,10 +86,18 @@ function CustomExtensionEmptyState(props: {
           </button>
         ) : null
       ) : props.search ? (
-        <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip mt-3">
-          <HiMiniXMark className="size-4" aria-hidden="true" />
-          Clear search
-        </button>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={props.onClearSearch} className="guard-extensions-chip">
+            <HiMiniXMark className="size-4" aria-hidden="true" />
+            Clear search
+          </button>
+          {props.addWithSearch ? (
+            <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
+              <HiMiniPlus className="size-4" aria-hidden="true" />
+              Add custom extension
+            </button>
+          ) : null}
+        </div>
       ) : (
         <>
           <button type="button" onClick={props.onAdd} className="mt-3 inline-flex min-h-11 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-semibold text-brand-dark">
@@ -101,11 +124,26 @@ function CustomExtensionEmptyState(props: {
  */
 interface CustomExtensionsSectionProps {
   items: LocalCliItem[];
+  seededItems?: LocalCliItem[];
+  onSetUp?: (command: string) => void;
   onOpen: (cliId: string) => void;
   onAdd: () => void;
   discovering?: boolean;
   filteredOut?: boolean;
   onClearFilters?: () => void;
+  /** Host connector discovery status and retry, owned by the catalog page. */
+  discoveryControl?: ReactNode;
+  /**
+   * Set when a list switch above the section already names it and carries the
+   * Add action: the heading stays for assistive tech and the section drops its
+   * own top margin, Add button and repeated title.
+   */
+  embedded?: boolean;
+  /**
+   * Embedded only: nothing has been added, so this list's empty state is where
+   * Add lives, including while a search typed here is still set.
+   */
+  addInEmptyState?: boolean;
 }
 
 export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
@@ -113,9 +151,9 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   const [showAll, setShowAll] = useState(false);
   const [page, setPage] = useState(0);
   const rowsId = useId();
-  const all = useMemo(() => connectorWorkspaceItems(props.items), [props.items]);
-  const added = useMemo(() => search ? connectorWorkspaceItems(props.items, search) : all,
-    [props.items, search, all]);
+  const all = useMemo(() => connectorWorkspaceItems(props.items, "", props.seededItems), [props.items, props.seededItems]);
+  const added = useMemo(() => search ? connectorWorkspaceItems(props.items, search, props.seededItems) : all,
+    [props.items, props.seededItems, search, all]);
   const searchable = all.length > CUSTOM_EXTENSION_PREVIEW_COUNT || search !== "";
   const filteredOut = props.filteredOut === true && search === "";
   const needsReview = added.filter(customExtensionNeedsReview);
@@ -140,18 +178,28 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
   const visibleNeedsReview = grouped ? visible.filter(customExtensionNeedsReview) : visible;
   const visibleReviewed = grouped ? visible.filter((item) => !customExtensionNeedsReview(item)) : [];
   const unit = added.length === 1 ? "extension" : "extensions";
+  // With nothing added yet the empty state carries the one Add action.
+  const firstRun = all.length === 0 && search === "" && !filteredOut;
   return (
-    <section className="mt-10" aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
+    <section className={props.embedded ? "mt-4" : "mt-10"} aria-labelledby="custom-extensions-heading" data-testid="custom-extensions-section">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h2 id="custom-extensions-heading" className="text-xl font-semibold tracking-tight text-brand-dark">Custom extensions</h2>
-          <p className="mt-1 max-w-xl text-sm text-slate-500">Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
+          <h2
+            id="custom-extensions-heading"
+            className={props.embedded ? "sr-only" : "text-xl font-semibold tracking-tight text-brand-dark"}
+          >
+            Custom extensions
+          </h2>
+          <p className={props.embedded ? "max-w-xl text-sm text-slate-500" : "mt-1 max-w-xl text-sm text-slate-500"}>Connectors Guard detected in your apps, plus tools you add yourself. Open one to choose its permissions.</p>
         </div>
-        <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
-          <HiMiniPlus className="size-4" aria-hidden="true" />
-          Add custom extension
-        </button>
+        {firstRun || props.embedded ? null : (
+          <button type="button" onClick={props.onAdd} className="inline-flex min-h-11 shrink-0 items-center gap-2 self-start rounded-xl px-3 text-sm font-semibold text-brand-blue sm:self-end">
+            <HiMiniPlus className="size-4" aria-hidden="true" />
+            Add custom extension
+          </button>
+        )}
       </div>
+      {props.discoveryControl ? <div className="mt-2">{props.discoveryControl}</div> : null}
       {searchable ? (
         <div className="mt-4">
           <label className="relative block w-full max-w-sm">
@@ -172,6 +220,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
           onAdd={props.onAdd}
           onClearFilters={props.onClearFilters}
           onClearSearch={handleClearSearch}
+          addWithSearch={props.embedded === true && props.addInEmptyState === true}
         />
       ) : (
         <div className="mt-4" id={rowsId}>
@@ -181,7 +230,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
             </p>
           ) : null}
           {visibleNeedsReview.map((item) => (
-            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
+            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} onSetUp={props.onSetUp} />
           ))}
           {grouped && visibleReviewed.length > 0 ? (
             <p className="mt-6 text-xs font-semibold text-brand-dark/55">
@@ -189,7 +238,7 @@ export function CustomExtensionsSection(props: CustomExtensionsSectionProps) {
             </p>
           ) : null}
           {visibleReviewed.map((item) => (
-            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} />
+            <CustomExtensionRow key={item.cli_id} item={item} onOpen={props.onOpen} onSetUp={props.onSetUp} />
           ))}
           {!showAll && added.length > visible.length ? (
             <div className="mt-4 flex flex-wrap items-center gap-3">

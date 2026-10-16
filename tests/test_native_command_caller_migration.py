@@ -7,28 +7,11 @@ import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_github_workflow as workflow_hook
 from codex_plugin_scanner.guard.cli import commands_support_command_activity as activity
-from codex_plugin_scanner.guard.cli import commands_support_compound_decision as compound
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_command_control_authority_io import (
     NativeCommandControlMutationRequiredError,
 )
-
-
-def test_compound_native_unavailable_is_explicit_and_fail_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    del monkeypatch
-
-    assert compound.compound_command_decision_metadata(
-        "git push origin main",
-        native_review=None,
-        workspace=tmp_path,
-        home_dir=tmp_path,
-    ) == {
-        "command_action_floor": "require-reapproval",
-        "command_evaluation_status": "native_unavailable",
-    }
 
 
 def test_activity_read_only_authority_upgrade_is_unavailable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -54,10 +37,9 @@ def test_activity_read_only_authority_upgrade_is_unavailable(tmp_path: Path, mon
 
 
 def test_workflow_native_unavailable_does_not_fabricate_allow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    descriptor = object()
+    descriptor = SimpleNamespace(record=None, command_identity="command-security-v2:test")
     store = SimpleNamespace(read_extension_control_authority_for_registry=lambda *_args, **_kwargs: object())
     monkeypatch.setattr(workflow_hook, "_runtime_github_workflow_descriptor", lambda *_args, **_kwargs: descriptor)
-    monkeypatch.setattr(workflow_hook.GitHubWorkflowApprovalRecord, "from_descriptor", lambda _descriptor: None)
     monkeypatch.setattr(workflow_hook, "github_workflow_capability_required", lambda *_args: True)
     monkeypatch.setattr(workflow_hook, "claim_resolved_github_workflow_authorization", lambda *_args: object())
     monkeypatch.setattr(

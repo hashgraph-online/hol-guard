@@ -1,7 +1,6 @@
 #![cfg(unix)]
 
-#[path = "support/git_helper_fixture.rs"]
-mod fixture;
+use crate::git_helper_fixture as fixture;
 
 use fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
 use serde_json::json;
@@ -113,6 +112,7 @@ fn evaluate_with_path(
         pager_disabled: false,
         xdg_config_home: None,
         git_config_no_system: true,
+        library_search_paths: Default::default(),
     };
     guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
         "omp",
@@ -123,6 +123,12 @@ fn evaluate_with_path(
         guard_command::pretool::PathContext {
             home_dir: home.to_str(),
             cwd: repository.to_str(),
+            cdpath_unset: false,
+            rustup_override_absent: false,
+            npm_config_inert: false,
+            shell_home_matches: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         Some(&context),
     )
@@ -453,9 +459,9 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
         assert!(!destination.exists(), "{destination:?}");
     }
 
-    let symlink_parent_target = root.join("symlink-parent-target");
+    // A symlinked parent is judged where it leads: the `.ssh` refused above.
+    let symlink_parent_target = root.join(".ssh");
     let symlink_parent = root.join("symlink-parent");
-    std::fs::create_dir_all(&symlink_parent_target).unwrap();
     std::os::unix::fs::symlink(&symlink_parent_target, &symlink_parent).unwrap();
     let symlink_parent_destination = symlink_parent.join("native-worktree");
     let symlink_parent_command = format!(
@@ -541,4 +547,23 @@ fn native_worktree_proof_admits_only_fresh_local_branch_creation() {
     let denied = evaluate(&repository, &disabled, &command);
     assert_eq!(denied.minimum_action, "block");
     assert_eq!(denied.reason_code, "native_command_permission_disabled");
+
+    // A plain branch name as the start point is proven the same way, and the
+    // Git extension's permission and extension switches still decide it.
+    git(
+        &repository,
+        &["config", "--unset", "remote.origin.partialCloneFilter"],
+    );
+    git(&repository, &["branch", "release-lane"]);
+    let named_base = format!(
+        "git worktree add --quiet -b named-base {} release-lane",
+        root.join("named-base-child").display()
+    );
+    let named_allowed = evaluate(&repository, &enabled, &named_base);
+    assert_eq!(named_allowed.reason_code, "native_exact_safe_worktree_add");
+    for controls in [&disabled, &extension_disabled] {
+        let named_denied = evaluate(&repository, controls, &named_base);
+        assert_eq!(named_denied.minimum_action, "block", "{named_base}");
+        assert!(named_denied.reason_code.ends_with("disabled"));
+    }
 }

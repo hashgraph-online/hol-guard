@@ -29,12 +29,25 @@ EXACT_FIXTURES = (
     r"printf escaped\ space",
     r"printf \#not-a-comment",
     "./tool --flag=value",
+    # A shell run on a script file is exact in both models; the script contents
+    # are governed by the file-shell read authority, not by command-model uncertainty.
+    "bash ./script.sh",
     # Bounded sudo wrappers preserve the same source tokens, spans, and
     # wrapper provenance as Python; exact parsing does not authorize execution.
     "sudo rm -rf /tmp/example",
     "sudo -n rm -rf /tmp/example",
     "sudo --non-interactive -- rm -rf /tmp/example",
+    # A literal shell-script invocation is an exact single command in both
+    # models (bounded script execution review is owned by the pre-tool
+    # authority, not by the structural parser), so parity must hold.
+    "bash ./script.sh",
+    "sh script.sh",
 )
+# Transparent prefixes that the Python model's wrapper normalization rewrites
+# away (`time tool` becomes `tool` with a `time` wrapper), while the native
+# shadow keeps the source text and spans and models the prefix as a keyword.
+# Both must be exact and must run the same program with the same arguments.
+NORMALIZED_WRAPPER_FIXTURES = (("time tool", "time"),)
 UNCERTAIN_FIXTURES = (
     "echo $(uname)",
     "echo `uname`",
@@ -45,10 +58,8 @@ UNCERTAIN_FIXTURES = (
     "sudo -i rm -rf /tmp/example",
     "sudo -s rm -rf /tmp/example",
     "env FOO=bar tool",
-    "time tool",
     "stdbuf -o0 tool",
     "sh -c 'rm -rf /tmp/example'",
-    "bash ./script.sh",
     "eval 'rm -rf /tmp/example'",
     "exec rm -rf /tmp/example",
     "source ./script.sh",
@@ -104,6 +115,20 @@ def _comparable(command: dict[str, object]) -> dict[str, object]:
     }
 
 
+def _programs(command: dict[str, object]) -> list[tuple[object, ...]]:
+    return [
+        (
+            segment["executable"],
+            segment["arguments"],
+            segment["environment_names"],
+            segment["path_overridden"],
+            segment["execution_context"],
+            segment["pipeline_index"],
+        )
+        for segment in command["segments"]
+    ]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--binary", type=Path, required=True)
@@ -126,6 +151,14 @@ def main() -> int:
         assert native_model["confidence"] == "exact", fixture
         assert _comparable(native_model) == _comparable(python_model), fixture
 
+    for fixture, wrapper in NORMALIZED_WRAPPER_FIXTURES:
+        python_model = parse_shell_command(fixture).to_dict()
+        native_model = _native(args.binary, fixture)
+        assert python_model["confidence"] == "exact", fixture
+        assert native_model["confidence"] == "exact", fixture
+        assert wrapper in python_model["wrapper_chain"], fixture
+        assert _programs(native_model) == _programs(python_model), fixture
+
     for fixture in UNCERTAIN_FIXTURES:
         native_model = _native(args.binary, fixture)
         assert native_model["confidence"] == "uncertain", fixture
@@ -136,6 +169,7 @@ def main() -> int:
         json.dumps(
             {
                 "exact_fixture_count": len(EXACT_FIXTURES),
+                "normalized_wrapper_fixture_count": len(NORMALIZED_WRAPPER_FIXTURES),
                 "uncertain_fixture_count": len(UNCERTAIN_FIXTURES),
                 "status": "ok",
             },

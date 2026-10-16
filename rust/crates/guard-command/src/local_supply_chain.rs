@@ -1711,42 +1711,42 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("package_script", "warn"),
                 ("persistence", "warn"),
                 ("guard_bypass", "warn"),
-                ("cloud_advisory", "warn"),
+                ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
             ],
         ),
         (
             "balanced",
             &[
-                ("local_secret_read", "review"),
-                ("credential_exfiltration", "block"),
-                ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
+                ("data_flow_exfiltration", "require-reapproval"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
                 ("network_egress", "warn"),
-                ("prompt_injection", "review"),
+                ("prompt_injection", "require-reapproval"),
                 ("mcp_dangerous_tool", "require-reapproval"),
-                ("malicious_skill", "block"),
-                ("package_script", "review"),
-                ("persistence", "review"),
+                ("malicious_skill", "require-reapproval"),
+                ("package_script", "warn"),
+                ("persistence", "require-reapproval"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
-                ("encoded_exfiltration", "block"),
+                ("encoded_exfiltration", "require-reapproval"),
             ],
         ),
         (
             "strict",
             &[
-                ("local_secret_read", "block"),
-                ("credential_exfiltration", "block"),
+                ("local_secret_read", "require-reapproval"),
+                ("credential_exfiltration", "require-reapproval"),
                 ("data_flow_exfiltration", "block"),
-                ("destructive_shell", "block"),
-                ("encoded_execution", "block"),
-                ("network_egress", "warn"),
+                ("destructive_shell", "require-reapproval"),
+                ("encoded_execution", "require-reapproval"),
+                ("network_egress", "require-reapproval"),
                 ("prompt_injection", "block"),
                 ("mcp_dangerous_tool", "block"),
                 ("malicious_skill", "block"),
-                ("package_script", "block"),
+                ("package_script", "require-reapproval"),
                 ("persistence", "block"),
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
@@ -1803,7 +1803,7 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
         .unwrap_or(&[])
 }
 
-fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
+pub fn security_level_risk_actions(level: &str) -> std::collections::BTreeMap<String, String> {
     security_level_risk_rows(level)
         .iter()
         .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
@@ -1863,7 +1863,7 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
         .map(|(_, rows)| *rows)
 }
 
-fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
+pub fn posture_risk_actions(posture: &str) -> Option<std::collections::BTreeMap<String, String>> {
     posture_risk_rows(posture).map(|rows| {
         rows.iter()
             .map(|(key, action)| ((*key).to_owned(), (*action).to_owned()))
@@ -2614,10 +2614,18 @@ fn workspace_has_project_markers(workspace_dir: &Path) -> bool {
 /// `managed_install_audit_workspace_dirs` — active installs first, then by
 /// `updated_at` desc; deduped, stripped non-empty workspaces.
 pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec<String> {
-    let mut installs = store.list_managed_installs();
+    managed_install_audit_workspace_dirs_from(store.list_managed_installs())
+}
+
+/// `managed_install_audit_workspace_dirs` over an already-listed install set:
+/// active installs first, then newest `updated_at`, deduplicated by the
+/// stripped workspace string.
+pub fn managed_install_audit_workspace_dirs_from(mut installs: Vec<Value>) -> Vec<String> {
     installs.sort_by(|a, b| {
         let a_key = (
-            if a.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if a.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2628,7 +2636,9 @@ pub fn managed_install_audit_workspace_dirs(store: &dyn SupplyChainStore) -> Vec
                 .to_string(),
         );
         let b_key = (
-            if b.get("active").and_then(Value::as_bool).unwrap_or(false) {
+            if b.get("active")
+                .is_some_and(crate::target_identities::py_truthy)
+            {
                 1
             } else {
                 0
@@ -2680,15 +2690,24 @@ fn managed_workspace_audit_candidates(
     store: &dyn SupplyChainStore,
     workspace_dir: Option<&Path>,
 ) -> Vec<PathBuf> {
+    managed_workspace_audit_candidates_for(
+        &managed_install_audit_workspace_dirs(store),
+        workspace_dir,
+    )
+}
+
+/// `_managed_workspace_audit_candidates` over the ordered managed workspace
+/// strings: the explicit workspace first, then each managed one, kept when it
+/// resolves to an existing directory with project markers.
+pub fn managed_workspace_audit_candidates_for(
+    managed_dirs: &[String],
+    workspace_dir: Option<&Path>,
+) -> Vec<PathBuf> {
     let mut raw: Vec<PathBuf> = Vec::new();
     if let Some(dir) = workspace_dir {
         raw.push(dir.to_path_buf());
     }
-    raw.extend(
-        managed_install_audit_workspace_dirs(store)
-            .iter()
-            .map(|entry| expand_tilde(entry)),
-    );
+    raw.extend(managed_dirs.iter().map(|entry| expand_tilde(entry)));
     let mut seen = HashSet::new();
     let mut candidates = Vec::new();
     for candidate in raw {
@@ -3132,7 +3151,12 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
     if matched_policy.get("artifact_id").and_then(Value::as_str) != Some("family:package-request") {
         return false;
     }
-    if matched_policy.get("artifact_hash").is_some() {
+    // Python reads `artifact_hash is None`: a stored row carries the column, so
+    // JSON null means "absent" exactly like a missing key.
+    if matched_policy
+        .get("artifact_hash")
+        .is_some_and(|hash| !hash.is_null())
+    {
         return false;
     }
     if !matches!(scope, Some("harness") | Some("global")) {
@@ -3160,7 +3184,6 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
 
 /// `.local_supply_chain._package_policy_workspace_candidates` (:2620-2637).
 /// Returns the ordered runtime workspace candidates for stored overrides.
-#[allow(dead_code)]
 fn package_policy_workspace_candidates(
     artifact: &GuardArtifact,
     artifact_hash: &str,
@@ -5259,8 +5282,7 @@ fn build_package_execution_context(
 
 /// `approval_scope_support.package_request_runtime_workspace_scope` —
 /// return the only workspace identity valid for a package-policy lookup.
-#[allow(dead_code)]
-fn package_request_runtime_workspace_scope(
+pub fn package_request_runtime_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5519,73 +5541,107 @@ fn resolve_stored_package_policy_override(
     artifact_hash: &str,
     workspace_dir: &Path,
     now: &str,
-    _execution_context: Option<&PackageExecutionContext>,
+    execution_context: Option<&PackageExecutionContext>,
     _current_action: Option<&Value>,
     claim_saved_approval: bool,
     _intent_parser: &dyn PackageIntentParserApi,
     _eval_api: &dyn PackageEvalApi,
-    _paths_api: &dyn PathSupportApi,
+    paths_api: &dyn PathSupportApi,
     approval_context_api: &dyn ApprovalContextApi,
 ) -> StoredPackagePolicyResolution {
-    // Look up the saved approval for this artifact.
-    let lookup = store.resolve_policy_decision_lookup(
-        &artifact.artifact_id,
-        artifact.artifact_id.as_str(),
-        Some(artifact_hash),
-        workspace_dir.to_string_lossy().as_ref(),
-        artifact.publisher.as_deref(),
-        now,
-        false,
+    let unchanged = || StoredPackagePolicyResolution {
+        evaluation: evaluation.clone(),
+        claim_disposition: None,
+    };
+    // `native_package_policy_resolve._hydrate` — probe the workspace
+    // identities a package-policy lookup may answer for, in order, and take
+    // the first saved decision. The only valid identity is the runtime
+    // workspace scope token, never the workspace path itself.
+    let workspaces = package_policy_workspace_candidates(
+        artifact,
+        artifact_hash,
+        workspace_dir,
+        execution_context,
+        paths_api,
     );
-    let Some(saved) = lookup.decision else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+    let mut saved_decision: Option<Value> = None;
+    for workspace in &workspaces {
+        let lookup = store.resolve_policy_decision_lookup(
+            &artifact.harness,
+            artifact.artifact_id.as_str(),
+            Some(artifact_hash),
+            workspace,
+            artifact.publisher.as_deref(),
+            now,
+            false,
+        );
+        // A row whose local integrity did not verify stops the probe: Python
+        // hands that case to the daemon authority, which this lane has no seam
+        // for, so the review verdict stands rather than a row being reused on
+        // unverified integrity.
+        if lookup.ignored_local_integrity.is_some() {
+            return unchanged();
+        }
+        if lookup.decision.is_some() {
+            saved_decision = lookup.decision;
+            break;
+        }
+    }
+    let Some(saved) = saved_decision else {
+        return unchanged();
     };
     if !claim_saved_approval {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     }
     // Attempt to claim the saved approval — verify artifact-hash match and
     // freshness via the approval_context seam.
     let decision_id = saved.get("decision_id").and_then(Value::as_i64);
     let Some(did) = decision_id else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     };
+    // Only a saved allow is reused. A row recording any other action is read
+    // by the saved-policy lanes that own it, never claimed as an approval.
+    if saved.get("action").and_then(Value::as_str) != Some("allow") {
+        return unchanged();
+    }
     let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
     if saved_hash != Some(artifact_hash) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some("artifact_hash_mismatch".to_string()),
-        };
+        return unchanged();
     }
     // Check freshness — expiry, approval-context token, etc.
-    if let Some(reason) = approval_context_api.approval_context_tokens_validation_reason(
-        saved.get("artifact_hash").unwrap_or(&Value::Null),
-        &Value::String(artifact_hash.to_string()),
-    ) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some(reason),
-        };
+    if approval_context_api
+        .approval_context_tokens_validation_reason(
+            saved.get("artifact_hash").unwrap_or(&Value::Null),
+            &Value::String(artifact_hash.to_string()),
+        )
+        .is_some()
+    {
+        return unchanged();
+    }
+    // The disposition the row reports is the store's, and only the two values
+    // the caller's vocabulary carries: a single-use row reads as `consumed`,
+    // a durable one as `retained`.
+    let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
+        Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
+        _ => None,
+    };
+    // The store claims the row before the evaluation reports the approval
+    // (`_run_claim`, kind `store`). A refused claim — another caller took the
+    // single-use row, or the row no longer stands — leaves the review verdict
+    // the package lane settled, so an unclaimed row is never read as approved.
+    if !store.claim_approval_reuse_decision(&saved, now) {
+        return unchanged();
     }
     // Apply the saved approval — rewrite decision fields.
-    let eval_mut = evaluation.clone();
-    eval_mut.with_fields(&[
+    let claimed = evaluation.with_fields(&[
         ("decision", json!("allow")),
         ("policy_action", json!("allow")),
         ("saved_approval_applied", Value::Bool(true)),
         ("saved_approval_decision_id", json!(did)),
     ]);
     StoredPackagePolicyResolution {
-        evaluation: eval_mut,
-        claim_disposition: Some("claimed".to_string()),
+        evaluation: claimed,
+        claim_disposition: disposition,
     }
 }
 
@@ -5797,8 +5853,7 @@ fn package_policy_gate_context(
 /// local mirror does not model yet (`artifact_actions`, `publisher_actions`,
 /// `harness_actions`, `sandbox_analysis`, `resolve_action_override`, `mode`)
 /// ride through `config.extra` until the full config port lands.
-#[allow(dead_code)]
-fn package_config_policy_context(
+pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {

@@ -11,9 +11,12 @@ from typing import Any
 from ci.native_runtime.probe_workflow_matrix import assert_execution, contained_vitest_cases
 from ci.native_runtime.workflow_matrix_cases import WorkflowCase
 
+from .contained_core import receipt_is_authoritative
+from .contained_core import workspace_identity_matches as _contained_workspace_identity_matches
 from .evidence import reconcile, sha256_bytes
 from .fixtures import digest_file
 from .input_evidence import input_digest
+from .native_routes import native_route_error
 from .transport import reconcile_rounds
 
 _CONTAINED_PROFILE = "contained-bun-vitest-extended"
@@ -137,56 +140,11 @@ def _contained_wrapper_argv(
     return argv, None
 
 
-def _contained_receipt_is_authoritative(observation: dict[str, Any], expected_reason: str) -> bool:
-    """Require the Rust receipt that denied the original input for containment."""
-    native = observation.get("native_observation")
-    receipt = native.get("native_receipt") if isinstance(native, dict) else None
-    if not isinstance(receipt, dict):
-        return False
-    if (
-        observation.get("decision") != "deny"
-        or observation.get("reason_code") != expected_reason
-        or observation.get("policy_action") != "sandbox-required"
-        or not isinstance(native, dict)
-        or native.get("required_execution_profile") != "vitest-readonly-v1"
-        or receipt.get("authority") != "rust"
-        or receipt.get("harness") != "omp"
-        or receipt.get("event_name") != "PreToolUse"
-        or receipt.get("decision") != "deny"
-        or receipt.get("policy_action") != "sandbox-required"
-        or receipt.get("reason_code") != expected_reason
-        or receipt.get("request_id") != observation.get("probe_request_id")
-    ):
-        return False
-    if not isinstance(receipt.get("decision_id"), str) or not receipt["decision_id"]:
-        return False
-    binding = receipt.get("command_extensions")
-    if not isinstance(binding, dict):
-        return False
-    return all(
-        re.fullmatch(r"[0-9a-f]{64}", binding.get(key, ""))
-        for key in ("program_digest", "catalog_digest", "trust_digest")
-    )
-
-
-def _contained_workspace_identity_matches(observed: object, expected: object) -> bool:
-    """Treat macOS /tmp aliases as one workspace without accepting relative paths."""
-    if not isinstance(observed, str) or not isinstance(expected, str):
-        return False
-    observed_path = Path(observed)
-    expected_path = Path(expected)
-    if not observed_path.is_absolute() or not expected_path.is_absolute():
-        return False
-    try:
-        return observed_path.resolve() == expected_path.resolve()
-    except (OSError, RuntimeError, ValueError):
-        return False
-
-
 def _contained_guard_inventory(
     calls: list[dict[str, Any]],
     observations: list[dict[str, Any]],
     routes: dict[str, int],
+    resident_direct: int,
     *,
     cases: list[WorkflowCase],
     expected_commands: list[str],
@@ -231,10 +189,8 @@ def _contained_guard_inventory(
         by_id.setdefault(call_id, []).append(observation)
     if set(by_id) != {call["id"] for call in calls}:
         return {}, "host/Guard call inventories disagree"
-    if set(routes) != {"native_resident"} or type(routes.get("native_resident")) is not int:
+    if native_route_error(routes, resident_direct, len(observations)):
         return {}, "native route counts do not reconcile with contained observations"
-    if routes["native_resident"] != len(observations):
-        return {}, "native route count does not reconcile with contained observations"
     for index, (case, call) in enumerate(zip(cases, calls, strict=True)):
         bound = by_id[call["id"]]
         pre = [row for row in bound if row.get("event") == "PreToolUse"]
@@ -248,7 +204,7 @@ def _contained_guard_inventory(
             return {}, "contained Guard observation tool differs from bash sink"
         if pre[0].get("input") != expected_input:
             return {}, "native Guard did not review the exact original contained command"
-        if not _contained_receipt_is_authoritative(pre[0], case.protected_reason or ""):
+        if not receipt_is_authoritative(pre[0], case.protected_reason or "", "vitest-readonly-v1"):
             return {}, "original contained command lacks an authoritative Rust denial receipt"
         wrapper = call.get("args", {}).get("command")
         if post[0].get("decision") != "allow" or post[0].get("input", {}).get("command") != wrapper:
@@ -338,6 +294,7 @@ def assess_contained_execution(
     events: list[dict[str, Any]],
     guard_observations: list[dict[str, Any]],
     native_routes: dict[str, Any],
+    resident_direct_answers: int,
     inference: dict[str, Any],
     filesystem: dict[str, bool],
     returncode: int,
@@ -365,13 +322,7 @@ def assess_contained_execution(
     protocol_errors.extend(reconcile_errors)
     rounds_ok, recovered_retries = reconcile_rounds(inference.get("live_rounds", []))
     terminal = any(event.get("type") == "agent_end" and event.get("terminal") is True for event in events)
-    route_ok = (
-        isinstance(native_routes, dict)
-        and set(native_routes) == {"native_resident"}
-        and type(native_routes.get("native_resident")) is int
-        and native_routes["native_resident"] == len(guard_observations)
-        and native_routes["native_resident"] > 0
-    )
+    route_ok = not native_route_error(native_routes, resident_direct_answers, len(guard_observations))
     by_id: dict[str, list[dict[str, Any]]] = {}
     guard_error: str | None = None
     if calls and route_ok:
@@ -379,6 +330,7 @@ def assess_contained_execution(
             calls,
             guard_observations,
             native_routes,
+            resident_direct_answers,
             cases=cases,
             expected_commands=expected_commands,
             caller_workspaces=caller_workspaces,

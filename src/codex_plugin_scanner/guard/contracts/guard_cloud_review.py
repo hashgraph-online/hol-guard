@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections.abc import Mapping
@@ -160,12 +159,6 @@ def _validate_schema(result: Mapping[str, object]) -> None:
         _schema_validator(schema).validate(dict(result))
     except ValidationError as error:
         raise ValueError(error.message) from error
-
-
-def result_validation_schema() -> dict[str, object]:
-    """Return the standalone Draft 2020-12 schema for result consumers."""
-
-    return load_contract()
 
 
 def _decode_json_pointer_token(token: str) -> str:
@@ -358,41 +351,6 @@ def validate_exact_command_result(result: Mapping[str, object]) -> None:
     for field in ("applicationUpdatedAt", "continuationUpdatedAt"):
         if not _is_rfc3339_date_time(result.get(field)):
             raise ValueError(f"{field} must be an RFC3339 date-time")
-
-
-def expected_artifact_digests() -> dict[str, str]:
-    """Return the checked-in, non-self-referential generated artifact digests."""
-
-    generation = _mapping_field(_contract_metadata(load_contract()), "generation")
-    if generation.get("algorithm") != "sha256":
-        raise ValueError("unsupported contract generation algorithm")
-    artifacts = _mapping_field(generation, "artifacts")
-    expected: dict[str, str] = {}
-    for name, (_, expected_path) in _GENERATED_ARTIFACTS.items():
-        entry = _mapping_field(artifacts, name)
-        digest = entry.get("sha256")
-        if (
-            entry.get("path") != expected_path
-            or not isinstance(digest, str)
-            or len(digest) != 64
-            or any(character not in "0123456789abcdef" for character in digest)
-        ):
-            raise ValueError(f"invalid generated artifact declaration: {name}")
-        expected[name] = digest
-    return expected
-
-
-def validate_generated_artifacts() -> dict[str, str]:
-    """Verify generated fixture and public-documentation bytes against the contract."""
-
-    expected = expected_artifact_digests()
-    observed = {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, (path, _) in _GENERATED_ARTIFACTS.items()}
-    for name, digest in expected.items():
-        if observed[name] != digest:
-            raise ValueError(f"generated artifact digest mismatch: {name}")
-    if PUBLIC_DOCUMENTATION_PATH.read_text(encoding="utf-8") != render_public_documentation():
-        raise ValueError("generated public documentation does not match the contract")
-    return observed
 
 
 def validate_reviewability_case(case: Mapping[str, object]) -> None:

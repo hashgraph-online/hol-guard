@@ -16,7 +16,6 @@ import pytest
 from codex_plugin_scanner.guard.approval_scope_support import (
     APPROVAL_SCOPE_CONTRACT_VERSION,
     request_scope_contract,
-    supported_request_scopes,
 )
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
@@ -180,17 +179,6 @@ def test_recommended_allow_scope_falls_back_to_artifact() -> None:
 
     assert contract.allow_scopes == ("artifact",)
     assert contract.recommended_allow_scope == "artifact"
-
-
-def test_package_context_never_invents_workspace_allow() -> None:
-    request = _request(
-        "package",
-        artifact_id="codex:project:package-request:package",
-        artifact_type="package_request",
-    ).to_dict()
-    request["scanner_evidence"] = [{"portable": True, "schema_version": "package-execution-context.v1"}]
-
-    assert supported_request_scopes(request) == ("artifact",)
 
 
 def test_package_request_can_persist_the_exact_context_bound_action() -> None:
@@ -1094,10 +1082,10 @@ def test_raced_completed_replay_maps_scope_contract_errors(
     original_get = store.get_approval_request
     call_count = 0
 
-    def raced_get(request_id: str) -> dict[str, object] | None:
+    def raced_get(request_id: str, *, derive_scope: bool = True) -> dict[str, object] | None:
         nonlocal call_count
         call_count += 1
-        current = original_get(request_id)
+        current = original_get(request_id, derive_scope=derive_scope)
         if current is None:
             return None
         if call_count == 1:

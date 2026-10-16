@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -99,7 +100,13 @@ def test_native_wheel_helpers_run_without_site_packages(script: str) -> None:
 
 def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
     job = _workflow("publish.yml")["jobs"]["build-native-guard-wheels"]
-    assert len(job["strategy"]["matrix"]["include"]) == 4
+    assert job["strategy"]["matrix"]["include"] == "${{ fromJSON(needs.build.outputs.native_wheel_matrix) }}"
+    selector = next(
+        step for step in _workflow("publish.yml")["jobs"]["build"]["steps"] if step.get("id") == "native_wheel_matrix"
+    )
+    platforms = [leg["platform_tag"] for leg in json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])]
+    assert platforms == ["manylinux_2_17_x86_64", "macosx_13_0_x86_64", "macosx_11_0_arm64", "win_amd64", "win_arm64"]
+    assert 'select(.platform_tag != "win_arm64")' in selector["run"]
     commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "uv sync" not in commands
     assert "pip install" not in commands
@@ -112,7 +119,7 @@ def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
     """Verify duration telemetry uses successful push on target branch."""
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    job = workflow["jobs"]["coverage-plan"]
+    job = workflow["jobs"]["native-command-evaluators"]
     plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
     assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
     action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))

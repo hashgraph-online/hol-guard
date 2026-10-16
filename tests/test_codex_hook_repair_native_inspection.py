@@ -43,16 +43,6 @@ def test_actual_native_inspection_is_read_only(native_hook_force, tmp_path):
     assert _tree(tmp_path) == before
 
 
-@pytest.mark.parametrize("mode", ["off", "shadow"])
-def test_non_enforcing_mode_cannot_inspect_repair_native(native_hook_force, monkeypatch, mode):
-    monkeypatch.setenv("HOL_GUARD_NATIVE", mode)
-    launched = []
-    monkeypatch.setattr(inspection, "run_isolated_hook_process", lambda *args, **kwargs: launched.append(args))
-    with pytest.raises(TransitionError, match="native_mode_invalid"):
-        inspection.inspect_codex_repair_native_runtime(deadline_monotonic=time.monotonic() + 5)
-    assert launched == []
-
-
 def test_expired_parent_does_not_launch_a_new_native_probe(native_hook_force, monkeypatch):
     launched = []
     monkeypatch.setattr(inspection, "run_isolated_hook_process", lambda *args, **kwargs: launched.append(args))

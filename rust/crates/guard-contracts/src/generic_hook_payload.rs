@@ -24,6 +24,7 @@ use crate::canonical_json::write_canonical_json;
 /// normalizes to `PermissionRequest` (V2 folds into the shared route).
 fn canonical_hook_event_name(lowered: &str) -> Option<&'static str> {
     match lowered {
+        "userpromptsubmitted" => Some("UserPromptSubmit"),
         "pretooluse" => Some("PreToolUse"),
         "posttooluse" => Some("PostToolUse"),
         "permissionrequest" | "permissionrequestv2" => Some("PermissionRequest"),
@@ -71,6 +72,7 @@ fn coalesce_string(values: &[Option<&str>]) -> String {
 /// anything else routes through the MCP server prefix.
 const CLAUDE_BUILTIN_HOOK_TOOL_NAMES: &[&str] = &[
     "bash",
+    "powershell",
     "shell",
     "sh",
     "zsh",
@@ -454,6 +456,14 @@ mod tests {
         assert_eq!(
             hook_event_name(&payload).as_deref(),
             Some("PermissionRequest")
+        );
+        let payload = json!({"event": "UserPromptSubmitted"})
+            .as_object()
+            .unwrap()
+            .clone();
+        assert_eq!(
+            hook_event_name(&payload).as_deref(),
+            Some("UserPromptSubmit")
         );
         // Unmapped value passes through unchanged.
         let payload = json!({"event": "CustomEvent"}).as_object().unwrap().clone();

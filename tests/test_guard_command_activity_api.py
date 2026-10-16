@@ -22,7 +22,6 @@ from codex_plugin_scanner.guard.runtime.command_activity_api_contract import (
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_command_activity_api import (
     CommandActivityNotFoundError,
-    _activity_page_query,
 )
 from tests.guard_command_activity_api_support import evidence, seed
 
@@ -223,26 +222,3 @@ def test_empty_invalidation_log_resets_an_ahead_cursor(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     page = store.list_command_activity_invalidations(42)
     assert page == {"reset_required": True, "reset_cursor": 0, "items": []}
-
-
-def test_filtered_query_plans_are_index_driven(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    with sqlite3.connect(store.path) as connection:
-        status_sql, status_params = _activity_page_query(
-            CommandActivityListQuery(execution_status="confirmed_failure"),
-            cursor=None,
-        )
-        status_plan = " ".join(
-            str(row[3]) for row in connection.execute(f"explain query plan {status_sql}", status_params).fetchall()
-        )
-        rule_sql, rule_params = _activity_page_query(
-            CommandActivityListQuery(rule_id="command.git.missing"),
-            cursor=None,
-        )
-        rule_plan = " ".join(
-            str(row[3]) for row in connection.execute(f"explain query plan {rule_sql}", rule_params).fetchall()
-        )
-    assert "idx_command_activity_execution_status_occurred_at" in status_plan
-    assert "idx_command_activity_match_rule" in rule_plan
-    assert "SCAN activity USING INDEX idx_command_activity_occurred_at" not in status_plan
-    assert "SCAN activity USING INDEX idx_command_activity_occurred_at" not in rule_plan

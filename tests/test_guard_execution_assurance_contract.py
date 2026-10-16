@@ -8,7 +8,6 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     AtomicGuarantee,
     AtomicGuaranteeKind,
     DecisionContext,
-    EvidenceSummary,
     ExecutionLease,
     ExecutionOutcome,
     GuardExecutionAssuranceBoundary,
@@ -18,7 +17,6 @@ from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
     SecretHandle,
     TerminalStatement,
     framed_digest,
-    require_guarantees_satisfied,
 )
 
 _SHA = "a" * 64
@@ -210,54 +208,6 @@ class TestDecisionContextAndEvidence:
                 executable_digest=_SHA,
                 action_class="x",
             )
-
-    def test_evidence_summary(self) -> None:
-        ev = EvidenceSummary(
-            context_digest=_SHA,
-            guarantee_kinds=("filesystem", "network"),
-            achieved_boundary=GuardExecutionAssuranceBoundary.OS_ISOLATED,
-        )
-        assert ev.degraded_reason is None
-
-
-class TestRequireGuaranteesSatisfied:
-    def test_all_satisfied(self) -> None:
-        provided = [_guarantee(AtomicGuaranteeKind.FILESYSTEM), _guarantee(AtomicGuaranteeKind.NETWORK)]
-        assert (
-            require_guarantees_satisfied(
-                [AtomicGuaranteeKind.FILESYSTEM, AtomicGuaranteeKind.NETWORK],
-                provided,
-                GuardExecutionAssuranceBoundary.CONTROLLED_HOST,
-            )
-            == ()
-        )
-
-    def test_missing_guarantee_not_substituted_by_boundary(self) -> None:
-        # High boundary but the required guarantee is absent.
-        provided = [
-            _guarantee(AtomicGuaranteeKind.FILESYSTEM, boundary=GuardExecutionAssuranceBoundary.HARDWARE_ISOLATED)
-        ]
-        assert require_guarantees_satisfied(
-            [AtomicGuaranteeKind.NETWORK],
-            provided,
-            GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-        ) == ("network",)
-
-    def test_unenforced_guarantee_unsatisfied(self) -> None:
-        provided = [_guarantee(AtomicGuaranteeKind.NETWORK, enforced=False)]
-        assert require_guarantees_satisfied(
-            [AtomicGuaranteeKind.NETWORK],
-            provided,
-            GuardExecutionAssuranceBoundary.OBSERVED_HOST,
-        ) == ("network",)
-
-    def test_boundary_below_minimum_unsatisfied(self) -> None:
-        provided = [_guarantee(AtomicGuaranteeKind.FILESYSTEM, boundary=GuardExecutionAssuranceBoundary.OBSERVED_HOST)]
-        assert require_guarantees_satisfied(
-            [AtomicGuaranteeKind.FILESYSTEM],
-            provided,
-            GuardExecutionAssuranceBoundary.OS_ISOLATED,
-        ) == ("filesystem",)
 
 
 class TestEnums:

@@ -6,7 +6,8 @@ import json
 from pathlib import Path
 
 from ...safe_output import _normalized_output_path
-from ..models import GuardArtifact, HarnessDetection
+from ..aibom_detection import native_adapter_detection
+from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
@@ -16,17 +17,16 @@ from .base import (
     _ensure_path_within_root,
     _json_payload,
     _run_command_probe,
+    detection_request,
 )
 from .cloud_identity import cloud_agent_identity_environment, cloud_agent_identity_hints
 from .openclaw_config import load_config
 from .openclaw_support import (
-    config_artifacts,
     config_path,
     install_state,
     managed_root,
     overlay_payload,
     pretool_payload,
-    skill_artifacts,
 )
 
 _OPENCLAW_MANAGED_APPROVAL_TIER = "native-or-center"
@@ -89,19 +89,18 @@ class OpenClawHarnessAdapter(HarnessAdapter):
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         path = config_path(context)
-        payload = load_config(path)
-        found_paths: list[str] = []
-        artifacts: list[GuardArtifact] = []
-        if payload:
-            found_paths.append(str(path))
-            artifacts.extend(config_artifacts(context, path, payload))
-        artifacts.extend(skill_artifacts(context, payload, found_paths))
+        request = {
+            **detection_request(self.harness, context),
+            "config_path": str(path),
+            "payload": json.dumps(load_config(path)),
+        }
+        artifacts, found_paths = native_adapter_detection("openclaw_detect", request)
         return HarnessDetection(
             harness=self.harness,
             installed=bool(found_paths) or _command_available(self.executable),
             command_available=_command_available(self.executable),
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
+            config_paths=found_paths,
+            artifacts=artifacts,
         )
 
     def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:

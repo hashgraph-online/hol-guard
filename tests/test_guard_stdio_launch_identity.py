@@ -6,6 +6,7 @@ import io
 import subprocess
 import sys
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 
 import pytest
@@ -16,8 +17,6 @@ from codex_plugin_scanner.guard.proxy import stdio as stdio_module
 from codex_plugin_scanner.guard.proxy.stdio import (
     ProxyLaunchIdentityChangedError,
     StdioGuardProxy,
-    _sensitive_read_current_action,
-    build_sensitive_read_approval_hash,
 )
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_tokens_validation_reason,
@@ -26,6 +25,7 @@ from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_file_read_request_artifact,
     extract_sensitive_file_read_request,
 )
+from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
 
 
 class _FakeProcess:
@@ -62,6 +62,15 @@ def _replace_file(path: Path, content: bytes, *, executable: bool = False) -> No
     replacement.replace(path)
 
 
+def _patch_server_spawn(monkeypatch: pytest.MonkeyPatch, spawn: Any) -> None:
+    # Native digest clients may restart during a shard. Keep their real spawn
+    # path independent from the server mutation/failure under test.
+    server_subprocess = ModuleType(subprocess.__name__)
+    server_subprocess.__dict__.update(vars(subprocess))
+    server_subprocess.Popen = spawn
+    monkeypatch.setattr(stdio_module, "subprocess", server_subprocess)
+
+
 def _sensitive_artifact(workspace: Path) -> GuardArtifact:
     request = extract_sensitive_file_read_request("read_file", {"path": ".env"}, cwd=workspace)
     assert request is not None
@@ -79,11 +88,11 @@ def _pinned_token(proxy: StdioGuardProxy, artifact: GuardArtifact, config: Guard
     env_values_hash = proxy._active_env_values_hash
     assert launch_identity is not None
     assert env_values_hash is not None
-    return build_sensitive_read_approval_hash(
+    return sensitive_read_token(
         artifact,
         config=config,
         cwd=proxy.cwd,
-        current_action=_sensitive_read_current_action(config, artifact=artifact, harness="codex"),
+        current_action=sensitive_read_current_action(config, artifact=artifact, harness="codex"),
         server_launch_identity=launch_identity,
         configured_env_values_hash=env_values_hash,
     )
@@ -167,7 +176,7 @@ def test_stdio_launch_identity_change_during_spawn_is_quarantined_and_fails_clos
         _replace_file(script, b"print('after-spawn')\n")
         return spawned
 
-    monkeypatch.setattr(stdio_module.subprocess, "Popen", mutate_during_spawn)
+    _patch_server_spawn(monkeypatch, mutate_during_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
     assert spawned.terminated is True
@@ -200,7 +209,7 @@ def test_stdio_launches_canonical_executable_and_rejects_symlink_swap(
         observed["process"] = process
         return process
 
-    monkeypatch.setattr(stdio_module.subprocess, "Popen", swap_then_spawn)
+    _patch_server_spawn(monkeypatch, swap_then_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
 
@@ -229,7 +238,7 @@ def test_stdio_rejects_real_interpreted_entrypoint_swap_before_traffic(
         observed["process"] = process
         return process
 
-    monkeypatch.setattr(stdio_module.subprocess, "Popen", mutate_then_spawn)
+    _patch_server_spawn(monkeypatch, mutate_then_spawn)
     with pytest.raises(ProxyLaunchIdentityChangedError, match="launch identity changed"):
         proxy._start_process()
 
@@ -253,7 +262,7 @@ def test_stdio_launch_identity_is_cleared_on_spawn_failure(
     def fail_spawn(*_args: object, **_kwargs: object) -> _FakeProcess:
         raise OSError("spawn failed")
 
-    monkeypatch.setattr(stdio_module.subprocess, "Popen", fail_spawn)
+    _patch_server_spawn(monkeypatch, fail_spawn)
     with pytest.raises(OSError, match="spawn failed"):
         failing_proxy._start_process()
     assert failing_proxy._active_launch_identity is None

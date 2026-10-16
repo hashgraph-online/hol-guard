@@ -13,9 +13,10 @@ id = "aws-access-token"
 description = "Audited synthetic scanner or cryptographic interoperability test vector"
 condition = "AND"
 regexTarget = "line"
-paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''']
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''', '''(?:^|/)rust/crates/guard\-command/tests/pretool_omp_tracked_search\.rs$''']
 regexes = [
   '''^[\t\r\n ]*std::fs::write\(dir\.join\("\.env"\), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\.unwrap\(\);[\t\r\n ]*$''',
+  '''^[\t\r\n ]*&\[\("\.env", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\],[\t\r\n ]*$''',
 ]
 
 [[rules]]
@@ -30,8 +31,76 @@ regexes = [
   '''^[\t\r\n ]*curl \-H "Authorization: Bearer hol\-fake\-docs\-token\-example\-0000" \\\\[\t\r\n ]*$''',
 ]
 
+[[rules.allowlists]]
+description = "Synthetic bearer token recorded in the hook adapter parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-command/testdata/hook_adapter_vectors\.json$''']
+regexes = [
+  '''^abcdefghijkl12345$''',
+]
+
 [[rules]]
 id = "generic-api-key"
+
+[[rules.allowlists]]
+description = "Pinned public token-fixture SHA-256, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = [
+  '''(?:^|/)rust/crates/guard\-command/tests/fixtures/developer_inspection_authority\.json$''',
+  '''(?:^|/)rust/crates/guard\-command/tests/fixtures/shell_request_authority\.json$''',
+]
+regexes = [
+  '''^[\t\r\n ]*"rust/crates/guard-command/tests/fixtures/sfrs/intermediate_tokens\.json\.gz": "fe85e5500ef3cf7c9f81bd69650d09e6cfca8813dedb5717c78e9de32223105a",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic capture keys recorded in the binding-capture parity vectors, not credentials"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/binding_capture/vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"capture_key_b64": "(?:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=?|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tr|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2traw==|\-_v7(?:\-_v7){9}\-_s=|\+/v7(?:\+/v7){9}\+/s=)",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic API key in the approval-queue redaction parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/approval_queue_vectors\.json$''',
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/record_approval_queue_vectors\.py$''',
+]
+regexes = [
+  '''^sk\-abcdefghijklmnopqrstuvwxyz0123$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic byte-range policy-integrity key recorded in the policy-integrity row parity vectors, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/policy_integrity_rows/vectors\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"(?:integrity_key_b64|key_b64)": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",?[\t\r\n ]*$''',
+]
+[[rules.allowlists]]
+description = "Pinned command-token source SHA-256, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)scripts/ci/record_rich_command_model_vectors\.py$''',
+  '''(?:^|/)tests/fixtures/native_rich_command_model\.json$''',
+]
+regexes = ['''^2bb624010d3dfea8cfff5f5b16face626033b76c894e313b2221df2ecd23f358$''']
+[[rules.allowlists]]
+description = "Pinned public source-file digest for sensitivity parity, not a credential"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)tests/fixtures/content_sensitivity_parity\.json$''']
+regexes = [
+  '''^[\t\r\n ]*"src/codex_plugin_scanner/guard/runtime/secret_sensitivity\.py": "2f692c209f962b918c70a38b30235a8284d2889daa4df07e885dc584754a114b",[\t\r\n ]*$''',
+]
 
 [[rules.allowlists]]
 description = "Canonical source digest, not a credential"
@@ -41,6 +110,15 @@ paths = ['''(?:^|/)contributions/command\-sources/migration\-manifest\.json$''']
 regexes = [
   '''^[\t\r\n ]*"command\.api\-gateway\.json": "c435d78e882f941c989aa097e875b0c61dafbd13523f515b03f1d967636031aa",[\t\r\n ]*$''',
   '''^[\t\r\n ]*"command\.kubernetes\-secrets\.json": "cfd8b77be9464f35df79497d0db382b55288620d1c5decfadb9b83e45da0d92f",[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic OAuth subject digest recorded in the guard-store parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/(?:approval_request_write_)?vectors\.json$''']
+regexes = [
+  '''^00d1c1c9f0bcc58c43e6d0b1c69ce3c8250dd42a15f9127dc42eb95303c4bec6$''',
 ]
 
 [[rules.allowlists]]
@@ -203,6 +281,18 @@ regexes = [
   '''^[\t\r\n ]*secret_line = "//registry\.npmjs\.org/:_authToken=npm_abcdefghijklmnopqrstuvwxyz012345\\n"[\t\r\n ]*$''',
 ]
 
+[[rules.allowlists]]
+description = "Synthetic API key recorded in the MCP call projection parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)tests/fixtures/mcp_proxy_decision/call_projection_vectors\.json$''',
+  '''(?:^|/)tests/fixtures/mcp_proxy_decision/record_call_projection_vectors\.py$''',
+]
+regexes = [
+  '''^sk\-live\-0123456789abcdef0123456789abcdef$''',
+]
+
 [[rules]]
 id = "github-pat"
 
@@ -242,3 +332,13 @@ regexes = [
   '''^[\t\r\n ]*output="token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz",[\t\r\n ]*$''',
   '''^[\t\r\n ]*content = "token: gh\x70_1234567890abcdefghijklmnopqrstuvwxyz\\n"[\t\r\n ]*$''',
 ]
+
+[[rules]]
+id = "private-key"
+
+[[rules.allowlists]]
+description = "Exact Rust rejection fixture: YWJjZA== is abcd, not a private key"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)rust/crates/guard-contained-process/src/runtime_resources/resource_tests\.rs$''']
+regexes = ['''^[\t\r\n ]*b"\-\-\-\-\-BEGIN PRIVATE KEY\-\-\-\-\-\\nYWJjZA==\\n\-\-\-\-\-END PRIVATE KEY\-\-\-\-\-"\.as_slice\(\),\n        b"\-\-\-\-\-BEGIN CERTIFICATE\-\-\-\-\-\\nYWJjZA==",\n        b"",\n        b"unframed private data",\n    \] \{\n        fs::write\(root\.join\("certifi/cacert\.pem"\), bytes\)\.unwrap\(\);\n        assert!\(capture_tree\(\&root\)\.is_err\(\)\);\n    \}\n    let mut mixed = CERT\.to_vec\(\);\n    mixed\.extend_from_slice\(b"\-\-\-\-\-BEGIN PRIVATE KEY\-\-\-\-\-\\nYWJjZA==\\n\-\-\-\-\-END PRIVATE KEY\-\-\-\-\-"\);[\t\r\n ]*$''']

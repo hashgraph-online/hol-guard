@@ -11,14 +11,21 @@ path = "src/lib.rs"
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true, features = [
+    "combaseapi",
     "dpapi",
     "errhandlingapi",
     "fileapi",
     "handleapi",
+    "ioapiset",
     "jobapi2",
+    "knownfolders",
     "namedpipeapi",
+    "processenv",
     "processthreadsapi",
+    "shlobj",
+    "stringapiset",
     "synchapi",
+    "tlhelp32",
     "winbase",
     "winerror",
     "wincred",
@@ -26,6 +33,7 @@ winapi = { workspace = true, features = [
     "winnt",
 ] }
 windows-permissions.workspace = true
+getrandom.workspace = true
 
 [lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

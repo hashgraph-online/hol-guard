@@ -1,0 +1,832 @@
+{
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "repopy install command",
+            "repopy link command",
+            "repopy clean command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews repopy CLI operations across repository cloning, dependency installation, remote Git linkage, and non-interactive workspace cleanup.",
+          "ecosystem_ids": [
+            "repopy"
+          ],
+          "executables": [
+            "repopy"
+          ],
+          "extension_id": "command.repopy",
+          "homepage": "https://github.com/manatunga/repopy",
+          "icon": {
+            "background": "#2563EB",
+            "kind": "react-icon",
+            "name": "HiMiniFolder"
+          },
+          "license": "MIT",
+          "name": "Repopy CLI protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "repopy install command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies repopy operations that automatically install dependencies from a cloned repository.",
+              "example_command": "repopy clone https://github.com/user/repo.git --install",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Repopy dependency installation",
+              "permission_id": "command.repopy.permission.install",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run 'repopy clone <url> --no-install' to inspect dependencies safely before installation."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "repopy link command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies repopy operations that link a project to a remote Git repository and can stage, commit, and push work.",
+              "example_command": "repopy link https://github.com/user/repo.git",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Repopy remote linkage",
+              "permission_id": "command.repopy.permission.link",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Inspect staged changes with 'git status' and push explicitly via standard Git commands."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "repopy clean command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies repopy clean operations that bypass interactive confirmation before deleting discovered workspace artifacts.",
+              "example_command": "repopy clean --yes",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "2.2.0",
+              "label": "Repopy non-interactive artifact cleanup",
+              "permission_id": "command.repopy.permission.clean",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Run 'repopy clean' without -y or --yes to preview discovered artifacts and confirm removal interactively."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Community",
+            "id": "community.repopy",
+            "url": "https://github.com/manatunga/repopy"
+          },
+          "reference_urls": [
+            "https://pypi.org/project/repopy/",
+            "https://github.com/manatunga/repopy"
+          ],
+          "required": false,
+          "risk_classes": [
+            "destructive_shell",
+            "execution",
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "repopy install command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies repopy clone operations that automatically install dependencies from the cloned repository.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "excluded_first_arguments": [
+                        "init",
+                        "link"
+                      ],
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "minimum_operands": 2,
+                      "options_with_values": [
+                        "-t",
+                        "--theme",
+                        "-l",
+                        "--link",
+                        "-m",
+                        "--message"
+                      ],
+                      "required_flags": [
+                        "--install"
+                      ]
+                    },
+                    "op": "operand-gated-flags.v1"
+                  },
+                  {
+                    "config": {
+                      "excluded_first_arguments": [
+                        "init",
+                        "link"
+                      ],
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "minimum_operands": 2,
+                      "options_with_values": [
+                        "-t",
+                        "--theme",
+                        "-l",
+                        "--link",
+                        "-m",
+                        "--message"
+                      ],
+                      "required_flags": [
+                        "-i"
+                      ]
+                    },
+                    "op": "operand-gated-flags.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.repopy.permission.install",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.repopy.install",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run 'repopy clone <url> --no-install' to inspect dependencies safely before installation."
+              ],
+              "severity": "high",
+              "title": "Repopy dependency installation"
+            },
+            {
+              "action_classes": [
+                "repopy link command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies repopy link operations that can stage, commit, and push work to a remote Git repository.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "-t",
+                        "--theme",
+                        "-l",
+                        "--link",
+                        "-m",
+                        "--message"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "link"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "excluded_first_arguments": [
+                        "clone"
+                      ],
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "minimum_operands": 1,
+                      "options_with_values": [
+                        "-t",
+                        "--theme",
+                        "-l",
+                        "--link",
+                        "-m",
+                        "--message"
+                      ],
+                      "required_flags": [
+                        "--link"
+                      ]
+                    },
+                    "op": "operand-gated-flags.v1"
+                  },
+                  {
+                    "config": {
+                      "excluded_first_arguments": [
+                        "clone"
+                      ],
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "minimum_operands": 1,
+                      "options_with_values": [
+                        "-t",
+                        "--theme",
+                        "-l",
+                        "--link",
+                        "-m",
+                        "--message"
+                      ],
+                      "required_flags": [
+                        "-l"
+                      ]
+                    },
+                    "op": "operand-gated-flags.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.repopy.permission.link",
+              "risk_classes": [
+                "destructive_shell",
+                "network_egress"
+              ],
+              "rule_id": "command.repopy.link",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Inspect staged changes with 'git status' and push explicitly via standard Git commands."
+              ],
+              "severity": "high",
+              "title": "Repopy remote linkage"
+            },
+            {
+              "action_classes": [
+                "repopy clean command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies repopy clean invocations that bypass interactive confirmation and immediately remove discovered workspace artifacts.",
+              "family": null,
+              "matcher": {
+                "config": {},
+                "matchers": [
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "--yes"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "clean"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "repopy",
+                        "repopy.cmd",
+                        "repopy.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [
+                        "-h",
+                        "--help"
+                      ],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [
+                        "-y"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "clean"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  }
+                ],
+                "op": "any.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.repopy.permission.clean",
+              "risk_classes": [
+                "destructive_shell"
+              ],
+              "rule_id": "command.repopy.clean-confirmation-bypass",
+              "rule_version": "1.0.0",
+              "safe_variants": [],
+              "safer_alternatives": [
+                "Run 'repopy clean' without -y or --yes to preview discovered artifacts and confirm removal interactively."
+              ],
+              "severity": "high",
+              "title": "Repopy non-interactive artifact cleanup"
+            }
+          ],
+          "safer_alternatives": [
+            "Run 'repopy clone <url> --no-install' to inspect dependencies safely before installation.",
+            "Inspect staged changes with 'git status' and push explicitly via standard Git commands.",
+            "Run 'repopy clean' without -y or --yes to preview discovered artifacts and confirm removal interactively."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "mcp_sources": [],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repopy",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid"
+        ]
+      }
+    },
+    "base": "packaged"
+  },
+  "cases": [
+    {
+      "command": "repopy clone https://github.com/org/repo.git --install",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-install",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy clone https://github.com/org/repo.git --install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-long",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy clone https://github.com/org/repo.git -i",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-short",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy clone --install https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-before-url",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy clone https://github.com/org/repo.git --theme minimal --install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "install-after-theme",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy link https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "link-subcommand",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy link https://github.com/org/repo.git -m \"Initial commit\"",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "link-message",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init my_project --link https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-link-long",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init my_project -l https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-link-short",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init my_project --theme web_api --link https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-theme-link",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init --skip --link https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "init-skip-link",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy clean --yes",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "clean-yes-long",
+      "rule_id": "command.repopy.clean-confirmation-bypass"
+    },
+    {
+      "command": "repopy clean -y",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "clean-yes-short",
+      "rule_id": "command.repopy.clean-confirmation-bypass"
+    },
+    {
+      "command": "repopy clone https://github.com/org/repo.git",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-clone",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy clone https://github.com/org/repo.git --no-install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-clone-no-install",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy init my_project",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-init",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init --theme minimal",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-init-theme",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy init --skip",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-init-skip",
+      "rule_id": "command.repopy.link"
+    },
+    {
+      "command": "repopy clean",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-clean-interactive",
+      "rule_id": "command.repopy.clean-confirmation-bypass"
+    },
+    {
+      "command": "repopy info",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-info",
+      "rule_id": "command.repopy.clean-confirmation-bypass"
+    },
+    {
+      "command": "repopy info --json",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-info-json",
+      "rule_id": "command.repopy.clean-confirmation-bypass"
+    },
+    {
+      "command": "repopy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-help",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "repopy --install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "safe-install-flag-without-operands",
+      "rule_id": "command.repopy.install"
+    },
+    {
+      "command": "echo repopy clone https://github.com/org/repo.git --install",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.repopy"
+      ],
+      "expected_action": "allow",
+      "expected_effective_segments": [],
+      "id": "safe-unrelated-command",
+      "rule_id": "command.repopy.install"
+    }
+  ],
+  "schema": "guard.command-extension-fixtures.v1"
+}

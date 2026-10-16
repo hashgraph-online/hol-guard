@@ -21,9 +21,21 @@ from packaging.utils import InvalidWheelFilename, parse_wheel_filename
 from packaging.version import InvalidVersion, Version
 
 if __package__:
+    from .release_artifact_sets import (
+        ARTIFACT_SETS,
+        ArtifactSetError,
+        remote_for_artifact_set,
+        select_upload_artifacts,
+    )
     from .release_registry_types import Registry, RegistryVerificationError, ReleaseInspection
     from .verify_release_registry import compute_local_distribution_hashes, inspect_release
 else:
+    from release_artifact_sets import (  # pyright: ignore[reportImplicitRelativeImport]
+        ARTIFACT_SETS,
+        ArtifactSetError,
+        remote_for_artifact_set,
+        select_upload_artifacts,
+    )
     from release_registry_types import (  # pyright: ignore[reportImplicitRelativeImport]
         Registry,
         RegistryVerificationError,
@@ -45,8 +57,13 @@ EXPECTED_TARGETS: Final[Mapping[str, str]] = {
     "macosx_13_0_x86_64": "x86_64-apple-darwin",
     "macosx_11_0_arm64": "aarch64-apple-darwin",
     "win_amd64": "x86_64-pc-windows-msvc",
+    "win_arm64": "aarch64-pc-windows-msvc",
 }
 EXPECTED_PLATFORMS: Final = frozenset(EXPECTED_TARGETS)
+# Pull request canaries skip the Windows ARM64 runner; alpha and stable releases always carry it.
+CANARY_OPTIONAL_PLATFORMS: Final = frozenset({"win_arm64"})
+NATIVE_WHEEL_MANIFEST_PATH: Final = "codex_plugin_scanner/native-wheels.json"
+NATIVE_WHEEL_MANIFEST_SCHEMA: Final = "hol-guard-native-wheels.v1"
 _MAX_NATIVE_WHEEL_BYTES: Final = 256 * 1024 * 1024
 _MAX_BASE_DISTRIBUTION_BYTES: Final = 256 * 1024 * 1024
 _MAX_RUNTIME_BYTES: Final = 128 * 1024 * 1024
@@ -249,11 +266,33 @@ def local_native_hashes(
             raise NativeReleaseError("Native wheel manifest identity does not match the embedded runtime")
         hashes[wheel.name] = _sha256_file(wheel)
 
-    if platforms != EXPECTED_PLATFORMS:
+    required = EXPECTED_PLATFORMS - CANARY_OPTIONAL_PLATFORMS if Version(version).is_devrelease else EXPECTED_PLATFORMS
+    if not required <= platforms <= EXPECTED_PLATFORMS:
         missing = sorted(EXPECTED_PLATFORMS - platforms)
         extra = sorted(platforms - EXPECTED_PLATFORMS)
         raise NativeReleaseError(f"Native wheel platform set is incomplete: missing={missing}, extra={extra}")
     return hashes
+
+
+def _assert_native_wheel_manifest(pure_wheel: Path, *, version: str, native: Mapping[str, str]) -> None:
+    """Require the pure wheel to list the exact digest of every native wheel in this release."""
+
+    try:
+        with zipfile.ZipFile(pure_wheel) as archive:
+            names = [entry.filename for entry in archive.infolist()]
+            if names.count(NATIVE_WHEEL_MANIFEST_PATH) != 1:
+                raise NativeReleaseError("Guard pure wheel must carry exactly one native wheel manifest")
+            raw = _read_zip_member_bounded(
+                archive,
+                archive.getinfo(NATIVE_WHEEL_MANIFEST_PATH),
+                max_bytes=_MAX_MANIFEST_BYTES,
+                label="native wheel manifest",
+            )
+        document = json.loads(raw.decode("utf-8"))
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile, json.JSONDecodeError, KeyError) as exc:
+        raise NativeReleaseError("Guard pure wheel native wheel manifest could not be read") from exc
+    if document != {"schema": NATIVE_WHEEL_MANIFEST_SCHEMA, "version": version, "wheels": dict(native)}:
+        raise NativeReleaseError("Guard pure wheel native wheel manifest does not match the native wheels")
 
 
 def local_guard_hashes(
@@ -262,7 +301,7 @@ def local_guard_hashes(
     version: str,
     source_sha: str,
 ) -> dict[str, str]:
-    """Return the exact six-file Guard release set after validating native bytes."""
+    """Return the exact Guard release set after validating native bytes and the pure wheel manifest."""
     version = _canonical_version(version)
     native = local_native_hashes(
         dist_dir,
@@ -284,6 +323,7 @@ def local_guard_hashes(
         raise NativeReleaseError(f"Guard release artifact set is not exact: missing={missing}, extra={extra}")
     _assert_regular_distribution(dist_dir / pure_wheel, label="Guard pure wheel")
     _assert_regular_distribution(dist_dir / sdist, label="Guard source distribution")
+    _assert_native_wheel_manifest(dist_dir / pure_wheel, version=version, native=native)
     return {filename: complete[filename] for filename in sorted(expected)}
 
 
@@ -330,20 +370,6 @@ def _copy_exclusive(source: Path, target: Path) -> None:
         raise NativeReleaseError(f"Native upload artifact could not be copied: {target.name}") from exc
 
 
-def select_upload_artifacts(local: Mapping[str, str], *, version: str, artifact_set: str) -> dict[str, str]:
-    """Return the registry subset that this publication is allowed to upload."""
-
-    if artifact_set == "full":
-        return dict(local)
-    if artifact_set != "pure":
-        raise NativeReleaseError("Unsupported Guard registry artifact set")
-    wheel = f"hol_guard-{_canonical_version(version).replace('-', '_')}-py3-none-any.whl"
-    digest = local.get(wheel)
-    if digest is None:
-        raise NativeReleaseError("Guard pure wheel is missing from the local release set")
-    return {wheel: digest}
-
-
 def plan_upload(
     registry: Registry,
     *,
@@ -353,17 +379,19 @@ def plan_upload(
     output_dir: Path,
     artifact_set: str = "full",
 ) -> tuple[str, ...]:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
+        version=version,
+        source_sha=source_sha,
+    )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
+    inspection = _inspection(registry, version)
+    remote = remote_for_artifact_set(
+        inspection.digests if inspection.exists else {},
+        complete,
         version=version,
         artifact_set=artifact_set,
     )
-    inspection = _inspection(registry, version)
-    remote = inspection.digests if inspection.exists else {}
     unexpected = sorted(set(remote) - set(local))
     if unexpected:
         raise NativeReleaseError(f"Registry release contains unexpected artifacts: {unexpected}")
@@ -391,19 +419,16 @@ def assert_published_exact(
     dist_dir: Path,
     artifact_set: str = "full",
 ) -> None:
-    local = select_upload_artifacts(
-        local_guard_hashes(
-            dist_dir,
-            version=version,
-            source_sha=source_sha,
-        ),
+    complete = local_guard_hashes(
+        dist_dir,
         version=version,
-        artifact_set=artifact_set,
+        source_sha=source_sha,
     )
+    local = select_upload_artifacts(complete, version=version, artifact_set=artifact_set)
     inspection = _inspection(registry, version)
     if not inspection.exists:
         raise NativeReleaseError("Registry release is absent")
-    remote = inspection.digests
+    remote = remote_for_artifact_set(inspection.digests, complete, version=version, artifact_set=artifact_set)
     if remote != local:
         missing = sorted(set(local) - set(remote))
         extra = sorted(set(remote) - set(local))
@@ -445,7 +470,7 @@ def _parser() -> argparse.ArgumentParser:
         elif name in {"plan-upload", "verify-published"}:
             sub.add_argument(
                 "--artifact-set",
-                choices=("full", "pure"),
+                choices=ARTIFACT_SETS,
                 default="full",
             )
     return parser
@@ -489,7 +514,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = {"status": "exact", "version": args.version}
         else:
             raise NativeReleaseError("Unsupported command")
-    except NativeReleaseError as exc:
+    except (NativeReleaseError, ArtifactSetError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
     print(json.dumps(result, separators=(",", ":"), sort_keys=True))

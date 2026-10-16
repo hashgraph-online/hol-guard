@@ -73,7 +73,8 @@ RELEASE_TRAINS: Final[Mapping[str, ReleaseTrain]] = MappingProxyType(
         ),
     }
 )
-ALPHA_BRANCHES: Final[tuple[str, ...]] = tuple(RELEASE_TRAINS)
+MAIN_REF: Final[str] = "refs/heads/main"
+ALPHA_BRANCHES: Final[tuple[str, ...]] = (*RELEASE_TRAINS, MAIN_REF)
 _CANONICAL_GIT_SHA: Final[re.Pattern[str]] = re.compile(r"[0-9a-f]{40}")
 
 
@@ -106,6 +107,36 @@ def _is_train_stable(version: Version, train: ReleaseTrain) -> bool:
         and version.post is None
         and version.local is None
     )
+
+
+def main_alpha_train(base_version: str) -> ReleaseTrain:
+    """Return the alpha train for main: the minor after the current stable base."""
+
+    base = _parse_version(base_version, label="Base version")
+    if (
+        str(base) != base_version
+        or base.epoch != 0
+        or len(base.release) != 3
+        or base.pre is not None
+        or base.dev is not None
+        or base.post is not None
+        or base.local is not None
+    ):
+        raise ValueError(f"Base version must be a canonical stable X.Y.Z version: {base_version!r}")
+    return ReleaseTrain(git_ref=MAIN_REF, major=base.release[0], minor=base.release[1] + 1)
+
+
+def _resolve_train(git_ref: str, channel: ReleaseChannel, base_version: str | None) -> ReleaseTrain:
+    if git_ref == MAIN_REF:
+        if channel is not ReleaseChannel.ALPHA:
+            raise ValueError(f"{MAIN_REF} stable releases are cut by Release Please, not this validator")
+        if base_version is None:
+            raise ValueError(f"{MAIN_REF} alpha releases require --base-version")
+        return main_alpha_train(base_version)
+    train = RELEASE_TRAINS.get(git_ref)
+    if train is None:
+        raise ValueError(f"Releases must run from one of: {', '.join(ALPHA_BRANCHES)}")
+    return train
 
 
 def _parse_channel(channel: ReleaseChannel | str) -> ReleaseChannel:
@@ -160,11 +191,10 @@ def validate_release_train(
     actual_ref: str | None = None,
     github_sha: str | None = None,
     expected_sha: str | None = None,
+    base_version: str | None = None,
 ) -> ValidatedRelease:
     parsed_channel = _parse_channel(channel)
-    train = RELEASE_TRAINS.get(git_ref)
-    if train is None:
-        raise ValueError(f"Releases must run from one of: {', '.join(ALPHA_BRANCHES)}")
+    train = _resolve_train(git_ref, parsed_channel, base_version)
     if parsed_channel is ReleaseChannel.STABLE and not train.stable_enabled:
         raise ValueError(f"{git_ref} is alpha-only; stable releases are disabled")
 
@@ -192,6 +222,15 @@ def validate_release_train(
         raise ValueError(f"{parsed_channel.value.title()} version {version} already exists")
 
     if parsed_channel is ReleaseChannel.ALPHA:
+        closing = [
+            existing
+            for existing in parsed_existing
+            if existing.epoch == 0
+            and existing.release == (train.major, train.minor, train.patch)
+            and not _is_train_alpha(existing, train)
+        ]
+        if closing:
+            raise ValueError(f"Existing release {max(closing)} closes the {train.version_prefix} alpha train")
         train_alphas = [existing for existing in parsed_existing if _is_train_alpha(existing, train)]
         if train_alphas:
             latest = max(train_alphas)
@@ -249,6 +288,7 @@ def main() -> int:
     _ = parser.add_argument("--github-sha")
     _ = parser.add_argument("--expected-sha")
     _ = parser.add_argument("--actual-ref")
+    _ = parser.add_argument("--base-version", help="Current stable base version; required for main alphas")
     _ = parser.add_argument(
         "--existing-version",
         action="append",
@@ -262,6 +302,7 @@ def main() -> int:
     github_sha = getattr(args, "github_sha", None)
     expected_sha = getattr(args, "expected_sha", None)
     actual_ref = getattr(args, "actual_ref", None)
+    base_version = getattr(args, "base_version", None)
     existing_versions = getattr(args, "existing_version", None)
     if (
         not isinstance(version_text, str)
@@ -270,6 +311,7 @@ def main() -> int:
         or (github_sha is not None and not isinstance(github_sha, str))
         or (expected_sha is not None and not isinstance(expected_sha, str))
         or (actual_ref is not None and not isinstance(actual_ref, str))
+        or (base_version is not None and not isinstance(base_version, str))
         or not isinstance(existing_versions, list)
         or not all(isinstance(value, str) for value in existing_versions)
     ):
@@ -287,6 +329,7 @@ def main() -> int:
             actual_ref=actual_ref,
             github_sha=github_sha,
             expected_sha=expected_sha,
+            base_version=base_version,
         )
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)

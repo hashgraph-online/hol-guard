@@ -34,15 +34,16 @@ use guard_policy_snapshot::policy_integrity::{
 
 use super::context_digest_json::write_canonical_json_with_limit;
 use crate::claim_reuse::approval_authority_revision;
+use crate::guard_store_json::dumps_sorted;
 
-const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
+pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
 const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = 256;
-const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
+pub(crate) const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
      artifact_hash, workspace, publisher, source, reason, owner, expires_at, updated_at, \
      integrity_version, integrity_generation, payload_hash, payload_mac, integrity_key_id, \
      signed_at";
-const LOCAL_ONCE_CLAIM_COLUMNS: &str = "approval_id, request_id, harness, artifact_id, \
+pub(crate) const LOCAL_ONCE_CLAIM_COLUMNS: &str = "approval_id, request_id, harness, artifact_id, \
      artifact_hash, workspace, publisher, action, created_at, expires_at, claimed_at, \
      integrity_version, payload_hash, payload_mac, integrity_key_id, signed_at, \
      authority_kind";
@@ -82,7 +83,7 @@ const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
 /// ids pass through verbatim (already canonical); otherwise the family is
 /// `parts[2]` of `harness:scope:family:…`, lower-cased, gated by the scoped
 /// approval families so unrelated namespaces never collapse to a family key.
-fn artifact_family_key(artifact_id: Option<&str>) -> Option<String> {
+pub(crate) fn artifact_family_key(artifact_id: Option<&str>) -> Option<String> {
     let id = artifact_id?.trim();
     if id.is_empty() {
         return None;
@@ -113,7 +114,7 @@ fn canonical_json(value: &Value) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-fn row_value(row: &Value, key: &str) -> Value {
+pub(crate) fn row_value(row: &Value, key: &str) -> Value {
     row.get(key).cloned().unwrap_or(Value::Null)
 }
 
@@ -138,13 +139,23 @@ fn normalized_workspace_path(value: &str) -> String {
 /// `_workspace_policy_key` (`store_base.py`) — `"workspace:" +
 /// sha256(normalized).hexdigest()`, full 64-hex digest. An already-keyed
 /// input (`workspace:<hex>`) is returned unchanged so stored rows match.
-fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
+pub(crate) fn workspace_policy_key(workspace: Option<&str>) -> Option<String> {
     let ws = workspace?;
     if ws.trim().is_empty() {
         return None;
     }
     if ws.starts_with("workspace:") {
         return Some(ws.to_string());
+    }
+    computed_workspace_policy_key(Some(ws))
+}
+
+/// `_workspace_policy_key` (`store_base.py`) exactly: always hashes the
+/// normalized path, with no passthrough for already-keyed input.
+pub(crate) fn computed_workspace_policy_key(workspace: Option<&str>) -> Option<String> {
+    let ws = workspace?;
+    if ws.trim().is_empty() {
+        return None;
     }
     Some(format!(
         "workspace:{}",
@@ -158,12 +169,13 @@ fn family_key_value(family_key: &str) -> &str {
 
 /// `_runtime_scoped_exact_match_key` — `runtime-exact:<digest>`; `None` unless
 /// the artifact is a scoped family member.
-fn runtime_scoped_exact_match_key(
+pub(crate) fn runtime_scoped_exact_match_key(
     artifact_id: Option<&str>,
     runtime_exact_match_context: Option<&str>,
 ) -> Option<String> {
-    let id = artifact_id?.trim();
-    if id.is_empty() || id.starts_with("family:") {
+    // Python keys the untrimmed id; only the blank check strips.
+    let id = artifact_id?;
+    if id.trim().is_empty() || id.starts_with("family:") {
         return None;
     }
     let family_key = artifact_family_key(Some(id))?;
@@ -173,11 +185,11 @@ fn runtime_scoped_exact_match_key(
     let digest = match runtime_exact_match_context {
         None => sha256_hex(id.as_bytes()),
         Some(ctx) => sha256_hex(
-            canonical_json(&json!({
+            dumps_sorted(&json!({
                 "artifact_id": id,
                 "context": ctx,
                 "version": 2,
-            }))
+            }))?
             .as_bytes(),
         ),
     };
@@ -190,7 +202,7 @@ fn runtime_scoped_exact_match_key(
 /// broad rule matches the identical executable action across workspaces. Parses
 /// the runtime exact-match context JSON, requires `raw_command_text`, and rebuilds
 /// the canonical context payload with the location fields nulled.
-fn runtime_tool_action_portable_match_context(ctx: Option<&str>) -> Option<String> {
+pub(crate) fn runtime_tool_action_portable_match_context(ctx: Option<&str>) -> Option<String> {
     let ctx = ctx?;
     let payload: Value = serde_json::from_str(ctx).ok()?;
     let payload = payload.as_object()?;
@@ -221,7 +233,7 @@ fn runtime_tool_action_portable_match_context(ctx: Option<&str>) -> Option<Strin
         "wrapper_chain": wrapper_chain.unwrap_or_default(),
         "permission_mode": permission_mode,
     });
-    Some(canonical_json(&context))
+    dumps_sorted(&context)
 }
 
 /// `_global_runtime_scoped_exact_match_key`.
@@ -465,7 +477,7 @@ fn local_once_integrity_purpose(authority_kind: Option<&str>) -> String {
     }
 }
 
-fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
+pub(crate) fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
     use rusqlite::types::ValueRef;
     match cell {
         ValueRef::Null => Value::Null,
@@ -477,7 +489,7 @@ fn value_or_null(cell: rusqlite::types::ValueRef<'_>) -> Value {
 }
 
 /// Row → JSON for `POLICY_LOOKUP_COLUMNS` (19 cols).
-fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+pub(crate) fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     const COLS: [&str; 19] = [
         "decision_id",
         "harness",
@@ -507,7 +519,7 @@ fn policy_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
 }
 
 /// Row → JSON for `LOCAL_ONCE_CLAIM_COLUMNS` (17 cols).
-fn local_once_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
+pub(crate) fn local_once_row_to_json(row: &rusqlite::Row<'_>) -> rusqlite::Result<Value> {
     const COLS: [&str; 17] = [
         "approval_id",
         "request_id",
@@ -586,6 +598,9 @@ fn local_once_approval_payload(row: &Value) -> Value {
         "request_id": row_value(row, "request_id"),
         "scope": "artifact",
         "source": "approval-gate-once",
+        "fresh_local_approval": crate::approval_reuse::exact_artifact_approval_qualification(
+            row, "approval-gate-once", true,
+        ).0,
         "signed_at": row_value(row, "signed_at"),
         "updated_at": row_value(row, "created_at"),
         "workspace": row_value(row, "workspace"),
@@ -613,7 +628,7 @@ fn local_once_integrity_failure(row: &Value, result: &LocalAuthorityVerification
 }
 
 /// `verify_local_once_approval` — purpose from `authority_kind`.
-fn verify_local_once(
+pub(crate) fn verify_local_once(
     row: &Value,
     key: Option<&[u8]>,
     key_id: Option<&str>,
@@ -751,7 +766,7 @@ fn claim_local_once_lookup(
 
 /// `_claim_local_once_approval_by_id_locked` — re-select, verify, re-sign with
 /// `claimed_at`, consume.
-fn claim_local_once_by_id(
+pub(crate) fn claim_local_once_by_id(
     conn: &Connection,
     approval_id: &str,
     now: &str,
@@ -849,7 +864,7 @@ fn claim_local_once_by_id(
 // ---------------------------------------------------------------------------
 
 /// `_materialized_policy_bundle_row_identity` — 11-tuple equality probe.
-fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
+pub(crate) fn materialized_policy_bundle_row_identity(row: &Value) -> Value {
     json!([
         row_value(row, "harness"),
         row_value(row, "scope"),
@@ -903,7 +918,7 @@ fn runtime_policy_row_is_eligible(
 }
 
 /// `_policy_integrity_result_for_row` — remote sources short-circuit valid.
-fn policy_integrity_result_for_row(
+pub(crate) fn policy_integrity_result_for_row(
     row: &Value,
     mode: &str,
     key: Option<&[u8]>,
@@ -924,13 +939,20 @@ fn policy_integrity_result_for_row(
 }
 
 /// `_policy_row_payload` — base columns plus integrity overlays.
-fn policy_row_payload(
+pub(crate) fn policy_row_payload(
     row: &Value,
     integrity_result: Option<&PolicyIntegrityVerification>,
     state: Option<&Value>,
 ) -> Value {
     let source = row_value(row, "source").as_str().unwrap_or("").to_string();
     let mut map = serde_json::Map::new();
+    let (fresh, durable) = crate::approval_reuse::exact_artifact_approval_qualification(
+        row,
+        &source,
+        integrity_result.is_some_and(|result| result.status == "valid"),
+    );
+    map.insert("fresh_local_approval".into(), Value::Bool(fresh));
+    map.insert("durable_exact_approval".into(), Value::Bool(durable));
     let keys = [
         "action",
         "artifact_hash",
@@ -1304,18 +1326,21 @@ pub(crate) fn evaluate_policy_decision_lookup_request(
     })
 }
 
-fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
+/// One lookup on its own store connection: the `lookup_result` payload, with
+/// the consuming path serialized in its own transaction. In-process callers
+/// that hold a store themselves resolve a lookup through this rather than
+/// reading `policy_decisions` directly, so a decision they go on to claim
+/// carries the authority revision and integrity payload the claim compares.
+pub(crate) fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
     if request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
         return Err("native_policy_decision_lookup_schema_mismatch".to_owned());
     }
+    if let Some(groups) = &request.probe_groups {
+        return crate::policy_lookup_groups::evaluate(request, groups);
+    }
     let current_time = canonical_utc_timestamp(&request.now)
         .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;
-    let mut conn = Connection::open(&request.store_path)
-        .map_err(|_| "native_policy_decision_lookup_store_unavailable".to_owned())?;
-    conn.busy_timeout(std::time::Duration::from_secs(5))
-        .map_err(|_| "native_policy_decision_lookup_store_unavailable".to_owned())?;
-    conn.execute("pragma foreign_keys = on", [])
-        .map_err(|_| "native_policy_decision_lookup_store_unavailable".to_owned())?;
+    let mut conn = open_lookup_connection(&request.store_path)?;
     if request.consume_one_shot {
         // Serialize selection with consumption. Rollback-on-drop also keeps a
         // one-shot usable when its required audit write or commit fails.
@@ -1330,6 +1355,32 @@ fn evaluate(request: &PolicyDecisionLookupRequestV1) -> Result<Value, String> {
     } else {
         evaluate_in_connection(request, &conn, &current_time)
     }
+}
+
+/// Open the store the way a stand-alone lookup does, for callers that probe it
+/// several times in one request.
+pub(crate) fn open_lookup_connection(store_path: &str) -> Result<Connection, String> {
+    let unavailable = || "native_policy_decision_lookup_store_unavailable".to_owned();
+    let conn = Connection::open(store_path).map_err(|_| unavailable())?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))
+        .map_err(|_| unavailable())?;
+    conn.execute("pragma foreign_keys = on", [])
+        .map_err(|_| unavailable())?;
+    Ok(conn)
+}
+
+/// One non-consuming probe on an already open store: the `lookup_result`
+/// payload a stand-alone `consume_one_shot: false` request would return.
+pub(crate) fn evaluate_non_consuming(
+    request: &PolicyDecisionLookupRequestV1,
+    conn: &Connection,
+) -> Result<Value, String> {
+    if request.consume_one_shot || request.schema != POLICY_DECISION_LOOKUP_REQUEST_SCHEMA {
+        return Err("native_policy_decision_lookup_invalid".to_owned());
+    }
+    let current_time = canonical_utc_timestamp(&request.now)
+        .ok_or_else(|| "native_policy_decision_lookup_invalid_now".to_owned())?;
+    evaluate_in_connection(request, conn, &current_time)
 }
 
 fn evaluate_in_connection(
@@ -1397,12 +1448,16 @@ fn evaluate_in_connection(
     let mut reported_local_once_failures: Vec<Value> = Vec::new();
     let local_once_hashes: Vec<String> = {
         let mut v = Vec::new();
-        for h in [
-            artifact_hash.map(str::to_string),
-            runtime_exact_match_key.clone(),
-        ]
-        .into_iter()
-        .flatten()
+        // The exact peek matches only the caller-supplied hash; the id-derived
+        // runtime-exact fallback belongs to ordinary policy lookups.
+        let runtime_fallback = if request.local_once_only {
+            None
+        } else {
+            runtime_exact_match_key.clone()
+        };
+        for h in [artifact_hash.map(str::to_string), runtime_fallback]
+            .into_iter()
+            .flatten()
         {
             if !v.contains(&h) {
                 v.push(h);
@@ -1466,6 +1521,23 @@ fn evaluate_in_connection(
             local_once_hash = Some(lo_hash.clone());
             break;
         }
+    }
+    if request.local_once_only {
+        // The exact local-once peek never reads policy rows or consumes.
+        flush_events(conn, &events, current_time)
+            .map_err(|_| "native_policy_decision_lookup_write_failed".to_owned())?;
+        let trust_status = trust_status_from_state(&integrity_state);
+        if let Some(ref mut ignored) = ignored_local_integrity {
+            ignored["trust_status"] = trust_status.clone();
+        }
+        return Ok(lookup_result(
+            conn,
+            local_once_decision,
+            ignored_local_integrity,
+            trust_status,
+            false,
+            starting_revision,
+        ));
     }
     if local_once_decision.is_some() {
         selected_payload = local_once_decision.clone();
@@ -1959,4 +2031,4 @@ fn consuming_policy_rows(
 
 #[cfg(test)]
 #[path = "policy_decision_lookup_tests.rs"]
-mod tests;
+pub(crate) mod tests;

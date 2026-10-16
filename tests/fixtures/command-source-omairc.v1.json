@@ -1,0 +1,668 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "base": "packaged",
+    "sources": [
+      {
+        "extension": {
+          "action_classes": [
+            "Omairc message send command",
+            "Omairc window raise command"
+          ],
+          "aliases": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "dependencies": [],
+          "description": "Reviews omairc commands that send IRC messages or raise the running window. Read-only inventory commands stay outside these rules.",
+          "ecosystem_ids": [
+            "omairc"
+          ],
+          "executables": [
+            "omairc"
+          ],
+          "extension_id": "command.omairc",
+          "homepage": "https://github.com/fredimachado/omairc",
+          "icon": {
+            "background": "#1D4ED8",
+            "kind": "react-icon",
+            "name": "HiMiniCommandLine"
+          },
+          "license": "MIT",
+          "name": "omairc command protection",
+          "permissions": [
+            {
+              "action_classes": [
+                "Omairc message send command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `omairc send`, which delivers a PRIVMSG through a running Omairc window. Incomplete send invocations stay reviewable. `--help` is help only before a target; after the target, or after `--`, it is message text and stays reviewable.",
+              "example_command": "omairc send",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Omairc message send",
+              "permission_id": "command.omairc.permission.send",
+              "replacement_permission_id": null,
+              "risk_tier": "high",
+              "safer_guidance": [
+                "Confirm the network, target, and exact message text before sending.",
+                "Use omairc read, names, status, or connections to inspect state first."
+              ],
+              "typed_capabilities": []
+            },
+            {
+              "action_classes": [
+                "Omairc window raise command"
+              ],
+              "baseline_floor": "review",
+              "configurable": true,
+              "conflicts": [],
+              "default_enabled": true,
+              "dependencies": [],
+              "deprecated": false,
+              "description": "Identifies `omairc raise`, which activates the existing Omairc window and changes desktop focus.",
+              "example_command": "omairc raise",
+              "family": null,
+              "fixed_reason": null,
+              "implementation_version": "1.0.0",
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "label": "Omairc window raise",
+              "permission_id": "command.omairc.permission.raise",
+              "replacement_permission_id": null,
+              "risk_tier": "medium",
+              "safer_guidance": [
+                "Do not raise the window unless the user asked to bring Omairc to the front."
+              ],
+              "typed_capabilities": []
+            }
+          ],
+          "project_markers": [],
+          "publisher": {
+            "display_name": "Fredi Machado",
+            "id": "community.fredimachado",
+            "url": "https://github.com/fredimachado"
+          },
+          "reference_urls": [
+            "https://github.com/fredimachado/omairc"
+          ],
+          "required": false,
+          "risk_classes": [
+            "execution",
+            "network_egress"
+          ],
+          "rules": [
+            {
+              "action_classes": [
+                "Omairc message send command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `omairc send`, which delivers a PRIVMSG through a running Omairc window. Incomplete send invocations stay reviewable. `--help` is help only before a target; after the target, or after `--`, it is message text and stays reviewable.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "omairc",
+                    "omairc.cmd",
+                    "omairc.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [
+                    "--network"
+                  ],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "send"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.omairc.permission.send",
+              "risk_classes": [
+                "network_egress"
+              ],
+              "rule_id": "command.omairc.send",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "omairc",
+                        "omairc.cmd",
+                        "omairc.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [
+                        "--network"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "send",
+                        "--help"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "omairc send command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Confirm the network, target, and exact message text before sending.",
+                "Use omairc read, names, status, or connections to inspect state first."
+              ],
+              "severity": "high",
+              "title": "Omairc message send"
+            },
+            {
+              "action_classes": [
+                "Omairc window raise command"
+              ],
+              "default_mode": "review",
+              "description": "Identifies `omairc raise`, which activates the existing Omairc window and changes desktop focus.",
+              "family": null,
+              "matcher": {
+                "config": {
+                  "allow_leading_options": false,
+                  "executables": [
+                    "omairc",
+                    "omairc.cmd",
+                    "omairc.exe"
+                  ],
+                  "fail_secure_unknown_options": true,
+                  "forbidden_flags": [],
+                  "interspersed_flags": [],
+                  "interspersed_options_with_values": [],
+                  "inverse_flag_pairs": [],
+                  "leading_options_with_values": [],
+                  "options_with_values": [],
+                  "required_flags": [],
+                  "required_flags_in_all_arguments": false,
+                  "required_option_values": [],
+                  "subcommands": [
+                    "raise"
+                  ]
+                },
+                "op": "executable.v1"
+              },
+              "native_capability": null,
+              "permission_id": "command.omairc.permission.raise",
+              "risk_classes": [
+                "execution"
+              ],
+              "rule_id": "command.omairc.raise",
+              "rule_version": "1.0.0",
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "omairc",
+                        "omairc.cmd",
+                        "omairc.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [],
+                      "interspersed_options_with_values": [],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "raise",
+                        "--help"
+                      ]
+                    },
+                    "op": "executable.v1"
+                  },
+                  "title": "omairc raise command help",
+                  "variant_id": "help"
+                }
+              ],
+              "safer_alternatives": [
+                "Do not raise the window unless the user asked to bring Omairc to the front."
+              ],
+              "severity": "medium",
+              "title": "Omairc window raise"
+            }
+          ],
+          "safer_alternatives": [
+            "Confirm the network, target, and exact message text before sending.",
+            "Use omairc read, names, status, or connections to inspect state first."
+          ],
+          "source": "built-in",
+          "version": "1.0.0"
+        },
+        "schema": "guard.command-extension-source.v1"
+      }
+    ],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.digline",
+          "command.errand",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-contribos",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.omairc",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.snoboard",
+          "command.syngraphe",
+          "command.tui-runner",
+          "command.uivoid"
+        ]
+      }
+    }
+  },
+  "cases": [
+    {
+      "command": "omairc send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "inactive-send",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-message",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc.exe send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-exe",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc.cmd send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-cmd",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "/usr/bin/omairc send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-path",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-incomplete",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send --network abc '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-network",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "send-help",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc.exe send --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "send-help-exe",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc.cmd send --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "send-help-cmd",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send --network abc --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "send-help-network",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send '#omarchy' --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-help-after-target",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send -- '#omarchy' --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "send-end-options",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send '#omarchy hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "send-malformed",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc raise",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "raise-window",
+      "rule_id": "command.omairc.raise"
+    },
+    {
+      "command": "omairc.exe raise",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "raise-exe",
+      "rule_id": "command.omairc.raise"
+    },
+    {
+      "command": "omairc raise --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "raise-help",
+      "rule_id": "command.omairc.raise"
+    },
+    {
+      "command": "omairc read --last 20",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "read-inventory",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc status",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "status-inventory",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc names '#omarchy'",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "names-inventory",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc connections",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "connections-inventory",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc send '#omarchy' hello",
+      "disabled_permissions": [
+        "command.omairc.permission.send"
+      ],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-send",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "omairc status; omairc send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        1
+      ],
+      "id": "compound-send",
+      "rule_id": "command.omairc.send"
+    },
+    {
+      "command": "exec omairc send '#omarchy' hello",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.omairc"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [],
+      "id": "wrapped-exec",
+      "rule_id": "command.omairc.send"
+    }
+  ]
+}

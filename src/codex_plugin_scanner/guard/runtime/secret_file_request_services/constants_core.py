@@ -15,11 +15,15 @@ _FILE_READ_TOOL_NAMES = frozenset(
     }
 )
 
+# Deletes change files too; strreplace and delete are Cursor's native edit and delete tools.
 _FILE_WRITE_TOOL_NAMES = frozenset(
     {
         "edit",
         "edit_file",
         "multiedit",
+        "strreplace",
+        "delete",
+        "delete_file",
         "write",
         "write_file",
         "apply_patch",

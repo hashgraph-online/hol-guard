@@ -166,3 +166,30 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
     assert_eq!(states[0].1, digest);
     fs::remove_dir_all(base).unwrap();
 }
+
+#[cfg(unix)]
+#[test]
+fn same_executable_discovery_accepts_this_executable_without_hashing() {
+    let base = test_home("same-executable");
+    // Neither recorded digest matches this test binary, so digest liveness
+    // keeps scanning while same-executable liveness stops at the first scope.
+    for digest in ["aa".repeat(32), "fe".repeat(32)] {
+        let scope = state_scope(&base, &digest).unwrap();
+        publish_state(
+            &scope,
+            1,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &[9u8; crate::AUTH_TOKEN_BYTES],
+        )
+        .unwrap();
+    }
+
+    assert_eq!(discover_home_states_prefer(&base, None).unwrap().len(), 2);
+    let states = discover_same_executable_states(&base).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].1, "aa".repeat(32));
+    fs::remove_dir_all(base).unwrap();
+}

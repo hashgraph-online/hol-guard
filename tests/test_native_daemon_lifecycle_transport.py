@@ -1,0 +1,463 @@
+from __future__ import annotations
+
+import copy
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import native_daemon_lifecycle as transport
+
+
+class _Identity:
+    sha256 = "identity-a"
+    path = Path("/runtime/hol-guard-runtime")
+
+
+class _Status:
+    identity = _Identity()
+    available = True
+    compatible = True
+    capabilities = object()
+    reason = "native_ready"
+
+
+@pytest.fixture(autouse=True)
+def _isolated_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    transport._NEED_KEYS.clear()
+    transport._VERDICTS.clear()
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: _Status())
+    monkeypatch.setattr(transport, "_resolve_existing_digest_home", lambda home: Path("/home"))
+    monkeypatch.setattr(transport, "_record_success", lambda _home: None)
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", lambda _home: True)
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: True)
+
+
+def test_repeat_request_is_answered_once_and_facts_ride_the_first_round(monkeypatch: pytest.MonkeyPatch) -> None:
+    rounds: list[dict[str, object]] = []
+
+    def round_trip(query, facts, _home, _platform, _timeout):
+        rounds.append(dict(facts))
+        if "pid_running:7" not in facts:
+            return {"need": "facts", "keys": ["pid_running:7"]}
+        return {"ok": bool(facts["pid_running:7"])}
+
+    monkeypatch.setattr(transport, "_round_trip", round_trip)
+    state = {"running": True}
+
+    def resolve(key: str) -> object:
+        return state["running"]
+
+    first = transport.native_daemon_lifecycle("live_state_gate", {"payload": {"pid": 7}}, resolve_fact=resolve)
+    assert first == {"ok": True}
+    assert len(rounds) == 2
+
+    again = transport.native_daemon_lifecycle("live_state_gate", {"payload": {"pid": 7}}, resolve_fact=resolve)
+    assert again == {"ok": True}
+    assert len(rounds) == 2  # identical query and facts: no resident round trip
+
+    state["running"] = False
+    changed = transport.native_daemon_lifecycle("live_state_gate", {"payload": {"pid": 7}}, resolve_fact=resolve)
+    assert changed == {"ok": False}
+    assert rounds[-1] == {"pid_running:7": False}  # the learned fact set rode the first request
+
+
+def test_time_bearing_checks_and_failures_are_never_cached(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+
+    def round_trip(*_args):
+        calls.append(1)
+        return {"claim": True}
+
+    monkeypatch.setattr(transport, "_round_trip", round_trip)
+    for _ in range(2):
+        transport.native_daemon_lifecycle("wake_claim", {"existing": None, "now": 1.0})
+    assert len(calls) == 2
+
+    def failing(*_args):
+        raise transport.NativeDaemonLifecycleError("native_daemon_lifecycle_unavailable")
+
+    monkeypatch.setattr(transport, "_round_trip", failing)
+    for _ in range(2):
+        with pytest.raises(transport.NativeDaemonLifecycleError):
+            transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"})
+    assert not transport._VERDICTS
+
+
+def test_a_cached_verdict_stays_inside_the_home_that_learned_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    checked: list[Path] = []
+    calls: list[Path] = []
+
+    def resolve_home(home: Path | None) -> Path:
+        assert home is not None
+        return home
+
+    def prerequisite(home: Path) -> bool:
+        checked.append(home)
+        return home == Path("/a")
+
+    def round_trip(_query, _facts, home, _platform, _timeout):
+        calls.append(home)
+        return {"ok": True, "home": str(home)}
+
+    def resolve(_key: str) -> object:
+        return None
+
+    monkeypatch.setattr(transport, "_resolve_existing_digest_home", resolve_home)
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", prerequisite)
+    monkeypatch.setattr(transport, "_round_trip", round_trip)
+
+    first = transport.native_daemon_lifecycle(
+        "ephemeral_home",
+        {"guard_home": "/a"},
+        resolve_fact=resolve,
+        guard_home=Path("/a"),
+    )
+    again = transport.native_daemon_lifecycle(
+        "ephemeral_home",
+        {"guard_home": "/a"},
+        resolve_fact=resolve,
+        guard_home=Path("/a"),
+    )
+    assert first == {"ok": True, "home": "/a"}
+    assert again == first
+    assert calls == [Path("/a")]
+    assert checked == [Path("/a")]
+
+    def prerequisite_closed(home: Path) -> bool:
+        checked.append(home)
+        return False
+
+    monkeypatch.setattr(transport, "ensure_resident_prerequisite", prerequisite_closed)
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="prerequisite_unavailable"):
+        transport.native_daemon_lifecycle(
+            "ephemeral_home",
+            {"guard_home": "/a"},
+            resolve_fact=resolve,
+            guard_home=Path("/a"),
+        )
+    assert calls == [Path("/a")]
+
+    other = transport.native_daemon_lifecycle(
+        "ephemeral_home",
+        {"guard_home": "/c"},
+        resolve_fact=resolve,
+        guard_home=Path("/c"),
+    )
+    assert other == {"ok": True, "home": "/c"}
+    assert calls == [Path("/a"), Path("/c")]
+
+
+def test_integer_float_fields_are_hashed_as_the_resident_f64_spelling(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: list[dict[str, object]] = []
+
+    def resident(**kwargs: object) -> dict[str, object]:
+        request = kwargs["request"]
+        assert isinstance(request, dict)
+        captured.append(request)
+        digest = "sha256:" + transport._canonical_request_sha256(request)
+        return {
+            "schema": transport._RESULT_SCHEMA,
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            "status": "ok",
+            "code": "ok",
+            "payload": {"claim": True},
+        }
+
+    monkeypatch.setattr(transport, "_resident_request", resident)
+    verdict = transport.native_daemon_lifecycle("wake_claim", {"existing": None, "now": 10, "now_ns": 10})
+    assert verdict == {"claim": True}
+    query = captured[0]["query"]
+    assert isinstance(query, dict)
+    assert query["now"] == 10.0
+    assert isinstance(query["now"], float)
+    assert query["now_ns"] == 10
+    assert isinstance(query["now_ns"], int)
+    integer_request = copy.deepcopy(captured[0])
+    assert isinstance(integer_request["query"], dict)
+    integer_request["query"]["now"] = 10
+    assert transport._canonical_request_sha256(integer_request) != transport._canonical_request_sha256(captured[0])
+
+
+def test_fact_rounds_stop_at_the_operation_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = {"now": 100.0}
+    timeouts: list[float] = []
+
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock["now"])
+
+    def resident(**kwargs: object) -> dict[str, object]:
+        timeout = kwargs["timeout_seconds"]
+        assert isinstance(timeout, float)
+        timeouts.append(timeout)
+        request = kwargs["request"]
+        assert isinstance(request, dict)
+        clock["now"] = 107.0
+        digest = "sha256:" + transport._canonical_request_sha256(request)
+        return {
+            "schema": transport._RESULT_SCHEMA,
+            "request_id": request["request_id"],
+            "request_sha256": digest,
+            "status": "ok",
+            "code": "ok",
+            "payload": {"need": "facts", "keys": ["pid_running:1"]},
+        }
+
+    monkeypatch.setattr(transport, "_resident_request", resident)
+
+    def resolve(_key: str) -> object:
+        return True
+
+    with pytest.raises(TimeoutError, match="deadline exceeded"):
+        transport.native_daemon_lifecycle(
+            "ephemeral_home",
+            {"guard_home": "/x"},
+            resolve_fact=resolve,
+            deadline_monotonic=105.0,
+        )
+    assert timeouts == [5.0]
+
+
+def test_resident_outage_is_not_a_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert issubclass(transport.NativeDaemonLifecycleError, RuntimeError)
+    assert not issubclass(transport.NativeDaemonLifecycleError, ValueError)
+
+    from codex_plugin_scanner.guard.daemon import manager
+
+    def boom(*_args: object, **_kwargs: object) -> dict[str, object]:
+        raise transport.NativeDaemonLifecycleError("native_daemon_lifecycle_unavailable")
+
+    monkeypatch.setattr(manager, "native_daemon_lifecycle", boom)
+    with pytest.raises(transport.NativeDaemonLifecycleError):
+        manager._healthz_payload_is_current("{}")
+
+
+def test_startup_and_retirement_bind_the_lifecycle_deadline(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.daemon import manager
+
+    clock = {"now": 1000.0}
+    seen: list[tuple[str, float | None]] = []
+    monkeypatch.setattr(manager.time, "monotonic", lambda: clock["now"])
+
+    def lifecycle(check: str, _query: object, **_kwargs: object) -> dict[str, object]:
+        seen.append((check, transport.daemon_lifecycle_deadline()))
+        return {"default": 4.0, "post_update": 30.0}
+
+    def live(*_args: object, **_kwargs: object) -> str:
+        seen.append(("live", transport.daemon_lifecycle_deadline()))
+        return "http://127.0.0.1:9"
+
+    monkeypatch.setattr(manager, "native_daemon_lifecycle", lifecycle)
+    monkeypatch.setattr(manager, "_live_or_newer_daemon_url", live)
+    url = manager.ensure_guard_daemon(
+        tmp_path,
+        deadline_monotonic=1010.0,
+        background_maintenance=False,
+    )
+    assert url == "http://127.0.0.1:9"
+    assert seen == [("start_timeouts", 1010.0), ("live", 1004.0)]
+    assert transport.daemon_lifecycle_deadline() is None
+
+    def inventory(_home: Path) -> list[tuple[int, int]]:
+        seen.append(("inventory", transport.daemon_lifecycle_deadline()))
+        return []
+
+    monkeypatch.setattr(manager, "_guard_daemon_process_inventory_for_guard_home", inventory)
+    monkeypatch.setattr(manager, "reap_orphaned_daemon_workers", lambda **_kwargs: None)
+    assert manager.retire_all_guard_daemons_for_home(tmp_path, deadline=50.0) == []
+    assert seen[-1] == ("inventory", 50.0)
+    assert transport.daemon_lifecycle_deadline() is None
+
+
+def _answer(kwargs: dict[str, object], timeouts: list[float]) -> dict[str, object]:
+    timeout = kwargs["timeout_seconds"]
+    assert isinstance(timeout, float)
+    timeouts.append(timeout)
+    request = kwargs["request"]
+    assert isinstance(request, dict)
+    return {
+        "schema": transport._RESULT_SCHEMA,
+        "request_id": request["request_id"],
+        "request_sha256": "sha256:" + transport._canonical_request_sha256(request),
+        "status": "ok",
+        "code": "ok",
+        "payload": {"ephemeral": False},
+    }
+
+
+def test_a_cold_resident_spawn_gets_a_start_allowance(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: False)
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"})
+
+    assert timeouts == [transport._TIMEOUT_SECONDS + transport._COLD_START_ALLOWANCE_SECONDS]
+
+
+def test_a_warm_resident_keeps_the_steady_state_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"})
+
+    assert timeouts == [transport._TIMEOUT_SECONDS]
+
+
+def test_the_caller_deadline_bounds_the_cold_start_allowance(monkeypatch: pytest.MonkeyPatch) -> None:
+    timeouts: list[float] = []
+    clock = {"now": 100.0}
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock["now"])
+    monkeypatch.setattr(transport, "native_resident_client_ready", lambda _path, _home: False)
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport.native_daemon_lifecycle("ephemeral_home", {"guard_home": "/x"}, deadline_monotonic=112.0)
+
+    assert timeouts == [12.0]
+
+
+class _ProbeMiss:
+    """What a real missed capabilities probe yields: no identity, not available."""
+
+    identity = None
+    available = False
+    compatible = False
+    capabilities = None
+    reason = "native_unavailable"
+
+
+def test_a_transient_capability_probe_miss_is_waited_out_before_the_resident_is_asked(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = [_ProbeMiss(), _ProbeMiss(), _Status()]
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda **_kw: statuses.pop(0) if len(statuses) > 1 else statuses[0]
+    )
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
+    monkeypatch.setattr(transport.time, "sleep", lambda _seconds: None)
+    seen: list[str] = []
+    monkeypatch.setattr(
+        transport,
+        "_resident_request",
+        lambda **_kwargs: seen.append("asked") or {"schema": transport._RESULT_SCHEMA},
+    )
+
+    transport._await_native_runtime(20.0)
+
+    assert statuses == [statuses[0]]
+    assert seen == []  # waiting never decides anything; the resident is asked afterwards
+
+
+def test_a_host_with_no_runtime_is_not_waited_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: calls.append("status") or _ProbeMiss())
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: False)
+    monkeypatch.setattr(transport.time, "sleep", lambda _seconds: calls.append("sleep"))
+
+    transport._await_native_runtime(20.0)
+
+    assert calls == ["status"]
+
+
+def test_a_persistent_probe_miss_stops_waiting_and_names_the_runtime(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    monkeypatch.setattr(transport, "native_runtime_status", lambda **_kw: _ProbeMiss())
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
+    monkeypatch.setattr(transport, "_resident_request", lambda **_kwargs: None)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: None)
+
+    with pytest.raises(transport.NativeDaemonLifecycleError) as raised:
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 30.0)
+
+    assert clock[0] <= transport._RUNTIME_PROBE_WAIT_SECONDS + 1.0
+    assert "runtime_unavailable:native_unavailable" in str(raised.value)
+
+
+def test_the_resident_gets_only_the_budget_the_probe_wait_left(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(transport.time, "sleep", lambda seconds: clock.__setitem__(0, clock[0] + seconds))
+    statuses = [_ProbeMiss()] * 5 + [_Status()]
+    monkeypatch.setattr(
+        transport, "native_runtime_status", lambda **_kw: statuses.pop(0) if len(statuses) > 1 else statuses[0]
+    )
+    monkeypatch.setattr(transport, "native_runtime_probe_missed", lambda: True)
+    timeouts: list[float] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **kwargs: _answer(kwargs, timeouts))
+
+    transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "win32", 12.0)
+
+    assert timeouts == [pytest.approx(12.0 - 5 * transport._RUNTIME_PROBE_RETRY_SECONDS)]
+
+
+def test_a_lapsed_resident_deadline_is_retried_inside_the_caller_budget(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    timeouts: list[float] = []
+
+    def request(**kwargs):
+        if len(timeouts) < 1:
+            timeouts.append(kwargs["timeout_seconds"])
+            clock[0] += 4.0
+            return None
+        return _answer(kwargs, timeouts)
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_request_deadline_exceeded")
+
+    payload = transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+
+    assert payload == {"ephemeral": False}
+    assert timeouts == [pytest.approx(30.0), pytest.approx(26.0)]
+
+
+def test_a_deadline_retry_stops_when_the_budget_is_spent(monkeypatch: pytest.MonkeyPatch) -> None:
+    clock = [0.0]
+    monkeypatch.setattr(transport.time, "monotonic", lambda: clock[0])
+    calls: list[int] = []
+
+    def request(**_kwargs):
+        calls.append(1)
+        clock[0] += 9.5
+        return None
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_client_deadline_exceeded")
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="native_client_deadline_exceeded"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 10.0)
+    assert len(calls) == 1
+
+
+def test_a_non_deadline_outage_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+    monkeypatch.setattr(transport, "_resident_request", lambda **_kw: calls.append(1))
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", lambda: "native_client_connect_failed")
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="native_client_connect_failed"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+    assert len(calls) == 1
+
+
+def test_a_stale_deadline_code_is_not_read_as_the_next_attempts_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    from codex_plugin_scanner.guard.native_resident_client import (
+        native_resident_client_failure_code,
+        record_native_resident_client_failure_code,
+    )
+
+    calls: list[int] = []
+
+    def request(**_kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            record_native_resident_client_failure_code("native_request_deadline_exceeded")
+        return None  # the second attempt never reaches the client and leaves no code
+
+    monkeypatch.setattr(transport, "_resident_request", request)
+    monkeypatch.setattr(transport, "_runtime_unavailable_detail", lambda: "runtime_unavailable:x")
+    monkeypatch.setattr(transport, "native_resident_client_failure_code", native_resident_client_failure_code)
+
+    with pytest.raises(transport.NativeDaemonLifecycleError, match="runtime_unavailable:x"):
+        transport._round_trip({"check": "live_state_gate"}, {}, Path("/home"), "posix", 30.0)
+    assert len(calls) == 2

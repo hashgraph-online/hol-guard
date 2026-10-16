@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "src"))
 
-TRUST_MAP = ROOT / "contracts/extensions/trust-class-map.v1.json"
+TRUST_MAP = ROOT / "contracts/extensions/build-trust-class-map.v1.json"
 TARGET_DIR = ROOT / "rust/target"
 COMPILER = TARGET_DIR / "release/guard-command-source"
 TOOLCHAIN = "1.88.0"
@@ -53,7 +53,7 @@ def _write_json(path: Path, value: object, *, sort_keys: bool = True) -> bool:
     if path.is_file() and path.read_bytes() == content.encode():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(content)
+    path.write_bytes(content.encode("utf-8"))
     return True
 
 
@@ -65,8 +65,8 @@ def _detector():
 
 
 def contribution_ids() -> list[str]:
-    """Extension ids declared by in-tree contribution sources."""
-    return sorted(_detector().contribution_ids())
+    """Derive trust inventory from canonical inputs, never published descriptors."""
+    return sorted(_detector().contribution_ids(include_legacy=False))
 
 
 def catalog_ids() -> set[str]:
@@ -119,10 +119,10 @@ def _projected_aggregate() -> dict:
 
 
 def check_trust_consistency() -> None:
-    """Fail if the committed aggregate map drifts from the authored bindings."""
+    """Fail if a staged aggregate map drifts from the authored bindings."""
     if TRUST_MAP.is_file() and _read(TRUST_MAP) != _projected_aggregate():
         raise SystemExit(
-            "trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
+            "build-trust-class-map.v1.json is out of sync with contracts/extensions/trust/; "
             "edit the per-extension binding and run `refresh_extension_artifacts.py --trust-only`"
         )
 
@@ -133,17 +133,32 @@ def _sync_aggregate_map() -> bool:
     The aggregate still ships to packaged/frozen runtimes and release staging;
     it is generated, never edited by hand.
     """
-    return _write_json(TRUST_MAP, _projected_aggregate(), sort_keys=False)
+    content = _canonical_bytes(_projected_aggregate())
+    if TRUST_MAP.is_file() and TRUST_MAP.read_bytes() == content:
+        return False
+    TRUST_MAP.parent.mkdir(parents=True, exist_ok=True)
+    TRUST_MAP.write_bytes(content)
+    return True
+
+
+def check_authored_trust() -> None:
+    """Check canonical ownership before CI can create missing defaults."""
+    missing = sorted(set(contribution_ids()) - _read_binding_ids())
+    if missing:
+        raise SystemExit(
+            "canonical contributions lack authored trust bindings: "
+            + ", ".join(missing)
+            + "; run `python scripts/refresh_extension_artifacts.py --trust-only` "
+            "and include the new contracts/extensions/trust/*.v1.json files in this PR"
+        )
 
 
 def sync_trust_map() -> bool:
     """Add contribution ids missing a trust binding as ``external`` files.
 
-    Gate on committed-aggregate consistency first: if the generated map was
-    hand-edited or is stale, fail instead of silently rewriting it to match the
-    bindings. Only after a clean baseline do we add missing bindings and regen.
+    Authored bindings are the authority. Legacy aggregate copies can be stale
+    after merges; regenerate them without admitting their values into policy.
     """
-    check_trust_consistency()
     missing = sorted(set(contribution_ids()) - _read_binding_ids())
     changed = False
     for extension_id in missing:
@@ -177,10 +192,28 @@ def build_source_compiler() -> None:
 
 
 def regenerate_projections() -> None:
-    """One native build, then project its sources without a rebuild fixpoint."""
+    """Publish current sources without admitting historical fixture snapshots."""
     build_source_compiler()
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--compiler", str(COMPILER)])
-    _run([sys.executable, "scripts/prepare_extension_contribution.py", "--check", "--compiler", str(COMPILER)])
+    _run(
+        [
+            sys.executable,
+            "scripts/build_native_command_program.py",
+            "--compiler",
+            str(COMPILER),
+            "--check-public-descriptors",
+        ]
+    )
+    for check in ([], ["--check"]):
+        _run(
+            [
+                sys.executable,
+                "scripts/build_native_command_program.py",
+                "--compiler",
+                str(COMPILER),
+                *check,
+            ]
+        )
+        _run([sys.executable, "scripts/export_extension_directory.py", *check])
 
 
 def refresh_directory_render() -> None:
@@ -196,12 +229,22 @@ def verify() -> None:
 def main(argv: list[str] | None = None) -> int:
     """Refresh maintainer-owned product artifacts without replacing independent test expectations."""
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument(
         "--trust-only",
         action="store_true",
         help="Stage missing contribution ids as external before dependency installation and native compilation.",
     )
+    mode.add_argument(
+        "--check-trust",
+        action="store_true",
+        help="Check authored bindings for all canonical contributions without generating or changing files.",
+    )
     args = parser.parse_args(argv)
+    if args.check_trust:
+        check_authored_trust()
+        print(json.dumps({"ok": True, "authored_trust_complete": True}, sort_keys=True))
+        return 0
     if args.trust_only:
         changed = sync_trust_map()
         print(json.dumps({"ok": True, "trust_map_changed": changed}, sort_keys=True))

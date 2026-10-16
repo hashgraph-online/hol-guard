@@ -6,6 +6,7 @@ import "./tailwind-root.css";
 import "./shell-navigation.css";
 import "./open-guard-cloud-action.css";
 import "./shell-navigation-status.css";
+import "./extensions-presence.css";
 import "./responsive-layout.css";
 
 const container = document.getElementById("guard-dashboard-root");

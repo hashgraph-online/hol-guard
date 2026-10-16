@@ -79,10 +79,14 @@ def _execution(job: dict, run_id: int, attempt: int, head_sha: str) -> tuple[dat
     return started, completed, started >= created
 
 
-def _original_executions(base: str, run_id: int, attempt: int, head_sha: str, fetch: Fetch) -> dict:
+def _original_executions(
+    base: str, run_id: int, attempt: int, head_sha: str, fetch: Fetch,
+    *, required: frozenset[str] | None = None,
+) -> dict:
     """Prove inherited jobs against their real source attempts, not cloned IDs."""
     shard_names = [f"coverage (3.12, {index})" for index in range(barrier.SHARD_COUNT)]
-    required = {*shard_names, "coverage-plan", "native-command-evaluators"}
+    if required is None:
+        required = frozenset({*shard_names, "native-command-evaluators"})
     current: dict[str, dict] = {}
     intervals: dict[str, tuple[datetime, datetime]] = {}
     origins: dict[str, tuple[int, dict]] = {}
@@ -125,9 +129,7 @@ def _original_executions(base: str, run_id: int, attempt: int, head_sha: str, fe
 def _coverage_artifacts(base: str, run_id: int, head_sha: str, origins: dict, fetch: Fetch) -> list[dict]:
     """Bind one immutable coverage artifact to each successful producer."""
     shard_names = [f"coverage (3.12, {index})" for index in range(barrier.SHARD_COUNT)]
-    prerequisite_finished = max(
-        _time(origins[name][1]["completed_at"]) for name in ("coverage-plan", "native-command-evaluators")
-    )
+    prerequisite_finished = _time(origins["native-command-evaluators"][1]["completed_at"])
     artifacts = _pages(f"{base}/artifacts", "artifacts", fetch)
     selected = []
     for index, name in enumerate(shard_names):
@@ -274,8 +276,10 @@ def main(argv: list[str] | None = None) -> int:
         # below then resolves inherited results to their actual source executions.
         # The change planner only runs on pull_request; on push a skipped planner
         # is expected and must not block coverage selection.
+        # Each inventory spans several API pages. Polling every second exhausts
+        # the repository's shared Actions quota while other shards are running.
         barrier.wait_for_shards(
-            repository, run_id, attempt, poll_seconds=1,
+            repository, run_id, attempt, poll_seconds=30,
             execution_validator=lambda _job, _label: None,
             plan_skippable=os.environ.get("GITHUB_EVENT_NAME", "") != "pull_request",
         )

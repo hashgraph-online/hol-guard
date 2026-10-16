@@ -1,0 +1,155 @@
+name: Gauntlet full-task runtime
+
+# Builds the native Guard wheels that full-task Gauntlet runs install: Linux arm64 for the Docker
+# agent container on an arm64 host, and macOS arm64 for host runs that exercise the Seatbelt
+# workspace sandbox and for `python -m ci.gauntlet qualify --wheel`. Not a required check.
+# Every push to the Release Please branch rebuilds the wheels for that exact head, so release
+# qualification never waits on a manual dispatch after a rebase. No other branch builds on push.
+on:
+  push:
+    branches:
+      - release-please--branches--main--components--hol-guard
+  pull_request:
+    paths:
+      - 'ci/gauntlet/docker/**'
+      - 'ci/gauntlet/full_task*'
+      - '.github/workflows/gauntlet-full-task-runtime.yml'
+  workflow_dispatch:
+    inputs:
+      release_profile:
+        description: Build with the shipped fat-LTO release profile instead of the Gauntlet development profile.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One build per ref: a newer Release Please head cancels the stale head's build.
+concurrency:
+  group: gauntlet-full-task-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-build:
+    name: ${{ matrix.label }} native wheel build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux arm64 static
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            platform_tag: manylinux_2_17_aarch64
+            artifact: hol-guard-native-build-linux-arm64
+          - label: macOS arm64
+            runner: macos-15
+            target: aarch64-apple-darwin
+            platform_tag: macosx_11_0_arm64
+            artifact: hol-guard-native-build-macos-arm64
+    env:
+      TARGET: ${{ matrix.target }}
+      # These wheels are never published. By default they use the development profile that
+      # `ci.gauntlet qualify` builds locally (ci/gauntlet/README.md): no LTO, 16 codegen units and
+      # workspace crates at opt-level 0. The source identity check binds the runtime's embedded
+      # build SHA, not its bytes. Dispatch with release_profile for the shipped fat-LTO profile.
+      QUALIFY_PROFILE: ${{ inputs.release_profile && 'release' || 'dev' }}
+      CARGO_PROFILE_RELEASE_LTO: ${{ inputs.release_profile && 'fat' || 'false' }}
+      CARGO_PROFILE_RELEASE_CODEGEN_UNITS: ${{ inputs.release_profile && '1' || '16' }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: 0.9.26
+          enable-cache: true
+      - run: uv sync --frozen --no-dev --group ci-test --python 3.12
+      - uses: ./.github/actions/setup-rust
+        with:
+          targets: ${{ matrix.target }}
+          # Dependencies only. The release branch reuses its own previous build; PR branches
+          # cannot write here and Actions never restores their caches on this ref.
+          save-push-ref: refs/heads/release-please--branches--main--components--hol-guard
+      - name: Install static Linux linker
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends musl-tools
+      - name: Build static native runtime and source compiler
+        env:
+          HOL_GUARD_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          export HOL_GUARD_PACKAGE_VERSION="$VERSION"
+          cargo_config=()
+          if [[ "$QUALIFY_PROFILE" == "dev" ]]; then
+            uv run --no-sync python scripts/release/workspace_opt_profile.py --opt-level 0 \
+              --output "$RUNNER_TEMP/dev-workspace-profile.toml"
+            cargo_config=(--config "$RUNNER_TEMP/dev-workspace-profile.toml")
+          fi
+          # One invocation, as in the release pipeline, keeps feature unification identical for
+          # both binaries, so shared workspace crates compile once instead of twice.
+          cargo build --manifest-path rust/Cargo.toml --locked --release --target "$TARGET" \
+            -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source \
+            ${cargo_config[@]+"${cargo_config[@]}"}
+          runtime="rust/target/$TARGET/release/hol-guard-runtime"
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            LDD_OUTPUT=$(ldd "$runtime" 2>&1 || true)
+            if grep -Eq 'not a dynamic executable|statically linked' <<< "$LDD_OUTPUT"; then
+              echo "Runtime is static"
+            else
+              echo "Linux runtime must be statically linked" >&2
+              printf '%s\n' "$LDD_OUTPUT" >&2
+              exit 1
+            fi
+          fi
+          "$runtime" self-test --json
+      - name: Prove the declarative source compiler
+        run: |
+          compiler="rust/target/$TARGET/release/guard-command-source"
+          "$compiler" export-trust > contracts/extensions/build-trust-class-map.v1.json
+          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
+          "$compiler" compile < source-build.json > source-compiled.json
+          jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
+          "$compiler" test < source-fixtures.json > source-fixture-results.json
+      - name: Assemble and install native wheel
+        env:
+          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          PLATFORM_TAG: ${{ matrix.platform_tag }}
+        run: |
+          VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
+          runtime="rust/target/$TARGET/release/hol-guard-runtime"
+          compiler="rust/target/$TARGET/release/guard-command-source"
+          # Without the built compiler, the wheel build hook would compile it again through cargo run.
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv build --wheel --out-dir pure-dist
+          RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
+          HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir native-dist \
+            --version "$VERSION" \
+            --platform-tag "$PLATFORM_TAG" \
+            --target "$TARGET" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$RULE_DIGEST" \
+            --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
+            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+          uv pip uninstall --python .venv/bin/python hol-guard
+          uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
+          (cd native-dist && shasum -a 256 ./*.whl)
+      - name: Upload the native wheel
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: ${{ matrix.artifact }}
+          path: native-dist/*.whl
+          if-no-files-found: error
+          compression-level: 0

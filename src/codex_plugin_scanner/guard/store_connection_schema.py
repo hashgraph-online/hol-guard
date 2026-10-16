@@ -11,7 +11,12 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, ClassVar, cast
 from uuid import uuid4
 
-from . import store_connection_scope, store_native_decision_receipts, store_review_event_outbox_schema
+from . import (
+    store_connection_scope,
+    store_native_decision_receipts,
+    store_review_event_outbox_schema,
+    store_storage_gate,
+)
 from .fork_safety import forget_in_child
 from .mcp.policy_store import ensure_mcp_policy_request_schema
 from .sqlite_deadline_connection import DeadlineConnection
@@ -24,6 +29,7 @@ from .sqlite_profile import (
 )
 from .sqlite_quarantine_forensics import (
     quarantine_file_stats,
+    sqlite_header_diagnosis,
     update_quarantine_forensics_outcome,
     write_quarantine_forensics,
 )
@@ -47,6 +53,7 @@ from .store_command_activity_schema import ensure_command_activity_schema
 from .store_command_shadow_schema import ensure_command_shadow_schema
 from .store_extension_control_authority_schema import ensure_extension_control_authority_schema
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_receipt_rollup_schema import request_receipt_rollup_rebuild
 from .store_resume import ensure_resume_schema
 from .store_review_event_outbox_schema import ensure_review_event_outbox_schema
 from .store_secret_policy_integrity import _POLICY_INTEGRITY_LOOKUP_UNSET
@@ -201,7 +208,6 @@ class StoreConnectionSchemaMixin:
     )
     _startup_prefetched_policy_integrity_repair_failed = False
     _storage_recovery_local: ClassVar[threading.local] = threading.local()
-    _storage_gate_local: ClassVar[threading.local] = threading.local()
     _last_sqlite_recovery = "skipped"
     _last_sqlite_recovery_details: dict[str, bool] | None = None
 
@@ -214,131 +220,19 @@ class StoreConnectionSchemaMixin:
 
     @contextmanager
     def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
-        local = self._storage_gate_local
-        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
-            if exclusive and getattr(local, "exclusive", False) is False:
-                raise RuntimeError("Cannot upgrade an active Guard storage read gate.")
-            local.depth += 1
-            try:
-                yield
-            finally:
-                local.depth -= 1
-            return
-        path = self.guard_home / "storage-access.lock"
-        deadline = time.monotonic() + sqlite_connect_timeout_seconds()
-        with path.open("a+b") as handle:
-            while True:
-                try:
-                    if os.name == "nt":
-                        import msvcrt
-
-                        handle.seek(0)
-                        if not handle.read(1):
-                            handle.write(b"0")
-                            handle.flush()
-                        handle.seek(0)
-                        mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-                        msvcrt.locking(handle.fileno(), mode, 1)
-                    else:
-                        import fcntl
-
-                        mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                        fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise TimeoutError("Timed out waiting for Guard storage access.") from None
-                    time.sleep(0.01)
-            local.owner = id(self)
-            local.depth = 1
-            local.exclusive = exclusive
-            try:
-                yield
-            finally:
-                local.owner = None
-                local.depth = 0
-                local.exclusive = False
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                else:
-                    import fcntl
-
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        with store_storage_gate.hold_storage_gate(self.guard_home, exclusive=exclusive):
+            yield
 
     @contextmanager
     def _try_hold_storage_gate(self, *, exclusive: bool) -> Iterator[bool]:
         """Attempt the storage gate once without blocking; yields the result.
 
-        Re-entrancy matches ``_hold_storage_gate``: nesting under an existing
-        hold yields True, while upgrading a shared hold to exclusive yields
-        False instead of raising. Callers that must never stall on storage
-        (the runtime heartbeat) use this to fail fast and retry on their own
-        cadence.
+        Callers that must never stall on storage (the runtime heartbeat) use
+        this to fail fast and retry on their own cadence.
         """
 
-        local = self._storage_gate_local
-        if getattr(local, "owner", None) == id(self) and getattr(local, "depth", 0) > 0:
-            if exclusive and getattr(local, "exclusive", False) is False:
-                yield False
-                return
-            local.depth += 1
-            try:
-                yield True
-            finally:
-                local.depth -= 1
-            return
-        path = self.guard_home / "storage-access.lock"
-        handle = None
-        acquired = False
-        try:
-            try:
-                handle = path.open("a+b")
-                if os.name == "nt":
-                    import msvcrt
-
-                    handle.seek(0)
-                    if not handle.read(1):
-                        handle.write(b"0")
-                        handle.flush()
-                    handle.seek(0)
-                    mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-                    msvcrt.locking(handle.fileno(), mode, 1)
-                else:
-                    import fcntl
-
-                    mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-                    fcntl.flock(handle.fileno(), mode | fcntl.LOCK_NB)
-                acquired = True
-            except OSError:
-                acquired = False
-            if not acquired:
-                yield False
-                return
-            local.owner = id(self)
-            local.depth = 1
-            local.exclusive = exclusive
-            try:
-                yield True
-            finally:
-                local.owner = None
-                local.depth = 0
-                local.exclusive = False
-                if handle is not None:
-                    if os.name == "nt":
-                        import msvcrt
-
-                        handle.seek(0)
-                        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-                    else:
-                        import fcntl
-
-                        fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
-        finally:
-            if handle is not None:
-                handle.close()
+        with store_storage_gate.try_hold_storage_gate(self.guard_home, exclusive=exclusive) as held:
+            yield held
 
     def _store_is_proven_unusable(self, error: BaseException) -> bool:
         detail = sqlite_store_probe_detail(
@@ -404,6 +298,7 @@ class StoreConnectionSchemaMixin:
                     error=error,
                     probe=probe_detail,
                     files=quarantine_file_stats(self.path),
+                    header=sqlite_header_diagnosis(self.path),
                 )
             except Exception as forensics_error:
                 _store_logger.warning(
@@ -1248,6 +1143,7 @@ class StoreConnectionSchemaMixin:
             self._ensure_approval_column(connection, "desktop_notified_at", "text")
             self._ensure_approval_column(connection, "raw_command_text", "text")
             self._ensure_approval_column(connection, "continuation_snapshot_json", "text")
+            self._ensure_approval_column(connection, "extension_allow_hint_json", "text")
             ensure_watch_only_approval_schema(connection, schema=self)
             if not self._schema_version_applied(connection, version=3):
                 _backfill_approval_queue_columns_compat(connection)
@@ -1266,8 +1162,7 @@ class StoreConnectionSchemaMixin:
             for idx_stmt in receipt_rollup_index_statements():
                 connection.execute(idx_stmt)
             if not self._schema_version_applied(connection, version=6):
-                if receipt_rollups_need_backfill(connection):
-                    backfill_receipt_rollups(connection)
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(connection, version=6)
             if not self._schema_version_applied(
                 connection,
@@ -1275,9 +1170,10 @@ class StoreConnectionSchemaMixin:
             ):
                 # P45 changes ``warn`` from the reviewed bucket to allowed.
                 # Existing v6 rollups can have the right total while retaining
-                # the old bucket semantics, so this migration must rebuild them
-                # unconditionally before incremental deltas are applied.
-                backfill_receipt_rollups(connection)
+                # the old bucket semantics, so this migration requests a rebuild;
+                # the resident runs it before the next incremental delta or
+                # total read, keeping the archived-receipt totals it preserves.
+                request_receipt_rollup_rebuild(connection, _now())
                 self._record_schema_version(
                     connection,
                     version=_RECEIPT_WARN_ROLLUP_MIGRATION_VERSION,
@@ -1370,6 +1266,7 @@ class StoreConnectionSchemaMixin:
                         "last_seen_guard_version",
                         "watch_only_observation",
                         "continuation_snapshot_json",
+                        "extension_allow_hint_json",
                     }
                     return (
                         row is not None
@@ -1522,14 +1419,6 @@ class StoreConnectionSchemaMixin:
         if column_name in existing:
             return
         connection.execute(f"alter table guard_client_attachments add column {column_name} {column_type}")
-
-    @staticmethod
-    def _ensure_evidence_column(connection: sqlite3.Connection, column_name: str, column_type: str) -> None:
-        rows = connection.execute("pragma table_info(guard_evidence)").fetchall()
-        existing = {str(row["name"]) for row in rows}
-        if column_name in existing:
-            return
-        connection.execute(f"alter table guard_evidence add column {column_name} {column_type}")
 
     @staticmethod
     def _record_schema_version(connection: sqlite3.Connection, *, version: int) -> None:

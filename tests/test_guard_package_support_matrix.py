@@ -32,6 +32,14 @@ def test_supported_managers_match_shim_commands() -> None:
     assert package_shim_supported_managers() == expected
 
 
+def test_supported_managers_match_resident_contract(tmp_path) -> None:
+    """The static manager contract must equal the list the resident op owns."""
+    from codex_plugin_scanner.guard.native_shim_admin import native_shim_admin
+
+    native = native_shim_admin("supported_managers", guard_home=tmp_path / "guard-home")
+    assert tuple(native) == package_shim_supported_managers()
+
+
 def test_probe_args_cover_protected_managers() -> None:
     """Managers without dedicated probe args are documented.
 

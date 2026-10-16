@@ -268,6 +268,12 @@ pub(super) fn derive_context_with_snapshot(
         guard_command::pretool::PathContext {
             home_dir: Some(envelope.source.home_dir.as_str()),
             cwd: envelope.source.cwd.as_deref(),
+            cdpath_unset: false,
+            rustup_override_absent: false,
+            npm_config_inert: false,
+            shell_home_matches: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
         },
         Some(
             envelope
@@ -277,6 +283,11 @@ pub(super) fn derive_context_with_snapshot(
                 .unwrap_or(&unavailable_environment),
         ),
     );
+    let intrinsic = crate::omp_yield_input_scan::scan(
+        &envelope.raw_payload,
+        envelope.deadline_budget_ms,
+        intrinsic,
+    )?;
     if result.action != intrinsic.action
         || action_rank(&intrinsic.minimum_action).is_none()
         || action_rank(&result.minimum_action).is_none()

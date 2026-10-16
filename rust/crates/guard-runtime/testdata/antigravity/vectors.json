@@ -1,0 +1,1779 @@
+{
+ "cases": [
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.full",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/full/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": "D",
+      "display_name": "Full",
+      "extension_id": "acme.full"
+     },
+     "name": "Full",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.fallback",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/fallback/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": null,
+      "display_name": null,
+      "extension_id": "acme.fallback"
+     },
+     "name": "acme.fallback",
+     "publisher": "Fallback Co",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.blank",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/blank/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": "only",
+      "display_name": "",
+      "extension_id": "acme.blank"
+     },
+     "name": "acme.blank",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.missing",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/missing/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": null,
+      "display_name": null,
+      "extension_id": "acme.missing"
+     },
+     "name": "acme.missing",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.relative",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "ext/relative/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": null,
+      "display_name": null,
+      "extension_id": "acme.relative"
+     },
+     "name": "acme.relative",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.dup",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/full/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": "D",
+      "display_name": "Full",
+      "extension_id": "acme.dup"
+     },
+     "name": "Full",
+     "publisher": "acme",
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:acme.empty-path",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": null,
+      "display_name": null,
+      "extension_id": "acme.empty-path"
+     },
+     "name": "acme.empty-path",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "[{\"identifier\": {\"id\": \"acme.full\"}, \"location\": {\"path\": \"<ROOT>/ext/full\"}, \"metadata\": {\"publisherDisplayName\": \"Acme Inc\"}}, {\"identifier\": {\"id\": \"acme.fallback\"}, \"location\": {\"path\": \"<ROOT>/ext/fallback\"}, \"metadata\": {\"publisherDisplayName\": \"Fallback Co\"}}, {\"identifier\": {\"id\": \"acme.blank\"}, \"location\": {\"path\": \"<ROOT>/ext/blank\"}}, {\"identifier\": {\"id\": \"acme.missing\"}, \"location\": {\"path\": \"<ROOT>/ext/missing\"}, \"metadata\": \"x\"}, {\"identifier\": {\"id\": \"acme.relative\"}, \"location\": {\"path\": \"ext/relative\"}}, {\"identifier\": {\"id\": \"acme.dup\"}, \"location\": {\"path\": \"<ROOT>/ext/full\"}}, {\"identifier\": {\"id\": 5}, \"location\": {\"path\": \"<ROOT>/ext/full\"}}, {\"identifier\": \"acme.str\", \"location\": {\"path\": \"<ROOT>/ext/full\"}}, {\"identifier\": {\"id\": \"acme.nopath\"}, \"location\": {\"fsPath\": \"<ROOT>/ext/full\"}}, \"not-a-dict\", {\"identifier\": {\"id\": \"acme.empty-path\"}, \"location\": {\"path\": \"\"}}]"
+    },
+    {
+     "mode": 420,
+     "path": "ext/full/package.json",
+     "text": "{\"displayName\": \"Full\", \"description\": \"D\", \"publisher\": \"acme\"}"
+    },
+    {
+     "mode": 420,
+     "path": "ext/fallback/package.json",
+     "text": "{\"displayName\": 3, \"description\": null, \"publisher\": null}"
+    },
+    {
+     "mode": 420,
+     "path": "ext/blank/package.json",
+     "text": "{\"displayName\": \"\", \"description\": \"only\"}"
+    },
+    {
+     "mode": 420,
+     "path": "ext/relative/package.json",
+     "text": "{\"displayName\": \"Rel\"}"
+    },
+    {
+     "mode": 420,
+     "path": "package.json",
+     "text": "{\"displayName\": \"Cwd\"}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.antigravity/extensions/extensions.json",
+    "<ROOT>/ext/full/package.json",
+    "<ROOT>/ext/fallback/package.json",
+    "<ROOT>/ext/blank/package.json"
+   ],
+   "home": "home",
+   "name": "index_matrix",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "[]"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "index_empty_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "{\"identifier\": {\"id\": \"x\"}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "index_object",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "["
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "index_invalid_json",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "5b22ff225d",
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json"
+    }
+   ],
+   "home": "home",
+   "name": "index_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.antigravity/extensions/extensions.json"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "index_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "[1, null, \"x\"]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.antigravity/extensions/extensions.json"
+   ],
+   "home": "home",
+   "name": "index_only_junk",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:a.b",
+     "artifact_type": "extension",
+     "command": null,
+     "config_path": "<ROOT>/ext/x/package.json",
+     "harness": "antigravity",
+     "metadata": {
+      "description": null,
+      "display_name": null,
+      "extension_id": "a.b"
+     },
+     "name": "a.b",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "[{\"identifier\": {\"id\": \"a.b\"}, \"location\": {\"path\": \"<ROOT>/ext/x\"}}]"
+    },
+    {
+     "mode": 420,
+     "path": "ext/x/package.json",
+     "text": "{"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.antigravity/extensions/extensions.json"
+   ],
+   "home": "home",
+   "name": "index_manifest_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.antigravity/extensions/extensions.json",
+     "text": "[{\"identifier\": {\"id\": \"a.b\"}, \"location\": {\"path\": \"<ROOT>/ext/x\\u0000y\"}}]"
+    }
+   ],
+   "home": "home",
+   "name": "index_location_nul",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [
+      "1"
+     ],
+     "artifact_id": "antigravity:global:mcp:bridge:g",
+     "artifact_type": "mcp_server",
+     "command": "gc",
+     "config_path": "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "g",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:bridge:u",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "u",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://u"
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:bridge:w",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "w",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"g\": {\"command\": \"gc\", \"args\": [\"1\", 2]}, \"u\": {\"url\": \"https://u\"}, \"bad\": 1}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"w\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+    "<ROOT>/work/.gemini/antigravity/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "bridges",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "bridge_empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/alpha/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/antigravity/skills/alpha/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/work/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/plain/readme.md",
+     "text": "r"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.gemini/antigravity/skills/plain/readme.md",
+     "text": "r"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/skills/.hidden/SKILL.md",
+    "<ROOT>/home/.gemini/antigravity/skills/alpha/SKILL.md",
+    "<ROOT>/home/.gemini/antigravity/skills/group/beta/SKILL.md",
+    "<ROOT>/work/.gemini/antigravity/skills/.hidden/SKILL.md",
+    "<ROOT>/work/.gemini/antigravity/skills/alpha/SKILL.md",
+    "<ROOT>/work/.gemini/antigravity/skills/group/beta/SKILL.md"
+   ],
+   "home": "home",
+   "name": "skills",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:macos-user:mac",
+     "artifact_type": "mcp_server",
+     "command": "m",
+     "config_path": "<ROOT>/home/Library/Application Support/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "mac",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:windows-user:win",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/AppData/Roaming/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "win",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://w"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/Library/Application Support/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"mac\": {\"command\": \"m\"}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/Antigravity/User/settings.json",
+     "text": "{\"editor.fontSize\": 12}"
+    },
+    {
+     "mode": 420,
+     "path": "home/AppData/Roaming/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"win\": {\"url\": \"https://w\"}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/Library/Application Support/Antigravity/User/settings.json",
+    "<ROOT>/home/.config/Antigravity/User/settings.json",
+    "<ROOT>/home/AppData/Roaming/Antigravity/User/settings.json"
+   ],
+   "home": "home",
+   "name": "settings_owned",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "vscode_without_signal",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"antigravity.enabled\": true, \"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "vscode_with_antigravity_key",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"x\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+    "<ROOT>/work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "vscode_with_bridge_signal",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.config/Antigravity/User/settings.json",
+     "text": "{\"a\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.config/Antigravity/User/settings.json",
+    "<ROOT>/work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "vscode_with_owned_signal",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"x\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/mcp_config.json"
+   ],
+   "home": "home",
+   "name": "vscode_empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": null
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/Library/Application Support/Antigravity/User/settings.json",
+     "text": "{\"x\": 1}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/Library/Application Support/Antigravity/User/settings.json"
+   ],
+   "home": "home",
+   "name": "vscode_no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:skill:skills/a",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/a/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/a"
+      }
+     },
+     "name": "skills/a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/a/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/skills/a/SKILL.md",
+    "<ROOT>/work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "vscode_with_skill_signal",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:bridge:same",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:macos-user:same",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/Library/Application Support/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:xdg-user:same",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.config/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "same",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:same",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "same",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"same\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/Library/Application Support/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"same\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"same\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"same\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+    "<ROOT>/home/Library/Application Support/Antigravity/User/settings.json",
+    "<ROOT>/home/.config/Antigravity/User/settings.json",
+    "<ROOT>/work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "same_server_names",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/home"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:bridge:h",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "h",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:bridge:h",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "h",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/alpha/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/.hidden",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/.hidden"
+      }
+     },
+     "name": "skills/.hidden",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/alpha",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/alpha/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "entryCount": 2,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 43
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:0310d241c3ccd3c1e0838cd59c0e0b5ef339b7af2022462edba277b6bda8765f",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/alpha"
+      }
+     },
+     "name": "skills/alpha",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:skill:skills/group/beta",
+     "artifact_type": "skill",
+     "command": null,
+     "config_path": "<ROOT>/home/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "harness": "antigravity",
+     "metadata": {
+      "content_hash": "sha256:ab5c08364bb8c6e57646b71a03feb26c8e4280da11171af632e7be31c025a5ab",
+      "directory_hash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+      "skillDirectoryIdentity": {
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "entryCount": 1,
+       "reusable": true,
+       "schemaVersion": "guard.skill-directory-identity.v1",
+       "status": "complete",
+       "totalBytes": 42
+      },
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "sha256:df5a6f332696acd1375feda9a7515776c770d28713515773dd262c8035191a43",
+       "hashBasis": "skill-directory-v1",
+       "versionLabel": "skills/group/beta"
+      }
+     },
+     "name": "skills/group/beta",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"h\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/alpha/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/alpha/notes.txt",
+     "text": "n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/group/beta/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/.hidden/SKILL.md",
+     "text": "---\nname: s\ndescription: A skill\n---\nbody\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/skills/plain/readme.md",
+     "text": "r"
+    },
+    {
+     "mode": 420,
+     "path": "home/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.gemini/antigravity/mcp_config.json",
+    "<ROOT>/home/.gemini/antigravity/skills/.hidden/SKILL.md",
+    "<ROOT>/home/.gemini/antigravity/skills/alpha/SKILL.md",
+    "<ROOT>/home/.gemini/antigravity/skills/group/beta/SKILL.md",
+    "<ROOT>/home/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "workspace_is_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "antigravity",
+    "home": "home",
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:bridge:r",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "home/.gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:xdg-user:x",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "home/.config/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "x",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:workspace-vscode:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "work/.vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"r\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/.vscode/settings.json",
+     "text": "{\"mcpServers\": {\"v\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.config/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"x\": {}}}"
+    }
+   ],
+   "found_paths": [
+    "home/.gemini/antigravity/mcp_config.json",
+    "home/.config/Antigravity/User/settings.json",
+    "work/.vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "relative_context",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "antigravity",
+    "home": ".",
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:bridge:r",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": ".gemini/antigravity/mcp_config.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "r",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:application-support-antigravity-user-settings-json:m",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "Library/Application Support/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "m",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:config-antigravity-user-settings-json:x",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": ".config/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "x",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "antigravity:global:mcp:settings:roaming-antigravity-user-settings-json:w",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "AppData/Roaming/Antigravity/User/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "w",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": ".gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"r\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "Library/Application Support/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"m\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": ".config/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"x\": {}}}"
+    },
+    {
+     "mode": 420,
+     "path": "AppData/Roaming/Antigravity/User/settings.json",
+     "text": "{\"mcpServers\": {\"w\": {}}}"
+    }
+   ],
+   "found_paths": [
+    ".gemini/antigravity/mcp_config.json",
+    "Library/Application Support/Antigravity/User/settings.json",
+    ".config/Antigravity/User/settings.json",
+    "AppData/Roaming/Antigravity/User/settings.json"
+   ],
+   "home": ".",
+   "name": "home_is_cwd",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "harness": "antigravity",
+    "home": "home",
+    "workspace": "."
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "antigravity:project:mcp:settings:vscode-settings-json:v",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": ".vscode/settings.json",
+     "harness": "antigravity",
+     "metadata": {},
+     "name": "v",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": ".vscode/settings.json",
+     "text": "{\"antigravity.x\": 1, \"mcpServers\": {\"v\": {}}}"
+    }
+   ],
+   "found_paths": [
+    ".vscode/settings.json"
+   ],
+   "home": "home",
+   "name": "workspace_is_cwd",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "."
+  },
+  {
+   "args": {
+    "harness": "antigravity",
+    "home": "<ROOT>/home",
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.gemini/antigravity/mcp_config.json",
+     "text": "{\"mcpServers\": {\"\\udc80\": {}}}"
+    }
+   ],
+   "home": "home",
+   "name": "lone_surrogate_server",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-antigravity-vectors.v1"
+}

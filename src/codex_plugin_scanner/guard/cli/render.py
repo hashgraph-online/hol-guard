@@ -10,12 +10,17 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO, TypeAlias
 
+from ..harness_posture import harness_posture_line
+from ..protection_coverage import PROTECTION_NOT_IN_EFFECT_DETAIL, protection_is_in_effect
 from ..redaction import redact_text
 from ..value_coercion import coerce_int as _coerce_int
 from .doctor_readiness import doctor_runtime_readiness
 from .protect_output import _protect_harness_message_for_render, _restore_ephemeral_signed_approval_output
+from .render_approval_gate_nudge import print_approval_gate_nudge
 from .render_doctor_readiness import build_doctor_harness_table, readiness_text
+from .render_skill_scan import skill_scan_rows, skill_scan_title
 from .render_uninstall import render_self_uninstall
+from .update_repair_notes import render_protection_repair_failures
 
 try:
     from ..redaction import redact_local_path
@@ -834,10 +839,29 @@ def _protection_status_copy(payload: dict[str, object], fallback: str) -> tuple[
     return _protection_display_name(payload, protection), bool(payload.get("protection_off")) or protection == "watch"
 
 
+def _protection_panel_line(name: str, *, protection_off: bool, in_effect: bool) -> str:
+    """Build the panel's headline, which must not read as protected when it is not.
+
+    The posture is still worth naming when no app is registered: it is what Guard
+    will enforce once the hooks are back. What it must not do is stand alone, in
+    the calm colour, while nothing is being checked.
+    """
+
+    if protection_off:
+        return f"[bold red]protection: {name} (off)[/bold red]"
+    if not in_effect:
+        return f"[bold red]protection: {name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+    return f"protection: {name}"
+
+
 def _render_status(console: Console, payload: dict[str, object]) -> None:
     harnesses = _coerce_dict_list(payload.get("harnesses"))
     name, protection_off = _protection_status_copy(payload, "protected")
-    protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+    reported = payload.get("protection_in_effect")
+    in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(harnesses)
+    protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+    protection_off = protection_off or not in_effect
+    protection_line += harness_posture_line(payload)
     console.print(
         Panel.fit(
             f"[bold]HOL Guard status[/bold]\n"
@@ -853,6 +877,7 @@ def _render_status(console: Console, payload: dict[str, object]) -> None:
     console.print(_build_product_table(harnesses))
     if payload.get("approval_center_url"):
         console.print(f"Approval center: [bold]{payload.get('approval_center_url')}[/bold]")
+    print_approval_gate_nudge(console, payload)
     review_items = [item for item in harnesses if _coerce_int(item.get("review_count")) > 0]
     if review_items:
         console.print(
@@ -919,18 +944,23 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if settings_url:
             summary.add_row("Settings URL", str(settings_url))
         console.print(Panel(summary, title="Guard notification setup", border_style="cyan"))
+        print_approval_gate_nudge(console, payload)
     elif "adapters" in payload:
         tables = _coerce_string_list(payload.get("tables"))
+        adapters = _coerce_dict_list(payload.get("adapters"))
         name, protection_off = _protection_status_copy(payload, "protected")
-        protection_line = f"[bold red]protection: {name} (off)[/bold red]" if protection_off else f"protection: {name}"
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect(adapters)
+        protection_line = _protection_panel_line(name, protection_off=protection_off, in_effect=in_effect)
+        protection_off = protection_off or not in_effect
         console.print(
             Panel.fit(
                 f"[bold]HOL Guard doctor[/bold]\n{protection_line}\n{len(tables)} local tables checked",
                 border_style="red" if protection_off else "cyan",
             )
         )
-        adapters = _coerce_dict_list(payload.get("adapters"))
         console.print(build_doctor_harness_table(adapters))
+        print_approval_gate_nudge(console, payload)
     elif "harnesses" in payload and all("install_aliases" in h for h in _coerce_dict_list(payload.get("harnesses"))):
         contracts = _coerce_dict_list(payload.get("harnesses"))
         table = Table(title="HOL Guard supported harnesses", box=box.SIMPLE_HEAD, show_lines=False)
@@ -952,6 +982,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 textwrap.shorten(blind_spots, width=60),
             )
         console.print(table)
+        print_approval_gate_nudge(console, payload)
     else:
         warnings = _coerce_string_list(payload.get("warnings"))
         summary = Table.grid(padding=(0, 1))
@@ -983,10 +1014,21 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 summary.add_row("Recovery", recovery_command)
         summary.add_row("Warnings", str(len(warnings)))
         name, protection_off = _protection_status_copy(payload, "")
+        reported = payload.get("protection_in_effect")
+        in_effect = reported if isinstance(reported, bool) else protection_is_in_effect([payload])
         if name:
-            value = f"[bold red]{name} (off)[/bold red]" if protection_off else name
+            if protection_off:
+                value = f"[bold red]{name} (off)[/bold red]"
+            elif not in_effect:
+                value = f"[bold red]{name} ({PROTECTION_NOT_IN_EFFECT_DETAIL})[/bold red]"
+            else:
+                value = name
             summary.add_row("Protection", value)
-        console.print(Panel(summary, title="Guard doctor", border_style="cyan"))
+            per_app = harness_posture_line(payload).strip()
+            if per_app:
+                summary.add_row("Per app", per_app.removeprefix("per app: "))
+        protection_alarm = bool(name) and (protection_off or not in_effect)
+        console.print(Panel(summary, title="Guard doctor", border_style="red" if protection_alarm else "cyan"))
         if warnings:
             warning_text = "\n".join(
                 textwrap.fill(
@@ -997,6 +1039,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
                 for warning in warnings
             )
             console.print(Panel(Text(warning_text), title="Attention", border_style="yellow"))
+        print_approval_gate_nudge(console, payload)
         runtime_probe = payload.get("runtime_probe")
         if isinstance(runtime_probe, dict):
             console.print(_build_runtime_probe_panel(runtime_probe))
@@ -1006,6 +1049,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         supply_chain = payload.get("supply_chain")
         if isinstance(supply_chain, dict):
             console.print(_build_supply_chain_posture_panel(supply_chain))
+    _print_bundled_runtime_warning(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -1026,6 +1070,18 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
             )
         console.print(perf_table)
     console.print(_build_diagnostic_command_panel())
+
+
+def _print_bundled_runtime_warning(console: Console, payload: dict[str, object]) -> None:
+    native_runtime = payload.get("native_runtime")
+    bundled = native_runtime.get("bundled") if isinstance(native_runtime, dict) else None
+    if not isinstance(bundled, dict) or bundled.get("status") != "missing" or not bundled.get("message"):
+        return
+    lines = [str(bundled["message"]), "Or run `hol-guard doctor --repair`."]
+    manual = bundled.get("manual_install")
+    if isinstance(manual, str) and manual:
+        lines.append(f"If the download is blocked, install it by hand: {manual}")
+    console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
 
 
 def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:
@@ -1493,6 +1549,10 @@ def _render_managed_install(console: Console, payload: dict[str, object]) -> Non
         _render_safe_decode_results(console, safe_decode_risks)
     if sandbox_analysis:
         _render_sandbox_results(console, sandbox_analysis)
+    if payload.get("native_resident_retired") is False:
+        console.print(
+            "[yellow]Could not stop the Guard native runtime. It may keep running until it goes idle.[/yellow]"
+        )
 
 
 def _render_apps(console: Console, payload: dict[str, object]) -> None:
@@ -1615,18 +1675,9 @@ def _render_skill_scan_results(console: Console, skill_scan: list[dict[str, obje
     table.add_column("Risks", justify="right", no_wrap=True)
     table.add_column("Severities", no_wrap=True)
     table.add_column("Signals", overflow="fold")
-    for entry in skill_scan:
-        severity_text = ", ".join(_coerce_string_list(entry.get("severities")))
-        signal_text = " ".join(_coerce_string_list(entry.get("signal_ids")))
-        risk_count = str(entry.get("risk_count", 0))
-        table.add_row(str(entry.get("skill_path", "?")), risk_count, severity_text, signal_text)
-    console.print(
-        Panel(
-            table,
-            title=f"[bold red]Skill security scan — {len(skill_scan)} file(s) with risks[/bold red]",
-            border_style="red",
-        )
-    )
+    for row in skill_scan_rows(skill_scan):
+        table.add_row(*row)
+    console.print(Panel(table, title=f"[bold red]{skill_scan_title(skill_scan)}[/bold red]", border_style="red"))
 
 
 def _managed_install_workspace_label(workspace: object) -> str:
@@ -1943,6 +1994,7 @@ def _render_update(console: Console, payload: dict[str, object]) -> None:
     error = str(payload.get("error") or "").strip()
     if notes:
         console.print(Panel("\n".join(f"{_bullet()} {note}" for note in notes), title="Notes", border_style="blue"))
+    render_protection_repair_failures(console, payload, _bullet(), Panel)
     if status in {"updated", "failed"} and stdout and stdout != str(payload.get("message") or "").strip():
         console.print(Panel(stdout, title="stdout", border_style="green"))
     if status == "failed" and stderr:
@@ -2277,11 +2329,22 @@ def _render_protect(console: Console, payload: dict[str, object]) -> None:
     if isinstance(request, dict):
         body.add_row("Command", _command_text(request.get("command")))
         body.add_row("Kind", str(request.get("install_kind") or "unknown"))
+    supply_chain_evaluation = payload.get("supply_chain_evaluation")
     if isinstance(verdict, dict):
         action = str(verdict.get("action") or "review")
         body.add_row("Action", _action_text(action))
         body.add_row("Executed", _bool_label(bool(payload.get("executed"))))
         body.add_row("Reason", str(verdict.get("reason") or "unknown"))
+        if action == "block" and isinstance(supply_chain_evaluation, dict):
+            reasons = _coerce_dict_list(supply_chain_evaluation.get("reasons"))
+            user_copy = supply_chain_evaluation.get("user_copy")
+            if (
+                isinstance(user_copy, dict)
+                and user_copy.get("next_step") == "hol-guard connect"
+                and any(item.get("code") == "cloud_auth_error" for item in reasons)
+                and not any(item.get("code") == "saved_package_block" for item in reasons)
+            ):
+                body.add_row("Next", "Run hol-guard connect to sign in, then retry this install.")
     console.print(Panel(body, title="Install protection", border_style="cyan"))
     guidance = _protect_guidance_lines(payload)
     if guidance:

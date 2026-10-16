@@ -210,18 +210,51 @@ def test_transform_capability_requires_the_same_native_profile(tmp_path, monkeyp
         assert executed == [True]
 
 
+def _native_vitest_plan(command, workspace):
+    from codex_plugin_scanner.guard.native_restricted_pytest import native_launch_plan
+
+    return native_launch_plan(
+        "prepare_vitest",
+        command,
+        workspace=workspace,
+        cwd=workspace,
+        platform="darwin",
+        backend_executable=Path("/usr/bin/true"),
+        profile="vitest-readonly-v1",
+    )
+
+
+def _native_project(tmp_path, monkeypatch):
+    (tmp_path / "package.json").write_text("{}")
+    (tmp_path / "bin").mkdir()
+    node = tmp_path / "bin/node"
+    node.write_bytes(b"\x7fELF" + b"native-fixture")
+    node.chmod(0o755)
+    monkeypatch.setenv("PATH", str(node.parent))
+    entry = tmp_path / "node_modules/vitest/vitest.mjs"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("")
+    return entry
+
+
+@pytest.mark.skipif(__import__("os").name != "posix", reason="contained executable preparation requires Unix")
+@pytest.mark.usefixtures("native_context_digest")
 @pytest.mark.parametrize("form", ["relative", "absolute", "equals"])
 def test_bun_cwd_resolves_before_local_dependency_preparation(tmp_path, monkeypatch, form):
+    _native_project(tmp_path, monkeypatch)
     target = tmp_path / "target"
     target.mkdir()
     arguments = ["--cwd=target"] if form == "equals" else ["--cwd", "target" if form == "relative" else str(target)]
-    captured = []
+    plan = _native_vitest_plan(["bun", *arguments, "x", "vitest", "run"], tmp_path)
+    assert (plan.workspace, plan.cwd) == (tmp_path.resolve(), target.resolve())
 
-    def prepare(command, *, workspace, cwd):
-        captured.append((workspace, cwd))
-        raise RestrictedPytestError("test_stop", "stop before backend preparation")
 
-    monkeypatch.setattr(vitest, "prepare_restricted_node_test", prepare)
-    with pytest.raises(RestrictedPytestError, match="stop before backend"):
-        vitest.prepare_restricted_vitest(["bun", *arguments, "x", "vitest", "run"], workspace=tmp_path, cwd=tmp_path)
-    assert captured == [(target.resolve(), target.resolve())]
+@pytest.mark.skipif(__import__("os").name != "posix", reason="contained executable preparation requires Unix")
+@pytest.mark.usefixtures("native_context_digest")
+@pytest.mark.parametrize("launcher", [["bunx", "--cwd", "web"], ["bun", "--cwd", "web", "x"]])
+def test_bun_cwd_finds_vitest_hoisted_to_the_workspace_root(tmp_path, monkeypatch, launcher):
+    entry = _native_project(tmp_path, monkeypatch)
+    (tmp_path / "web").mkdir()
+    plan = _native_vitest_plan([*launcher, "vitest", "run"], tmp_path)
+    assert (plan.workspace, plan.cwd) == (tmp_path.resolve(), (tmp_path / "web").resolve())
+    assert plan.command[1] == str(entry.resolve())

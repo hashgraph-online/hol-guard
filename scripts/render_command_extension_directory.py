@@ -50,7 +50,9 @@ def _category(extension_id: str) -> str:
 
 
 def _escape_cell(value: str) -> str:
-    return " ".join(value.split()).replace("|", "\\|")
+    # Even segments sit outside code spans, where a bare `<` would open an HTML tag.
+    segments = " ".join(value.split()).replace("|", "\\|").split("`")
+    return "`".join(segment if index % 2 else segment.replace("<", "&lt;") for index, segment in enumerate(segments))
 
 
 def _protection_model(extension: CommandSafetyExtension) -> str:

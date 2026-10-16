@@ -12,6 +12,10 @@ permissions:
 
 env:
   UV_HTTP_TIMEOUT: "120"
+  # This compiler generates wheel data; it is not a shipped enforcement binary.
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "0"
+  CARGO_PROFILE_RELEASE_LTO: "false"
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "16"
 
 concurrency:
   group: evaluation-wheel-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
@@ -21,6 +25,8 @@ jobs:
   staged-evaluator-wheel:
     name: Staged evaluator wheel (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # A slow macOS compiler build has used almost all of five minutes and was
+    # cancelled during verification. Fifteen still bounds the job.
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -33,7 +39,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-from glob import glob
 from pathlib import Path
 
-from ..models import GuardArtifact
 from .pi_extension_source import managed_extension_source as managed_extension_source
 
 PI_DIR = ".pi"
@@ -16,15 +13,7 @@ OMP_DIR = ".omp"
 OMP_AGENT_DIR = ".omp/agent"
 PI_SETTINGS_FILE = "settings.json"
 PI_MANAGED_EXTENSION_NAME = "hol-guard.ts"
-EXTENSION_SUFFIXES = (".ts", ".js", ".mts", ".cts", ".mjs", ".cjs")
-THEME_SUFFIXES = (".json", ".js", ".ts", ".yaml", ".yml")
 REMOTE_RESOURCE_PREFIXES = ("npm:", "git:", "http://", "https://", "ssh://")
-
-
-def append_found_path(found_paths: list[str], path: Path) -> None:
-    candidate = str(path)
-    if candidate not in found_paths:
-        found_paths.append(candidate)
 
 
 def json_payload(path: Path) -> dict[str, object]:
@@ -35,62 +24,8 @@ def json_payload(path: Path) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
-def stable_suffix(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]
-
-
-def artifact(
-    *,
-    harness: str,
-    artifact_id: str,
-    name: str,
-    artifact_type: str,
-    scope: str,
-    path: Path,
-    metadata: dict[str, object] | None = None,
-    publisher: str | None = None,
-) -> GuardArtifact:
-    return GuardArtifact(
-        artifact_id=artifact_id,
-        name=name,
-        harness=harness,
-        artifact_type=artifact_type,
-        source_scope=scope,
-        config_path=str(path),
-        publisher=publisher,
-        metadata=metadata or {},
-    )
-
-
-def append_artifact(
-    artifacts: list[GuardArtifact],
-    seen_keys: set[str],
-    next_artifact: GuardArtifact,
-    *,
-    dedupe_key: str,
-) -> None:
-    if dedupe_key in seen_keys:
-        return
-    seen_keys.add(dedupe_key)
-    artifacts.append(next_artifact)
-
-
 def is_remote_resource(value: str) -> bool:
     return value.startswith(REMOTE_RESOURCE_PREFIXES)
-
-
-def resolve_configured_paths(settings_path: Path, value: str) -> tuple[Path, ...]:
-    if is_remote_resource(value):
-        return ()
-    candidate = Path(value).expanduser()
-    if not candidate.is_absolute():
-        candidate = (settings_path.parent / candidate).expanduser()
-    pattern = str(candidate)
-    if any(char in pattern for char in "*?["):
-        matches = [Path(item).expanduser().resolve() for item in glob(pattern, recursive=True)]
-        return tuple(sorted(path for path in matches if path.exists()))
-    resolved = candidate.resolve()
-    return (resolved,) if resolved.exists() else ()
 
 
 def enable_managed_extension(*, settings_path: Path, extension_path: Path) -> None:

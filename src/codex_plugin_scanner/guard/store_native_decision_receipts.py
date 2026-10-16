@@ -120,28 +120,6 @@ class StoreNativeDecisionReceiptsMixin:
         _record_native_decision_receipts(self, (receipt,))
         return True
 
-    def record_native_decision_receipts(
-        self: _ConnectionOwner, receipts: Sequence[Mapping[str, object]]
-    ) -> tuple[str, ...]:
-        """Commit a bounded batch atomically, returning acknowledged identities.
-
-        Validate every input before opening a transaction. A failed commit
-        acknowledges none; replay of an already committed decision is harmless.
-        """
-
-        return _record_native_decision_receipts(self, receipts)
-
-    def native_decision_receipt_count(self: _ConnectionOwner) -> int:
-        with self._connect() as connection:
-            row = cast(
-                sqlite3.Row | None,
-                connection.execute(
-                    "select (select count(*) from native_hook_decision_receipts) + "
-                    "(select count(*) from native_prompt_decision_receipts) as count"
-                ).fetchone(),
-            )
-        return int(row["count"]) if row is not None else 0
-
     def get_native_decision_receipt(self: _ConnectionOwner, decision_id: str) -> dict[str, object] | None:
         """Read one complete receipt and reject changed identity or binding data."""
         if re.fullmatch(r"[0-9a-f]{64}", decision_id) is None:

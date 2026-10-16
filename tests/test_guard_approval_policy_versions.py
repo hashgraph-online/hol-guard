@@ -12,12 +12,12 @@ from codex_plugin_scanner.guard import mcp_tool_calls as mcp_tool_calls_module
 from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.proxy import stdio as stdio_module
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_tokens_validation_reason,
     parse_approval_context_token,
 )
+from tests.guard_sensitive_read_support import sensitive_read_token
 
 
 def _config(tmp_path: Path) -> GuardConfig:
@@ -201,17 +201,11 @@ def test_mcp_tool_call_approval_ignores_presentation_only_changes(
     )
 
 
-
 def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
-    return stdio_module.build_sensitive_read_approval_hash(
-        artifact,
-        config=config,
-        cwd=config.workspace,
-        current_action="review",
-    )
+    return sensitive_read_token(artifact, config=config, cwd=config.workspace)
 
 
-def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_component(
+def test_stdio_sensitive_read_token_ignores_presentation_only_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     native_context_digest: Path,
@@ -239,14 +233,4 @@ def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_compo
             config=_ux_only_config_change(config),
         )
         == saved_token
-    )
-
-    monkeypatch.setattr(
-        stdio_module,
-        "_STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION",
-        "stdio-sensitive-read-evaluation-v2-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _sensitive_read_token(artifact=artifact, config=config),
     )

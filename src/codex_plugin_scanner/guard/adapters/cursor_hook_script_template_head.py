@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
 from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
 from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
@@ -39,6 +40,11 @@ GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
 GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
 GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
 _HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + GUARD_HOOK_TIMEOUT_SECONDS
+# The native runtime hands over a hook it did not answer with the time it
+# already spent; that time comes out of this client's budget, never added.
+_NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
+if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
+    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(GUARD_HOOK_TIMEOUT_SECONDS))
 GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
 _FALLBACK_LOCK = threading.Lock()
 
@@ -188,9 +194,7 @@ def _daemon_hook_result(
     pid = state.get("pid")
     if not isinstance(pid, int) or pid <= 0:
         return (None, None)
-    try:
-        os.kill(pid, 0)
-    except OSError:
+    if not _daemon_pid_is_alive(pid):
         return (None, "transport-failure")
     # Probe /healthz before sending the hook payload and auth token.
     # Ensures the listener is actually the Guard daemon, not a spoofed process.
@@ -355,6 +359,8 @@ def _run_guard_fallback(
     guard_env: Mapping[str, str],
     deadline_monotonic: float,
 ) -> subprocess.CompletedProcess[str]:
+    if getattr(sys, "frozen", False):
+        raise RuntimeError("HOL Guard has no cold evaluator in a frozen build")
     if not _FALLBACK_LOCK.acquire(blocking=False):
         raise RuntimeError("HOL Guard fallback review is already in progress")
     try:
@@ -582,5 +588,5 @@ def _cursor_read_file_permission(permission: str) -> str:
     return "allow"
 
 '''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
-    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE
 )

@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TextIO
 
 from ..extension_builder.errors import BuilderError
-from ..extension_builder.io import canonical_json, list_value, object_value, read_json
+from ..extension_builder.io import canonical_json, object_value, read_json
 
 _METADATA_FLAGS = (
     "slug",
@@ -126,28 +126,19 @@ def _handoff(args: argparse.Namespace) -> dict[str, object]:
     expected_fixture = repo / "tests" / "fixtures" / f"command-source-{extension_id.removeprefix('command.')}.v1.json"
     if source_path != expected_source or fixture_path != expected_fixture:
         raise BuilderError("canonical_paths", "Source and fixture must use their canonical repository paths.")
-    trust_map = object_value(
-        read_json(repo / "contracts" / "extensions" / "trust-class-map.v1.json"), code="trust_shape"
-    )
-    if trust_map.get("schemaVersion") != "guard.extension-trust-class-map.v1":
-        raise BuilderError("trust_schema", "Trust map must use guard.extension-trust-class-map.v1.")
-    classes = object_value(trust_map.get("classes"), code="trust_shape")
-    external = list_value(classes.get("external"), maximum=4096)
-    if not all(isinstance(item, str) for item in external):
-        raise BuilderError("trust_shape", "Trust map must list extension IDs as strings.")
-    other_classes = {
-        class_name
-        for class_name in ("first-party", "trusted-library")
-        if extension_id in list_value(classes.get(class_name), maximum=4096)
-    }
-    if extension_id not in external:
-        if other_classes:
-            raise BuilderError(
-                "trust_class", "External contributions must remain in the reviewed external trust class."
-            )
-        raise BuilderError("missing_external_trust", "Trust map must list the extension under external.")
-    if other_classes:
-        raise BuilderError("trust_class", "Trust map must assign the extension to only the external trust class.")
+    bindings = repo / "contracts" / "extensions" / "trust"
+    if not bindings.is_dir():
+        raise BuilderError("trust_shape", "Repository authored trust bindings are missing.")
+    from ..runtime.extension_trust import trust_binding_index
+
+    try:
+        trust_class = trust_binding_index(bindings).get(extension_id)
+    except (OSError, ValueError) as exc:
+        raise BuilderError("trust_shape", "Repository trust bindings are invalid.") from exc
+    if trust_class is None:
+        raise BuilderError("missing_external_trust", "The extension needs a reviewed external trust binding.")
+    if trust_class != "external":
+        raise BuilderError("trust_class", "External contributions must remain in the reviewed external trust class.")
     script = repo / "scripts" / "prepare_extension_contribution.py"
     if script.is_symlink() or not script.is_file():
         raise BuilderError("repository_layout", "Repository preparation tooling is unavailable.")

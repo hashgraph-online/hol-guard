@@ -10,6 +10,7 @@ base64ct.workspace = true
 getrandom.workspace = true
 guard-contracts = { path = "../guard-contracts" }
 guard-command = { path = "../guard-command" }
+guard-scanner = { path = "../guard-scanner" }
 hex.workspace = true
 hmac.workspace = true
 oauth2 = { version = "=5.0.0", default-features = false, features = ["timing-resistant-secret-traits"] }

@@ -22,7 +22,7 @@ from .codex_config import tomllib
 from .codex_hook_bridge_runtime import bridge_config_from_argv, trusted_hook_launch
 from .codex_hook_file_integrity import CodexHookIntegrityError, hook_validation_deadline, split_hook_command
 from .codex_hook_integrity import hook_manifest_path, load_authenticated_hook_manifest
-from .codex_hook_launch_runtime import run_isolated_hook_process
+from .codex_hook_launch_runtime import desktop_hook_proxy_context, run_isolated_hook_process
 from .codex_hook_recovery import _snapshot
 from .codex_hook_runtime_trust import TrustedCodexHookLaunch
 from .codex_install_transaction import require_codex_install_owner
@@ -47,6 +47,12 @@ if TYPE_CHECKING:
 def _digest(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _desktop_hook_proxy_context() -> dict[str, str]:
+    """Carry the allow-listed Desktop proxy selectors into the hook probe."""
+
+    return desktop_hook_proxy_context()
 
 
 def observe_configured_codex_hook(
@@ -220,6 +226,7 @@ def _observe_configured_codex_hook(
     output_digests: list[str] = []
     launch_environment = dict(trusted.environment)
     launch_environment.update(environment)
+    launch_environment.update(_desktop_hook_proxy_context())
     for probe_command, decision in (("pwd", "allow"), ("rm -rf /", "deny")):
         check_deadline()
         request_id = "transition-hook-" + uuid.uuid4().hex
@@ -236,6 +243,9 @@ def _observe_configured_codex_hook(
         check_legacy_key()
         since = datetime.now(timezone.utc)
         result = run_isolated_hook_process(
+            # Keep the manifest-authenticated command as the launch target.
+            # Frozen Desktop bridge routing happens only after that exact
+            # configured command has parsed and validated this probe.
             argv,
             input_text=json.dumps(payload),
             cwd=trusted.cwd,
