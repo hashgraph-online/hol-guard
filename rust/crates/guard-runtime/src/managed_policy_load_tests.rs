@@ -185,6 +185,35 @@ fn a_profile_the_machine_does_not_own_is_not_authority() {
     assert!(state.status.fails_closed());
 }
 
+/// Root reads a directory whose mode forbids it, so the one machine that
+/// cannot reproduce an unreadable profile is one running as root.
+#[test]
+#[cfg(unix)]
+fn an_unreadable_profile_directory_fails_closed() {
+    use std::os::unix::fs::PermissionsExt;
+
+    if administrator_context(MachineSystem::Other) {
+        return;
+    }
+    let root = TempDir::new().expect("tempdir");
+    let source = rooted(&root, MachineSystem::Other);
+    let native = source.native_policy_path().expect("native path");
+    let parent = native.parent().expect("parent");
+    fs::create_dir_all(parent).expect("parent");
+    let mut blocked = fs::metadata(parent).expect("metadata").permissions();
+    blocked.set_mode(0o000);
+    fs::set_permissions(parent, blocked).expect("block");
+
+    let state = load_managed_policy(&source);
+
+    let mut restored = fs::metadata(parent).expect("metadata").permissions();
+    restored.set_mode(0o755);
+    fs::set_permissions(parent, restored).expect("restore");
+    assert_eq!(state.status, ManagedPolicyStatus::Inaccessible);
+    assert_eq!(state.reason_code, Some("managed_policy_inaccessible"));
+    assert!(state.status.fails_closed());
+}
+
 #[test]
 fn no_profile_and_no_cache_is_an_unmanaged_machine() {
     let root = TempDir::new().expect("tempdir");

@@ -217,17 +217,27 @@ pub(crate) fn load_managed_policy(source: &ManagedPolicySource) -> ManagedPolicy
         );
     };
     let display = native_path.to_string_lossy().into_owned();
-    // `os.path.lexists` reports false for every lstat failure, so an
-    // unreachable profile path reads as no profile and the cache answers for
-    // it rather than the load reporting a read error it never attempted.
-    if fs::symlink_metadata(&native_path).is_err() {
-        return load_cache(source).unwrap_or_else(|| {
-            ManagedPolicyState::new(
-                ManagedPolicyStatus::Absent,
+    // A missing profile is no authority. Any other lstat failure means the
+    // runtime could not tell, and that is not a license to use the local
+    // configuration: the floor stands in until the profile can be read.
+    match fs::symlink_metadata(&native_path) {
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            return load_cache(source).unwrap_or_else(|| {
+                ManagedPolicyState::new(
+                    ManagedPolicyStatus::Absent,
+                    &display,
+                    "managed_policy_absent",
+                )
+            });
+        }
+        Err(_) => {
+            return ManagedPolicyState::new(
+                ManagedPolicyStatus::Inaccessible,
                 &display,
-                "managed_policy_absent",
-            )
-        });
+                "managed_policy_inaccessible",
+            );
+        }
+        Ok(_) => {}
     }
     if !machine_controlled_file_is_trusted(&native_path, source.system) {
         return ManagedPolicyState::new(

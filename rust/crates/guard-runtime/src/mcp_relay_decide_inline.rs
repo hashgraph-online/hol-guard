@@ -55,9 +55,7 @@ impl Reply {
         }
     }
 
-    /// Classify one `elicitation/create` response as the proxy does. Only the
-    /// Unix relay (`mcp_relay_resident`) raises the prompt.
-    #[cfg(any(unix, test))]
+    /// Classify one `elicitation/create` response as the proxy does.
     pub(crate) fn classify(response: &Value) -> Reply {
         let payload = approval_payload(response);
         if payload.get("action").and_then(Value::as_str) != Some(ACCEPT) {
@@ -78,13 +76,9 @@ impl Reply {
 }
 
 /// `_approval_denies` reads `action == "accept"`.
-#[cfg(any(unix, test))]
 const ACCEPT: &str = "accept";
-#[cfg(any(unix, test))]
 const DECISION: &str = "decision";
-#[cfg(any(unix, test))]
 const APPROVE: &str = "approve";
-#[cfg(any(unix, test))]
 const DENY: &str = "deny";
 /// `_inline_approval_deny_result`'s sources.
 pub(crate) const DENIED_SOURCE: &str = "inline-denied";
@@ -92,7 +86,6 @@ pub(crate) const INVALID_SOURCE: &str = "inline-invalid";
 
 /// `_approval_payload`: the result of an answered prompt, and a cancel for an
 /// error, a missing result or a result that is not an object.
-#[cfg(any(unix, test))]
 fn approval_payload(response: &Value) -> Value {
     match response.get("result") {
         Some(Value::Object(result)) => Value::Object(result.clone()),

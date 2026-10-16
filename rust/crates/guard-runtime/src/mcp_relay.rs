@@ -11,7 +11,8 @@
 //! select the relay wherever the runtime advertises it. A lane the daemon
 //! has only not prepared yet keeps the session native.
 //!
-//! Unix only: the child session relies on process groups.
+//! The child session runs in its own process group on unix and in a
+//! kill-on-close JobObject on Windows. The relay is advertised on unix only.
 
 /// `hol-guard-runtime` subcommand that runs the relay.
 pub(crate) const RELAY_COMMAND: &str = "mcp-relay";
@@ -22,20 +23,10 @@ pub(crate) const RELAY_FEATURE: &str = "mcp-stdio-relay-v1";
 
 /// Run the relay; returns the process exit status.
 pub(crate) fn run(python_argv: &[String]) -> i32 {
-    #[cfg(unix)]
-    {
-        unix::run(python_argv)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = python_argv;
-        eprintln!("hol-guard mcp-relay: the native MCP relay is not supported on this platform");
-        2
-    }
+    session::run(python_argv)
 }
 
-#[cfg(unix)]
-mod unix {
+mod session {
     use std::io;
 
     use crate::guard_config_load::approval_wait_timeout_seconds;
