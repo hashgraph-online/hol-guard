@@ -248,9 +248,3 @@ def remove_managed_block(text: str) -> str:
     cleaned = pattern.sub("", text)
     cleaned = re.sub(rf"^\s*#.*{re.escape(GUARD_MANAGED_MARKER)}.*$\n?", "", cleaned, flags=re.MULTILINE)
     return cleaned
-
-
-def append_found_path(found_paths: list[str], path: Path) -> None:
-    candidate = str(path)
-    if candidate not in found_paths:
-        found_paths.append(candidate)

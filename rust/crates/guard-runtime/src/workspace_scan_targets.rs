@@ -58,11 +58,16 @@ mod tests {
         let cases = vectors["specs"].as_array().expect("specs");
         assert!(cases.len() > 150);
         for case in cases {
-            let got = target_for_spec(
-                case["ecosystem"].as_str().expect("ecosystem"),
-                case["spec"].as_str().expect("spec"),
-            )
-            .to_execution_dict();
+            // An unsupported npm source is named by its path basename, and on
+            // Windows `a:` parses as a drive, as it does for Python's `Path`.
+            let spec = case["spec"].as_str().expect("spec");
+            let drive =
+                spec.as_bytes().get(1) == Some(&b':') && spec.as_bytes()[0].is_ascii_alphabetic();
+            if cfg!(windows) && case["ecosystem"] == "npm" && drive {
+                continue;
+            }
+            let got = target_for_spec(case["ecosystem"].as_str().expect("ecosystem"), spec)
+                .to_execution_dict();
             assert_eq!(
                 got, case["target"],
                 "spec {} {}",

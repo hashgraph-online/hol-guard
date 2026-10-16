@@ -64,6 +64,10 @@ pub(crate) enum ToolCallVerdict {
     Forward(ForwardTicket),
     /// Claim the saved approval once the catalog still matches, then answer.
     Claim(ClaimTicket),
+    /// Raise the client's inline approval prompt with these
+    /// `elicitation/create` params, then decide the same call again with the
+    /// answer. The relay owns the request id, so the authority never sees it.
+    Elicit(Value),
 }
 
 /// Decides `tools/call` requests; the relay never decides one itself.
@@ -83,6 +87,16 @@ pub(crate) trait RelayAuthority {
     fn claim(&mut self, ticket: ClaimTicket) -> ToolCallVerdict {
         ToolCallVerdict::Respond(ticket.no_decision())
     }
+
+    /// `_record_client_capabilities`: the client's `initialize` params, which
+    /// say whether it offers the inline approval prompt. An authority that
+    /// never asks for one ignores them.
+    fn client_capabilities(&mut self, _params: Option<&Value>) {}
+
+    /// The answer to the prompt the relay raised, which the next decide of
+    /// the same call routes. `None` is a prompt that went unanswered, which
+    /// the proxy answers itself with a cancel.
+    fn elicited(&mut self, _answer: Option<&Value>) {}
 
     /// The catalog changed between the decision and the write.
     fn boundary_changed(&mut self, ticket: ForwardTicket) -> Value;

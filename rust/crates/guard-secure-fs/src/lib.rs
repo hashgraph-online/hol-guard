@@ -20,7 +20,8 @@ use secure_open::{secure_open, SecureOpenError};
 pub use source_path::{
     classify_scannable_source_path, classify_source_path, credential_path_markers,
     hidden_empty_work_tree_file, hidden_read_parts_allowed, is_source_code_extension,
-    sensitive_external_filename, sensitive_path_family, source_like, EXTERNAL_SENSITIVE_PARTS,
+    sensitive_external_filename, sensitive_path_family, source_like, win32_name,
+    EXTERNAL_SENSITIVE_PARTS,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]

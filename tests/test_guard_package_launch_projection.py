@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.models import (
     GuardAction,
     PolicyDecision,
 )
+from codex_plugin_scanner.guard.native_package_evaluation_compose import compose_package_evaluation
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.manifest_install_fixtures import (
     _allow_package_evaluation,
@@ -223,10 +224,7 @@ def test_current_package_policy_rewrites_every_package_decision(
         ),
     )
 
-    rewritten = local_supply_chain_module._package_evaluation_with_current_policy_action(
-        evaluation,
-        current_action=current_action,
-    )
+    rewritten = compose_package_evaluation("current_policy_action", evaluation, current_action=current_action)
 
     assert rewritten.policy_action == current_action
     assert all(package["decision"] == expected_package_decision for package in rewritten.packages)

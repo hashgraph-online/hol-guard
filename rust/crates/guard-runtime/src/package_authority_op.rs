@@ -16,6 +16,7 @@ use std::path::{Path, PathBuf};
 
 use crate::package_authority_config::ResidentConfigLoader;
 
+use base64ct::{Base64UrlUnpadded, Encoding};
 use guard_command::local_supply_chain::{
     apply_stored_package_policy_override, resolve_package_firewall_entitlement,
     resolve_package_firewall_entitlement_with_refresh, ApprovalContextApi, CommandExecution,
@@ -43,11 +44,13 @@ use guard_command::supply_chain_package_identity;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApplyStoredPackagePolicyResultV1,
     PackageAuthorityDecideRequestV1, PackageAuthorityDecideResultV1, PackageIntentParseRequestV1,
-    PackageIntentParseResultV1, SupplyChainEvalRequestV1, SupplyChainEvalResultV1,
-    PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
+    PackageIntentParseResultV1, PolicyDecisionLookupRequestV1, SupplyChainEvalRequestV1,
+    SupplyChainEvalResultV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
+    POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
 };
 use rusqlite::Connection;
 use serde_json::{json, Map, Value};
+use zeroize::Zeroizing;
 
 use crate::supply_chain_egress::{enter_scope, required_reply};
 use crate::supply_chain_eval_seams::*;
@@ -1041,78 +1044,67 @@ impl SupplyChainStore for ResidentSupplyChainStore {
 
     fn resolve_policy_decision_lookup(
         &self,
-        _harness: &str,
+        harness: &str,
         artifact_id: &str,
-        _artifact_hash: Option<&str>,
-        _workspace: &str,
-        _publisher: Option<&str>,
-        _now: &str,
-        _consume_one_shot: bool,
+        artifact_hash: Option<&str>,
+        workspace: &str,
+        publisher: Option<&str>,
+        now: &str,
+        consume_one_shot: bool,
     ) -> PolicyDecisionLookup {
-        // store_policy.py: resolve_policy_decision_lookup — look up the
-        // materialized decision row for the artifact.
-        let conn = match self.conn() {
-            Ok(c) => c,
-            Err(_) => return PolicyDecisionLookup::default(),
+        // store_policy.py: resolve_policy_decision_lookup — the shared lookup
+        // op owns the scope, eligibility and row-integrity rules and stamps
+        // the authority revision a later claim compares against, so the
+        // resident resolves the row through it rather than reading
+        // `policy_decisions` itself. Python procures the keyring-facing
+        // integrity evidence before dispatch (`policy_lookup_evidence`); in
+        // the resident the same material is resolved in-process, exactly as
+        // `claim_approval_reuse_decision` below resolves it.
+        let resolved_home =
+            std::fs::canonicalize(&self.guard_home).unwrap_or_else(|_| self.guard_home.clone());
+        let mut secret_store =
+            crate::encrypted_secret_store::EncryptedFileSecretStore::new(&resolved_home);
+        let (material, integrity_state) = crate::policy_integrity_resolver::resolve_integrity_state(
+            &mut secret_store,
+            &resolved_home,
+        );
+        let key_b64 = material
+            .as_ref()
+            .map(|m| Zeroizing::new(Base64UrlUnpadded::encode_string(&m.raw_key)));
+        let key_id = material.as_ref().map(|m| m.key_id.clone());
+        let request = PolicyDecisionLookupRequestV1 {
+            schema: POLICY_DECISION_LOOKUP_REQUEST_SCHEMA.to_owned(),
+            request_id: String::new(),
+            store_path: self.store_path.to_string_lossy().into_owned(),
+            guard_home: resolved_home.to_string_lossy().into_owned(),
+            harness: harness.to_owned(),
+            artifact_id: Some(artifact_id.to_owned()),
+            artifact_hash: artifact_hash.map(str::to_owned),
+            workspace: Some(workspace.to_owned()),
+            publisher: publisher.map(str::to_owned),
+            now: now.to_owned(),
+            runtime_exact_match_context: None,
+            consume_one_shot,
+            local_once_only: false,
+            integrity_state: Some(integrity_state),
+            integrity_key_b64: key_b64.as_ref().map(|k| k.to_string()),
+            integrity_key_id: key_id.clone(),
+            local_once_integrity_key_b64: key_b64.as_ref().map(|k| k.to_string()),
+            local_once_integrity_key_id: key_id,
+            policy_bundle_decision_identities: None,
+            probe_groups: None,
         };
-        // `_policy_row_payload` — project the `policy_decisions` columns into
-        // the decision dict the callers inspect.
-        let mut stmt = match conn.prepare(
-            "SELECT harness, scope, artifact_id, artifact_hash, workspace, \
-                    publisher, action, reason, owner, source, expires_at, \
-                    policy_document_schema_version, policy_document_id, \
-                    policy_document_digest, policy_rule_id, \
-                    policy_provenance_json, updated_at \
-             FROM policy_decisions \
-             WHERE artifact_id = ?1 ORDER BY decision_id DESC LIMIT 1",
-        ) {
-            Ok(st) => st,
-            Err(_) => return PolicyDecisionLookup::default(),
+        let Ok(payload) = crate::policy_decision_lookup_op::evaluate(&request) else {
+            // A lookup the store cannot resolve reports no saved decision, so
+            // the review verdict the caller already holds stands.
+            return PolicyDecisionLookup::default();
         };
-        let decision = stmt
-            .query_row([artifact_id], |row| {
-                let mut map = Map::new();
-                for (i, name) in [
-                    "harness",
-                    "scope",
-                    "artifact_id",
-                    "artifact_hash",
-                    "workspace",
-                    "publisher",
-                    "action",
-                    "reason",
-                    "owner",
-                    "source",
-                    "expires_at",
-                    "policy_document_schema_version",
-                    "policy_document_id",
-                    "policy_document_digest",
-                    "policy_rule_id",
-                    "policy_provenance_json",
-                    "updated_at",
-                ]
-                .iter()
-                .enumerate()
-                {
-                    let v: rusqlite::types::Value = row.get(i)?;
-                    let jv = db_value_to_json(v);
-                    // `policy_provenance_json` is stored as a JSON blob text —
-                    // emit it parsed like the Python `_row_to_payload` does.
-                    let jv = if *name == "policy_provenance_json" {
-                        jv.as_str()
-                            .and_then(|t| serde_json::from_str::<Value>(t).ok())
-                            .unwrap_or(jv)
-                    } else {
-                        jv
-                    };
-                    map.insert(name.to_string(), jv);
-                }
-                Ok(Value::Object(map))
-            })
-            .ok();
+        let field = |name: &str| -> Option<Value> {
+            payload.get(name).filter(|value| !value.is_null()).cloned()
+        };
         PolicyDecisionLookup {
-            decision,
-            ignored_local_integrity: None,
+            decision: field("decision"),
+            ignored_local_integrity: field("ignored_local_integrity"),
         }
     }
 

@@ -198,7 +198,7 @@ fn launch_cwd(payload: &Map<String, Value>, workspace: &str) -> Result<Option<St
 }
 
 #[path = "hook_direct_local_cli_block.rs"]
-mod block;
+pub(crate) mod block;
 
 #[cfg(test)]
 #[path = "hook_direct_local_cli_tests.rs"]

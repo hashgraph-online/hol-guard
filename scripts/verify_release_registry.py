@@ -19,6 +19,7 @@ from packaging.version import InvalidVersion, Version
 
 if __package__:
     from . import release_registry_retry
+    from .release_artifact_sets import registry_wheels
     from .release_registry_types import (
         Registry,
         RegistryResult,
@@ -29,6 +30,7 @@ if __package__:
     )
 else:
     import release_registry_retry  # pyright: ignore[reportImplicitRelativeImport]
+    from release_artifact_sets import registry_wheels  # pyright: ignore[reportImplicitRelativeImport]
     from release_registry_types import (  # pyright: ignore[reportImplicitRelativeImport]
         Registry,
         RegistryResult,
@@ -344,7 +346,7 @@ def verify_registry_release(
         require_sdist=not wheels_only,
     )
     local_hashes = (
-        {name: digest for name, digest in local_distributions.items() if name.endswith(".whl")}
+        {name: local_distributions[name] for name in registry_wheels(local_distributions)}
         if wheels_only
         else local_distributions
     )

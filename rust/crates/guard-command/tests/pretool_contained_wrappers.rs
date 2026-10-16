@@ -13,7 +13,20 @@ fn fixture() -> std::path::PathBuf {
         .join(format!("fixture-{}-{nonce}", std::process::id()));
     std::fs::create_dir_all(root.join("project/web")).unwrap();
     std::fs::create_dir_all(root.join("outside")).unwrap();
+    package(&root.join("project"));
     std::fs::canonicalize(root).unwrap()
+}
+
+/// The script bodies the narrow node sinks run, and their local entrypoints.
+fn package(directory: &std::path::Path) {
+    let scripts =
+        r#"{"scripts":{"build":"vite build","test":"node --test","typecheck":"tsc --noEmit"}}"#;
+    std::fs::write(directory.join("package.json"), scripts).unwrap();
+    for entry in ["typescript/bin/tsc", "vite/bin/vite.js"] {
+        let entry = directory.join("node_modules").join(entry);
+        std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+        std::fs::write(entry, "").unwrap();
+    }
 }
 
 fn classify(
@@ -151,6 +164,31 @@ fn other_wrappers_stay_out_of_containment() {
     }
 }
 
+/// The contained sink refuses a relative `cd` into the workspace, so the
+/// edge must not issue a narrower receipt for one: every harness would then
+/// fail the call at the sink with `contained_test_authorization_failed`.
+#[test]
+fn relative_cd_inside_the_workspace_gets_no_narrower_receipt() {
+    let root = fixture();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "cd ./web && ./node_modules/.bin/vite build 2>&1 | tail -15",
+            "cd ./web && bunx vitest run x | tail -20",
+            "cd ./web && bun run build",
+        ] {
+            let result = classify(&root, harness, command);
+            assert!(
+                !result
+                    .reason_code
+                    .ends_with("_readonly_containment_required")
+                    && result.reason_code != "native_node_build_output_containment_required",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+        }
+    }
+}
+
 /// Agents step from one checkout into a sibling repository or worktree by
 /// absolute path. The run is contained to that repository, as it would be
 /// from a session started there; a directory outside any repository is not.
@@ -161,6 +199,7 @@ fn verified_cd_into_a_sibling_repository_reaches_containment() {
     std::fs::create_dir_all(sibling.join("dashboard")).unwrap();
     // A linked worktree marks its root with a `.git` file.
     std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    package(&sibling);
     let sibling = sibling.to_str().unwrap();
     let outside = root.join("outside");
     let outside = outside.to_str().unwrap();
@@ -269,6 +308,84 @@ fn standard_input_grep_filters_reach_containment() {
             assert_ne!(result.decision, "allow", "{harness}: {command}");
             assert_ne!(
                 result.minimum_action, "sandbox-required",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
+/// The execution sink peels a `cd` only to an absolute directory or to a
+/// relative sibling repository root. A relative `cd` into a workspace
+/// subdirectory therefore stays on the workspace sandbox, which the sink
+/// can run as written, instead of the narrower node build profile it would
+/// reject.
+#[test]
+fn relative_workspace_cd_stays_on_the_workspace_sandbox() {
+    let root = fixture();
+    let project = root.join("project");
+    let sibling = root.join("sibling-worktree");
+    std::fs::create_dir_all(sibling.join("dashboard/node_modules/.bin")).unwrap();
+    std::fs::write(
+        sibling.join("dashboard/node_modules/.bin/vite"),
+        "#!/bin/sh\n",
+    )
+    .unwrap();
+    std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    std::fs::create_dir_all(project.join("dashboard")).unwrap();
+    std::os::unix::fs::symlink(
+        sibling.join("dashboard/node_modules"),
+        project.join("dashboard/node_modules"),
+    )
+    .unwrap();
+    let environment = guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap(),
+        environment_names: Vec::new(),
+        environment_digest: "0".repeat(64),
+        home: root.to_str().map(str::to_owned),
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+        library_search_paths: Default::default(),
+    };
+    let decide = |harness: &str, command: &str| {
+        guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            harness,
+            "PreToolUse",
+            &json!({"tool_name":"bash","tool_input":{"command":command}}),
+            None,
+            None,
+            guard_command::pretool::PathContext {
+                home_dir: root.to_str(),
+                cwd: project.to_str(),
+                cdpath_unset: true,
+                ..guard_command::pretool::PathContext::default()
+            },
+            Some(&environment),
+        )
+    };
+    let project = project.to_str().unwrap();
+    let build = "./node_modules/.bin/vite build 2>&1 | tail -15";
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        // The sink cannot peel these, so the narrower profile must not claim them.
+        for command in [
+            format!("cd dashboard && {build}"),
+            format!("cd dashboard; {build}"),
+            format!("cd {project}/dashboard; {build}"),
+        ] {
+            let result = decide(harness, &command);
+            assert_ne!(
+                result.reason_code, "native_node_build_output_containment_required",
+                "{harness}: {command}"
+            );
+        }
+        // An absolute cd keeps the narrower profile.
+        let command = format!("cd {project}/dashboard && {build}");
+        let result = decide(harness, &command);
+        assert_eq!(result.decision, "deny", "{harness}: {command}");
+        if cfg!(target_os = "macos") {
+            assert_eq!(
+                result.reason_code, "native_node_build_output_containment_required",
                 "{harness}: {command}"
             );
         }

@@ -112,6 +112,9 @@ fn search_path_count_and_expansion_are_bounded_before_import_allocation() {
     .is_err());
 }
 
+// ELF search paths are POSIX paths. On Windows `/app/lib` has no drive, so it
+// is not absolute there and the entry fails closed (see the test below).
+#[cfg(unix)]
 #[test]
 fn inherited_rpath_reaches_grandchildren_but_runpath_does_not() {
     let strings = b"\0libA.so\0/app/lib\0";
@@ -148,6 +151,17 @@ fn inherited_rpath_reaches_grandchildren_but_runpath_does_not() {
         own[0].inherited_rpath.as_ref(),
         &[PathBuf::from("/inherited")]
     );
+}
+
+#[cfg(windows)]
+#[test]
+fn driveless_search_paths_fail_closed_on_windows() {
+    let strings = b"\0libA.so\0/app/lib\0";
+    let tool = Path::new("/app/bin/tool");
+    assert!(elf(&image(strings, &[(1, 1)]), tool).is_ok());
+    for tag in [15, 29] {
+        assert!(elf(&image(strings, &[(1, 1), (tag, 9)]), tool).is_err());
+    }
 }
 
 #[cfg(unix)]

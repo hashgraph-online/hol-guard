@@ -96,6 +96,7 @@ def _frozen(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_claude_hooks_use_entrypoint_not_dash_c_when_frozen(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     _frozen(monkeypatch)
+    monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda *_args, **_kwargs: None)
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
     daemon = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
     session = claude_hook_argv.session_start_command_parts(context)
@@ -107,6 +108,26 @@ def test_claude_hooks_use_entrypoint_not_dash_c_when_frozen(monkeypatch: pytest.
     assert fallback[1] == "hook"
     assert any(is_guard_hook_command(part) for part in daemon)
     assert any(is_guard_hook_command(part) for part in session)
+
+
+def test_frozen_claude_daemon_hook_runs_the_durable_native_bridge(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _frozen(monkeypatch)
+    runtime = tmp_path / "g" / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
+    requested: list[Path | None] = []
+
+    def durable(_feature: str, *, guard_home: Path | None = None) -> Path:
+        requested.append(guard_home)
+        return runtime
+
+    monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", durable)
+    context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
+    daemon = claude_hook_argv.daemon_hook_command_parts(context, fallback_daemon_url="http://127.0.0.1:1")
+
+    assert daemon[:3] == (str(runtime), claude_hook_argv.NATIVE_CLAUDE_HOOK_COMMAND, CLAUDE_GUARD_DAEMON_HOOK_MARKER)
+    assert sys.executable not in daemon
+    assert requested and all(home == context.guard_home for home in requested)
 
 
 def test_claude_hooks_keep_python_launcher_when_not_frozen(tmp_path: Path) -> None:

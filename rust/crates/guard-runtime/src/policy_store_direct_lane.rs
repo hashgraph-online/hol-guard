@@ -26,6 +26,20 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
 
+/// What one store has settled about the publisher's ACK.
+#[derive(Default)]
+pub(crate) struct DirectLaneAckWait {
+    /// The newest generation whose settle wait a hook has already claimed, so
+    /// only that hook waits and every other hook defers straight away.
+    pub(crate) claimed: AtomicU64,
+    /// A settle budget, in milliseconds, that replaces the shipped one, or
+    /// zero for the shipped one. Tests that race an ACK into that window
+    /// widen it: a stalled runner can close the window before the racing
+    /// write lands, and the settled wait then reads as a mismatch.
+    #[cfg(test)]
+    pub(crate) settle_override_ms: AtomicU64,
+}
+
 /// The ACK lives in its own directory so that writing, renewing or unlinking
 /// it never changes the state directory identity the publisher fences on.
 pub(crate) const DIRECT_LANE_ACK_DIRECTORY: &str = "direct-lane";
@@ -116,7 +130,6 @@ impl DirectLaneBinding {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum DirectLaneDefer {
-    Unsupported,
     Unbound,
     SnapshotUnavailable,
     AckMissing,
@@ -129,7 +142,6 @@ pub(crate) enum DirectLaneDefer {
 impl DirectLaneDefer {
     pub(crate) fn code(self) -> &'static str {
         match self {
-            Self::Unsupported => "direct_lane_unsupported",
             Self::Unbound => "direct_lane_unbound",
             Self::SnapshotUnavailable => "direct_lane_snapshot_unavailable",
             Self::AckMissing => "direct_lane_ack_missing",
@@ -239,11 +251,6 @@ impl PolicySnapshotStore {
         workspace: &str,
         file_less_covered: bool,
     ) -> Result<(Arc<AdmittedPolicySnapshot>, Arc<DirectLaneBinding>), DirectLaneDefer> {
-        if !cfg!(unix) {
-            // Stat identity parity with the publisher is only established
-            // for Unix filesystems.
-            return Err(DirectLaneDefer::Unsupported);
-        }
         let binding = self
             .direct_lane
             .lock()
@@ -270,9 +277,6 @@ impl PolicySnapshotStore {
     /// The bound binding while its lease holds, for a hook that reads no
     /// policy input, such as the Claude permission notice lane.
     pub(crate) fn admit_direct_binding(&self) -> Result<Arc<DirectLaneBinding>, DirectLaneDefer> {
-        if !cfg!(unix) {
-            return Err(DirectLaneDefer::Unsupported);
-        }
         let binding = self
             .direct_lane
             .lock()
@@ -340,13 +344,14 @@ impl PolicySnapshotStore {
         if ack.generation >= generation
             || !live_publisher_ack(&ack)
             || self
-                .direct_lane_ack_wait_claimed
+                .direct_lane_ack_wait
+                .claimed
                 .fetch_max(generation, Ordering::AcqRel)
                 >= generation
         {
             return Ok((ack, false));
         }
-        let deadline = Instant::now() + DIRECT_LANE_ACK_SETTLE;
+        let deadline = Instant::now() + self.direct_lane_ack_settle();
         loop {
             let now = Instant::now();
             if now >= deadline {
@@ -358,6 +363,22 @@ impl PolicySnapshotStore {
                 return Ok((ack, true));
             }
         }
+    }
+
+    /// How long this store's next hook waits for the ACK of the snapshot it is
+    /// bound to.
+    fn direct_lane_ack_settle(&self) -> Duration {
+        #[cfg(test)]
+        {
+            let widened = self
+                .direct_lane_ack_wait
+                .settle_override_ms
+                .load(Ordering::Acquire);
+            if widened > 0 {
+                return Duration::from_millis(widened);
+            }
+        }
+        DIRECT_LANE_ACK_SETTLE
     }
 
     fn read_direct_lane_ack(&self) -> Result<DirectLaneAckV1, DirectLaneDefer> {
@@ -403,9 +424,35 @@ fn observe_input(path: &str) -> Option<DirectLaneStatV1> {
     })
 }
 
-#[cfg(not(unix))]
+/// On Windows, CPython's `win32_xstat` fills `st_ctime` with the creation
+/// time and `st_ino` with the file ID; an ID wider than 64 bits never binds.
+#[cfg(windows)]
+fn observe_input(path: &str) -> Option<DirectLaneStatV1> {
+    let stat = guard_runtime_windows_process::path_stat(std::path::Path::new(path)).ok()?;
+    Some(DirectLaneStatV1 {
+        mtime_ns: filetime_ns(stat.last_write_time)?,
+        size: stat.size,
+        ino: u64::try_from(stat.file_index).ok()?,
+        ctime_ns: filetime_ns(stat.creation_time)?,
+    })
+}
+
+#[cfg(not(any(unix, windows)))]
 fn observe_input(_path: &str) -> Option<DirectLaneStatV1> {
     None
+}
+
+/// CPython's `LARGE_INTEGER_to_time_t_nsec`: `FILETIME` ticks since 1601 as
+/// Unix seconds and nanoseconds, each truncated toward zero, then joined as
+/// `st_*_ns` joins them.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn filetime_ns(ticks: u64) -> Option<i64> {
+    const TICKS_PER_SECOND: i64 = 10_000_000;
+    const SECONDS_BETWEEN_EPOCHS: i64 = 11_644_473_600;
+    let ticks = i64::try_from(ticks).ok()?;
+    let seconds = ticks / TICKS_PER_SECOND - SECONDS_BETWEEN_EPOCHS;
+    let nanoseconds = (ticks % TICKS_PER_SECOND) * 100;
+    seconds.checked_mul(1_000_000_000)?.checked_add(nanoseconds)
 }
 
 /// Whether `ack` is one the publisher wrote and still renews.
@@ -428,3 +475,7 @@ pub(crate) use review::{DirectLaneReviewFacts, HOOK_DIRECT_REVIEW_FACTS_FEATURE}
 #[cfg(all(test, unix))]
 #[path = "policy_store_direct_lane_tests.rs"]
 pub(crate) mod tests;
+
+#[cfg(test)]
+#[path = "policy_store_direct_lane_input_tests.rs"]
+mod direct_lane_input_tests;

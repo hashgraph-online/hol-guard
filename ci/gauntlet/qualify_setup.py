@@ -38,6 +38,8 @@ GNU_SED_DIRS = (
     Path("/usr/local/opt/gnu-sed/libexec/gnubin"),
 )
 LOCK_DIR = "ci/pi-exact-continuation"
+# The local Linux wheel is never published, so the release size budgets do not cover it.
+LINUX_LOCAL_TAG = "linux_x86_64"
 
 
 def _reap_group(process: subprocess.Popen[Any]) -> None:
@@ -239,16 +241,22 @@ def ensure_sdk(cache_root: Path, repo: Path, sha: str, log: Path) -> dict[str, A
     return {"root": str(root), "lock_sha256": lock_digest, "omp_version": pinned}
 
 
-def macos_platform() -> tuple[str, str, str]:
-    """Map this host to the CI wheel's platform tag, cargo target and deployment target."""
-    if sys.platform != "darwin":
-        raise RuntimeError("in-place wheel builds are macOS-only; pass --wheel on this platform")
+def host_platform() -> tuple[str, str, str]:
+    """Map this host to its wheel platform tag, cargo target and macOS deployment target.
+
+    Linux builds the host's glibc wheel for local runs; the published Linux
+    wheel is the static musl build from the nightly workflow, not this one.
+    """
     arch = platform.machine()
-    if arch == "arm64":
-        return "macosx_11_0_arm64", "aarch64-apple-darwin", "11.0"
-    if arch == "x86_64":
-        return "macosx_13_0_x86_64", "x86_64-apple-darwin", "13.0"
-    raise RuntimeError(f"unsupported macOS architecture: {arch}")
+    if sys.platform == "darwin":
+        if arch == "arm64":
+            return "macosx_11_0_arm64", "aarch64-apple-darwin", "11.0"
+        if arch == "x86_64":
+            return "macosx_13_0_x86_64", "x86_64-apple-darwin", "13.0"
+        raise RuntimeError(f"unsupported macOS architecture: {arch}")
+    if sys.platform.startswith("linux") and arch == "x86_64":
+        return LINUX_LOCAL_TAG, "x86_64-unknown-linux-gnu", ""
+    raise RuntimeError("in-place wheel builds support macOS and Linux x86_64; pass --wheel on this platform")
 
 
 def _dev_profile_supported(worktree: Path) -> bool:
@@ -352,11 +360,12 @@ def _build_wheel(
             "HOL_GUARD_BUILD_SHA": sha,
             "PLATFORM_TAG": tag,
             "TARGET": target,
-            "MACOSX_DEPLOYMENT_TARGET": deployment,
             "PATH": os.pathsep.join(
                 [str(worktree / ".venv" / "bin"), str(cargo) if cargo.is_dir() else "", env.get("PATH", "")]
             ).strip(os.pathsep),
         }
+        if deployment:
+            build_env["MACOSX_DEPLOYMENT_TARGET"] = deployment
         if profile == "dev":
             build_env.update(DEV_WHEEL_ENV)
             # Same PATH as the build, so a cargo that lives only under ~/.cargo/bin is found.
@@ -384,11 +393,16 @@ def ensure_wheel(
     """The tested commit's platform wheel: supplied, cache-hit, or built under one host lock."""
     if wheel is not None:
         return {"path": str(wheel), "sha256": digest_file(wheel), "cached": False, "profile": "supplied"}
-    tag, target, deployment = macos_platform()
+    tag, target, deployment = host_platform()
     profile = "release" if release_profile else "dev"
     if profile == "dev" and DEV_WHEEL_MARKER.encode() not in git_show(repo, sha, WHEEL_BUILD_SCRIPT):
         # Candidates older than the dev-profile switch still run the stable size check.
         profile = "release"
+    if profile == "release" and tag == LINUX_LOCAL_TAG:
+        raise RuntimeError(
+            "release-profile wheels run the published size check, which has no budget for the local "
+            "linux_x86_64 wheel; build the development profile or pass --wheel"
+        )
     private_dir(cache_root / "wheels", tighten=driver_owned(cache_root / "wheels"))
     store = cache_root / "wheels" / f"{sha}-{tag}{'-dev' if profile == 'dev' else ''}"
     store.mkdir(parents=True, exist_ok=True)

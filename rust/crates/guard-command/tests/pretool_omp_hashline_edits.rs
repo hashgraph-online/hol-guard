@@ -23,7 +23,7 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let home = std::fs::canonicalize(&root).unwrap();
+    let home = fixture::canonical_spelling(&root);
     let workspace = home.join("project");
     let sibling = home.join("project-fix");
     for directory in [&workspace, &sibling] {
@@ -32,6 +32,11 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         std::fs::write(directory.join("src/a.ts"), "export const a = 1;\n").unwrap();
     }
     std::fs::write(workspace.join("src/b.ts"), "export const b = 2;\n").unwrap();
+    std::fs::write(
+        workspace.join("package.json"),
+        "{\n  \"scripts\": {\n    \"test\": \"echo none\"\n  }\n}\n",
+    )
+    .unwrap();
     std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
     std::fs::write(workspace.join("AGENTS.md"), "rules\n").unwrap();
     std::fs::write(workspace.join(".git/config"), "[core]\n").unwrap();
@@ -72,6 +77,9 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "[src/a.ts#0AC4]\nCUT 1.=1 @line\n",
             "[src/b.ts#1B2C]\nPUT >$ @line\n",
         ]),
+        // Unified-diff `-old` rows under a `PUT` are body, not operations.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n-export const a = 1;\n+export const a = 3;\n"]),
+        patch(&["[package.json#0AC4]\nPUT 3.=3:\n-    \"test\": \"echo none\"\n+    \"test\": \"node --test\"\n"]),
     ] {
         let result = evaluate("omp", &input);
         assert_eq!(
@@ -152,7 +160,7 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         ));
     std::fs::create_dir_all(&root).unwrap();
     let _cleanup = fixture::FixtureCleanup(root.clone());
-    let workspace = std::fs::canonicalize(&root).unwrap().join("project");
+    let workspace = fixture::canonical_spelling(&root).join("project");
     std::fs::create_dir_all(workspace.join("src")).unwrap();
     std::fs::create_dir_all(workspace.join(".git")).unwrap();
     std::fs::write(workspace.join("src/a.ts"), "export const a = 1;\n").unwrap();
@@ -217,5 +225,41 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         json!({"input": patch(&["[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"]), "path": ".env", "paths": [".env"]}),
     ] {
         assert_ne!(evaluate(tool_input.clone()), allowed, "{tool_input}");
+    }
+}
+
+#[test]
+fn todo_updates_sent_to_edit_name_no_file() {
+    let home = std::env::temp_dir();
+    let evaluate = |input: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": input}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        )
+    };
+    let todo = evaluate(json!({
+        "input": "done", "phase": "Implement game", "task": "Build canvas gameplay"
+    }));
+    assert_eq!(todo.minimum_action, "allow");
+    assert_eq!(todo.reason_code, "native_omp_edit_without_target");
+    for input in [
+        json!({"input": "[game.js#250F]\nPUT 1.=1:\n+x\n", "phase": "Implement game"}),
+        json!({"input": "*** Begin Patch\n*** Update File: game.js\n+x\n*** End Patch", "task": "t"}),
+        json!({"input": "done", "phase": "p", "path": "game.js"}),
+        json!({"input": "done\n+x", "phase": "p"}),
+        json!({"input": "done", "phase": "p", "edits": []}),
+        json!({"input": "done"}),
+        json!({"input": "game.js", "task": "t"}),
+    ] {
+        assert_ne!(
+            evaluate(input.clone()).reason_code,
+            "native_omp_edit_without_target",
+            "{input}"
+        );
     }
 }

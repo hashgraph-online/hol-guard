@@ -64,6 +64,8 @@ _TRANSPORT_IDENTITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_runtime_process_cache.py",
         # Extracted binary identity validation; no command or policy semantics.
         "src/codex_plugin_scanner/guard/native_binary_identity.py",
+        # Windows read handle that locks writers out of the validated binary.
+        "src/codex_plugin_scanner/guard/native_binary_write_lock.py",
         "src/codex_plugin_scanner/guard/native_context.py",
         "src/codex_plugin_scanner/guard/native_content_sensitivity.py",
         # Bounded non-secret reason code for resident prerequisite failures.
@@ -129,7 +131,6 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         # Same correlation-only digest for the MCP tool-policy resident op.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
         "src/codex_plugin_scanner/guard/native_shim_admin.py",
@@ -167,6 +168,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_shell_helpers.py",
         # Bounded response decoding for native package-authority results.
         "src/codex_plugin_scanner/guard/native_package_authority.py",
+        # Bounded decoding of the resident artifact-risk reply (gzip-packed when
+        # large); signals and summary are computed in Rust and only validated.
+        "src/codex_plugin_scanner/guard/risk.py",
         # Bounded response decoding for the resident approval-identity/hash result.
         "src/codex_plugin_scanner/guard/native_package_approval_hash.py",
         "src/codex_plugin_scanner/guard/native_package_policy_resolve.py",
@@ -221,7 +225,6 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         # DTO is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_mcp_tool_policy.py",
         "src/codex_plugin_scanner/guard/native_git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/native_compound_git_inspection.py",
         "src/codex_plugin_scanner/guard/native_codex_tool_output.py",
         "src/codex_plugin_scanner/guard/native_policy_bundle.py",
         # Gathers ambient facts for and decodes the resident package-shim admin envelope; results stay Rust.
@@ -301,6 +304,7 @@ _PERSISTENCE_PATH_PREFIXES: Final = (
     "src/codex_plugin_scanner/guard/guard_home_state.py",
     "src/codex_plugin_scanner/guard/store_base.py",
     "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
+    "src/codex_plugin_scanner/guard/store_storage_gate.py",
 )
 _PRESENTATION_PATHS: Final = frozenset(
     {
@@ -380,14 +384,11 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
         "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
         "src/codex_plugin_scanner/guard/runtime/effect_decision.py",
-        "src/codex_plugin_scanner/guard/runtime/embedded_script_evidence.py",
         "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
         "src/codex_plugin_scanner/guard/runtime/extension_control_runtime.py",
         "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
         "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py",
         "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/runtime/git_index_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
         "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
@@ -404,8 +405,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/package_intent_common.py",
         "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
         "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
-        "src/codex_plugin_scanner/guard/runtime/routine_local_node.py",
-        "src/codex_plugin_scanner/guard/runtime/routine_node_identity.py",
         "src/codex_plugin_scanner/guard/runtime/runner.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py",
         "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
@@ -421,7 +420,6 @@ _PENDING_AUTHORITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/runtime/workspace_path_guard.py",
         "src/codex_plugin_scanner/guard/shims.py",
         "src/codex_plugin_scanner/guard/trusted_local_tools.py",
-        "src/codex_plugin_scanner/guard/trusted_package_tools.py",
     }
 )
 _PERSISTENCE_ONLY_PATHS: Final[frozenset[str]] = frozenset()

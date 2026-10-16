@@ -8,10 +8,12 @@
 
 use crate::cloud_scrub_shell::{shell_tokens, ShellToken};
 use crate::pretool::PathContext;
-use guard_contracts::PreToolResultV1;
 
+#[path = "env_prefix_reviewed.rs"]
+mod reviewed;
 #[path = "env_prefix_search_path.rs"]
 mod search_path;
+pub(super) use reviewed::join_reviewed;
 
 const MAX_PROJECTED_CHARS: usize = 32_768;
 
@@ -113,6 +115,8 @@ pub(super) struct ReviewedProjection {
     pub(super) command: String,
     /// The first setting that is not inert, a shape-checked variable name.
     pub(super) setting: String,
+    /// Whether every such setting is data the read-only profiles drop.
+    pub(super) data_only: bool,
 }
 
 /// The command with every inert environment prefix removed, or `None` when
@@ -128,17 +132,18 @@ pub(super) fn project_reviewed(
     command: &str,
     context: PathContext<'_>,
 ) -> Option<ReviewedProjection> {
-    let mut setting = None;
-    let command = project_with(command, Some(&mut setting), context)?;
+    let mut settings = reviewed::Reviewed::default();
+    let command = project_with(command, Some(&mut settings), context)?;
     Some(ReviewedProjection {
         command,
-        setting: setting?,
+        setting: settings.first?,
+        data_only: settings.data_only,
     })
 }
 
 fn project_with(
     command: &str,
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     context: PathContext<'_>,
 ) -> Option<String> {
     if command.len() > MAX_PROJECTED_CHARS || command.contains(['\n', '\r', '\0']) {
@@ -192,7 +197,7 @@ fn strip_prefixes(
     chars: &[char],
     mut index: usize,
     removed: &mut [bool],
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     context: PathContext<'_>,
 ) -> Option<usize> {
     let mut stripped = false;
@@ -258,7 +263,7 @@ fn strip_env_options(
     chars: &[char],
     mut index: usize,
     removed: &mut [bool],
-    mut setting: Option<&mut Option<String>>,
+    mut setting: Option<&mut reviewed::Reviewed>,
     required: &mut Vec<&'static [&'static str]>,
     context: PathContext<'_>,
 ) -> Option<usize> {
@@ -584,10 +589,20 @@ pub(super) fn substituted_setting(command: &str) -> Option<String> {
     let tokens = shell_tokens(&chars)?;
     let mut command_start = true;
     let mut in_prefix = false;
+    // Only a setting that a command follows reaches that command's
+    // environment. A bare `n=$((n+1))` sets a shell variable.
+    let mut pending: Option<String> = None;
+    let mut bare_env = false;
     for token in &tokens {
         if token.is_control {
+            // `env` with nothing after it still passes the setting on.
+            if bare_env && pending.is_some() {
+                return pending;
+            }
+            bare_env = false;
             command_start = COMMAND_SEPARATORS.contains(&token.value.as_str());
             in_prefix = false;
+            pending = None;
             continue;
         }
         if command_start {
@@ -595,19 +610,28 @@ pub(super) fn substituted_setting(command: &str) -> Option<String> {
             in_prefix = true;
         }
         if !in_prefix || token.value == "env" || token.value == "/usr/bin/env" {
+            bare_env = in_prefix;
             continue;
         }
         let Some((name, _)) = shell_assignment(chars.as_slice(), token) else {
+            bare_env = false;
+            if pending.is_some() {
+                return pending;
+            }
             in_prefix = false;
             continue;
         };
         let raw = chars.get(token.start..token.end)?;
-        if name.len() <= MAX_SETTING_CHARS
+        if pending.is_none()
+            && name.len() <= MAX_SETTING_CHARS
             && assignment_name_shape(name)
             && raw.iter().any(|character| matches!(character, '$' | '`'))
         {
-            return Some(name.to_owned());
+            pending = Some(name.to_owned());
         }
+    }
+    if bare_env {
+        return pending;
     }
     None
 }
@@ -625,52 +649,6 @@ fn next_word_start(chars: &[char], mut index: usize) -> usize {
         index += 1;
     }
     index
-}
-
-/// Joins the verdict of a [`ReviewedProjection`] with the unprojected
-/// command's own intrinsic verdict, never below review.
-pub(super) fn join_reviewed(
-    mut projected: PreToolResultV1,
-    raw: PreToolResultV1,
-    setting: &str,
-) -> PreToolResultV1 {
-    projected.action.sensitive_target |= raw.action.sensitive_target;
-    projected.action.bounded &= raw.action.bounded;
-    if raw.reason_code != "native_command_review_required"
-        && raw.reason_code != "native_command_extension_evaluation_failed"
-        && rank(&raw.minimum_action) > rank(&projected.minimum_action)
-    {
-        projected.minimum_action = raw.minimum_action;
-        projected.policy_action = raw.policy_action;
-        projected.decision = raw.decision;
-        projected.reason_code = raw.reason_code;
-        projected.reason = raw.reason;
-    }
-    // Protected execution would run the command without its settings.
-    if rank(&projected.minimum_action) < rank("review")
-        || projected.minimum_action == "sandbox-required"
-    {
-        projected.minimum_action = "review".into();
-        projected.policy_action = "review".into();
-        projected.decision = "deny".into();
-        projected.reason_code = "native_command_review_required".into();
-        projected.reason = format!(
-            "HOL Guard requires review because the {setting} setting can change how this command runs."
-        );
-    }
-    projected.explicitly_benign = false;
-    projected
-}
-
-fn rank(action: &str) -> u8 {
-    match action {
-        "allow" => 0,
-        "warn" => 1,
-        "review" => 2,
-        "require-reapproval" => 3,
-        "sandbox-required" => 4,
-        _ => 5,
-    }
 }
 
 #[cfg(test)]

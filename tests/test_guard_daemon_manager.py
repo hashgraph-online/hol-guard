@@ -3340,6 +3340,7 @@ def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, 
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Windows argv parsing has no unterminated-quote failure")
 @pytest.mark.parametrize(
     "command_line",
     (
@@ -3347,9 +3348,7 @@ def test_daemon_inventory_fails_closed_for_matching_home_without_port(tmp_path, 
         '"C:\\Program Files\\HOL Guard\\hol-guard.exe --_hol-guard-daemon-serve {broken',
     ),
 )
-def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(
-    command_line: str, tmp_path, monkeypatch
-) -> None:
+def test_malformed_frozen_guard_command_with_quoted_executable_fails_closed(command_line: str, tmp_path, monkeypatch):
     monkeypatch.setattr(daemon_manager_module, "_trusted_posix_ps_path", lambda: "/bin/ps")
     monkeypatch.setattr(daemon_manager_module, "_bounded_process_query_stdout", lambda _args: f"123 {command_line}\n")
     assert daemon_manager_module._guard_daemon_process_inventory_for_guard_home(tmp_path) is None

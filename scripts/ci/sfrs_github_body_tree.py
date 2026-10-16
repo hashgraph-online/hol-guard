@@ -26,9 +26,7 @@ sys.path.insert(0, str(REPO_ROOT / "tests"))
 
 from native_github_offline import install_offline_github_classifier  # noqa: E402
 
-from codex_plugin_scanner.guard.runtime import github_actions_read_workflow as aw
 from codex_plugin_scanner.guard.runtime import github_pr_body_file as bf
-from codex_plugin_scanner.guard.runtime.secret_file_request_services import github_pr_ephemeral_body as eph
 from codex_plugin_scanner.guard.runtime.secret_file_request_services import shell_quote_tokens as sqt
 from codex_plugin_scanner.guard.runtime.shell_structure import extract_heredocs, mask_complete_heredocs
 
@@ -176,16 +174,6 @@ def _text(root: Path, value: object) -> object:
 
 def _fake_secret(content: str, *, suppress_samples: bool = True) -> list[str]:
     return ["secret"] if SECRET_MARKER in content else []
-
-
-def _trust_factory(root: Path):
-    bin_root = str(root / "bin")
-
-    def trusted(path: object, *, cwd: object = None) -> bool:
-        text = str(path)
-        return text == bin_root or text.startswith(bin_root + "/")
-
-    return trusted
 
 
 def _env_base(root: Path) -> dict[str, str]:

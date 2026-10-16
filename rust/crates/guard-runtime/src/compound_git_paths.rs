@@ -25,7 +25,9 @@ pub(crate) fn resolve(path: &Path) -> Option<PathBuf> {
     while let Some(name) = pending.pop_front() {
         let component = Path::new(&name).components().next();
         match component {
-            Some(Component::RootDir | Component::Prefix(_)) => resolved = PathBuf::from(&name),
+            // `push` keeps a Windows drive when the root follows it and
+            // replaces the whole path for a new drive or a POSIX root.
+            Some(Component::RootDir | Component::Prefix(_)) => resolved.push(&name),
             Some(Component::ParentDir) => {
                 resolved.pop();
             }
@@ -49,7 +51,8 @@ pub(crate) fn resolve(path: &Path) -> Option<PathBuf> {
             Some(Component::CurDir) | None => {}
         }
     }
-    Some(resolved)
+    // A drive-relative symlink target (`C:dir`) has no root to resolve against.
+    resolved.is_absolute().then_some(resolved)
 }
 
 fn is_double_slash_root(text: &str) -> bool {
@@ -101,5 +104,23 @@ mod tests {
         assert!(resolve(Path::new("relative")).is_none());
         assert!(resolve(Path::new("//double")).is_none());
         let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn a_drive_path_keeps_its_drive() {
+        let temp = std::env::temp_dir();
+        let resolved = resolve(&temp.join("cg-missing").join("..").join("tail")).unwrap();
+        assert_eq!(resolved, temp.join("tail"));
+        assert!(matches!(
+            resolved.components().next(),
+            Some(Component::Prefix(_))
+        ));
+        let verbatim = fs::canonicalize(&temp).unwrap();
+        assert_eq!(resolve(&verbatim.join("x")).unwrap(), verbatim.join("x"));
     }
 }

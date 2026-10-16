@@ -1,8 +1,11 @@
 use super::super::PreToolDecisionV1;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result, review_reason};
-use super::tools::{infer_action_type, package_command, tool_matches};
+use super::tools::{infer_action_type, is_package_tool, package_command, tool_matches};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
+
+#[path = "generic_build_review.rs"]
+mod build_review;
 
 pub(super) fn evaluate_signals(
     harness: &str,
@@ -379,6 +382,16 @@ pub(super) fn evaluate_signals(
     {
         // Same review; the reason names the form Guard can check instead.
         reason = EVAL_REVIEW_REASON;
+    }
+    if action_type == PreToolActionTypeV1::Package
+        && command_decision
+            .and_then(|decision| decision.as_ref().ok())
+            .is_some_and(|decision| {
+                build_review::build_or_test_command(&decision.command_model, is_package_tool)
+            })
+    {
+        // Same package review; install advice does not fit a build or test.
+        reason = build_review::BUILD_REVIEW_REASON;
     }
     generic_result(action, "review", reason_code, reason)
 }

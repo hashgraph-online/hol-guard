@@ -1,0 +1,262 @@
+{
+  "description": "The inline approval prompt the MCP proxy raises on an elicitation-capable client (_inline_approval_request), the reply kinds it classifies (_approval_payload then _inline_approval_kind) and the blocks a denied or invalid reply produces (_inline_approval_deny_result). The relay raises the same prompt and classifies the same replies, and its resident routes the result.",
+  "prompt": {
+    "server": "workspace-files",
+    "tool": "delete_secret_file",
+    "summary": "MCP tool call deletes files.",
+    "counter": 1,
+    "request": {
+      "jsonrpc": "2.0",
+      "id": "guard-elicitation-1",
+      "method": "elicitation/create",
+      "params": {
+        "mode": "form",
+        "message": "HOL Guard intercepted workspace-files.delete_secret_file. MCP tool call deletes files. Approve this exact call?",
+        "requestedSchema": {
+          "type": "object",
+          "properties": {
+            "decision": {
+              "type": "string",
+              "enum": [
+                "approve",
+                "deny"
+              ],
+              "enumNames": [
+                "Approve",
+                "Deny"
+              ],
+              "description": "Approve or reject this exact tool call."
+            }
+          },
+          "required": [
+            "decision"
+          ]
+        }
+      }
+    }
+  },
+  "blocks": [
+    {
+      "reply": "denied",
+      "decision_source": "inline-denied",
+      "event_decision": "deny-inline",
+      "reason": "HOL Guard blocked tool call delete_secret_file from workspace-files.",
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "deny"
+        }
+      }
+    },
+    {
+      "reply": "invalid",
+      "decision_source": "inline-invalid",
+      "event_decision": "deny-inline-invalid",
+      "reason": "HOL Guard blocked tool call delete_secret_file from workspace-files because inline approval returned an invalid response.",
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "maybe"
+        }
+      }
+    }
+  ],
+  "vectors": [
+    {
+      "name": "approve",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {
+            "decision": "approve"
+          }
+        }
+      },
+      "reply": "allow",
+      "kind": "allow"
+    },
+    {
+      "name": "approve_with_other_fields",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {
+            "decision": "approve",
+            "note": "fine"
+          }
+        }
+      },
+      "reply": "allow",
+      "kind": "allow"
+    },
+    {
+      "name": "deny",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {
+            "decision": "deny"
+          }
+        }
+      },
+      "reply": "denied",
+      "kind": "denied"
+    },
+    {
+      "name": "unknown_decision",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {
+            "decision": "maybe"
+          }
+        }
+      },
+      "reply": "invalid",
+      "kind": "denied"
+    },
+    {
+      "name": "decision_is_not_text",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {
+            "decision": true
+          }
+        }
+      },
+      "reply": "invalid",
+      "kind": "denied"
+    },
+    {
+      "name": "no_decision",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": {}
+        }
+      },
+      "reply": "invalid",
+      "kind": "denied"
+    },
+    {
+      "name": "content_is_not_an_object",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept",
+          "content": "approve"
+        }
+      },
+      "reply": "invalid",
+      "kind": "denied"
+    },
+    {
+      "name": "no_content",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "accept"
+        }
+      },
+      "reply": "invalid",
+      "kind": "denied"
+    },
+    {
+      "name": "cancel",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "cancel"
+        }
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "decline_carrying_a_denial",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "decline",
+          "content": {
+            "decision": "deny"
+          }
+        }
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "timeout",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": {
+          "action": "cancel",
+          "reason": "timeout"
+        }
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "result_is_not_an_object",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": "accept"
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "result_is_null",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "result": null
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "error",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1",
+        "error": {
+          "code": -32601,
+          "message": "elicitation/create not supported"
+        }
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    },
+    {
+      "name": "neither_result_nor_error",
+      "response": {
+        "jsonrpc": "2.0",
+        "id": "guard-elicitation-1"
+      },
+      "reply": "fallthrough",
+      "kind": "fallthrough"
+    }
+  ]
+}

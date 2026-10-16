@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Protocol, cast
 
 from ...no_redirect import RejectRedirects
+from ...version import __version__
 from ..mdm.network_transport import managed_opener
 from ..native_resident_client import native_resident_client_request
 from ..native_runtime import NativeRuntimeStatus, _isolated_environment, native_runtime_status
@@ -35,12 +36,19 @@ from ..strict_json_pairs import unique_json_object
 DISCOVERY_ROLLOUT_ENV = "HOL_GUARD_DISCOVERY"
 DISCOVERY_UNAVAILABLE = "discovery_capability_unavailable"
 DISCOVERY_TRANSPORT_FAILED = "discovery_transport_failed"
+DISCOVERY_OPTED_OUT = "discovery_opted_out"
 
 # Fixed upstream: production callers can select neither host nor path.
 DISCOVERY_CLOUD_ORIGIN = "https://hol.org"
 DISCOVERY_PLACEMENTS_PATH = "/api/guard/extensions/discovery/v1/placements"
 DISCOVERY_RENDERS_PATH = "/api/guard/extensions/discovery/v1/renders"
 DISCOVERY_EVENTS_PATH = "/api/guard/extensions/discovery/v1/events"
+
+# Edges in front of the discovery origin reject the interpreter's default
+# agent string, so an install that does not name itself never reaches the
+# service at all. The value carries the product and its version and no
+# device, account, or installation identifier.
+DISCOVERY_USER_AGENT = f"hol-guard/{__version__}"
 
 MAX_DISCOVERY_RESPONSE_BYTES = 65_536
 MAX_DISCOVERY_REQUEST_BYTES = 16_384
@@ -191,6 +199,7 @@ def fetch_discovery_snapshot(
                 # decompressed bound; no transparent compression surprises.
                 "Accept-Encoding": "identity",
                 "Cache-Control": "no-store",
+                "User-Agent": DISCOVERY_USER_AGENT,
                 **({"If-None-Match": _cached_snapshot.etag} if _cached_snapshot and _cached_snapshot.etag else {}),
             },
         )
@@ -345,6 +354,7 @@ def relay_discovery_measurement(
             "Accept-Encoding": "identity",
             "Content-Type": "application/json",
             "Cache-Control": "no-store",
+            "User-Agent": DISCOVERY_USER_AGENT,
         },
     )
     handler = opener if opener is not None else _build_opener()
@@ -378,6 +388,7 @@ __all__ = [
     "DISCOVERY_CLOUD_ORIGIN",
     "DISCOVERY_EVENTS_PATH",
     "DISCOVERY_IO_DEADLINE_SECONDS",
+    "DISCOVERY_OPTED_OUT",
     "DISCOVERY_PLACEMENTS_PATH",
     "DISCOVERY_RENDERS_PATH",
     "DISCOVERY_REQUEST_SCHEMA",

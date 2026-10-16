@@ -80,7 +80,7 @@ pub(super) fn strengthen(result: &mut PreToolResultV1, action: &str, reason: &st
         result.reason_code = reason.to_owned();
         result.reason = match reason {
             "native_command_extension_evaluation_failed" => {
-                "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs` or `node -e`) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`."
+                "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`."
             }
             "native_command_extension_uncertain" => {
                 "HOL Guard requires review because it could not match this command to its extension permissions."

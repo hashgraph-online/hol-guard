@@ -10,8 +10,11 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-POLICY_SCHEMA_URL = "https://guard.hashgraphonline.com/schema/policy/v1alpha1"
+# The schema's ``$id`` stays https://guard.hashgraphonline.com/schema/policy/v1alpha1; this is where it is served.
+POLICY_SCHEMA_URL = "https://hol.org/schema/policy/v1alpha1"
 POLICY_MODELINE = f"# yaml-language-server: $schema={POLICY_SCHEMA_URL}"
+# Modelines written by earlier releases; ``policy fmt --check`` still accepts them.
+LEGACY_POLICY_MODELINES = ("# yaml-language-server: $schema=https://guard.hashgraphonline.com/schema/policy/v1alpha1",)
 DEFAULT_STARTER = "safe-defaults"
 
 _COMPROMISED_PACKAGES = ("pkg:npm/event-stream", "pkg:npm/flatmap-stream", "pkg:npm/ua-parser-js")
@@ -237,6 +240,7 @@ def render_starter_yaml(starter: PolicyStarter, *, now: datetime | None = None) 
 
 __all__ = [
     "DEFAULT_STARTER",
+    "LEGACY_POLICY_MODELINES",
     "POLICY_MODELINE",
     "POLICY_SCHEMA_URL",
     "POLICY_STARTERS",

@@ -105,6 +105,31 @@ impl SearchFilter {
         Some(filter)
     }
 
+    /// The inclusions of shell `rg -g` options. A shell passes each glob
+    /// whole, so only a path-shaped glob, which depends on ripgrep's match
+    /// base, or one that could select `.git` is left unmodeled. ripgrep
+    /// enters a directory an inclusion matches even when it is hidden, and
+    /// the walk always skips `.git`.
+    pub(super) fn from_rg_inclusions(globs: &[&str]) -> Option<Self> {
+        let mut include = Vec::new();
+        for glob in globs {
+            if glob.starts_with('!') || glob.contains(['/', '\\']) {
+                return None;
+            }
+            for pattern in expand_braces(glob).ok()? {
+                if pattern.contains('/') || glob_matches(&pattern, ".git").ok()? {
+                    return None;
+                }
+                include.push(pattern);
+            }
+        }
+        (!include.is_empty()).then_some(Self {
+            include,
+            exclude: Vec::new(),
+            types: &[],
+        })
+    }
+
     /// Apply glob overrides to one entry name. Directory exclusions are not
     /// modeled, so a directory is never skipped here.
     pub(super) fn override_for(&self, name: &str, is_directory: bool) -> Override {

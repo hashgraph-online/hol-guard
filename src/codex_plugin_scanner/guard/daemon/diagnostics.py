@@ -72,6 +72,7 @@ class DaemonDiagnostics:
         *,
         queue_capacity: int = _DEFAULT_QUEUE_CAPACITY,
         start_worker: bool = True,
+        rotate: bool = True,
     ) -> None:
         self.log_directory = guard_home / _DAEMON_LOG_DIRECTORY
         self.log_path = self.log_directory / _DAEMON_LOG_FILENAME
@@ -79,21 +80,31 @@ class DaemonDiagnostics:
         self._closed = True
         self._close_lock = threading.Lock()
         self._stop_requested = threading.Event()
-        self._handler: TimedRotatingFileHandler | None = None
+        self._handler: logging.Handler | None = None
         self._thread: threading.Thread | None = None
         try:
             _secure_directory(self.log_directory)
-            cleanup_expired_daemon_logs(self.log_directory)
+            # The long-running daemon owns retention. A one-shot hook must not
+            # scan and unlink rotated logs on the fail-closed path.
+            if rotate:
+                cleanup_expired_daemon_logs(self.log_directory)
             if self.log_path.is_symlink():
                 raise OSError("daemon diagnostic log cannot be a symbolic link")
-            self._handler = TimedRotatingFileHandler(
-                self.log_path,
-                when="midnight",
-                interval=1,
-                backupCount=7,
-                encoding="utf-8",
-                utc=True,
-            )
+            # The long-running daemon owns midnight rotation. A one-shot CLI
+            # hook that opens the same file with its own rotating handler can
+            # rename the live log out from under the daemon, and on Windows
+            # that rename fails into the hook's stderr.
+            if rotate:
+                self._handler = TimedRotatingFileHandler(
+                    self.log_path,
+                    when="midnight",
+                    interval=1,
+                    backupCount=7,
+                    encoding="utf-8",
+                    utc=True,
+                )
+            else:
+                self._handler = logging.FileHandler(self.log_path, mode="a", encoding="utf-8")
             self._handler.setFormatter(_DaemonLogFormatter())
             with suppress(OSError):
                 os.chmod(self.log_path, 0o600)
@@ -136,8 +147,17 @@ class DaemonDiagnostics:
                 return self._thread is None or not self._thread.is_alive()
             self._closed = True
             if self._thread is None:
-                self._handler.close()
-                return True
+                # A stalled write must not hold the fail-closed hook response.
+                # The drain is daemon-threaded so the timeout bounds that write,
+                # and a fast disk still finishes before close returns.
+                drained = threading.Thread(
+                    target=self._finish_pending,
+                    daemon=True,
+                    name="guard-daemon-diagnostics-drain",
+                )
+                drained.start()
+                drained.join(timeout=max(0.0, timeout_seconds))
+                return not drained.is_alive()
             self._stop_requested.set()
         self._thread.join(timeout=max(0.0, timeout_seconds))
         return not self._thread.is_alive()
@@ -154,6 +174,34 @@ class DaemonDiagnostics:
         record.guard_event = event
         record.guard_detail = detail
         return record
+
+    def _finish_pending(self) -> None:
+        self._drain_pending()
+        if self._handler is not None:
+            self._handler.close()
+
+    def _drain_pending(self) -> None:
+        """Write queued records when no worker thread owns the handler.
+
+        Callers that run without a worker (one-shot CLI hooks) would otherwise
+        close the handler with their records still in the queue, which is how a
+        fail-closed deny can reach a harness with nothing written to the log.
+        """
+
+        handler = self._handler
+        if handler is None:
+            return
+        while True:
+            try:
+                record = self._queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                handler.emit(record)
+            except Exception:
+                continue
+            finally:
+                self._queue.task_done()
 
     def _enqueue(self, record: logging.LogRecord) -> bool:
         if self._closed:

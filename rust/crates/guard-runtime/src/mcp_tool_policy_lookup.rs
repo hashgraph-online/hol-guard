@@ -3,8 +3,9 @@
 //! This is the resident side of `resolve_policy_decision_lookup_with_memory_pattern`
 //! for a non-consuming call: one probe per candidate artifact id through the
 //! `policy_decision_lookup` engine on a single store connection, the portable
-//! Git-workspace composition, and the most-restrictive choice. The caller ships
-//! the keyring-facing integrity evidence once; nothing here consumes a
+//! Git-workspace composition, and the most-restrictive choice. The candidate ids
+//! come from the tool-call subject; the caller ships the keyring-facing
+//! integrity evidence once; nothing here consumes a
 //! one-shot approval or writes the store.
 
 use guard_contracts::{
@@ -16,6 +17,7 @@ use serde_json::{json, Map, Value};
 use crate::context_digest::python_strip;
 use crate::local_store_read::require_store_path;
 use crate::mcp_tool_policy_flow::Stop;
+use crate::memory_pattern::{self, MemoryRequest};
 use crate::policy_decision_lookup_op::{evaluate_non_consuming, open_lookup_connection};
 
 pub(crate) const ERR_LOOKUP: &str = "native_mcp_tool_policy_decide_lookup_failed";
@@ -163,7 +165,31 @@ pub(crate) fn policy_lookup(
     subject: &McpToolPolicySubjectV1,
     exact_match_context: Option<String>,
 ) -> Result<Value, Stop> {
-    let ids = &input.candidate_artifact_ids;
+    let ids = candidate_ids(subject);
+    policy_lookup_candidates(input, subject, &ids, exact_match_context)
+}
+
+/// The direct artifact id, then its exact-command and memory-pattern ids.
+fn candidate_ids(subject: &McpToolPolicySubjectV1) -> Vec<String> {
+    let remembered = memory_pattern::verdict(&MemoryRequest {
+        command: subject.artifact.command.as_deref(),
+        artifact_type: Some(&subject.artifact_type),
+        artifact_id: Some(&subject.artifact_id),
+        artifact_name: Some(&subject.artifact.name),
+        harness: Some(&subject.harness),
+    });
+    let mut ids = vec![subject.artifact_id.clone()];
+    ids.extend(remembered.exact_artifact_ids);
+    ids.extend(remembered.memory_artifact_id);
+    ids
+}
+
+fn policy_lookup_candidates(
+    input: &McpPolicyLookupInputV1,
+    subject: &McpToolPolicySubjectV1,
+    ids: &[String],
+    exact_match_context: Option<String>,
+) -> Result<Value, Stop> {
     if ids.is_empty()
         || ids.len() > MAX_CANDIDATES
         || ids.first().map(String::as_str) != Some(subject.artifact_id.as_str())

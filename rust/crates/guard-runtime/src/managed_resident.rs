@@ -169,7 +169,7 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     let identity = crate::resident_client::ExpectedProcessIdentity {
         process_id: state.process_id,
         start_marker: &state.process_start_marker,
-        digest: Some(&state.runtime_sha256),
+        runtime: crate::resident_client::ExpectedRuntime::Digest(&state.runtime_sha256),
     };
     if crate::resident_client::send_request_for_digest(
         &state.transport,
@@ -419,6 +419,13 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
 /// seconds except the skill-directory scan, whose bounded tree walk may
 /// legitimately read hundreds of megabytes and is granted a longer ceiling.
 const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
+/// Cold daemon-lifecycle startup. Python grants `_TIMEOUT_SECONDS` (10s) plus
+/// `_COLD_START_ALLOWANCE_SECONDS` (20s) in `native_daemon_lifecycle.py`.
+/// A packaged Windows resident can spend most of that creating the process
+/// and scanning the binary before it answers; clamping the request to nine
+/// seconds reports `native_resident_start_timeout` while the resident is
+/// still starting.
+const DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS: u64 = 30_000;
 const SKILL_SCAN_TIMEOUT_CEILING_MS: u64 = 60_000;
 /// Contained local runners honour the caller's process timeout (up to ten
 /// minutes) plus a minute of transport slack for the probe and snapshot, so their budget must not be clamped to the
@@ -448,6 +455,7 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
             | "shim_admin",
         ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
         Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
+        Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS,
         _ => CLIENT_TIMEOUT_CEILING_MS,
     };
     let budget = value

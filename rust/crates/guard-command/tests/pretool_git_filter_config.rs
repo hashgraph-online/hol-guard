@@ -4,7 +4,14 @@ use serde_json::json;
 
 #[test]
 fn unused_global_filters_do_not_block_unrelated_repository_inspection() {
-    let root = std::env::temp_dir().join(format!("guard unused filters {}", std::process::id()));
+    // Resolve an 8.3 short TEMP spelling (`RUNNER~1`), which Guard refuses as
+    // a path proof; agents report the long canonical working directory.
+    let temp = if cfg!(windows) {
+        canonical_spelling(std::env::temp_dir())
+    } else {
+        std::env::temp_dir()
+    };
+    let root = temp.join(format!("guard unused filters {}", std::process::id()));
     let _cleanup = FixtureCleanup(root.clone());
     let home = root.join("home");
     let repository = root.join("repository");

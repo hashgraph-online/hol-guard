@@ -28,12 +28,16 @@ pub(crate) const REASON: &str = "native_workspace_containment_required";
 #[cfg(unix)]
 pub(crate) const PROFILE: &str = "workspace-contained-v1";
 
+#[path = "workspace_contained_cd.rs"]
+mod cd;
 #[path = "workspace_contained_chmod.rs"]
 mod chmod;
 #[path = "workspace_contained_git.rs"]
 mod git_metadata;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
+#[path = "workspace_contained_kill.rs"]
+mod kill;
 #[path = "workspace_contained_links.rs"]
 mod links;
 #[path = "workspace_contained_package.rs"]
@@ -44,6 +48,8 @@ mod reach;
 mod removal;
 #[path = "workspace_contained_runner.rs"]
 pub(super) mod runner;
+#[path = "workspace_contained_script.rs"]
+mod script;
 #[path = "workspace_contained_settings.rs"]
 mod settings;
 #[path = "workspace_contained_sibling.rs"]
@@ -115,6 +121,10 @@ pub(crate) struct Shape {
     pub remainder: Option<String>,
     /// Character span of the `git init` segment in the classified text.
     pub init_span: Option<(usize, usize)>,
+    /// Canonical scripts outside the workspace the sandbox may read, each
+    /// only as that one file.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub read_files: Vec<std::path::PathBuf>,
 }
 
 /// Shell-state builtins: before `git init` they run in a separate shell.
@@ -123,18 +133,6 @@ pub(super) const SHELL_STATE: &[&str] = &[
     "declare", "typeset", "local", "readonly", "eval", "exec", "umask", "trap", "ulimit", "hash",
     "shift", "read", "getopts", "builtin", "enable", "exit", "return", "function",
 ];
-
-/// A literal directory at or below the workspace, with no parent step.
-fn below(target: &str, workspace: &Path) -> bool {
-    let path = Path::new(target);
-    !target.is_empty()
-        && !target.starts_with(['~', '-'])
-        && !target.contains('$')
-        && path
-            .components()
-            .all(|component| !matches!(component, std::path::Component::ParentDir))
-        && (path.is_relative() || path.starts_with(workspace))
-}
 
 fn branch_name(name: &str) -> bool {
     !name.is_empty()
@@ -183,16 +181,24 @@ pub(crate) fn command_shape(
         || model.path_overridden
         || !model.wrapper_chain.is_empty()
         || model.segments.is_empty()
+        || !cd::stand_ins_only_entered(model)
     {
         return None;
     }
     let mut bootstrap = None;
+    let mut read_files = Vec::new();
     if links::unbounded_linked_writes(model, workspace) {
         return None;
     }
     let linked = super::worktree_writes::linked_worktree_common_dir(workspace).is_some();
     let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
+    // `~` is the private home the launcher seeds only while nothing rebinds it.
+    let home_fixed = !model.normalized_text.contains("HOME");
     for (index, segment) in model.segments.iter().enumerate() {
+        // A bare private assignment starts no program.
+        if segment.executable.is_none() && cd::assigns_private(model, segment) {
+            continue;
+        }
         let executable = segment.executable.as_deref()?;
         if executable.contains('$')
             || !segment.wrapper_chain.is_empty()
@@ -207,17 +213,37 @@ pub(crate) fn command_shape(
             return None;
         }
         let name = super::executable_basename(executable);
+        // A scratch script outside the workspace is read as that one file.
+        let script = script::outside_script(segment, workspace);
         // The sandbox has no network, so a network client would only fail,
         // and it reaches no directory outside the workspace.
         if NETWORK_CLIENTS.contains(&name)
-            || reach::reaches_outside(segment, name, workspace, temp_fixed)
+            || reach::reaches_outside(
+                segment,
+                name,
+                workspace,
+                temp_fixed,
+                home_fixed,
+                script.as_ref().map(|(operand, _)| operand.as_str()),
+            )
             || (matches!(name, "cd" | "pushd")
-                && !matches!(segment.arguments.as_slice(), [target] if below(target, workspace)))
+                && !matches!(segment.arguments.as_slice(),
+                    [target] if cd::bounded(target, workspace, temp_fixed)))
         {
             return None;
         }
+        if let Some((_, path)) = script {
+            // One script only: a second grant would let the first read it.
+            if read_files.first().is_some_and(|first| *first != path) {
+                return None;
+            }
+            if !read_files.contains(&path) {
+                read_files.push(path);
+            }
+        }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
+            && !(name == "kill" && kill::jobs_only(&segment.arguments))
         {
             return None;
         }
@@ -249,13 +275,14 @@ pub(crate) fn command_shape(
             prefix: None,
             remainder: None,
             init_span: None,
+            read_files,
         });
     };
     if model.segments[..init].iter().any(|segment| {
         segment
             .executable
             .as_deref()
-            .is_some_and(|value| SHELL_STATE.contains(&super::executable_basename(value)))
+            .is_none_or(|value| SHELL_STATE.contains(&super::executable_basename(value)))
     }) {
         return None;
     }
@@ -271,6 +298,7 @@ pub(crate) fn command_shape(
         prefix,
         remainder: Some(remainder),
         init_span: Some((span.start, span.end)),
+        read_files,
     })
 }
 
@@ -412,6 +440,7 @@ pub(super) fn convert(
     let (Some(model), Some(controls), Some(cwd)) = (model, controls, context.cwd) else {
         return;
     };
+    let (launch_context, sent_text) = (context, command_text);
     let projected = super::contained_wrapper::package_dir::as_cd_list(model, context);
     let (issued, model) = (model, projected.as_ref().map_or(model, |list| &list.model));
     let command_text = projected
@@ -481,6 +510,10 @@ pub(super) fn convert(
         || removal::destroys_workspace(result, issued, &workspace)
         || removal::loses_work(result, issued, context, execution_environment)
     {
+        return;
+    }
+    // Last, so a check above that keeps the review keeps its own reason.
+    if super::script_content::keeps_network_review(result, issued, sent_text, launch_context) {
         return;
     }
     mark_contained(result);

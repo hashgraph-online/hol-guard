@@ -1,27 +1,35 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 
-import {
-  catalogRowSecondLine,
-  extensionDisplayName,
-  extensionStateLabel,
-} from "../extension-control-center-model";
+import { extensionEffectiveState } from "../extension-control-center-model";
 import type { CatalogReadModel } from "../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary } from "../extension-controls-api";
 import { fetchExtensionDiscoveryApi } from "../guard-api";
-import { connectorWorkspaceItems, refreshCodexHostInventory, refreshMcpInventory, type LocalCliItem } from "../local-cli-api";
+import {
+  connectorWorkspaceItems,
+  customExtensionNeedsReview,
+  refreshCodexHostInventory,
+  refreshMcpInventory,
+  type LocalCliItem,
+} from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
-import { ExtensionsDiscover } from "./extensions-discover";
+import { useDiscoveryFeed, useJoinedDiscovery } from "./extensions-discovery-feed";
+import { MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderFeaturedFirst } from "./extensions-discover-model";
+import { CatalogSlotRow, ExtensionsSpotlight } from "./extensions-spotlight";
+import {
+  CATALOG_SLOT_PRODUCTS,
+  slotInventoryLabel,
+  slotStartingPrice,
+  slotState,
+} from "./extensions-spotlight-model";
+import { useExtensionPopularity } from "./use-extension-popularity";
 import { LocalSkillsWorkspace } from "./local-skills-workspace";
 import { CodexHostConnectors } from "./codex-host-connectors";
 import { AddCustomExtensionButton } from "./local-clis-panel";
 import { CustomExtensionsSection } from "./custom-extensions-section";
+import { ExtensionListSwitch, type ExtensionListView } from "./extensions-list-switch";
 import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { PatternSearchConsole } from "./components/pattern-search-console";
-import {
-  InlineError,
-  ProtectionModuleRow,
-  ProtectionStatusHero,
-} from "./components/protection-primitives";
+import { InlineError, ProtectionStatusHero } from "./components/protection-primitives";
 import { PROTECTION_TERMS } from "./copy/protection-copy";
 import {
   catalogFilterCountCopy,
@@ -34,80 +42,14 @@ import {
   type CatalogFilterState,
 } from "./model/catalog-filters";
 import type { ProtectionStatusView } from "./model/protection-presentation";
-import { extensionProtectionSource } from "../managed-controls/extension-managed-controls-panel";
-
-function sourceIsManaged(effective: EffectiveExtensionControls, extensionId: string): boolean {
-  return effective.layers.some((layer) =>
-    layer.kind === "signed-cloud"
-    && layer.controls.some((control) =>
-      control.target_kind === "extension" && control.target_id === extensionId
-    ));
-}
-
-function CatalogExtensionRow(props: {
-  extension: ExtensionCatalogSummary;
-  effective: EffectiveExtensionControls;
-  onOpen: (extension: ExtensionCatalogSummary) => void;
-}) {
-  const handleOpen = useCallback(() => {
-    props.onOpen(props.extension);
-  }, [props]);
-  const source = extensionProtectionSource(props.effective, props.extension);
-  const cloudSource = source === "Synced from Guard Cloud" || source.startsWith("Managed by ");
-  return (
-    <ProtectionModuleRow
-      extensionId={props.extension.extension_id}
-      name={extensionDisplayName(props.extension.name)}
-      description={props.extension.description}
-      behavior={catalogRowSecondLine(props.extension, extensionStateLabel(props.effective, props.extension))}
-      required={props.extension.required}
-      mcp={props.extension.surface === "mcp"}
-      external={props.extension.trust_class === "external"}
-      managed={cloudSource || sourceIsManaged(props.effective, props.extension.extension_id)}
-      managedLabel={cloudSource ? source : undefined}
-      executables={props.extension.executables}
-      ecosystemIds={props.extension.ecosystem_ids}
-      onOpen={handleOpen}
-    />
-  );
-}
-
-function ConnectorDiscoveryControl(props: {
-  discovering: boolean;
-  showProgress: boolean;
-  error: string | null;
-  onRetry: () => void;
-}) {
-  const message = props.discovering
-    ? (props.showProgress ? "Checking host connections…" : "")
-    : (props.error ?? "");
-  return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      <p aria-live="polite" aria-atomic="true" className="text-sm text-brand-dark/70">{message}</p>
-      {props.discovering ? null : (
-        <button
-          type="button"
-          className="inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-brand-blue hover:text-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue"
-          onClick={props.onRetry}
-        >
-          {props.error ? "Check for connectors again" : "Check host connections"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function CatalogFilterEmpty(props: { onClear: () => void }) {
-  return (
-    <div className="mt-6 rounded-2xl border border-[rgba(63,65,116,0.12)] bg-white px-4 py-6">
-      <p className="text-sm font-semibold text-brand-dark">No extensions match these filters.</p>
-      <p className="mt-1 text-sm leading-6 text-brand-dark/70">Remove a filter or start over to see the full catalog again.</p>
-      <button type="button" className="guard-extensions-chip mt-3" onClick={props.onClear}>
-        Clear filters
-      </button>
-    </div>
-  );
-}
+import {
+  CatalogExtensionRow,
+  CatalogFilterEmpty,
+  CatalogPostureSummary,
+  ConnectorDiscoveryControl,
+  ConnectorDiscoveryNotice,
+  PaidCatalogRow,
+} from "./extensions-catalog-rows";
 
 export function ExtensionsOverview(props: {
   catalogExtensions: readonly ExtensionCatalogSummary[];
@@ -130,7 +72,18 @@ export function ExtensionsOverview(props: {
   onOpenLocalCli: (cliId: string) => void;
   onAddCustom: (command?: string) => void;
 }) {
-  const [workspaceView, setWorkspaceView] = useState<"manage" | "discover">("manage");
+  // One surface, one feed. Featured extensions lead the spotlight and the
+  // catalog list. A device that turned sponsored discovery off gets nothing
+  // back, and the page still works in full.
+  const fetchPlacements = useCallback(
+    () => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements"),
+    [],
+  );
+  const discoveryFeed = useDiscoveryFeed(props.active, fetchPlacements);
+  const joinedDiscovery = useJoinedDiscovery(discoveryFeed, props.catalogExtensions);
+  const discoverySnapshotId = discoveryFeed.projection?.snapshot.snapshotId || null;
+  const discoveryOffers = discoveryFeed.projection?.snapshot.offers ?? [];
+  const popularity = useExtensionPopularity(props.active);
   const [query, setQuery] = useState("");
   const discoveryStarted = useRef(false);
   const reloadConnections = useRef(props.onReloadConnections);
@@ -176,7 +129,10 @@ export function ExtensionsOverview(props: {
   }, [props.active, discoveryAttempt]);
   const [filters, setFilters] = useState<CatalogFilterState>(EMPTY_CATALOG_FILTERS);
   const [filterPanelOpen, setFilterPanelOpen] = useState(false);
+  const [listView, setListView] = useState<ExtensionListView>("builtin");
   const filterPanelId = useId();
+  const builtinPanelId = useId();
+  const customPanelId = useId();
   const filterTriggerRef = useRef<HTMLButtonElement>(null);
   const filterToolbarRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -233,28 +189,107 @@ export function ExtensionsOverview(props: {
     () => filterCatalogExtensions(props.catalogExtensions, filters),
     [filters, props.catalogExtensions],
   );
+  // The shelf holds three cells; paid placements beyond them must still get
+  // their labeled row, or a maker can buy a placement that renders nowhere.
+  const paidById = useMemo(
+    () => new Map(
+      // Featured last so it wins a collision: one extension can hold both a
+      // featured and a sponsored placement, and the row must disclose and
+      // measure the stronger one it is actually ranked for.
+      [...joinedDiscovery.sponsored, ...joinedDiscovery.featured]
+        .map((entry) => [entry.placement.extensionId, entry] as const),
+    ),
+    [joinedDiscovery.featured, joinedDiscovery.sponsored],
+  );
+  // Featured rows lead in server order (all-day before time windows).
+  const orderedCatalog = useMemo(() => {
+    const visibleIds = new Set(visibleCatalog.map((extension) => extension.extension_id));
+    const featuredVisible = joinedDiscovery.featured
+      .map((entry) => entry.catalog)
+      .filter((extension) => visibleIds.has(extension.extension_id));
+    // Exclude the featured ids by identity rather than by count: slicing
+    // assumes the first N reordered entries are the featured ones, which is
+    // false as soon as a sponsored id sorts ahead of a featured one - that
+    // drops the sponsored row and renders a featured one twice.
+    const featuredIds = new Set(joinedDiscovery.featured.map((entry) => entry.placement.extensionId));
+    const sponsoredIds = new Set(
+      joinedDiscovery.sponsored
+        .map((entry) => entry.placement.extensionId)
+        .filter((extensionId) => !featuredIds.has(extensionId)),
+    );
+    const rest = orderFeaturedFirst(
+      visibleCatalog.filter((extension) => !featuredIds.has(extension.extension_id)),
+      sponsoredIds,
+    );
+    return [...featuredVisible, ...rest];
+  }, [joinedDiscovery.featured, joinedDiscovery.sponsored, visibleCatalog]);
+  // Both surfaces ask, because they are different placements with their own
+  // availability, and a reader scrolling the list should never have to scroll
+  // back up to find the one that sits inside it. Neither waits for the server
+  // to confirm a vacancy before asking; an authoritative sold-out is the one
+  // answer that withdraws the row.
+  const catalogSlot = slotState({
+    status: discoveryFeed.status,
+    offers: discoveryOffers,
+    products: CATALOG_SLOT_PRODUCTS,
+  });
+  const catalogSlotOpen = !searching
+    && !filtering
+    && visibleCatalog.length >= MIN_ORGANIC_ROWS_BEFORE_IN_FEED
+    && (catalogSlot === "open" || catalogSlot === "unconfirmed");
+  const catalogSlotPrice = useMemo(
+    () => slotStartingPrice(discoveryOffers, CATALOG_SLOT_PRODUCTS),
+    [discoveryOffers],
+  );
+  const catalogSlotInventory = useMemo(
+    () => slotInventoryLabel(discoveryOffers, CATALOG_SLOT_PRODUCTS),
+    [discoveryOffers],
+  );
+  const catalogSlotIndex = Math.min(6, Math.max(1, orderedCatalog.length - 1));
+  // The shelf states whether each extension is protecting this device right
+  // now; it reads the same effective controls the rows below it read, and it
+  // only ever reports that state - nothing on the shelf changes protection.
+  const effective = props.effective;
+  const isExtensionActive = useCallback(
+    (extension: ExtensionCatalogSummary) => extensionEffectiveState(effective, extension) === "enabled",
+    [effective],
+  );
+
   const handleClearFilters = useCallback(() => {
     setFilters(EMPTY_CATALOG_FILTERS);
   }, []);
   const onAddCustom = props.onAddCustom;
-  const handleAddCustom = useCallback(() => { onAddCustom(); }, [onAddCustom]);
+  // The added tool lands in the custom list, so that is the list the reader
+  // comes back to from the add flow, whichever list they started it from.
+  const handleAddCustom = useCallback(() => {
+    setListView("custom");
+    onAddCustom();
+  }, [onAddCustom]);
+  const handleSetUpCustom = useCallback((command: string) => {
+    setListView("custom");
+    onAddCustom(command);
+  }, [onAddCustom]);
   const allCustomItems = connectorWorkspaceItems(props.localCliItems, "", props.seededItems);
   const addedCustomItems = allCustomItems.filter((item) =>
     customItemMatchesFilters(item, filters),
   );
   const customItemsFilteredOut = filtering && allCustomItems.length > 0 && addedCustomItems.length === 0;
+  // Filters narrow what the list shows, never what is waiting on a decision.
+  const customNeedsReviewCount = allCustomItems.filter(customExtensionNeedsReview).length;
+  // There is one Add action on screen at a time. With nothing added yet, the
+  // custom list's own empty state carries it while that list is open; a search
+  // carries it above the results; otherwise the switch does.
+  const customEmptyOwnsAdd = listView === "custom" && allCustomItems.length === 0;
+  const switchOffersAdd = !searching && !customEmptyOwnsAdd;
+  const searchOffersAdd = searching && !customEmptyOwnsAdd;
+  const discoveryMessage = [discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null;
+  const retryDiscovery = useCallback(() => setDiscoveryAttempt((attempt) => attempt + 1), []);
   return (
     <div hidden={!props.active} inert={!props.active || undefined}>
       <WorkspacePageHeader
         eyebrow="On this device"
         title={PROTECTION_TERMS.pageTitle}
         description="Choose an Extension to review its permissions and effective protection."
-        tabs={[
-          { value: "manage", label: "Manage" },
-          { value: "discover", label: "Discover" },
-        ]}
-        activeTab={workspaceView}
-        onTabChange={setWorkspaceView}
         actions={
           <a
             className="guard-extensions-chip"
@@ -268,19 +303,7 @@ export function ExtensionsOverview(props: {
           </a>
         }
       />
-      {/* Manage stays the default view; Discover is the explicitly online
-          secondary surface and makes no request while unmounted. */}
-      {workspaceView === "discover" ? (
-        <div className="mt-4" data-testid="extensions-discover-panel">
-          <ExtensionsDiscover
-            active={props.active && workspaceView === "discover"}
-            catalogExtensions={visibleCatalog}
-            onOpenExtension={props.onOpenExtension}
-            fetchPlacements={() => fetchExtensionDiscoveryApi("/v1/discovery/extensions/placements")}
-          />
-        </div>
-      ) : (
-        <div data-testid="extensions-manage-panel">
+      <div data-testid="extensions-surface">
       <div className="mt-6">
         <ProtectionStatusHero
           status={props.status}
@@ -306,6 +329,21 @@ export function ExtensionsOverview(props: {
         </p>
       ) : null}
 
+      {searching ? null : (
+        <ExtensionsSpotlight
+          catalogExtensions={props.catalogExtensions}
+          featured={joinedDiscovery.featured}
+          sponsored={joinedDiscovery.sponsored}
+          activity={popularity.counts}
+          offers={discoveryOffers}
+          status={discoveryFeed.status}
+          snapshotId={discoverySnapshotId}
+          settled={popularity.settled}
+          isExtensionActive={isExtensionActive}
+          onOpenExtension={props.onOpenExtension}
+        />
+      )}
+
       <div
         ref={filterToolbarRef}
         data-testid="catalog-filters"
@@ -319,7 +357,7 @@ export function ExtensionsOverview(props: {
           onQueryChange={setQuery}
           onRefresh={props.onRefresh}
           onOpenExtension={props.onOpenExtension}
-          actionSlot={searching ? <AddCustomExtensionButton onClick={handleAddCustom} /> : null}
+          actionSlot={searchOffersAdd ? <AddCustomExtensionButton onClick={handleAddCustom} /> : null}
           toolbarSlot={
             <CatalogFilterTrigger
               open={filterPanelOpen}
@@ -343,32 +381,50 @@ export function ExtensionsOverview(props: {
         />
       </div>
 
+      <ExtensionListSwitch
+        view={listView}
+        onViewChange={setListView}
+        builtinCount={visibleCatalog.length}
+        customCount={addedCustomItems.length}
+        customNeedsReviewCount={customNeedsReviewCount}
+        builtinPanelId={searching ? undefined : builtinPanelId}
+        customPanelId={customPanelId}
+        onAddCustom={switchOffersAdd ? handleAddCustom : undefined}
+      />
+      {props.active && listView === "builtin" ? (
+        <ConnectorDiscoveryNotice error={discoveryMessage} onRetry={retryDiscovery} />
+      ) : null}
+
+      <div id={customPanelId} hidden={listView !== "custom"}>
+        <CustomExtensionsSection
+          embedded
+          addInEmptyState={customEmptyOwnsAdd}
+          items={addedCustomItems}
+          onOpen={props.onOpenLocalCli}
+          seededItems={addedCustomItems.filter((item) => item.seeded === true)}
+          onSetUp={handleSetUpCustom}
+          onAdd={handleAddCustom}
+          discovering={discovering}
+          filteredOut={customItemsFilteredOut}
+          onClearFilters={handleClearFilters}
+          discoveryControl={props.active && listView === "custom" ? (
+            <ConnectorDiscoveryControl
+              discovering={discovering}
+              showProgress={addedCustomItems.length > 0 || customItemsFilteredOut}
+              error={discoveryMessage}
+              onRetry={retryDiscovery}
+            />
+          ) : null}
+        />
+      </div>
+
       {searching ? null : (
         <>
-          <CustomExtensionsSection
-            items={addedCustomItems}
-            onOpen={props.onOpenLocalCli}
-            seededItems={addedCustomItems.filter((item) => item.seeded === true)}
-            onSetUp={props.onAddCustom}
-            onAdd={handleAddCustom}
-            discovering={discovering}
-            filteredOut={customItemsFilteredOut}
-            onClearFilters={handleClearFilters}
-            discoveryControl={props.active ? (
-              <ConnectorDiscoveryControl
-                discovering={discovering}
-                showProgress={addedCustomItems.length > 0 || customItemsFilteredOut}
-                error={[discoveryError, hostDiscoveryError].filter(Boolean).join(" ") || null}
-                onRetry={() => setDiscoveryAttempt((attempt) => attempt + 1)}
-              />
-            ) : null}
-          />
-
-          <section className="mt-10" aria-labelledby="all-tools-heading">
+          <section id={builtinPanelId} hidden={listView !== "builtin"} className="mt-4" aria-labelledby="all-tools-heading">
             <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 id="all-tools-heading" className="text-xl font-semibold tracking-tight text-brand-dark">All tools</h2>
-                <p className="mt-1 text-sm text-slate-500">
+                <h2 id="all-tools-heading" className="sr-only">All tools</h2>
+                <p className="text-sm text-slate-500">
                   {filtering
                     ? "Built-in tools that match the selected trust, kind, and area filters."
                     : "Every built-in tool Guard can watch on this device. Open one to adjust its command patterns."}
@@ -380,16 +436,39 @@ export function ExtensionsOverview(props: {
                 </span>
               </div>
             </div>
+            {!filtering ? <CatalogPostureSummary extensions={props.catalogExtensions} effective={props.effective} /> : null}
             {visibleCatalog.length ? (
               <div className="mt-4">
-                {visibleCatalog.map((extension) => (
-                  <CatalogExtensionRow
-                    key={extension.extension_id}
-                    extension={extension}
-                    effective={props.effective}
-                    onOpen={props.onOpenExtension}
-                  />
-                ))}
+                {orderedCatalog.map((extension, index) => {
+                  const paid = paidById.get(extension.extension_id);
+                  const row = paid ? (
+                    <PaidCatalogRow
+                      key={extension.extension_id}
+                      entry={paid}
+                      snapshotId={discoverySnapshotId}
+                      effective={props.effective}
+                      onOpen={props.onOpenExtension}
+                    />
+                  ) : (
+                    <CatalogExtensionRow
+                      key={extension.extension_id}
+                      extension={extension}
+                      effective={props.effective}
+                      onOpen={props.onOpenExtension}
+                    />
+                  );
+                  if (!catalogSlotOpen || index !== catalogSlotIndex) return row;
+                  return (
+                    <Fragment key={extension.extension_id}>
+                      <CatalogSlotRow
+                        state={catalogSlot === "open" ? "open" : "unconfirmed"}
+                        price={catalogSlotPrice}
+                        inventory={catalogSlotInventory}
+                      />
+                      {row}
+                    </Fragment>
+                  );
+                })}
               </div>
             ) : (
               <CatalogFilterEmpty onClear={handleClearFilters} />
@@ -401,9 +480,7 @@ export function ExtensionsOverview(props: {
           <LocalSkillsWorkspace />
         </>
       )}
-        </div>
-      )}
-
+      </div>
     </div>
   );
 }

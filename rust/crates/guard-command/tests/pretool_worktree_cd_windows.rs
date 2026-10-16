@@ -88,6 +88,7 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
                 npm_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
             Some(&environment),
         )

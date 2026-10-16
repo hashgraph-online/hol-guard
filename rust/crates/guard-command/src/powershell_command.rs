@@ -138,3 +138,13 @@ pub(crate) fn names_powershell_effect(segments: &[CommandSegmentV1]) -> bool {
             .is_some_and(crate::powershell_effects::is_powershell_specific)
     })
 }
+
+/// True when a POSIX-exact segment list names a read-only PowerShell cmdlet.
+pub(crate) fn names_powershell_benign(segments: &[CommandSegmentV1]) -> bool {
+    segments.iter().any(|segment| {
+        segment
+            .executable
+            .as_deref()
+            .is_some_and(crate::powershell_effects::is_powershell_benign)
+    })
+}

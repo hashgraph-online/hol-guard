@@ -69,7 +69,7 @@ def run_harness_suite(
         **binding,
         "harness": harness,
         "harness_version": version,
-        "harness_model": model or "harness default",
+        "harness_model": spec.model(model) or "harness default",
         "installed_source_sha": capabilities.build_sha,
         "native_binary_sha256": identity.sha256,
         "guard_version": capabilities.runtime_version,
@@ -125,7 +125,7 @@ def run_harness_suite(
                 {
                     "scenario_id": scenario.id,
                     "harness": harness,
-                    "harness_model": model,
+                    "harness_model": spec.model(model),
                     "root": str(root),
                     "public": str(output / "cases"),
                     "executable": resolved,

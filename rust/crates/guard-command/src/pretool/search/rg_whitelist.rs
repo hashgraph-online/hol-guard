@@ -234,7 +234,35 @@ fn walk(
         if depth > MAX_DEPTH {
             return None;
         }
-        let nested = depth > 0 && std::fs::symlink_metadata(directory.join(".git")).is_ok();
+        // List first: most directories hold none of `.git` or the ignore
+        // files, and each failed open is a filesystem round trip. A listed
+        // name is matched without case, as a case-insensitive volume opens it.
+        // Only directories that may be walked keep their path.
+        let mut has_git = false;
+        let mut has_ignore = [false; IGNORE_FILES.len()];
+        let mut children = Vec::new();
+        for entry in std::fs::read_dir(&directory).ok()? {
+            entries += 1;
+            if entries > MAX_ENTRIES {
+                return None;
+            }
+            let entry = entry.ok()?;
+            let file_name = entry.file_name();
+            let name = file_name.to_str()?;
+            has_git |= name.eq_ignore_ascii_case(".git");
+            for (listed, wanted) in has_ignore.iter_mut().zip(IGNORE_FILES) {
+                *listed |= name.eq_ignore_ascii_case(wanted);
+            }
+            if name.starts_with('.') && name != ".git" {
+                hidden.push(name.to_owned());
+            }
+            let is_dir = entry.file_type().ok()?.is_dir();
+            if is_dir && name != ".git" && (!name.starts_with('.') || benign_hidden(name)) {
+                children.push((name.to_owned(), entry.path()));
+            }
+        }
+        let nested =
+            depth > 0 && has_git && std::fs::symlink_metadata(directory.join(".git")).is_ok();
         if nested {
             // A nested repository's own `.gitignore` replaces the outer ones.
             rules.retain(|rule| !rule.git);
@@ -249,10 +277,10 @@ fn walk(
             }
         }
         let in_repository = in_repository || nested;
-        for name in IGNORE_FILES {
+        for (name, listed) in IGNORE_FILES.into_iter().zip(has_ignore) {
             let git = name == ".gitignore";
             // `rg` honors a `.gitignore` only inside a repository.
-            if !git || in_repository {
+            if (!git || in_repository) && listed {
                 rules.extend(ignore_rules(
                     &directory.join(name),
                     &directory,
@@ -261,26 +289,9 @@ fn walk(
                 )?);
             }
         }
-        for entry in std::fs::read_dir(&directory).ok()? {
-            entries += 1;
-            if entries > MAX_ENTRIES {
-                return None;
-            }
-            let entry = entry.ok()?;
-            let name = entry.file_name();
-            let name = name.to_str()?;
-            if name.starts_with('.') && name != ".git" {
-                hidden.push(name.to_owned());
-            }
-            if !entry.file_type().ok()?.is_dir()
-                || name == ".git"
-                || (name.starts_with('.') && !benign_hidden(name))
-            {
-                continue;
-            }
-            let path = entry.path();
-            if rules.iter().any(|rule| rule.prunes(&path, name)) {
-                pruned.push(name.to_owned());
+        for (name, path) in children {
+            if rules.iter().any(|rule| rule.prunes(&path, &name)) {
+                pruned.push(name);
                 continue;
             }
             pending.push((path, depth + 1, rules.clone(), in_repository));

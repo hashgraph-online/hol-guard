@@ -11,12 +11,14 @@ from pathlib import Path
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def workflow(name: str) -> dict:
     """Load declarative workflow metadata without executing repository runtime code."""
-    return yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8"))
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text(encoding="utf-8")))
 
 
 @pytest.mark.skipif(os.name == "nt", reason="The required aggregate executes on Ubuntu with Bash")
@@ -106,9 +108,13 @@ def test_shipped_runtime_cache_is_exact_and_only_main_can_write() -> None:
         "runner.os", "runner.arch", "steps.shipping-platform.outputs.image",
         "'rust/**'", "'contributions/**'", "'contracts/**'", "'spec/**'",
         "'src/codex_plugin_scanner/guard/contracts/**'",
-        "'.github/actions/setup-rust/action.yml'", "'.github/workflows/ci.yml'",
+        "'.github/actions/setup-rust/action.yml'", "'.github/actions/ci-job-native-release-size/action.yml'",
+        "'scripts/ci/native_cache_environment.py'", "'scripts/refresh_extension_artifacts.py'", "'.cargo/**'",
+        "steps.shipping-platform.outputs.compiler-env",
     ):
         assert token in restore["with"]["key"]
+    assert "'.github/workflows/ci.yml'" not in restore["with"]["key"]
+    assert "python3 -m scripts.ci.native_cache_environment" in platform["run"]
     miss = "steps.shipped-runtime-cache.outputs.cache-hit != 'true'"
     for name in ("Install content-addressed compiler cache", "Build the shipped fat-LTO runtime"):
         assert next(step for step in steps if step.get("name") == name)["if"] == miss
@@ -171,19 +177,26 @@ def test_fast_rust_workspace_profile(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(os.name == "nt", reason="Linux workspace validation uses Bash")
+@pytest.mark.parametrize("archive_hit", [False, True])
 @pytest.mark.parametrize(
-    ("check", "packages"),
+    ("check", "packages", "partition"),
     [
-        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"]),
-        ("test-command", ["--package", "guard-command"]),
-        ("test-runtime", ["--package", "hol-guard-runtime"]),
+        ("test-core", ["--workspace", "--exclude", "guard-command", "--exclude", "hol-guard-runtime"], []),
+        ("test-command", ["--package", "guard-command"], []),
+        ("test-runtime-1", ["--package", "hol-guard-runtime"], ["--partition", "hash:1/2"]),
+        ("test-runtime-2", ["--package", "hol-guard-runtime"], ["--partition", "hash:2/2"]),
     ],
 )
-def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, packages: list[str]) -> None:
+def test_rust_shards_preserve_full_target_selection(
+    tmp_path: Path, check: str, packages: list[str], partition: list[str], archive_hit: bool
+) -> None:
     """Execute each shard's shell branch and inspect the exact Cargo arguments."""
     job = workflow("ci.yml")["jobs"]["native-workspace"]
-    assert job["strategy"]["matrix"]["check"] == ["clippy", "test-core", "test-command", "test-runtime"]
+    assert job["strategy"]["matrix"]["check"] == [
+        "clippy", "test-core", "test-command", "test-runtime-1", "test-runtime-2",
+    ]
     assert job["strategy"]["fail-fast"] is False
+    assert "continue-on-error" not in job
     validate = next(step["run"] for step in job["steps"] if step.get("name") == "Validate the locked Rust workspace")
     assert "cargo clippy --manifest-path rust/Cargo.toml --locked --workspace --all-targets" in validate
     assert "-- -D warnings" in validate
@@ -209,14 +222,22 @@ def test_rust_shards_preserve_full_target_selection(tmp_path: Path, check: str, 
             **os.environ, "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}",
             "CARGO_CHECK": check, "FAKE_BIN": str(bindir), "CAPTURE": str(capture),
             "CARGO_PROFILE_TEST_OPT_LEVEL": "1",
+            "RUNTIME_ARCHIVE_HIT": str(archive_hit).lower(),
+            "RUNNER_TEMP": str(tmp_path), "GITHUB_WORKSPACE": str(ROOT),
         },
         check=True, capture_output=True, timeout=5,
     )
     invocation = json.loads(capture.read_text())
     assert invocation["opt"] == "1"
+    if archive_hit and check.startswith("test-runtime-"):
+        build_args = [
+            "--archive-file", str(tmp_path / "runtime-test-archive.tar.zst"),
+            "--workspace-remap", str(ROOT / "rust"),
+        ]
+    else:
+        build_args = ["--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets", *packages]
     assert invocation["args"] == [
-        "nextest", "run", "--manifest-path", "rust/Cargo.toml", "--locked", "--all-targets",
-        *packages, "--profile", "ci",
+        "nextest", "run", *build_args, "--profile", "ci", *partition,
         "--test-threads", "4", "--retries", "0", "--no-fail-fast",
     ]
 

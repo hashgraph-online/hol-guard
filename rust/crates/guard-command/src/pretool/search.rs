@@ -5,7 +5,7 @@ mod agent_root;
 mod fd;
 mod git_metadata;
 mod glob_class;
-mod grep;
+pub(super) mod grep;
 mod hint;
 mod options;
 mod rg;

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { initialize, mount } from "./extension-control-fixtures";
+import { initialize, mount, showCustomExtensions } from "./extension-control-fixtures";
 
 for (const width of [1280, 390]) {
   test(`catalog refresh preserves drafts and scopes bulk choices at ${width}px`, async ({ page }, testInfo) => {
@@ -121,6 +121,7 @@ for (const width of [1280, 390]) {
         cloud: { sync_local_only: true, summary: "Synthetic fixture; this device only." } } });
     });
     await initialize(page);
+    await showCustomExtensions(page);
     await page.getByRole("button", { name: /Fixture connector/ }).click();
     const detail = page.getByTestId("local-cli-detail");
     expect(skillRequests).toHaveLength(0);

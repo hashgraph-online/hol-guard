@@ -6,6 +6,7 @@ import type {
 import { isRiskSignalEvidence } from "../guard-types";
 import { harnessDisplayName, resolveActionEnvelopeDetailText } from "../approval-center-utils";
 import { detectCategory, type ReceiptCategory } from "./categories";
+import { approvalLeftActionStopped } from "./approval-outcome";
 import {
   guardActionActivityCopy,
   guardActionPresentation,
@@ -236,6 +237,13 @@ export function plainEnglishDescription(receipt: GuardReceipt): string {
   const type = resolveActionType(receipt);
   const title = resolveActionTitle(receipt);
   const subtitle = resolveActionSubtitle(receipt);
+
+  if (approvalLeftActionStopped(receipt)) {
+    const outcome = `You approved it once, but a one-time approval could not let ${app} run it, so it stayed stopped.`;
+    return subtitle
+      ? `${app} tried to ${infinitiveVerb(type)} ${title}. ${formatSubtitle(subtitle)}${outcome}`
+      : `${app} tried to ${infinitiveVerb(type)} ${title}. ${outcome}`;
+  }
 
   const action = guardActionPresentation(receipt.policy_decision);
   if (action.disposition === "allowed") {

@@ -29,7 +29,6 @@ pub(super) fn run() -> Result<(), String> {
         [command, flag] if command == "self-test" && flag == "--json" => {
             write_json(&serde_json::json!({"ok": true, "capabilities": capabilities()}))
         }
-        #[cfg(unix)]
         [command, mode, marker, config]
             if command == "claude-hook-bridge"
                 && mode == claude_session_start::SESSION_START_MODE
@@ -56,6 +55,9 @@ pub(super) fn run() -> Result<(), String> {
             if command == cursor_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
         {
             std::process::exit(cursor_hook_bridge::run(python_argv))
+        }
+        [command, config] if command == pi_hook_bridge::BRIDGE_COMMAND => {
+            std::process::exit(pi_hook_bridge::run(config))
         }
         [command, python_argv @ ..]
             if command == mcp_relay::RELAY_COMMAND && python_argv.len() >= 2 =>

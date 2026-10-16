@@ -99,6 +99,7 @@ fn exact_safe_search_command(model: &CanonicalCommandV1) -> bool {
 }
 
 pub(super) fn sensitive_command_input(value: &str) -> bool {
+    let value = &super::data_heredocs::without_data_bodies(value);
     if !sensitive_command(value) {
         return false;
     }

@@ -19,7 +19,7 @@ impl TestRoot {
             .as_nanos();
         let root = base.join(format!("run-{}-{nonce}", std::process::id()));
         std::fs::create_dir(&root).unwrap();
-        Self(root.canonicalize().unwrap())
+        Self(crate::git_helper_fixture::canonical_spelling(root))
     }
 }
 

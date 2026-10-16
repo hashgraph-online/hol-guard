@@ -3,7 +3,8 @@
 The native relay runs a session's MCP server only when the resident has a
 report of that server's catalog and the catalog offers no tool whose calls
 the proxy decides itself: a shell-named tool, a tool declaring a command
-argument, or a Composio tool. Any other session runs under this proxy, which
+argument (including one declared behind a schema reference or combinator), or
+a Composio tool. Any other session runs under this proxy, which
 reports the whole catalog once it has it, so the server's later sessions can
 run under the relay.
 

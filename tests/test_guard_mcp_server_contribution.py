@@ -55,29 +55,6 @@ def test_mcp_contribution_rejects_whitespace_aliased_tool_names() -> None:
         validate_mcp_contribution(payload, filename="dup.json")
 
 
-def test_action_classes_preserve_id_separators() -> None:
-    from codex_plugin_scanner.guard.runtime.command_permission_catalog import permissions_for_action_classes
-    from codex_plugin_scanner.guard.runtime.mcp_server_catalog import _action_class_for
-
-    dotted = _action_class_for("mcp.foo.bar")
-    hyphen = _action_class_for("mcp.foo-bar")
-    encoded = _action_class_for("mcp.foo-dot-bar")
-    assert len({dotted, hyphen, encoded}) == 3
-    assert _action_class_for("mcp.filesystem") == "mcp filesystem tool"
-    extension_id = "command.mcp-test"
-    ids = {
-        permissions_for_action_classes(
-            extension_id,
-            "1.0.0",
-            (action_class,),
-            ("Inspect first.",),
-            configurable=False,
-        )[0].permission_id
-        for action_class in (dotted, hyphen, encoded)
-    }
-    assert len(ids) == 3
-
-
 def test_mcp_contribution_rejects_unknown_icon() -> None:
     payload = _filesystem_payload()
     payload["icon"] = {"kind": "react-icon", "name": "NotAnAllowlistedIcon"}

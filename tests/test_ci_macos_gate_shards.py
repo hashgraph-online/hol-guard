@@ -14,7 +14,7 @@ def test_macos_gates_require_every_disjoint_shard(node_count):
     workflow = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
     job = workflow["jobs"]["macos-gates"]
     indices = job["strategy"]["matrix"]["shard-index"]
-    assert indices == list(range(24))
+    assert indices == list(range(12))
     assert job["strategy"]["fail-fast"] is False
     assert job["timeout-minutes"] == 5
     assert "macos-gates" in workflow["jobs"]["required"]["needs"]
@@ -52,6 +52,17 @@ def test_macos_gates_require_every_disjoint_shard(node_count):
         )
         shard = result.stdout.splitlines()
         assert shard
+        previous = []
+        for old_index in (index, index + len(indices)):
+            control = subprocess.run(
+                ["awk", "-v", f"n={len(indices) * 2}", "-v", f"i={old_index}", expression],
+                input="\n".join(nodes) + "\n",
+                text=True,
+                check=True,
+                capture_output=True,
+            )
+            previous.extend(control.stdout.splitlines())
+        assert sorted(shard) == sorted(previous)
         selected.extend(shard)
     assert len(selected) == len(set(selected)) == len(nodes)
     assert sorted(selected) == nodes

@@ -3,13 +3,47 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+import stat
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, cast
 
 from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
 
 if TYPE_CHECKING:
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+
+
+def _spelled_without_links(candidate: Path) -> bool:
+    """True when ``candidate`` reaches its directory through no link.
+
+    The overlay checks walk ``candidate`` and its parents as spelled, so a
+    symlink, junction or substituted drive would hide the real ancestors.
+    Windows also spells one directory several ways with no link between:
+    8.3 short names, such as the ``RUNNER~1`` temp root of hosted CI
+    runners, and letter case. ``realpath`` re-spells those, so there a path
+    also counts when it resolves on the same drive to as many components and
+    none of the components it names is a reparse point.
+    """
+
+    try:
+        final = os.path.realpath(candidate)
+    except (OSError, ValueError):
+        return False
+    if final == os.fspath(candidate):
+        return True
+    if os.name != "nt":
+        return False
+    resolved = PureWindowsPath(final)
+    if resolved.drive.upper() != candidate.drive.upper() or len(resolved.parts) != len(candidate.parts):
+        return False
+    for component in (candidate, *candidate.parents):
+        try:
+            attributes = os.lstat(component).st_file_attributes
+        except (AttributeError, OSError, ValueError):
+            return False
+        if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            return False
+    return True
 
 
 class NativePolicySnapshotWorkspaceReadinessMixin:
@@ -116,10 +150,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
 
     @staticmethod
     def _file_less_canonical_workspace(candidate: Path) -> bool:
-        try:
-            if os.path.realpath(candidate) != os.fspath(candidate):
-                return False
-        except (OSError, ValueError):
+        if not _spelled_without_links(candidate):
             return False
         return NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(candidate)
 

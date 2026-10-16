@@ -54,6 +54,12 @@ fn append(guard_home: &Path, harness: &str, reason: Fallback) -> std::io::Result
         use std::os::unix::fs::OpenOptionsExt;
         options.mode(0o600).custom_flags(libc::O_NOFOLLOW);
     }
+    // FILE_FLAG_OPEN_REPARSE_POINT: open a planted link itself, never its target.
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        options.custom_flags(0x0020_0000);
+    }
     let mut file = options.open(path)?;
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)

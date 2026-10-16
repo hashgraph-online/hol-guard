@@ -139,7 +139,7 @@ pub(super) fn build(
 pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQuery<'a>> {
     // An empty workspace scopes the request to the harness and Guard home,
     // which the daemon fills in.
-    if !cfg!(unix) || input.workspace.is_empty() {
+    if input.workspace.is_empty() {
         return None;
     }
     let text = |name: &str| {
@@ -149,12 +149,8 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
             .map(String::as_str)
             .filter(|value| !value.is_empty())
     };
-    // `os.path.expanduser("~")`; without `HOME` it reads the password
-    // database, which the published environment cannot answer.
-    let home = input.environment.get("HOME")?;
-    let trimmed = home.trim_end_matches('/');
-    let tilde_home = if trimmed.is_empty() { "/" } else { trimmed };
-    let resolved = (!tilde_home.starts_with('~')).then(|| tilde_home.to_owned());
+    let tilde_home = expanded_home(input.environment)?;
+    let resolved = (!tilde_home.starts_with('~')).then_some(tilde_home);
     Some(EnvelopeQuery {
         workspace: input.workspace,
         home_dir: input.home_dir,
@@ -166,6 +162,46 @@ pub(super) fn envelope_query<'a>(input: &RequestInput<'a>) -> Option<EnvelopeQue
             cwd: input.host_cwd.map(str::to_owned),
         },
     })
+}
+
+/// `os.path.expanduser("~")` in the daemon's published environment. Without
+/// `HOME` it reads the password database, which that environment cannot
+/// answer.
+#[cfg(unix)]
+fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+    let trimmed = environment.get("HOME")?.trim_end_matches('/');
+    Some(if trimmed.is_empty() { "/" } else { trimmed }.to_owned())
+}
+
+/// `ntpath.expanduser("~")`: `USERPROFILE` as it stands, else
+/// `ntpath.join(HOMEDRIVE, HOMEPATH)`. `os.environ` spells Windows names in
+/// upper case, as published.
+#[cfg(windows)]
+fn expanded_home(environment: &BTreeMap<String, String>) -> Option<String> {
+    if let Some(profile) = environment.get("USERPROFILE") {
+        return Some(profile.clone());
+    }
+    let drive = environment.get("HOMEDRIVE").map_or("", String::as_str);
+    join_home_drive(drive, environment.get("HOMEPATH")?)
+}
+
+/// `ntpath.join(drive, path)` where it is plain concatenation: an empty or
+/// letter drive, and a path that names no drive and does not start a UNC
+/// share. Other shapes go through `splitroot`, so the daemon joins them.
+#[cfg(any(windows, test))]
+fn join_home_drive(drive: &str, path: &str) -> Option<String> {
+    let letter_drive = matches!(drive.as_bytes(), [letter, b':'] if letter.is_ascii_alphabetic());
+    let separators = path
+        .bytes()
+        .take_while(|byte| matches!(byte, b'\\' | b'/'))
+        .count();
+    ((drive.is_empty() || letter_drive) && !path.contains(':') && separators < 2)
+        .then(|| format!("{drive}{path}"))
+}
+
+#[cfg(not(any(unix, windows)))]
+fn expanded_home(_environment: &BTreeMap<String, String>) -> Option<String> {
+    None
 }
 
 /// `native_action_envelope`, run in process.

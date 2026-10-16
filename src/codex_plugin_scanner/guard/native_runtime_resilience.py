@@ -1,8 +1,9 @@
 """Bounded, privacy-safe resilience state for the native Guard runtime.
 
 This module owns only process-local availability controls. It does not persist
-commands, prompts, paths, payloads, tokens, proofs, or exception text. Python
-remains the authoritative policy and fallback control plane.
+commands, prompts, paths, payloads, tokens, proofs, or exception text. The
+native resident is the policy authority; an open circuit makes callers fail
+closed rather than evaluate in Python.
 """
 
 from __future__ import annotations

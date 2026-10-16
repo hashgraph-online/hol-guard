@@ -63,6 +63,18 @@ runs:
       HOL_GUARD_NATIVE_REGRESSION: "1"
     run: uv run --no-sync pytest tests/test_native_skill_directory_portable.py --tb=short
     shell: pwsh
+  - name: Run the native MCP relay end to end on Windows
+    # A disposable runner: the lane test starts a real daemon for the account.
+    if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+    run: uv run --no-sync pytest tests/test_mcp_relay_handoff.py tests/test_mcp_relay_lane_ready_install.py
+      tests/test_mcp_relay_native_launch.py --tb=short
+    shell: pwsh
+  - name: Run Windows direct-lane ACK regressions
+    if: runner.os == 'Windows'
+    run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py --tb=short
+    shell: pwsh
   - name: Run Windows Codex hook process-tree regressions
     if: runner.os == 'Windows'
     run: uv run --no-sync pytest tests/test_codex_hook_fallback_isolation.py -k "isolated_process_timeout_kills_descendants

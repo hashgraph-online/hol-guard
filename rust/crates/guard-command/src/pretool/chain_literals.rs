@@ -15,6 +15,8 @@ use std::collections::{HashMap, HashSet};
 #[path = "chain_literals_lex.rs"]
 mod lex;
 use lex::{identifier, items, names_variable, opaque, tokenize, Token};
+#[path = "chain_literals_inert.rs"]
+pub(crate) mod inert;
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
 
@@ -76,8 +78,10 @@ struct Binding {
 const EVALUATION_FAILED: &str = "native_command_extension_evaluation_failed";
 
 /// Replace a raw review with the verdict for the substituted command, which
-/// runs the same words. Another sandbox verdict is kept only when its
-/// launcher, which re-derives the shape from the raw text, would run it. A
+/// runs the same words, or the same words with each value-producing command
+/// substitution written as a stand-in no broader than its value. Another
+/// sandbox verdict is kept only when its launcher, which re-derives the shape
+/// from the raw text, would run it. A
 /// raw block that only says the expansions could not be evaluated also takes
 /// the substituted command's review, which every control did evaluate.
 pub(super) fn rejudge(
@@ -96,9 +100,16 @@ pub(super) fn rejudge(
     else {
         return raw;
     };
-    let directory = context.cwd.and_then(|cwd| pwd::project(&command, cwd));
-    let base = directory.as_deref().unwrap_or(&command);
-    let Some(substituted) = substitute(base).or(directory) else {
+    // A value producer counts only when it would be allowed as a command of
+    // its own, so lockdown, managed policy and extension controls on it hold.
+    let allowed = |body: &str| {
+        evaluate(&super::payload_with_command(payload, &command, body)).minimum_action == "allow"
+    };
+    let opened = inert::project(&command, allowed);
+    let unopened = opened.as_deref().unwrap_or(&command);
+    let directory = context.cwd.and_then(|cwd| pwd::project(unopened, cwd));
+    let base = directory.as_deref().unwrap_or(unopened);
+    let Some(substituted) = substitute(base).or(directory).or(opened) else {
         return raw;
     };
     let projected_payload = super::payload_with_command(payload, &command, &substituted);
@@ -337,7 +348,7 @@ fn assignment(word: &[char]) -> Option<(String, Option<String>)> {
     Some((name, literal.then_some(value)))
 }
 
-fn ordinary_name(name: &str) -> bool {
+pub(crate) fn ordinary_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     name != "_"
         && name.len() <= 64

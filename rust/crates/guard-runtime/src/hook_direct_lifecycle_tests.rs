@@ -67,7 +67,7 @@ fn hooks_the_daemon_handles_itself_defer() {
     }
     for name in ["PermissionRequest", "permission_request_v2"] {
         assert_eq!(
-            deferred(&run_as(&lane, "copilot", Some(HOME), lifecycle(name))),
+            deferred(&run_as(&lane, "kimi", Some(HOME), lifecycle(name))),
             unsupported,
             "{name}"
         );
@@ -159,20 +159,23 @@ fn a_claude_permission_dialog_without_a_notice_is_left_to_claude() {
 }
 
 #[test]
-fn a_codex_permission_request_is_left_to_codex() {
-    let lane = lane("codex-permission-passthrough", json!({}));
+fn a_passthrough_permission_request_is_left_to_the_harness() {
+    let lane = lane("permission-passthrough", json!({}));
     let passthrough = json!({
         "harness_response": {
             "hookSpecificOutput": { "hookEventName": "PermissionRequest" },
         }
     });
-    for payload in [
-        permission_request(json!("synthetic")),
-        json!({ "hookEventName": "permission_request_v2" }),
-    ] {
-        let result = run(&lane, payload.clone());
-        assert_eq!(result["outcome"], "answer", "{payload}: {result}");
-        assert_eq!(result["edge"], passthrough, "{payload}");
+    for harness in ["codex", "copilot", "devin", "zcode"] {
+        for payload in [
+            permission_request(json!("synthetic")),
+            json!({ "hookEventName": "permission_request_v2" }),
+            json!({ "hookEventName": "permissionRequest" }),
+        ] {
+            let result = run_as(&lane, harness, Some(HOME), payload.clone());
+            assert_eq!(result["outcome"], "answer", "{harness} {payload}: {result}");
+            assert_eq!(result["edge"], passthrough, "{harness} {payload}");
+        }
     }
     // The answer carries no decision and records nothing.
     assert_eq!(drain(&lane, None)["records"], json!([]));

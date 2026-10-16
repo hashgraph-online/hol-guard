@@ -27,6 +27,13 @@ _EARLY_HANDLERS = {
     "mcp": "_run_guard_mcp_command",
 }
 
+# Commands that stand up, repair or report this machine's protection. Each is
+# a user-invoked one-shot, so it values arriving at an answer over arriving
+# quickly; see `bind_context_digest_lifecycle_budget`.
+_NATIVE_LIFECYCLE_COMMANDS = frozenset(
+    {"apps", "bootstrap", "doctor", "init", "install", "repair", "uninstall", "update"}
+)
+
 _PRESTORE_HANDLERS = {
     "daemon": "_run_guard_daemon_command",
     "update": "_run_guard_update_command",
@@ -143,7 +150,35 @@ def run_guard_command(
     input_text: str | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
-    "Execute a Guard subcommand."
+    """Execute a Guard subcommand under the digest budget it is entitled to.
+
+    Lifecycle commands install, repair or report protection: each runs once at
+    a keystroke, each pays for a cold native runtime nothing else pays for, and
+    none of them has a fallback when the answer does not arrive in time.  A
+    slow first install has to stay an install.  The floor is bound here, ahead
+    of every dispatch below, because an install reaches native authority long
+    before it resolves a guard home, and it is released here, because a process
+    that dispatches more than one command must not run enforcement on it.
+    """
+
+    if args.guard_command not in _NATIVE_LIFECYCLE_COMMANDS:
+        return _dispatch_guard_command(args, input_text=input_text, output_stream=output_stream)
+    from ..native_context_budget import bind_context_digest_lifecycle_budget, reset_context_digest_budget
+
+    token = bind_context_digest_lifecycle_budget()
+    try:
+        return _dispatch_guard_command(args, input_text=input_text, output_stream=output_stream)
+    finally:
+        reset_context_digest_budget(token)
+
+
+def _dispatch_guard_command(
+    args: argparse.Namespace,
+    *,
+    input_text: str | None = None,
+    output_stream: TextIO | None = None,
+) -> int:
+    "Route one Guard subcommand to its handler."
 
     if args.guard_command == "extensions":
         from .extension_builder_commands import run_extension_builder_command

@@ -134,6 +134,10 @@ def _resident_environment(environment: Mapping[str, str] | None) -> dict[str, st
     return {**environment, "PATH": ambient_path}
 
 
+class NativePackageIntentUnavailableError(RuntimeError):
+    """The resident gave no usable answer to a package intent parse."""
+
+
 def package_intent_parse_native(
     command_text: str,
     *,
@@ -144,8 +148,14 @@ def package_intent_parse_native(
     guard_home: Path,
     timeout_seconds: float = 5.0,
     deadline_monotonic: float | None = None,
+    require_answer: bool = False,
 ) -> PackageIntent | None:
-    """Hydrate exact intent targets and argv from the bound private channel."""
+    """Hydrate exact intent targets and argv from the bound private channel.
+
+    ``None`` is the resident's "no package intent" answer. With
+    ``require_answer``, a missing or malformed answer raises instead of reading
+    as no intent, so a caller can fail closed.
+    """
     from .runtime.package_intent_common import PackageIntent
 
     request: dict[str, object] = {
@@ -165,9 +175,14 @@ def package_intent_parse_native(
         deadline_monotonic=deadline_monotonic,
     )
     if response is None:
+        if require_answer:
+            raise NativePackageIntentUnavailableError("native_package_intent_unavailable")
         return None
     payload = response.get("payload")
     if not isinstance(payload, dict):
+        # An explicit null is the resident's no-intent answer; an omitted field is not.
+        if require_answer and (payload is not None or "payload" not in response):
+            raise NativePackageIntentUnavailableError("native_package_intent_malformed")
         return None
     runtime_private_metadata = response.get("runtime_private_metadata")
     if not isinstance(runtime_private_metadata, Mapping):

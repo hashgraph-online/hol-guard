@@ -1,4 +1,5 @@
-//! Plain `curl` GET and HEAD requests for public web content.
+//! Plain `curl` GET and HEAD requests for public web content and local dev
+//! servers.
 //!
 //! The request may only fetch named public `http(s)` URLs and print the
 //! response to stdout, where the pipeline's own proofs judge every consumer
@@ -7,7 +8,12 @@
 //! config, carries credentials, routes through a proxy or socket, or writes a
 //! file other than a scratch file keeps the normal review path.
 //!
-//! Loopback, private, link-local and metadata addresses, rebinding names and
+//! A read of a dev server on `127.0.0.1` or `localhost` is proven too, on a
+//! conventional dev-server port ([`super::loopback_ports`]) that neither
+//! Guard's daemon nor a local service answering a plain GET with
+//! credentials, cluster state or a debugger ([`LOCAL_ADMIN_PORTS`]) may
+//! listen on. Private, link-local
+//! and metadata addresses, other loopback spellings, rebinding names and
 //! names under reserved test suffixes stay reviewed: those resolve to local
 //! services rather than public content. The response body and headers reach
 //! a file only through `-o` or `-D` naming a scratch file ([`output_targets`]); the redirect
@@ -26,6 +32,23 @@ pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";
 /// Names reserved by RFC 6761 or routinely mapped to local development
 /// servers. They never name public content.
 const RESERVED_SUFFIXES: [&str; 4] = [".test", ".invalid", ".example", ".localhost"];
+
+/// Loopback ports of container engines (`2375`, `2376`, `4243`), cluster
+/// stores, APIs and proxies (`2379`, `2380`, `6443`, `8001`, kubelet and
+/// kube-proxy `10248`-`10256`), Nomad (`4646`), secret stores and service
+/// catalogs (`8200`, `8500`), proxy admin APIs (`2019`, `15000`), and the
+/// Chrome and Node inspectors (`9222`, `9229`). A GET to any of them can read
+/// secrets or drive another process.
+///
+/// This list subtracts from the dev-server ports, which is what a loopback
+/// read is allowed on in the first place: a port no framework conventionally
+/// binds is already unreachable here without being named. It is written out
+/// whole, the kubelet block included, so the list keeps saying what it means
+/// if the dev-server ranges ever widen onto one of these.
+const LOCAL_ADMIN_PORTS: [u16; 23] = [
+    2019, 2375, 2376, 2379, 2380, 4243, 4646, 6443, 8001, 8200, 8500, 9222, 9229, 10248, 10249,
+    10250, 10251, 10252, 10253, 10254, 10255, 10256, 15000,
+];
 
 /// Flags that change only presentation, failure handling or transport version.
 const PLAIN_FLAGS: [&str; 17] = [
@@ -102,7 +125,7 @@ pub(super) fn safe_curl_segment(
             continue;
         }
         if !options || !argument.starts_with('-') || argument == "-" {
-            if !public_url(argument) {
+            if !readable_url(argument, context) {
                 return false;
             }
             urls += 1;
@@ -113,7 +136,7 @@ pub(super) fn safe_curl_segment(
             return false;
         };
         if let Some(url) = url_option(arguments, index) {
-            if !public_url(url) {
+            if !readable_url(url, context) {
                 return false;
             }
             urls += 1;
@@ -259,6 +282,34 @@ fn safe_header(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
         && !CREDENTIAL_TERMS.iter().any(|term| name.contains(term))
+}
+
+fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
+    public_url(raw) || loopback_url(raw, context.home_dir)
+}
+
+/// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
+/// port that no local admin service or Guard daemon listens on.
+fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
+    if raw.contains(['{', '}', '[', ']', '\\', ' ']) {
+        return false;
+    }
+    let Ok(url) = url::Url::parse(raw) else {
+        return false;
+    };
+    let loopback = match url.host() {
+        Some(url::Host::Ipv4(address)) => address == std::net::Ipv4Addr::LOCALHOST,
+        Some(url::Host::Domain(name)) => name == "localhost",
+        _ => false,
+    };
+    loopback
+        && matches!(url.scheme(), "http" | "https")
+        && url.username().is_empty()
+        && url.password().is_none()
+        && url.port_or_known_default().is_some_and(|port| {
+            super::loopback_ports::dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
+        })
+        && !url_secrets::carries_secret(&url)
 }
 
 fn public_url(raw: &str) -> bool {

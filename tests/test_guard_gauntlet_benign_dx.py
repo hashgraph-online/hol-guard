@@ -8,6 +8,12 @@ from pathlib import Path
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
+from ci.gauntlet.clone_fixtures import (
+    LONG_LIVED_BRANCH,
+    LONG_LIVED_CLONE_CASE,
+    long_lived_clone_checks,
+    long_lived_clone_config,
+)
 from ci.gauntlet.fixtures import (
     ALIAS_ESCAPES_CASE,
     INSTEAD_OF_CASE,
@@ -162,3 +168,22 @@ def test_placeholder_docs_and_field_copies_match_the_reported_shapes(tmp_path: P
     assert "password: cfg.password, // database" in session
     for command in commands_for("omp-native-shell-read-credential-placeholder-docs"):
         assert _shell(fixture, command).returncode == 0, command
+
+
+def test_long_lived_clone_fixture_signs_by_default_and_tracks_many_branches(tmp_path: Path) -> None:
+    scenario = {s.id: s for s in load_catalog()}[LONG_LIVED_CLONE_CASE]
+    assert (scenario.expectation, scenario.oracle) == ("allow", "native-tools")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=LONG_LIVED_CLONE_CASE)
+    listing = _git(fixture.workspace, fixture.home, "config", "--null", "--list")
+    assert len(listing.encode()) > 256 * 1024
+    assert _git(fixture.workspace, fixture.home, "config", "--get", "commit.gpgsign").strip() == "true"
+    assert _git(fixture.workspace, fixture.home, "config", "--get", "user.email").strip()
+    text = long_lived_clone_config()
+    assert "include" not in text.lower() and "!" not in text and "program" not in text
+    checks = long_lived_clone_checks(fixture.workspace, LONG_LIVED_CLONE_CASE)
+    assert checks == {"long-lived-branch-checked-out": False}
+    _git(fixture.workspace, fixture.home, "switch", "-c", LONG_LIVED_BRANCH)
+    _git(fixture.workspace, fixture.home, "add", "README.md")
+    assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_CLONE_CASE) == {"long-lived-branch-checked-out": True}
+    other = create_fixture(tmp_path / "other", realistic=True, scenario_id="omp-native-git-compound-reads")
+    assert "retired/" not in _git(other.workspace, other.home, "config", "--list")

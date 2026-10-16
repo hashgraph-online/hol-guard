@@ -9,23 +9,23 @@ import pytest
 from codex_plugin_scanner.guard.proxy import runtime_mcp
 
 
-def _patch(monkeypatch: pytest.MonkeyPatch, *, replacements: dict[str, str] | None, required: bool) -> list[dict]:
+def _patch(monkeypatch: pytest.MonkeyPatch, *, downloads: tuple[object, ...], required: bool) -> list[dict]:
     calls: list[dict] = []
-    monkeypatch.setattr(runtime_mcp, "_verified_external_archive_replacements", lambda _evaluation: replacements)
+    monkeypatch.setattr(runtime_mcp, "_external_archive_downloads", lambda _evaluation: downloads)
     monkeypatch.setattr(
         runtime_mcp, "_package_evaluation_requires_external_archive_binding", lambda _evaluation: required
     )
 
-    def bind(params: object, reps: object, **kwargs: object) -> dict:
-        calls.append({"params": params, "replacements": reps, **kwargs})
+    def bind(params: object, sent: object, **kwargs: object) -> dict:
+        calls.append({"params": params, "downloads": sent, **kwargs})
         return {"unused": True}
 
     monkeypatch.setattr(runtime_mcp, "native_external_archive_bind", bind)
     return calls
 
 
-def test_no_replacements_and_no_requirement_skips_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _patch(monkeypatch, replacements={}, required=False)
+def test_no_downloads_and_no_requirement_skips_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _patch(monkeypatch, downloads=(), required=False)
     message = {"method": "tools/call", "params": {"big": "x" * (6 * 1024 * 1024)}}
     params = message["params"]
     result = runtime_mcp._bound_external_archive_mcp_request(
@@ -35,8 +35,8 @@ def test_no_replacements_and_no_requirement_skips_the_resident(monkeypatch: pyte
     assert calls == []
 
 
-def test_required_binding_without_replacements_sends_empty_params(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls = _patch(monkeypatch, replacements={}, required=True)
+def test_required_binding_without_downloads_sends_empty_params(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = _patch(monkeypatch, downloads=(), required=True)
     result = runtime_mcp._bound_external_archive_mcp_request(
         {"params": {"a": 1}}, {"a": 1}, evaluation=object(), guard_home=Path("/tmp/g")
     )

@@ -91,7 +91,7 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
     CodexHarnessAdapter._write_authenticated_hook_config(
         context,
         config_path=config_path,

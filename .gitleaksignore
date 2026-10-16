@@ -227,3 +227,5 @@ b6926bac2ef58d0794d1df6e2bb9ee401d8ac18b:tests/test_guard_runtime.py:generic-api
 1249cd32613b79fa4f2241ac931c98b29de738ce:rust/crates/guard-hook-core/src/source_slice.rs:private-key:130
 # Synthetic base64 credential in a field-copy unit test that must still match.
 5797263da1a42106da975a2758b427831d1af7d1:rust/crates/guard-scanner/src/field_copy.rs:generic-api-key:151
+# Synthetic policy-integrity test key (bytes 0..31) in an earlier commit; the test now encodes it at runtime.
+7c5f2d735d2186b11c8960434cc2699818f106de:rust/crates/guard-runtime/testdata/policy_integrity_generation/vectors.json:generic-api-key:1424

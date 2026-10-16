@@ -8,6 +8,11 @@
 //! canonical payload, SHA-256 hash and HMAC-SHA256 tag; the caller only
 //! ships rows and the resolved key and stores what comes back.
 //!
+//! The `generation` section decides startup's trusted control state from
+//! the store's local rows: it adopts a single newer authenticated generation,
+//! completes or abandons a pending generation, and marks cutover complete once
+//! no legacy row remains.
+//!
 //! The key arrives as base64url without padding, is held zeroized for the
 //! duration of the request, and never appears in a result or an error.
 
@@ -20,6 +25,9 @@ pub const POLICY_INTEGRITY_ROWS_REQUEST_SCHEMA: &str = "guard-policy-integrity-r
 pub const POLICY_INTEGRITY_ROWS_RESULT_SCHEMA: &str = "guard-policy-integrity-rows-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const POLICY_INTEGRITY_ROWS_FEATURE: &str = "policy-integrity-rows-v1";
+/// Capability advertised by the runtime when the request may carry a
+/// `generation` section.
+pub const POLICY_INTEGRITY_GENERATION_FEATURE: &str = "policy-integrity-generation-v1";
 
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_INTEGRITY_ROWS_MAX_BYTES: usize = 4 * 1024 * 1024;
@@ -44,6 +52,30 @@ pub struct PolicyIntegrityRowsRequestV1 {
     pub integrity_key_id: Option<String>,
     pub verify: Vec<PolicyIntegrityVerifyItemV1>,
     pub sign: Vec<PolicyIntegritySignItemV1>,
+    /// Startup generation decision over the store's local rows. Needs the
+    /// key; answered in the payload's `generation` section.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<PolicyIntegrityGenerationRequestV1>,
+}
+
+/// Decide the startup policy-integrity control state from the local rows of
+/// `store_path`, which must be `guard.db` directly under `guard_home`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityGenerationRequestV1 {
+    pub store_path: String,
+    pub guard_home: String,
+    /// The normalized control state the store currently trusts.
+    pub trusted_state: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PolicyIntegrityGenerationOutcomeV1 {
+    /// The control state startup should trust after authenticating the rows.
+    pub prepared_state: Value,
+    /// Every local row verifies at the trusted state's generation.
+    pub still_matches: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -83,6 +115,8 @@ pub struct PolicyIntegrityRowsResultV1 {
 pub struct PolicyIntegrityRowsPayloadV1 {
     pub verify: Vec<PolicyIntegrityVerifyOutcomeV1>,
     pub sign: Vec<PolicyIntegritySignatureV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generation: Option<PolicyIntegrityGenerationOutcomeV1>,
 }
 
 /// `PolicyIntegrityVerificationResult` fields, one per verify item in order.

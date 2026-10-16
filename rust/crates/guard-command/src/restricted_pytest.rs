@@ -233,7 +233,9 @@ pub fn evaluate_with_deadline(
     mapping::evaluate(operation, input, deadline).unwrap_or_else(|| evaluate(operation, input))
 }
 pub use authority::evaluate;
+pub(crate) use environment::forwarded_setting;
 pub use mapping::evidence as mapping_evidence;
+pub use workspace::workspace_script_reads;
 pub(crate) use workspace::{exact_shape as workspace_exact_shape, workspace_admissible};
 pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;
 #[cfg(test)]

@@ -22,14 +22,14 @@ pub(super) fn unsafe_search_value(
                 value,
                 context.home_dir,
                 context.cwd,
-            ) && (value.starts_with(['/', '~'])
+            ) && (rooted_operand(value)
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
                 || glob_can_select_sensitive_path(value))
         }
         SearchValueRole::RgGlob if value.starts_with('!') => false,
         SearchValueRole::Glob | SearchValueRole::RgGlob | SearchValueRole::Path => {
-            value.starts_with(['/', '~'])
+            rooted_operand(value)
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)
                 || glob_can_select_sensitive_path(value)
@@ -44,6 +44,13 @@ pub(super) fn unsafe_search_value(
         SearchValueRole::DirectoryAction => value.eq_ignore_ascii_case("recurse"),
         SearchValueRole::Pattern | SearchValueRole::Other => false,
     }
+}
+
+/// A home, root, drive or UNC spelling names a place outside the working
+/// directory, so it never gets the relative-path floor. Windows accepts
+/// `C:\work`, `C:/work` and `\\server\share` as well as `/work`.
+fn rooted_operand(value: &str) -> bool {
+    value.starts_with('~') || super::super::read_paths::rooted(value)
 }
 
 /// `rg` file types whose built-in globs name only source and data

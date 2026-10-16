@@ -19,10 +19,10 @@ fn original_python_sensitivity_and_mediation_vectors_replay() {
             Instant::now() + Duration::from_secs(2),
         );
         match result.map(|actual| host_paths(query, actual)) {
-            Ok(actual) if actual == vector["expected"] => {}
+            Ok(actual) if actual == host_expected(vector) => {}
             other => failures.push(format!(
                 "vector {index} query {query}: {other:?}, expected {}",
-                vector["expected"]
+                host_expected(vector)
             )),
         }
     }
@@ -51,6 +51,28 @@ fn host_paths(query: &str, mut value: Value) -> Value {
         posix(&mut value);
     }
     value
+}
+
+/// A few path vectors spell the requested path with backslashes. POSIX
+/// recorded them as one relative file name joined to `cwd`; Windows reads the
+/// same text as separators, so a drive-rooted spelling stays absolute and a
+/// relative one joins `cwd` component by component. The classification
+/// (family, sensitivity, reason, requested path) must still match exactly.
+fn host_expected(vector: &Value) -> Value {
+    let mut expected = vector["expected"].clone();
+    let requested = vector["body"]["path"].as_str().unwrap_or_default();
+    if !cfg!(windows) || !requested.contains('\\') || !expected["ok"]["path"].is_string() {
+        return expected;
+    }
+    let requested = requested.replace('\\', "/");
+    let drive_rooted = requested.as_bytes().get(1..3) == Some(&b":/"[..]);
+    expected["ok"]["path"] = Value::String(if drive_rooted {
+        requested
+    } else {
+        let cwd = vector["body"]["cwd"].as_str().expect("recorded cwd");
+        format!("{}/{requested}", cwd.trim_end_matches('/'))
+    });
+    expected
 }
 
 #[test]
@@ -147,7 +169,7 @@ fn batched_paths_replay_original_python_outcomes_in_order() {
         .unwrap();
         assert_eq!(
             host_paths("path_batch", actual)["ok"],
-            json!([vector["expected"]["ok"], vector["expected"]["ok"]])
+            json!([host_expected(vector)["ok"], host_expected(vector)["ok"]])
         );
     }
     assert!(super::evaluate(

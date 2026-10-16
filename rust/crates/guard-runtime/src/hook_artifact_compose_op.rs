@@ -10,11 +10,13 @@
 use guard_contracts::{
     normalize_guard_action, normalize_guard_action_result, GrantSettleQueryV1, GuardAction,
     HookArtifactComposeQueryV1, HookArtifactComposeRequestV1, HookArtifactComposeResultV1,
-    PolicyStackQueryV1, HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA, HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA,
+    HookNativeEdgeV1, NativeEdgeFactsV1, PolicyStackQueryV1, HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA,
+    HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
 use crate::hook_artifact_compose_reuse as reuse;
+use crate::hook_decision_compose::{edge_action, edge_floor, is_hard};
 use crate::hook_policy_config::{artifact_policy_action, data_flow_configured_action};
 
 pub(crate) fn evaluate_hook_artifact_compose_request(
@@ -109,6 +111,51 @@ fn dedup(items: impl IntoIterator<Item = String>) -> Vec<String> {
     seen
 }
 
+/// The native edge verdict as a floor on the artifact composition. Before
+/// execution only a hard verdict floors; after it a hard verdict keeps the
+/// output reviewable rather than undoing the finished action.
+fn native_edge_floor(
+    edge: &NativeEdgeFactsV1,
+    default_action: Option<&str>,
+) -> Option<GuardAction> {
+    let event = edge.event_name.as_deref();
+    if event == Some("PreToolUse")
+        && edge.package_request
+        && edge.reason_code.as_str() == Some("native_command_extension_evaluation_failed")
+    {
+        // Package requests have their own fail-closed evaluator. A generic
+        // command-control failure is not a second package verdict.
+        return None;
+    }
+    match event {
+        Some("PreToolUse") => {
+            // Only an explicit hard verdict floors before execution; a bare
+            // deny stays provenance for native command review to price.
+            let explicit = HookNativeEdgeV1 {
+                policy_action: edge.policy_action.clone(),
+                minimum_action: edge.minimum_action.clone(),
+                decision: Value::Null,
+            };
+            edge_floor(Some(&explicit), event)
+        }
+        Some("PostToolUse") => {
+            let typed = HookNativeEdgeV1 {
+                policy_action: edge.policy_action.clone(),
+                minimum_action: edge.minimum_action.clone(),
+                decision: edge.decision.clone(),
+            };
+            if default_action == Some("warn") && is_hard(edge_action(&typed)) {
+                // The edge still masks output already priced as warn-tier evidence.
+                return None;
+            }
+            edge_floor(Some(&typed), event)
+        }
+        // Other events take their floors from native review and artifact
+        // classes; the edge verdict is provenance there.
+        _ => None,
+    }
+}
+
 fn policy_stack(query: &PolicyStackQueryV1) -> Value {
     let cli = (!query.cli_action.is_null())
         .then(|| normalize_guard_action_result(&query.cli_action, GuardAction::RequireReapproval));
@@ -123,7 +170,11 @@ fn policy_stack(query: &PolicyStackQueryV1) -> Value {
         &query.approval_context,
         &mut auto_stop_events,
     );
-    let native_floor = [present(&query.native_floor), present(&query.edge_floor)]
+    let edge = query
+        .native_edge
+        .as_ref()
+        .and_then(|edge| native_edge_floor(edge, query.runtime.guard_default_action.as_deref()));
+    let native_floor = [present(&query.native_floor), edge]
         .into_iter()
         .flatten()
         .reduce(stricter);

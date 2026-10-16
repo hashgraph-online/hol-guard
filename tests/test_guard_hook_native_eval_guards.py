@@ -7,8 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
+from codex_plugin_scanner.guard.cli.commands_hook_native_edge_facts import _native_edge_facts
 from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
-    _native_edge_floor_action,
     _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
@@ -41,38 +41,18 @@ def test_archive_command_matcher_accepts_plain_matching_command() -> None:
     assert _runtime_external_archive_command_matches_executable("unzip -l bundle.zip", "unzip") is True
 
 
-def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
-    assert _native_edge_floor_action(None, "PostToolUse") is None
-    assert _native_edge_floor_action({"decision": "deny"}, "PreToolUse") is None
-    assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse") == "require-reapproval"
-    assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse", artifact_default_action="warn") is None
-    assert _native_edge_floor_action({"policy_action": "allow"}, "PostToolUse") == "allow"
-
-
-@pytest.mark.parametrize("action", ["block", "sandbox-required"])
-def test_pre_tool_native_terminal_action_cannot_be_relaxed_to_review(action: str) -> None:
-    assert (
-        _native_edge_floor_action(
-            {"decision": "deny", "policy_action": action}, "PreToolUse", artifact_default_action="warn"
-        )
-        == action
-    )
-    assert _native_edge_floor_action({"policy_action": "review"}, "PreToolUse") is None
-    assert _native_edge_floor_action({"policy_action": "allow"}, "PreToolUse") is None
-
-
-def test_package_evaluator_owns_command_control_failure_but_not_secret_deny() -> None:
-    failure = {"policy_action": "block", "reason_code": "native_command_extension_evaluation_failed"}
-    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="package_request") is None
-    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="command") == "block"
-    assert (
-        _native_edge_floor_action(
-            {"policy_action": "block", "reason_code": "native_secret_exfiltration"},
-            "PreToolUse",
-            artifact_type="package_request",
-        )
-        == "block"
-    )
+def test_native_edge_facts_forward_the_edge_verdict_without_deciding() -> None:
+    assert _native_edge_facts(None, "PostToolUse") is None
+    edge = {"decision": "deny", "policy_action": "block", "reason_code": "native_secret_exfiltration", "extra": 1}
+    assert _native_edge_facts(edge, "PreToolUse", artifact_type="package_request") == {
+        "event_name": "PreToolUse",
+        "policy_action": "block",
+        "minimum_action": None,
+        "decision": "deny",
+        "reason_code": "native_secret_exfiltration",
+        "package_request": True,
+    }
+    assert _native_edge_facts({}, "PostToolUse", artifact_type="command")["package_request"] is False
 
 
 def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> None:

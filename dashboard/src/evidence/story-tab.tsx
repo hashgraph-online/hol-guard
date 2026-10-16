@@ -184,7 +184,7 @@ function StoryCard({ receipt }: { receipt: GuardReceipt }) {
           </div>
           <p className="mt-2 text-sm text-brand-dark">{description}</p>
         </div>
-        <DecisionBadge decision={receipt.policy_decision} />
+        <DecisionBadge decision={receipt.policy_decision} userOverride={receipt.user_override} />
       </div>
       <div className="mt-3 flex items-center gap-2">
         <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wider ${catInfo.color} bg-slate-50`}>

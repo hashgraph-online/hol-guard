@@ -1,0 +1,466 @@
+{
+  "version": 1,
+  "description": "Package-manager script routes: the narrow receipt the edge issues, or null when the protected sink refuses the script and the generic route applies. Shared by the Rust edge and Python sink tests.",
+  "cases": [
+    {
+      "name": "ready-npm-build",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "npm run build",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "ready-pnpm-build",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "pnpm run build",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "ready-bun-lint",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "bun run lint",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "ready-npm-typecheck",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "npm run typecheck",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "ready-npm-test",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "npm test",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "ready-npm-test-args",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "npm test -- test/unit.js",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "ready-bun-run-test",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "bun run test",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "vitest-run",
+      "scripts": {
+        "test": "vitest run"
+      },
+      "command": "pnpm run test",
+      "entries": [],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "renamed",
+      "scripts": {
+        "lint": "vite build"
+      },
+      "command": "npm run lint",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "tsc-build",
+      "scripts": {
+        "build": "tsc -p ."
+      },
+      "command": "npm run build",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": null
+    },
+    {
+      "name": "next-build",
+      "scripts": {
+        "build": "next build"
+      },
+      "command": "pnpm run build",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-build",
+      "scripts": {
+        "build": "node scripts/build.js"
+      },
+      "command": "bun run build",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-entry-build",
+      "scripts": {
+        "build": "node build.js",
+        "test": "node test.js"
+      },
+      "command": "npm run build",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-entry-test",
+      "scripts": {
+        "build": "node build.js",
+        "test": "node test.js"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "node-entry-pnpm-test",
+      "scripts": {
+        "test": "node test.js"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "prebuild",
+      "scripts": {
+        "build": "vite build",
+        "prebuild": "rm -rf dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "global-vite",
+      "scripts": {
+        "build": "vite build"
+      },
+      "command": "npm run build",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "eslint-fix",
+      "scripts": {
+        "lint": "eslint --fix src"
+      },
+      "command": "npm run lint",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "chain",
+      "scripts": {
+        "lint": "eslint src && rm -rf dist"
+      },
+      "command": "npm run lint",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "emit",
+      "scripts": {
+        "typecheck": "tsc"
+      },
+      "command": "npm run typecheck",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": null
+    },
+    {
+      "name": "jest",
+      "scripts": {
+        "test": "jest"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "watch",
+      "scripts": {
+        "test": "vitest"
+      },
+      "command": "pnpm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "pretest",
+      "scripts": {
+        "test": "node --test",
+        "pretest": "node setup.js"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "expand",
+      "scripts": {
+        "test": "node --test $SUITE"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "redirect",
+      "scripts": {
+        "test": "node --test > out.txt"
+      },
+      "command": "npm test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "unflagged-args",
+      "scripts": {
+        "test": "node --test"
+      },
+      "command": "npm test test/unit.js",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "absent",
+      "scripts": {},
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "bun-test",
+      "scripts": {
+        "test": "node --test"
+      },
+      "command": "bun test",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "outdir-dist",
+      "scripts": {
+        "build": "vite build --outDir dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-equals-build",
+      "scripts": {
+        "build": "vite build --outDir=build"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-dot-out",
+      "scripts": {
+        "build": "vite build --outDir ./out/"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-empty",
+      "scripts": {
+        "build": "vite build --outDir="
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-last-wins",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/out --outDir dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "outdir-absolute",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/out"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-absolute-split",
+      "scripts": {
+        "build": "vite build --outDir /tmp/out"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-absolute-dist",
+      "scripts": {
+        "build": "vite build --outDir=/tmp/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-custom",
+      "scripts": {
+        "build": "vite build --outDir=public"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-parent",
+      "scripts": {
+        "build": "vite build --outDir ../dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-hidden",
+      "scripts": {
+        "build": "vite build --outDir .cache/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-nested",
+      "scripts": {
+        "build": "vite build --outDir src/dist"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "outdir-missing",
+      "scripts": {
+        "build": "vite build --outDir"
+      },
+      "command": "npm run build",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    }
+  ]
+}

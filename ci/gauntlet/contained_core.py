@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 import shlex
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from .input_evidence import input_digest, input_matches, redact_value
@@ -47,6 +47,16 @@ _SANDBOX_DENIAL = re.compile(
     r"|nodename nor servname provided|Connection refused"
 )
 _CURL_NETWORK_EXITS = frozenset({6, 7})
+# On Windows the adapter runs the sink with Guard's own Python and this fixed bootstrap,
+# naming the package root with forward slashes so the shell keeps it intact.
+_WINDOWS_PYTHON = re.compile(r"[A-Za-z]:\\(?:[^\\/:*?\"<>|']+\\)*python\.exe", re.IGNORECASE)
+_WINDOWS_BOOTSTRAP = re.compile(
+    r"import sys;sys\.path\.insert\(0, '[A-Za-z]:/[^'\\]*'\);"
+    r"from codex_plugin_scanner\.cli import main;raise SystemExit\(main\(sys\.argv\[1:\]\)\)"
+)
+# Redaction folds the shell-quoted spelling of a fixture path into its placeholder. A Windows
+# path needs quoting, so its placeholder is left bare where a POSIX one stays inside quotes.
+_PLACEHOLDERS = frozenset({"{{workspace}}", "{{home}}", "{{fixture}}", "{{scratch}}"})
 
 
 def contained_public_path(value: object) -> bool:
@@ -56,11 +66,25 @@ def contained_public_path(value: object) -> bool:
     )
 
 
+def _quoted(argv: list[str], *, bare_placeholders: bool) -> str:
+    return " ".join(
+        value if bare_placeholders and value in _PLACEHOLDERS else "'" + value.replace("'", "'\\''") + "'"
+        for value in argv
+    )
+
+
+def windows_sink(argv: list[str]) -> bool:
+    """Whether a normalized wrapper argv names the Windows sink's Python, not a wrapper script."""
+    return bool(argv) and _WINDOWS_PYTHON.fullmatch(argv[0]) is not None
+
+
 def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[list[str] | None, str | None]:
     """Validate the canonical ``execute-contained-test`` argv the adapter exports.
 
     The adapter leaves out ``--home`` when Guard's home directory is the agent's own HOME, so a
-    run in the account's real home has ten items instead of twelve.
+    run in the account's real home has ten items instead of twelve. On Windows the adapter starts
+    Guard's Python with a fixed bootstrap and the ``guard`` subcommand; that prefix is folded into
+    its first item, so callers index the same argv on every platform.
     """
     if not isinstance(command, str):
         return None, "contained wrapper command is missing"
@@ -68,20 +92,32 @@ def contained_wrapper_argv(command: object, expected_workspace: str) -> tuple[li
         argv = shlex.split(command)
     except ValueError:
         return None, "contained wrapper command is not valid shell argv"
-    canonical = " ".join("'" + value.replace("'", "'\\''") + "'" for value in argv)
-    if command != canonical:
+    windows = (
+        len(argv) > 5
+        and _WINDOWS_PYTHON.fullmatch(argv[0]) is not None
+        and argv[1:3] == ["-I", "-c"]
+        and _WINDOWS_BOOTSTRAP.fullmatch(argv[3]) is not None
+        and argv[4] == "guard"
+    )
+    if command != _quoted(argv, bare_placeholders=False) and not (
+        windows and command == _quoted(argv, bare_placeholders=True)
+    ):
         return None, "contained wrapper command is not canonical"
-    if len(argv) not in (10, 12) or not contained_public_path(argv[0]):
+    if windows:
+        argv = [argv[0], *argv[5:]]
+    if len(argv) not in (10, 12) or not (windows or contained_public_path(argv[0])):
         return None, "contained wrapper is not an approved path"
-    if argv[1] != "execute-contained-test" or argv[2] != "--guard-home" or not contained_public_path(argv[3]):
+    guard_home = argv[3].startswith("{{fixture}}\\") if windows else contained_public_path(argv[3])
+    if argv[1] != "execute-contained-test" or argv[2] != "--guard-home" or not guard_home:
         return None, "contained wrapper guard-home binding is malformed"
     if argv[4:6] != ["--workspace", expected_workspace]:
         return None, "contained wrapper workspace binding differs from the reviewed caller"
     if argv[6] != "--request-file":
         return None, "contained wrapper request-file flag is missing"
-    request = Path(argv[7])
+    request = PureWindowsPath(argv[7]) if windows else Path(argv[7])
     if (
         not request.is_absolute()
+        or (windows and re.match(r"[A-Za-z]:\\", argv[7]) is None)
         or request.name != "request.json"
         or not request.parent.name.startswith("hol-guard-contained-test-")
     ):
@@ -242,7 +278,10 @@ def _binding_error(
         return "harness-error", wrapper_error or "contained wrapper is unavailable"
     # Only a full task can run in the account's own home, where the adapter omits the binding.
     homes = ([], ["--home", "{{home}}"]) if own_exit_ok else (["--home", "{{home}}"],)
-    if PurePosixPath(argv[0]).name != "hol-guard" or argv[3] != "{{fixture}}/guard-home" or argv[10:] not in homes:
+    windows = windows_sink(argv)
+    executable = windows or PurePosixPath(argv[0]).name == "hol-guard"
+    guard_home = "{{fixture}}\\guard-home" if windows else "{{fixture}}/guard-home"
+    if not executable or argv[3] != guard_home or argv[10:] not in homes:
         return "harness-error", "contained wrapper is not bound to the case's Guard installation"
     post_input = post[0].get("input") if len(post) == 1 else None
     if (

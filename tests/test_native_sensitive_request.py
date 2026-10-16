@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard import native_sensitive_request as client
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_request_context import NativeRequestContextFailure
 from codex_plugin_scanner.guard.runtime import secret_file_requests
 
@@ -242,3 +243,105 @@ def test_command_list_outage_is_not_a_read_only_post_tool(monkeypatch: pytest.Mo
 def test_command_list_texts_are_a_tuple_of_strings(monkeypatch: pytest.MonkeyPatch) -> None:
     _answer(monkeypatch, _reply("command_list_candidate_texts", ["cat README.md"]))
     assert secret_file_requests.command_list_candidate_texts(["cat", "README.md"]) == ("cat README.md",)
+
+
+def test_unmodeled_shell_artifact_forwards_the_temp_directory(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    seen: list[dict[str, Any]] = []
+    reply = {"fingerprint": "f", "metadata": [["action_class", "unmodeled shell command"]]}
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply), seen)
+    monkeypatch.setenv("TMPDIR", str(tmp_path))
+
+    review = client.native_unmodeled_shell_artifact("gh run view 1 --log", workspace=None, home_dir=tmp_path)
+
+    assert review == ("f", {"action_class": "unmodeled shell command"})
+    assert seen[0]["body"]["facts"]["environment"]["TMPDIR"] == str(tmp_path)
+    assert seen[0]["body"]["input"]["workspace"] is None
+    assert seen[0]["body"]["input"]["home"] == str(tmp_path)
+
+
+def test_unmodeled_shell_artifact_is_none_for_a_modeled_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", None))
+
+    assert client.native_unmodeled_shell_artifact("ls", workspace=Path("/w"), home_dir=Path("/h")) is None
+
+
+def _finding(artifact_id: str, artifact_type: str, **metadata: object) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id=artifact_id,
+        name=artifact_id,
+        harness="codex",
+        artifact_type=artifact_type,
+        source_scope="project",
+        config_path="/c",
+        metadata=metadata,
+    )
+
+
+def _compound(findings: list[GuardArtifact]) -> GuardArtifact:
+    return client.native_compound_artifact(
+        findings, command_text="ls; pwd", decision={}, workspace=None, home_dir=Path("/home/user")
+    )
+
+
+def test_compound_artifact_applies_the_resident_binding(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[dict[str, Any]] = []
+    reply = {
+        "primary": 1,
+        "artifact_id": "codex:pkg:f",
+        "name": "compound p",
+        "metadata": [["guard_default_action", "x"]],
+    }
+    _answer(monkeypatch, _reply("compound_artifact", reply), seen)
+    tool = _finding("codex:tool:1", "tool_action_request", action_class="a", private_note="kept local")
+    package = _finding("codex:pkg:1", "package_request", extension_allow_hint={"id": "h"}, guard_default_action="warn")
+
+    composed = _compound([tool, package])
+
+    assert (composed.artifact_id, composed.name) == ("codex:pkg:f", "compound p")
+    assert composed.metadata == {"guard_default_action": "x"}
+    sent = seen[0]["body"]["input"]["artifacts"]
+    assert sent[0]["metadata"] == {"action_class": "a"}
+
+
+def test_compound_artifact_keeps_an_unbound_primary(monkeypatch: pytest.MonkeyPatch) -> None:
+    _answer(monkeypatch, _reply("compound_artifact", {"primary": 0, "metadata": None}))
+    finding = _finding("codex:tool:1", "tool_action_request")
+
+    assert _compound([finding]) is finding
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        {"fingerprint": "f"},
+        {"fingerprint": 1, "metadata": []},
+        {"fingerprint": "f", "metadata": [["k"]]},
+        {"fingerprint": "f", "metadata": [[1, "v"]]},
+        {"fingerprint": "f", "metadata": {}},
+    ],
+    ids=["missing-metadata", "non-text-fingerprint", "short-pair", "non-text-key", "not-pairs"],
+)
+def test_unmodeled_shell_artifact_rejects_malformed_replies(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
+    _answer(monkeypatch, _reply("unmodeled_shell_artifact", reply))
+
+    with pytest.raises(client.NativeSensitiveRequestError):
+        client.native_unmodeled_shell_artifact("ls", workspace=None, home_dir=Path("/h"))
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        None,
+        {"primary": 2, "metadata": None},
+        {"primary": True, "metadata": None},
+        {"primary": 0, "artifact_id": "a", "name": "n", "metadata": [["k"]]},
+        {"primary": 0, "artifact_id": "a", "name": "n", "metadata": None},
+        {"primary": 0, "artifact_id": 1, "name": "n", "metadata": []},
+    ],
+    ids=["not-object", "out-of-range", "bool-index", "short-pair", "unbound-with-id", "non-text-id"],
+)
+def test_compound_artifact_rejects_malformed_replies(monkeypatch: pytest.MonkeyPatch, reply: object) -> None:
+    _answer(monkeypatch, _reply("compound_artifact", reply))
+
+    with pytest.raises(client.NativeSensitiveRequestError):
+        _compound([_finding("codex:tool:1", "tool_action_request")])

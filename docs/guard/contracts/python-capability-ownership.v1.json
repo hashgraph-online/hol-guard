@@ -33,7 +33,6 @@
     "src/codex_plugin_scanner/guard/adapters/*hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
-    "src/codex_plugin_scanner/guard/cli/commands_hook_local_cli.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_decision_copy.py",
     "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
@@ -50,6 +49,7 @@
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
+    "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"

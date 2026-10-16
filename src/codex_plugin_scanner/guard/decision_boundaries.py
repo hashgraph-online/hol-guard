@@ -10,7 +10,6 @@ from pathlib import Path
 from .decision_projection_boundaries import CanonicalApprovalDecision as CanonicalApprovalDecision
 from .decision_projection_boundaries import canonical_approval_decision as canonical_approval_decision
 from .models import GuardAction
-from .native_decisions import artifact_transport_fields
 from .native_signal_projection import NativeSignalProjectionError, signal_projection
 
 # Leave framing and home-path headroom below the resident's 4 MiB request cap.
@@ -80,16 +79,6 @@ def canonical_approval_surfaces(
                 "reject": reject_contradiction,
             },
             guard_home=guard_home,
-        )
-    )
-
-
-def canonical_approval_artifact(
-    artifact: Mapping[str, object], *, guard_home: Path | None = None
-) -> CanonicalApprovalSurfaces:
-    return CanonicalApprovalSurfaces(
-        **signal_projection(
-            "projection_artifact_surfaces", {"artifact": artifact_transport_fields(artifact)}, guard_home=guard_home
         )
     )
 
