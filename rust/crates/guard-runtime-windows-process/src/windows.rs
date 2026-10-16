@@ -359,20 +359,30 @@ fn extend_over_max_path(wide: Vec<u16>, absolute: bool) -> Vec<u16> {
 }
 
 fn command_line(executable: &OsStr, args: &[&OsStr]) -> io::Result<Vec<u16>> {
-    let mut output = Vec::new();
-    let all_args = std::iter::once(executable).chain(args.iter().copied());
-    for (index, arg) in all_args.enumerate() {
-        if index != 0 {
-            output.push(' ' as u16);
-        }
-        output.extend(quote_arg(arg)?);
+    // The image comes from the application name; argv[0] only names it.
+    // Programs such as cmd.exe scan the raw command line for switches, so a
+    // `/` in the program name (`System32/cmd.exe`) would read as `/c md.exe`
+    // and run a different command. Name the program with native separators.
+    let program = executable
+        .encode_wide()
+        .map(|unit| {
+            if unit == b'/' as u16 {
+                b'\\' as u16
+            } else {
+                unit
+            }
+        })
+        .collect();
+    let mut output = quote_units(program)?;
+    for arg in args {
+        output.push(' ' as u16);
+        output.extend(quote_units(arg.encode_wide().collect())?);
     }
     output.push(0);
     Ok(output)
 }
 
-fn quote_arg(arg: &OsStr) -> io::Result<Vec<u16>> {
-    let value: Vec<u16> = arg.encode_wide().collect();
+fn quote_units(value: Vec<u16>) -> io::Result<Vec<u16>> {
     if value.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,

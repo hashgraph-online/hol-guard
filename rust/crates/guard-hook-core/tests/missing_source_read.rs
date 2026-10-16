@@ -19,13 +19,23 @@ impl TestRoot {
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         std::fs::create_dir(&root).unwrap();
-        Self(root.canonicalize().unwrap())
+        Self(host_spelling(root.canonicalize().unwrap()))
     }
 }
 
 impl Drop for TestRoot {
     fn drop(&mut self) {
         let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// `canonicalize` spells Windows paths in the verbatim `\\?\C:\` form, which
+/// source review refuses as a glob. Hosts send the ordinary drive form, so the
+/// fixture root uses that.
+fn host_spelling(path: std::path::PathBuf) -> std::path::PathBuf {
+    match path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) {
+        Some(drive) if drive.as_bytes().get(1) == Some(&b':') => drive.into(),
+        _ => path,
     }
 }
 
