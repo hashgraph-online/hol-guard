@@ -319,3 +319,27 @@ fn printing_a_credential_variable_reads_the_secret() {
     assert!(!reads_secret("echo \"$PATH\""));
     assert!(!reads_secret("echo hello"));
 }
+
+#[test]
+fn a_port_variable_read_names_no_dotenv_file() {
+    let writes_sensitive = |command: &str| {
+        compatibility_observations(&model(command), None)
+            .unwrap()
+            .rule_matches
+            .iter()
+            .any(|matched| matched.rule_id == "command.shell-mutations.sensitive-file-write")
+    };
+    for command in [
+        "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(Number(process.env.PORT)||3000)\"",
+        "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(process.env.DEV_PORT||3000)\"",
+    ] {
+        assert!(!writes_sensitive(command), "{command}");
+    }
+    for command in [
+        "node -e \"require('node:http').createServer((q,r)=>r.end(JSON.stringify(process.env))).listen(3000)\"",
+        "node -e \"require('node:http').createServer((q,r)=>r.end(require('fs').readFileSync('.env'))).listen(process.env.PORT)\"",
+        "node -e \"require('fs').promises.writeFile('.env',String(process.env.PORT)).then(()=>0)\"",
+    ] {
+        assert!(writes_sensitive(command), "{command}");
+    }
+}

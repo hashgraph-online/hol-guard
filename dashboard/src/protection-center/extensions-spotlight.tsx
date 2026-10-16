@@ -100,8 +100,8 @@ function PaidSpotlightCard(props: {
           <p className="mt-0.5 text-xs font-medium text-white/60">{catalog.name}</p>
         </div>
       </div>
-      <p className="mt-3 line-clamp-3 text-sm leading-6 text-white/85">{props.placement.creative.body}</p>
-      <div className="mt-auto pt-5">
+      <p className="line-clamp-3 text-sm leading-5 text-white/85">{props.placement.creative.body}</p>
+      <div className="mt-auto">
         <button
           type="button"
           className="guard-discover-cta guard-discover-cta-inverse"
@@ -113,7 +113,7 @@ function PaidSpotlightCard(props: {
           View extension
           <HiMiniArrowRight className="size-4" aria-hidden="true" />
         </button>
-        <p className="mt-3 text-xs text-white/55">Paid placement. Your protection settings are unchanged.</p>
+        <p className="mt-2 text-xs text-white/55">Paid placement. Your protection settings are unchanged.</p>
       </div>
     </article>
   );
@@ -165,13 +165,14 @@ function OrganicSpotlightCard(props: {
         </div>
       </div>
       {protection ? (
-        <p className="mt-3 text-sm leading-6 text-brand-dark/85" data-testid="spotlight-organic-protection">
+        <p className="text-sm leading-5 text-brand-dark/85" data-testid="spotlight-organic-protection">
           {protection}
         </p>
-      ) : null}
-      <p className="mt-2 line-clamp-2 text-sm leading-6 text-brand-dark/65">{catalog.description}</p>
-      <div className="mt-auto pt-5">
-        <button type="button" className="guard-discover-cta" onClick={() => props.onOpen(catalog)}>
+      ) : (
+        <p className="line-clamp-2 text-sm leading-5 text-brand-dark/65">{catalog.description}</p>
+      )}
+      <div className="mt-auto">
+        <button type="button" className="guard-discover-cta guard-discover-cta-quiet" onClick={() => props.onOpen(catalog)}>
           {props.active ? "Review protection" : "Set it up"}
           <HiMiniArrowRight className="size-4" aria-hidden="true" />
         </button>
@@ -202,25 +203,22 @@ function VacantSlotCard(props: {
       data-full={props.full ? "true" : undefined}
       aria-labelledby="spotlight-slot-heading"
     >
-      <div className="flex items-start gap-3">
-        <span className="guard-spotlight-slot-mark" aria-hidden="true">
-          <HiMiniPlus className="size-5" />
+      <div className="flex items-center gap-2">
+        <span className="guard-spotlight-slot-mark guard-spotlight-slot-mark-sm" aria-hidden="true">
+          <HiMiniPlus className="size-4" />
         </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue">
-            {props.state === "open" ? "This slot is open" : "Promote your extension"}
-          </p>
-          <h3 id="spotlight-slot-heading" className="mt-2 text-base font-semibold leading-snug tracking-tight text-brand-dark">
-            Put your extension on this shelf.
-          </h3>
-        </div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-brand-blue">
+          {props.state === "open" ? "This slot is open" : "Promote your extension"}
+        </p>
       </div>
-      <p className="mt-3 text-sm leading-6 text-brand-dark/75">
-        This shelf is the first thing anyone sees on Extensions. Spots are labeled Sponsored, carry your own
-        headline, and never change anyone’s protection.
+      <h3 id="spotlight-slot-heading" className="text-base font-semibold leading-snug tracking-tight text-brand-dark">
+        Put your extension on this shelf.
+      </h3>
+      <p className="text-sm leading-5 text-brand-dark/75">
+        Labeled Sponsored. Never changes anyone’s protection.
         {props.inventory ? <span className="font-semibold text-brand-dark"> {props.inventory}</span> : null}
       </p>
-      <div className="mt-auto pt-5">
+      <div className="mt-auto">
         <a
           className="guard-discover-cta"
           href={advertiseUrl("extensions_header")}
@@ -244,7 +242,7 @@ function VacantSlotCard(props: {
  */
 function SlotFreePath(props: { placement: "extensions_feed" | "extensions_header" }) {
   return (
-    <p className="mt-3 text-xs text-brand-dark/50">
+    <p className="mt-2 text-xs text-brand-dark/50">
       Already listed?{" "}
       <a
         className="font-semibold text-brand-blue hover:underline"
@@ -274,7 +272,7 @@ function SpotlightSkeleton() {
   return (
     <div className="guard-spotlight-grid mt-5" aria-hidden="true">
       {[0, 1, 2].map((cell) => (
-        <div key={cell} className="guard-spotlight-card guard-spotlight-skeleton" />
+        <div key={cell} className="guard-spotlight-card guard-spotlight-skeleton min-h-40" />
       ))}
     </div>
   );
@@ -446,7 +444,7 @@ export function CatalogSlotRow(props: {
       <span className="guard-spotlight-slot-mark" aria-hidden="true">
         <HiMiniPlus className="size-5" />
       </span>
-      <div className="min-w-0 flex-[1_1_16rem]">
+      <div className="min-w-0 max-w-[62ch] flex-[1_1_16rem]">
         <p className="text-sm font-semibold text-brand-dark">Put your extension in this list.</p>
         <p className="mt-0.5 text-sm leading-6 text-brand-dark/65">
           Sponsored listings sit inside the catalog, keep their real protection state and their Sponsored label.
@@ -456,7 +454,7 @@ export function CatalogSlotRow(props: {
         <SlotFreePath placement="extensions_feed" />
       </div>
       <a
-        className="guard-discover-cta shrink-0"
+        className="guard-discover-cta shrink-0 sm:ml-auto"
         href={advertiseUrl("extensions_feed")}
         target="_blank"
         rel="noopener noreferrer"

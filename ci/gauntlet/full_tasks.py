@@ -27,7 +27,13 @@ from .fixtures import Fixture, digest_file, file_metadata
 from .full_task_git import blob as _blob
 from .full_task_git import git_lines
 from .full_task_git import tree as _tree
-from .full_task_local_checks import LOCAL_APP_CHECKS, _passes, _ran_python_tests, python_test_evidence
+from .full_task_local_checks import (
+    LOCAL_APP_CHECKS,
+    _passes,
+    _ran_python_tests,
+    committed_evidence,
+    python_test_evidence,
+)
 from .interruptions import REVIEW_ACTIONS, observation_interruptions, rendered_fields
 
 FULL_TASKS = Path(__file__).with_name("full_tasks.json")
@@ -280,6 +286,11 @@ def full_task_checks(fixture: Fixture, task_id: str) -> dict[str, bool]:
     else:
         raise ValueError("unknown full task: " + task_id)
     return checks
+
+
+def full_task_evidence(fixture: Fixture, task_id: str) -> dict[str, Any]:
+    """Committed file digests and per-check facts for a local task; GitHub tasks are judged by the host."""
+    return {} if task_id in REMOTE_TASKS else committed_evidence(fixture.workspace, task_id)
 
 
 def authorization(fixture: Fixture, owner: str = OWNER) -> str:

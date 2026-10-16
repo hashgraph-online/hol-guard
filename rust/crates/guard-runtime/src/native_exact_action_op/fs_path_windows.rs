@@ -143,6 +143,19 @@ pub(super) fn is_anchored(path: &str) -> bool {
     parse(path).0 != Root::Relative
 }
 
+/// A drive-rooted path that compares as text against another one: no
+/// `\\?\` prefix and no component that folds (`.`, `..`), that Windows
+/// trims or that may be a short name.
+pub(super) fn is_literal(path: &str) -> bool {
+    let (Root::Drive(_), parts) = parse(path) else {
+        return false;
+    };
+    !path.starts_with(r"\\")
+        && parts
+            .iter()
+            .all(|part| is_plain(part) && !may_be_short_name(part))
+}
+
 /// `str(PureWindowsPath(path))` with `.` and `..` folded; an unpinned
 /// spelling is returned as given, which no resolver accepts.
 pub(super) fn norm(path: &str) -> String {

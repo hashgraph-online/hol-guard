@@ -21,6 +21,7 @@ use super::{decide, token};
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/native_exact_action_vectors.json.gz");
 
 struct Fake {
+    #[cfg_attr(windows, allow(dead_code))]
     root: String,
     intent: Value,
 }

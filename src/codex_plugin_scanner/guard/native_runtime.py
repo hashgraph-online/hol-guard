@@ -19,6 +19,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from .codex_hook_launch_runtime import run_isolated_hook_process
+from .group_write_trust import trusted_owner_and_mode as _trusted_owner_and_mode
 from .native_binary_identity import validate_native_binary as _validate_binary
 from .native_resident_client import native_resident_client_request
 from .native_response_decoder import native_error as _native_error
@@ -62,7 +63,6 @@ from .native_runtime_values import (
     warn_legacy_hook_fast_path_once,
 )
 from .native_runtime_values import _NATIVE_RUNTIME_EXPORTS as __all__  # noqa: F401, N811
-from .owner_private_group import trusted_owner_and_mode as _trusted_owner_and_mode
 from .runtime.hook_review_types import HookReviewRequest, HookReviewResponse
 
 _NATIVE_PROTOCOL_VERSION = 1
@@ -154,7 +154,7 @@ def _manifest_for_bundled_identity(
             return None, "native_manifest_invalid"
         if metadata.st_size <= 0 or metadata.st_size > _MAX_MANIFEST_BYTES:
             return None, "native_manifest_invalid"
-        if os.name != "nt" and not _trusted_owner_and_mode(metadata):
+        if os.name != "nt" and not _trusted_owner_and_mode(metadata, manifest_path):
             return None, "native_manifest_invalid"
         payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     except FileNotFoundError:
@@ -188,7 +188,7 @@ def _restore_bundled_runtime_execute_bit(path: Path) -> None:
         mode = stat.S_IMODE(metadata.st_mode)
         if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode) or mode & stat.S_IXUSR:
             return
-        if not _trusted_owner_and_mode(metadata):
+        if not _trusted_owner_and_mode(metadata, path):
             return
         path.chmod(mode | 0o111)
     except (OSError, RuntimeError, ValueError):

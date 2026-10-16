@@ -12,8 +12,23 @@ use crate::resident_state::{
     validate_runtime_process_identity,
 };
 
-// Startup may use the caller's remaining budget, never more than nine seconds.
+// Ordinary startup may use the caller's remaining budget, never more than nine
+// seconds. Daemon lifecycle cold start may use the caller's budget up to the
+// thirty-second ceiling in the parent module.
 const CLIENT_START_TIMEOUT: Duration = Duration::from_millis(9_000);
+const DAEMON_LIFECYCLE_START_TIMEOUT: Duration =
+    Duration::from_millis(super::DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS);
+
+fn startup_limit(payload: &[u8]) -> Duration {
+    let value = crate::strict_json_value(payload).ok();
+    match value
+        .as_ref()
+        .and_then(|value| value.get("operation")?.as_str())
+    {
+        Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_START_TIMEOUT,
+        _ => CLIENT_START_TIMEOUT,
+    }
+}
 
 fn try_live_or_restart(
     state_base: &Path,
@@ -200,7 +215,7 @@ fn client_request_with_deadline_inner(
         let response = observe(
             Phase::ClientStartupWait,
             || -> Result<Option<Vec<u8>>, String> {
-                let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
+                let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
                 while Instant::now() < deadline {
                     if let Some(response) = try_live_or_restart(
                         state_base,
@@ -249,7 +264,7 @@ fn client_request_with_deadline_inner(
         )?;
         Ok((generation, token, spawned))
     })?;
-    let deadline = overall_deadline.min(Instant::now() + CLIENT_START_TIMEOUT);
+    let deadline = overall_deadline.min(Instant::now() + startup_limit(payload));
     let request_result = observe(Phase::ClientSpawnWait, || loop {
         if Instant::now() >= deadline {
             break Err("native_resident_start_timeout".to_owned());
@@ -276,6 +291,25 @@ fn client_request_with_deadline_inner(
             )?;
             Err(error)
         }
+    }
+}
+
+#[cfg(test)]
+mod startup_limit_tests {
+    use super::startup_limit;
+    use std::time::Duration;
+
+    #[test]
+    fn daemon_lifecycle_startup_keeps_the_cold_start_budget() {
+        assert_eq!(
+            startup_limit(br#"{"operation":"daemon_lifecycle_decide"}"#),
+            Duration::from_secs(30)
+        );
+        assert_eq!(
+            startup_limit(br#"{"operation":"prompt_analyze","deadline_budget_ms":30000}"#),
+            Duration::from_secs(9)
+        );
+        assert_eq!(startup_limit(br"{}"), Duration::from_secs(9));
     }
 }
 

@@ -33,6 +33,7 @@ from .full_tasks import (
     authorization,
     create_full_task_fixture,
     full_task_checks,
+    full_task_evidence,
     load_full_tasks,
 )
 from .guard_tap import GuardTap, read_tap
@@ -245,6 +246,7 @@ def run_harness_full_task(
                 if fixture is not None:
                     try:
                         case["filesystem"] = full_task_checks(fixture, task.id)
+                        case["oracle_evidence"] = full_task_evidence(fixture, task.id)
                     except Exception as exc:
                         case.setdefault("execution_error", "checks-" + type(exc).__name__)
     case["ended_at"] = time.time()
