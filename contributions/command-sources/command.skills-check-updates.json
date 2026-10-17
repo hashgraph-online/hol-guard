@@ -149,7 +149,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -210,22 +364,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -233,7 +371,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-u"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -556,7 +766,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -617,22 +981,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -640,7 +988,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -963,7 +1383,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -1024,22 +1598,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -1047,7 +1605,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -1370,7 +2000,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -1431,22 +2215,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -1454,7 +2222,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -1806,7 +2646,163 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -1867,22 +2863,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -1890,7 +2870,80 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -2219,7 +3272,163 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -2280,22 +3489,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -2303,7 +3496,80 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-u",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -2632,7 +3898,163 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -2693,22 +4115,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -2716,7 +4122,80 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "-f"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -3045,7 +4524,163 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -3106,22 +4741,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -3129,7 +4748,80 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "--upgrade",
+                  "--force"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -3457,7 +5149,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -3518,22 +5364,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -3541,7 +5371,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-uf"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
@@ -3864,7 +5766,161 @@
                   "pnpm.exe",
                   "yarn",
                   "yarn.cmd",
-                  "yarn.exe",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "skills-check-updates"
+                  ],
+                  [
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "npm",
+                  "npm.cmd",
+                  "npm.exe",
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
+                  [
+                    "exec",
+                    "skills-check-updates"
+                  ],
+                  [
+                    "exec",
+                    "skills-check-updates",
+                    "--"
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
                   "npm",
                   "npm.cmd",
                   "npm.exe",
@@ -3925,22 +5981,6 @@
                 "options_with_values": [],
                 "paths": [
                   [
-                    "skills-check-updates"
-                  ],
-                  [
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates"
-                  ],
-                  [
-                    "exec",
-                    "skills-check-updates",
-                    "--"
-                  ],
-                  [
                     "x",
                     "skills-check-updates"
                   ],
@@ -3948,7 +5988,79 @@
                     "x",
                     "skills-check-updates",
                     "--"
-                  ],
+                  ]
+                ],
+                "required_flags": [
+                  "-fu"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": []
+              },
+              "op": "executable-path-set.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "pnpm",
+                  "pnpm.cmd",
+                  "pnpm.exe",
+                  "yarn",
+                  "yarn.cmd",
+                  "yarn.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [
+                  "--help",
+                  "--version",
+                  "-h",
+                  "-v"
+                ],
+                "interspersed_flags": [
+                  "--aggregate-output",
+                  "--details",
+                  "--exit-code",
+                  "--force",
+                  "--help",
+                  "--json",
+                  "--no",
+                  "--no-install",
+                  "--silent",
+                  "--stream",
+                  "--upgrade",
+                  "--use-stderr",
+                  "--version",
+                  "--workspace-root",
+                  "--yes",
+                  "-d",
+                  "-f",
+                  "-fu",
+                  "-h",
+                  "-u",
+                  "-uf",
+                  "-v",
+                  "-y"
+                ],
+                "interspersed_options_with_values": [
+                  "--cache",
+                  "--call",
+                  "--cwd",
+                  "--dir",
+                  "--filter",
+                  "--from",
+                  "--min-age",
+                  "--package",
+                  "--reporter",
+                  "--skip",
+                  "--workspace",
+                  "-c",
+                  "-p",
+                  "-w"
+                ],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "paths": [
                   [
                     "dlx",
                     "skills-check-updates"
