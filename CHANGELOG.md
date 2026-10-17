@@ -93,6 +93,36 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.48.0](https://github.com/hashgraph-online/hol-guard/compare/v3.47.0...v3.48.0) (2026-10-17)
+
+
+### Features
+
+* Add DeArmour command extension ([#3073](https://github.com/hashgraph-online/hol-guard/issues/3073)) ([c8b2de9](https://github.com/hashgraph-online/hol-guard/commit/c8b2de9de00975a8afb5562d479c01792cccecb9))
+* **dashboard:** search, filter, sort and group custom extension scripts and commands ([#5002](https://github.com/hashgraph-online/hol-guard/issues/5002)) ([17d952c](https://github.com/hashgraph-online/hol-guard/commit/17d952ca24307ebc1700ebb5873e5527d1a32c41))
+* **extension:** add command.hashdup extension for HashDup CLI ([#3018](https://github.com/hashgraph-online/hol-guard/issues/3018)) ([eb56d5d](https://github.com/hashgraph-online/hol-guard/commit/eb56d5d5586c65ffb1dba09fef60ae3701a11cee))
+* **extensions:** add kindling command source ([#3277](https://github.com/hashgraph-online/hol-guard/issues/3277)) ([3039dcf](https://github.com/hashgraph-online/hol-guard/commit/3039dcf5c4742e764e788cf2fe5d1823f001b272))
+* **guard:** report fleet posture (Guard version, OS, AI-tool protection, inventory, policy ack) to Guard Cloud ([e3b4358](https://github.com/hashgraph-online/hol-guard/commit/e3b435860efc4ca902f1a3eb5b5ca06a681012e8))
+* **mcp:** add PC-Control MCP server contribution ([#4320](https://github.com/hashgraph-online/hol-guard/issues/4320)) ([e621a7b](https://github.com/hashgraph-online/hol-guard/commit/e621a7b2975eb34ee96543c7a7d512009e97601d))
+
+
+### Bug Fixes
+
+* **daemon:** retry the Windows daemon-state replace while a reader holds the file ([#5021](https://github.com/hashgraph-online/hol-guard/issues/5021)) ([5091996](https://github.com/hashgraph-online/hol-guard/commit/5091996e61163ca422e21be524022b33935f104d))
+* **guard:** bind one-time ssh push approvals on hosts with XQuartz ([#4999](https://github.com/hashgraph-online/hol-guard/issues/4999)) ([27f8143](https://github.com/hashgraph-online/hol-guard/commit/27f814337a2f34cb6ff49d6b50db223a5345ac6a))
+* **guard:** end the extension policy conflict dead-end ([#5000](https://github.com/hashgraph-online/hol-guard/issues/5000)) ([bcee8a8](https://github.com/hashgraph-online/hol-guard/commit/bcee8a81200997786d5ef3c316f50d034e0140a0))
+* **guard:** keep the output of a toolchain package read under a hidden home directory ([#5019](https://github.com/hashgraph-online/hol-guard/issues/5019)) ([c23a791](https://github.com/hashgraph-online/hol-guard/commit/c23a7918c9a942d1e796109f7382d38397127601))
+* **guard:** let a literal pattern bound an fd search below a dot-directory ([#5015](https://github.com/hashgraph-online/hol-guard/issues/5015)) ([7945fae](https://github.com/hashgraph-online/hol-guard/commit/7945fae5654a03efd7d4b2e70680e588544d2484))
+* **guard:** let a name pattern bound what a deeper find prints ([#5013](https://github.com/hashgraph-online/hol-guard/issues/5013)) ([6f9a890](https://github.com/hashgraph-online/hol-guard/commit/6f9a89040fe16b5670d187dfa346a6f4fbae13fe))
+* **guard:** list a home dot-directory through the host's own listing tools ([#5003](https://github.com/hashgraph-online/hol-guard/issues/5003)) ([07f2352](https://github.com/hashgraph-online/hol-guard/commit/07f23529f66cece609d8a6990391a0ded317da9f))
+* **guard:** prove a recursive search for what it actually reads ([#5012](https://github.com/hashgraph-online/hol-guard/issues/5012)) ([e53bdd2](https://github.com/hashgraph-online/hol-guard/commit/e53bdd270db6264233382c9229a5d0d1a5ca2162))
+* **guard:** read a file named in a neighbouring repository without review ([#5009](https://github.com/hashgraph-online/hol-guard/issues/5009)) ([c522ff8](https://github.com/hashgraph-online/hol-guard/commit/c522ff89e5f18a13694e2dd3152d0dc6dc7390ff))
+* **guard:** read a migration named for the table it defines ([#5007](https://github.com/hashgraph-online/hol-guard/issues/5007)) ([f02d5e4](https://github.com/hashgraph-online/hol-guard/commit/f02d5e4790f15547d4bab08a34ce6ebed75018b6))
+* **guard:** sandbox script smoke tests that reuse a fresh mktemp directory ([#4995](https://github.com/hashgraph-online/hol-guard/issues/4995)) ([44f7ded](https://github.com/hashgraph-online/hol-guard/commit/44f7ded1ce6314c043496b727a61756796944429))
+* **guard:** screen hidden home reads for credentials, not for being hidden ([#4992](https://github.com/hashgraph-online/hol-guard/issues/4992)) ([46f9b33](https://github.com/hashgraph-online/hol-guard/commit/46f9b33422d6889c1e79ac0b2ed1c150fbcc0422))
+* **mcp:** drop omarchy-mcp contribution pointing pipx at an unrelated package ([#4996](https://github.com/hashgraph-online/hol-guard/issues/4996)) ([6ef1fa9](https://github.com/hashgraph-online/hol-guard/commit/6ef1fa92aed72b56a128c9e47e49a563c3d71caf))
+* **release:** raise x86_64 wheel download budgets so 3.47 can publish ([#4993](https://github.com/hashgraph-online/hol-guard/issues/4993)) ([37ef1bc](https://github.com/hashgraph-online/hol-guard/commit/37ef1bc4ebd0d2f4b2603dad031e90bdf3733710))
+
 ## [3.47.0](https://github.com/hashgraph-online/hol-guard/compare/v3.46.0...v3.47.0) (2026-10-16)
 
 
