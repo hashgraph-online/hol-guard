@@ -283,7 +283,7 @@ pub enum McpProxyQueryV1 {
     RouteToolCall(McpRouteToolCallQueryV1),
     ObserveToolForward(McpObserveToolForwardQueryV1),
     EvidenceItem(McpEvidenceItemQueryV1),
-    SensitiveReadContext(McpSensitiveReadContextQueryV1),
+    SensitiveReadContext(Box<McpSensitiveReadContextQueryV1>),
     SensitiveReadReuse(McpSensitiveReadReuseQueryV1),
     SensitiveReadHint(McpSensitiveReadHintQueryV1),
     ExternalArchiveBind(McpExternalArchiveBindQueryV1),

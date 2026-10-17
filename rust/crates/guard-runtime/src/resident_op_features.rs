@@ -86,5 +86,6 @@ pub(crate) const RESIDENT_OP_FEATURES: &[&str] = &[
     guard_contracts::MCP_TOOL_CALL_IDENTITY_FEATURE,
     guard_contracts::GITHUB_WORKFLOW_PREPARE_FEATURE,
     guard_contracts::NATIVE_EXACT_ACTION_FEATURE,
+    guard_contracts::NATIVE_BASH_SUBJECT_INSPECTION_FEATURE,
     guard_contracts::SKILL_WORKFLOW_PREFLIGHT_FEATURE,
 ];

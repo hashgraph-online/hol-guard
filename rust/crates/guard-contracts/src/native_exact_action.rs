@@ -64,6 +64,10 @@ pub enum NativePolicyBindingV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeExactActionQueryV1 {
+    /// Observe a bounded Bash graph. This never mints a permission token.
+    BashSubject {
+        capture: Box<crate::NativeBashCaptureV1>,
+    },
     /// The persistent exact-action token of one review, or the reason it must
     /// stay a one-time allow.
     ExactAction {
@@ -115,6 +119,10 @@ pub enum NativeExactActionQueryV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeExactActionPayloadV1 {
+    BashSubject {
+        subject: Option<Box<crate::NativeBashSubjectV1>>,
+        unavailable_reason: Option<String>,
+    },
     /// Exactly one of `token` and `once_only_reason` is set.
     ExactAction {
         token: Option<String>,

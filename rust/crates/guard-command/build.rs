@@ -95,7 +95,9 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
 }
 
 fn write_json(path: &Path, value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(value).expect("generated JSON");
+    let mut canonical = value.clone();
+    canonical.sort_all_objects();
+    let mut bytes = serde_json::to_vec(&canonical).expect("generated JSON");
     bytes.push(b'\n');
     fs::write(path, &bytes).expect("write generated build output");
     bytes

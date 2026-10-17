@@ -21,6 +21,23 @@ pub fn changed() -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, "filesystem binding changed")
 }
 
+/// Ask the OS using effective credentials, including ACLs, before PATH selection.
+#[cfg(unix)]
+pub fn can_execute(path: &Path) -> io::Result<bool> {
+    let path = CString::new(path.as_os_str().as_bytes()).map_err(|_| changed())?;
+    if unsafe { libc::faccessat(libc::AT_FDCWD, path.as_ptr(), libc::X_OK, libc::AT_EACCESS) } == 0
+    {
+        return Ok(true);
+    }
+    let error = io::Error::last_os_error();
+    match error.kind() {
+        io::ErrorKind::NotFound
+        | io::ErrorKind::NotADirectory
+        | io::ErrorKind::PermissionDenied => Ok(false),
+        _ => Err(error),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Identity {
     #[cfg(unix)]

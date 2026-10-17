@@ -443,3 +443,13 @@ fn program_budget_matches_delivery_manifest() {
         Some(MAX_PROGRAM_BYTES as u64)
     );
 }
+
+#[test]
+fn canonical_encoding_sorts_nested_objects_and_preserves_utf8() {
+    let value: Value =
+        serde_json::from_str(r#"{"z":{"β":2,"a":1},"a":["ü",{"b":2,"a":1}]}"#).unwrap();
+    assert_eq!(
+        canonical_json_bytes(&value).unwrap(),
+        r#"{"a":["ü",{"a":1,"b":2}],"z":{"a":1,"β":2}}"#.as_bytes()
+    );
+}

@@ -299,8 +299,17 @@ pub fn digest_value(domain: &[u8], value: &impl serde::Serialize) -> Result<Stri
 }
 
 fn digest_json_value(domain: &[u8], value: &Value) -> Result<String, &'static str> {
-    let encoded = serde_json::to_vec(value).map_err(|_| "native_command_encoding_failed")?;
+    let encoded = canonical_json_bytes(value).map_err(|_| "native_command_encoding_failed")?;
     Ok(digest_canonical_bytes(domain, &encoded))
+}
+
+// Do not depend on serde_json's selected Map implementation. Build dependencies
+// may enable preserve_order, while the packaged/runtime contract requires
+// recursively sorted object keys and the usual UTF-8 JSON string encoding.
+fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
+    let mut canonical = value.clone();
+    canonical.sort_all_objects();
+    serde_json::to_vec(&canonical)
 }
 
 // ring uses the CPU's SHA instructions; the packaged program digest covers

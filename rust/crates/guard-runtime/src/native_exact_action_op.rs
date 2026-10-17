@@ -6,6 +6,7 @@
 //! judged it. A proof that fails is a successful reply carrying the once-only
 //! reason, so only a malformed request is an `error`.
 
+mod bash_capture;
 mod binding;
 pub(crate) mod context;
 mod env_launch;
@@ -164,6 +165,16 @@ fn decide(
         return Err("native_exact_action_schema_mismatch");
     }
     Ok(match &request.query {
+        NativeExactActionQueryV1::BashSubject { capture } => match bash_capture::inspect(capture) {
+            Ok(subject) => NativeExactActionPayloadV1::BashSubject {
+                subject: Some(Box::new(subject)),
+                unavailable_reason: None,
+            },
+            Err(reason) => NativeExactActionPayloadV1::BashSubject {
+                subject: None,
+                unavailable_reason: Some(reason.to_owned()),
+            },
+        },
         NativeExactActionQueryV1::ReviewBinding {
             harness,
             command,

@@ -130,8 +130,9 @@ pub(super) struct ChildSetup<'a> {
     pub(super) argv: &'a [*const libc::c_char],
     pub(super) env: &'a [*const libc::c_char],
     pub(super) deadline: &'a LaunchDeadline,
-    #[cfg(target_os = "linux")]
     pub(super) inherited: &'a [std::os::fd::OwnedFd],
+    #[cfg(target_os = "macos")]
+    pub(super) keep_descriptors: &'a [i32],
     #[cfg(target_os = "macos")]
     pub(super) descriptors: &'a mut super::supervisor::DescriptorTable,
     #[cfg(target_os = "macos")]
@@ -149,7 +150,6 @@ unsafe extern "C" {
 
 impl ChildSetup<'_> {
     pub(super) unsafe fn exec(self) -> ! {
-        #[cfg(target_os = "linux")]
         use std::os::fd::AsRawFd;
         let err = self.error;
         if unsafe { self.deadline.expired() } || !unsafe { super::owner::reset_child_sigchld() } {
@@ -234,15 +234,15 @@ impl ChildSetup<'_> {
                 libc::close(5);
             }
         }
-        #[cfg(target_os = "linux")]
-        {
-            for (index, file) in self.inherited.iter().enumerate() {
-                if unsafe { libc::dup2(file.as_raw_fd(), 6 + index as i32) } < 0 {
-                    unsafe {
-                        child_failure(4, 9);
-                    }
+        for (index, file) in self.inherited.iter().enumerate() {
+            if unsafe { libc::dup2(file.as_raw_fd(), 6 + index as i32) } < 0 {
+                unsafe {
+                    child_failure(4, 9);
                 }
             }
+        }
+        #[cfg(target_os = "linux")]
+        {
             let first = 6 + self.inherited.len() as u32;
             let gate = self.launch as u32;
             // Keep the already-open CLOEXEC gate above the reserved targets.
@@ -261,10 +261,7 @@ impl ChildSetup<'_> {
             }
         }
         #[cfg(target_os = "macos")]
-        if !unsafe {
-            self.descriptors
-                .close_except(&[0, 1, 2, 3, 4, 5, self.launch])
-        } {
+        if !unsafe { self.descriptors.close_except(self.keep_descriptors) } {
             unsafe {
                 child_failure(4, 9);
             }

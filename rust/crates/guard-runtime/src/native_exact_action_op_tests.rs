@@ -229,6 +229,9 @@ fn run_case(case: &Value) -> Result<(), String> {
     let expected = &concrete["expected"];
     let payload = decide(&request, &engines).map_err(|code| format!("error {code}"))?;
     match payload {
+        NativeExactActionPayloadV1::BashSubject { .. } => {
+            Err("legacy identity vector unexpectedly returned a Bash subject".into())
+        }
         NativeExactActionPayloadV1::ReviewBinding { binding } => {
             let want = expected["binding"].as_str().map(str::to_owned);
             (binding == want)

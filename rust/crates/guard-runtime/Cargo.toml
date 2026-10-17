@@ -54,6 +54,7 @@ guard-archive = { version = "0.1.0", path = "../guard-archive" }
 nix = { workspace = true, features = ["signal", "resource", "socket", "net", "user", "mount"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
+guard-contained-process = { path = "../guard-contained-process" }
 guard-seatbelt = { path = "../guard-seatbelt" }
 libproc = "0.14.11"
 security-framework = "3.7.0"

@@ -154,6 +154,8 @@ mod daemon_route;
 pub use daemon_route::*;
 mod native_exact_action;
 pub use native_exact_action::*;
+mod native_bash_subject;
+pub use native_bash_subject::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
