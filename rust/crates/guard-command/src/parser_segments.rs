@@ -54,7 +54,15 @@ fn split_execution_segments_inner(
                     quote = Quote::None;
                 } else if current == '\\' {
                     escaped = true;
-                } else if current == '`' || (current == '$' && chars.get(index + 1) == Some(&'(')) {
+                } else if current == '`'
+                    || (current == '$' && chars.get(index + 1) == Some(&'('))
+                    || (current == '$'
+                        && chars.get(index + 1) == Some(&'{')
+                        && chars
+                            .get(index + 2)
+                            .copied()
+                            .is_some_and(crate::parser_brace_command::opens_brace_command))
+                {
                     return Err("command_substitution_not_yet_supported");
                 }
                 index += 1;
