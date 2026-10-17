@@ -18,7 +18,15 @@
 //!
 //! An interpreter is unbounded unless it is the whole command and the program
 //! it runs, inline or fed on standard input, was read; it then runs only that
-//! program, as it would run a script file.
+//! program, as it would run a script file. `xargs` is the exception that
+//! names its program in the text: standard input supplies arguments, not the
+//! program, so `cat list.txt | xargs rm -f` owns what `rm` owns. A literal
+//! input redirect is not read yet, so `xargs rm -f < list.txt` stays an
+//! evaluation failure. An active
+//! extension with trust class `external` that owns a program named in the
+//! text is not read through, and an unknown name set fails closed: its rules
+//! judge arguments standard input supplies, which this text does not hold.
+//! A built-in owner of the program `xargs` names still supplies its floor.
 
 use std::collections::BTreeSet;
 use std::time::Instant;
@@ -29,13 +37,21 @@ use super::{rank, rule_floor, CompiledNativeCommandControls};
 use crate::pretool::generic::workspace_redirects;
 use crate::CanonicalCommandV1;
 
+#[path = "native_command_unmodeled_expansion.rs"]
+mod expansion;
 #[path = "native_command_link_makers.rs"]
 mod link_makers;
+#[path = "native_command_unmodeled_redirections.rs"]
+mod redirections;
 #[path = "native_command_unmodeled_shapes.rs"]
 mod shapes;
+#[path = "native_command_unmodeled_xargs.rs"]
+mod xargs;
 use link_makers::creates_links;
+use redirections::without_redirections;
 use shapes::{data_heredocs, without_lookups, without_plain_awk};
 pub(crate) use shapes::{python_is_builtin_only, python_stdin};
+use xargs::{xargs_input_is_named, xargs_names_its_program, xargs_programs};
 
 /// Compatibility owners recognize these programs without a catalog matcher.
 const COMPATIBILITY_EXECUTABLES: &[(&str, &[&str])] = &[
@@ -176,9 +192,13 @@ impl CompiledNativeCommandControls {
             Some((shell, _)) => shell.clone(),
             None => shell_text(text).to_owned(),
         };
+        // A redirection such as `;2>&1` is not a program. It goes before the
+        // awk pass, which rejoins words with spaces: `2>&1` became `2 >& 1`,
+        // and the lone fd then read as the program hiding the interpreter.
+        let bare = without_plain_awk(&without_redirections(&shell));
         let shell = without_plain_awk(&shell);
         let shell = shell.as_str();
-        let interpreted = named_words(&joined_quotes(shell));
+        let interpreted = named_words(&joined_quotes(&bare));
         // `source FILE` runs the file's words in this shell, so the file names
         // the programs the command can run. Reading it bounds those owners the
         // way a script file bounds an interpreter's. Until it was read, an
@@ -202,10 +222,29 @@ impl CompiledNativeCommandControls {
         for source in sourced.iter().flatten() {
             named.extend(named_words(source));
         }
-        if INTERPRETERS
-            .iter()
-            .any(|name| interpreted.contains(*name) && !(sourced_resolved && *name == "source"))
-        {
+        let xargs_programs = xargs_programs(shell);
+        // An `xargs` is read only when the text also says where it reads its
+        // operands. A bare one takes the caller's standard input, so the
+        // arguments it hands the program are not in this text.
+        let xargs_bounded = xargs_programs.is_some() && xargs_input_is_named(shell);
+        // No command-position `xargs` is `None`, not an empty program set.
+        let xargs_names_program = shell.contains("xargs")
+            && xargs_bounded
+            && xargs_names_its_program(shell)
+            && xargs_programs
+                .as_ref()
+                .is_some_and(|programs| !programs.is_empty());
+        if INTERPRETERS.iter().any(|name| {
+            interpreted.contains(*name)
+                && !(sourced_resolved && *name == "source")
+                && !(xargs_bounded && *name == "xargs")
+        }) {
+            // An `xargs` whose operands are not in the text is not bounded by
+            // reading a script file. `2>/dev/null xargs gh` still takes its
+            // arguments from the caller.
+            if interpreted.contains("xargs") && !xargs_bounded {
+                return None;
+            }
             // A program read from a file names the tools it may launch
             // outside the command text, so it counts toward the owners.
             match crate::pretool::sole_program_sources(command, context) {
@@ -214,14 +253,23 @@ impl CompiledNativeCommandControls {
                         named.extend(named_words(&source));
                     }
                 }
-                // Backgrounding leaves no segments, so a module launch such as
-                // `python3 -m http.server` looks like a script that was never
-                // read. The module name is already in the command.
-                None if command.uncertainty_reason.as_deref()
-                    == Some("background_job_not_yet_supported")
-                    && !interpreter_launch_reads_a_file(shell) => {}
+                // Backgrounding or a redirect leaves no segments, so a module
+                // launch such as `python3 -m http.server` looks like a script
+                // that was never read. The module name is already in the
+                // command.
+                None if !interpreter_launch_reads_a_file(&bare) => {}
                 None => return None,
             }
+        }
+        // Reading the program out of an `xargs` leaves the operands standard
+        // input supplies unread. An active external command source that owns
+        // a program named here, or whose names are unknown, judges arguments
+        // this text does not hold, so the evaluation failure stays. Those
+        // extensions are inactive until enabled. A pipe such as
+        // `cat list.txt | xargs rm -f` keeps the review its built-in owner
+        // gives it. A literal input redirect is not read yet.
+        if xargs_names_program && self.external_source_names_a_program(&named) {
+            return None;
         }
         let mut floor = "review";
         for (index, extension) in self.program.extensions.iter().enumerate() {
@@ -232,15 +280,56 @@ impl CompiledNativeCommandControls {
                 .iter()
                 .find(|(id, _)| *id == extension.extension_id)
                 .map(|(_, executables)| *executables);
-            let owns = self
-                .program
-                .extension_names(index, compatibility)
+            let extension_names = self.program.extension_names(index, compatibility);
+            let owns = extension_names
+                .as_ref()
                 .is_none_or(|names| names.is_empty() || !names.is_disjoint(&named));
-            if owns && rank(self.extension_floor(index)) > rank(floor) {
+            if !owns {
+                continue;
+            }
+            // A contributed extension with a known program list is not read
+            // through when that list includes the program `xargs` names.
+            // `gh` is one, so `xargs gh pr merge` stays an evaluation
+            // failure. An unknown or empty name set is not that list: treating
+            // it as one refused `xargs rm` along with every other unmodeled
+            // command. The required owner of `rm` still reviews it.
+            if xargs_names_program && !extension.required {
+                if let (Some(programs), Some(names)) = (&xargs_programs, &extension_names) {
+                    if !names.is_empty() && !names.is_disjoint(programs) {
+                        return None;
+                    }
+                }
+            }
+            if rank(self.extension_floor(index)) > rank(floor) {
                 floor = self.extension_floor(index);
             }
         }
         Some(floor)
+    }
+
+    /// An active extension with trust class `external` owns a program the
+    /// command names. An unknown name set fails closed: that extension can
+    /// match without a known program, so it is treated as owning the command.
+    fn external_source_names_a_program(&self, named: &BTreeSet<String>) -> bool {
+        self.program
+            .extensions
+            .iter()
+            .enumerate()
+            .any(|(index, extension)| {
+                if extension.trust_class != "external"
+                    || !self.active_extensions.contains(&extension.extension_id)
+                {
+                    return false;
+                }
+                let compatibility = COMPATIBILITY_EXECUTABLES
+                    .iter()
+                    .find(|(id, _)| *id == extension.extension_id)
+                    .map(|(_, executables)| *executables);
+                let extension_names = self.program.extension_names(index, compatibility);
+                extension_names
+                    .as_ref()
+                    .is_none_or(|names| names.is_empty() || !names.is_disjoint(named))
+            })
     }
 
     /// The floor the extension would apply to its strongest rule, as an
@@ -274,6 +363,71 @@ impl CompiledNativeCommandControls {
     }
 }
 
+/// A pipeline whose only data movement is a pipe into an `xargs` that names
+/// the program it runs. A pipe into a shell, `curl url | sh`, is not one.
+fn named_xargs_pipeline(text: &str) -> bool {
+    let literal = unquoted_literal(text);
+    text.contains("xargs")
+        && xargs_names_its_program(text)
+        && xargs_input_is_named(text)
+        && !text.contains(['<', '>', '`', '$', '\n'])
+        && !moves_data(&literal)
+}
+
+/// `;2>&1 python3 evil.py` and the same shape with `<` or `>&`. A spaced
+/// `cmd 2>&1` is not glued, and `python3 -` names no script file.
+fn glued_redirect_runs_interpreter(text: &str) -> bool {
+    let chars: Vec<char> = text.chars().collect();
+    let mut glued = false;
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
+            glued = true;
+            break;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            glued = true;
+            break;
+        }
+    }
+    if !glued {
+        return false;
+    }
+    let words = named_words(text);
+    words.iter().any(|word| {
+        matches!(
+            word.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        )
+    }) && words.iter().any(|word| word.contains('.'))
+}
+
 /// Loops and conditionals, or one heredoc that only feeds standard input,
 /// with nothing in the shell text that substitutes or overrides `PATH` and no
 /// redirect except to a literal path.
@@ -292,14 +446,40 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
                 && (!moves_data(&literal) || literal_redirects_only(&command.normalized_text))
         }
         Some("compound_shell_not_yet_supported") => {
-            !moves_data(&unquoted_literal(&command.normalized_text))
+            let literal = unquoted_literal(&command.normalized_text);
+            !moves_data(&literal)
                 || literal_redirects_only(&command.normalized_text)
+                || named_xargs_pipeline(&command.normalized_text)
+        }
+        // `cat list.txt | xargs -0 rm -f` is a nested executor because `xargs`
+        // is one, and the pipe carries arguments into the program the text
+        // names. `find -exec`, `eval`, and `xargs sh` stay an evaluation
+        // failure: those do not name a bounded program.
+        Some("nested_command_executor_not_yet_supported") => {
+            named_xargs_pipeline(&command.normalized_text)
         }
         Some("command_redirect_not_yet_supported") => {
             let text = without_lookups(&command.normalized_text);
-            input_heredoc(&text)
-                || literal_redirects_only(&text)
-                || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell))
+            // `;2>&1 python3 evil.py` has no segments: the redirect is the
+            // uncertainty. Reviewing it would hide the interpreter.
+            !glued_redirect_runs_interpreter(&text)
+                && (input_heredoc(&text)
+                    || literal_redirects_only(&text)
+                    || data_heredocs(&text).is_some_and(|(shell, _)| plain_after_heredocs(&shell)))
+        }
+        // An unquoted `${NAME}` expands to a value the shell splits into
+        // words. Splitting makes operands, never operators, so the text still
+        // names every program it runs, exactly as the `$NAME` and `"${NAME}"`
+        // spellings of the same value do: those two model exactly, while this
+        // one reached an evaluation failure and blocked outright. A command
+        // word built from an expansion, `${ cmd; }` among them, is refused
+        // before any floor is read, and so is a brace form the shell
+        // evaluates rather than substitutes (see `expansion`).
+        Some("parameter_expansion_not_yet_supported") => {
+            let literal = unquoted_literal(&command.normalized_text);
+            expansion::expansions_are_inert(&command.normalized_text)
+                && !expansion_builds_a_word(&command.normalized_text)
+                && (!moves_data(&literal) || literal_redirects_only(&command.normalized_text))
         }
         // A lookup in a substitution is the only one that does not run a
         // program, so a command whose substitutions are all lookups reads
@@ -327,6 +507,9 @@ fn plain_after_heredocs(shell: &str) -> bool {
 /// `/dev/null`, makes no link that redirect could follow.
 fn literal_redirects_only(text: &str) -> bool {
     workspace_redirects::project_naming_files(text).is_some_and(|(projected, names_files)| {
+        // `2>&1>log` keeps the descriptor copy in the projected text. That
+        // copy is not a file write, so it does not by itself move data.
+        let projected = projected.replace("2>&1", " ").replace("2>/dev/null", " ");
         let literal = unquoted_literal(&projected);
         !(moves_data(&literal) || (names_files && creates_links(&literal)))
     })
@@ -335,12 +518,31 @@ fn literal_redirects_only(text: &str) -> bool {
 /// A backgrounded pipeline stays out of the review floor. The pipe check
 /// names a remote-code or exfiltration attack before this runs; anything it
 /// cannot classify, including a benign pipe, keeps the evaluation failure.
+/// A pipeline after the last backgrounded job runs in the foreground, as the
+/// `curl -fsS http://localhost:8080/ | grep title` that checks a server just
+/// started does.
 fn background_pipeline(text: &str) -> bool {
     let preserve_backslash = cfg!(windows);
-    match crate::parser_segments::split_pipelines_including_background(text, preserve_backslash) {
-        Ok(segments) => segments.iter().any(|segment| segment.pipeline_index > 0),
-        Err(_) => text.contains('|'),
-    }
+    let Ok(segments) =
+        crate::parser_segments::split_pipelines_including_background(text, preserve_backslash)
+    else {
+        return text.contains('|');
+    };
+    let chars: Vec<char> = text.chars().collect();
+    let last_job = segments
+        .iter()
+        .filter(|segment| {
+            let mut rest = chars[segment.end..]
+                .iter()
+                .skip_while(|c| c.is_whitespace());
+            rest.next() == Some(&'&') && rest.next() != Some(&'&')
+        })
+        .map(|segment| segment.end)
+        .max()
+        .unwrap_or(chars.len());
+    segments
+        .iter()
+        .any(|segment| segment.pipeline_index > 0 && segment.start < last_job)
 }
 
 /// Whether shell text redirects, substitutes or sets the environment of a
@@ -349,7 +551,7 @@ fn moves_data(literal: &str) -> bool {
     literal.contains(['<', '>', '`'])
         || literal.contains("$(")
         || command_words(literal).any(|word| {
-            is_assignment(word)
+            (is_assignment(word) && !saves_job_pid(word))
                 || matches!(
                     word,
                     "export" | "declare" | "typeset" | "readonly" | "local" | "unset" | "alias"
@@ -508,11 +710,50 @@ fn joined_quotes(text: &str) -> String {
     joined
 }
 
+/// An interpreter word followed by a program file, after redirections are
+/// blanked. `python3 -m` and `node -e` are not file launches.
+pub(crate) fn unread_file_interpreter(shell: &str) -> bool {
+    const FILE_INTERPRETERS: &[&str] = &[
+        "sh", "bash", "dash", "zsh", "python", "python2", "python3", "node", "ruby", "perl", "php",
+    ];
+    without_redirections(shell)
+        .split(|character: char| {
+            matches!(
+                character,
+                ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
+            )
+        })
+        .any(|piece| {
+            let words: Vec<&str> = piece
+                .split_whitespace()
+                .map(|word| word.trim_matches(['\'', '"']))
+                .filter(|word| !word.is_empty() && !is_assignment(word))
+                .skip_while(|word| SHELL_PREFIXES.contains(word))
+                .collect();
+            let Some(program) = words.first() else {
+                return false;
+            };
+            if !FILE_INTERPRETERS.contains(&command_basename(program).as_str()) {
+                return false;
+            }
+            for argument in &words[1..] {
+                if matches!(*argument, "-c" | "-m" | "-e") {
+                    return false;
+                }
+                if argument.starts_with('-') {
+                    continue;
+                }
+                return true;
+            }
+            false
+        })
+}
+
 /// Whether a backgrounded interpreter still names a program file this scan
 /// did not read. A `python -m` module launch does not: the module is an
 /// argument, same as the foreground command.
 fn interpreter_launch_reads_a_file(shell: &str) -> bool {
-    shell
+    without_redirections(shell)
         .split(|character: char| {
             matches!(
                 character,
@@ -659,6 +900,43 @@ fn parameter_expansion_runs_a_command(characters: &[char]) -> bool {
     false
 }
 
+/// An expansion glued to the characters beside it spells a word the text does
+/// not hold. `find . -exec ${X}er ps {} +` runs docker when `X` is `dock`, and
+/// nothing a floor can read names it, so a command carrying one keeps its
+/// evaluation failure. An expansion standing as its own word, or beside a
+/// separator such as `/` or `=`, names no program the text is hiding.
+fn expansion_builds_a_word(text: &str) -> bool {
+    let characters: Vec<char> = text.chars().collect();
+    for (at, _) in text.match_indices("${") {
+        let start = text[..at].chars().count();
+        if start > 0 && glues_a_word(characters[start - 1]) {
+            return true;
+        }
+        let Some(close) = characters[start..]
+            .iter()
+            .position(|character| *character == '}')
+        else {
+            return true;
+        };
+        if characters
+            .get(start + close + 1)
+            .copied()
+            .is_some_and(glues_a_word)
+        {
+            return true;
+        }
+    }
+    false
+}
+
+/// A character the shell joins to the expansion beside it. Quotes and a
+/// backslash join too: `"dock"${X}`, `${X}"er"` and `${X}\er` are each one
+/// word, so the program they name is not in the text either.
+fn glues_a_word(character: char) -> bool {
+    character.is_alphanumeric()
+        || matches!(character, '_' | '-' | '.' | '$' | '}' | '"' | '\'' | '\\')
+}
+
 fn synthesizes_program(literal: &str, sourced: bool) -> bool {
     let masked = mask_double_quoted_separators(literal);
     let mut words = command_words(&masked).filter(|word| !is_assignment(word));
@@ -759,6 +1037,21 @@ fn command_words(literal: &str) -> impl Iterator<Item = &str> {
         })
 }
 
+/// `server=$!`: the process ID of the job just backgrounded, saved so a later
+/// `kill $server` stops it. A number moves no data, unless the name is one the
+/// shell or loader reads.
+fn saves_job_pid(word: &str) -> bool {
+    word.split_once('=').is_some_and(|(name, value)| {
+        value == "$!"
+            && !matches!(
+                name,
+                "PATH" | "IFS" | "HOME" | "CDPATH" | "ENV" | "BASH_ENV" | "PS4" | "PROMPT_COMMAND"
+            )
+            && !name.starts_with("LD_")
+            && !name.starts_with("DYLD_")
+    })
+}
+
 fn is_assignment(word: &str) -> bool {
     word.split_once('=').is_some_and(|(name, _)| {
         !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
@@ -772,3 +1065,15 @@ mod tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_sourced_tests.rs"]
 mod sourced_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_bounded_tests.rs"]
+mod bounded_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_ansi_c_tests.rs"]
+mod ansi_c_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_expansion_tests.rs"]
+mod expansion_tests;

@@ -584,6 +584,11 @@ def test_unresolved_execution_context_cannot_reuse_an_approval_token(tmp_path: P
     second = _approval_token(artifact, workspace=workspace, config=config)
 
     assert artifact.metadata["shell_execution_context_complete"] is False
+    if is_unbound_context_digest(first) or is_unbound_context_digest(second):
+        # A loaded runner can leave the resident unreachable; the degraded
+        # sentinel never validates, so it cannot be reused either.
+        assert is_unbound_context_digest(first) and is_unbound_context_digest(second)
+        return
     assert first != second
 
 

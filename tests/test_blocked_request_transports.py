@@ -287,6 +287,7 @@ def test_default_mcp_review_blocks_without_prompt_or_execution(
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="policy",
             signals=("review required",),
             summary="review required",

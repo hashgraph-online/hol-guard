@@ -259,7 +259,7 @@ pub trait SupplyChainStore {
     );
     /// `store.get_approval_request(request_id)` -> dict | None
     fn get_approval_request(&self, request_id: &str) -> Option<Value>;
-    /// `store.resolve_policy_decision_lookup(...) -> (decision, ignored_local_integrity)`
+    /// `store.resolve_policy_decision_lookup(...) -> (decision, ignored_local_integrity, error)`
     #[allow(clippy::too_many_arguments)]
     fn resolve_policy_decision_lookup(
         &self,
@@ -305,6 +305,9 @@ pub trait SupplyChainStore {
 pub struct PolicyDecisionLookup {
     pub decision: Option<Value>,
     pub ignored_local_integrity: Option<Value>,
+    /// Set when the lookup could not run. Absent after a successful lookup,
+    /// including one that found no saved decision.
+    pub error: Option<String>,
 }
 
 /// `.runtime.runner` seam.
@@ -3184,7 +3187,6 @@ pub(crate) fn stored_package_policy_is_stale_policy_bundle_family(
 
 /// `.local_supply_chain._package_policy_workspace_candidates` (:2620-2637).
 /// Returns the ordered runtime workspace candidates for stored overrides.
-#[allow(dead_code)]
 fn package_policy_workspace_candidates(
     artifact: &GuardArtifact,
     artifact_hash: &str,
@@ -4288,8 +4290,7 @@ pub fn build_supply_chain_explain_payload(
 }
 
 /// `_package_evaluation_requires_external_archive_binding` (:1263-1285).
-#[allow(dead_code)]
-fn package_evaluation_requires_external_archive_binding(
+pub fn package_evaluation_requires_external_archive_binding(
     evaluation: &PackageRequestEvaluation,
 ) -> bool {
     let source_hashes = evaluation.external_archive_source_hashes();
@@ -4523,11 +4524,20 @@ fn build_package_protect_authority(
     }))
 }
 
+const PACKAGE_POLICY_LOOKUP_ERROR: &str = "package_policy_lookup_error";
+
+fn evaluation_with_lookup_error(
+    evaluation: &PackageRequestEvaluation,
+    code: &str,
+) -> PackageRequestEvaluation {
+    evaluation.with_fields(&[(PACKAGE_POLICY_LOOKUP_ERROR, Value::String(code.to_string()))])
+}
+
 /// `_final_package_protect_authority` (:1497-1694).
 #[allow(clippy::too_many_arguments)]
 #[allow(clippy::type_complexity)]
 #[allow(dead_code)]
-fn final_package_protect_authority(
+pub(crate) fn final_package_protect_authority(
     initial: PackageProtectAuthority,
     initial_saved_evaluation: &PackageRequestEvaluation,
     saved_approval_pending: bool,
@@ -4572,6 +4582,7 @@ fn final_package_protect_authority(
     let mut saved_approval_claimed = false;
     let mut saved_approval_claim_disposition: Option<String> = None;
     let mut saved_approval_claim_failure: Option<PackageRequestEvaluation> = None;
+    let mut claim_lookup_error: Option<String> = None;
 
     let observe_mode = current_config
         .as_ref()
@@ -4594,17 +4605,22 @@ fn final_package_protect_authority(
             paths_api,
             approval_context_api,
         );
-        let claimed_action = protect_action_for_policy_action(Some(&Value::String(
-            claimed_resolution
-                .evaluation
-                .policy_action()
-                .unwrap_or_default(),
-        )));
-        if !is_execution_permitted(&claimed_action) {
+        if let Some(code) = claimed_resolution.lookup_error {
+            claim_lookup_error = Some(code);
             saved_approval_claim_failure = Some(claimed_resolution.evaluation);
         } else {
-            saved_approval_claimed = true;
-            saved_approval_claim_disposition = claimed_resolution.claim_disposition;
+            let claimed_action = protect_action_for_policy_action(Some(&Value::String(
+                claimed_resolution
+                    .evaluation
+                    .policy_action()
+                    .unwrap_or_default(),
+            )));
+            if !is_execution_permitted(&claimed_action) {
+                saved_approval_claim_failure = Some(claimed_resolution.evaluation);
+            } else {
+                saved_approval_claimed = true;
+                saved_approval_claim_disposition = claimed_resolution.claim_disposition;
+            }
         }
     }
 
@@ -4713,19 +4729,20 @@ fn final_package_protect_authority(
     ));
 
     if let Some(failure_eval) = saved_approval_claim_failure {
-        return Ok((
-            current.clone(),
-            PackageRequestEvaluation::new(Value::Object(
-                ppo::package_evaluation_with_current_policy_action(
-                    eval_api,
-                    failure_eval.value.as_object().map_or(&*EMPTY_MAP, |m| m),
-                    normalize_guard_action(
-                        current.current_action.as_ref().unwrap_or(&Value::Null),
-                        GuardAction::Block,
-                    ),
+        let mut evaluation = PackageRequestEvaluation::new(Value::Object(
+            ppo::package_evaluation_with_current_policy_action(
+                eval_api,
+                failure_eval.value.as_object().map_or(&*EMPTY_MAP, |m| m),
+                normalize_guard_action(
+                    current.current_action.as_ref().unwrap_or(&Value::Null),
+                    GuardAction::Block,
                 ),
-            )),
+            ),
         ));
+        if let Some(code) = claim_lookup_error {
+            evaluation = evaluation_with_lookup_error(&evaluation, &code);
+        }
+        return Ok((current.clone(), evaluation));
     }
 
     if current.observe_mode {
@@ -4756,7 +4773,7 @@ fn final_package_protect_authority(
                 )),
             ));
         }
-        let refreshed_saved_policy = apply_stored_package_policy_override(
+        let refreshed = apply_stored_package_policy_override(
             &current_evaluation,
             store,
             &current.artifact,
@@ -4771,6 +4788,15 @@ fn final_package_protect_authority(
             paths_api,
             approval_context_api,
         );
+        if let Some(code) = refreshed.lookup_error.as_deref() {
+            // The claim was already taken. A failed re-read is not confirmation
+            // that the saved allow still applies, so the review evaluation stands.
+            return Ok((
+                current,
+                evaluation_with_lookup_error(&current_evaluation, code),
+            ));
+        }
+        let refreshed_saved_policy = refreshed.evaluation;
         if ppo::evaluation_uses_saved_package_approval(&refreshed_saved_policy.value) {
             return Ok((current, refreshed_saved_policy));
         }
@@ -4873,7 +4899,7 @@ fn final_package_protect_authority(
         ));
     }
 
-    let resolved = apply_stored_package_policy_override(
+    let applied = apply_stored_package_policy_override(
         &current_evaluation,
         store,
         &current.artifact,
@@ -4888,6 +4914,13 @@ fn final_package_protect_authority(
         paths_api,
         approval_context_api,
     );
+    if let Some(code) = applied.lookup_error.as_deref() {
+        return Ok((
+            current,
+            evaluation_with_lookup_error(&current_evaluation, code),
+        ));
+    }
+    let resolved = applied.evaluation;
     if ppo::evaluation_uses_saved_package_approval(&resolved.value) {
         let reuse = evaluate_approval_reuse(
             &current.current_action.clone().unwrap_or(Value::Null),
@@ -5283,8 +5316,7 @@ fn build_package_execution_context(
 
 /// `approval_scope_support.package_request_runtime_workspace_scope` —
 /// return the only workspace identity valid for a package-policy lookup.
-#[allow(dead_code)]
-fn package_request_runtime_workspace_scope(
+pub fn package_request_runtime_workspace_scope(
     artifact_id: Option<&str>,
     artifact_hash: Option<&str>,
     artifact_type: Option<&str>,
@@ -5530,6 +5562,7 @@ fn compose_current_package_policy_action(
 struct StoredPackagePolicyResolution {
     evaluation: PackageRequestEvaluation,
     claim_disposition: Option<String>,
+    lookup_error: Option<String>,
 }
 
 /// `_resolve_stored_package_policy_override` — attempt to claim a saved
@@ -5543,74 +5576,133 @@ fn resolve_stored_package_policy_override(
     artifact_hash: &str,
     workspace_dir: &Path,
     now: &str,
-    _execution_context: Option<&PackageExecutionContext>,
+    execution_context: Option<&PackageExecutionContext>,
     _current_action: Option<&Value>,
     claim_saved_approval: bool,
     _intent_parser: &dyn PackageIntentParserApi,
     _eval_api: &dyn PackageEvalApi,
-    _paths_api: &dyn PathSupportApi,
+    paths_api: &dyn PathSupportApi,
     approval_context_api: &dyn ApprovalContextApi,
 ) -> StoredPackagePolicyResolution {
-    // Look up the saved approval for this artifact.
-    let lookup = store.resolve_policy_decision_lookup(
-        &artifact.artifact_id,
-        artifact.artifact_id.as_str(),
-        Some(artifact_hash),
-        workspace_dir.to_string_lossy().as_ref(),
-        artifact.publisher.as_deref(),
-        now,
-        false,
+    let unchanged = || StoredPackagePolicyResolution {
+        evaluation: evaluation.clone(),
+        claim_disposition: None,
+        lookup_error: None,
+    };
+    // `native_package_policy_resolve._hydrate` — probe the workspace
+    // identities a package-policy lookup may answer for, in order, and take
+    // the first saved decision. The only valid identity is the runtime
+    // workspace scope token, never the workspace path itself.
+    let workspaces = package_policy_workspace_candidates(
+        artifact,
+        artifact_hash,
+        workspace_dir,
+        execution_context,
+        paths_api,
     );
-    let Some(saved) = lookup.decision else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+    let mut saved_decision: Option<Value> = None;
+    for workspace in &workspaces {
+        let lookup = store.resolve_policy_decision_lookup(
+            &artifact.harness,
+            artifact.artifact_id.as_str(),
+            Some(artifact_hash),
+            workspace,
+            artifact.publisher.as_deref(),
+            now,
+            false,
+        );
+        if let Some(code) = lookup.error.as_deref() {
+            // A store failure is not an empty lookup. The review verdict
+            // stands. The event is written when the store can take it; the
+            // code is also returned, because this same store may be unable
+            // to record the event.
+            store.add_event(
+                "package_policy_lookup_failed",
+                &json!({ "code": code }),
+                now,
+            );
+            return StoredPackagePolicyResolution {
+                evaluation: evaluation.clone(),
+                claim_disposition: None,
+                lookup_error: Some(code.to_string()),
+            };
+        }
+        // A row whose local integrity did not verify stops the probe: Python
+        // hands that case to the daemon authority, which this lane has no seam
+        // for, so the review verdict stands rather than a row being reused on
+        // unverified integrity.
+        if lookup.ignored_local_integrity.is_some() {
+            return unchanged();
+        }
+        if lookup.decision.is_some() {
+            saved_decision = lookup.decision;
+            break;
+        }
+    }
+    let Some(saved) = saved_decision else {
+        return unchanged();
     };
     if !claim_saved_approval {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     }
     // Attempt to claim the saved approval — verify artifact-hash match and
     // freshness via the approval_context seam.
     let decision_id = saved.get("decision_id").and_then(Value::as_i64);
     let Some(did) = decision_id else {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: None,
-        };
+        return unchanged();
     };
+    // Only a saved allow is reused. A row recording any other action is read
+    // by the saved-policy lanes that own it, never claimed as an approval.
+    if saved.get("action").and_then(Value::as_str) != Some("allow") {
+        return unchanged();
+    }
     let saved_hash = saved.get("artifact_hash").and_then(Value::as_str);
     if saved_hash != Some(artifact_hash) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some("artifact_hash_mismatch".to_string()),
-        };
+        return unchanged();
     }
     // Check freshness — expiry, approval-context token, etc.
-    if let Some(reason) = approval_context_api.approval_context_tokens_validation_reason(
-        saved.get("artifact_hash").unwrap_or(&Value::Null),
-        &Value::String(artifact_hash.to_string()),
-    ) {
-        return StoredPackagePolicyResolution {
-            evaluation: evaluation.clone(),
-            claim_disposition: Some(reason),
-        };
+    if approval_context_api
+        .approval_context_tokens_validation_reason(
+            saved.get("artifact_hash").unwrap_or(&Value::Null),
+            &Value::String(artifact_hash.to_string()),
+        )
+        .is_some()
+    {
+        return unchanged();
+    }
+    // The disposition the row reports is the store's, and only the two values
+    // the caller's vocabulary carries: a single-use row reads as `consumed`,
+    // a durable one as `retained`.
+    let disposition = match store.approval_reuse_claim_disposition(&saved).as_deref() {
+        Some(value @ ("consumed" | "retained")) => Some(value.to_owned()),
+        _ => None,
+    };
+    // The store claims the row before the evaluation reports the approval
+    // (`_run_claim`, kind `store`). A refused claim — another caller took the
+    // single-use row, or the row no longer stands — leaves the review verdict
+    // the package lane settled, so an unclaimed row is never read as approved.
+    if !store.claim_approval_reuse_decision(&saved, now) {
+        return unchanged();
     }
     // Apply the saved approval — rewrite decision fields.
-    let eval_mut = evaluation.clone();
-    eval_mut.with_fields(&[
+    let claimed = evaluation.with_fields(&[
         ("decision", json!("allow")),
         ("policy_action", json!("allow")),
         ("saved_approval_applied", Value::Bool(true)),
         ("saved_approval_decision_id", json!(did)),
     ]);
     StoredPackagePolicyResolution {
-        evaluation: eval_mut,
-        claim_disposition: Some("claimed".to_string()),
+        evaluation: claimed,
+        claim_disposition: disposition,
+        lookup_error: None,
     }
+}
+
+/// A stored package-policy override. `lookup_error` is set when the lookup
+/// could not run; `evaluation` is then the review verdict unchanged.
+pub struct AppliedStoredPackagePolicy {
+    pub evaluation: PackageRequestEvaluation,
+    pub lookup_error: Option<String>,
 }
 
 /// `_apply_stored_package_policy_override` — claim the saved approval when the
@@ -5630,8 +5722,8 @@ pub fn apply_stored_package_policy_override(
     eval_api: &dyn PackageEvalApi,
     paths_api: &dyn PathSupportApi,
     approval_context_api: &dyn ApprovalContextApi,
-) -> PackageRequestEvaluation {
-    resolve_stored_package_policy_override(
+) -> AppliedStoredPackagePolicy {
+    let resolved = resolve_stored_package_policy_override(
         evaluation,
         store,
         artifact,
@@ -5645,8 +5737,11 @@ pub fn apply_stored_package_policy_override(
         eval_api,
         paths_api,
         approval_context_api,
-    )
-    .evaluation
+    );
+    AppliedStoredPackagePolicy {
+        evaluation: resolved.evaluation,
+        lookup_error: resolved.lookup_error,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -5821,8 +5916,7 @@ fn package_policy_gate_context(
 /// local mirror does not model yet (`artifact_actions`, `publisher_actions`,
 /// `harness_actions`, `sandbox_analysis`, `resolve_action_override`, `mode`)
 /// ride through `config.extra` until the full config port lands.
-#[allow(dead_code)]
-fn package_config_policy_context(
+pub fn package_config_policy_context(
     artifact: &GuardArtifact,
     config: Option<&GuardConfig>,
 ) -> Map<String, Value> {
@@ -6438,7 +6532,7 @@ fn build_package_protect_payload(
         ));
     }
 
-    let (final_authority, final_evaluation) = final_package_protect_authority(
+    let (final_authority, mut final_evaluation) = final_package_protect_authority(
         authority.clone(),
         &evaluation,
         ppo::evaluation_uses_saved_package_approval(&evaluation.value),
@@ -6456,6 +6550,13 @@ fn build_package_protect_payload(
         paths_api,
         approval_context_api,
     )?;
+    if let Some(code) = final_evaluation
+        .value
+        .as_object_mut()
+        .and_then(|fields| fields.remove(PACKAGE_POLICY_LOOKUP_ERROR))
+    {
+        payload.insert(PACKAGE_POLICY_LOOKUP_ERROR.to_owned(), code);
+    }
     let final_execution_action =
         package_execution_policy_action(&final_authority, &final_evaluation);
     if !is_execution_permitted(&final_execution_action) {

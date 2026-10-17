@@ -317,6 +317,11 @@ def _run_guard_inventory_command(
         )
     else:
         payload = {"generated_at": generated_at, "items": store.list_inventory()}
+    if getattr(args, "sync", False):
+        from ..runtime.fleet_posture import request_full_inventory
+
+        request_full_inventory(store, source="cli", now=generated_at)
+        payload["fleet_posture"] = {"next_sync_inventory": "full"}
     _emit("inventory", payload, getattr(args, "json", False))
     return 0
 
@@ -602,6 +607,50 @@ def _run_guard_policies_command(
     return 0
 
 
+def _run_fleet_posture_setting(
+    args: argparse.Namespace,
+    *,
+    config: GuardConfig,
+    store: GuardStore | None,
+    guard_home: Path,
+) -> int:
+    from ..runtime.fleet_posture import (
+        fleet_posture_managed,
+        fleet_posture_opted_out,
+        set_fleet_posture_reporting,
+    )
+
+    if store is None:
+        from ..store import GuardStore as _GuardStore
+
+        store = _GuardStore(guard_home)
+    enabled = getattr(args, "fleet_posture", "on") == "on"
+    as_json = getattr(args, "json", False)
+    if not enabled and fleet_posture_managed(config):
+        message = "Fleet posture reporting is required on managed installs and cannot be turned off."
+        if as_json:
+            _emit("settings.fleet-posture", {"fleet_posture": "on", "managed": True, "error": message}, True)
+        else:
+            print(message, file=sys.stderr)
+        return 2
+    set_fleet_posture_reporting(store, enabled=enabled, now=_now())
+    _emit(
+        "settings.fleet-posture",
+        {
+            "fleet_posture": "off" if fleet_posture_opted_out(store) else "on",
+            "managed": fleet_posture_managed(config),
+            "detail": (
+                "Guard still reports version, tool protection state and policy status; "
+                "it omits OS version, blind-spot detail and per-item inventory."
+                if not enabled
+                else "Guard reports full fleet posture detail."
+            ),
+        },
+        as_json,
+    )
+    return 0
+
+
 def _run_guard_settings_command(
     args: argparse.Namespace,
     *,
@@ -617,6 +666,8 @@ def _run_guard_settings_command(
         raise RuntimeError("Guard home is required")
     config = _require_guard_config(config)
     settings_sub = getattr(args, "settings_command", None)
+    if settings_sub == "set" and getattr(args, "settings_set_command", None) == "fleet-posture":
+        return _run_fleet_posture_setting(args, config=config, store=store, guard_home=guard_home)
     if settings_sub == "set":
         try:
             config = _update_guard_cli_settings(args=args, config=config, guard_home=guard_home)

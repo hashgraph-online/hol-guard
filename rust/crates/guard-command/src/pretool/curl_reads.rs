@@ -290,7 +290,7 @@ fn readable_url(raw: &str, context: super::PathContext<'_>) -> bool {
 
 /// An `http(s)` URL naming `127.0.0.1` or `localhost` itself, on a dev-server
 /// port that no local admin service or Guard daemon listens on.
-fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
+pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> bool {
     if raw.contains(['{', '}', '[', ']', '\\', ' ']) {
         return false;
     }

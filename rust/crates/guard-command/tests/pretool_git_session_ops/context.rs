@@ -181,6 +181,68 @@ fn init_of_a_fresh_owned_temporary_directory_is_quiet() {
 }
 
 #[test]
+fn clone_of_a_local_repository_into_a_fresh_directory_is_quiet() {
+    const CLONE: &str = "native_exact_safe_git_clone_local";
+    let session = session("clone");
+    let primary = session.primary.display();
+    let home = session.home.display();
+    let copy = format!("{home}/app-portal-copy");
+    for command in [
+        format!("git clone {primary} {copy}"),
+        format!("git clone --branch main {primary} {copy}"),
+        format!("git clone -q --no-hardlinks {primary} {copy}"),
+        format!("git clone --single-branch -b main {primary} {copy}"),
+        format!("git clone -n {primary} {copy}"),
+    ] {
+        session.assert_allow(&command, CLONE);
+    }
+    for command in [
+        // A remote clone fetches a repository nothing here has read.
+        format!("git clone https://github.com/example-org/app-portal.git {copy}"),
+        format!("git clone file://{primary} {copy}"),
+        // The template, the configuration and the submodules of the new
+        // repository all decide what later runs in it.
+        format!("git clone --template={home}/tpl {primary} {copy}"),
+        format!("git clone --recurse-submodules {primary} {copy}"),
+        format!("git clone --config core.pager=id {primary} {copy}"),
+        format!("git -c core.pager=id clone {primary} {copy}"),
+        format!("git clone --separate-git-dir {home}/sep {primary} {copy}"),
+        format!("git clone --upload-pack id {primary} {copy}"),
+        // The destination must be a directory that does not exist yet,
+        // below the home directory or an owned temporary directory.
+        format!("git clone {primary} {home}"),
+        format!("git clone {primary} /etc/guard-clone"),
+        format!("git clone {primary} {copy}/nested/deeper"),
+        // A single operand leaves the destination for Git to name.
+        format!("git clone {primary}"),
+        // The source must be a repository the user already has.
+        format!("git clone {home}/org {copy}"),
+        format!("git clone {primary} {copy} > {home}/clone.log"),
+        format!("git clone {primary} {copy} && rm -rf {primary}"),
+        format!("git clone -b missing-branch {primary} {copy}"),
+    ] {
+        session.assert_not_allow(&command);
+    }
+    // A hook the new checkout would run, and a template directory whose
+    // hooks the copy would keep, each keep their review.
+    executable_hook(&session.primary.join(".git/hooks/post-checkout"));
+    session.assert_not_allow(&format!("git clone {primary} {copy}"));
+    std::fs::remove_file(session.primary.join(".git/hooks/post-checkout")).unwrap();
+    session.assert_allow(&format!("git clone {primary} {copy}"), CLONE);
+    git(
+        &session.home,
+        &session.primary,
+        &[
+            "config",
+            "--global",
+            "init.templateDir",
+            &format!("{home}/tpl"),
+        ],
+    );
+    session.assert_not_allow(&format!("git clone {primary} {copy}"));
+}
+
+#[test]
 fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
     const INIT: &str = "native_exact_safe_git_init_target";
     let session = session("init-root");
@@ -227,4 +289,91 @@ fn init_of_a_fresh_leaf_directly_in_a_temporary_root_is_quiet() {
         std::fs::create_dir(&leaf).unwrap();
         session.assert_not_allow(&format!("git init -q {target}"));
     }
+}
+
+/// `git clone` copies a repository, and a repository can point its object
+/// read somewhere else: a `.git` file names another Git directory, a link in
+/// its place does the same, and `objects/info/alternates` borrows a store the
+/// proof never bounded. Each keeps its review.
+#[test]
+fn a_clone_whose_repository_data_is_not_its_own_keeps_review() {
+    const CLONE: &str = "native_exact_safe_git_clone_local";
+    let session = session("clone-data");
+    let primary = session.primary.display();
+    let home = session.home.display();
+    let copy = format!("{home}/app-portal-copy");
+    session.assert_allow(&format!("git clone {primary} {copy}"), CLONE);
+    // The linked worktree's `.git` is a file naming the primary's Git
+    // directory, which is where the clone would read from.
+    session.assert_not_allow(&format!("git clone {} {copy}", session.worktree.display()));
+    // A link in place of the `.git` directory reads the same way.
+    let linked = session.home.join("linked-portal");
+    std::fs::create_dir_all(&linked).unwrap();
+    std::os::unix::fs::symlink(session.primary.join(".git"), linked.join(".git")).unwrap();
+    session.assert_not_allow(&format!("git clone {} {copy}", linked.display()));
+    // Alternates send the object read to a store outside the copy.
+    let info = session.primary.join(".git/objects/info");
+    std::fs::create_dir_all(&info).unwrap();
+    for name in ["alternates", "http-alternates"] {
+        let file = info.join(name);
+        std::fs::write(&file, format!("{home}/objects\n")).unwrap();
+        session.assert_not_allow(&format!("git clone {primary} {copy}"));
+        std::fs::remove_file(&file).unwrap();
+    }
+    session.assert_allow(&format!("git clone {primary} {copy}"), CLONE);
+}
+
+/// A repository in a temporary directory is the source only while it is the
+/// user's own: a directory another user can write to can be rewritten between
+/// this proof and the clone, so it keeps its review however it was reached.
+#[test]
+fn a_clone_from_a_repository_other_users_can_rewrite_keeps_review() {
+    const CLONE: &str = "native_exact_safe_git_clone_local";
+    let session = session("clone-temp");
+    let copy = format!("{}/app-portal-copy", session.home.display());
+    let leaf = std::fs::canonicalize("/tmp").unwrap().join(format!(
+        "guard-clone-temp-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let _cleanup = FixtureCleanup(leaf.clone());
+    for source in [leaf.clone(), leaf.join("nested")] {
+        std::fs::create_dir_all(&source).unwrap();
+        git(&session.home, &source, &["init", "--quiet", "-b", "main"]);
+        git(
+            &session.home,
+            &source,
+            &["config", "user.name", "Guard Fixture"],
+        );
+        git(
+            &session.home,
+            &source,
+            &["config", "user.email", "guard-fixture@example.invalid"],
+        );
+        std::fs::write(source.join("tracked.txt"), "fixture\n").unwrap();
+        git(&session.home, &source, &["add", "tracked.txt"]);
+        git(
+            &session.home,
+            &source,
+            &["commit", "--quiet", "-m", "fixture"],
+        );
+        let spelled = source.display().to_string();
+        let command = format!("git clone {spelled} {copy}");
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755)).unwrap();
+        session.assert_allow(&command, CLONE);
+        for mode in [0o777, 0o775] {
+            std::fs::set_permissions(&source, std::fs::Permissions::from_mode(mode)).unwrap();
+            session.assert_not_allow(&command);
+        }
+        std::fs::set_permissions(&source, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    // The directory on the way down counts too: a world-writable parent is
+    // enough to replace the repository below it.
+    let nested = leaf.join("nested");
+    std::fs::set_permissions(&leaf, std::fs::Permissions::from_mode(0o777)).unwrap();
+    session.assert_not_allow(&format!("git clone {} {copy}", nested.display()));
+    std::fs::set_permissions(&leaf, std::fs::Permissions::from_mode(0o755)).unwrap();
 }

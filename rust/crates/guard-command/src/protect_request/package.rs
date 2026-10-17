@@ -129,31 +129,7 @@ pub(super) fn package_target(
 }
 
 pub(super) fn collect_package_specs(values: &[String]) -> Vec<String> {
-    const VALUE_OPTIONS: [&str; 6] = [
-        "-r",
-        "--extra-index-url",
-        "--index-url",
-        "--prefix",
-        "--registry",
-        "--requirement",
-    ];
-    let mut specs = Vec::new();
-    let mut skip_next = false;
-    for (index, value) in values.iter().enumerate() {
-        if skip_next {
-            skip_next = false;
-            continue;
-        }
-        if value.starts_with('-') {
-            skip_next = VALUE_OPTIONS.contains(&value.as_str());
-            continue;
-        }
-        if index > 0 && matches!(values[index - 1].as_str(), "-r" | "--requirement") {
-            continue;
-        }
-        specs.push(value.clone());
-    }
-    specs
+    crate::package_intent_common::collect_package_specs(values)
 }
 
 pub(super) fn package_manager_request(
@@ -193,8 +169,13 @@ pub(super) fn package_manager_request(
 }
 
 pub(super) fn specs_after(command: &[String], verbs: &[&str]) -> Vec<String> {
+    specs_after_with(command, verbs, &[])
+}
+
+/// [`specs_after`] for a manager whose own options also take a value.
+fn specs_after_with(command: &[String], verbs: &[&str], value_options: &[&str]) -> Vec<String> {
     if command.len() > 1 && verbs.contains(&command[1].as_str()) {
-        collect_package_specs(&command[2..])
+        crate::package_intent_common::collect_package_specs_with(&command[2..], value_options)
     } else {
         Vec::new()
     }
@@ -220,7 +201,11 @@ pub(super) fn parse_package_manager(
                     } else {
                         normalized
                     };
-                    specs_after(&working, &["add"])
+                    specs_after_with(
+                        &working,
+                        &["add"],
+                        crate::package_intent_common::YARN_VALUE_OPTIONS,
+                    )
                 }
                 _ => {
                     if normalized.len() >= 3 && normalized[1] == "pip" && normalized[2] == "install"

@@ -16,7 +16,7 @@ use super::McpRelayDecideRequestV1;
 use crate::mcp_tool_policy_decision::Decision;
 
 /// The artifact type a tool call is built with.
-const ARTIFACT_TYPE: &str = "tool_call";
+pub(super) const ARTIFACT_TYPE: &str = "tool_call";
 /// `_QUEUE_METADATA_KEYS`, which a tool-call artifact never carries.
 const QUEUE_METADATA_KEYS: [&str; 4] = [
     "raw_command_text",
@@ -149,8 +149,9 @@ pub(super) fn review_item(
 }
 
 /// `tool_decision_scanner_evidence`: how the decision's action was reached,
-/// without any of the call's payload.
-fn scanner_evidence(decision: &Decision) -> Vec<Value> {
+/// without any of the call's payload. The package lane leads its own receipt
+/// evidence with this, as `_package_scanner_evidence` does.
+pub(super) fn scanner_evidence(decision: &Decision) -> Vec<Value> {
     let facts = crate::mcp_tool_policy_proxy::facts(decision);
     let effective = crate::mcp_proxy_actions::enforcement(&facts.action, &facts);
     let mut evidence = Vec::new();
@@ -185,11 +186,30 @@ pub(super) fn args(
     now: &str,
     redaction_level: &str,
 ) -> Map<String, Value> {
+    queue_args(
+        request,
+        item,
+        &artifact.artifact_id,
+        queue_artifact(artifact),
+        center,
+        now,
+        redaction_level,
+    )
+}
+
+/// The same arguments for an item whose artifact is not a tool call's, which
+/// the package lane shapes itself (`mcp_relay_decide_package_ask.rs`).
+pub(super) fn queue_args(
+    request: &McpRelayDecideRequestV1,
+    item: Map<String, Value>,
+    artifact_id: &str,
+    queued: Map<String, Value>,
+    center: &str,
+    now: &str,
+    redaction_level: &str,
+) -> Map<String, Value> {
     let mut artifacts = Map::new();
-    artifacts.insert(
-        artifact.artifact_id.clone(),
-        Value::Object(queue_artifact(artifact)),
-    );
+    artifacts.insert(artifact_id.to_owned(), Value::Object(queued));
     let mut args = Map::new();
     args.insert("harness".to_owned(), json!(request.build.harness));
     args.insert("items".to_owned(), json!([Value::Object(item)]));

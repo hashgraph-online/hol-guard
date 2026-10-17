@@ -40,7 +40,10 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
     attempts = 0
 
     def paused_read(
-        catalog_digest: str, *, migration_registry: CommandSafetyExtensionRegistry | None = None
+        catalog_digest: str,
+        *,
+        migration_registry: CommandSafetyExtensionRegistry | None = None,
+        allow_migration: bool = True,
     ) -> ExtensionControlAuthorityView:
         nonlocal attempts
         attempts += 1
@@ -48,7 +51,7 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
             # This is the existing guard used before catalog migration and
             # authority recovery writes. A shared attempt must unwind first.
             require_command_control_mutation_lease(store.guard_home)
-        view = read_locked(catalog_digest, migration_registry=migration_registry)
+        view = read_locked(catalog_digest, migration_registry=migration_registry, allow_migration=allow_migration)
         entered.set()
         assert release.wait(timeout=5)
         return view

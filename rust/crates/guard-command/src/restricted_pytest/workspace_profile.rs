@@ -456,8 +456,9 @@ pub(super) fn compose(
     // The daemon's state is read again here, at launch: the port it settled
     // on may have changed since the command was judged.
     let home = std::env::var("HOME").ok();
-    lines.extend(loopback_rules(&crate::pretool::inline_loopback_ports(
+    lines.extend(loopback_rules(&crate::pretool::launch_loopback_ports(
         &input.command,
+        input.cwd.to_str(),
         home.as_deref(),
     )));
     // Last, so no earlier allow can reopen a credential for reading or writing.

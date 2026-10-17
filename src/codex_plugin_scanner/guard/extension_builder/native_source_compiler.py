@@ -23,7 +23,9 @@ from importlib import metadata
 from pathlib import Path
 from typing import BinaryIO
 
-_MAX_INPUT_BYTES = 4 * 1024 * 1024
+from ..group_write_trust import writable_only_by_owner
+from ..runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
+
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
@@ -126,8 +128,9 @@ def _hex(value: object, *, length: int, field: str) -> str:
 def _verify_compiler(path: Path, manifest: Mapping[str, object]) -> bytes:
     raw = _read_regular(path, limit=_MAX_COMPILER_BYTES, label="source compiler")
     if os.name != "nt":
-        mode = stat.S_IMODE(path.stat().st_mode)
-        if mode & 0o022:
+        compiler_stat = path.stat()
+        mode = stat.S_IMODE(compiler_stat.st_mode)
+        if not writable_only_by_owner(compiler_stat, os.getuid(), path):
             raise NativeSourceCompilerError("source compiler is group/world writable")
         if not mode & stat.S_IXUSR:
             raise NativeSourceCompilerError("source compiler is not owner-executable")
@@ -141,7 +144,11 @@ def _verify_compiler(path: Path, manifest: Mapping[str, object]) -> bytes:
 
 
 def _packaged_program_digest() -> str:
-    raw = _read_regular(_PACKAGED_PROGRAM, limit=_MAX_INPUT_BYTES, label="packaged native command program")
+    raw = _read_regular(
+        _PACKAGED_PROGRAM,
+        limit=MAX_NATIVE_COMMAND_PROGRAM_BYTES,
+        label="packaged native command program",
+    )
     try:
         value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

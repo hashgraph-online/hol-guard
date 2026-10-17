@@ -1,7 +1,8 @@
-//! Inline Node source that only serves and fetches on literal loopback
-//! ports runs in the workspace sandbox, which grants exactly those ports.
-//! Any other address, an administrative port or a port chosen at run time
-//! keeps the review.
+//! Node source that only serves and fetches on literal loopback ports, inline
+//! or a script in the workspace, runs in the workspace sandbox, which grants
+//! exactly those ports. A remote host, a host other than loopback or every
+//! address, an administrative port or a port chosen at run time without a
+//! literal fallback keeps the review.
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use guard_contracts::PreToolResultV1;
 use serde_json::json;
@@ -36,8 +37,19 @@ impl Fixture {
             ("game.js", "module.exports = { score: (rows) => rows.length };\n"),
             ("game.test.js", "const test = require('node:test');\nconst assert = require('node:assert');\nconst { score } = require('./game.js');\ntest('score', () => assert.equal(score([1]), 1));\n"),
             ("server.js", "require('node:http').createServer((q, r) => r.end('ok')).listen(3000, '127.0.0.1');\n"),
+            ("src/server.js", "const http = require('node:http');\nconst { page } = require('./page');\nconst PORT = 4173;\nhttp.createServer((q, r) => r.end(page())).listen(PORT, '127.0.0.1', () => {\n  console.log(`listening on http://127.0.0.1:${PORT}/`);\n});\n"),
+            ("src/page.js", "module.exports = { page: () => '<!doctype html><title>todo</title>' };\n"),
+            ("src/open.js", "const http = require('node:http');\nconst PORT = 4173;\nhttp.createServer((q, r) => r.end('ok')).listen(PORT, () => console.log(`up on ${PORT}`));\n"),
+            ("src/env.js", "const http = require('node:http');\nconst PORT = process.env.PORT || 3000;\nhttp.createServer((q, r) => r.end('ok')).listen(PORT, '127.0.0.1');\n"),
+            ("src/todo-server.js", "const { createServer } = require('node:http');\nfunction startServer(port = Number(process.env.PORT ?? 3000)) {\n  return createServer((q, r) => r.end(new URL(q.url, 'http://localhost').pathname)).listen(port);\n}\nstartServer().on('listening', () => console.log(`http://localhost:${process.env.PORT ?? 3000}`));\n"),
+            ("src/bare-env.js", "require('node:http').createServer((q, r) => r.end('ok')).listen(process.env.PORT);\n"),
+            ("src/lan.js", "require('node:http').createServer((q, r) => r.end('ok')).listen(3000, '192.168.1.5');\n"),
+            ("src/remote.js", "const http = require('node:http');\nhttp.createServer((q, r) => r.end('ok')).listen(3000, '127.0.0.1');\nfetch('https://example.com/');\n"),
+            ("src/keys.js", "const fs = require('node:fs');\nconst http = require('node:http');\nconst key = fs.readFileSync(process.env.HOME + '/.ssh/id_ed25519');\nhttp.createServer((q, r) => r.end(key)).listen(3000, '127.0.0.1');\n"),
         ] {
-            std::fs::write(project.join(relative), text).unwrap();
+            let path = project.join(relative);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
         }
         let home = root.canonicalize().unwrap();
         let project = project.canonicalize().unwrap();
@@ -119,7 +131,6 @@ fn other_addresses_and_ports_keep_their_review() {
             SPAWNED_SERVER.replace("127.0.0.1:3000", "127.0.0.1:54321"),
             STATIC_SERVER.replace("4173", "0"),
             STATIC_SERVER.replace("4173,'127.0.0.1'", "process.env.PORT,'127.0.0.1'"),
-            STATIC_SERVER.replace("'127.0.0.1'", "'0.0.0.0'"),
             STATIC_SERVER.replace("'127.0.0.1'", "'127.0.0.2'"),
             SELF_CHECK.replace("http://127.0.0.1:8765", "https://example.com"),
             SPAWNED_SERVER.replace("127.0.0.1:3000", "127.0.0.1:2375"),
@@ -162,5 +173,135 @@ fn a_local_module_too_large_to_read_keeps_the_review() {
             result.reason_code
         );
         assert_ne!(result.reason_code, CONTAINED, "{harness}");
+    }
+}
+
+#[test]
+fn workspace_scripts_serving_on_loopback_run_in_the_sandbox() {
+    let fixture = Fixture::new();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "node server.js",
+            "node src/server.js",
+            "echo serving && node src/server.js",
+            "node src/open.js",
+            "node src/env.js",
+            "node src/todo-server.js",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(Number(process.env.PORT)||3000)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(4173)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(4173,()=>console.log('up'))\"",
+            "node -e \"const PORT=4173;require('node:http').createServer((q,r)=>r.end('ok')).listen(PORT)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(4173,'0.0.0.0')\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(process.env.PORT||3000)\"",
+        ] {
+            let result = fixture.classify(harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    (result.minimum_action.as_str(), result.reason_code.as_str()),
+                    ("sandbox-required", CONTAINED),
+                    "{harness}: {command}: {}",
+                    result.reason
+                );
+            }
+        }
+    }
+}
+
+/// A server is contained on its port whatever host it names; one with a
+/// port the sandbox does not grant, a host other than loopback or every
+/// address, or other network use keeps the review, inline or as a script.
+#[test]
+fn servers_on_other_ports_or_hosts_and_scripts_using_other_network_keep_their_review() {
+    let fixture = Fixture::new();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "node src/bare-env.js",
+            "node src/lan.js",
+            "node src/remote.js",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(Number(process.env.PORT))\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(4173,'example.com')\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(6379,'127.0.0.1')\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end('ok')).listen(80,'127.0.0.1')\"",
+        ] {
+            let result = fixture.classify(harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_eq!(
+                result.minimum_action, "review",
+                "{harness}: {command}: {}",
+                result.reason_code
+            );
+            assert_ne!(result.reason_code, CONTAINED, "{harness}: {command}");
+        }
+        // A server that serves a credential store is never contained.
+        let result = fixture.classify(harness, "node src/keys.js");
+        assert_ne!(result.decision, "allow", "{harness}");
+        assert_ne!(result.reason_code, CONTAINED, "{harness}");
+    }
+}
+
+/// The smoke test an agent runs against the todo server it started, then the
+/// project's tests.
+const TODO_SMOKE: &str = "node --input-type=module -e 'const base=\"http://127.0.0.1:3000\"; const page=await fetch(base); if(!page.ok) throw Error(\"web interface failed\"); let r=await fetch(base+\"/api/todos\",{method:\"POST\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({title:\"Smoke test\"})}); const todo=await r.json(); r=await fetch(base+\"/api/todos/\"+todo.id,{method:\"PATCH\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({completed:true})}); r=await fetch(base+\"/api/todos/\"+todo.id,{method:\"DELETE\"}); if(r.status!==204) throw Error(\"delete failed\"); console.log(\"smoke passed\");' && npm test";
+
+#[test]
+fn a_smoke_test_fetching_one_loopback_base_runs_in_the_sandbox() {
+    let fixture = Fixture::new();
+    let chosen = TODO_SMOKE.replace("3000", "3147");
+    let assert_contained = |command: &str| {
+        for harness in ["omp", "claude-code", "codex"] {
+            let result = fixture.classify(harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    (result.minimum_action.as_str(), result.reason_code.as_str()),
+                    ("sandbox-required", CONTAINED),
+                    "{harness}: {command}: {}",
+                    result.reason
+                );
+            }
+        }
+    };
+    assert_contained(TODO_SMOKE);
+    // A port the agent chose opens once Guard's daemon is known to be
+    // elsewhere.
+    let guard = fixture.home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert_contained(&chosen);
+    for command in [
+        TODO_SMOKE.replace("127.0.0.1:3000", "example.com"),
+        TODO_SMOKE.replace("const base=", "let base="),
+        TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+\"@example.com/\""),
+        TODO_SMOKE.replace("3000", "11434"),
+        TODO_SMOKE.replace("3000", "54321"),
+    ] {
+        for harness in ["omp", "claude-code", "codex"] {
+            let result = fixture.classify(harness, &command);
+            assert_eq!(result.minimum_action, "review", "{harness}: {command}");
+            assert_ne!(result.reason_code, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
+
+/// Inline source that reads its port from the environment earns the grant;
+/// one that also reads the whole environment or another variable keeps the
+/// sensitive-access review.
+#[test]
+fn inline_servers_reading_more_of_the_environment_keep_the_sensitive_review() {
+    let fixture = Fixture::new();
+    for harness in ["omp", "claude-code", "codex"] {
+        for command in [
+            "node -e \"require('node:http').createServer((q,r)=>r.end(JSON.stringify(process.env))).listen(Number(process.env.PORT)||3000)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end(process.env.GITHUB_TOKEN)).listen(process.env.PORT||3000)\"",
+            "node -e \"require('node:http').createServer((q,r)=>r.end(process.env[q.url.slice(1)])).listen(3000)\"",
+        ] {
+            let result = fixture.classify(harness, command);
+            assert_eq!(
+                (result.minimum_action.as_str(), result.reason_code.as_str()),
+                ("review", "native_sensitive_access_review"),
+                "{harness}: {command}"
+            );
+        }
     }
 }

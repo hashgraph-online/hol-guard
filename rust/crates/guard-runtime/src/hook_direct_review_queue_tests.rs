@@ -457,7 +457,7 @@ fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
             panic!("an exact-action query");
         };
         *query_command = Some(command.to_owned());
-        assert!(crate::native_exact_action_op::review_binding_for(&exact, None).is_none());
+        assert!(crate::native_exact_action_op::review_binding_for(&exact, None, None).is_none());
         let payload = json!({"tool_name": "Bash", "tool_input": {"command": command}});
         let payload = payload.as_object().unwrap();
         let fixture = super::super::tests::vectors();

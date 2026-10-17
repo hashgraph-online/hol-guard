@@ -25,7 +25,7 @@ pub(super) fn safe_recursive_copy_arguments(
         || destination.starts_with('-')
         || source.trim() != source
         || destination.trim() != destination
-        || !super::search::safe_recursive_search_target(source, context)
+        || !super::search::safe_recursive_target_through_links(source, context)
     {
         return false;
     }

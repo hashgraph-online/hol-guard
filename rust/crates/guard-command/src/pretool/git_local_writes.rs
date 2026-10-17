@@ -344,8 +344,9 @@ fn proven(
         || writes
             .iter()
             .any(|(index, _)| forms::signs(&model.segments[*index]));
+    let (external_off, textconv_off) = diff_drivers_disarmed(model, &writes, &stashed);
     if branch_scoped
-        || !inert(&effective, &repository)
+        || !inert_with(&effective, &repository, external_off, textconv_off)
         || ((merging || rebasing) && !merge::inert(&effective, &repository))
         || (rebasing && !rebase::resumable(&probe))
         || (signs
@@ -460,6 +461,17 @@ pub(in crate::pretool) fn signs_by_default(effective: &GitConfig) -> bool {
 /// Commit signing is left to the caller: only a write that creates a commit
 /// runs the signing program, and [`signs_by_default`] reports it.
 pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -> bool {
+    inert_with(effective, repository, false, false)
+}
+
+/// `external_off` and `textconv_off` are set only when every write in the
+/// command is a `stash show` that keeps that driver from running.
+fn inert_with(
+    effective: &GitConfig,
+    repository: &GitConfig,
+    external_off: bool,
+    textconv_off: bool,
+) -> bool {
     !super::git_remote_ops::pull::repository_lfs_program(repository)
         && !effective.iter().any(|(key, values)| {
             let enabled = values
@@ -471,13 +483,32 @@ pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -
                 || key.starts_with("hook.")
                 || key == "core.worktree"
                 || key == "core.virtualfilesystem"
-                || key == "diff.external"
+                || (key == "diff.external" && !external_off)
                 || key == "extensions.partialclone"
-                || (key.starts_with("diff.")
-                    && (key.ends_with(".textconv") || key.ends_with(".command")))
+                || (key.starts_with("diff.") && key.ends_with(".command") && !external_off)
+                || (key.starts_with("diff.") && key.ends_with(".textconv") && !textconv_off)
                 || (key.starts_with("trailer.")
                     && (key.ends_with(".command") || key.ends_with(".cmd")))
                 || (key.starts_with("remote.") && key.ends_with(".promisor") && enabled)
                 || (matches!(key.as_str(), "core.fsmonitor" | "submodule.recurse") && enabled)
         })
+}
+
+/// Whether every local write is a `stash show` whose flags keep the named
+/// diff driver from running.
+fn diff_drivers_disarmed(
+    model: &CanonicalCommandV1,
+    writes: &[(usize, &'static [&'static str])],
+    stashed: &[usize],
+) -> (bool, bool) {
+    if stashed.is_empty() || writes.iter().any(|(index, _)| !stashed.contains(index)) {
+        return (false, false);
+    }
+    stashed
+        .iter()
+        .try_fold((true, true), |acc, index| {
+            forms::show_diff_drivers_disarmed(&model.segments[*index])
+                .map(|(external, textconv)| (acc.0 && external, acc.1 && textconv))
+        })
+        .unwrap_or((false, false))
 }

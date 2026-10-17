@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from hashlib import sha256
+from pathlib import Path
+from typing import cast
 
 from .runtime.composio_discovery import ComposioActionSchema
-from .runtime.mcp_classification import classify_mcp_action
+from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
 from .runtime.observed_mcp_tools import ObservedMcpTool
 
 _MAX_ACTIONS = 10_000
@@ -148,7 +150,14 @@ def read_provider_actions(
     offset: int = 0,
     search: str = "",
     expected_token: str | None = None,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
+    """A page of provider actions and the declarations that describe them.
+
+    The declarations travel to the resident, which is a round trip the caller
+    makes after this connection's read transaction has ended; classifying here
+    would hold a reader open for the length of that call.
+    """
+
     if not 1 <= limit <= 100 or offset < 0 or len(search) > 128:
         raise ValueError("invalid provider catalog page")
     fingerprint = sha256(identity_hash.encode())
@@ -177,29 +186,62 @@ def read_provider_actions(
         order by a.toolkit asc, a.tool_slug asc limit ? offset ?""",
         (cli_id, identity_hash, pattern, pattern, pattern, limit + 1, offset),
     ).fetchall()
-    return {
-        "actions": [
-            {
-                "tool_slug": slug,
-                "toolkit": toolkit,
-                "description": description,
-                "full_schema": bool(full),
-                "revision": revision,
-                "updated_at": updated_at,
-                "permission_state": state,
-                "allow_supported": False,
-                "account_binding": "unverified",
-                "source": "observed-provider-result",
-                "classification": classify_mcp_action(
-                    slug,
-                    json.loads(raw_schema),
-                    provider="composio",
-                    full_schema=bool(full),
-                ),
-            }
-            for slug, toolkit, description, full, revision, updated_at, state, raw_schema in rows[:limit]
-        ],
-        "next_offset": offset + limit if len(rows) > limit else None,
-        "coverage": "discovery-subset",
-        "catalog_token": token,
-    }
+    page = rows[:limit]
+    declarations: tuple[dict[str, object], ...] = tuple(
+        {
+            "name": slug,
+            "schema": json.loads(raw_schema),
+            "provider": "composio",
+            "full_schema": bool(full),
+        }
+        for slug, _, _, full, _, _, _, raw_schema in page
+    )
+    return (
+        {
+            "actions": [
+                {
+                    "tool_slug": slug,
+                    "toolkit": toolkit,
+                    "description": description,
+                    "full_schema": bool(full),
+                    "revision": revision,
+                    "updated_at": updated_at,
+                    "permission_state": state,
+                    "allow_supported": False,
+                    "account_binding": "unverified",
+                    "source": "observed-provider-result",
+                }
+                for slug, toolkit, description, full, revision, updated_at, state, _ in page
+            ],
+            "next_offset": offset + limit if len(rows) > limit else None,
+            "coverage": "discovery-subset",
+            "catalog_token": token,
+        },
+        declarations,
+    )
+
+
+def describe_provider_actions(
+    page: dict[str, object],
+    declarations: Sequence[dict[str, object]],
+    *,
+    guard_home: Path,
+) -> dict[str, object]:
+    """Attach the resident's advisory classification to a page of actions.
+
+    The classification is display evidence, not authority: a page without a
+    resident still names every action and its permission state, so an absent
+    description leaves the entry out rather than failing the read.
+    """
+
+    actions = cast("list[dict[str, object]]", page["actions"])
+    if not actions:
+        return page
+    try:
+        described = classify_mcp_actions(list(declarations), guard_home=guard_home)
+    except McpClassificationUnavailableError:
+        return page
+    for action, classification in zip(actions, described, strict=True):
+        if classification is not None:
+            action["classification"] = classification
+    return page

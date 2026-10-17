@@ -82,8 +82,6 @@ def validate_harness(args: argparse.Namespace) -> None:
         )
     if remote := sorted(set(args.cases or ()) & REMOTE_TASKS):
         raise ValueError(f"{', '.join(remote)} reach real GitHub; run them with --harness omp --full-task-docker")
-    if args.jobs != 1:
-        raise ValueError("full tasks run one at a time; omit --jobs")
 
 
 def run_harness_profile(args: argparse.Namespace) -> dict[str, Any]:
@@ -101,12 +99,15 @@ def run_harness_profile(args: argparse.Namespace) -> dict[str, Any]:
         executable=args.harness_cli,
         model=args.harness_model,
         work_root=args.work_root,
+        jobs=args.jobs,
     )
 
 
 def run_profile(args: argparse.Namespace, provider: dict[str, Any]) -> dict[str, Any]:
     owner = args.github_owner or DEFAULT_OWNER
     if args.full_task_docker:
+        if args.jobs != 1:
+            raise ValueError("--full-task-docker tasks share one GitHub owner and run one at a time; omit --jobs")
         from .full_task_docker import run_docker_full_tasks
         from .full_task_docker_inputs import ARM_PLATFORM, ensure_image, pr_head_source, pypi_source, wheel_source
 
@@ -145,6 +146,7 @@ def run_profile(args: argparse.Namespace, provider: dict[str, Any]) -> dict[str,
         omp=args.omp,
         work_root=args.work_root,
         world=world,
+        jobs=args.jobs,
     )
 
 

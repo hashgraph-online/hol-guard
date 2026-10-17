@@ -19,7 +19,8 @@
 //! the installation's and the snapshot's binaries; this parses manifests only
 //! and runs no module code. Granting `registryRead` instead would also expose
 //! the user's HKCU hive, including persisted environment variables, so only a
-//! build run, whose Node runtime cannot start Winsock without it, requests it.
+//! Node run, build or read-only, which cannot start Winsock without it,
+//! requests it.
 use super::AppContainer;
 use crate::bound_fs::{self, Directory};
 use crate::{CapturedOutput, Isolation, PinnedCommand};
@@ -63,6 +64,10 @@ pub struct ReadonlySnapshotRun<'a> {
     pub cancel: &'a AtomicBool,
     pub job_limits: guard_runtime_windows_process::ResourceLimits,
     pub build: Option<BuildRun<'a>>,
+    /// Run Node as a build does: copy the executable next to the snapshot, so
+    /// a per-user install the LPAC token cannot read still starts, and request
+    /// `registryRead`, without which Winsock and so Node fail to start.
+    pub stage_executable: bool,
 }
 
 pub struct BuildRun<'a> {
@@ -81,6 +86,9 @@ pub struct BuildRun<'a> {
 
 struct Limits<'a> {
     withhold: &'a dyn Fn(&Path) -> bool,
+    /// A workspace file with a second directory entry may be another name for
+    /// a withheld one, such as a hardlink to `.env`, so it is left out.
+    skip_linked: bool,
     max_entries: usize,
     max_bytes: usize,
 }
@@ -114,13 +122,16 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
     getrandom::fill(&mut suffix).map_err(io::Error::other)?;
     let name = format!("hol-guard-ro-{}", hex::encode(suffix));
     let mut container = AppContainer::create(&name)?;
-    if run.build.is_some() {
+    if run.build.is_some() || run.stage_executable {
         container.allow_registry_read()?;
+    }
+    if run.build.is_some() {
         // Granted while empty, so every copied object inherits write access.
         container.grant(&snapshot, true, true)?;
     }
     let workspace_limits = Limits {
         withhold: run.withhold,
+        skip_linked: true,
         max_entries: run.max_entries,
         max_bytes: run.max_bytes,
     };
@@ -136,6 +147,7 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
     if let Some(build) = &run.build {
         let limits = Limits {
             withhold: build.withhold_dependency,
+            skip_linked: false,
             max_entries: build.max_dependency_entries,
             max_bytes: build.max_dependency_bytes,
         };
@@ -147,6 +159,8 @@ pub fn run_readonly_snapshot(run: ReadonlySnapshotRun<'_>) -> io::Result<Capture
             let source = Directory::open(source)?;
             copy_tree(&source, Path::new("."), &target, &limits, &mut budget)?;
         }
+    }
+    if run.build.is_some() || run.stage_executable {
         executable = stage_executable(run.executable, &staging.path().join("bin"))?;
         grant_snapshot(&container, executable.parent().unwrap_or(staging.path()))?;
     }
@@ -251,6 +265,11 @@ fn copy_tree(
             fs::create_dir(&destination)?;
             copy_tree(source, &child, target, run, budget)?;
         } else if metadata.is_file() {
+            if run.skip_linked
+                && !guard_runtime_windows_process::is_single_link_file(&source.path().join(&child))?
+            {
+                continue;
+            }
             let file = source.read(&child, run.max_bytes.saturating_sub(budget.bytes))?;
             budget.bytes += file.bytes.len();
             fs::write(&destination, &file.bytes)?;

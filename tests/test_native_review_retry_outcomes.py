@@ -65,7 +65,9 @@ def test_real_native_omp_hook_honors_keep_blocked(tmp_path: Path, monkeypatch, n
     payload = {
         "hook_event_name": "PreToolUse",
         "tool_name": "learn",
-        "tool_input": {"memory": "Synthetic retry test"},
+        # A global note reaches every project's recall, so it keeps the review
+        # a project note no longer needs, which is the review this retries.
+        "tool_input": {"memory": "Synthetic retry test", "scope": "global"},
         "session_id": "retry-test",
         "tool_call_id": "initial",
         "cwd": str(workspace),

@@ -58,15 +58,22 @@ jobs:
             target: x86_64-pc-windows-msvc
             suffix: .exe
             rustflags: -C link-arg=/Brepro
+          # Windows ARM64 binaries are cross-compiled on x64; the native
+          # windows-11-arm wheel job self-tests and verifies them before packaging.
+          - runner: windows-latest
+            target: aarch64-pc-windows-msvc
+            suffix: .exe
+            rustflags: -C link-arg=/Brepro
+            cross: true
     env:
       SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
       VERSION: ${{ inputs.version }}
       FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
-      # Only the Windows alpha build lowers workspace opt-level: it is the
-      # slowest target. Keep level 1 optimization because unoptimized
+      # Only the Windows alpha builds lower workspace opt-level: they are the
+      # slowest targets. Keep level 1 optimization because unoptimized
       # workspace code exceeds the alpha runtime size ceiling.
       # Dependencies keep the release profile either way.
-      ALPHA_WORKSPACE_OPT_LEVEL: ${{ matrix.target == 'x86_64-pc-windows-msvc' && '1' || '' }}
+      ALPHA_WORKSPACE_OPT_LEVEL: ${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}
@@ -82,7 +89,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: '3.12'
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: '0.9.26'
           enable-cache: true

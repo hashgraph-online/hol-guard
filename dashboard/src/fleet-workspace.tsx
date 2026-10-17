@@ -27,9 +27,12 @@ import {
   detectedHarnesses,
   resolveDetectedAppStatus,
   useHarnessDetection,
+  versionCompatibilityFor,
   visibleHarnessesFor,
   type DetectedAppStatus,
 } from "./harness-detection";
+import type { HarnessVersionCompatibility } from "./harness-version-compatibility";
+import { HarnessVersionLabel } from "./harness-version-label";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
 import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
@@ -125,10 +128,11 @@ type AppRowProps = {
   status: DetectedAppStatus;
   inventoryCount: number;
   policyCount: number;
+  versionCompatibility?: HarnessVersionCompatibility | null;
   onOpenAppDetail?: (harness: string) => void;
 };
 
-function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail }: AppRowProps) {
+function AppRow({ harness, status, inventoryCount, policyCount, versionCompatibility, onOpenAppDetail }: AppRowProps) {
   const isClickable = onOpenAppDetail !== undefined;
 
   const handleClick = useCallback(() => {
@@ -162,6 +166,7 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
           <p className="text-xs text-slate-400">
             {formatCount(inventoryCount)} actions · {formatCount(policyCount)} decisions
           </p>
+          <HarnessVersionLabel compatibility={versionCompatibility ?? null} />
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -297,6 +302,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                     status={status}
                     inventoryCount={harnessInventory.length}
                     policyCount={harnessPolicies.length}
+                    versionCompatibility={versionCompatibilityFor(harnessDetection, harness)}
                     onOpenAppDetail={props.onOpenAppDetail}
                   />
                 );

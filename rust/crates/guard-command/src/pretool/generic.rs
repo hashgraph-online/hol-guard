@@ -657,6 +657,24 @@ fn evaluate_envelope(
                 result
             }
         }
+    } else if harness == "omp"
+        && event == "PreToolUse"
+        && signals.tool_name.as_deref() == Some("edit")
+        && omp::strict_tool_input(payload).is_some_and(super::omp_hashline_writes::headerless_edit)
+    {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::Harness,
+                PreToolOperationV1::Set,
+                true,
+                false,
+            ),
+            "allow",
+            "native_omp_edit_without_header",
+            "The Rust authority found an edit with no file header: Oh My Pi refuses it, so it cannot change any file.",
+        )
     } else if let Some(omp_result) = omp_result {
         omp_result
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {
@@ -792,17 +810,20 @@ fn evaluate_envelope(
         )
     });
     // macOS runs every credential-filtering profile. Windows runs the Python
-    // and Vite build profiles in an AppContainer, for harnesses whose shell
-    // runs a sink command written for it: Claude Code (Git Bash) and the Pi
-    // family (a bash implementation) take the POSIX-quoted one for both, Codex
-    // a PowerShell one for the Python profile only. Only harnesses that
-    // rewrite into the contained sink get the receipt; others would see a
-    // bare deny.
+    // and Node evaluation and Vite build profiles in an AppContainer, for
+    // harnesses whose shell runs a sink command written for it: Claude Code
+    // (Git Bash) and the Pi family (a bash implementation) take the
+    // POSIX-quoted one for all three, Codex a PowerShell one for the Python
+    // profile only. Only harnesses that rewrite into the contained sink get
+    // the receipt; others would see a bare deny.
     let windows_contained = match contained_test_reason {
         Some("native_python_eval_readonly_containment_required") => {
             matches!(harness, "claude-code" | "codex" | "omp" | "oh-my-pi" | "pi")
         }
-        Some("native_node_build_output_containment_required") => {
+        Some(
+            "native_node_build_output_containment_required"
+            | "native_node_eval_readonly_containment_required",
+        ) => {
             matches!(harness, "claude-code" | "omp" | "oh-my-pi" | "pi")
         }
         _ => false,

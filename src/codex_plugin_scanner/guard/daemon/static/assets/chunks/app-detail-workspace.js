@@ -1,5 +1,5 @@
-import { r as reactExports, i as harnessDisplayName, ae as fetchSettings, c1 as runHarnessAction, c2 as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, c3 as HiMiniRocketLaunch, y as HiMiniShieldCheck, aF as HiMiniArrowPath, B as formatRelativeTime, T as HiMiniExclamationTriangle, s as HiMiniCheckCircle, c4 as HiMiniTrash, at as ApprovalProofModal, b9 as isGuardDemoMode, c5 as fetchGuardApi, c6 as formatHarnessCommand, aB as HiMiniAdjustmentsHorizontal, c7 as fetchApprovalPage, c8 as fetchPolicy, z as guardActionDisposition, p as protectionHealthFor, l as useProtectionPresentationState, bQ as HiMiniArrowLeft, c as HiMiniChevronRight, v as GuardHero, ao as ProofStrip, c9 as HiMiniHome, U as HiMiniBolt, ca as appSetupTarget, cb as guardActionPresentation, V as Badge, cc as DEFAULT_FILTER_STATE, cd as filterEvidence, ce as sortEvidence, cf as computeMetrics, cg as CommandActivityWorkspace, n as EmptyState, ch as EvidenceFilterBar, ci as EvidenceInsightStrip, cj as EvidenceActionList, ck as EvidenceActionDetail, Q as useFocusTrap, cl as policyIdentityKey, N as HiMiniCloud, au as Tag, ap as HiMiniXCircle, cm as clearLabelForScope, cn as HiMiniChartBar } from "../guard-dashboard.js";
-import { u as useHarnessDetection, i as isHarnessDetected } from "./harness-detection.js";
+import { r as reactExports, i as harnessDisplayName, ae as fetchSettings, c2 as runHarnessAction, c3 as GuardHarnessActionError, j as jsxRuntimeExports, S as SectionLabel, A as ActionButton, c4 as HiMiniRocketLaunch, y as HiMiniShieldCheck, aF as HiMiniArrowPath, B as formatRelativeTime, T as HiMiniExclamationTriangle, s as HiMiniCheckCircle, c5 as HiMiniTrash, at as ApprovalProofModal, b9 as isGuardDemoMode, c6 as fetchGuardApi, c7 as formatHarnessCommand, aB as HiMiniAdjustmentsHorizontal, c8 as fetchApprovalPage, c9 as fetchPolicy, z as guardActionDisposition, p as protectionHealthFor, l as useProtectionPresentationState, bR as HiMiniArrowLeft, c as HiMiniChevronRight, v as GuardHero, ao as ProofStrip, ca as HiMiniHome, U as HiMiniBolt, cb as appSetupTarget, cc as guardActionPresentation, V as Badge, cd as DEFAULT_FILTER_STATE, ce as filterEvidence, cf as sortEvidence, cg as computeMetrics, ch as CommandActivityWorkspace, n as EmptyState, ci as EvidenceFilterBar, cj as EvidenceInsightStrip, ck as EvidenceActionList, cl as EvidenceActionDetail, Q as useFocusTrap, cm as policyIdentityKey, N as HiMiniCloud, au as Tag, ap as HiMiniXCircle, cn as clearLabelForScope, co as HiMiniChartBar } from "../guard-dashboard.js";
+import { b as versionCheckUnsupported, c as versionReasonCopy, H as HarnessVersionLabel, e as refreshVersionCompatibility, f as acknowledgeUntestedVersion, g as clearVersionAcknowledgement, u as useHarnessDetection, a as versionCompatibilityFor, i as isHarnessDetected } from "./harness-version-label.js";
 function HarnessSetupPanel(props) {
   const [setupState, setSetupState] = reactExports.useState({ kind: "idle" });
   const [disconnectArmed, setDisconnectArmed] = reactExports.useState(false);
@@ -350,6 +350,166 @@ function setupSuccessTitle(action, displayName) {
   if (action === "repair") return `${displayName} repaired`;
   return `${displayName} disconnected`;
 }
+const SOURCE_LABELS = {
+  "package-metadata": "Package metadata",
+  "version-probe": "Version check"
+};
+const LEVEL_LABELS = {
+  unit_test: "Contract test",
+  live_block: "Full-task run"
+};
+function Fact({ label, children }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[11px] uppercase tracking-wide text-slate-400", children: label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-0.5 break-words text-sm text-brand-dark", children })
+  ] });
+}
+function EvidenceSummary({ compatibility }) {
+  if (compatibility.state !== "tested") return null;
+  const levels = Array.from(new Set(compatibility.evidence.map((item) => LEVEL_LABELS[item.evidence_level] ?? item.evidence_level)));
+  const untested = compatibility.declaredEvents.filter((event) => !compatibility.testedEvents.includes(event));
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 space-y-1 text-sm text-slate-600", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      "Evidence: ",
+      levels.join(", "),
+      " on Guard ",
+      compatibility.guardVersion,
+      " (",
+      compatibility.platform,
+      ").",
+      " ",
+      compatibility.evidence.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "a",
+        {
+          href: item.evidence_reference,
+          target: "_blank",
+          rel: "noreferrer noopener",
+          className: "text-brand-blue underline-offset-2 hover:underline",
+          children: "View run"
+        },
+        `${item.suite.id}-${item.evidence_reference}`
+      ))
+    ] }),
+    untested.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { children: [
+      "Not covered by this evidence: ",
+      untested.join(", "),
+      "."
+    ] }) : null
+  ] });
+}
+function AppVersionCompatibilityCard({ initial }) {
+  const [compatibility, setCompatibility] = reactExports.useState(initial);
+  const [busy, setBusy] = reactExports.useState(false);
+  const [error, setError] = reactExports.useState(null);
+  const currentHarness = reactExports.useRef(initial?.harness ?? null);
+  reactExports.useEffect(() => {
+    currentHarness.current = initial?.harness ?? null;
+    setCompatibility(initial);
+    setBusy(false);
+    setError(null);
+  }, [initial]);
+  const run = reactExports.useCallback(async (action) => {
+    const requested = currentHarness.current;
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await action();
+      if (currentHarness.current === requested) setCompatibility(next);
+    } catch (caught) {
+      if (currentHarness.current === requested) {
+        setError(caught instanceof Error ? caught.message : "Guard could not update version coverage.");
+      }
+    } finally {
+      if (currentHarness.current === requested) setBusy(false);
+    }
+  }, []);
+  if (!compatibility || versionCheckUnsupported(compatibility)) return null;
+  const harness = compatibility.harness;
+  const reason = versionReasonCopy(compatibility);
+  const ack = compatibility.acknowledgement;
+  const collapsed = compatibility.state === "untested" && ack.acknowledged;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "rounded-xl border border-slate-100 p-4 sm:p-5", "aria-labelledby": "app-version-heading", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-start justify-between gap-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { id: "app-version-heading", children: "Version coverage" }) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HarnessVersionLabel, { compatibility }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionButton,
+        {
+          variant: "ghost",
+          disabled: busy,
+          onClick: () => void run(() => refreshVersionCompatibility(harness)),
+          children: busy ? "Checking…" : "Check again"
+        }
+      )
+    ] }),
+    compatibility.state === "untested" && !collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900", role: "status", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "font-medium", children: [
+        "Guard has not been tested with ",
+        compatibility.detectedVersion,
+        "."
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1", children: [
+        "Protection still runs, but Guard has no evidence that every check works with this exact version.",
+        compatibility.testedVersions.length > 0 ? ` Tested versions: ${compatibility.testedVersions.join(", ")}.` : ""
+      ] }),
+      ack.eligible && ack.key ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        ActionButton,
+        {
+          variant: "outline",
+          disabled: busy,
+          onClick: () => void run(() => acknowledgeUntestedVersion(harness, ack.key)),
+          children: "Acknowledge for this version"
+        }
+      ) }) : null
+    ] }) : reason ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-slate-600", children: reason }) : null,
+    collapsed ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-3 text-sm text-slate-600", children: [
+      "You acknowledged that ",
+      compatibility.detectedVersion,
+      " is untested. The warning returns if the version, installation, or Guard's coverage changes.",
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx(
+        "button",
+        {
+          type: "button",
+          className: "text-brand-blue underline-offset-2 hover:underline disabled:opacity-50",
+          disabled: busy,
+          onClick: () => void run(() => clearVersionAcknowledgement(harness)),
+          children: "Show warning again"
+        }
+      )
+    ] }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceSummary, { compatibility }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { label: "Detected", children: [
+        compatibility.detectedVersion ?? "Unknown",
+        compatibility.versionIsPrerelease ? " (pre-release)" : ""
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Source", children: (compatibility.versionSource && SOURCE_LABELS[compatibility.versionSource]) ?? "None" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(Fact, { label: "Checked", children: [
+        compatibility.observedAt ? formatRelativeTime(compatibility.observedAt) : "Never",
+        compatibility.observedAt && !compatibility.observationFresh ? " (out of date)" : ""
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Tested versions", children: compatibility.testedVersions.length > 0 ? compatibility.testedVersions.join(", ") : "None recorded" }),
+      compatibility.coverageRevision ? /* @__PURE__ */ jsxRuntimeExports.jsx(Fact, { label: "Coverage data", children: compatibility.coverageRevision }) : null
+    ] }),
+    compatibility.limitations.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-4 list-disc space-y-1 pl-5 text-xs text-slate-500", children: compatibility.limitations.map((limitation) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: limitation }, limitation)) }) : null,
+    compatibility.remediation.length > 0 && compatibility.state !== "tested" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs", children: compatibility.remediation.map((link) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "a",
+      {
+        href: link.url,
+        target: "_blank",
+        rel: "noreferrer noopener",
+        className: "text-brand-blue underline-offset-2 hover:underline",
+        children: link.label
+      },
+      link.url
+    )) }) : null,
+    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs text-slate-400", children: "Version coverage is informational. It never changes what Guard allows or blocks." }),
+    error ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-brand-attention", role: "alert", children: error }) : null
+  ] });
+}
 function ActivityModeButton(props) {
   const active = props.mode === props.value;
   const handleClick = reactExports.useCallback(() => props.onChange(props.value), [props.onChange, props.value]);
@@ -490,6 +650,10 @@ function TabButton({ tabKey, label, icon: Icon, isActive, tabRefs, onSelect }) {
 }
 function AppDetailWorkspace(props) {
   const harnessDetection = useHarnessDetection();
+  const versionCompatibility = reactExports.useMemo(
+    () => versionCompatibilityFor(harnessDetection, props.harness),
+    [harnessDetection, props.harness]
+  );
   const [activeTab, setActiveTab] = reactExports.useState(readTabFromUrl);
   const [tabDirection, setTabDirection] = reactExports.useState("right");
   const tabRefs = reactExports.useRef({ overview: null, activity: null, settings: null });
@@ -706,6 +870,7 @@ function AppDetailWorkspace(props) {
                 harnessInventory,
                 pendingItems,
                 protection: runtime.supply_chain?.package_manager_protection,
+                versionCompatibility,
                 onOpenRequest: props.onOpenRequest,
                 onManagedInstallChanged: props.onManagedInstallChanged
               }
@@ -800,7 +965,10 @@ function AppOverviewTab(props) {
             protection: props.protection
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-6", children: /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection }) })
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-6", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AppVersionCompatibilityCard, { initial: props.versionCompatibility }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection })
+        ] })
       ] })
     ] });
   }
@@ -889,6 +1057,7 @@ function AppOverviewTab(props) {
           item.artifact_id
         )) })
       ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(AppVersionCompatibilityCard, { initial: props.versionCompatibility }),
       /* @__PURE__ */ jsxRuntimeExports.jsx(AppFirewallStatusCard, { protection: props.protection })
     ] })
   ] });

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -416,5 +417,50 @@ def test_linked_subdirectory_still_waits_for_its_ack(tmp_path: Path, monkeypatch
     try:
         assert worker.prepare_workspace_policy(linked, deadline=time.monotonic() + 0.1) is None
         assert worker.prepare_workspace_policy(existing / "linked" / "..", deadline=time.monotonic() + 0.1) is None
+    finally:
+        publisher.close()
+
+
+def _windows_short_path(path: Path) -> str:
+    import ctypes
+
+    buffer = ctypes.create_unicode_buffer(1024)
+    length = ctypes.windll.kernel32.GetShortPathNameW(str(path), buffer, len(buffer))
+    return buffer.value if 0 < length < len(buffer) else str(path)
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows path spellings")
+def test_windows_short_and_case_spellings_of_a_file_less_workspace_use_the_current_ack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    publisher, worker, _existing = _subdirectory_worker(tmp_path, monkeypatch)
+    workspace = tmp_path / "file-less-workspace-with-a-long-name"
+    workspace.mkdir()
+    spellings = [Path(str(workspace).swapcase())]
+    short = _windows_short_path(workspace)
+    if short != str(workspace):
+        spellings.append(Path(short))
+    try:
+        binding = publisher.current_snapshot_binding()
+        for spelled in spellings:
+            started = time.monotonic()
+            assert worker.prepare_workspace_policy(spelled, deadline=time.monotonic() + 2.0) == binding, spelled
+            assert time.monotonic() - started < 0.5, f"{spelled} names the same directory without a link"
+    finally:
+        publisher.close()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows junctions")
+def test_windows_junction_subdirectory_still_waits_for_its_ack(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import _winapi
+
+    publisher, worker, existing = _subdirectory_worker(tmp_path, monkeypatch)
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    junction = existing / "junction"
+    _winapi.CreateJunction(str(target), str(junction))
+    try:
+        assert worker.prepare_workspace_policy(junction, deadline=time.monotonic() + 0.1) is None
+        assert worker.prepare_workspace_policy(junction / "..", deadline=time.monotonic() + 0.1) is None
     finally:
         publisher.close()

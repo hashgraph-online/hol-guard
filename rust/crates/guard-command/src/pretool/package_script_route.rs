@@ -48,6 +48,11 @@ pub(in crate::pretool) fn contained_test_reason(
     if let Some(reason) = super::readonly_test_reason(model) {
         return resolved(model, reason, context.cwd.map(PathBuf::from), context);
     }
+    if cfg!(windows) {
+        if let Some(reason) = super::windows_script_reason(model, context) {
+            return Some(reason);
+        }
+    }
     let core = contained_core(model, context)?;
     let reason = super::readonly_test_reason(&core).filter(|reason| *reason != GIT)?;
     resolved(&core, reason, core_cwd(model, context), context)

@@ -12,7 +12,9 @@ from scripts.ci.prune_superseded_caches import (
     idle_compiler_entries,
     main,
     overlay_status_entries,
+    rust_job_name,
     superseded,
+    superseded_compiler_generations,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,6 +82,42 @@ def test_keeps_newest_entry_per_family_on_main() -> None:
         ),
     ]
     assert superseded(entries) == [1, 4, 5, 7]
+
+
+def test_drops_compiler_generations_older_than_the_two_newest_saves() -> None:
+    entries = [
+        _entry(1, "v0-rust-native-wheel-Linux-x64-11111111-aaaaaaaa", "2026-10-10T00:00:00Z"),
+        _entry(2, "v0-rust-native-wheel-Linux-x64-22222222-bbbbbbbb", "2026-10-16T00:00:00Z"),
+        _entry(3, "v0-rust-native-wheel-Linux-x64-33333333-dddddddd", "2026-10-12T00:00:00Z"),
+        _entry(6, "v0-rust-native-wheel-Windows_NT-x64-11111111-aaaaaaaa", "2026-10-10T00:00:00Z"),
+        _entry(4, "v0-rust-native-wheel-Linux-x64-22222222-cccccccc", "2026-10-12T00:00:00Z", "refs/pull/9/merge"),
+        _entry(5, "setup-uv-2-aaaaaaaa-bbbbbbbb", "2026-10-01T00:00:00Z"),
+    ]
+    assert rust_job_name("v0-rust-native-wheel-Linux-x64-22222222-bbbbbbbb") == (
+        "v0-rust-native-wheel-Linux-x64"
+    )
+    assert rust_job_name("setup-uv-2-aaaaaaaa-bbbbbbbb") is None
+    assert superseded_compiler_generations(entries) == [1]
+
+
+def test_late_save_from_an_older_run_does_not_evict_the_other_generation() -> None:
+    entries = [
+        _entry(1, "v0-rust-native-wheel-Linux-x64-11111111-aaaaaaaa", "2026-10-16T09:00:00Z"),
+        _entry(2, "v0-rust-native-wheel-Linux-x64-22222222-bbbbbbbb", "2026-10-16T10:00:00Z"),
+        _entry(3, "v0-rust-native-wheel-Linux-x64-33333333-cccccccc", "2026-10-16T08:00:00Z"),
+    ]
+    assert superseded_compiler_generations(entries) == [3]
+
+
+def test_two_late_saves_of_one_environment_do_not_evict_the_other() -> None:
+    entries = [
+        _entry(1, "v0-rust-native-wheel-Linux-x64-11111111-aaaaaaaa", "2026-10-16T10:00:00Z"),
+        _entry(2, "v0-rust-native-wheel-Linux-x64-22222222-bbbbbbbb", "2026-10-16T10:05:00Z"),
+        _entry(3, "v0-rust-native-wheel-Linux-x64-22222222-cccccccc", "2026-10-16T10:10:00Z"),
+        _entry(4, "v0-rust-native-wheel-Linux-x64-33333333-dddddddd", "2026-10-16T08:00:00Z"),
+    ]
+    assert superseded_compiler_generations(entries) == [4]
+    assert superseded(entries) == [2]
 
 
 def test_never_selects_pull_request_or_unknown_entries() -> None:

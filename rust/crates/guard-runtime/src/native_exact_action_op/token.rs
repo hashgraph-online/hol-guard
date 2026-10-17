@@ -7,7 +7,7 @@ use serde_json::{json, Value};
 
 use super::context::{Ctx, Engines};
 use super::fs_path;
-use super::launch::launch_identity;
+use super::launch::shell_launch_identity;
 use super::reasons::{
     Proof, GUARD_CONTROL, GUARD_CONTROL_ACTION_TYPES, NON_OVERRIDABLE, NO_COMMAND_IDENTITY,
     PACKAGE_ACTION, UNPROVEN_LAUNCH,
@@ -54,7 +54,7 @@ fn non_overridable_reason(facts: &NativeReviewFactsV1) -> &'static str {
 }
 
 /// `launch_cwd`: the payload cwd, else the workspace; it must be an existing absolute directory.
-fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> Option<String> {
+pub(super) fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> Option<String> {
     let candidate = payload_cwd
         .filter(|raw| !raw.trim().is_empty())
         .or(workspace)?;
@@ -130,7 +130,10 @@ pub(super) fn exact_action_components(
     };
     let (launch, content) = if has_command {
         let text = command.as_deref().unwrap_or("");
-        (launch_identity(text, &cwd, &ctx)?, json!({"command": text}))
+        (
+            shell_launch_identity(harness, tool_name, text, &cwd, &ctx)?,
+            json!({"command": text}),
+        )
     } else {
         tool_target_identity(
             tool_name,

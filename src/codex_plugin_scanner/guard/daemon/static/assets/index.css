@@ -475,6 +475,14 @@
   [hidden]:where(:not([hidden="until-found"])) {
     display: none !important;
   }
+
+  a, button, input, select, textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
 }
 
 @layer components;
@@ -718,6 +726,10 @@
     margin-inline: calc(var(--spacing) * -1);
   }
 
+  .-mx-5 {
+    margin-inline: calc(var(--spacing) * -5);
+  }
+
   .mx-1\.5 {
     margin-inline: calc(var(--spacing) * 1.5);
   }
@@ -946,6 +958,11 @@
 
   .aspect-square {
     aspect-ratio: 1;
+  }
+
+  .size-1\.5 {
+    width: calc(var(--spacing) * 1.5);
+    height: calc(var(--spacing) * 1.5);
   }
 
   .size-3\.5 {
@@ -1236,6 +1253,10 @@
     min-height: calc(var(--spacing) * 24);
   }
 
+  .min-h-40 {
+    min-height: calc(var(--spacing) * 40);
+  }
+
   .min-h-\[3px\] {
     min-height: 3px;
   }
@@ -1476,6 +1497,10 @@
     max-width: 55%;
   }
 
+  .max-w-\[62ch\] {
+    max-width: 62ch;
+  }
+
   .max-w-\[70vw\] {
     max-width: 70vw;
   }
@@ -1594,6 +1619,10 @@
 
   .shrink-0 {
     flex-shrink: 0;
+  }
+
+  .basis-56 {
+    flex-basis: calc(var(--spacing) * 56);
   }
 
   .basis-full {
@@ -4325,6 +4354,10 @@
     padding-bottom: calc(var(--spacing) * 10);
   }
 
+  .pl-1 {
+    padding-left: var(--spacing);
+  }
+
   .pl-2\.5 {
     padding-left: calc(var(--spacing) * 2.5);
   }
@@ -5506,6 +5539,16 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
 
+  .placeholder\:text-brand-dark\/50::placeholder {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .placeholder\:text-brand-dark\/50::placeholder {
+      color: color-mix(in oklab, var(--brand-dark) 50%, transparent);
+    }
+  }
+
   .placeholder\:text-brand-dark\/70::placeholder {
     color: var(--brand-dark);
   }
@@ -5644,6 +5687,16 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:border-brand-blue\/45:hover {
         border-color: color-mix(in oklab, var(--brand-blue) 45%, transparent);
+      }
+    }
+
+    .hover\:border-brand-blue\/60:hover {
+      border-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:border-brand-blue\/60:hover {
+        border-color: color-mix(in oklab, var(--brand-blue) 60%, transparent);
       }
     }
 
@@ -6180,6 +6233,10 @@
     border-radius: var(--radius-sm);
   }
 
+  .focus-visible\:border-brand-blue:focus-visible {
+    border-color: var(--brand-blue);
+  }
+
   .focus-visible\:ring-2:focus-visible {
     --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -6250,6 +6307,10 @@
     outline-width: 2px;
   }
 
+  .focus-visible\:outline-offset-1:focus-visible {
+    outline-offset: 1px;
+  }
+
   .focus-visible\:outline-offset-2:focus-visible {
     outline-offset: 2px;
   }
@@ -6279,6 +6340,10 @@
 
   .disabled\:pointer-events-none:disabled {
     pointer-events: none;
+  }
+
+  .disabled\:cursor-default:disabled {
+    cursor: default;
   }
 
   .disabled\:cursor-not-allowed:disabled {
@@ -6428,6 +6493,10 @@
 
     .sm\:col-span-2 {
       grid-column: span 2 / span 2;
+    }
+
+    .sm\:-mx-6 {
+      margin-inline: calc(var(--spacing) * -6);
     }
 
     .sm\:mt-0 {
@@ -7183,6 +7252,11 @@
     display: none;
   }
 
+  .\[\&\>article\:last-child\]\:border-b-0 > article:last-child {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 0;
+  }
+
   .\[\&\>svg\]\:pointer-events-none > svg {
     pointer-events: none;
   }
@@ -7411,14 +7485,6 @@ body {
 
 .guard-story-strip {
   background: linear-gradient(135deg, #f8fafc 0%, #fff 60%, #5599fe0a 100%);
-}
-
-a, button, input, select, textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
 }
 
 input:focus-visible, button:focus-visible, a:focus-visible {
@@ -9669,22 +9735,26 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   display: grid;
   gap: 1rem;
   grid-template-columns: 1fr;
+  align-items: start;
 }
 
 @media (min-width: 768px) {
   .guard-spotlight-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  /* Equal cells only once they sit side by side; stacked, a card is its own
-     height so a short one never opens a well of dead space on a phone. */
-  .guard-spotlight-card { min-height: 16rem; }
+  /* A shelf with no organic cell to give up keeps every bought card, so the
+     slot follows them across the full width instead of as a lone stub. */
+  .guard-spotlight-slot[data-full="true"] { grid-column: 1 / -1; }
 }
 
 /* One card shape for the whole shelf, so a bought cell is the same object as
-   an organic one and a maker can judge the placement in context. */
+   an organic one and a maker can judge the placement in context. Cards size to
+   their content and the grid aligns them to the top, so a short card is never
+   stretched to the height of the longer slot copy beside it. */
 .guard-spotlight-card {
   display: flex;
   flex-direction: column;
+  gap: 0.75rem;
   border-radius: 1rem;
-  padding: 1.25rem;
+  padding: 1rem 1.125rem;
   background: #fff;
   border: 1px solid rgb(63 65 116 / 0.1);
   animation: guard-discover-rise 420ms var(--ease-out-quint) both;
@@ -9706,6 +9776,7 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   border-style: dashed;
   border-color: color-mix(in srgb, var(--brand-blue) 35%, transparent);
   background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
+  gap: 0.625rem;
 }
 
 .guard-spotlight-slot[data-state="sold-out"] {
@@ -9722,6 +9793,14 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   border-radius: 0.75rem;
   color: var(--brand-blue);
   background: color-mix(in srgb, var(--brand-blue) 12%, transparent);
+}
+
+/* The open slot's mark sits in the eyebrow row, so it stays small enough not to
+   make the card taller than the organic cards beside it. */
+.guard-spotlight-slot-mark-sm {
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.5rem;
 }
 
 /* The on/off pill reports effective protection state and nothing else; it is
@@ -9750,22 +9829,24 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 
 /* The bookable row keeps the catalog's rhythm and never imitates a row that
-   represents real protection state. */
+   represents real protection state. The rows around it are separated by
+   hairlines that run edge to edge, so the dashed box floats clear of them
+   instead of sharing an edge, and its content sits well inside the dashes. */
 .guard-catalog-slot-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
+  gap: 0.75rem 1.25rem;
+  margin-block: 0.75rem;
   border-radius: 1rem;
-  padding: 1rem 1.25rem;
+  padding: 1.25rem 1.5rem;
   border: 1px dashed color-mix(in srgb, var(--brand-blue) 35%, transparent);
   background: color-mix(in srgb, var(--brand-blue) 5%, #fff);
 }
 
 .guard-discover-cta {
   display: inline-flex;
-  min-height: 44px;
+  min-height: 2.5rem;
   align-items: center;
   gap: 0.5rem;
   border-radius: 0.75rem;
@@ -9777,7 +9858,23 @@ input:focus-visible, button:focus-visible, a:focus-visible {
   transition: background-color 160ms var(--ease-out-quart);
 }
 
+/* Touch targets keep the full 44px; a pointer can aim at the tighter button. */
+@media (pointer: coarse) {
+  .guard-discover-cta { min-height: 44px; }
+}
+
 .guard-discover-cta:hover { background: #2d2f56; }
+
+/* The quiet variant is the shelf's repeated action. Only the paid and slot
+   buttons stay solid, so the cards that cost something are the ones that pull
+   the eye, and a row of "Review protection" never reads as three ads. */
+.guard-discover-cta-quiet {
+  color: var(--brand-dark);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px rgb(63 65 116 / 0.2);
+}
+
+.guard-discover-cta-quiet:hover { background: rgb(63 65 116 / 0.06); }
 
 .guard-discover-cta:focus-visible,
 .guard-featured-row:focus-within {
@@ -9791,6 +9888,91 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 }
 
 .guard-discover-cta-inverse:hover { background: rgb(255 255 255 / 0.88); }
+
+/* The list switch is one control with two states, not two tabs to a different
+   page: a recessed track, with the current list lifted onto a white thumb. */
+.guard-list-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-top: 2.5rem;
+}
+
+.guard-list-switch-track {
+  display: inline-flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  border-radius: 0.875rem;
+  padding: 0.25rem;
+  background: rgb(63 65 116 / 0.07);
+}
+
+.guard-list-switch-option {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.625rem;
+  padding: 0 0.875rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: rgb(63 65 116 / 0.78);
+  transition:
+    background-color 160ms var(--ease-out-quart),
+    color 160ms var(--ease-out-quart),
+    box-shadow 160ms var(--ease-out-quart);
+}
+
+.guard-list-switch-option:hover { color: var(--brand-dark); }
+
+.guard-list-switch-option[aria-pressed="true"] {
+  color: var(--brand-dark);
+  background: #fff;
+  box-shadow: 0 1px 2px rgb(63 65 116 / 0.14);
+}
+
+.guard-list-switch-option:focus-visible,
+.guard-list-switch-add:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+.guard-list-switch-count {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.guard-list-switch-dot {
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 999px;
+  background: var(--brand-blue);
+}
+
+.guard-list-switch-add {
+  display: inline-flex;
+  min-height: 2.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 0.75rem;
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--brand-blue);
+}
+
+.guard-list-switch-add:hover { color: var(--brand-dark); }
+
+@media (min-width: 640px) {
+  .guard-list-switch-add { margin-left: auto; }
+}
+
+@media (pointer: coarse) {
+  .guard-list-switch-option,
+  .guard-list-switch-add { min-height: 44px; }
+}
 
 .guard-discover-offers {
   display: flex;
@@ -9840,7 +10022,8 @@ input:focus-visible, button:focus-visible, a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   .guard-spotlight-card,
   .guard-spotlight-skeleton { animation: none; }
-  .guard-discover-cta { transition: none; }
+  .guard-discover-cta,
+  .guard-list-switch-option { transition: none; }
 }
 /*
  * Responsive corrections inside Guard workspaces.

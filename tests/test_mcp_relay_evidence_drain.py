@@ -23,6 +23,7 @@ TOKEN = "guard-approval-context:v1:token"
 def _decision(action: str = "allow", **fields: object) -> dict[str, object]:
     return {
         "action": action,
+        "policy_action": action,
         "source": "policy",
         "signals": ["signal"],
         "summary": "summary",

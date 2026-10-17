@@ -125,8 +125,13 @@ fn unbound_environments_and_missing_pieces_match_nothing() {
 
 #[test]
 fn missing_store_and_missing_tables_match_nothing() {
-    let rig = Rig::new();
+    let mut rig = Rig::new();
     let server = hash('a');
+    // Windows refuses to delete a file a connection still holds open.
+    drop(std::mem::replace(
+        &mut rig.connection,
+        Connection::open_in_memory().unwrap(),
+    ));
     fs::remove_file(rig.home.join("guard.db")).unwrap();
     assert_eq!(state(&rig.request(&server, TOOL, "review")), "none");
     Connection::open(rig.home.join("guard.db"))

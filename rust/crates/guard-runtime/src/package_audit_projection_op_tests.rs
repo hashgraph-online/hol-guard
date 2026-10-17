@@ -296,8 +296,31 @@ fn check_cloud_vector(index: usize, vector: &Value, kind: &str, result: Result<V
             .unwrap()
             .remove("machine");
         assert_eq!(machine, Some(json!(VECTOR_MACHINE)), "vector {index}");
+        host_folder_path(vector, &mut actual, &expected);
     }
     assert_eq!(actual, expected, "vector {index}: {vector}");
+}
+
+/// The folder display was recorded on POSIX. On Windows a temp workspace sits
+/// under the user profile, so it shows home-relative, and a drive-less
+/// `/opt/...` is not absolute, so it shows as given, as Python's `Path` does.
+fn host_folder_path(vector: &Value, actual: &mut Value, expected: &Value) {
+    let pointer = "/workspaceContext/folderPath";
+    let (Some(workspace), Some(want), Some(got)) = (
+        vector["workspace"].as_str(),
+        expected.pointer(pointer),
+        actual.pointer_mut(pointer),
+    ) else {
+        return;
+    };
+    let shown = got.as_str().unwrap_or_default();
+    let host = match workspace {
+        "REL" => shown.starts_with("~\\") && shown.ends_with("\\vector-parent\\vector-ws"),
+        absolute => absolute.strip_prefix("ABS:") == Some(shown),
+    };
+    if cfg!(windows) && host {
+        *got = want.clone();
+    }
 }
 
 #[test]

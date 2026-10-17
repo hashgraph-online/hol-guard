@@ -55,10 +55,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -103,6 +102,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -211,10 +211,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -259,6 +258,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -366,10 +366,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -410,6 +409,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -516,10 +516,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": null,
@@ -555,6 +554,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -663,10 +663,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -711,6 +710,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -826,10 +826,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -893,6 +892,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -997,10 +997,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": null,
@@ -1036,6 +1035,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1143,10 +1143,9 @@
        "trust_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
        "uncertainty_count": 0
       },
-      "policy_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
       "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
-      "schema": "guard.native-review-policy-binding.v1"
+      "schema": "guard.native-review-policy-binding.v2"
      }
     },
     "tool_input": [
@@ -1187,6 +1186,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1275,6 +1275,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1336,6 +1337,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1438,6 +1440,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1540,6 +1543,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1642,6 +1646,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
@@ -1744,6 +1749,7 @@
     "reason_code": "native_command_extension_review",
     "request_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "request_id": "request-1",
+    "review_anchor_digest": "9999999999999999999999999999999999999999999999999999999999999999",
     "reviewed_output_sha256": null,
     "rule_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
     "runtime_identity": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",

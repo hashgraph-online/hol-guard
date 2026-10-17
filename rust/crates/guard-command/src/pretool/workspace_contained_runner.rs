@@ -11,6 +11,10 @@ use std::path::Path;
 
 /// Runner options that neither name a package nor allow a fetch.
 const RUNNER_OPTIONS: &[&str] = &["--no-install", "--bun"];
+/// `npx` options that only answer its install prompt in advance. They allow a
+/// fetch of a tool that is missing, never of one installed where it runs, and
+/// only an installed tool is admitted here. Bun's runners are not given them.
+const NPX_PROMPT_OPTIONS: &[&str] = &["--yes", "-y"];
 
 /// The arguments after the runner itself, when `segment` is one.
 pub(super) fn runner_arguments(segment: &CommandSegmentV1) -> Option<&[String]> {
@@ -50,9 +54,11 @@ pub(super) fn installed_tools(model: &CanonicalCommandV1, workspace: &Path) -> O
         if !segment.environment_names.is_empty() || segment.path_overridden {
             return None;
         }
-        let tool = arguments
-            .iter()
-            .find(|argument| !RUNNER_OPTIONS.contains(&argument.as_str()))?;
+        let npx = segment.executable.as_deref() == Some("npx");
+        let tool = arguments.iter().find(|argument| {
+            !(RUNNER_OPTIONS.contains(&argument.as_str())
+                || npx && NPX_PROMPT_OPTIONS.contains(&argument.as_str()))
+        })?;
         let bare = !tool.starts_with(['.', '-'])
             && tool
                 .chars()

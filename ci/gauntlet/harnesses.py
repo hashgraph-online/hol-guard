@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import Scenario
+from .claude_tools import claude_tools
 
 HARNESSES = ("omp", "claude-code", "codex", "cursor")
 
@@ -66,6 +67,21 @@ class Harness:
     # home through the OS profile API, not USERPROFILE, so only CODEX_HOME keeps it
     # off the operator's own config and on Guard's freshly installed hooks.
     home_env: dict[str, str] = field(default_factory=dict)
+    # The model a lane runs when the operator names none. Each CLI otherwise picks
+    # its own default, which can be a far more expensive model than a lane needs.
+    default_model: str | None = None
+    # Reasoning effort pinned on every invocation, for CLIs that accept one.
+    reasoning_effort: str | None = None
+    # The catalog's tool names this lane can actually drive. A `native-tools`
+    # case names the tools the model must use, and those names are Oh My Pi's;
+    # a lane runs such a case only when it has its own tool for every one of
+    # them. Keeping this on the adapter is what lets a structured read run
+    # where the harness really makes it, rather than only as a shell spelling.
+    native_tools: frozenset[str] = frozenset({"bash"})
+
+    def model(self, requested: str | None) -> str | None:
+        """The model this lane runs: the operator's choice, else the lane default."""
+        return requested or self.default_model
 
     def home_environment(self, home: Path) -> dict[str, str]:
         return {key: str(home / relative) for key, relative in self.home_env.items()}
@@ -154,8 +170,9 @@ class Harness:
                 "--disable-slash-commands",
                 "--no-session-persistence",
                 "--tools",
-                _claude_tools(scenario),
+                claude_tools(scenario),
             ]
+            model = self.model(model)
             return command + (["--model", model] if model else [])
         if self.name == "codex":
             command = [
@@ -172,8 +189,11 @@ class Harness:
                 "-C",
                 str(workspace),
             ]
+            model = self.model(model)
             if model:
                 command += ["-m", model]
+            if self.reasoning_effort:
+                command += ["-c", f"model_reasoning_effort={json.dumps(self.reasoning_effort)}"]
             # Developer instructions keep the fixture context out of the user prompt, as
             # Claude's system prompt does, so Guard's prompt review sees only the task.
             instructions = json.dumps(f"{context}\n{glossary}", ensure_ascii=False)
@@ -210,23 +230,6 @@ class Harness:
         )
 
 
-# A full task leaves every step to the model, so Claude gets its ordinary coding tools.
-FULL_TASK_CLAUDE_TOOLS = "Bash,Read,Write,Edit,Glob,Grep,TodoWrite"
-
-
-def _claude_tools(scenario: Scenario) -> str:
-    if scenario.oracle == "full-task":
-        return FULL_TASK_CLAUDE_TOOLS
-    if scenario.oracle == "home-copy-task":
-        return "Bash,Read"
-    if scenario.commands:
-        return "Bash"
-    if scenario.oracle == "blocked-read":
-        return "Read"
-    names = {"bash": "Bash", "read": "Read", "write": "Write", "edit": "Edit"}
-    return ",".join(names[tool] for tool in scenario.required_tools) or "Bash,Read,Write,Edit"
-
-
 ADAPTERS = {
     "claude-code": Harness(
         "claude-code",
@@ -235,6 +238,8 @@ ADAPTERS = {
         credential_env=("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"),
         extra_env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1"},
         macos_keychain=True,
+        default_model="claude-sonnet-5-5",
+        native_tools=frozenset({"bash", "read", "write", "edit"}),
     ),
     "codex": Harness(
         "codex",
@@ -242,6 +247,8 @@ ADAPTERS = {
         credential_files=(".codex/auth.json",),
         credential_env=("CODEX_API_KEY",),
         home_env={"CODEX_HOME": ".codex"},
+        default_model="gpt-6-luna",
+        reasoning_effort="medium",
     ),
     "cursor": Harness(
         "cursor",
@@ -250,6 +257,7 @@ ADAPTERS = {
         credential_files=(".cursor/cli-config.json", "AppData/Roaming/Cursor/auth.json"),
         credential_env=("CURSOR_API_KEY",),
         macos_keychain=True,
+        native_tools=frozenset({"bash", "read", "write", "edit"}),
     ),
 }
 

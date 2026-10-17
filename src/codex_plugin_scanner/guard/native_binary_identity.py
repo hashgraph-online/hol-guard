@@ -13,6 +13,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from .file_identity import full_stat_identity
+from .group_write_trust import trusted_owner_and_mode
 from .native_binary_write_lock import open_write_locked
 from .native_runtime_values import NativeRuntimeIdentity
 
@@ -51,14 +52,12 @@ def _identity(metadata: os.stat_result) -> tuple[int, ...]:
     return (*values, int(getattr(metadata, "st_uid", -1)), int(getattr(metadata, "st_gid", -1)))
 
 
-def _trusted_regular_file(metadata: os.stat_result) -> bool:
+def _trusted_regular_file(metadata: os.stat_result, path: Path) -> bool:
     if not stat.S_ISREG(metadata.st_mode):
         return False
     if os.name == "nt":
         return True
-    current_uid = os.getuid() if hasattr(os, "getuid") else None
-    owner = getattr(metadata, "st_uid", current_uid)
-    return not stat.S_IMODE(metadata.st_mode) & 0o022 and (current_uid is None or owner in {0, current_uid})
+    return trusted_owner_and_mode(metadata, path)
 
 
 def _cacheable(metadata: os.stat_result) -> bool:
@@ -81,7 +80,7 @@ def _read_digest(path: Path, expected: tuple[int, ...], locked: int | None = Non
         descriptor = locked
     try:
         opened = os.fstat(descriptor)
-        if _identity(opened) != expected or not _trusted_regular_file(opened):
+        if _identity(opened) != expected or not _trusted_regular_file(opened, path):
             return None
         digest = hashlib.sha256()
         remaining = opened.st_size
@@ -172,7 +171,7 @@ def validate_native_binary(path: Path) -> NativeRuntimeIdentity | None:
     try:
         lexical = path.expanduser()
         metadata = lexical.lstat()
-        if not _trusted_regular_file(metadata):
+        if not _trusted_regular_file(metadata, lexical):
             return None
         resolved = lexical.resolve(strict=True)
         expected = _identity(metadata)

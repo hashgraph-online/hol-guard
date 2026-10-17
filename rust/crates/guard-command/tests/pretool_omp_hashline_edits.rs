@@ -227,3 +227,87 @@ fn oh_my_pi_header_copies_keep_the_file_write_proof() {
         assert_ne!(evaluate(tool_input.clone()), allowed, "{tool_input}");
     }
 }
+
+#[test]
+fn todo_updates_sent_to_edit_name_no_file() {
+    let home = std::env::temp_dir();
+    let evaluate = |input: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": input}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        )
+    };
+    let todo = evaluate(json!({
+        "input": "done", "phase": "Implement game", "task": "Build canvas gameplay"
+    }));
+    assert_eq!(todo.minimum_action, "allow");
+    assert_eq!(todo.reason_code, "native_omp_edit_without_target");
+    for input in [
+        json!({"input": "[game.js#250F]\nPUT 1.=1:\n+x\n", "phase": "Implement game"}),
+        json!({"input": "*** Begin Patch\n*** Update File: game.js\n+x\n*** End Patch", "task": "t"}),
+        json!({"input": "done", "phase": "p", "path": "game.js"}),
+        json!({"input": "done\n+x", "phase": "p"}),
+        json!({"input": "done", "phase": "p", "edits": []}),
+        json!({"input": "done"}),
+        json!({"input": "game.js", "task": "t"}),
+    ] {
+        assert_ne!(
+            evaluate(input.clone()).reason_code,
+            "native_omp_edit_without_target",
+            "{input}"
+        );
+    }
+}
+
+#[test]
+fn edits_without_a_file_header_name_no_file() {
+    let home = std::env::temp_dir();
+    let evaluate = |input: serde_json::Value| {
+        evaluate_pre_tool_envelope_with_context(
+            "omp",
+            "PreToolUse",
+            &json!({"tool_name": "edit", "tool_input": input}),
+            None,
+            None,
+            home.to_str(),
+            home.to_str(),
+        )
+    };
+    // Calls a model meant for read and bash; Oh My Pi refused both.
+    for input in [
+        json!({"input": "test/game.test.js"}),
+        json!({"input": "node --test", "timeout": 120}),
+        json!({"input": "done"}),
+        json!({"input": "~/.ssh/id_ed25519"}),
+    ] {
+        let result = evaluate(input.clone());
+        assert_eq!(result.minimum_action, "allow", "{input}");
+        assert_eq!(
+            result.reason_code, "native_omp_edit_without_header",
+            "{input}"
+        );
+    }
+    for input in [
+        json!({"input": "[.env#0AC4]\nPUT >$:\n+EXTRA=1\n"}),
+        json!({"input": "[.env]"}),
+        json!({"input": "*** Begin Patch\n*** Add File: .env\n+X=1\n*** End Patch"}),
+        json!({"input": "*** Edit File: .env"}),
+        json!({"input": "\u{b6}.env"}),
+        json!({"input": "game.js\n+x"}),
+        json!({"input": "game.js", "path": "game.js"}),
+        json!({"input": "game.js", "timeout": "120"}),
+        json!({"input": "game.js", "edits": []}),
+        json!({"input": 7}),
+    ] {
+        assert_ne!(
+            evaluate(input.clone()).reason_code,
+            "native_omp_edit_without_header",
+            "{input}"
+        );
+    }
+}

@@ -100,7 +100,9 @@ class _AuthorityStore:
         """No device grant rows exist, so an unavailable resident cannot hide one."""
         return False
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self, registry: object, **_kwargs
+    ) -> ExtensionControlAuthorityView:
         assert registry is BUILT_IN_COMMAND_EXTENSION_REGISTRY
         return ExtensionControlAuthorityView(
             health=AuthorityHealth.PROTECTED,

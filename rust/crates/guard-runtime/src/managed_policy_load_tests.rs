@@ -6,6 +6,8 @@
 
 use super::*;
 
+use crate::managed_policy_registry::{RegistryAuthority, RegistryRead};
+
 use crate::managed_policy::POLICY_SCHEMA_VERSION;
 use serde_json::json;
 use tempfile::TempDir;
@@ -35,6 +37,7 @@ fn rooted(root: &TempDir, system: MachineSystem) -> ManagedPolicySource {
         policy_path: None,
         write_cache: true,
         machine_root: Some(root.path().to_path_buf()),
+        registry: RegistryAuthority::Native,
     }
 }
 
@@ -44,6 +47,7 @@ fn explicit(path: &Path) -> ManagedPolicySource {
         policy_path: Some(path.to_path_buf()),
         write_cache: true,
         machine_root: None,
+        registry: RegistryAuthority::Native,
     }
 }
 
@@ -266,9 +270,12 @@ fn an_unprivileged_load_writes_no_cache_to_distrust_later() {
 }
 
 #[test]
-fn a_windows_machine_fails_closed_on_the_registry_it_cannot_read() {
+fn a_build_without_a_registry_fails_closed_for_a_windows_machine() {
     let root = TempDir::new().expect("tempdir");
-    let source = rooted(&root, MachineSystem::Windows);
+    let source = ManagedPolicySource {
+        registry: RegistryAuthority::Fixed(RegistryRead::Unavailable),
+        ..rooted(&root, MachineSystem::Windows)
+    };
 
     let state = load_managed_policy(&source);
 

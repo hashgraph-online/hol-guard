@@ -38,8 +38,27 @@ fn under(root: &Path, relative: &str, fallback: Option<&str>) -> String {
 fn detokenize(value: Value, root: &Path) -> Value {
     let text = serde_json::to_string(&value).expect("serialize");
     let root_json = serde_json::to_string(&path_text(root)).expect("serialize root");
-    serde_json::from_str(&text.replace(root_json.trim_matches('"'), ROOT_TOKEN))
-        .expect("parse detokenized")
+    let mut value = serde_json::from_str(&text.replace(root_json.trim_matches('"'), ROOT_TOKEN))
+        .expect("parse detokenized");
+    if cfg!(windows) {
+        posix_separators_below_root(&mut value);
+    }
+    value
+}
+
+/// The recorder ran on POSIX; a Windows host joins paths below the root with
+/// `\`, as Python's `Path` does there.
+fn posix_separators_below_root(value: &mut Value) {
+    match value {
+        Value::String(text) if text.starts_with(ROOT_TOKEN) => *text = text.replace('\\', "/"),
+        Value::Array(items) => items.iter_mut().for_each(posix_separators_below_root),
+        Value::Object(fields) => fields.values_mut().for_each(posix_separators_below_root),
+        _ => {}
+    }
+}
+
+fn host_spelling(path: &str) -> &str {
+    path.strip_prefix(r"\\?\").unwrap_or(path)
 }
 
 #[test]
@@ -50,16 +69,20 @@ fn package_json_scripts_match_python_vectors() {
         let name = vector["name"].as_str().expect("name");
         let root = tree(name, vector["files"].as_object().expect("files"));
         let cwd = under(&root, vector["cwd"].as_str().expect("cwd"), None);
+        // Hosts and pasted commands spell paths without the `\\?\` that
+        // canonicalize adds on Windows: `~/` expands to `{home}/`, and `/`
+        // inside a verbatim path is no separator.
         let home = under(
             &root,
             vector["home"].as_str().expect("home"),
             Some("no-home"),
         );
+        let home = host_spelling(&home);
         let command = vector["command"]
             .as_str()
             .expect("command")
-            .replace(ROOT_TOKEN, &path_text(&root));
-        let got = package_json_scripts(&command, &cwd, &home).expect("no native error");
+            .replace(ROOT_TOKEN, host_spelling(&path_text(&root)));
+        let got = package_json_scripts(&command, &cwd, home).expect("no native error");
         let got = got.map(|found| {
             assert_eq!(
                 found.identity,

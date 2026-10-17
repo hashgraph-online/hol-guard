@@ -16,7 +16,11 @@ from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .store_local_cli_retention import LocalCliReplaySkippedError, utc_now_iso
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import read_mcp_skill_page
-from .store_mcp_provider_catalog import read_provider_actions, write_composio_metadata
+from .store_mcp_provider_catalog import (
+    describe_provider_actions,
+    read_provider_actions,
+    write_composio_metadata,
+)
 
 if TYPE_CHECKING:
     from .store import GuardStore
@@ -154,7 +158,7 @@ class StoreLocalMcpMixin:
             ).fetchone()
             if observation is None:
                 raise ValueError("provider connection not found")
-            return read_provider_actions(
+            page, declarations = read_provider_actions(
                 connection,
                 cli_id,
                 observation[0],
@@ -163,6 +167,11 @@ class StoreLocalMcpMixin:
                 search=search,
                 expected_token=expected_token,
             )
+        return describe_provider_actions(
+            page,
+            declarations,
+            guard_home=cast("GuardStore", self).guard_home,
+        )
 
     def read_local_mcp_skills(
         self,

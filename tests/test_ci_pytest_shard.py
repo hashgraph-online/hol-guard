@@ -219,6 +219,18 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         assert job.count("save-cache: false") >= expected_count
 
 
+def test_ci_jobs_cannot_inherit_the_six_hour_default_timeout() -> None:
+    """A missing timeout-minutes is GitHub's 360-minute default."""
+
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))["jobs"]
+    missing = sorted(name for name, job in jobs.items() if "timeout-minutes" not in job)
+    assert missing == []
+    # Observed successes: dashboard ~79s, cross-platform Windows ~103s, cisco-full ~213s.
+    assert jobs["dashboard"]["timeout-minutes"] == 10
+    assert jobs["cisco-full"]["timeout-minutes"] == 15
+    assert jobs["cross-platform"]["timeout-minutes"] == 15
+
+
 @pytest.mark.parametrize(
     "failed_dependency", ["NATIVE_PRODUCER_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
 )

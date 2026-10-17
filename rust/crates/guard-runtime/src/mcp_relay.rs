@@ -12,13 +12,12 @@
 //! has only not prepared yet keeps the session native.
 //!
 //! The child session runs in its own process group on unix and in a
-//! kill-on-close JobObject on Windows. The relay is advertised on unix only.
+//! kill-on-close JobObject on Windows.
 
 /// `hol-guard-runtime` subcommand that runs the relay.
 pub(crate) const RELAY_COMMAND: &str = "mcp-relay";
 
-/// Capability string installers gate relay selection on; advertised on unix.
-#[cfg_attr(not(unix), allow(dead_code))]
+/// Capability string installers gate relay selection on.
 pub(crate) const RELAY_FEATURE: &str = "mcp-stdio-relay-v1";
 
 /// Run the relay; returns the process exit status.
@@ -47,6 +46,10 @@ mod session {
     }
 
     pub(super) fn run(python_argv: &[String]) -> i32 {
+        // The host reads this relay's stdio to EOF, so no child the relay
+        // starts (a detached daemon launch included) may hold it open.
+        #[cfg(windows)]
+        guard_runtime_windows_process::disinherit_standard_handles();
         let args = match parse(python_argv) {
             Ok(args) => args,
             Err(reason) => return fail(&reason, 2),

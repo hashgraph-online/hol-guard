@@ -58,28 +58,21 @@ static NO_EGRESS_POLICY: NoEgressPolicy = NoEgressPolicy;
 /// CA, or registry rule the unreadable profile may have required. That load
 /// refuses the network instead.
 ///
-/// A machine whose authority this runtime cannot read at all is the exception.
+/// A machine whose authority this runtime cannot read at all refuses too.
 /// Every Windows machine reports that status, because the registry is the
-/// authority and this runtime does not read it yet, so refusing there would
-/// refuse every Windows evaluation — including the unmanaged machines Python
-/// reads the registry on and reports as having no policy. Such a machine
-/// exchanges under the unmanaged default until the registry is read natively.
-///
-/// On a managed Windows machine that is a known gap, and the narrower one of
-/// the two: an administrator whose registry policy sets a proxy, a CA, or
-/// `allowPublicRegistries: false` has those honoured on the Python path and not
-/// here, where this caller exchanges directly under the unmanaged default. The
-/// alternative is worse rather than safer — every Windows machine reports the
-/// same status, so refusing would refuse package evaluation on all of them,
-/// managed and unmanaged alike, and a caller that cannot evaluate has no
-/// verdict to enforce an administrator's policy with either. Reading HKLM
-/// natively closes it, and until it is read, a Windows front end that has a
-/// managed registry policy to honour belongs on the Python path.
+/// authority and this runtime does not read it yet, so an administrator's
+/// proxy, CA, or `allowPublicRegistries: false` is invisible here while being
+/// honoured on the Python path. Exchanging under the unmanaged default would
+/// exchange outside every rule such a policy sets, so this caller performs no
+/// exchange on a machine whose authority it cannot read: an evaluation the
+/// resident answers from the cache still settles, and one that needs the
+/// network has no verdict here and belongs on the Python path, which reads the
+/// registry. Reading HKLM natively is what moves those machines onto this lane.
 pub(crate) fn caller_network_policy(
     managed: &ManagedPolicySource,
 ) -> Result<ManagedNetworkPolicy, &'static str> {
     let state = load_managed_policy(managed);
-    if state.status.fails_closed() && !state.authority_unreadable() {
+    if state.status.fails_closed() {
         return Err(POLICY_UNHONOURED);
     }
     Ok(effective_managed_policy(&state)
@@ -105,6 +98,7 @@ impl PrivateSpool {
         let mut name = [0u8; SPOOL_NAME_BYTES];
         getrandom::fill(&mut name).ok()?;
         let dir = std::env::temp_dir().join(format!("{SPOOL_PREFIX}{}", hex::encode(name)));
+        #[cfg_attr(not(unix), allow(unused_mut))]
         let mut builder = std::fs::DirBuilder::new();
         #[cfg(unix)]
         {

@@ -14,6 +14,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..native_restricted_pytest import restricted_native
+from .contained_authority import settled_authority
 from .git_execution_safety import trusted_git_binary_for_cwd
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
@@ -256,7 +257,7 @@ def run_workspace_contained(
         publish=publish,
     )
     # A second receipt taken after planning must still bind the same evidence.
-    second = authorize(payload)
+    second = settled_authority(authorize, payload)
     if not receipt_matches(second) or not isinstance(second, Mapping):
         raise _reject("Guard could not re-authorize this workspace sandbox execution.")
     if second.get("command_binding_digest") != first_receipt.get("command_binding_digest") or (
@@ -379,7 +380,7 @@ def _run_publish_steps(
     tool_input = payload["tool_input"]
     if not isinstance(tool_input, dict):
         raise _reject("Invalid workspace sandbox request.")
-    response = authorize({**payload, "tool_input": {**tool_input, "command": suffix}})
+    response = settled_authority(authorize, {**payload, "tool_input": {**tool_input, "command": suffix}})
     if (
         not isinstance(response, Mapping)
         or response.get("decision") != "allow"

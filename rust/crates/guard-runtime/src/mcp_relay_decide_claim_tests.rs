@@ -84,31 +84,35 @@ fn a_fresh_block_after_the_claim_is_the_proxy_terminal() {
     let mut stored = fresh(GuardAction::Block, HASH);
     stored.decision.saved_action = Some(GuardAction::Block);
     let (routed, _) = postclaim(&claimed(Disposition::Consumed), &stored).unwrap();
-    assert_eq!(routed, Routed::StoredBlock);
+    assert_eq!(
+        routed,
+        Routed::StoredBlock {
+            package_request: false,
+        }
+    );
 }
 
 #[test]
-fn a_post_claim_reapproval_rolls_the_claim_back() {
-    // The proxy queues an approval request here (`runtime_mcp.py` 2670); the
-    // resident cannot, so it refuses and the claim rolls back unspent.
+fn a_post_claim_reapproval_queues_the_fresh_call() {
+    // The proxy spends the claim and queues a re-approval request for the
+    // fresh identity (`runtime_mcp.py` 2674-2684).
+    let queued = || Routed::Queue {
+        policy_action: "require-reapproval".to_owned(),
+    };
     let moved = fresh(GuardAction::Allow, "guard-approval-context:v1:moved");
-    assert_eq!(
-        postclaim(&claimed(Disposition::Consumed), &moved),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, append) = postclaim(&claimed(Disposition::Consumed), &moved).unwrap();
+    assert_eq!(routed, queued());
+    // The context change is the evidence the queued row and receipt append.
+    assert!(!append.is_empty());
     // A retained claim does not authorize a fresh review.
     let review = fresh(GuardAction::Review, HASH);
-    assert_eq!(
-        postclaim(&claimed(Disposition::Retained), &review),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, _) = postclaim(&claimed(Disposition::Retained), &review).unwrap();
+    assert_eq!(routed, queued());
     // A fresh require-reapproval asks whether the claim still covers it; an
     // empty claimed row never does.
     let reapproval = fresh(GuardAction::RequireReapproval, HASH);
-    assert_eq!(
-        postclaim(&claimed(Disposition::Consumed), &reapproval),
-        Err(POSTCLAIM_REAPPROVAL)
-    );
+    let (routed, _) = postclaim(&claimed(Disposition::Consumed), &reapproval).unwrap();
+    assert_eq!(routed, queued());
 }
 
 #[test]
@@ -142,6 +146,7 @@ fn an_unknown_or_spent_ticket_defers() {
     let request = McpRelayClaimRequestV1 {
         guard_home: root.to_string_lossy().into_owned(),
         ticket: "claim-0-0-0:1".to_owned(),
+        package_evaluation: None,
     };
     let answer: Value = serde_json::from_slice(&claim(&request, &store).unwrap()).unwrap();
     assert_eq!(answer["outcome"], "defer");

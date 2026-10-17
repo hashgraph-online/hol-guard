@@ -202,12 +202,14 @@ def test_a_saved_decision_rebinds_the_lane_from_the_reconcile(tmp_path: Path, mo
     assert lane._direct_lane_integrity_state == stored
 
     # A refresh that wrote the row costs one more refresh, which writes
-    # nothing; after that an unchanged database refreshes nothing.
+    # nothing. What matters is that the refreshes stop: the stamp also moves
+    # when SQLite checkpoints the write-ahead log, so how many of them the
+    # first write costs is not the lane's to decide.
     refreshes = _counted_refreshes(monkeypatch)
-    lane._recheck_direct_lane_saved_state()
-    lane._recheck_direct_lane_saved_state()
-    assert len(refreshes) <= 1
+    for _ in range(4):
+        lane._recheck_direct_lane_saved_state()
     settled = len(refreshes)
+    assert settled <= 2
     lane._recheck_direct_lane_saved_state()
     assert (lane.rebinds, len(refreshes)) == (1, settled)
 

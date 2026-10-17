@@ -388,13 +388,29 @@ def _run_guard_doctor_command(
             skip_steps=frozenset({"package_shims", "command_queue"}),
             harness=args.harness or None,
         )
+    native_runtime_repair: dict[str, object] | None = None
+    if getattr(args, "repair", False):
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
         availability = doctor_native_availability()
-    payload["native_runtime"] = {
+    native_runtime: dict[str, object] = {
         "availability": availability,
         "admission": native_resident_admission_snapshot(),
         "daemon_http": daemon_admission_snapshot(),
     }
+    bundled_runtime = bundled_native_runtime_report()
+    if bundled_runtime is not None:
+        native_runtime["bundled"] = bundled_runtime
+    if native_runtime_repair is not None:
+        native_runtime["repair"] = native_runtime_repair
+    payload["native_runtime"] = native_runtime
     payload["trust"] = build_trust_doctor_payload(store)
     payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
     with nullcontext() if args.harness else without_command_probes():

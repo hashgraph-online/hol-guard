@@ -26,6 +26,11 @@ mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
 mod compound_artifact;
+mod credential_store_names {
+    //! The credential screen is shared with PostToolUse source review, so it
+    //! lives in `guard-secure-fs`.
+    pub(crate) use guard_secure_fs::credential_store_names::*;
+}
 pub mod cursor_shell_command;
 pub mod policy_document;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
@@ -470,6 +475,15 @@ fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> Cano
     }
 }
 
+/// `2>&1` and `>&1`. A path or a program never has this shape.
+fn is_fd_dup_redirect(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    let rest = bytes
+        .strip_prefix(b"2>&")
+        .or_else(|| bytes.strip_prefix(b">&"));
+    rest.is_some_and(|rest| !rest.is_empty() && rest.iter().all(|byte| byte.is_ascii_digit()))
+}
+
 fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
     let raw = request.command.trim();
     if raw.is_empty() {
@@ -515,11 +529,18 @@ fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalComma
         let mut environment_names = Vec::new();
         let mut executable_index = 0usize;
         while executable_index < tokens.len() {
-            let Some(name) = assignment_name(&tokens[executable_index]) else {
-                break;
-            };
-            environment_names.push(name.to_owned());
-            executable_index += 1;
+            if let Some(name) = assignment_name(&tokens[executable_index]) {
+                environment_names.push(name.to_owned());
+                executable_index += 1;
+                continue;
+            }
+            // `;2>&1 python3 evil.py` tokenizes the redirect as the first word.
+            // It is not the program.
+            if is_fd_dup_redirect(&tokens[executable_index]) {
+                executable_index += 1;
+                continue;
+            }
+            break;
         }
         let (executable_index, wrapper_chain) = match parser_wrappers::unwrap_wrappers(
             &tokens,
@@ -671,6 +692,8 @@ pub mod cloud_audit_sync;
 pub mod guard_run_launch;
 pub mod install_time_event;
 pub mod local_supply_chain;
+#[cfg(test)]
+mod local_supply_chain_saved_claim_tests;
 #[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
 pub mod package_approval;

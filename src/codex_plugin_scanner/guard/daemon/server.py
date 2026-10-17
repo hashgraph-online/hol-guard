@@ -132,6 +132,7 @@ from .discovery import (
 from .extension_control_api import ExtensionControlApiService
 from .extension_discovery_read import (
     DISCOVERY_EVENTS_PATH,
+    DISCOVERY_OPTED_OUT,
     DISCOVERY_RENDERS_PATH,
     DISCOVERY_UNAVAILABLE,
     DiscoveryReadError,
@@ -1301,6 +1302,16 @@ class _GuardDaemonHandler(
             if not self._header_token_is_valid():
                 self._write_unauthorized(extra_headers=self._cors_headers_for_request())
                 return
+            # A device whose user or administrator turned sponsored discovery
+            # off answers that before anything that can fail. The rollout gate,
+            # the native capability and the upstream read all have failure
+            # modes, and a failure must never read as "no preference stated" on
+            # a device that already stated one.
+            if parsed.path == _LOCAL_DISCOVERY_PLACEMENTS and not sponsored_discovery_allowed(
+                self.server.store  # type: ignore[attr-defined]
+            ):
+                self._write_json({"error": DISCOVERY_OPTED_OUT}, status=403)
+                return
             if not discovery_rollout_enabled():
                 self._write_json({"error": DISCOVERY_UNAVAILABLE}, status=503)
                 return
@@ -1929,6 +1940,7 @@ class _GuardDaemonHandler(
                     guard_home=guard_home,
                     workspace=workspace,
                     deadline=hook_deadline.expires_at,
+                    release_capacity=admission.permit.release,
                 )
         finally:
             with daemon_server.hook_capacity_lock:
@@ -2070,6 +2082,7 @@ class _GuardDaemonHandler(
         guard_home: str | None,
         workspace: str | None,
         deadline: float | None = None,
+        release_capacity: Callable[[], None] | None = None,
     ) -> None:
         from contextlib import nullcontext
 
@@ -2085,26 +2098,28 @@ class _GuardDaemonHandler(
                 workspace=workspace,
                 deadline=deadline,
             )
-            if result is not None:
-                if deadline is not None and time.monotonic() >= deadline:
-                    result = self._runtime_hook_fail_safe_response(
-                        payload,
-                        params,
-                        default_harness=default_harness,
-                        reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
-                        reason_code="daemon_hook_deadline_exhausted",
-                    )
-                self._write_json(result)
-                return
-            self._write_json(
-                self._runtime_hook_fail_safe_response(
+            if result is None:
+                result = self._runtime_hook_fail_safe_response(
                     payload,
                     params,
                     default_harness=default_harness,
                     reason="HOL Guard could not complete the native hook decision safely.",
                     reason_code="native_hook_worker_unavailable",
                 )
-            )
+            elif deadline is not None and time.monotonic() >= deadline:
+                result = self._runtime_hook_fail_safe_response(
+                    payload,
+                    params,
+                    default_harness=default_harness,
+                    reason="HOL Guard could not complete local review within the hook deadline. Retry this action.",
+                    reason_code="daemon_hook_deadline_exhausted",
+                )
+        # The decision is final. Free its review slot before the answer is
+        # sent: a client holding its answer must never see the slot still
+        # busy, and a slow reader must not occupy review capacity.
+        if release_capacity is not None:
+            release_capacity()
+        self._write_json(result)
 
     def _handle_runtime_hook_fast(
         self,
@@ -3528,6 +3543,7 @@ class GuardDaemonServer:
             if self._shutdown_started.is_set():
                 stop_reason = "requested_shutdown"
         except KeyboardInterrupt:
+            self._record_lifecycle("shutdown_requested", reason="keyboard_interrupt")
             self._shutdown_started.set()
             stop_reason = "requested_shutdown"
         except BaseException as error:
@@ -3831,6 +3847,7 @@ class GuardDaemonServer:
                 if idle:
                     self._server.idle_shutdown_claimed = True
             if idle:
+                self._record_lifecycle("shutdown_requested", reason="idle_timeout")
                 self._shutdown_started.set()
                 self._server.shutdown()
                 return

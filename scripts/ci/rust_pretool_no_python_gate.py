@@ -244,7 +244,10 @@ def _contract_failures(root: Path) -> list[str]:
             (
                 "pre-tool-command-authority-v1",
                 "pre-tool-generic-authority-v1",
-                "PreToolUse(CommandModelRequestV1)",
+                # The resident PreToolUse frame carries the command model
+                # request, now wrapped in the envelope that adds the path
+                # context the lane runs in.
+                "PreToolUse(crate::oneshot::PreToolRequestV1)",
             ),
         ),
         (
@@ -263,7 +266,14 @@ def _contract_failures(root: Path) -> list[str]:
         ),
         (
             root / "rust/crates/guard-runtime/src/oneshot.rs",
-            ("fn evaluate_pre_tool_bytes", "pre_tool_response", "evaluate_pre_tool_request"),
+            (
+                "fn evaluate_pre_tool_bytes",
+                "pre_tool_response",
+                "evaluate_pre_tool_request",
+                # The lane tells the runtime where the command runs, and says
+                # so in its feature list so a caller knows the fields are read.
+                "pre-tool-path-context-v1",
+            ),
         ),
     )
     for path, tokens in checks:

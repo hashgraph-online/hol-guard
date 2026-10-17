@@ -69,7 +69,7 @@ pub(super) const OPENCODE: &str = "opencode";
 /// The busy timeout the daemon's own store calls take.
 const BUSY_TIMEOUT_MS: u64 = 250;
 /// The actions `_needs_review` queues; any other item is dropped unwritten.
-const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
+pub(super) const REVIEWABLE: [&str; 2] = ["review", "require-reapproval"];
 
 /// The hosts `canonical_local_approval_url` treats as this machine.
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
@@ -126,6 +126,29 @@ pub(super) fn queue(
     resolved: &Resolved,
     policy_action: String,
 ) -> Result<Routed, &'static str> {
+    prepare(request, admitted, resolved, policy_action, &[])?.write(request)
+}
+
+/// An approval request every check has passed, ready to be written.
+pub(super) struct Prepared {
+    policy_action: String,
+    center: String,
+    oauth_source: String,
+    workspace: String,
+    args: Map<String, Value>,
+}
+
+/// Everything `queue` checks and derives before it writes, so a caller that
+/// must defer before it commits anything can do so. `evidence_append` follows
+/// the decision's own scanner evidence in the queued row, as the proxy's
+/// post-claim evidence does.
+pub(super) fn prepare(
+    request: &McpRelayDecideRequestV1,
+    admitted: &Admitted,
+    resolved: &Resolved,
+    policy_action: String,
+    evidence_append: &[Value],
+) -> Result<Prepared, &'static str> {
     if !REVIEWABLE.contains(&policy_action.as_str()) {
         return Err(ASK_UNSUPPORTED);
     }
@@ -148,7 +171,7 @@ pub(super) fn queue(
         return Err(ASK_UNSUPPORTED);
     }
     let projection = project(request, artifact)?;
-    let item = review_item(
+    let mut item = review_item(
         artifact,
         artifact_hash,
         signals,
@@ -156,42 +179,76 @@ pub(super) fn queue(
         &policy_action,
         &resolved.decision,
     );
+    append_scanner_evidence(&mut item, evidence_append);
     let now = now_isoformat().ok_or(ASK_QUEUE_FAILED)?;
-    let args = args(request, item, artifact, center, &now, redaction_level);
-    let (request_id, notice) = write(request, oauth_source, args)?;
-    let row = read_back(request, &request_id)?;
-    let review_url = review_url(&row, center, &request_id);
-    let message = format!(
-        "HOL Guard stopped tool call {} from {}. Approve request {request_id} at {review_url}, \
-         then retry the same action.",
-        request.build.tool_name, request.build.server_name
-    );
-    let data = json!({
-        "approvalCenterUrl": center,
-        "approvalRequests": [Value::Object(row)],
-        "guardPolicyAction": policy_action,
-        "reviewUrl": review_url,
-    });
-    Ok(Routed::Asked {
+    Ok(Prepared {
+        args: args(request, item, artifact, center, &now, redaction_level),
         policy_action,
-        message,
-        data,
-        // What `_notify_pending_approval` and `_maybe_open_approval_center`
-        // raise once the row is written, which the drain owns.
-        approval: json!({
-            "approval_center_url": center,
-            "review_url": review_url,
-            "request_id": request_id,
-            "workspace": admitted.workspace,
-            "notices": [notice],
-        }),
+        center: center.to_owned(),
+        oauth_source: oauth_source.to_owned(),
+        workspace: admitted.workspace.clone(),
     })
+}
+
+/// `(*_tool_decision_scanner_evidence(decision), *evidence_append)`: the
+/// row's evidence, still left out when both are empty.
+fn append_scanner_evidence(item: &mut Map<String, Value>, evidence_append: &[Value]) {
+    if evidence_append.is_empty() {
+        return;
+    }
+    let evidence = item
+        .entry("scanner_evidence")
+        .or_insert_with(|| Value::Array(Vec::new()));
+    if let Value::Array(evidence) = evidence {
+        evidence.extend_from_slice(evidence_append);
+    }
+}
+
+impl Prepared {
+    /// Write the request, read it back and block the call on it.
+    pub(super) fn write(self, request: &McpRelayDecideRequestV1) -> Result<Routed, &'static str> {
+        let Self {
+            policy_action,
+            center,
+            oauth_source,
+            workspace,
+            args,
+        } = self;
+        let (request_id, notice) = write(request, &oauth_source, args)?;
+        let row = read_back(request, &request_id)?;
+        let review_url = review_url(&row, &center, &request_id);
+        let message = format!(
+            "HOL Guard stopped tool call {} from {}. Approve request {request_id} at \
+             {review_url}, then retry the same action.",
+            request.build.tool_name, request.build.server_name
+        );
+        let data = json!({
+            "approvalCenterUrl": center,
+            "approvalRequests": [Value::Object(row)],
+            "guardPolicyAction": policy_action,
+            "reviewUrl": review_url,
+        });
+        Ok(Routed::Asked {
+            policy_action,
+            message,
+            data,
+            // What `_notify_pending_approval` and `_maybe_open_approval_center`
+            // raise once the row is written, which the drain owns.
+            approval: json!({
+                "approval_center_url": center,
+                "review_url": review_url,
+                "request_id": request_id,
+                "workspace": workspace,
+                "notices": [notice],
+            }),
+        })
+    }
 }
 
 /// `first_approval_url(...) or approval_center_url`: the written row's own
 /// link, rewritten when it names a stale loopback center, and this center's
 /// deep link for the row's request when the row carries no link at all.
-fn review_url(row: &Map<String, Value>, center: &str, request_id: &str) -> String {
+pub(super) fn review_url(row: &Map<String, Value>, center: &str, request_id: &str) -> String {
     if let Some(approval_url) = nonempty(row.get("approval_url")) {
         return canonical_local_approval_url(&approval_url, center);
     }
@@ -253,7 +310,7 @@ fn url_host(netloc: &str) -> &str {
 
 /// Write the request through the daemon's own store operation, under the
 /// storage gate every writer of this store holds.
-fn write(
+pub(super) fn write(
     request: &McpRelayDecideRequestV1,
     oauth_source: &str,
     args: Map<String, Value>,
@@ -289,7 +346,7 @@ fn write(
 
 /// `store.get_approval_request(request_id)`, with the queue hints Python
 /// attaches to every approval read.
-fn read_back(
+pub(super) fn read_back(
     request: &McpRelayDecideRequestV1,
     request_id: &str,
 ) -> Result<Map<String, Value>, &'static str> {
@@ -343,7 +400,7 @@ fn store(
 
 /// `_now()`: `datetime.now(timezone.utc).isoformat()`, which leaves the
 /// fraction out at exactly zero microseconds.
-fn now_isoformat() -> Option<String> {
+pub(super) fn now_isoformat() -> Option<String> {
     let micros = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .ok()?

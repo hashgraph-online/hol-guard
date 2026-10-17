@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from tests.release_workflow_helpers import PUBLISH_WORKFLOW, ROOT, load_workflow
 
 
@@ -32,8 +34,11 @@ def test_native_guard_wheel_timeout_covers_in_job_release_compiles() -> None:
 
 
 def test_windows_native_guard_wheel_uses_reproducible_linker_mode() -> None:
-    native = load_workflow(PUBLISH_WORKFLOW)["jobs"]["build-native-guard-wheels"]
-    windows = next(row for row in native["strategy"]["matrix"]["include"] if row["platform_tag"] == "win_amd64")
+    jobs = load_workflow(PUBLISH_WORKFLOW)["jobs"]
+    native = jobs["build-native-guard-wheels"]
+    selector = next(step for step in jobs["build"]["steps"] if step.get("id") == "native_wheel_matrix")
+    legs = json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])
+    windows = [row for row in legs if row["platform_tag"] in {"win_amd64", "win_arm64"}]
     build = next(step for step in native["steps"] if step.get("name") == "Build version-matched runtime")
-    assert windows["rustflags"] == "-C link-arg=/Brepro"
+    assert [row["rustflags"] for row in windows] == ["-C link-arg=/Brepro"] * 2
     assert build["env"]["RUSTFLAGS"] == "${{ matrix.rustflags }}"

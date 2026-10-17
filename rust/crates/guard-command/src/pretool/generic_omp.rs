@@ -7,6 +7,8 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[path = "generic_omp_learn.rs"]
+mod learn;
 #[path = "generic_omp_yield.rs"]
 mod yield_report;
 
@@ -97,14 +99,12 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
 
 /// `learn` stores one memory note and returns the store's acknowledgement.
 /// Its PreToolUse stays an unknown-tool review, so under enforce the call has
-/// run only after a person approved it. Without this, that approved call's
-/// result is withheld with nothing left to approve.
+/// run only after a person approved it, and the result it returns has nothing
+/// left to approve. Withholding it would leave Oh My Pi without the
+/// acknowledgement for a call that already happened. The note shapes this
+/// covers are named in `generic_omp_learn`.
 fn learn_input(input: &Map<String, Value>) -> bool {
-    input.len() == 1
-        && input
-            .get("memory")
-            .and_then(Value::as_str)
-            .is_some_and(|memory| !memory.trim().is_empty())
+    learn::note_input(input)
 }
 
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
@@ -118,11 +118,18 @@ pub(super) fn evaluate(
         || signals.sensitive_target
         || signals.command.is_some()
         || signals.package_present
-        || !signals.url_values.is_empty()
     {
         return None;
     }
     let tool = signals.tool_name.as_deref()?;
+    if context.harness == "omp" && tool == "eval" {
+        if let Some(result) = eval::evaluate_browser(payload, context) {
+            return Some(result);
+        }
+    }
+    if !signals.url_values.is_empty() {
+        return None;
+    }
     if context.harness == "pi" && !matches!(tool, "find" | "ls" | "grep") {
         return None;
     }
@@ -150,11 +157,47 @@ pub(super) fn evaluate(
                 .then(|| delegation_result(tool, context))
         }
         "eval" => eval::evaluate(payload, signals, context),
+        "edit" => todo_shaped_edit(payload, signals, context),
         "glob" | "find" | "ls" => listing(payload, signals, context),
         "grep" => grep_scope(payload, signals, context),
         "lsp" => lsp_read(payload, signals, context),
         _ => None,
     }
+}
+
+/// Models sometimes send a todo update (`{op, phase, task}`) to `edit`,
+/// with the op under `input`. Every edit mode names its file in `path`,
+/// `edits`, or a header line inside `input`, and a lone todo op word has no
+/// room for a header, so the call cannot change a file; Oh My Pi rejects it
+/// and the agent retries with `todo`. Any other edit keeps its normal proof.
+fn todo_shaped_edit(
+    payload: &Value,
+    signals: &GenericSignals,
+    context: &OmpContext<'_>,
+) -> Option<PreToolResultV1> {
+    let input = strict_tool_input(payload)?;
+    let op = input.get("input")?.as_str()?;
+    let todo_keys = input.iter().all(|(key, value)| match key.as_str() {
+        "input" => true,
+        "phase" | "task" | "reason" => value.is_string(),
+        _ => false,
+    });
+    let todo_op = matches!(
+        op,
+        "init" | "start" | "done" | "rm" | "drop" | "block" | "unblock" | "append" | "view"
+    );
+    (todo_keys
+        && todo_op
+        && (input.contains_key("phase") || input.contains_key("task"))
+        && signals.path_values.is_empty())
+    .then(|| {
+        generic_result(
+            generic_action(context.harness, context.event, PreToolActionTypeV1::Harness, PreToolOperationV1::Set, true, false),
+            "allow",
+            "native_omp_edit_without_target",
+            "The Rust authority found a todo update sent to edit: it names no file and has no patch header, so it cannot change any file.",
+        )
+    })
 }
 
 fn delegation_result(tool: &str, context: &OmpContext<'_>) -> PreToolResultV1 {
@@ -421,7 +464,31 @@ fn listing_target_proven(
             context.path.home_dir,
             context.path.cwd,
         )
+        || home_dot_directory_listing(target, has_glob_selector, recursive, context)
         || (!has_glob_selector && project_skill_listing(target, context))
+}
+
+/// A names-only listing of a dot-directory in the home directory, the same
+/// one `ls ~/.nvm` already gets.
+///
+/// The shared screen is bounded to the directory's own entries, because a
+/// walk below `~/.config` prints the names inside `~/.config/gh`. The host
+/// recurses only for `find` or a `pattern`, and a selector walks below its
+/// prefix, so both are left out and the entry names of one directory are
+/// what remains.
+fn home_dot_directory_listing(
+    target: &str,
+    has_glob_selector: bool,
+    recursive: bool,
+    context: &OmpContext<'_>,
+) -> bool {
+    !has_glob_selector
+        && !recursive
+        && super::super::read_paths::home_hidden_directory(
+            target,
+            context.path.home_dir,
+            context.path.cwd,
+        )
 }
 
 /// A names-only listing of the session's own project skill folders. Only a

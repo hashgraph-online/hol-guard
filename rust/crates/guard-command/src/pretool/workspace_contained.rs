@@ -36,6 +36,8 @@ mod chmod;
 mod git_metadata;
 #[path = "workspace_git_keeps_work.rs"]
 mod keeps_work;
+#[path = "workspace_contained_kill.rs"]
+mod kill;
 #[path = "workspace_contained_links.rs"]
 mod links;
 #[path = "workspace_contained_package.rs"]
@@ -190,6 +192,8 @@ pub(crate) fn command_shape(
     }
     let linked = super::worktree_writes::linked_worktree_common_dir(workspace).is_some();
     let temp_fixed = !reach::rebinds_private_temp(&model.normalized_text);
+    // `~` is the private home the launcher seeds only while nothing rebinds it.
+    let home_fixed = !model.normalized_text.contains("HOME");
     for (index, segment) in model.segments.iter().enumerate() {
         // A bare private assignment starts no program.
         if segment.executable.is_none() && cd::assigns_private(model, segment) {
@@ -219,6 +223,7 @@ pub(crate) fn command_shape(
                 name,
                 workspace,
                 temp_fixed,
+                home_fixed,
                 script.as_ref().map(|(operand, _)| operand.as_str()),
             )
             || (matches!(name, "cd" | "pushd")
@@ -238,6 +243,7 @@ pub(crate) fn command_shape(
         }
         if PRIVILEGE_DENY.contains(&name)
             && !(name == "chmod" && chmod::plain_mode(&segment.arguments))
+            && !(name == "kill" && kill::jobs_only(&segment.arguments))
         {
             return None;
         }

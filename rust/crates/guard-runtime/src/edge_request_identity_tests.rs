@@ -113,6 +113,25 @@ fn execution_intent_digest_excludes_policy_refresh() {
 }
 
 #[test]
+fn execution_intent_digest_binds_the_home_directory() {
+    // `~` and dotfiles resolve against HOME, so a retry under another HOME is
+    // another action for the native review binding anchored to this digest.
+    let first = envelope(
+        "PreToolUse",
+        serde_json::json!({
+            "tool_name": "read",
+            "tool_input": {"path": "~/notes.md"}
+        }),
+    );
+    let mut other_home = first.clone();
+    other_home.source.home_dir = "/home/someone-else".to_owned();
+    assert_ne!(
+        execution_intent_digest(&first).unwrap(),
+        execution_intent_digest(&other_home).unwrap()
+    );
+}
+
+#[test]
 fn execution_intent_same_session_call_id_is_harness_scoped() {
     for harness in ["pi", "omp"] {
         let mut first = envelope(

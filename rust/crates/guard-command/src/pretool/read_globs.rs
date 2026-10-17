@@ -121,6 +121,23 @@ fn readable_match(
     if name.starts_with('.') {
         return false;
     }
+    // A name holding whitespace is one word to the shell that expanded the
+    // pattern, but several arguments once that word passes through an
+    // unquoted expansion: `for f in src/*-n; do cat $f; done` reads
+    // `src/public -n` here and runs `cat src/public -n`. The two are not the
+    // same read, so a directory holding such a name keeps its review.
+    if name.contains(char::is_whitespace) {
+        return false;
+    }
+    // The same unquoted expansion is a pathname expansion as well: a matched
+    // name that holds a glob character is a pattern once it passes through
+    // `$f`, and the shell then reads whatever that pattern matches. A decoy
+    // `x[.]pem` beside `x.pem` matches `src/x?.?pem` here with the harmless
+    // extension `]pem`, but `cat $f` expands it back to `src/x.pem`. A name a
+    // second expansion could rewrite keeps its review.
+    if name.contains(['*', '?', '[', ']', '\\']) {
+        return false;
+    }
     let extension = Path::new(name)
         .extension()
         .and_then(|extension| extension.to_str())

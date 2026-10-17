@@ -96,7 +96,10 @@ def run_restricted_inline_eval(
 
 def _run_windows_inline_eval(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
     """The native runner stages a credential-filtered snapshot and owns the environment."""
-    if sys.platform != "win32" or plan.profile_version != PYTHON_EVAL_READ_ONLY_PROFILE_VERSION:
+    if sys.platform != "win32" or plan.profile_version not in {
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }:
         raise RestrictedPytestError("inline_eval_invalid_command", "Unexpected protected inline evaluation plan.")
     argv = [
         str(plan.backend_executable),
@@ -107,6 +110,11 @@ def _run_windows_inline_eval(plan: RestrictedPytestPlan, *, timeout_seconds: int
         str(plan.cwd),
         "--timeout-seconds",
         str(timeout_seconds),
+        *(
+            ("--profile", NODE_EVAL_READ_ONLY_PROFILE_VERSION)
+            if plan.profile_version == NODE_EVAL_READ_ONLY_PROFILE_VERSION
+            else ()
+        ),
         "--",
         *plan.command,
     ]

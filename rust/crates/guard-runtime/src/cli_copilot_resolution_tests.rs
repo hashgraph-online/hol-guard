@@ -87,7 +87,9 @@ fn config_order_ties_and_relative_reads_preserve_selection() {
         "payload": {"tool_name": "mcp_z_a_echo"}, "preferred": null});
     let (server, tool) = select_server(&params).unwrap().unwrap();
     assert_eq!(server["server_name"], "z-a");
-    assert_eq!(server["config_path"], "workspace/.mcp.json");
+    // The relative workspace is joined with the host separator, as Python's `Path` does.
+    let expected = Path::new("workspace").join(".mcp.json");
+    assert_eq!(server["config_path"], expected.to_str().unwrap());
     assert_eq!(tool, "echo");
 }
 

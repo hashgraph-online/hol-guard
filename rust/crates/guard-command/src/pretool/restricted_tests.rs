@@ -249,6 +249,72 @@ pub(super) fn bun_inline_eval(model: &CanonicalCommandV1) -> bool {
                 && bun_eval_args(&segment.arguments))
 }
 
+/// `python report.py` or `node report.mjs` on Windows: an ordinary workspace
+/// script whose source only reads (`script_content::read_only`). Windows has
+/// no workspace sandbox to run it in, so it shares the inline evaluation
+/// boundary there; a script that writes, launches or imports a package keeps
+/// its review. The sink accepts the same names (`contained_argv`).
+pub(super) fn windows_script_reason(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Option<&'static str> {
+    use super::script_content::Language;
+    if model.confidence != "exact"
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+        || model.segments.len() != 1
+    {
+        return None;
+    }
+    let segment = &model.segments[0];
+    if !segment.environment_names.is_empty() || segment.pipeline_index != 0 {
+        return None;
+    }
+    let name = crate::program_basename(segment.executable.as_deref()?).to_ascii_lowercase();
+    let arguments = segment.arguments.as_slice();
+    let (language, script, reason) = if python_runtime_name(&name) {
+        let [script, ..] = python_after_isolation_flags(arguments)? else {
+            return None;
+        };
+        (
+            Language::Python,
+            script,
+            "native_python_eval_readonly_containment_required",
+        )
+    } else if matches!(name.as_str(), "node" | "nodejs") {
+        let [script, ..] = node_after_script_flags(arguments) else {
+            return None;
+        };
+        (
+            Language::Node,
+            script,
+            "native_node_eval_readonly_containment_required",
+        )
+    } else {
+        return None;
+    };
+    let file = script.rsplit('/').next().unwrap_or(script);
+    let (stem, extension) = file.rsplit_once('.')?;
+    let named = !stem.is_empty()
+        && !stem.starts_with('.')
+        && stem
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        && match language {
+            Language::Python => extension == "py",
+            Language::Node => matches!(extension, "js" | "mjs" | "cjs"),
+        };
+    if !named || !workspace_relative(script) {
+        return None;
+    }
+    let workspace = std::fs::canonicalize(context.cwd?).ok()?;
+    let path = std::fs::canonicalize(workspace.join(script)).ok()?;
+    (path.starts_with(&workspace)
+        && path.is_file()
+        && super::script_content::read_only::read_only(language, &path))
+    .then_some(reason)
+}
+
 pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
     if requires_pytest_containment(model) {
         return Some("native_pytest_readonly_containment_required");

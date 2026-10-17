@@ -190,6 +190,10 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
         "py.test tests/unit -q",
         "./.venv/bin/python3 -m pytest -q",
         "/usr/bin/python3 -m pytest tests/unit -q",
+        // A system clock bounds how long the run may take, not what it may
+        // do, so it reaches the same containment as the command it wraps.
+        "timeout 20 pytest -q",
+        "timeout 5m python3 -m pytest -q",
     ] {
         for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
@@ -225,7 +229,8 @@ fn unrelated_execution_and_shell_effects_do_not_inherit_test_delegation() {
         "pytest &",
         "PATH=/tmp pytest -q",
         "PYTHONPATH=/tmp python3 -m pytest",
-        "timeout 20 pytest -q",
+        // A `timeout` named by path is whatever that file holds.
+        "./timeout 20 pytest -q",
         "sudo pytest -q",
         "pytest .env",
     ] {
@@ -586,6 +591,23 @@ fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
 fn windows_contains_direct_vite_builds_of_a_flat_install() {
     let root = std::env::temp_dir().join(format!("hg-vite-build-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
+    std::fs::create_dir_all(&root).unwrap();
+    // A harness reports its directory in the long, drive-letter spelling. The
+    // temporary directory can arrive as an 8.3 short name (`RUNNER~1` on CI
+    // runners), which the cd proof rightly declines as an alias.
+    let root = std::fs::canonicalize(&root).unwrap();
+    // Canonicalization answers in the verbatim spelling: `\\?\C:\...` for a
+    // drive and `\\?\UNC\server\share\...` for a share. Dropping the prefix
+    // off the share form would leave a relative path, so give it back its
+    // leading separators, and leave a non-verbatim answer as it stands.
+    let canonical = root.to_str().unwrap();
+    let root = std::path::PathBuf::from(match canonical.strip_prefix(r"\\?\") {
+        Some(share) => match share.strip_prefix(r"UNC\") {
+            Some(share) => format!(r"\\{share}"),
+            None => share.to_owned(),
+        },
+        None => canonical.to_owned(),
+    });
     let app = root.join("dashboard");
     std::fs::create_dir_all(app.join("node_modules/vite/bin")).unwrap();
     std::fs::create_dir_all(app.join("node_modules/.bin")).unwrap();

@@ -9,15 +9,35 @@
 mod binding;
 pub(crate) mod context;
 mod fs_path;
+#[cfg(windows)]
+mod fs_path_windows;
+// Windows launches refuse git (`launch.rs`), so its config digest is unreached
+// there; `git_windows` still supplies the homes the loader binding reads.
+#[cfg_attr(windows, allow(dead_code))]
 mod git_config;
+#[cfg_attr(windows, allow(dead_code))]
 mod git_identity;
+#[cfg_attr(windows, allow(dead_code))]
+mod git_push;
+#[cfg(windows)]
+#[allow(dead_code)]
+mod git_windows;
 mod launch;
+#[cfg(windows)]
+mod launch_windows;
 mod launcher_sets;
+// Windows launches refuse interpreters (`launch.rs`), so these POSIX
+// module-graph proofs are unreached there.
+#[cfg_attr(windows, allow(dead_code))]
 mod node_script;
+#[cfg_attr(windows, allow(dead_code))]
 mod node_source;
 mod operands;
+#[cfg_attr(windows, allow(dead_code))]
 mod python_modules;
+#[cfg_attr(windows, allow(dead_code))]
 mod python_script;
+#[cfg_attr(windows, allow(dead_code))]
 mod python_source;
 mod reasons;
 mod reuse_shape;
@@ -73,10 +93,12 @@ pub(crate) fn exact_action_token(query: &NativeExactActionQueryV1) -> Result<Str
 }
 
 /// The review identity the daemon binds an approve-once retry of `query` to
-/// (`native_review_binding`), for a resident caller that holds the query.
+/// (`native_review_binding`), for a resident caller that holds the query and
+/// the hook's stamped `guard_execution_environment`.
 pub(crate) fn review_binding_for(
     query: &NativeExactActionQueryV1,
     receipt: Option<&serde_json::Value>,
+    execution_environment: Option<&serde_json::Value>,
 ) -> Option<String> {
     let NativeExactActionQueryV1::ExactAction {
         harness,
@@ -90,6 +112,14 @@ pub(crate) fn review_binding_for(
     else {
         return None;
     };
+    let launcher = || {
+        launcher_reuse(
+            command.as_deref(),
+            payload_cwd.as_deref(),
+            workspace.as_deref(),
+            execution_environment,
+        )
+    };
     binding::review_binding(
         harness,
         command.as_deref(),
@@ -101,7 +131,24 @@ pub(crate) fn review_binding_for(
         facts,
         receipt,
         policy_binding,
+        launcher,
     )
+}
+
+/// The launcher state a one-time approval of `command` binds to: only a plain
+/// `git push origin <branch>` has one (`git_push`). It is proved in the
+/// agent's own stamped environment, so a request without one binds none.
+fn launcher_reuse(
+    command: Option<&str>,
+    payload_cwd: Option<&str>,
+    workspace: Option<&str>,
+    execution_environment: Option<&serde_json::Value>,
+) -> Option<reuse_shape::Reuse> {
+    let text = command?;
+    let cwd = token::launch_cwd(payload_cwd, workspace)?;
+    git_push::push_state(text, &cwd, execution_environment)
+        .ok()
+        .map(reuse_shape::Reuse::Launcher)
 }
 
 fn decide(
@@ -120,6 +167,8 @@ fn decide(
             facts,
             receipt,
             policy_binding,
+            workspace,
+            execution_environment,
         } => NativeExactActionPayloadV1::ReviewBinding {
             binding: binding::review_binding(
                 harness,
@@ -129,6 +178,14 @@ fn decide(
                 facts,
                 receipt.as_ref(),
                 policy_binding,
+                || {
+                    launcher_reuse(
+                        command.as_deref(),
+                        cwd.as_deref(),
+                        workspace.as_deref(),
+                        execution_environment.as_ref(),
+                    )
+                },
             ),
         },
         NativeExactActionQueryV1::ExactAction { budget_ms, .. } => {
@@ -151,3 +208,7 @@ fn decide(
 #[cfg(test)]
 #[path = "native_exact_action_op_tests.rs"]
 mod tests;
+
+#[cfg(all(test, windows))]
+#[path = "native_exact_action_op/windows_tests.rs"]
+mod windows_tests;

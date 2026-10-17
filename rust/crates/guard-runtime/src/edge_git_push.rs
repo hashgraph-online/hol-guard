@@ -78,7 +78,7 @@ fn request(
 }
 
 #[cfg(unix)]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     let user = nix::unistd::User::from_uid(nix::unistd::Uid::current()).ok()??;
     Path::new(&user.dir)
         .is_absolute()
@@ -86,7 +86,7 @@ fn account_home() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     None
 }
 

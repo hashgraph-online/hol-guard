@@ -137,6 +137,58 @@ RISKY_APPROVAL_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r'approval[_ -]?policy["\']?\s*[:=]\s*["\']never["\']', re.I),
     re.compile(r'approvalMode["\']?\s*[:=]\s*["\']bypass["\']', re.I),
 ]
+# Markdown can name a risky value without setting it, as a rule or a changelog
+# does: "sandbox `danger-full-access`". Only a bare value alone in an inline code
+# span, outside fenced and indented code and not after an assignment or a flag,
+# counts as such a mention. Files that instruct an agent never qualify.
+# Any indentation opens a fence: a fence nested in a list item sits deeper than
+# three spaces, and an indented fence outside a list is code either way.
+# A closing marker counts only when it is no deeper than the fence it opened,
+# so a four-space marker does not close a top-level fence.
+MARKDOWN_FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})")
+MARKDOWN_BLOCKQUOTE_PREFIX_RE = re.compile(r"^(?: {0,3}>[ \t]?)+")
+MARKDOWN_LIST_MARKER_RE = re.compile(r"^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]+")
+# How much of a line before an inline code span is read for an assignment or a
+# flag. A bounded window keeps long lines with many spans linear.
+APPROVAL_CONTEXT_WINDOW = 256
+# Prose that tells the reader to turn the value on, checked on the sentence
+# before an inline code span. The last such verb before the span governs it.
+# A negation governs that verb only when it sits immediately before it ("never
+# enable", "do not use", "avoid using"). A risk word anywhere in the sentence
+# also keeps the mention. Words such as "without", "instead", or "avoid" in
+# front of a different phrase do not.
+APPROVAL_INSTRUCTION_RE = re.compile(
+    r"\b(?:select(?:ing|ed)?|set(?:ting)?|use|using|enable|enabling|switch(?:ing)? to|choose|choosing"
+    r"|pick(?:ing)?|configure|configuring|pass(?:ing)?|turn(?:ing)? on|run(?:ning)? with|start(?:ing)? with"
+    r"|launch(?:ing)? with|opt(?:ing)? (?:in|for)|change (?:it )?to|allow(?:ing)?)\b",
+    re.I,
+)
+APPROVAL_NEGATION_RE = re.compile(r"\b(?:never|avoid|don'?t|do not|not)\s+$", re.I)
+APPROVAL_RISK_RE = re.compile(r"\b(?:unsafe|insecure|dangerous|risky|risks?)\b", re.I)
+APPROVAL_SENTENCE_END_RE = re.compile(r"[.!?;]")
+APPROVAL_ASSIGNMENT_TAIL_RE = re.compile(r"(?:[=:]|(?:^|\s)--?[A-Za-z][\w-]*)\s*$")
+AGENT_INSTRUCTION_FILENAMES = {"agent.md", "agents.md", "claude.md", "gemini.md", "skill.md"}
+AGENT_INSTRUCTION_STEMS = {"context", "system-prompt", "system_prompt"}
+AGENT_INSTRUCTION_PATH_HINTS = {
+    ".agents",
+    ".claude",
+    ".codex",
+    ".cursor",
+    ".gemini",
+    ".github",
+    ".kiro",
+    ".windsurf",
+    "agent",
+    "agents",
+    "command",
+    "commands",
+    "instruction",
+    "instructions",
+    "prompt",
+    "prompts",
+    "skill",
+    "skills",
+}
 
 APACHE_LICENSE_VERSION_RE = re.compile(r"apache\s+license\s*,?\s*version\s+2\.0", re.I)
 LICENSE_URL_RE = re.compile(r"https?://[^\s<>()\"']+")
@@ -913,9 +965,186 @@ def check_mcp_transport_security(plugin_dir: Path) -> CheckResult:
     )
 
 
-def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] | None = None) -> CheckResult:
+def _is_agent_instruction_surface(relative_path: Path) -> bool:
+    """Whether an agent loads this file as instructions, judged by its name and directories."""
+    directories = {part.lower() for part in relative_path.parts[:-1]}
+    if relative_path.name.lower() in AGENT_INSTRUCTION_FILENAMES:
+        return True
+    stem = relative_path.stem.lower()
+    if stem in AGENT_INSTRUCTION_STEMS or stem in AGENT_INSTRUCTION_PATH_HINTS:
+        return True
+    return bool(directories & AGENT_INSTRUCTION_PATH_HINTS)
+
+
+def _is_documented_approval_value(line: str, start: int, end: int) -> bool:
+    """Whether line[start:end] is a bare value quoted alone in an inline code span of prose.
+
+    An assignment or a flag right before the span, in prose or at the end of an
+    earlier code span, makes it a setting rather than a mention. So does a
+    sentence that tells the reader to select or enable the value, unless a
+    negation governs that verb or the sentence names the risk.
+    """
+    if any(separator in line[start:end] for separator in "=:"):
+        return False
+    opens_span = start >= 1 and line[start - 1] == "`" and (start < 2 or line[start - 2] != "`")
+    closes_span = line[end : end + 1] == "`" and line[end + 1 : end + 2] != "`"
+    if not (opens_span and closes_span):
+        return False
+    # Step back over the padding and an earlier span's closing backticks first,
+    # then read a bounded window: padding cannot push a flag out of it, and
+    # each step covers only the gap since the previous span.
+    cut = start - 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    while cut > 0 and line[cut - 1] == "`":
+        cut -= 1
+    while cut > 0 and line[cut - 1] in " \t":
+        cut -= 1
+    before = line[max(0, cut - APPROVAL_CONTEXT_WINDOW) : cut]
+    if APPROVAL_ASSIGNMENT_TAIL_RE.search(before):
+        return False
+    sentence_start = max(before.rfind(mark) for mark in ".!?;") + 1
+    prefix = before[sentence_start:]
+    suffix = APPROVAL_SENTENCE_END_RE.split(line[end + 1 : end + 1 + APPROVAL_CONTEXT_WINDOW], maxsplit=1)[0]
+    verbs = list(APPROVAL_INSTRUCTION_RE.finditer(prefix))
+    if not verbs:
+        return True
+    negated = APPROVAL_NEGATION_RE.search(prefix[: verbs[-1].start()]) is not None
+    risky = APPROVAL_RISK_RE.search(f"{prefix} {suffix}") is not None
+    return negated or risky
+
+
+def _markdown_fence_marker(line: str) -> tuple[str, int] | None:
+    """The fence token and the column of its first character, if this line is a fence.
+
+    A list marker on the same line is skipped, so ``- ```bash`` is a fence at the
+    token's column. Closing compares that column with the opening fence.
+    """
+    match = MARKDOWN_FENCE_RE.match(line)
+    if match:
+        return match.group(1), match.start(1)
+    without_list_marker = MARKDOWN_LIST_MARKER_RE.sub("", line, count=1)
+    if without_list_marker == line:
+        return None
+    match = MARKDOWN_FENCE_RE.match(without_list_marker)
+    if match is None:
+        return None
+    column = len(line) - len(without_list_marker) + match.start(1)
+    return match.group(1), column
+
+
+def _markdown_code_lines(lines: list[str]) -> list[bool]:
+    """Mark the lines of fenced or indented code, fence lines included.
+
+    Block-quote prefixes are removed first, and a list marker on the fence line
+    is skipped, so a fence inside a quote or a list item still counts. A closing
+    marker ends the fence only when it sits under the same number of quote
+    markers as the opening fence and is indented no deeper, so a marker one
+    quote level deeper, or quoted inside an unquoted fence, is text. An
+    indented line starts a code block only after a blank line or a heading, or
+    continues one, because indented code cannot interrupt a paragraph.
+    """
+    code_lines: list[bool] = []
+    fence: str | None = None
+    fence_column = 0
+    fence_quote_depth = 0
+    can_start_indented_code = True
+    for raw_line in lines:
+        quote_match = MARKDOWN_BLOCKQUOTE_PREFIX_RE.match(raw_line)
+        quote_depth = quote_match.group(0).count(">") if quote_match else 0
+        line = raw_line[quote_match.end() :] if quote_match else raw_line
+        marker = _markdown_fence_marker(line)
+        if fence is not None:
+            is_code = True
+            if marker is not None:
+                token, column = marker
+                remainder = line[column + len(token) :]
+                if (
+                    quote_depth == fence_quote_depth
+                    and column <= fence_column
+                    and token[0] == fence[0]
+                    and len(token) >= len(fence)
+                    and not remainder.strip()
+                ):
+                    fence = None
+        elif marker is not None:
+            fence, fence_column = marker
+            fence_quote_depth = quote_depth
+            is_code = True
+        else:
+            is_code = line.startswith(("    ", "\t")) and can_start_indented_code
+        code_lines.append(is_code)
+        stripped = line.strip()
+        can_start_indented_code = is_code or not stripped or stripped.startswith("#")
+    return code_lines
+
+
+def _has_risky_approval_default(relative_path: Path, content: str, *, declared: bool = False) -> bool:
+    """Whether the file sets a risky approval or sandbox default.
+
+    Documentation may name a value in an inline code span without setting it.
+    A file an ecosystem declares as package content (``declared``), an agent
+    instruction file, and every non-Markdown file are matched as before.
+    """
+    if (
+        declared
+        or relative_path.suffix.lower() not in DOCUMENTATION_EXTS
+        or _is_agent_instruction_surface(relative_path)
+    ):
+        return any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS)
+    lines = content.split("\n")
+    line_starts = [0]
+    for line in lines[:-1]:
+        line_starts.append(line_starts[-1] + len(line) + 1)
+    code_lines = _markdown_code_lines(lines)
+    for pattern in RISKY_APPROVAL_PATTERNS:
+        for match in pattern.finditer(content):
+            index = bisect.bisect_right(line_starts, match.start()) - 1
+            line_start = line_starts[index]
+            if "\n" in match.group(0) or code_lines[index]:
+                return True
+            if not _is_documented_approval_value(lines[index], match.start() - line_start, match.end() - line_start):
+                return True
+    return False
+
+
+def _instruction_file_keys(
+    plugin_dir: Path, resolved_plugin_dir: Path, instruction_files: tuple[Path, ...]
+) -> frozenset[str]:
+    """The relative paths of ``instruction_files`` under the plugin directory, as the scan reports them."""
+    keys: set[str] = set()
+    for path in instruction_files:
+        relative = path
+        if path.is_absolute():
+            for root in (resolved_plugin_dir, plugin_dir):
+                try:
+                    relative = path.relative_to(root)
+                    break
+                except ValueError:
+                    continue
+            else:
+                continue
+        normalized = os.path.normpath(relative.as_posix())
+        if normalized.startswith("..") or os.path.isabs(normalized):
+            continue
+        keys.add(Path(normalized).as_posix())
+    return frozenset(keys)
+
+
+def check_no_approval_bypass_defaults(
+    plugin_dir: Path, files: tuple[Path, ...] | None = None, *, instruction_files: tuple[Path, ...] = ()
+) -> CheckResult:
+    """Report files that default to bypassed approvals or an unrestricted sandbox.
+
+    ``files`` limits the scan to the package content an ecosystem declared,
+    such as a manifest's system prompt or commands, read as instructions.
+    ``instruction_files`` names files an agent loads as instructions, such as
+    a manifest's context file: the whole directory is still scanned, and those
+    files get no documentation exception.
+    """
     findings: list[str] = []
     resolved_plugin_dir = plugin_dir.resolve()
+    strict_paths = _instruction_file_keys(plugin_dir, resolved_plugin_dir, instruction_files)
     try:
         for file_path in _scan_all_files(resolved_plugin_dir, files):
             relative_path = file_path.relative_to(resolved_plugin_dir)
@@ -934,7 +1163,8 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
                     max_points=3,
                     path=relative_path.as_posix(),
                 )
-            if any(pattern.search(content) for pattern in RISKY_APPROVAL_PATTERNS):
+            declared = files is not None or relative_path.as_posix() in strict_paths
+            if _has_risky_approval_default(relative_path, content, declared=declared):
                 findings.append(relative_path.as_posix())
     except ScanInputUnreadableError as exc:
         return unreadable_scan_input_failure(
@@ -977,12 +1207,13 @@ def check_no_approval_bypass_defaults(plugin_dir: Path, files: tuple[Path, ...] 
     )
 
 
-def run_security_checks(plugin_dir: Path) -> tuple[CheckResult, ...]:
+def run_security_checks(plugin_dir: Path, *, instruction_files: tuple[Path, ...] = ()) -> tuple[CheckResult, ...]:
+    """Run the security checks; ``instruction_files`` are read as agent instructions by the approval check."""
     return (
         check_security_md(plugin_dir),
         check_license(plugin_dir),
         check_no_hardcoded_secrets(plugin_dir),
         check_no_dangerous_mcp(plugin_dir),
         check_mcp_transport_security(plugin_dir),
-        check_no_approval_bypass_defaults(plugin_dir),
+        check_no_approval_bypass_defaults(plugin_dir, instruction_files=instruction_files),
     )

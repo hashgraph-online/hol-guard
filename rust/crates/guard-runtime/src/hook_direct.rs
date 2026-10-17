@@ -79,7 +79,7 @@ pub(crate) const DIRECT_HARNESSES: [&str; 14] = [
     "omp",
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
-const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
+pub(crate) const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
 const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
 const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
 const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];

@@ -95,7 +95,7 @@ pub fn evaluate_package_request_artifact(
         retain_external_archive_blob,
     );
     match (result, error) {
-        (Some(result), _) => Ok(result),
+        (Some(result), _) => Ok(super::hold_unresolved_package_cwd(artifact, result)),
         (None, Some(error)) => Err(error),
         (None, None) => Err(EvalError::Internal(
             "evaluate_package_request_artifact: no result".into(),
@@ -232,82 +232,6 @@ pub(super) fn artifact_has_package_material(
     }
     has_non_empty_string_item(artifact.metadata.get("manifest_paths"))
         || has_non_empty_string_item(artifact.metadata.get("lockfile_paths"))
-}
-
-/// `_empty_package_material_result` (:794-827).
-// supply_chain_package_eval.py:794-827
-#[allow(clippy::too_many_arguments)]
-#[allow(dead_code)]
-pub(super) fn empty_package_material_result(
-    _artifact: &GuardArtifact,
-    workspace_id: Option<&str>,
-    bundle_meta: Option<&Map<String, Value>>,
-    package_intent_hash: &str,
-    workspace_fingerprint: Option<&str>,
-) -> PackageEvalResult {
-    let mut reason_map = Map::new();
-    reason_map.insert(
-        "code".to_string(),
-        Value::String("no_package_material".into()),
-    );
-    reason_map.insert(
-        "message".to_string(),
-        Value::String(
-            "Guard found no package targets, manifests, or lockfiles to evaluate for this request."
-                .into(),
-        ),
-    );
-    reason_map.insert("severity".to_string(), Value::String("unknown".into()));
-    reason_map.insert("source".to_string(), Value::String("guard-local".into()));
-    let reasons = vec![reason_map];
-    let decision = "monitor".to_string();
-    let policy_action = decision_to_guard_action_variant(&decision);
-    let title = "No package material".to_string();
-    let summary =
-        "Guard found no package targets, manifests, or lockfiles to evaluate.".to_string();
-    let enforcement = if workspace_id.is_none() {
-        "free_local"
-    } else {
-        "local_fallback"
-    };
-    let entitlement_state = if workspace_id.is_none() {
-        "free"
-    } else {
-        "premium"
-    };
-    let policy_version = bundle_meta
-        .and_then(|m| optional_string(m.get("policy_hash")))
-        .unwrap_or_else(|| "local:none".to_string());
-    let bundle_version = bundle_meta.and_then(|m| optional_string(m.get("bundle_version")));
-    let user_copy = SupplyChainUserCopy {
-        title: title.clone(),
-        summary: summary.clone(),
-        next_step: None,
-        dashboard_url: None,
-        harness_message: format!("{summary} No action needed."),
-    };
-    PackageEvalResult {
-        decision,
-        policy_action: policy_action.as_str().to_string(),
-        enforcement: enforcement.to_string(),
-        entitlement_state: entitlement_state.to_string(),
-        cache_status: "empty".to_string(),
-        package_intent_hash: package_intent_hash.to_string(),
-        policy_version,
-        bundle_version,
-        workspace_fingerprint: workspace_fingerprint.map(str::to_string),
-        reasons,
-        packages: Vec::new(),
-        risk_summary: summary,
-        user_copy,
-        matched_rule_id: None,
-        exception_id: None,
-        refresh_required: false,
-        record_monitor_evidence: false,
-        evidence_ids: Vec::new(),
-        external_archive_downloads: Vec::new(),
-        external_archive_source_hashes: Vec::new(),
-    }
 }
 
 /// `_empty_evaluation` — derived: builds a minimal allow result with no

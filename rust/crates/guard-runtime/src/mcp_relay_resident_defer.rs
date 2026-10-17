@@ -18,6 +18,13 @@ pub(super) const REQUEST_UNSENDABLE: &str = "mcp_relay_request_unsendable";
 pub(super) const RESIDENT_UNREACHABLE: &str = "mcp_relay_resident_unreachable";
 /// The resident answered with something other than a decision.
 pub(super) const REPLY_INVALID: &str = "mcp_relay_reply_invalid";
+/// The resident asked for the package evaluation and the relay has none: the
+/// call carries no intent this process reads, its environment is not one the
+/// proxy could send, or the evaluation itself did not settle on a verdict.
+pub(super) const PACKAGE_UNEVALUATED: &str = "mcp_relay_package_unevaluated";
+/// The decide carrying the evaluation asked for one again, which is no
+/// decision: the evaluation is performed once per call.
+pub(super) const PACKAGE_UNDECIDED: &str = "mcp_relay_package_undecided";
 /// The stderr prefix a deferral line starts with.
 pub(super) const DEFER_LINE_PREFIX: &str = "hol-guard mcp-relay: no native decision: ";
 const MAX_CODE_BYTES: usize = 64;

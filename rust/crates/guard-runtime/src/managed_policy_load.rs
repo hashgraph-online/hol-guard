@@ -8,7 +8,8 @@
 //! The authority is the administrator-owned policy file and nothing else. A
 //! path that is not root-owned, is group- or world-writable, or reaches the
 //! file through a symlink is not authority, and neither is the cache on a
-//! platform whose ownership cannot be verified here.
+//! platform whose ownership cannot be verified here. On Windows the authority
+//! is the registry key `managed_policy_registry` reads.
 
 // The load lands ahead of its caller: the native guard-config load reads the
 // state it returns next, in place of today's blanket refusal.
@@ -26,9 +27,11 @@ use crate::managed_policy_file_trust::{
     machine_controlled_file_is_trusted, replace_restricted_file,
 };
 use crate::managed_policy_plist::parse_plist;
+use crate::managed_policy_registry::load_registry_policy;
+pub(crate) use crate::managed_policy_registry::RegistryAuthority;
 
 /// `_MAX_POLICY_BYTES` (mdm/policy.py:31).
-const MAX_POLICY_BYTES: u64 = 1024 * 1024;
+pub(crate) const MAX_POLICY_BYTES: u64 = 1024 * 1024;
 
 /// How far a detail string travels, as Python's `str(exc)[:256]`.
 const MAX_DETAIL_CHARS: usize = 256;
@@ -77,12 +80,16 @@ pub(crate) struct ManagedPolicyState {
     pub(crate) detail: Option<String>,
 }
 
-/// The reason a Windows machine reports: the registry is the authority and
-/// this runtime does not read it.
+/// The reason a build with no registry reports when it is asked for a Windows
+/// machine's authority. A Windows build reads the registry instead.
 pub(crate) const REGISTRY_UNREADABLE: &str = "managed_policy_registry_unreadable";
 
 impl ManagedPolicyState {
-    fn new(status: ManagedPolicyStatus, source: &str, reason_code: &'static str) -> Self {
+    pub(crate) fn new(
+        status: ManagedPolicyStatus,
+        source: &str,
+        reason_code: &'static str,
+    ) -> Self {
         Self {
             status,
             source: source.to_owned(),
@@ -95,16 +102,15 @@ impl ManagedPolicyState {
     /// Whether this runtime could not read the machine's authority at all, as
     /// opposed to reading it and finding it unusable.
     ///
-    /// A Windows machine's authority is the registry, which this runtime does
-    /// not read, so every Windows machine reports this. Its policy is unknown
-    /// rather than broken: the settings floor still governs the decision, but a
-    /// caller cannot conclude from this status that an administrator installed
-    /// a policy this machine is failing to honour.
+    /// Only a build with no registry reports this for a Windows machine. Its
+    /// policy is unknown rather than broken: the settings floor still governs
+    /// the decision, but a caller cannot conclude from this status that an
+    /// administrator installed a policy this machine is failing to honour.
     pub(crate) fn authority_unreadable(&self) -> bool {
         self.reason_code == Some(REGISTRY_UNREADABLE)
     }
 
-    fn with_detail(mut self, detail: &str) -> Self {
+    pub(crate) fn with_detail(mut self, detail: &str) -> Self {
         self.detail = Some(detail.chars().take(MAX_DETAIL_CHARS).collect());
         self
     }
@@ -171,6 +177,8 @@ pub(crate) struct ManagedPolicySource {
     /// below it is never machine-owned, so it is read exactly as an untrusted
     /// profile is.
     pub(crate) machine_root: Option<PathBuf>,
+    /// Where a Windows load reads the registry value from.
+    pub(crate) registry: RegistryAuthority,
 }
 
 impl ManagedPolicySource {
@@ -181,6 +189,7 @@ impl ManagedPolicySource {
             policy_path: None,
             write_cache: true,
             machine_root: None,
+            registry: RegistryAuthority::Native,
         }
     }
 
@@ -215,15 +224,7 @@ pub(crate) fn load_managed_policy(source: &ManagedPolicySource) -> ManagedPolicy
         return load_explicit(path);
     }
     if source.system == MachineSystem::Windows {
-        // The registry is the authority and this runtime cannot read it, so a
-        // Windows machine keeps failing closed rather than reporting that no
-        // policy applies. The ProgramData cache is never promoted into
-        // authority: its owner and DACL are not verifiable here.
-        return ManagedPolicyState::new(
-            ManagedPolicyStatus::Inaccessible,
-            r"HKLM\Software\Policies\HOL\Guard",
-            REGISTRY_UNREADABLE,
-        );
+        return load_registry_policy(source);
     }
     let Some(native_path) = source.native_policy_path() else {
         return ManagedPolicyState::new(
@@ -370,7 +371,7 @@ fn read_error(error: std::io::Error) -> LoadError {
 
 /// `_load_policy_cache` (mdm/policy.py:326). A cached policy records that the
 /// profile was removed, which is not the same as never having had one.
-fn load_cache(source: &ManagedPolicySource) -> Option<ManagedPolicyState> {
+pub(crate) fn load_cache(source: &ManagedPolicySource) -> Option<ManagedPolicyState> {
     let path = source.cache_path();
     fs::symlink_metadata(&path).ok()?;
     let display = path.to_string_lossy().into_owned();
@@ -412,7 +413,7 @@ fn load_cache(source: &ManagedPolicySource) -> Option<ManagedPolicyState> {
 /// `_write_policy_cache` (mdm/policy.py:311). Only an administrator writes the
 /// cache, so an unprivileged runtime never creates a file it would later have
 /// to distrust.
-fn write_cache(payload: &Value, source: &ManagedPolicySource) {
+pub(crate) fn write_cache(payload: &Value, source: &ManagedPolicySource) {
     if !payload.is_object() || !administrator_context(source.system) {
         return;
     }

@@ -96,6 +96,8 @@ fn bound_case(vectors: &Value) -> &Value {
         .unwrap()
 }
 
+/// A Windows workspace, plain or verbatim, defers too: the daemon then reads
+/// the saved decision itself, so it still answers the retry.
 #[test]
 fn an_unclean_workspace_defers() {
     let vectors = vectors();
@@ -108,13 +110,18 @@ fn an_unclean_workspace_defers() {
         payload,
         &environment,
     );
-    input.workspace = "/work/repo/";
-    let outcome = exact_action(
-        &input,
-        case["result"].as_object().unwrap(),
-        case.get("receipt"),
-    );
-    assert!(matches!(outcome, Err(HookDirectDefer::SavedDecision)));
+    for workspace in ["/work/repo/", r"C:\work\repo", r"\\?\C:\work\repo"] {
+        input.workspace = workspace;
+        let outcome = exact_action(
+            &input,
+            case["result"].as_object().unwrap(),
+            case.get("receipt"),
+        );
+        assert!(
+            matches!(outcome, Err(HookDirectDefer::SavedDecision)),
+            "{workspace}"
+        );
+    }
 }
 
 #[test]

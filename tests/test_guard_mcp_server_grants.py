@@ -93,7 +93,9 @@ class _AuthorityStore:
         """No device grant rows exist, so an unavailable resident cannot hide one."""
         return False
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self, registry: object, **_kwargs
+    ) -> ExtensionControlAuthorityView:
         digest = getattr(registry, "catalog_digest", "0" * 64)
         assert isinstance(digest, str)
         return ExtensionControlAuthorityView(
@@ -244,7 +246,7 @@ def test_evaluate_write_file_blocks_after_local_enable(tmp_path: Path, monkeypat
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         layers=(_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),),
     )
-    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry: view)
+    monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: view)
     artifact = _artifact(identity, "write_file")
     arguments = {"path": "notes.txt", "contents": "hi"}
     decision = evaluate_tool_call(

@@ -53,6 +53,7 @@ _ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-
 _PAYLOAD_KEYS = frozenset(
     {
         "action",
+        "policy_action",
         "source",
         "signals",
         "summary",
@@ -244,6 +245,7 @@ def _validated_decision(payload: object, *, proxy_requested: bool = False) -> di
     optional_text = ("normalization_reason_code", "original_action", "approval_reuse_reason_code")
     if (
         not _is_action(payload["action"])
+        or not _is_action(payload["policy_action"])
         or not isinstance(payload["source"], str)
         or not isinstance(payload["summary"], str)
         or not isinstance(payload["signals"], list)

@@ -97,12 +97,15 @@ pub use runtime_contracts::{
     RegistryMetadataApi, RestrictedArchiveApi, RestrictedArchiveDownload,
     RestrictedArchiveDownloadResult, RestrictedArchiveFailure, StoreExtrasApi, WorkspaceIoApi,
 };
+#[path = "supply_chain_package_eval/empty_material.rs"]
+mod empty_material;
 #[path = "supply_chain_package_eval/evaluation.rs"]
 mod evaluation;
+pub(crate) use empty_material::{empty_package_material_result, hold_unresolved_package_cwd};
 use evaluation::{
     artifact_has_flag, artifact_has_package_material, cache_reusable_cloud_validation_error,
-    decision_rank, decision_to_guard_action_variant, empty_package_material_result,
-    normalize_package_name, parse_evaluation_timestamp, reason_severity, severity_rank_value,
+    decision_rank, decision_to_guard_action_variant, normalize_package_name,
+    parse_evaluation_timestamp, reason_severity, severity_rank_value,
 };
 pub use evaluation::{
     evaluate_package_request_artifact, EvaluationDraft, SavedPolicyProbe, SupplyChainEvalDeps,

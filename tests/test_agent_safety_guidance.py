@@ -286,6 +286,11 @@ _SECRET_CARVEOUT_SAFETY_BODY = (
 ).read_text(encoding="utf-8")
 
 
+_BEFORE_SCRIPT_FREE_INSTALLS_BODY = (
+    Path(__file__).parent / "fixtures" / "agent-safety-guidance-before-script-free-installs.md"
+).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     "legacy",
     [
@@ -294,6 +299,10 @@ _SECRET_CARVEOUT_SAFETY_BODY = (
         pytest.param(
             f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_SECRET_CARVEOUT_SAFETY_BODY}",
             id="secret-carveout",
+        ),
+        pytest.param(
+            f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_BEFORE_SCRIPT_FREE_INSTALLS_BODY}",
+            id="before-script-free-installs",
         ),
     ],
 )
@@ -324,10 +333,7 @@ def test_safety_document_leaves_secret_reads_to_guard(tmp_path: Path) -> None:
     _ = install_agent_safety_guidance(home_dir)
     safety = (home_dir / ".hol-support" / "SAFETY.md").read_text(encoding="utf-8")
 
-    assert (
-        "Never read secret files, credential stores, or environment files on your own judgment."
-        in safety
-    )
+    assert "Never read secret files, credential stores, or environment files on your own judgment." in safety
     assert "unless the user explicitly authorizes" not in safety
     # The bullet must not end on an imperative to go ahead: an agent weighing
     # two sentences against each other takes the concrete one.

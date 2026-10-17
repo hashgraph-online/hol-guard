@@ -32,6 +32,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot_codec import (
     derive_native_policy_verifier_key,
 )
 from codex_plugin_scanner.guard.native_policy_snapshot_contract import _snapshot_integrity_mac_v3
+from codex_plugin_scanner.guard.runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
 from codex_plugin_scanner.guard.native_policy_snapshot_storage import _authority_snapshot_v3
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -245,7 +246,7 @@ def test_metadata_cache_rechecks_exact_bytes_even_when_file_size_and_mtime_match
         b"{" * 10000,
         b"{}",
         b'{"schema":"a","schema":"b"}',
-        b" " * (4 * 1024 * 1024 + 1),
+        b" " * (MAX_NATIVE_COMMAND_PROGRAM_BYTES + 1),
     ],
 )
 def test_artifact_loader_rejects_oversize_invalid_and_duplicate_json(

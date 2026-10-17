@@ -145,6 +145,23 @@ fn unproven_size_and_comparison_reads_still_ask() {
 }
 
 #[test]
+fn a_comparison_that_reads_through_a_link_still_asks() {
+    let home = home();
+    write(home.join("outside/notes.md"), "# Outside\n");
+    std::os::unix::fs::symlink(
+        home.join("outside/notes.md"),
+        home.join("project/src/linked.md"),
+    )
+    .unwrap();
+    // `diff -r` opens what the link points at, so the target needs proof of
+    // its own and the comparison keeps asking.
+    assert!(!shell(&home, "diff -ru src old").contains("allow"));
+    // A recursive search lists the same link without reading through it, so
+    // the walk is proven by what it would actually open.
+    assert_eq!(shell(&home, "grep -rn export src"), "allow");
+}
+
+#[test]
 fn configuration_reads_proceed() {
     let home = home();
     for command in [

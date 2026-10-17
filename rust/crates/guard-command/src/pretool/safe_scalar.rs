@@ -198,6 +198,33 @@ pub(super) fn version_probe_arguments(basename: &str, arguments: &[String]) -> b
     }
 }
 
+/// `node --check` parses a script and exits without running it; at most a
+/// syntax error with the offending source line reaches the output. That line
+/// is file content, so the file operand needs the same read proof as `cat`,
+/// and the operand-free form only parses what a proven producer piped in.
+/// Every other option is refused: `--require` and `--import` preloads still
+/// run under `--check`, and an operand before the flag is a script to run.
+pub(super) fn node_syntax_check_arguments(
+    arguments: &[String],
+    piped_input: bool,
+    context: super::PathContext<'_>,
+) -> bool {
+    let check = |flag: &String| matches!(flag.as_str(), "--check" | "-c");
+    // An inherited `NODE_OPTIONS=--require` or loader path also runs code.
+    if !context.npm_config_inert {
+        return false;
+    }
+    match arguments {
+        [flag] => piped_input && check(flag),
+        [flag, target] => {
+            check(flag)
+                && !target.starts_with('-')
+                && super::safe_reads::command_read_target(target, context, false)
+        }
+        _ => false,
+    }
+}
+
 pub(super) fn safe_date_arguments(arguments: &[String]) -> bool {
     let mut saw_format = false;
     let mut expect_epoch = false;

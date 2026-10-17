@@ -109,7 +109,9 @@ fn rg_over_a_temporary_checkout_keeps_real_credentials_reviewed() {
         ("runtime/config/credentials.json", "{}\n"),
         ("runtime/testdata/keys/server.pem", "pem\n"),
         ("runtime/tests/fixtures/deploy.key", "key\n"),
-        ("runtime/tests/.npmrc", "registry\n"),
+        // The checkout's `.gitignore` re-includes `.env.example`, so `rg`
+        // does open this one.
+        ("runtime/tests/.env.example", "TOKEN=fixture\n"),
         // A test directory inside a credential directory is still a store.
         ("runtime/secrets/tests/prod.json", "{}\n"),
         ("runtime/credentials/fixtures/aws.json", "{}\n"),
@@ -124,6 +126,16 @@ fn rg_over_a_temporary_checkout_keeps_real_credentials_reviewed() {
         );
         std::fs::remove_file(&path).unwrap();
     }
+    // A hidden file no rule re-includes is one `rg` never opens, so it does
+    // not hold the search.
+    let npmrc = bench.crates.join("runtime/tests/.npmrc");
+    write(&npmrc, "registry\n");
+    assert_eq!(
+        decide(&bench, &search).minimum_action,
+        "allow",
+        "runtime/tests/.npmrc"
+    );
+    std::fs::remove_file(&npmrc).unwrap();
     // So is a search rooted in a credential directory.
     write(&bench.crates.join("secrets/tests/prod.json"), "{}\n");
     let rooted = format!("rg -n Route {crates}/secrets");

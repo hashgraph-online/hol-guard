@@ -1,0 +1,1127 @@
+{
+  "schema": "guard.command-extension-fixtures.v1",
+  "build": {
+    "schema": "guard.command-extension-build.v1",
+    "sources": [
+      {
+        "schema": "guard.command-extension-source.v1",
+        "extension": {
+          "extension_id": "command.crisp-tui",
+          "version": "1.0.0",
+          "name": "crisp-tui command protection",
+          "description": "Reviews crisp-tui shell commands that change a Crisp support inbox. `crisp-tui ctl draft` writes a reply or internal note into the composer of the running TUI and never sends it. `crisp-tui cli` forwards every remaining argument to crispctl, whose reply, assign, segment, resolve, and reopen commands write immediately. Read-only control commands (ctl state, goto, screen, details, conversations, messages, drafts, read, and refresh) are not matched. ctl state is an inbox snapshot, not a resolve. The Unix-socket control protocol is not a shell command and is outside this extension. Pinned to crisp-tui 0.2.0 (ca38f362ea558cb09a82fbf3ef1aba3e6fb8692c).",
+          "icon": {
+            "kind": "none"
+          },
+          "publisher": {
+            "id": "community.solcreek",
+            "display_name": "SolCreek",
+            "url": "https://github.com/solcreek/crisp-tui"
+          },
+          "homepage": "https://github.com/solcreek/crisp-tui",
+          "license": "MIT",
+          "action_classes": [
+            "crisp-tui composer draft",
+            "crisp-tui crispctl passthrough"
+          ],
+          "risk_classes": [
+            "execution",
+            "network_egress"
+          ],
+          "safer_alternatives": [
+            "Prepare text with `crisp-tui ctl draft` and let a person send it from the TUI."
+          ],
+          "reference_urls": [
+            "https://github.com/solcreek/crisp-tui",
+            "https://www.npmjs.com/package/crisp-tui",
+            "https://github.com/solcreek/crisp-cli"
+          ],
+          "required": false,
+          "source": "built-in",
+          "aliases": [],
+          "dependencies": [],
+          "conflicts": [],
+          "delegated_protection": null,
+          "ecosystem_ids": [],
+          "executables": [
+            "crisp-tui",
+            "crisp-tui.cmd",
+            "crisp-tui.exe"
+          ],
+          "project_markers": [],
+          "permissions": [
+            {
+              "permission_id": "command.crisp-tui.permission.draft",
+              "implementation_version": "1.0.0",
+              "label": "crisp-tui composer draft",
+              "description": "Identifies `crisp-tui ctl draft`, which puts reply or note text into the live composer. The command returns sent:false and does not call Crisp.",
+              "risk_tier": "medium",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "fixed_reason": null,
+              "typed_capabilities": [],
+              "action_classes": [
+                "crisp-tui composer draft"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "replacement_permission_id": null,
+              "safer_guidance": [
+                "The draft stays in the composer until a person reviews it and presses Enter. crisp-tui does not send an agent draft."
+              ],
+              "example_command": "crisp-tui ctl draft session_1 \"Let me check that for you.\"",
+              "family": null
+            },
+            {
+              "permission_id": "command.crisp-tui.permission.cli",
+              "implementation_version": "1.0.0",
+              "label": "crisp-tui crispctl passthrough",
+              "description": "Identifies `crisp-tui cli`, which forwards the remaining arguments unchanged to crispctl. That bridge can send a customer-visible reply or change conversation state. This rule does not distinguish crispctl's read-only subcommands, so those are reviewed too.",
+              "risk_tier": "high",
+              "baseline_floor": "review",
+              "default_enabled": true,
+              "configurable": true,
+              "fixed_reason": null,
+              "typed_capabilities": [],
+              "action_classes": [
+                "crisp-tui crispctl passthrough"
+              ],
+              "dependencies": [],
+              "conflicts": [],
+              "implied_permissions": [],
+              "introduced_version": "1.0.0",
+              "deprecated": false,
+              "replacement_permission_id": null,
+              "safer_guidance": [
+                "Prefer `crisp-tui ctl draft`, which only fills the composer. `crisp-tui cli` forwards arguments to crispctl and can write to Crisp immediately."
+              ],
+              "example_command": "crisp-tui cli reply session_1 --text 'Hello!' --profile sandbox --json",
+              "family": null
+            }
+          ],
+          "rules": [
+            {
+              "rule_id": "command.crisp-tui.draft",
+              "rule_version": "1.0.0",
+              "permission_id": "command.crisp-tui.permission.draft",
+              "title": "crisp-tui composer draft",
+              "description": "Matches `crisp-tui ctl draft`. Help exits before a draft is stored. Other ctl verbs, including the read-only `ctl state` snapshot and `ctl goto`, do not match.",
+              "severity": "medium",
+              "risk_classes": [
+                "execution"
+              ],
+              "action_classes": [
+                "crisp-tui composer draft"
+              ],
+              "safer_alternatives": [
+                "The draft stays in the composer until a person reviews it and presses Enter. crisp-tui does not send an agent draft."
+              ],
+              "family": null,
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "crisp-tui",
+                        "crisp-tui.cmd",
+                        "crisp-tui.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--demo",
+                        "--help",
+                        "--note",
+                        "--read-only",
+                        "--replace",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--config",
+                        "--limit",
+                        "--offset",
+                        "--poll",
+                        "--profile",
+                        "--revision",
+                        "--website"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--config",
+                        "--limit",
+                        "--offset",
+                        "--poll",
+                        "--profile",
+                        "--revision",
+                        "--website"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "ctl",
+                        "draft"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "crisp-tui ctl draft help (--help)",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "crisp-tui",
+                            "crisp-tui.cmd",
+                            "crisp-tui.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--demo",
+                            "--help",
+                            "--note",
+                            "--read-only",
+                            "--replace",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "required_flags": [
+                            "--help"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "ctl",
+                            "draft"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "short-help",
+                  "title": "crisp-tui ctl draft help (-h)",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "crisp-tui",
+                            "crisp-tui.cmd",
+                            "crisp-tui.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--demo",
+                            "--help",
+                            "--note",
+                            "--read-only",
+                            "--replace",
+                            "-h"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "required_flags": [
+                            "-h"
+                          ],
+                          "required_flags_in_all_arguments": true,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "ctl",
+                            "draft"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "rule_id": "command.crisp-tui.cli",
+              "rule_version": "1.0.0",
+              "permission_id": "command.crisp-tui.permission.cli",
+              "title": "crisp-tui crispctl passthrough",
+              "description": "Matches `crisp-tui cli`. Only help as the crispctl verb is a safe variant. A later --help on a write verb stays reviewed, because this extension does not know whether crispctl would still perform the write.",
+              "severity": "high",
+              "risk_classes": [
+                "execution",
+                "network_egress"
+              ],
+              "action_classes": [
+                "crisp-tui crispctl passthrough"
+              ],
+              "safer_alternatives": [
+                "Prefer `crisp-tui ctl draft`, which only fills the composer. `crisp-tui cli` forwards arguments to crispctl and can write to Crisp immediately."
+              ],
+              "family": null,
+              "default_mode": "review",
+              "matcher": {
+                "op": "any.v1",
+                "config": {},
+                "matchers": [
+                  {
+                    "op": "executable.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "crisp-tui",
+                        "crisp-tui.cmd",
+                        "crisp-tui.exe"
+                      ],
+                      "fail_secure_unknown_options": true,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--demo",
+                        "--help",
+                        "--note",
+                        "--read-only",
+                        "--replace",
+                        "-h"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--config",
+                        "--limit",
+                        "--offset",
+                        "--poll",
+                        "--profile",
+                        "--revision",
+                        "--website"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--config",
+                        "--limit",
+                        "--offset",
+                        "--poll",
+                        "--profile",
+                        "--revision",
+                        "--website"
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": [],
+                      "subcommands": [
+                        "cli"
+                      ]
+                    }
+                  }
+                ]
+              },
+              "native_capability": null,
+              "safe_variants": [
+                {
+                  "variant_id": "help",
+                  "title": "crisp-tui cli help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "crisp-tui",
+                            "crisp-tui.cmd",
+                            "crisp-tui.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--demo",
+                            "--note",
+                            "--read-only",
+                            "--replace"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "required_flags": [],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "cli",
+                            "--help"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "short-help",
+                  "title": "crisp-tui cli short help",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "crisp-tui",
+                            "crisp-tui.cmd",
+                            "crisp-tui.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--demo",
+                            "--note",
+                            "--read-only",
+                            "--replace"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "required_flags": [],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "cli",
+                            "-h"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                },
+                {
+                  "variant_id": "help-verb",
+                  "title": "crisp-tui cli help verb",
+                  "matcher": {
+                    "op": "any.v1",
+                    "config": {},
+                    "matchers": [
+                      {
+                        "op": "executable.v1",
+                        "config": {
+                          "allow_leading_options": false,
+                          "executables": [
+                            "crisp-tui",
+                            "crisp-tui.cmd",
+                            "crisp-tui.exe"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [],
+                          "interspersed_flags": [
+                            "--demo",
+                            "--note",
+                            "--read-only",
+                            "--replace"
+                          ],
+                          "interspersed_options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [],
+                          "options_with_values": [
+                            "--config",
+                            "--limit",
+                            "--offset",
+                            "--poll",
+                            "--profile",
+                            "--revision",
+                            "--website"
+                          ],
+                          "required_flags": [],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "cli",
+                            "help"
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    ],
+    "mcp_sources": [],
+    "trust": {
+      "schemaVersion": "guard.extension-trust-class-map.v1",
+      "publishers": {
+        "hol": {
+          "id": "hol",
+          "displayName": "Hashgraph Online"
+        },
+        "hol-curated": {
+          "id": "hol-curated",
+          "displayName": "HOL curated library"
+        }
+      },
+      "classes": {
+        "first-party": [
+          "command.container-runtime",
+          "command.data-protection",
+          "command.encoded-execution",
+          "command.filesystem",
+          "command.git",
+          "command.guard-self-protection",
+          "command.kubernetes-secrets",
+          "command.package.go",
+          "command.package.jvm",
+          "command.package.node",
+          "command.package.php",
+          "command.package.python",
+          "command.package.ruby",
+          "command.package.rust",
+          "command.package.system",
+          "command.shell-mutations",
+          "command.system",
+          "command.windows"
+        ],
+        "trusted-library": [
+          "command.api-gateway",
+          "command.backup.borg",
+          "command.backup.rclone",
+          "command.backup.restic",
+          "command.backup.velero",
+          "command.cdn",
+          "command.cicd.circleci",
+          "command.cicd.github",
+          "command.cicd.gitlab",
+          "command.cloud.aws",
+          "command.cloud.azure",
+          "command.cloud.gcp",
+          "command.database.mongodb",
+          "command.database.mysql",
+          "command.database.postgresql",
+          "command.database.redis",
+          "command.database.sqlite",
+          "command.database.supabase",
+          "command.dns.aws",
+          "command.dns.azure",
+          "command.dns.gcp",
+          "command.email",
+          "command.feature-flags",
+          "command.framework.laravel",
+          "command.github",
+          "command.infrastructure-as-code",
+          "command.kubernetes-operations",
+          "command.load-balancer",
+          "command.messaging.kafka",
+          "command.messaging.nats",
+          "command.messaging.rabbitmq",
+          "command.monitoring",
+          "command.payment",
+          "command.platform.heroku",
+          "command.platform.netlify",
+          "command.platform.vercel",
+          "command.remote.rsync",
+          "command.remote.scp",
+          "command.remote.ssh",
+          "command.search.elasticsearch",
+          "command.storage.aws-s3",
+          "command.storage.azure-blob",
+          "command.storage.google-cloud",
+          "command.storage.minio"
+        ],
+        "external": [
+          "command.blitcp",
+          "command.cloudg",
+          "command.cogext",
+          "command.ctty",
+          "command.digline",
+          "command.genclave",
+          "command.gitsync",
+          "command.mcp-filesystem",
+          "command.mcp-instapods",
+          "command.mcp-pr-ui-compare",
+          "command.mcp-reaper",
+          "command.noodle",
+          "command.ollama",
+          "command.probe",
+          "command.remote.essh",
+          "command.repo2nb",
+          "command.skill-base",
+          "command.skill-sunset",
+          "command.uivoid"
+        ]
+      }
+    },
+    "base": "packaged"
+  },
+  "cases": [
+    {
+      "id": "draft-basic",
+      "command": "crisp-tui ctl draft session_1 \"Let me check that for you.\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-note",
+      "command": "crisp-tui ctl draft session_1 \"Internal note\" --note",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-replace",
+      "command": "crisp-tui ctl draft session_1 \"Replacement\" --replace",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-profile-leading",
+      "command": "crisp-tui --profile sandbox ctl draft session_1 Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-profile-equals",
+      "command": "crisp-tui --profile=sandbox ctl draft session_1 Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-flags-between",
+      "command": "crisp-tui ctl --note draft session_1 Hello --website site_1",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-read-only-attempt",
+      "command": "crisp-tui --read-only ctl draft session_1 Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-missing-operands",
+      "command": "crisp-tui ctl draft",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-text-mentions-help",
+      "command": "crisp-tui ctl draft session_1 \"see --help\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-quoted-verbs",
+      "command": "crisp-tui \"ctl\" \"draft\" session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-windows",
+      "command": "crisp-tui.cmd ctl draft session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-help",
+      "command": "crisp-tui ctl draft --help",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "draft-short-help",
+      "command": "crisp-tui ctl draft -h",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "draft-help-leading",
+      "command": "crisp-tui --help ctl draft session_1 Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "draft-inactive",
+      "command": "crisp-tui ctl draft session_1 \"Hello\"",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "draft-disabled-permission",
+      "command": "crisp-tui ctl draft session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [
+        "command.crisp-tui.permission.draft"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "draft-compound",
+      "command": "crisp-tui ctl state && crisp-tui ctl draft session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "draft-pipeline",
+      "command": "crisp-tui ctl draft session_1 \"Hello\" | head",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "state-not-draft",
+      "command": "crisp-tui ctl state",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "goto-not-draft",
+      "command": "crisp-tui ctl goto session_1",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "drafts-plural-not-draft",
+      "command": "crisp-tui ctl drafts",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "screen-not-draft",
+      "command": "crisp-tui ctl screen",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "refresh-not-draft",
+      "command": "crisp-tui ctl refresh",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "demo-not-draft",
+      "command": "crisp-tui --demo",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "lookalike-draft",
+      "command": "crisp-tui ctl draftx session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-not-draft-rule",
+      "command": "crisp-tui cli reply session_1 --text Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-reply",
+      "command": "crisp-tui cli reply session_1 --text 'Hello!' --profile sandbox --json",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "cli-resolve",
+      "command": "crisp-tui cli resolve session_1",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "cli-list-still-reviewed",
+      "command": "crisp-tui cli conversations list --profile sandbox --json",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "cli-help-later-stays-reviewed",
+      "command": "crisp-tui cli reply session_1 --text Hello --help",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "cli-help",
+      "command": "crisp-tui cli --help",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-short-help",
+      "command": "crisp-tui cli -h",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-help-verb",
+      "command": "crisp-tui cli help",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-inactive",
+      "command": "crisp-tui cli reply session_1 --text Hello",
+      "enabled_extensions": [],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "cli-disabled-permission",
+      "command": "crisp-tui cli reply session_1 --text Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [
+        "command.crisp-tui.permission.cli"
+      ],
+      "expected_action": "block",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        0
+      ]
+    },
+    {
+      "id": "cli-compound",
+      "command": "crisp-tui ctl state; crisp-tui cli reply session_1 --text Hello",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": [
+        1
+      ]
+    },
+    {
+      "id": "draft-not-cli-rule",
+      "command": "crisp-tui ctl draft session_1 \"Hello\"",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.cli",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unrelated",
+      "command": "pwd",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "allow",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    },
+    {
+      "id": "unknown-executable",
+      "command": "another-unknown-cli inspect",
+      "enabled_extensions": [
+        "command.crisp-tui"
+      ],
+      "disabled_permissions": [],
+      "expected_action": "review",
+      "rule_id": "command.crisp-tui.draft",
+      "expected_effective_segments": []
+    }
+  ]
+}

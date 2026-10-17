@@ -2,21 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniArrowLeft, HiMiniPlus } from "react-icons/hi2";
 
 import {
-  applyBulkCommandState,
   applyLocalCliMutation,
-  bulkCommandState,
-  enrollablePackageScriptCommands,
   LocalCliApiError,
   previewLocalCliMutation,
   recognizeLocalCli,
   refreshMcpInventory,
+  type LocalCliCommand,
   type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliListResponse,
   type LocalCliState,
 } from "../local-cli-api";
-import { BulkPolicyPicker } from "./add-custom-extension-catalog";
-import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { CustomExtensionCommandBrowser } from "./custom-extension-command-browser";
 import { McpDeclaredSkills } from "./mcp-declared-skills";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
@@ -97,20 +95,18 @@ export function LocalCliDetail(props: {
   const handleCommandState = useCallback((commandId: string, state: LocalCliCommandState) => {
     setCommands((current) => withCommandState(current, commandId, state));
   }, []);
-  const applyBulk = useCallback((state: LocalCliCommandState) => {
-    setCommands((current) => {
-      let excluded = new Set<string>();
-      if (props.item.surface === "package-scripts") excluded = new Set(["root", "other"]);
-      if (props.item.surface === "mcp") {
-        excluded = new Set(current.filter((command) => !mcpToolCanReceiveDirectAllow(command)).map((command) => command.command_id));
-      }
-      return applyBulkCommandState(current, state, excluded);
-    });
+  const bulkEligible = useCallback((command: LocalCliCommand) => {
+    if (props.item.surface === "package-scripts") return command.command_id !== "root" && command.command_id !== "other";
+    if (props.item.surface === "mcp") return mcpToolCanReceiveDirectAllow(command);
+    return true;
   }, [props.item.surface]);
-  let bulkTargets = commands;
-  if (props.item.surface === "package-scripts") bulkTargets = enrollablePackageScriptCommands(commands);
-  if (props.item.surface === "mcp") bulkTargets = commands.filter(mcpToolCanReceiveDirectAllow);
-  const bulkState = bulkCommandState(bulkTargets);
+  const applyBulk = useCallback((commandIds: ReadonlySet<string>, state: LocalCliCommandState) => {
+    setCommands((current) => current.map((command) => (
+      commandIds.has(command.command_id) && bulkEligible(command) ? { ...command, state } : command
+    )));
+  }, [bulkEligible]);
+  const resetCommands = useCallback(() => setCommands(prefillSuggestedStates(props.item)), [props.item]);
+  const bulkTargetCount = commands.filter(bulkEligible).length;
   const bulkCopy = bulkPolicyCopy(props.item.surface);
   const continuity = customExtensionContinuityView("local-only");
   const catalog = mcpCatalogCopy(props.item);
@@ -178,26 +174,30 @@ export function LocalCliDetail(props: {
         Extensions
       </button>
       <header className="mt-4 border-b border-slate-200 pb-6">
-        {props.item.surface !== "mcp" ? (
-          <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.item.example_label}</p>
-        ) : null}
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{customExtensionDisplayName(props.item)}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{customExtensionDisplayName(props.item)}</h1>
         {props.item.surface === "mcp" && props.item.source_label ? (
           <p className="mt-2 text-sm text-slate-600">{props.item.source_label}</p>
         ) : null}
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
-        {lastSeenCopy(props.item.last_seen_at) ? (
-          <p className="mt-1 text-xs leading-5 text-slate-500">{lastSeenCopy(props.item.last_seen_at)}</p>
-        ) : null}
+        <p className="mt-2 flex max-w-2xl flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-6 text-slate-600">
+          {props.item.surface !== "mcp" ? (
+            <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">{props.item.example_label}</code>
+          ) : null}
+          <span>{customExtensionStateLabel(props.item)}</span>
+          {lastSeenCopy(props.item.last_seen_at) ? (
+            <span className="text-xs text-slate-500">{lastSeenCopy(props.item.last_seen_at)}</span>
+          ) : null}
+        </p>
         {continuityCopy(props.item) ? (
           <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
             <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
             <p className="mt-1 text-sm leading-6 text-slate-600">{continuityCopy(props.item)?.description}</p>
           </div>
         ) : null}
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          {detailPolicyCopy(props.item.surface)}
-        </p>
+        {props.item.surface === "mcp" || !(added || hasSuggestedRules(props.item)) ? (
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
+            {detailPolicyCopy(props.item.surface)}
+          </p>
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
             <>
@@ -221,7 +221,7 @@ export function LocalCliDetail(props: {
                   Block this extension
                 </button>
               )}
-              <button type="button" className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80" onClick={requestRemove}>
+              <button type="button" className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/70 hover:text-brand-dark" onClick={requestRemove}>
                 Remove custom extension
               </button>
             </>
@@ -341,11 +341,6 @@ export function LocalCliDetail(props: {
           ) : null}
         </>
       ) : null}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="custom-extension-continuity-heading">
-        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
-        <p className="mt-2 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
-        <p className="mt-2 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
-      </section>
       {added || hasSuggestedRules(props.item) ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
@@ -357,39 +352,49 @@ export function LocalCliDetail(props: {
           {commandsDirty && hasSuggestedRules(props.item) && !added ? (
             <p role="note" className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{SUGGESTED_RULES_NOTICE}</p>
           ) : null}
-          {bulkTargets.length > 0 ? (
-            <BulkPolicyPicker
-              value={bulkState}
-              disabled={busy}
-              onChange={applyBulk}
-              groupLabel={bulkCopy.groupLabel}
-              allowLabel={props.item.surface === "mcp" ? "Allow listed" : undefined}
-              blockLabel={props.item.surface === "mcp" ? "Deny listed" : undefined}
-              mcpPolicy={props.item.surface === "mcp"}
-              mixedCopy={bulkCopy.mixedCopy}
-            />
-          ) : null}
-          {props.item.surface === "mcp" && bulkTargets.length > 0 ? (
+          <CustomExtensionCommandBrowser
+            key={props.item.cli_id}
+            commands={commands}
+            savedCommands={props.item.commands}
+            surface={props.item.surface}
+            disabled={busy}
+            bulkEligible={bulkEligible}
+            bulkGroupLabel={bulkCopy.groupLabel}
+            bulkMixedCopy={bulkCopy.mixedCopy}
+            onChange={handleCommandState}
+            onBulkChange={applyBulk}
+          />
+          {props.item.surface === "mcp" && bulkTargetCount > 0 ? (
             <p className="mt-2 text-xs leading-5 text-brand-dark/75">
-              Bulk choices apply to {bulkTargets.length} listed {bulkTargets.length === 1 ? "tool" : "tools"} with direct permissions.
+              Bulk choices apply to listed tools with direct permissions.
               Execution wrappers and unlisted tools keep their separate review settings.
             </p>
           ) : null}
-          <div className="mt-4">
-            <CustomExtensionCommandList
-              commands={commands}
-              disabled={busy}
-              surface={props.item.surface}
-              onChange={handleCommandState}
-            />
-          </div>
           {commandsDirty ? (
-            <button type="button" className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
-              Review {commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes
-            </button>
+            <div className="guard-review-bar" data-testid="custom-extension-review-bar">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-brand-dark">
+                  {commandChanges.length} unsaved {props.item.surface === "mcp" ? "tool" : "command"} {commandChanges.length === 1 ? "change" : "changes"}.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {added ? (
+                    <button type="button" disabled={busy} onClick={resetCommands}
+                      className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">Reset changes</button>
+                  ) : null}
+                  <button type="button" disabled={busy} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
+                    Review {commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
         </section>
       ) : null}
+      <section className="mt-10 max-w-2xl border-t border-slate-200 pt-5" aria-labelledby="custom-extension-continuity-heading">
+        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
+        <p className="mt-1 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
+        <p className="mt-1 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
+      </section>
       {error && !pending ? <div className="mt-4"><InlineError message={error} /></div> : null}
       {pending ? (
         <CustomExtensionReviewModal

@@ -254,6 +254,9 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
             }
+            ResidentOperationV1::ComposioRole(request) => {
+                crate::composio_role_op::evaluate_composio_role_request(&request)
+            }
             ResidentOperationV1::GithubCliClassify(request) => {
                 crate::github_cli_classify_op::evaluate_github_cli_classify_request(&request)
             }
@@ -317,6 +320,11 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::PackageEvaluationCompose(request) => {
                 crate::package_evaluation_compose_op::evaluate_package_evaluation_compose(&request)
+            }
+            ResidentOperationV1::PolicyDocumentDecide(request) => {
+                crate::policy_document_decide_op::evaluate_policy_document_decision_request(
+                    &request,
+                )
             }
             ResidentOperationV1::PolicyDecisionLookup(request) => {
                 crate::policy_decision_lookup_op::evaluate_policy_decision_lookup_request(&request)
@@ -427,6 +435,9 @@ pub(crate) fn evaluate_resident_bytes(
             }
             ResidentOperationV1::McpToolCallIdentity(request) => {
                 crate::mcp_tool_call_identity_op::evaluate_mcp_tool_call_identity_request(&request)
+            }
+            ResidentOperationV1::McpClassify(request) => {
+                crate::mcp_classification_op::evaluate_mcp_classification_request(&request)
             }
             ResidentOperationV1::PackageAdvisoryIds(request) => {
                 crate::package_authority_op::evaluate_package_advisory_ids(&request)

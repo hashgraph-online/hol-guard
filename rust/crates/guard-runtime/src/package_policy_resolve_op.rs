@@ -427,11 +427,29 @@ fn malformed(request: &PackagePolicyResolveRequestV1) -> bool {
             .is_some_and(|row| !row.is_object())
 }
 
+/// What a read-only resolution settles beside the evaluation it rewrites: the
+/// saved row it accepted, and the disposition a receipt records for it.
+pub(crate) struct UnclaimedResolution {
+    pub(crate) output: Map<String, Value>,
+    pub(crate) claim_disposition: Option<String>,
+    /// A saved row was accepted without a claim being asked for.
+    pub(crate) reused: bool,
+}
+
 /// The resolved evaluation for a read-only request: no claim is asked for, so
 /// a saved approval is only ever reported, never claimed.
 pub(crate) fn resolve_unclaimed(
     request: &PackagePolicyResolveRequestV1,
 ) -> Result<Map<String, Value>, String> {
+    resolve_unclaimed_resolution(request).map(|resolution| resolution.output)
+}
+
+/// The same resolution, for a caller that also records which saved row was
+/// reused. `resolve_unclaimed` drops both, because the finalize op rewrites an
+/// evaluation it has already decided the reuse of.
+pub(crate) fn resolve_unclaimed_resolution(
+    request: &PackagePolicyResolveRequestV1,
+) -> Result<UnclaimedResolution, String> {
     if malformed(request) || request.claim_saved_approval || request.claim_succeeded.is_some() {
         return Err(invalid());
     }
@@ -439,7 +457,11 @@ pub(crate) fn resolve_unclaimed(
     if resolution.claim.is_some() {
         return Err(invalid());
     }
-    Ok(resolution.output)
+    Ok(UnclaimedResolution {
+        output: resolution.output,
+        claim_disposition: resolution.claim_disposition,
+        reused: resolution.reused,
+    })
 }
 
 pub(crate) fn evaluate_package_policy_resolve(

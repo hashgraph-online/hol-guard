@@ -12,11 +12,6 @@
 //! readable or not the result schema leaves the caller with no verdict to act
 //! on - never a weaker one.
 
-// The MCP front end that evaluates a package request over this transport
-// lands with the relay's package path; until it does, only the tests below
-// construct one.
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 

@@ -7,6 +7,7 @@ import subprocess
 import sys
 
 from ..adapters.base import HarnessContext
+from ..codex_install_transaction import codex_install_transaction
 from ..daemon.manager import retire_all_guard_daemons_for_home
 from ..native_resident_update_lock import NativeResidentUpdateLockError, hold_native_resident_update_lock
 from ..redaction import redact_sensitive_text
@@ -15,7 +16,7 @@ from ..store import GuardStore
 from .install_commands import apply_managed_install
 from .managed_install_context import managed_install_context as _managed_install_context
 from .update_commands import _current_version, _installer_kind
-from .update_retirement import resident_stop_executable, retire_native_resident_for_home
+from .update_retirement import _resident_state_absent, resident_stop_executable, retire_native_resident_for_home
 
 
 def run_guard_self_uninstall(
@@ -320,6 +321,48 @@ def _disconnect_managed_installs(
         if isinstance(record, dict):
             removed.append(record)
     return removed, None
+
+
+def retire_native_resident_after_last_harness(context: HarnessContext, store: GuardStore) -> bool | None:
+    """Stop the native resident once a harness uninstall leaves none managed.
+
+    The resident only serves harness hooks, so with every harness disconnected
+    nothing will ask for it again, yet it would linger until its idle timeout.
+    On Windows it also keeps the runtime executable open. Returns ``None`` when
+    a harness is still managed (or the state cannot be read) or no resident
+    state exists, otherwise whether it stopped.
+    """
+
+    if _resident_kept(context, store):
+        return None
+    try:
+        # Same order as self-uninstall: the update barrier, then the install
+        # transaction. Holding both, an install cannot activate a harness
+        # between the last check and the stop.
+        with (
+            hold_native_resident_update_lock(
+                context.guard_home,
+                initial_executable=resident_stop_executable(),
+            ),
+            codex_install_transaction(
+                context.guard_home, context.guard_home / "managed", actor="managed.retire_resident"
+            ),
+        ):
+            if _resident_kept(context, store):
+                return None
+            return retire_native_resident_for_home(context.guard_home)
+    except (NativeResidentUpdateLockError, OSError, RuntimeError, TimeoutError):
+        return False
+
+
+def _resident_kept(context: HarnessContext, store: GuardStore) -> bool:
+    installs, error = _active_managed_installs(store)
+    if installs or error is not None:
+        return True
+    try:
+        return _resident_state_absent(context.guard_home)
+    except (OSError, RuntimeError):
+        return True
 
 
 def _frozen_package_uninstall_unsupported() -> bool:

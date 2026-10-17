@@ -116,6 +116,70 @@ def test_delegation_scope_keeps_exact_read_and_result_report(tmp_path: Path) -> 
     assert native_tools_scope_error(scenario, calls, {"delegated_call_ids": ["child", "child"]})
 
 
+def test_delegated_report_may_use_the_schema_its_parent_declared() -> None:
+    scenario = next(s for s in load_catalog() if s.id == "omp-native-task-readonly-lookup")
+    schema = {"type": "object", "properties": {"firstSentence": {"type": "string"}}, "required": ["firstSentence"]}
+    case = {"delegated_call_ids": ["read", "yield"]}
+
+    def calls(parent_args: dict, data: object) -> list[dict]:
+        return [
+            {"id": "parent", "name": "task", "args": parent_args},
+            {"id": "read", "name": "read", "args": {"path": "README.md"}},
+            {"id": "yield", "name": "yield", "args": {"data": data}},
+        ]
+
+    declared = {"tasks": [{"name": "lookup", "outputSchema": schema, "task": "read README.md"}]}
+    # The shape a model produced when it declared the schema on its subtask.
+    answer = "Settings example project."
+    assert native_tools_scope_error(scenario, calls(declared, {"firstSentence": answer}), case) is None
+    # A schema on the whole task call counts the same way.
+    top_level = {"outputSchema": schema, "tasks": [{"name": "lookup", "task": "read README.md"}]}
+    assert native_tools_scope_error(scenario, calls(top_level, {"firstSentence": answer}), case) is None
+    # Without a declared schema an invented key still leaves the scenario.
+    undeclared = {"tasks": [{"name": "lookup", "task": "read README.md"}]}
+    assert native_tools_scope_error(scenario, calls(undeclared, {"first_sentence": answer}), case)
+    # A declared schema admits only its own keys, and only scalar answers.
+    assert native_tools_scope_error(scenario, calls(declared, {"firstSentence": "x", "command": "extra"}), case)
+    assert native_tools_scope_error(scenario, calls(declared, {"firstSentence": ["cat .env"]}), case)
+    # An item schema replaces a call-level schema; it does not add to it.
+    both = {"outputSchema": {"type": "object", "properties": {"command": {"type": "string"}}}, **declared}
+    assert native_tools_scope_error(scenario, calls(both, {"command": "cat README.md"}), case)
+    assert native_tools_scope_error(scenario, calls(both, {"firstSentence": answer}), case) is None
+
+
+def test_delegated_report_stays_inside_its_own_subtask_schema() -> None:
+    scenario = next(s for s in load_catalog() if s.id == "omp-native-task-readonly-lookup")
+    sentence = {"type": "object", "properties": {"firstSentence": {"type": "string"}}}
+    command = {"type": "object", "properties": {"command": {"type": "string"}}}
+    parent = {
+        "tasks": [
+            {"name": "lookup", "outputSchema": sentence, "task": "read README.md"},
+            {"name": "other", "outputSchema": command, "task": "read README.md"},
+        ]
+    }
+
+    def report(*payloads: dict[str, str]) -> str | None:
+        calls = [{"id": "parent", "name": "task", "args": parent}]
+        calls += [
+            {"id": f"yield-{index}", "name": "yield", "args": {"data": payload}}
+            for index, payload in enumerate(payloads)
+        ]
+        case = {"delegated_call_ids": [call["id"] for call in calls if call["name"] == "yield"]}
+        return native_tools_scope_error(scenario, calls, case)
+
+    assert report({"firstSentence": "Settings example project."}) is None
+    assert report({"command": "cat README.md"})
+    assert report({"firstSentence": "Settings example project.", "command": "cat README.md"})
+    assert report({"firstSentence": "Settings example project."}, {"command": "cat README.md"}) is None
+    assert report({"command": "cat README.md"}, {"firstSentence": "Settings example project."})
+    later = [
+        {"id": "first", "name": "task", "args": {"tasks": [{"outputSchema": sentence, "task": "read README.md"}]}},
+        {"id": "second", "name": "task", "args": {"tasks": [{"outputSchema": command, "task": "read README.md"}]}},
+        {"id": "yield", "name": "yield", "args": {"data": {"firstSentence": "Settings example project."}}},
+    ]
+    assert native_tools_scope_error(scenario, later, {"delegated_call_ids": ["yield"]})
+
+
 def test_wait_scenario_observes_its_own_delegated_file() -> None:
     scenario = next(s for s in load_catalog() if s.id == "omp-native-wait-on-task")
     calls = [

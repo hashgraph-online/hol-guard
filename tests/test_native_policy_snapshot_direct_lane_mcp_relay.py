@@ -150,7 +150,7 @@ def test_extension_layers_come_from_the_runtime_and_fail_closed_without_one() ->
             raise RuntimeError("unreadable")
 
     class Store:
-        def read_extension_control_authority_for_registry(self, _registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, _registry: object, **_kwargs) -> object:
             raise AssertionError("the view never reads the store")
 
     assert extension_layers(_runtime()) == []

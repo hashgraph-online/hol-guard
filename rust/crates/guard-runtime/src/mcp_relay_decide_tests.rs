@@ -131,7 +131,12 @@ fn route_accepts_forward_terminal_and_stored_block() {
         })
     );
     let stored = proxy(json!({"kind": "stored_block"}));
-    assert_eq!(route(&stored, &block, None), Ok(Routed::StoredBlock));
+    assert_eq!(
+        route(&stored, &block, None),
+        Ok(Routed::StoredBlock {
+            package_request: false,
+        })
+    );
 }
 
 #[test]

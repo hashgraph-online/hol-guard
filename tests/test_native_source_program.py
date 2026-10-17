@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
 from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -162,7 +163,7 @@ def test_full_catalog_identity_coverage_and_node_closure(compiler: Path, build: 
     payload = dict(program)
     digest = payload.pop("program_digest")
     assert hashlib.sha256(PROGRAM_DOMAIN + canonical(payload)).hexdigest() == digest
-    assert len(canonical(program)) <= 4 * 1024 * 1024
+    assert len(canonical(program)) <= MAX_NATIVE_COMMAND_PROGRAM_BYTES
     metadata_rules = {rule["rule_id"]: rule for extension in compiled["catalog"] for rule in extension["rules"]}
     rules = {rule["rule_id"]: rule for rule in program["rules"]}
     coverage = {rule["rule_id"]: rule for rule in program["coverage"]}
