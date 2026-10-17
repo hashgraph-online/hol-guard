@@ -26,11 +26,11 @@
   "riskClasses": ["external-session-creation", "external-lead-export"],
   "tools": [
     { "name": "create_session", "state": "review" },
+    { "name": "export_leads", "state": "review" },
     { "name": "list_sessions", "state": "inherit" },
     { "name": "get_session", "state": "inherit" },
     { "name": "get_session_analytics", "state": "inherit" },
-    { "name": "export_leads", "state": "inherit" },
-    { "name": "other", "state": "inherit" }
+    { "name": "other", "state": "review" }
   ],
   "referenceUrls": [
     "https://seminara.online",
@@ -39,6 +39,7 @@
   ],
   "saferAlternatives": [
     "Keep create_session on Review so an agent cannot provision new presentation sessions or consume account minutes without explicit confirmation.",
-    "Use list_sessions, get_session, and get_session_analytics for read-only inspection of active presentations without modifying state."
+    "Keep export_leads on Review so captured attendee contact information and PII cannot be exported without explicit user approval.",
+    "Use list_sessions, get_session, and get_session_analytics for read-only inspection of active presentations without modifying state or exposing attendee PII."
   ]
 }
