@@ -17,7 +17,7 @@
     "background": "#1D6FF4"
   },
   "homepage": "https://seminara.online",
-  "license": "Apache-2.0",
+  "license": "MIT",
   "launch": {
     "kind": "package-launcher",
     "command": "npx",
