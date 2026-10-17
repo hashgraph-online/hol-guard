@@ -1,11 +1,13 @@
 //! The tool policy pass of one relay decision, with its saved lookups read
 //! from the store as the proxy reads them.
 
+use super::provider;
 use super::store;
 use super::POLICY_NEED;
 use crate::mcp_tool_policy_decision::Decision;
 use crate::mcp_tool_policy_flow::{evaluate_pass, Ctx, Pass, PassMemo, Phase, Stop};
 use guard_contracts::McpToolPolicyObservationV1;
+use rusqlite::Connection;
 use serde_json::{json, Value};
 
 /// Saved lookups one decision may name before it is left to the proxy.
@@ -16,9 +18,15 @@ const POLICY_FAILED: &str = "mcp_relay_policy_failed";
 /// the saved rows when there are any, the empty store's answer otherwise.
 /// Each round replays the pass over the same subject, so the parts no
 /// observation steers are evaluated once for the call.
+///
+/// A provider lookup is read from the connection rather than from the saved
+/// rows: a store that holds no saved policy at all can still hold the
+/// provider grants and the catalogue hash a reviewed provider action is
+/// steered by.
 pub(super) fn run_policy(
     subject: &guard_contracts::McpToolPolicySubjectV1,
     saved: Option<&store::Saved<'_>>,
+    connection: Option<&Connection>,
 ) -> Result<Decision, &'static str> {
     let mut observations: Vec<McpToolPolicyObservationV1> = Vec::new();
     let memo = PassMemo::new(subject);
@@ -32,9 +40,12 @@ pub(super) fn run_policy(
             Ok(Pass::Final(decision)) => return Ok(*decision),
             Ok(Pass::Claimed { .. }) | Err(Stop::Fail(_)) => return Err(POLICY_FAILED),
             Err(Stop::Need(need)) => {
-                let result = match saved {
-                    Some(saved) => saved.answer(&need)?,
-                    None => empty_store_answer(&need)?,
+                let result = match provider::answer(connection, &need) {
+                    Some(answer) => answer?,
+                    None => match saved {
+                        Some(saved) => saved.answer(&need)?,
+                        None => empty_store_answer(&need)?,
+                    },
                 };
                 observations.push(McpToolPolicyObservationV1 { need, result });
             }

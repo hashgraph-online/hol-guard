@@ -13,15 +13,13 @@ fn the_child_frame_and_the_request_share_one_python_rewrite() {
         "params":{"name":"read","arguments":{"b":1.00,"a":[-0,1e5,"2.50"]}}}"#;
     let message: Value = serde_json::from_str(host).unwrap();
     let order = ["b".to_owned(), "a".to_owned()];
-    let (frame, payload, expected) =
+    let (frame, request, expected) =
         prepare(&facts, &message, Some(&order), &catalog, &no_prompt()).unwrap();
     assert_eq!(expected, catalog.snapshot());
     assert_eq!(
         serde_json::to_string(&frame).unwrap(),
         r#"{"id":4,"jsonrpc":"2.0","method":"tools/call","params":{"arguments":{"a":[0,100000.0,"2.50"],"b":1.0},"name":"read"}}"#
     );
-    let payload: Value = serde_json::from_slice(&payload).unwrap();
-    let request = &payload["request"];
     assert_eq!(request["params"], frame["params"]);
     assert_eq!(
         serde_json::to_string(&request["arguments"]).unwrap(),

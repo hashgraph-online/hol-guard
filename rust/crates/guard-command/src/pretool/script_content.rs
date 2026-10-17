@@ -16,6 +16,7 @@ use regex::Regex;
 mod launch;
 mod loopback;
 mod loopback_bases;
+pub(in crate::pretool) mod read_only;
 
 use super::{read_paths, PathContext};
 use crate::CanonicalCommandV1;

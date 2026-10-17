@@ -364,6 +364,35 @@ def test_completed_leader_does_not_leave_a_term_ignoring_descendant(tmp_path):
     assert not state.stdout.strip() or state.stdout.strip().startswith("Z")
 
 
+def test_agent_process_reads_a_closed_stdin(tmp_path):
+    """The prompt is in argv; an inherited open stdin made agents wait to the deadline."""
+    import os
+    import sys
+
+    from ci.gauntlet.host_process import run_process
+
+    if os.name != "posix":
+        pytest.skip("Gauntlet process containment is POSIX-only")
+    read, write = os.pipe()
+    saved = os.dup(0)
+    os.dup2(read, 0)
+    try:
+        code, timed_out = run_process(
+            [sys.executable, "-c", "import sys; sys.stdout.write(repr(sys.stdin.read()))"],
+            cwd=tmp_path,
+            env=dict(os.environ),
+            output=tmp_path / "stdout.log",
+            error_output=tmp_path / "stderr.log",
+            timeout=10,
+        )
+    finally:
+        os.dup2(saved, 0)
+        for fd in (saved, read, write):
+            os.close(fd)
+    assert (code, timed_out) == (0, False)
+    assert (tmp_path / "stdout.log").read_text() == "''"
+
+
 def test_interrupt_during_termination_still_kills_and_reaps(tmp_path, monkeypatch):
     """An exception in the graceful wait must run the final kill and reap."""
     import os

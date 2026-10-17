@@ -48,6 +48,11 @@ pub(in crate::pretool) fn contained_test_reason(
     if let Some(reason) = super::readonly_test_reason(model) {
         return resolved(model, reason, context.cwd.map(PathBuf::from), context);
     }
+    if cfg!(windows) {
+        if let Some(reason) = super::windows_script_reason(model, context) {
+            return Some(reason);
+        }
+    }
     let core = contained_core(model, context)?;
     let reason = super::readonly_test_reason(&core).filter(|reason| *reason != GIT)?;
     resolved(&core, reason, core_cwd(model, context), context)
@@ -84,10 +89,10 @@ fn resolved(
     let arguments = segment.arguments.as_slice();
     // The same name the build classification reads, so `npm.exe run build`
     // is the package script `npm run build` is and keeps the review prompt.
-    if matches!(
-        crate::program_basename(segment.executable.as_deref()?),
-        "npm" | "pnpm" | "bun"
-    ) && arguments.first().is_some_and(|word| word == "run")
+    let manager = crate::program_basename(segment.executable.as_deref()?);
+    if matches!(manager, "npm" | "pnpm" | "bun" | "yarn")
+        && (arguments.first().is_some_and(|word| word == "run")
+            || super::manager_script_task(manager, arguments).is_some())
     {
         return None;
     }
@@ -119,16 +124,12 @@ fn resolved(
     }
     let segment = model.segments.first()?;
     let manager = executable_basename(segment.executable.as_deref()?);
-    if !matches!(manager, "npm" | "pnpm" | "bun") {
+    if !matches!(manager, "npm" | "pnpm" | "bun" | "yarn") {
         return direct_tool(reason, &segment.arguments, cwd, context);
     }
     let arguments = segment.arguments.as_slice();
-    let task = match arguments {
-        [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck" | "build") => {
-            Some(task.as_str())
-        }
-        _ => None,
-    };
+    let task = super::manager_script_task(manager, arguments)
+        .filter(|task| matches!(*task, "lint" | "typecheck" | "build"));
     let test = reason == PACKAGE_TEST;
     if test && manager == "bun" && arguments.first().is_some_and(|word| word == "test") {
         // `bun test` is Bun's own runner, never the package `test` script.

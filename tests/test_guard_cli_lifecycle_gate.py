@@ -465,3 +465,119 @@ def test_approval_prompt_tells_the_user_it_is_waiting(
     assert result is not None
     assert result.password == password
     assert "waiting for your approval password" in capsys.readouterr().err
+
+
+def test_silent_authority_names_the_runtime_install_when_the_runtime_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    manual = 'python -m pip install --force-reinstall --no-deps "https://example.test/hol_guard.whl"'
+    monkeypatch.setattr(
+        update_commands,
+        "bundled_native_runtime_report",
+        lambda: {"status": "missing", "bundled": False, "manual_install": manual},
+    )
+    error = ApprovalGateError("native_approval_gate_unavailable", "The native approval authority did not answer.")
+
+    explained = commands_lifecycle_gate.explain_missing_native_runtime(error)
+
+    assert explained.code == "native_approval_gate_unavailable"
+    assert manual in str(explained)
+    assert "Retry" not in str(explained)
+
+
+@pytest.mark.parametrize(
+    ("code", "report"),
+    [
+        ("native_approval_gate_unavailable", {"status": "present", "bundled": True}),
+        ("native_approval_gate_unavailable", None),
+        ("approval_gate_password_required", {"status": "missing", "manual_install": "python -m pip install x"}),
+    ],
+)
+def test_silent_authority_keeps_its_error_unless_the_runtime_is_missing(
+    monkeypatch: pytest.MonkeyPatch, code: str, report: dict[str, object] | None
+) -> None:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_report", lambda: report)
+    error = ApprovalGateError(code, "original")
+
+    assert commands_lifecycle_gate.explain_missing_native_runtime(error) is error
+
+
+def _missing_runtime(monkeypatch: pytest.MonkeyPatch, repair: tuple[dict[str, object], int] | None) -> list[Path]:
+    from codex_plugin_scanner.guard.cli import update_commands
+
+    runtime = {"missing": True}
+    calls: list[Path] = []
+
+    def fake_repair(**kwargs: object) -> tuple[dict[str, object], int] | None:
+        calls.append(cast(Path, kwargs["guard_home"]))
+        if repair is not None and repair[1] == 0:
+            runtime["missing"] = False
+        return repair
+
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: runtime["missing"])
+    monkeypatch.setattr(update_commands, "repair_native_runtime_if_missing", fake_repair)
+    return calls
+
+
+def test_silent_authority_installs_the_missing_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _missing_runtime(monkeypatch, ({"status": "updated"}, 0))
+    error = ApprovalGateError("native_approval_gate_unavailable", "silent")
+    stream = io.StringIO()
+
+    restored = commands_lifecycle_gate.restore_missing_native_runtime(
+        error, context=None, guard_home=tmp_path, error_stream=stream
+    )
+
+    assert restored is True
+    assert calls == [tmp_path]
+    assert "Installing the missing native runtime" in stream.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("code", "repair"),
+    [
+        ("approval_gate_password_required", ({"status": "updated"}, 0)),
+        ("native_approval_gate_unavailable", ({"status": "failed"}, 1)),
+        ("native_approval_gate_unavailable", None),
+    ],
+)
+def test_silent_authority_restore_leaves_other_failures_alone(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, code: str, repair: tuple[dict[str, object], int] | None
+) -> None:
+    calls = _missing_runtime(monkeypatch, repair)
+
+    restored = commands_lifecycle_gate.restore_missing_native_runtime(
+        ApprovalGateError(code, "original"), context=None, guard_home=tmp_path, error_stream=io.StringIO()
+    )
+
+    assert restored is False
+    assert calls == ([] if code != "native_approval_gate_unavailable" else [tmp_path])
+
+
+def test_router_reruns_the_gate_after_restoring_the_runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.cli import commands_router
+
+    gate_calls: list[str] = []
+
+    def gate(_args: object, **_kwargs: object) -> None:
+        gate_calls.append("gate")
+        if len(gate_calls) == 1:
+            raise ApprovalGateError("native_approval_gate_unavailable", "silent")
+        raise ApprovalGateError("approval_gate_interactive_required", "approve first")
+
+    monkeypatch.setattr(commands_router, "enforce_lifecycle_gate", gate)
+    monkeypatch.setattr(commands_router, "restore_missing_native_runtime", lambda *_a, **_k: True)
+    parser = argparse.ArgumentParser()
+    add_guard_root_parser(parser)
+    args = parser.parse_args(["update", "--guard-home", str(tmp_path), "--json"])
+    output = io.StringIO()
+
+    exit_code = run_guard_command(args, output_stream=output)
+
+    assert exit_code == 4
+    assert gate_calls == ["gate", "gate"]
+    assert cast(dict[str, object], json.loads(output.getvalue()))["error"] == "approval_gate_interactive_required"

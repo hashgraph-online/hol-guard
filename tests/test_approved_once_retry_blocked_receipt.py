@@ -1,15 +1,13 @@
-"""A one-time approval the agent's retry cannot reuse leaves the action stopped (#3844).
-
-The receipt still records the user's allow decision, but marks that the action
-did not run, so Evidence does not report it as allowed.
-"""
+"""Unbound once consent is rejected before saving a misleading allow receipt."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from codex_plugin_scanner.guard.approval_scope_support import IneligibleApprovalScopeError
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
-from codex_plugin_scanner.guard.memory_decision_outbox import APPROVAL_RETRY_BLOCKED_OVERRIDE
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -51,12 +49,13 @@ def _approve_once(tmp_path: Path, request_id: str, artifact_hash: str) -> dict[s
     return store.get_receipt_for_approval_request(request_id, policy_decision="allow")
 
 
-def test_approving_an_unbound_native_review_once_records_that_it_stayed_blocked(tmp_path: Path) -> None:
+def test_approving_an_unbound_native_review_once_saves_no_allow_receipt(tmp_path: Path) -> None:
     # An unbound row's hash is its request id, so the retry cannot reuse the approval.
-    receipt = _approve_once(tmp_path, "unbound-req", "unbound-req")
-    assert receipt is not None
-    assert receipt["policy_decision"] == "allow"
-    assert receipt["user_override"] == APPROVAL_RETRY_BLOCKED_OVERRIDE
+    with pytest.raises(IneligibleApprovalScopeError):
+        _approve_once(tmp_path, "unbound-req", "unbound-req")
+    store = GuardStore(tmp_path / "guard-home")
+    assert store.get_approval_request("unbound-req")["status"] == "pending"
+    assert store.get_receipt_for_approval_request("unbound-req", policy_decision="allow") is None
 
 
 def test_approving_a_bound_native_review_once_records_a_plain_approval(tmp_path: Path) -> None:

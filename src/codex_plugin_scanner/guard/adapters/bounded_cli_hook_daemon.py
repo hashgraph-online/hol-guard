@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ..action_lattice import is_guard_action
+from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..daemon.auth_token import load_guard_daemon_auth_token as _read_daemon_auth_token
 from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
@@ -304,7 +305,8 @@ def _daemon_response_to_native(
                 "approval_requests",
             ):
                 value = daemon_response.get(key)
-                if value is not None:
+                # A default-mode connector setup reason carries no approval link.
+                if value is not None and (key == "reason_code" or not is_unlinked_connector_setup_reason(reason)):
                     payload[key] = value
 
     exit_code = 2 if _should_exit_block(harness, event_name, policy_action) else 0

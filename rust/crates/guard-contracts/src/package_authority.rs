@@ -224,7 +224,9 @@ pub struct ApplyStoredPackagePolicyResultV1 {
     pub request_sha256: String,
     /// `ok` or `error`.
     pub status: String,
-    /// `ok`, or `native_apply_stored_package_policy_failed`.
+    /// `ok` when the lookup ran, the lookup error code when the store could
+    /// not answer, or `native_apply_stored_package_policy_failed`. A lookup
+    /// error keeps `status` as `ok` and `payload` as the review evaluation.
     pub code: String,
     /// Updated `PackageRequestEvaluation.to_dict()` on success.
     #[serde(default, skip_serializing_if = "Option::is_none")]

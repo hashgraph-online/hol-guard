@@ -1,5 +1,6 @@
 import { Component, type ReactNode } from "react";
 
+import { loadCurrentDashboardBuild } from "./dashboard-build";
 import { isChunkLoadError } from "./lazy-workspace";
 
 export const CHUNK_LOAD_ERROR_HEADLINE = "This screen couldn't load";
@@ -48,6 +49,7 @@ interface Props {
   fallback?: ReactNode;
   onReset?: () => void;
   reload?: () => void;
+  loadCurrentBuild?: () => boolean;
 }
 
 interface State {
@@ -85,6 +87,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+    // A screen that breaks because this tab still runs the bundle from before a
+    // Guard update cannot recover in place; load the current bundle instead.
+    if ((this.props.loadCurrentBuild ?? loadCurrentDashboardBuild)()) {
+      this.clearRetryTimer();
+      this.setState({ retrying: true, retryDecided: true });
+      return;
+    }
     const now = Date.now();
     if (!shouldAutoRetry(error, this.lastAutoRetryAt, now)) {
       this.setState({ retryDecided: true });

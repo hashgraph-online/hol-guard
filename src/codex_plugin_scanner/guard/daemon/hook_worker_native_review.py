@@ -12,6 +12,12 @@ from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import native_resident_client_failure_code
 from .hook_native_review_fence import native_review_fence
+from .hook_policy_fence_window import (
+    POLICY_UPDATE_PENDING_REASON_CODE,
+    PolicySourceFenceBusyError,
+    PolicySourceFenceWait,
+    policy_update_pending_reason,
+)
 
 if TYPE_CHECKING:
     from .hook_worker_native import _HookWorkerNativeHost
@@ -96,63 +102,90 @@ def review_native_edge(
     from .hook_worker_native import _record_unavailable_native
 
     snapshot = policy_snapshot
-    for attempt in range(2):
-        try:
-            return _review_native_edge_once(
-                worker,
-                payload=payload,
-                harness=harness,
-                event_name=event_name,
-                default_harness=default_harness,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                workspace=workspace,
-                deadline=deadline,
-                claim_saved_approval=claim_saved_approval,
-                claimed_saved_allow_hash=claimed_saved_allow_hash,
-                claimed_approval_request_id=claimed_approval_request_id,
-                policy_snapshot=snapshot,
-            )
-        except NativePolicyBindingRefreshError as error:
-            # The native engine rejected admission; no tool or approval result
-            # was accepted. Release the mutation lease before waiting for the
-            # publisher. Never reset the caller deadline or retry a deny verdict.
-            can_refresh = (
-                attempt == 0
-                and deadline is not None
-                and time.monotonic() < deadline
-                and event_name in {"UserPromptSubmit", "PreToolUse"}
-                and getattr(worker, "_publish_native_policy", False) is True
-            )
-            if can_refresh and deadline is not None:
-                publisher = getattr(worker, "policy_snapshot_publisher", None)
-                request_refresh = getattr(publisher, "request_control_binding_refresh", None)
-                if callable(request_refresh):
-                    request_refresh(error.generation)
-                    snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
-                    refreshed = snapshot is not None and (
-                        error.code == SNAPSHOT_NOT_CURRENT_ERROR or snapshot.get("mode") == "enforce"
-                    )
-                    if refreshed and time.monotonic() < deadline:
-                        continue
-            response = _record_unavailable_native(
-                worker,
-                payload,
-                harness=harness,
-                event_name=event_name,
-                reason_code="native_control_binding_unavailable",
-                workspace=workspace,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                # Control-binding failures only refresh enforce bindings and
-                # stay blocking; a superseded Watch snapshot keeps recording.
-                recording_only=False,
-                watch_continue=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
-                deadline=deadline,
-            )
-            response["native_failure_code"] = error.code
-            return response
-    raise AssertionError("bounded native review exhausted without a result")
+    refreshed_once = False
+    fence_wait = PolicySourceFenceWait(deadline, store=getattr(worker, "store", None))
+    try:
+        while True:
+            try:
+                return _review_native_edge_once(
+                    worker,
+                    payload=payload,
+                    harness=harness,
+                    event_name=event_name,
+                    default_harness=default_harness,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    workspace=workspace,
+                    # A poll after a fence wait stops short of the hook deadline.
+                    deadline=fence_wait.attempt_deadline,
+                    claim_saved_approval=claim_saved_approval,
+                    claimed_saved_allow_hash=claimed_saved_allow_hash,
+                    claimed_approval_request_id=claimed_approval_request_id,
+                    policy_snapshot=snapshot,
+                )
+            except PolicySourceFenceBusyError as busy:
+                # The fence refused admission before any evaluation, so the same
+                # request is retried as-is once it clears, within the deadline.
+                if fence_wait.pause():
+                    continue
+                response = _record_unavailable_native(
+                    worker,
+                    payload,
+                    harness=harness,
+                    event_name=event_name,
+                    reason_code=POLICY_UPDATE_PENDING_REASON_CODE,
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    recording_only=busy.recording_only,
+                    reason=policy_update_pending_reason(),
+                )
+                response["native_failure_code"] = busy.code
+                return response
+            except NativePolicyBindingRefreshError as error:
+                # The native engine rejected admission; no tool or approval result
+                # was accepted. Release the mutation lease before waiting for the
+                # publisher. Never reset the caller deadline or retry a deny verdict.
+                can_refresh = (
+                    not refreshed_once
+                    and deadline is not None
+                    and time.monotonic() < deadline
+                    and event_name in {"UserPromptSubmit", "PreToolUse"}
+                    and getattr(worker, "_publish_native_policy", False) is True
+                )
+                if can_refresh and deadline is not None:
+                    publisher = getattr(worker, "policy_snapshot_publisher", None)
+                    request_refresh = getattr(publisher, "request_control_binding_refresh", None)
+                    if callable(request_refresh):
+                        request_refresh(error.generation)
+                        snapshot = worker._native_policy_snapshot(workspace, deadline=deadline)
+                        refreshed = snapshot is not None and (
+                            error.code == SNAPSHOT_NOT_CURRENT_ERROR or snapshot.get("mode") == "enforce"
+                        )
+                        if refreshed and time.monotonic() < deadline:
+                            refreshed_once = True
+                            continue
+                response = _record_unavailable_native(
+                    worker,
+                    payload,
+                    harness=harness,
+                    event_name=event_name,
+                    reason_code="native_control_binding_unavailable",
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    # Control-binding failures only refresh enforce bindings and
+                    # stay blocking; a superseded Watch snapshot keeps recording.
+                    recording_only=False,
+                    watch_continue=error.code == SNAPSHOT_NOT_CURRENT_ERROR and error.recording_only,
+                    deadline=deadline,
+                )
+                response["native_failure_code"] = error.code
+                return response
+
+    finally:
+        # Close this hook's share of a fence window it waited through.
+        fence_wait.finish()
 
 
 def _review_native_edge_once(

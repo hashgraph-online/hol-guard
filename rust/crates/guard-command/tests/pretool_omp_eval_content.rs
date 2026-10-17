@@ -85,6 +85,8 @@ fn loopback_browser_checks_are_allowed() {
     for code in [
         "const tab = await browser.open({name:'skybound',url:'http://localhost:4173'}); display(await tab.title()); display(await tab.observe()); await tab.screenshot();",
         "const tab=browser.tab('skybound'); await tab.reload(); await tab.click('#start'); await tab.waitFor(300); await tab.press('Space'); const state=await tab.evaluate(()=>({score:document.querySelector('#score').textContent,canvas:document.querySelector('canvas').getContext('2d')!==null})); display(state); display(await tab.errors());",
+        "let r; for (let i=0;i<20;i++){ try {r=await fetch('http://localhost:3000/');break} catch {await new Promise(x=>setTimeout(x,100))}}; if(!r) throw Error('server did not start'); const html=await r.text(); const data=await (await fetch('http://localhost:3000/api/todos')).json(); display({status:r.status,title:html.includes('<title>My Todos</title>'),todoList:data})",
+        "const tab=browser.tab('flappy'); display(await tab.run(async({page})=>{await page.click('#game'); const started=await page.evaluate(()=>document.querySelector('#game').getContext('2d')!==null); await page.keyboard.press('Space'); return {started,canvas:await page.$eval('#game',e=>[e.width,e.height]),errors:[]};})); display(await tab.errors()); await tab.close();",
     ] {
         assert!(allowed(&s, "js", code), "{code}");
     }

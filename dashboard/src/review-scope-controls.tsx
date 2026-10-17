@@ -30,7 +30,9 @@ export function ReviewScopeControls(props: ReviewScopeControlsProps) {
       <SectionLabel>Approval scope</SectionLabel>
       {!props.hasAllowScope && (
         <p className="text-sm text-brand-attention" role="status">
-          This action cannot be approved under its current Guard policy.
+          {props.oneTimeRetryBlocked
+            ? "Guard cannot bind this app's retry to the reviewed version. Execution approval is unavailable."
+            : "This action cannot be approved under its current Guard policy."}
         </p>
       )}
       <div className="grid grid-cols-1 gap-2 md:grid-cols-2" role="radiogroup" aria-label="Allow scope selection">
@@ -134,7 +136,7 @@ function ExactActionPersistenceChoice(props: {
     <fieldset className="rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3">
       <legend className="px-1 text-sm font-semibold text-brand-dark">How long should Guard allow it?</legend>
       <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2">
-        <label className={exactActionChoiceClassName(!props.checked)}>
+        {!props.oneTimeRetryBlocked && <label className={exactActionChoiceClassName(!props.checked)}>
           <input
             type="radio"
             name="exact-action-approval-duration"
@@ -145,11 +147,9 @@ function ExactActionPersistenceChoice(props: {
           />
           <span className="block text-sm font-semibold text-brand-dark">This time</span>
           <span className="mt-0.5 block text-xs text-muted-foreground">
-            {props.oneTimeRetryBlocked
-              ? "Records your decision; the agent stays blocked."
-              : `Retry within ${props.retryWindowMinutes} minutes.`}
+            {`Retry within ${props.retryWindowMinutes} minutes.`}
           </span>
-        </label>
+        </label>}
         <label className={exactActionChoiceClassName(props.checked)}>
           <input
             type="radio"

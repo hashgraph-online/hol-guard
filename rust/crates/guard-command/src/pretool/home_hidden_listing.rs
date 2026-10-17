@@ -10,68 +10,18 @@
 //! `~/.local/share` (`~/.config/gh`). Callers must bound the listing to the
 //! directory's own entries: a recursive listing of `~/.config` prints the
 //! names inside `~/.config/gh` and keeps its review.
+//!
+//! The store lists themselves live in [`crate::credential_store_names`], so the
+//! content screen that `cat` and `rg` go through refuses the same directories.
+//! That content screen is the narrower of the two: it answers for one file's
+//! bytes, below one hidden directory, in a tree no other rule owns.
 
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
-/// Hidden directories that hold credentials, keys, wallets, browser profiles
-/// or Guard's own state. Their entry names alone reveal which accounts, hosts
-/// and keys exist.
-pub(super) const CREDENTIAL_STORE_NAMES: [&str; 18] = [
-    ".aws",
-    ".azure",
-    ".bitcoin",
-    ".docker",
-    ".electrum",
-    ".ethereum",
-    ".gcloud",
-    ".gnupg",
-    ".hol-guard",
-    ".kube",
-    ".mozilla",
-    ".password-store",
-    ".pki",
-    ".ssh",
-    ".terraform",
-    ".terraform.d",
-    ".thunderbird",
-    ".vault-token",
-];
-
-/// Harness directories that share skills, rules or Git hooks rather than an
-/// agent login. Every other harness directory (`~/.gemini`, `~/.omp`,
-/// `~/.copilot`) may hold login tokens under names Guard does not know, so it
-/// keeps review.
-const HARNESS_SHARED_NAMES: [&str; 5] = [".agent", ".agents", ".clinerules", ".githooks", ".husky"];
-
-/// Harness homes whose login and secret-bearing config live in files the
-/// credential and hidden-name screens already refuse to read
-/// (`auth.json`, `.credentials.json`, `config.toml`, `settings.json`).
-/// Listing them prints plan, memory and session names, never a secret.
-pub(super) const HARNESS_HOME_NAMES: [&str; 2] = [".claude", ".codex"];
-
-/// Credential, password-manager, keyring, browser-profile and agent-login
-/// stores kept directly below `~/.config` or `~/.local/share`. A tool whose
-/// directory holds only fixed-name config files (`~/.config/doctl/config.yaml`,
-/// with its tokens inside the file) is not listed: its entry names reveal no
-/// account, host or key, and content reads of the file stay guarded.
-const NESTED_CREDENTIAL_STORE_NAMES: [&str; 16] = [
-    "1password",
-    "bravesoftware",
-    "chromium",
-    "gcloud",
-    "gh",
-    "github-copilot",
-    "gnupg",
-    "google-chrome",
-    "gopass",
-    "hub",
-    "keyrings",
-    "microsoft-edge",
-    "op",
-    "opencode",
-    "password-store",
-    "solana",
-];
+use crate::credential_store_names::{
+    clears_store_screen, hidden_content_read_allowed, lowered_names, narrow_guidance_rule_owns,
+};
+pub(super) use crate::credential_store_names::{CREDENTIAL_STORE_NAMES, HARNESS_HOME_NAMES};
 
 /// Whether `value` names an existing directory below a hidden component of
 /// the home directory that is not, and is not inside, a credential store.
@@ -80,6 +30,33 @@ pub(in crate::pretool) fn home_hidden_directory(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
+    let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let Some(first) = relative.components().next() else {
+        return false;
+    };
+    // Only the home entry itself is hidden: a dot-directory nested deeper
+    // (`~/.nvm/.cache`) is private state of the tool that owns it.
+    let mut names = relative.components().skip(1);
+    canonical.is_dir()
+        && first.as_os_str().to_string_lossy().starts_with('.')
+        && !names.any(|name| name.as_os_str().to_string_lossy().starts_with('.'))
+        && clears_store_screen(&relative)
+        && super::super::resolved_location_allowed(&canonical, home_dir, cwd, false)
+}
+
+/// The canonical path of `value` and its path relative to the home directory,
+/// for a spelling that names an entry of the home directory and nothing else.
+///
+/// The spelled path must be the resolved one: a link anywhere below the home
+/// directory could dress another store, or the home directory itself, as an
+/// ordinary dot-directory.
+fn resolved_home_entry(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> Option<(PathBuf, PathBuf)> {
     if value.is_empty()
         || value.len() > 4096
         || value.starts_with('-')
@@ -95,39 +72,107 @@ pub(in crate::pretool) fn home_hidden_directory(
         || value.split(['/', '\\']).any(|part| part == "..")
         || !super::super::verified_path_context(home_dir, cwd)
     {
+        return None;
+    }
+    let raw_home = home_dir?;
+    let expanded = expanded(value, home_dir, cwd)?;
+    let home = std::fs::canonicalize(raw_home).ok()?;
+    let canonical = std::fs::canonicalize(&expanded).ok()?;
+    let relative = expanded
+        .strip_prefix(raw_home)
+        .or_else(|_| expanded.strip_prefix(&home))
+        .ok()
+        .filter(|relative| home.join(relative) == canonical)?;
+    Some((canonical.clone(), relative.to_path_buf()))
+}
+
+/// Whether `value` names a directory one tool owns, rather than a root that
+/// several tools keep their own directories under.
+///
+/// A depth-bounded listing prints the entries of the directory it was handed
+/// and stops there, so `~/.config` prints the names of the tool directories
+/// below it and nothing from inside them. A walk with no depth bound prints
+/// what those directories hold, and below `~/.config` and `~/.local/share`
+/// that is where the credential stores live: `find ~/.config -name hosts.yml`
+/// would print a path through `~/.config/gh`, which the listing screen
+/// refuses to name. A tool's own directory has no such shared children, so a
+/// deeper walk stays inside the tree the agent actually named.
+pub(in crate::pretool) fn home_hidden_tool_directory(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    if !home_hidden_directory(value, home_dir, cwd) {
         return false;
     }
-    let (Some(raw_home), Some(expanded)) = (home_dir, expanded(value, home_dir, cwd)) else {
+    let Some((_, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let lowered = lowered_names(&relative);
+    match lowered.first().map(String::as_str) {
+        Some(".config") => lowered.len() > 1,
+        Some(".local") => lowered.len() > 2,
+        _ => true,
+    }
+}
+
+/// Whether `value` names an existing file below a hidden entry of the home
+/// directory that returns no credential.
+///
+/// The listing screen above answers `ls ~/.agents/skills/`; this answers the
+/// read that follows it, `cat ~/.agents/skills/release-check/scripts/run.sh`.
+/// A hidden component used to end that lookup on its own, so an ordinary
+/// source read under a toolchain, a shared skill tree or a repository's own
+/// workflows collected an approval nobody answered.
+///
+/// What a hidden component has to clear is
+/// [`hidden_content_read_allowed`]: one hidden directory directly below home,
+/// no store at any depth, no name a secret is conventionally written under,
+/// and no tree a narrower rule already owns. The path itself is canonicalized
+/// and compared with the spelling first, so a link cannot dress a credential
+/// store as an ordinary dot-directory.
+pub(in crate::pretool) fn home_hidden_content_read(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    let Some((canonical, relative)) = resolved_home_entry(value, home_dir, cwd) else {
+        return false;
+    };
+    let lowered = lowered_names(&relative);
+    canonical.is_file()
+        && hidden_content_read_allowed(&lowered)
+        && !narrow_guidance_rule_owns(&lowered)
+        && super::super::resolved_location_allowed(&canonical, home_dir, cwd, false)
+}
+
+/// The same screen for a path a caller has already resolved.
+///
+/// A structured read tool hands its target to the shared resolved-path gate
+/// rather than to a spelling screen, so the canonical path is all there is to
+/// read. That is the stronger starting point: a link has already been followed,
+/// so a name below the home directory cannot stand in for a store somewhere
+/// else. What is left is the same question the spelling screen asks, over the
+/// components the path has after the home prefix.
+pub(in crate::pretool) fn resolved_home_hidden_content_read(
+    canonical: &Path,
+    home_dir: Option<&str>,
+) -> bool {
+    let Some(raw_home) = home_dir else {
         return false;
     };
     let Ok(home) = std::fs::canonicalize(raw_home) else {
         return false;
     };
-    let Ok(canonical) = std::fs::canonicalize(&expanded) else {
+    let Ok(relative) = canonical.strip_prefix(&home) else {
         return false;
     };
-    // The spelled path must be the resolved one: a link anywhere below the
-    // home directory could dress another store, or the home directory
-    // itself, as an ordinary dot-directory.
-    let Some(relative) = expanded
-        .strip_prefix(raw_home)
-        .or_else(|_| expanded.strip_prefix(&home))
-        .ok()
-        .filter(|relative| home.join(relative) == canonical)
-    else {
-        return false;
-    };
-    let Some(first) = relative.components().next() else {
-        return false;
-    };
-    // Only the home entry itself is hidden: a dot-directory nested deeper
-    // (`~/.nvm/.cache`) is private state of the tool that owns it.
-    let mut names = relative.components().skip(1);
-    canonical.is_dir()
-        && first.as_os_str().to_string_lossy().starts_with('.')
-        && !names.any(|name| name.as_os_str().to_string_lossy().starts_with('.'))
-        && clears_store_screen(relative)
-        && super::super::resolved_location_allowed(&canonical, home_dir, cwd, false)
+    let lowered = lowered_names(relative);
+    // A listing asks a different question and has its own screen: this rule
+    // answers for the bytes of one file.
+    canonical.is_file()
+        && hidden_content_read_allowed(&lowered)
+        && !narrow_guidance_rule_owns(&lowered)
 }
 
 fn expanded(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> Option<PathBuf> {
@@ -142,36 +187,4 @@ fn expanded(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> Option<Pa
         Path::new(&root).join(value)
     };
     Some(path.components().collect())
-}
-
-/// No component below the home directory is a credential store, and no
-/// store sits directly below `.config` or `.local/share` on the way.
-fn clears_store_screen(path: &Path) -> bool {
-    let names: Vec<String> = path
-        .components()
-        .filter_map(|component| match component {
-            Component::Normal(name) => Some(name.to_string_lossy().to_ascii_lowercase()),
-            _ => None,
-        })
-        .collect();
-    !names.iter().enumerate().any(|(index, name)| {
-        let parent = index.checked_sub(1).map(|at| names[at].as_str());
-        let grandparent = index.checked_sub(2).map(|at| names[at].as_str());
-        let config_child =
-            parent == Some(".config") || (parent == Some("share") && grandparent == Some(".local"));
-        CREDENTIAL_STORE_NAMES.contains(&name.as_str())
-            || (harness_login_store(name) && !names[index + 1..].iter().any(|n| n == "plugins"))
-            || name.starts_with(".env")
-            || (config_child && NESTED_CREDENTIAL_STORE_NAMES.contains(&name.as_str()))
-    })
-}
-
-/// A harness directory other than the shared skill and hook trees. Its
-/// `plugins` subtree (`~/.zcode/cli/plugins/cache`) holds installed plugin
-/// code rather than the login, so listings below it are screened like any
-/// other dot-directory.
-fn harness_login_store(name: &str) -> bool {
-    crate::harness_config_names::HARNESS_DIRECTORIES.contains(&name)
-        && !HARNESS_SHARED_NAMES.contains(&name)
-        && !HARNESS_HOME_NAMES.contains(&name)
 }

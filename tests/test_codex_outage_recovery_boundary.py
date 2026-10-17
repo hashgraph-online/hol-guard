@@ -15,6 +15,8 @@ from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as flow
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
+from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
+from codex_plugin_scanner.guard.codex_hook_command_line import encode_hook_config_argument
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import TrustedCodexHookLaunch
 
 
@@ -27,6 +29,12 @@ def test_total_outage_rejects_unverified_recovery_action(
     case: str,
     launcher_trust: str,
 ) -> None:
+    # Exercise the Windows wire encoding on every platform. Authentication
+    # must retain the registered argument, not its decoded JSON spelling.
+    monkeypatch.setattr(
+        codex_adapter, "encode_hook_config_argument",
+        lambda value: encode_hook_config_argument(value, windows=True),
+    )
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -34,13 +42,13 @@ def test_total_outage_rejects_unverified_recovery_action(
         home_override_explicit=True,
     )
     codex_adapter.CodexHarnessAdapter().install(context)
-    config_json = codex_adapter._hook_command_parts(context)[3]
-    managed_config = json.loads(config_json)
+    config_argument = codex_adapter._hook_command_parts(context)[-1]
+    managed_config = json.loads(decode_bridge_config_argument(config_argument))
     config = {
         key: managed_config[key]
         for key in ("state_path", "fallback_command", "start_command", "query", "hook_timeouts", "manifest_path")
     }
-    config["config_json"] = config_json
+    config["config_json"] = config_argument
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()

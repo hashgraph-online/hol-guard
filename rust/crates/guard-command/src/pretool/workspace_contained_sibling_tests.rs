@@ -38,6 +38,92 @@ fn reason(harness: &str, home: &Path, cwd: &Path, command: &str) -> String {
     .reason_code
 }
 
+/// The stamped shell environment a harness sends with a command, naming the
+/// HOME the shell would expand `~` from.
+fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
+    guard_contracts::GuardExecutionEnvironmentV1 {
+        path: std::env::var("PATH").unwrap_or_default(),
+        environment_names: vec!["HOME".to_owned(), "PATH".to_owned()],
+        environment_digest: "0".repeat(64),
+        home: Some(home.to_string_lossy().into_owned()),
+        git_pager_disabled: false,
+        pager_disabled: false,
+        xdg_config_home: None,
+        git_config_no_system: false,
+        library_search_paths: Default::default(),
+    }
+}
+
+/// The same evaluation for a command that spells its directory from home.
+/// A harness stamps the shell's HOME on the way in, and `~` proves only when
+/// that HOME is the declared one. The runtime rebuilds the path context from
+/// that stamp, so the fixture's home has to arrive stamped: without it the
+/// runtime reads its own HOME, which is never a fixture's.
+fn home_result(
+    harness: &str,
+    home: &Path,
+    cwd: &Path,
+    command: &str,
+) -> guard_contracts::PreToolResultV1 {
+    let controls = controls();
+    let environment = environment(home);
+    crate::pretool::evaluate_pre_tool_envelope_with_execution_context(
+        harness,
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "bash", "tool_input": {"command": command}}),
+        Some(&controls),
+        None,
+        crate::pretool::PathContext {
+            home_dir: home.to_str(),
+            cwd: cwd.to_str(),
+            shell_home_matches: true,
+            cdpath_unset: false,
+            rustup_override_absent: false,
+            npm_config_inert: false,
+            ripgrep_config_absent: false,
+            psql_environment: Default::default(),
+        },
+        Some(&environment),
+    )
+}
+
+/// What the containment screens read besides the command itself, so a
+/// spelling that loses containment names the evidence that refused it
+/// rather than only the reason it ended with.
+fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
+    let Some(extensions) = result.command_extensions.as_ref() else {
+        return format!("{} without extension evidence", result.reason_code);
+    };
+    let rules: Vec<String> = extensions
+        .observations
+        .iter()
+        .map(|observation| {
+            format!(
+                "{} {:?}",
+                observation.rule_id, observation.uncertainty_reasons
+            )
+        })
+        .collect();
+    let permissions: Vec<String> = extensions
+        .permission_observations
+        .iter()
+        .map(|observation| {
+            format!(
+                "{} {:?}",
+                observation.permission_id, observation.uncertainty_reasons
+            )
+        })
+        .collect();
+    format!(
+        "{} action={:?} sensitive={} uncertain={} error={:?} rules={rules:?} permissions={permissions:?}",
+        result.reason_code,
+        result.action.action_type,
+        result.action.sensitive_target,
+        extensions.binding.uncertainty_count,
+        extensions.evaluation_error,
+    )
+}
+
 /// A main checkout, a linked worktree beside it, an unrelated clone and a
 /// plain directory, all below a private home.
 fn fixture() -> (PathBuf, PathBuf, PathBuf) {
@@ -86,6 +172,48 @@ fn fixture() -> (PathBuf, PathBuf, PathBuf) {
 
 fn contained(reason: &str) -> bool {
     reason.ends_with("_containment_required")
+}
+
+/// The home projection the containment screens start from, asked against this
+/// module's fixture. `as_absolute_cd` answers `None` for every spelling it
+/// cannot prove, so a home-spelled list that keeps its review says nothing
+/// about which proof refused it; the steps below name them one at a time.
+#[cfg(unix)]
+#[test]
+fn the_home_projection_answers_for_a_sibling_root() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    let context = crate::pretool::PathContext {
+        home_dir: home.to_str(),
+        cwd: main.to_str(),
+        shell_home_matches: true,
+        cdpath_unset: false,
+        rustup_override_absent: false,
+        npm_config_inert: false,
+        ripgrep_config_absent: false,
+        psql_environment: Default::default(),
+    };
+    assert_eq!(
+        crate::pretool::directory_targets::verified_cwd_target("~/projects/app-report", context)
+            .as_deref(),
+        tree.to_str(),
+        "verified target"
+    );
+    let model = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: "cd ~/projects/app-report && ./tools/report 2>&1 | tail -15".to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "test".into(),
+    })
+    .unwrap();
+    let projected = crate::pretool::workspace_contained::home_cd::as_absolute_cd(&model, context)
+        .expect("a projected list");
+    assert_eq!(
+        projected.text,
+        format!("cd {} && ./tools/report 2>&1 | tail -15", tree.display()),
+        "projected text"
+    );
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
 }
 
 #[test]
@@ -236,6 +364,53 @@ fn worktree_packages(main: &Path, tree: &Path) -> PathBuf {
     outside
 }
 
+/// Agents spell the same directory from home. The proof and the sink expand
+/// an unquoted leading `~` to the same root, so a build written that way is
+/// contained exactly as the absolute spelling of it is.
+#[cfg(unix)]
+#[test]
+fn a_home_spelled_sibling_root_runs_contained_from_that_root() {
+    let (home, main, tree) = fixture();
+    worktree_packages(&main, &tree);
+    for (written, spelled) in [
+        (
+            "cd ~/projects/app-report && ./tools/report 2>&1 | tail -15",
+            format!("cd {} && ./tools/report 2>&1 | tail -15", tree.display()),
+        ),
+        (
+            "cd ~/projects/app-report/scripts && ./report.sh 2>&1 | tail -15",
+            format!(
+                "cd {}/scripts && ./report.sh 2>&1 | tail -15",
+                tree.display()
+            ),
+        ),
+        (
+            "cd ~/projects/app-report/web && ./node_modules/.bin/report build",
+            format!(
+                "cd {}/web && ./node_modules/.bin/report build",
+                tree.display()
+            ),
+        ),
+    ] {
+        let absolute = home_result("omp", &home, &main, &spelled);
+        assert_eq!(
+            contained(&absolute.reason_code),
+            host(),
+            "{spelled}: {}",
+            evidence(&absolute)
+        );
+        let written_result = home_result("omp", &home, &main, written);
+        assert_eq!(
+            written_result.reason_code,
+            absolute.reason_code,
+            "{written}\n  written:  {}\n  absolute: {}",
+            evidence(&written_result),
+            evidence(&absolute)
+        );
+    }
+    let _ = std::fs::remove_dir_all(home.parent().unwrap());
+}
+
 #[cfg(unix)]
 #[test]
 fn one_command_below_a_sibling_root_runs_contained_from_that_root() {
@@ -310,6 +485,14 @@ fn a_command_below_a_sibling_root_reaching_outside_it_keeps_its_review() {
             "cd {}/web; ./node_modules/.bin/report build ../other/package.json",
             tree.display()
         ),
+        // Only an unquoted leading `~` expands to home. A quoted one is a
+        // literal directory name, and `~+`, `~-` and `~N` name the stack.
+        "cd '~/projects/app-report/scripts' && ./report.sh 2>&1 | tail -15".to_owned(),
+        "cd ~+/projects/app-report/scripts && ./report.sh 2>&1 | tail -15".to_owned(),
+        "cd ~1/projects/app-report/scripts && ./report.sh 2>&1 | tail -15".to_owned(),
+        // Home itself is no sibling root, and neither is a plain directory.
+        "cd ~ && ./report.sh 2>&1 | tail -15".to_owned(),
+        "cd ~/projects/plain && npm run build 2>&1 | tail -15".to_owned(),
     ] {
         assert!(
             !contained(&reason("omp", &home, &main, &command)),

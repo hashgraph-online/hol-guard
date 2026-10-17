@@ -255,6 +255,7 @@ pub(super) fn evaluate_package_request_artifact_uncached(
                 }
             }
         }
+        cloud_result = hold_unresolved_package_cwd(artifact, cloud_result);
         cache_reusable_cloud_validation_error(
             deps,
             workspace_id.as_deref(),
@@ -327,6 +328,7 @@ pub(super) fn evaluate_package_request_artifact_uncached(
                 fallback = with_cloud_auth_reconnect_copy_result(fallback);
             }
         }
+        fallback = hold_unresolved_package_cwd(artifact, fallback);
         if let Some(bundle_meta) = bundle_meta.as_ref() {
             if bundle_draft.decision != "monitor" && fallback.cache_status != "cloud-error" {
                 let mut cache_workspace_id = workspace_id.clone();

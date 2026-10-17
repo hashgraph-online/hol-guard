@@ -21,8 +21,8 @@
 //! queue (2674-2684), with its evidence queued or held. Every other outcome
 //! rolls the claim back and defers, so the call is answered "no native
 //! decision" with the approval unspent: a declined claim (which the proxy
-//! queues for re-approval, 2570-2582), a package intent the fresh resolve now
-//! finds (which the proxy sends through its package policy), and any lane,
+//! queues for re-approval, 2570-2582), a package intent the gate now finds
+//! (which the proxy sends through its package policy), and any lane,
 //! store, policy or evidence failure.
 //!
 //! A post-claim re-approval spends the claim, as the proxy's does, and then
@@ -53,8 +53,8 @@
 
 use super::store::{self, STORE_UNREADABLE};
 use super::{
-    admit, ask, encode, queue, resolve, settle, Answer, ClaimContext, Claimed, Resolved, Routed,
-    ASK_MODE, IDENTITY_FAILED,
+    admit, ask, encode, package, package_spend, queue, resolve, settle, Answer, ClaimContext,
+    Claimed, HeldClaim, Resolved, Routed, ASK_MODE, IDENTITY_FAILED,
 };
 use crate::approval_proof_op::{
     fresh_tool_approval, lookup_preserves_claim, postclaim_review_authorized, Disposition,
@@ -67,7 +67,7 @@ use crate::policy_store::PolicySnapshotStore;
 use guard_contracts::{ClaimEvidenceBindingV1, McpToolPostclaimQueryV1};
 use guard_policy_snapshot::policy_integrity::is_remote_policy_source;
 use rusqlite::{Connection, OpenFlags};
-use serde_json::Value;
+use serde_json::{Map, Value};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -95,7 +95,12 @@ pub(crate) fn claim(
         .mcp_relay_claims()
         .take(&request.ticket, started)
         .ok_or(CLAIM_UNKNOWN)
-        .and_then(|context| spend(request, &context, policy_store, started));
+        .and_then(|held| match held {
+            HeldClaim::Tool(context) => spend(request, &context, policy_store, started),
+            HeldClaim::Package(context) => {
+                package_spend::spend_package(request, context, policy_store, started)
+            }
+        });
     encode(answer)
 }
 
@@ -121,25 +126,7 @@ fn spend(
     }
     let (state, key) = store::published_integrity(&admitted.binding)?;
     let pending = &context.claimed.pending;
-    // `_claim_integrity_evidence` for the one pending row.
-    let source = pending.get("source").and_then(Value::as_str);
-    if source == Some("policy-bundle") {
-        return Err(CLAIM_BUNDLE);
-    }
-    let local_once = pending
-        .get("approval_id")
-        .and_then(Value::as_str)
-        .is_some_and(|id| !id.is_empty());
-    let policy = !local_once && source.is_some() && !is_remote_policy_source(source);
-    let key_bytes: &[u8] = &key.key;
-    let evidence = ClaimEvidence {
-        integrity_state: policy.then_some(&state),
-        integrity_key: policy.then_some(key_bytes),
-        integrity_key_id: policy.then_some(key.key_id.as_str()),
-        local_once_key: local_once.then_some(key_bytes),
-        local_once_key_id: local_once.then_some(key.key_id.as_str()),
-        policy_bundle_identities: None,
-    };
+    let evidence = integrity_evidence(&[pending], &state, key)?;
     // `claim_evidence_binding(connection, bundle=False)`.
     let binding = ClaimEvidenceBindingV1::default();
     let connection = open_for_claim(&request.guard_home)?;
@@ -195,12 +182,57 @@ struct Requeue {
 /// Whether a lane admission is the very one a decision was made under: the
 /// same workspace and the same published snapshot and binding, not merely
 /// equal ones, so any republish in between counts as a change.
-fn unchanged<S, B>(held: (&str, &Arc<S>, &Arc<B>), now: (&str, &Arc<S>, &Arc<B>)) -> bool {
+pub(super) fn unchanged<S, B>(
+    held: (&str, &Arc<S>, &Arc<B>),
+    now: (&str, &Arc<S>, &Arc<B>),
+) -> bool {
     held.0 == now.0 && Arc::ptr_eq(held.1, now.1) && Arc::ptr_eq(held.2, now.2)
 }
 
+/// `_claim_integrity_evidence` (`store_policy.py:1395`) for the rows one claim
+/// spends: the local-once key when any row is a one-shot approval, and the
+/// published integrity state and key when any row is local saved policy.
+///
+/// A `policy-bundle` row defers the whole claim, as the tool lane's does: the
+/// resident derives no bundle identities, so a claim that needs them has no
+/// evidence to offer.
+pub(super) fn integrity_evidence<'a>(
+    pendings: &[&Map<String, Value>],
+    state: &'a Value,
+    key: &'a crate::policy_store::policy_store_direct_lane::DirectLaneIntegrityKey,
+) -> Result<ClaimEvidence<'a>, &'static str> {
+    fn source(pending: &Map<String, Value>) -> Option<&str> {
+        pending.get("source").and_then(Value::as_str)
+    }
+    fn one_shot(pending: &Map<String, Value>) -> bool {
+        pending
+            .get("approval_id")
+            .and_then(Value::as_str)
+            .is_some_and(|id| !id.is_empty())
+    }
+    if pendings
+        .iter()
+        .any(|pending| source(pending) == Some("policy-bundle"))
+    {
+        return Err(CLAIM_BUNDLE);
+    }
+    let local_once = pendings.iter().copied().any(one_shot);
+    let policy = pendings.iter().any(|pending| {
+        !one_shot(pending) && source(pending).is_some() && !is_remote_policy_source(source(pending))
+    });
+    let key_bytes: &[u8] = &key.key;
+    Ok(ClaimEvidence {
+        integrity_state: policy.then_some(state),
+        integrity_key: policy.then_some(key_bytes),
+        integrity_key_id: policy.then_some(key.key_id.as_str()),
+        local_once_key: local_once.then_some(key_bytes),
+        local_once_key_id: local_once.then_some(key.key_id.as_str()),
+        policy_bundle_identities: None,
+    })
+}
+
 /// The store, writable, at a schema the resident reads.
-fn open_for_claim(guard_home: &str) -> Result<Connection, &'static str> {
+pub(super) fn open_for_claim(guard_home: &str) -> Result<Connection, &'static str> {
     let connection = Connection::open_with_flags(
         Path::new(guard_home).join(STORE_FILE_NAME),
         OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -223,15 +255,21 @@ fn after_claim(
     policy_store: &PolicySnapshotStore,
     started: Instant,
 ) -> Result<Spent, &'static str> {
+    // A claim is held only for a call the package gate found no intent in, so
+    // a call it now reads as a package request rolls the claim back rather
+    // than answering it off the tool policy alone.
+    if package::package_gate(&context.request)?.is_some() {
+        return Err(package::PACKAGE_CLAIMED);
+    }
     // The fresh resolve only reads, as on the decision's read-only snapshot.
     connection
         .execute_batch("PRAGMA query_only = ON")
         .map_err(|_| STORE_UNREADABLE)?;
-    let fresh = resolve(&context.request, &context.admitted, Some(connection));
+    let fresh = resolve(&context.request, &context.admitted, Some(connection), None);
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;
-    let fresh = fresh?;
+    let (fresh, _) = fresh?;
     let (routed, append) = postclaim(&context.claimed, &fresh)?;
     let routed = match routed {
         // `_queue_approval_center_response`, straight to the queue: the
@@ -320,7 +358,9 @@ fn postclaim(claimed: &Claimed, fresh: &Resolved) -> Result<(Routed, Vec<Value>)
             // A claimed saved approval is already saved policy.
             remember: false,
         },
-        Some("stored_block") => Routed::StoredBlock,
+        Some("stored_block") => Routed::StoredBlock {
+            package_request: false,
+        },
         Some("terminal") => Routed::Terminal {
             policy_action: disposition["policy_action"]
                 .as_str()

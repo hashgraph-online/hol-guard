@@ -67,9 +67,25 @@ pub(crate) fn contract_value(contract: &ScopeContract) -> Value {
         "exact_action_persistence_eligible": contract.exact_action_persistence_eligible,
         "once_only_reason": contract.once_only_reason,
         "exact_context_token": contract.exact_context_token,
+        "execution_approval": {
+            "schema": "guard.execution-approval.v1",
+            "can_record_decision": !contract.block_scopes.is_empty(),
+            "can_run_once": !contract.allow_scopes.is_empty()
+                && !contract.restrictions.contains(&"retry_cannot_reuse_approval"),
+            "can_persist_exact_version": !contract.allow_scopes.is_empty()
+                && contract.exact_action_persistence_eligible,
+            "delivery_reason": if contract.restrictions.contains(&"retry_cannot_reuse_approval") {
+                Some("execution_binding_unavailable")
+            } else {
+                None
+            },
+        },
     })
 }
 
 #[cfg(test)]
 #[path = "approval_scope_vectors_tests.rs"]
 mod vectors_tests;
+
+#[cfg(test)]
+pub(crate) mod fixture_upgrade;

@@ -116,6 +116,10 @@ function declaredScopesForAction(
   item: GuardApprovalRequest,
   action: ApprovalResolutionAction,
 ): DecisionScope[] | null {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") &&
+      item.exact_action_persistence_eligible !== true) {
+    return [];
+  }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
@@ -134,6 +138,9 @@ export function requestSupportsScope(
   action: ApprovalResolutionAction,
   scope: DecisionScope,
 ): boolean {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+    return false;
+  }
   const declaredScopes = declaredScopesForAction(item, action);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
@@ -157,7 +164,10 @@ export function scopeChoicesForRequest(
     item,
     action,
     action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES,
-  );
+  ).map((choice) => action === "allow" && choice.value === "artifact" &&
+    item.scope_restrictions?.includes("retry_cannot_reuse_approval")
+      ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." }
+      : choice);
 }
 
 export const ADVANCED_SCOPE_VALUES = new Set<DecisionScope>(["global"]);
@@ -267,6 +277,11 @@ export function taskCapabilityExplanation(item: GuardApprovalRequest): string | 
   if (item.exact_action_persistence_eligible === true) {
     return null;
   }
+  if (item.scope_restrictions?.includes("retry_cannot_reuse_approval")) {
+    // Retry guidance and the scope controls explain unavailable delivery.
+    // The normal once-only explanation would falsely promise usable consent.
+    return null;
+  }
   if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
     // Task access only applies to GitHub workflow requests. For everything else
     // the useful question is why "Always allow" is missing.
@@ -320,6 +335,10 @@ export function buildDecisionPayload(input: {
     normalizedScope,
     input.persistExactAction === true,
   );
+  if (input.action === "allow" && input.item.scope_restrictions?.includes("retry_cannot_reuse_approval") &&
+      !persistExactAction) {
+    throw new Error("Guard cannot bind this app's retry to the reviewed action. A one-time approval is unavailable.");
+  }
   return {
     requestId: input.item.request_id,
     action: input.action,

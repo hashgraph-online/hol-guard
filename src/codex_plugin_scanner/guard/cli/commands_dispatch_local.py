@@ -709,6 +709,10 @@ def _run_guard_install_command(
         return 2
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
+    if not bool(getattr(args, "dry_run", False)):
+        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
     _emit("install", payload, getattr(args, "json", False))
     return 0
 

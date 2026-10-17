@@ -208,6 +208,12 @@ pub(crate) fn serve_managed(
 ) -> Result<(), String> {
     MANAGED_SHUTDOWN_REQUESTED.store(false, Ordering::Release);
     let startup_started = crate::resident_diagnostics::enabled().then(Instant::now);
+    // Decode the packaged command program while the executable self-check
+    // runs. Policy admission waits on the same OnceLock, so nothing uses the
+    // program before the identity check below has passed.
+    thread::spawn(|| {
+        let _ = guard_command::native_command_program::packaged_command_program();
+    });
     if generation == 0 || owner_process_id == 0 || runtime_digest()? != expected_digest {
         return Err("native_resident_runtime_identity_mismatch".to_owned());
     }

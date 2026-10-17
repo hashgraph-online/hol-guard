@@ -81,7 +81,12 @@ fn recursive_listing_still_screens_agent_home_entries() {
         let home = home();
         write(home.join(".agent").join(entry), "Inert synthetic fixture\n");
         assert_ne!(shell(&home, "ls -R ~/.agent"), "allow", "{entry}");
-        assert_ne!(
+        assert_ne!(shell(&home, "find ~/.agent -type f"), "allow", "{entry}");
+        // A recursive listing prints every name it reaches, which is why the
+        // entry above holds it back. A name pattern prints only the paths it
+        // selects, and one that could select a credential is refused before
+        // the walk is reached, so the entry cannot appear in the output.
+        assert_eq!(
             shell(&home, "find ~/.agent -name SKILL.md"),
             "allow",
             "{entry}"

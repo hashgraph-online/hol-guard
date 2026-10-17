@@ -34,6 +34,7 @@ _OPTIONAL_FIELDS = frozenset(
         "command_extensions",
         "origin_authentication",
         "execution_intent_digest",
+        "review_anchor_digest",
         "prompt_risk_classes",
         "business_review_binding",
     }
@@ -190,7 +191,12 @@ def _validate_receipt_policy(receipt: dict[str, object]) -> bool:
     )
     if reason_code is None:
         return False
-    for field in ("origin_authentication", "execution_intent_digest", "business_review_binding"):
+    for field in (
+        "origin_authentication",
+        "execution_intent_digest",
+        "review_anchor_digest",
+        "business_review_binding",
+    ):
         if field in receipt:
             digest = receipt[field]
             if not isinstance(digest, str) or _HEX64.fullmatch(digest) is None:

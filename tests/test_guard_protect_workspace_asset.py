@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_ASSET = Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/fleet-workspace.js"
-_DETECTION_ASSET = (
-    Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks/harness-detection.js"
-)
+from tests.dashboard_bundle_support import CHUNKS_DIR, dashboard_chunk
+
+_CHUNKS = CHUNKS_DIR
+_ASSET = dashboard_chunk("fleet-workspace")
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"
@@ -15,8 +15,17 @@ _RECOVERY_PARTS_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protec
 _COPY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery-copy.ts"
 
 
+def _detection_asset() -> Path:
+    # Rollup names a shared chunk after one of its modules, so find it by content.
+    matches = [
+        path for path in sorted(_CHUNKS.glob("*.js")) if "function useHarnessDetection(" in path.read_text("utf-8")
+    ]
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
 def _source() -> str:
-    return "\n".join(path.read_text(encoding="utf-8") for path in (_ASSET, _DETECTION_ASSET))
+    return "\n".join(path.read_text(encoding="utf-8") for path in (_ASSET, _detection_asset()))
 
 
 def _authoritative_source() -> str:

@@ -328,3 +328,65 @@ fn a_body_the_shell_expands_runs_or_redirects_elsewhere_stays_a_use() {
         assert_eq!(project(&command), None, "{command:?}");
     }
 }
+
+#[test]
+fn a_fresh_directory_expanded_after_an_and_chain_reads_as_the_private_temp() {
+    let t = TEMPORARY_VALUE;
+    for (command, expected) in [
+        (
+            "tmp=$(mktemp -d) && python3 todo.py --file \"$tmp/tasks.json\" add \"Test task\" && python3 todo.py --file \"$tmp/tasks.json\" list && python3 todo.py --file \"$tmp/tasks.json\" done 1 && python3 todo.py --file \"$tmp/tasks.json\" delete 1 && python3 todo.py --file \"$tmp/tasks.json\" list".to_owned(),
+            format!("tmp={t} && python3 todo.py --file \"$TMPDIR/tasks.json\" add \"Test task\" && python3 todo.py --file \"$TMPDIR/tasks.json\" list && python3 todo.py --file \"$TMPDIR/tasks.json\" done 1 && python3 todo.py --file \"$TMPDIR/tasks.json\" delete 1 && python3 todo.py --file \"$TMPDIR/tasks.json\" list"),
+        ),
+        (
+            "D=\"$(mktemp -d)\" && node src/cli.js --out ${D}/o.json".to_owned(),
+            format!("D=\"{t}\" && node src/cli.js --out ${{TMPDIR}}/o.json"),
+        ),
+    ] {
+        assert_eq!(project(&command).as_deref(), Some(expected.as_str()), "{command}");
+    }
+}
+
+#[test]
+fn a_fresh_directory_expanded_outside_a_failing_chain_stays_opaque() {
+    for command in [
+        // The expansion runs even when `mktemp` failed.
+        "tmp=$(mktemp -d); python3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) || python3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) &&\npython3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) & python3 todo.py --file \"$tmp/t.json\" list",
+        "export tmp=$(mktemp -d) && python3 todo.py --file \"$tmp/t.json\" list",
+        // Programs read the upper-case temporary names from the environment.
+        "TMP=$(mktemp -d) && python3 todo.py --file \"$TMP/t.json\" list",
+        "export TEMP=$(mktemp -d); ls",
+        "ls && tmp=$(mktemp -d) && python3 todo.py --file \"$tmp/t.json\" list",
+        // A rebound, defaulted, quoted or escaped name.
+        "tmp=$(mktemp -d) && tmp=/etc && rm -rf \"$tmp\"",
+        "tmp=$(mktemp -d) && read tmp && rm -rf \"$tmp\"",
+        "tmp=$(mktemp -d) && rm -rf ${tmp:-/etc}",
+        "tmp=$(mktemp -d) && echo '$tmp' && ls \"$tmp\"",
+        "tmp=$(mktemp -d) && echo \\$tmp && ls \"$tmp\"",
+        "tmp=$(mktemp -d) && rm -rf \"$tmp/../x\"",
+        // A pipeline runs the assignment in a subshell.
+        "tmp=$(mktemp -d) | cat \"$tmp/etc/passwd\"",
+        "tmp=$(mktemp -d) && ls | cat \"$tmp/x\"",
+        // Quote removal forms the name, or another expansion builds it.
+        "tmp=$(mktemp -d) && read t\\mp && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && unset t'mp' && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && \"tmp\"=/etc && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && t''mp=/etc && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && x=t && un''set ${x}mp && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && cat \"$HOME/$tmp\"",
+        "tmp=$(mktemp -d) && trap 'rm -rf /' EXIT && cat \"$tmp/x\"",
+        "tmp=$(mktemp -d) && printf -v other x && cat \"$tmp/x\"",
+        // Words that set or move without naming the variable.
+        "tmp=$(mktemp -d) && eval x && ls \"$tmp\"",
+        "tmp=$(mktemp -d) && source ./env && ls \"$tmp\"",
+        "tmp=$(mktemp -d) && . ./env && ls \"$tmp\"",
+        "tmp=$(mktemp -d) && cd \"$tmp\" && ls",
+        "tmp=$(mktemp -d) && (ls \"$tmp\")",
+        "tmp=$(mktemp -d) && ls `echo $tmp`",
+        "tmp=$(mktemp -d) && ls \"$tmp\" 2>&1",
+    ] {
+        assert_eq!(project(command), None, "{command}");
+    }
+}

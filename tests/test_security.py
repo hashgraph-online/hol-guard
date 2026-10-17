@@ -1,5 +1,6 @@
 """Tests for security checks."""
 
+import json
 import tempfile
 from pathlib import Path
 
@@ -10,11 +11,14 @@ from codex_plugin_scanner.checks.security import (
     _scan_all_files,
     check_license,
     check_mcp_transport_security,
+    check_no_approval_bypass_defaults,
     check_no_dangerous_mcp,
     check_no_hardcoded_secrets,
     check_security_md,
     run_security_checks,
 )
+from codex_plugin_scanner.models import ScanOptions
+from codex_plugin_scanner.scanner import scan_plugin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -541,6 +545,144 @@ class TestScanAllFiles:
 
         assert result.passed is False
         assert result.findings[0].rule_id == "SCAN_RESOURCE_BUDGET_EXCEEDED"
+
+
+class TestNoApprovalBypassDefaults:
+    def test_flags_shipped_config(self, tmp_path: Path):
+        """A shipped config that sets the sandbox default is reported on its path."""
+        (tmp_path / ".codex").mkdir()
+        (tmp_path / ".codex" / "config.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.points == 0
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == ".codex/config.toml"
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            (
+                "docs/rules/agent-shell.md",
+                "- Codex: `--full-auto`, sandbox `danger-full-access`, or `safety-strategy: unsafe`;\n",
+            ),
+            ("CHANGELOG.md", "Codex runs with sandbox `danger-full-access` are now reported.\n"),
+            ("README.md", "```\nexample\n```\n\nNever ship `danger-full-access` as a default.\n"),
+            ("docs/setup.md", "The sandbox modes are listed below,\n    and `danger-full-access` is one of them.\n"),
+            ("README.md", "Never enable `danger-full-access` by default.\n"),
+            ("docs/setup.md", "Using `danger-full-access` is risky; keep the default sandbox.\n"),
+            ("README.md", "Avoid using `danger-full-access`.\n"),
+            ("README.md", "Do not enable `danger-full-access`.\n"),
+            ("README.md", "Use the default sandbox and never enable `danger-full-access`.\n"),
+            ("docs/setup.md", "> ```\n> example\n> ```\n\nThe modes include `danger-full-access`.\n"),
+        ],
+    )
+    def test_documentation_that_names_the_value_passes(self, tmp_path: Path, path: str, content: str):
+        """Prose that only names the value in an inline code span is not reported."""
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is True
+        assert result.points == 3
+
+    @pytest.mark.parametrize(
+        ("path", "content"),
+        [
+            ("docs/setup.md", '```toml\nsandbox_mode = "danger-full-access"\n```\n'),
+            ("docs/setup.md", "```\n`danger-full-access`\n```\n"),
+            ("docs/setup.md", "````\n```\nsandbox `danger-full-access`\n````\n"),
+            ("docs/setup.md", "```\nunclosed fence\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "Intro.\n\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "# Modes\n    sandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> sandbox `danger-full-access`\n> ```\n"),
+            ("docs/setup.md", "- ```\n  sandbox `danger-full-access`\n  ```\n"),
+            ("docs/setup.md", "- outer\n  - inner\n    ```bash\n    sandbox `danger-full-access`\n    ```\n"),
+            ("docs/setup.md", "```\n    ```\nsandbox `danger-full-access`\n```\n"),
+            ("docs/setup.md", "```\n> ```\nsandbox `danger-full-access`\n"),
+            ("docs/setup.md", "> ```\n> > ```\n> sandbox `danger-full-access`\n"),
+            ("README.md", "Use `danger-full-access` to run without approval prompts.\n"),
+            ("README.md", "Enable `danger-full-access` instead of `workspace-write`.\n"),
+            ("README.md", "To avoid approval prompts, use `danger-full-access`.\n"),
+            ("README.md", "Do not use the default sandbox, select `danger-full-access`.\n"),
+            ("README.md", "For setup, disable the Codex sandbox by selecting `danger-full-access`.\n"),
+            ("docs/setup.md", "Set `sandbox_mode` to `danger-full-access` to disable the sandbox.\n"),
+            ("docs/setup.md", "Use `danger-full-access` for this project.\n"),
+            ("docs/setup.md", '1. ```toml\n   sandbox_mode = "danger-full-access"\n   ```\n'),
+            ("docs/setup.md", "Run `codex --sandbox` `danger-full-access`.\n"),
+            ("docs/setup.md", "Set `sandbox_mode =` `danger-full-access`.\n"),
+            ("docs/setup.md", "--sandbox" + " " * 300 + "`danger-full-access`\n"),
+            ("docs/setup.md", "sandbox_mode =" + " " * 300 + "`danger-full-access`\n"),
+            ("docs/setup.md", "Start with `codex --sandbox danger-full-access`.\n"),
+            ("docs/setup.md", "Start with --sandbox `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode: `danger-full-access`.\n"),
+            ("docs/setup.md", "Set sandbox_mode = `danger-full-access`.\n"),
+            ("docs/setup.md", "Set the sandbox to danger-full-access.\n"),
+            ("docs/setup.md", "sandbox ``danger-full-access``\n"),
+            ("docs/setup.md", 'Use `approval_policy = "never"`.\n'),
+            ("docs/setup.md", 'approval_policy =\n"never"\n'),
+            ("docs/setup.md", 'sandbox `danger-full-access` with `approvalMode: "bypass"`\n'),
+            ("skills/review/SKILL.md", "Run with sandbox `danger-full-access`.\n"),
+            ("commands/deploy.md", "Use sandbox `danger-full-access`.\n"),
+            ("AGENTS.md", "Use sandbox `danger-full-access`.\n"),
+            (".claude/rules/shell.md", "Use sandbox `danger-full-access`.\n"),
+            ("system-prompt.md", "Use sandbox `danger-full-access`.\n"),
+        ],
+    )
+    def test_documentation_that_sets_or_instructs_still_fails(self, tmp_path: Path, path: str, content: str):
+        """Code, settings, flags, prose without a code span and instruction files are still reported."""
+        target = tmp_path / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(content, encoding="utf-8")
+
+        result = check_no_approval_bypass_defaults(tmp_path)
+
+        assert result.passed is False
+        assert result.findings[0].rule_id == "RISKY_APPROVAL_DEFAULT"
+        assert result.findings[0].file_path == path
+
+    def test_many_mentions_on_one_line_stay_linear(self, tmp_path: Path):
+        """A long line full of harmless mentions is scanned without copying its prefix per match."""
+        (tmp_path / "README.md").write_text("`danger-full-access` " * 50_000 + "\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
+
+    def test_instruction_files_are_strict_and_the_directory_is_still_scanned(self, tmp_path: Path):
+        """A manifest-declared instruction file is reported, and so is a config elsewhere in the directory."""
+        (tmp_path / "boot.md").write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+        (tmp_path / "settings.toml").write_text('sandbox_mode = "danger-full-access"\n', encoding="utf-8")
+
+        before = check_no_approval_bypass_defaults(tmp_path)
+        assert [finding.file_path for finding in before.findings] == ["settings.toml"]
+        result = check_no_approval_bypass_defaults(tmp_path, instruction_files=(tmp_path / "./boot.md",))
+
+        assert sorted(finding.file_path or "" for finding in result.findings) == ["boot.md", "settings.toml"]
+
+    def test_gemini_context_file_is_read_as_instructions(self, tmp_path: Path):
+        """A Gemini extension's manifest-declared context file gets no documentation exception."""
+        manifest = {"name": "ext", "version": "1.0.0", "contextFileName": "boot.md"}
+        (tmp_path / "gemini-extension.json").write_text(json.dumps(manifest), encoding="utf-8")
+        (tmp_path / "boot.md").write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+
+        result = scan_plugin(tmp_path, ScanOptions(ecosystem="gemini", cisco_skill_scan="off"))
+
+        flagged = [finding.file_path for finding in result.findings if finding.rule_id == "RISKY_APPROVAL_DEFAULT"]
+        assert flagged == ["boot.md"]
+
+    def test_declared_files_are_read_as_instructions(self, tmp_path: Path):
+        """A file an ecosystem declares as package content gets no documentation exception."""
+        target = tmp_path / "guide.md"
+        target.write_text("Supported modes include `danger-full-access`.\n", encoding="utf-8")
+
+        assert check_no_approval_bypass_defaults(tmp_path).passed is True
+        result = check_no_approval_bypass_defaults(tmp_path, (target,))
+
+        assert result.passed is False
+        assert result.findings[0].file_path == "guide.md"
 
 
 class TestRunSecurityChecks:

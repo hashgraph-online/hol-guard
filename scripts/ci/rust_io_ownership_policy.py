@@ -124,6 +124,8 @@ _TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter.py",
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Same correlation-only digest for the Composio routing op.
+        "src/codex_plugin_scanner/guard/native_composio_role.py",
         "src/codex_plugin_scanner/guard/native_shell_request_authority.py",
         # Same correlation-only digest for the GitHub workflow prepare op.
         "src/codex_plugin_scanner/guard/native_github_workflow.py",
@@ -216,6 +218,9 @@ _TRANSPORT_DECODE_PATHS: Final = frozenset(
         "src/codex_plugin_scanner/guard/native_hook_adapter_wire.py",
         # Decodes the bounded resident GitHub CLI classification envelope.
         "src/codex_plugin_scanner/guard/native_github_cli.py",
+        # Decodes the bounded resident Composio routing envelope; the role is
+        # reported as the runtime named it and never re-derived.
+        "src/codex_plugin_scanner/guard/native_composio_role.py",
         # Decodes the bounded resident GitHub workflow prepare envelope; the
         # record is strictly validated and never reinterpreted.
         "src/codex_plugin_scanner/guard/native_github_workflow.py",

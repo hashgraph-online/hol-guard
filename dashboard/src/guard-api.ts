@@ -97,6 +97,7 @@ import {
   isGuardDemoMode
 } from "./guard-demo";
 import { normalizeApprovalExtensionRecommendation } from "./approval-extension-recommendation";
+import { observeDashboardBuild } from "./dashboard-build";
 
 const GUARD_TOKEN_PARAM = "guard-token";
 const GUARD_DAEMON_PARAM = "guardDaemon";
@@ -458,7 +459,7 @@ async function fetchGuardDaemonCandidateJson(
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload: unknown = await response.json();
     return { response, payload };
   } finally {
@@ -678,7 +679,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
     throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
   }
-  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+  let response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
@@ -688,7 +689,7 @@ export async function prepareGuardDaemonReconnect(): Promise<GuardDaemonReconnec
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
     if (refreshedToken && refreshedToken !== guardToken) {
       saveGuardToken(refreshedToken);
-      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+      response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}",
@@ -998,6 +999,14 @@ function withGuardAuth(init?: RequestInit): RequestInit | undefined {
   return withGuardAuthForToken(init, readGuardToken());
 }
 
+// Every daemon response names the dashboard bundle it serves; note it so a tab
+// left running an older bundle after a Guard update can load the current one.
+async function daemonFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  observeDashboardBuild(response);
+  return response;
+}
+
 function withGuardAuthForToken(
   init: RequestInit | undefined,
   guardToken: string | null,
@@ -1016,7 +1025,7 @@ function withGuardAuthForToken(
 export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit): Promise<Response> {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
-  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
   if (response.status !== 401 || !guardToken || input instanceof Request) {
     return response;
   }
@@ -1025,7 +1034,7 @@ export async function fetchWithGuardAuth(input: RequestInfo, init?: RequestInit)
     return response;
   }
   saveGuardToken(refreshedGuardToken);
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
+  return daemonFetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 
 export async function fetchCommandActivityApi(input: RequestInfo, init?: RequestInit): Promise<Response> {
@@ -1110,7 +1119,7 @@ function parseDashboardSessionToken(payload: unknown): string | null {
 
 async function refreshGuardDashboardSession(guardToken: string, signal?: AbortSignal | null): Promise<string | null> {
   try {
-    const response = await fetch(guardApiInput("/v1/initialize"), {
+    const response = await daemonFetch(guardApiInput("/v1/initialize"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -3093,7 +3102,7 @@ export async function revokeApprovalGateCooldown(password: string, totpCode?: st
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+  const response = await daemonFetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
     method: "POST",
     headers: {
       "Content-Type": "application/json",

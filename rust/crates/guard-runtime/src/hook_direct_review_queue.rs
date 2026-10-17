@@ -90,7 +90,13 @@ pub(super) fn answer(
     token: &Result<String, &'static str>,
 ) -> Result<Value, HookDirectDefer> {
     let facts = facts(context, result).ok_or(HookDirectDefer::ReviewQueue)?;
-    let review_binding = crate::native_exact_action_op::review_binding_for(exact, receipt);
+    let review_binding = crate::native_exact_action_op::review_binding_for(
+        exact,
+        receipt,
+        context
+            .recorded_payload
+            .get(crate::hook_direct::EXECUTION_ENVIRONMENT_FIELD),
+    );
     let request_id = request_id().ok_or(HookDirectDefer::ReviewQueue)?;
     let input = RequestInput {
         harness: context.harness,

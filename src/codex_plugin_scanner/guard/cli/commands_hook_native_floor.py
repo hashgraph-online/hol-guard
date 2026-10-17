@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ..action_lattice import coerce_guard_action
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..local_cli_hook import local_cli_grant_action
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
@@ -42,6 +43,7 @@ def native_pre_tool_floor_action(
     guard_home: Path,
     cwd: Path | None,
     home_dir: Path | None,
+    execution_environment: Mapping[str, object] | None = None,
 ) -> GuardAction | None:
     if event_name != "PreToolUse" or command is None:
         return None
@@ -51,8 +53,22 @@ def native_pre_tool_floor_action(
             guard_home=guard_home,
             cwd=cwd,
             home_dir=home_dir,
+            execution_environment=execution_environment,
         )
     )
+
+
+def _stamped_execution_environment(payload: Mapping[str, object]) -> Mapping[str, object] | None:
+    """The shell environment the outer hook bridge stamped on this event.
+
+    The floor runs where the hook worker runs, not in the shell the command
+    is about to run in, so the variables it can read are its own. The stamp
+    is what the bridge took in that shell, and the rules that answer for an
+    inherited variable are proven from it or not at all.
+    """
+
+    stamped = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
+    return stamped if isinstance(stamped, Mapping) else None
 
 
 def _ensure_native_resident_verifier(
@@ -101,6 +117,7 @@ def native_pre_tool_floor(
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
+        execution_environment=_stamped_execution_environment(payload),
     )
 
 

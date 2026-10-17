@@ -77,9 +77,28 @@ export function detailCatalogHelper(surface: LocalCliItem["surface"]): string {
     return "Choose Allow, Ask, or Deny for each tool. Policy follows Guard's existing rules.";
   }
   if (surface === "package-scripts") {
-    return "Same settings as built-in tools. Nested scripts stay indented under their prefix.";
+    return "Recommended keeps Guard's usual review. Allow or Block applies to that script in this project. Scripts that share a prefix, such as build:web, sit together.";
   }
-  return "Same settings as built-in tools. Recommended is the safe default.";
+  return "Recommended keeps Guard's usual review. Allow or Block applies to that command from this file. Pipes, wrappers, and destructive commands stay under Guard's usual rules.";
+}
+
+export function commandBrowserCopy(surface: LocalCliItem["surface"] | undefined): {
+  searchLabel: string;
+  searchPlaceholder: string;
+  catalogOrder: string;
+  units: string;
+  unit: (count: number) => string;
+} {
+  if (surface === "mcp") {
+    return { searchLabel: "Find a tool", searchPlaceholder: "Find a tool by name or description", catalogOrder: "Server order",
+      units: "tools", unit: (count) => (count === 1 ? "tool" : "tools") };
+  }
+  if (surface === "package-scripts") {
+    return { searchLabel: "Find a script", searchPlaceholder: "Find a script by name or what it runs", catalogOrder: "package.json order",
+      units: "scripts", unit: (count) => (count === 1 ? "script" : "scripts") };
+  }
+  return { searchLabel: "Find a command", searchPlaceholder: "Find a command by name or usage", catalogOrder: "Help order",
+    units: "commands", unit: (count) => (count === 1 ? "command" : "commands") };
 }
 
 export function bulkPolicyCopy(surface: LocalCliItem["surface"]): { groupLabel: string; mixedCopy: string } {

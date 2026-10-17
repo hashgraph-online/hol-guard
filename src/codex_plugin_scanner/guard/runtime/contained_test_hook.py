@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import shlex
 import stat
 import sys
@@ -13,7 +14,13 @@ from pathlib import Path
 
 from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
-from .contained_command_prefix import _assignments_applied, _peel_for_receipt, _split_command_prefix
+from .contained_authority import settled_authority
+from .contained_command_prefix import (
+    _assignments_applied,
+    _peel_for_receipt,
+    _split_command_prefix,
+    peel_timeout_clock,
+)
 from .contained_run_directory import as_directory_change, as_run_root
 from .contained_wrapper import anchored_sibling_root, bounded_output, peel_contained_wrapper, sibling_project_root
 from .restricted_inline_eval import prepare_restricted_inline_eval, run_restricted_inline_eval
@@ -28,6 +35,7 @@ from .restricted_pytest_model import (
     GIT_READ_ONLY_PROFILE_VERSION,
     NODE_BUILD_OUTPUT_PROFILE_VERSION,
     NODE_TEST_READ_ONLY_PROFILE_VERSION,
+    PYTEST_INVALID_COMMAND_REASON_CODE,
     PYTEST_READ_ONLY_PROFILE_VERSION,
     VITEST_READ_ONLY_PROFILE_VERSION,
 )
@@ -35,11 +43,51 @@ from .restricted_pytest_validation import _path_is_within
 from .restricted_workspace import receipt_matches, run_workspace_contained
 
 _MAX_REQUEST_BYTES = 1_048_576
-_FAILURE = "contained_test_authorization_failed"
+_FAILURE = "contained_run_authorization_failed"
+_PYTEST_EXECUTABLE_NAMES = frozenset({"pytest", "py.test", "pytest.exe", "py.test.exe"})
+_PYTHON_EXECUTABLE = re.compile(r"(?i)^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$")
 
 
 def _reject() -> RestrictedPytestError:
-    return RestrictedPytestError(_FAILURE, "Guard could not authorize this protected test execution.")
+    return RestrictedPytestError(_FAILURE, "Guard could not authorize this contained run.")
+
+
+def _command_names_pytest(command: list[str]) -> bool:
+    """Whether `command` is a pytest executable or a `python -m pytest` form."""
+    if not command:
+        return False
+    name = command[0].replace("\\", "/").rsplit("/", 1)[-1].lower()
+    if name in _PYTEST_EXECUTABLE_NAMES:
+        return True
+    if _PYTHON_EXECUTABLE.fullmatch(name) is None:
+        return False
+    return _python_args_name_pytest(command[1:])
+
+
+def _python_args_name_pytest(args: list[str]) -> bool:
+    """Match the native planner's `python -m pytest` recognition, flags included."""
+    index = 0
+    while index < len(args):
+        item = args[index]
+        if item == "--":
+            return False
+        if item in {"-c", "--command"} or item.startswith("-c") or item.startswith("--command="):
+            return False
+        if item == "-m":
+            module = args[index + 1] if index + 1 < len(args) else ""
+            return module.split(".", 1)[0] == "pytest"
+        if item.startswith("-m") and len(item) > 2:
+            return item[2:].split(".", 1)[0] == "pytest"
+        if item in {"-W", "-X", "--check-hash-based-pycs"}:
+            index += 2
+            continue
+        if item.startswith(("-W", "-X")) or item.startswith("--check-hash-based-pycs="):
+            index += 1
+            continue
+        if not item.startswith("-"):
+            return False
+        index += 1
+    return False
 
 
 def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -197,7 +245,7 @@ def run_authorized_contained_test(
         # Oh My Pi runs the command in its `cwd` argument. The call as issued
         # must carry the receipt; the explicit `cd` form is then authorized
         # and run by the wrapper path below.
-        receipt = authorize(payload)
+        receipt = settled_authority(authorize, payload)
         if not _contained_receipt(receipt):
             raise _reject()
         if receipt_matches(receipt):
@@ -213,7 +261,7 @@ def run_authorized_contained_test(
             bounded = _path_is_within(root, workspace.resolve(strict=True)) or (
                 sibling_project_root(root, home=home_dir) == root
             )
-            first = authorize(rooted) if bounded else None
+            first = settled_authority(authorize, rooted) if bounded else None
             if receipt_matches(first) and isinstance(first, Mapping):
                 return run_workspace_contained(
                     rooted,
@@ -255,14 +303,14 @@ def run_authorized_contained_test(
     except (OSError, RuntimeError, ValueError) as error:
         # Pipelines and lists the wrapper cannot peel (`| sort`, `&&`) still
         # run as issued when Rust chose the workspace sandbox for them.
-        exit_code = run_workspace(authorize(payload))
+        exit_code = run_workspace(settled_authority(authorize, payload))
         if exit_code is None:
             raise _reject() from error
         return exit_code
     if peeled is not None:
         # The wrapped original must carry the receipt; the core is then
         # re-authorized in its resolved directory by the recursive call.
-        receipt = authorize(payload)
+        receipt = settled_authority(authorize, payload)
         if not _contained_receipt(receipt):
             raise _reject()
         core, directory, output = peeled
@@ -303,7 +351,7 @@ def run_authorized_contained_test(
         return 0
 
     anchored = anchored_sibling_root(tool_input["command"], workspace=workspace, cwd=cwd, home=home_dir)
-    receipt = authorize(payload) if anchored is not None else None
+    receipt = settled_authority(authorize, payload) if anchored is not None else None
     if anchored is not None and receipt_matches(receipt) and isinstance(receipt, Mapping):
         # An absolute script in a sibling repository runs from that root, as
         # after `cd <root> &&`; any other receipt takes the paths below.
@@ -325,7 +373,7 @@ def run_authorized_contained_test(
         # Like a wrapper: the original carries the receipt, then the core is
         # authorized again and runs with the assignments exported (a dropped
         # data setting too). A workspace receipt runs the original as issued.
-        receipt = authorize(payload)
+        receipt = settled_authority(authorize, payload)
         exit_code = run_workspace(receipt)
         if exit_code is not None:
             return exit_code
@@ -342,14 +390,24 @@ def run_authorized_contained_test(
                 merge_stderr=merge_stderr,
             )
 
+    names_pytest = False
     try:
         try:
             command, _ = _split_command_prefix(shlex.split(tool_input["command"], posix=True))
         except ValueError as error:
             raise _reject() from error
+        # Native authority reads a system `timeout` through to the program it
+        # bounds, so the planners below are handed that program. The clock
+        # still bounds this run: it only ever shortens the deadline.
+        timed, clock = peel_timeout_clock(command)
+        if timed != command:
+            command, _ = _split_command_prefix(timed)
+        if clock is not None:
+            timeout_seconds = min(timeout_seconds, clock)
         package_test = is_package_test(command)
         if package_test:
             command = list(resolve_package_test(command, workspace=workspace, cwd=cwd))
+        names_pytest = _command_names_pytest(command)
         from ..native_restricted_pytest import restricted_native
 
         kinds = restricted_native("contained_kind", {"command": command}, dict)
@@ -373,12 +431,19 @@ def run_authorized_contained_test(
             node_test_plan = restricted_node_test.prepare_restricted_node_test(command, workspace=workspace, cwd=cwd)
         else:
             prepare_restricted_pytest(command, workspace=workspace, cwd=cwd, read_only_workspace=True)
-    except RestrictedPytestError:
+    except RestrictedPytestError as error:
         # The read-only planners reject the mutating shapes (`git add && git
         # commit`, `node -e`, `./todo.py`) that Rust sends to the workspace
         # sandbox. Only a live workspace receipt runs them; anything else fails.
-        exit_code = run_workspace(authorize(payload))
+        exit_code = run_workspace(settled_authority(authorize, payload))
         if exit_code is None:
+            # This planner is the last shape tried. Its "accepts only a pytest
+            # executable" message would point at an invocation that was never
+            # in the command, so a command that did not name pytest reports
+            # the authorization that failed. A command that did name pytest
+            # keeps the planner error, including a refused flag or argument.
+            if error.reason_code == PYTEST_INVALID_COMMAND_REASON_CODE and not names_pytest:
+                raise _reject() from error
             raise
         return exit_code
     if inline_plan is not None:
@@ -416,7 +481,7 @@ def run_authorized_contained_test(
 
     # Authorize after planning so the live decision follows every file the
     # planner read. Rust may still pick the workspace sandbox for this shape.
-    receipt = authorize(payload)
+    receipt = settled_authority(authorize, payload)
     exit_code = run_workspace(receipt)
     if exit_code is not None:
         return exit_code
@@ -428,7 +493,7 @@ def run_authorized_contained_test(
         raise _reject()
     if package_test:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(command)}}
-        if not required(authorize(underlying)):
+        if not required(settled_authority(authorize, underlying)):
             raise _reject()
 
     def authorize_capability(argv: tuple[str, ...]) -> None:
@@ -438,7 +503,7 @@ def run_authorized_contained_test(
         transform_plan = vitest_plan or (node_tool_plan if build else None)
         contexts = (workspace, cwd, *((transform_plan.cwd,) if transform_plan is not None else ()))
         for directory in dict.fromkeys(contexts):
-            response = authorize({**capability, "cwd": str(directory)})
+            response = settled_authority(authorize, {**capability, "cwd": str(directory)})
             if (
                 not isinstance(response, Mapping)
                 or not (
@@ -462,7 +527,7 @@ def run_authorized_contained_test(
     # No shell and no unsandboxed retry: the required profile is the actual sink.
     if inline_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(inline_plan.command)}}
-        if not required(authorize(underlying)):
+        if not required(settled_authority(authorize, underlying)):
             raise _reject()
         return run_restricted_inline_eval(
             inline_plan,
@@ -472,7 +537,7 @@ def run_authorized_contained_test(
         )
     if node_tool_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_tool_plan.command)}}
-        if not required(authorize(underlying)):
+        if not required(settled_authority(authorize, underlying)):
             raise _reject()
         return restricted_node_tool.run_restricted_node_tool(
             node_tool_plan,
@@ -488,7 +553,7 @@ def run_authorized_contained_test(
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(vitest_plan.command)}}
         # Selecting another directory cannot shed the original project's denies.
         for directory in dict.fromkeys((workspace, cwd, vitest_plan.cwd)):
-            if not required(authorize({**underlying, "cwd": str(directory)})):
+            if not required(settled_authority(authorize, {**underlying, "cwd": str(directory)})):
                 raise _reject()
         return restricted_vitest.run_restricted_vitest(
             command,
@@ -501,7 +566,7 @@ def run_authorized_contained_test(
         )
     if node_test_plan is not None:
         underlying = {**payload, "tool_input": {**tool_input, "command": shlex.join(node_test_plan.command)}}
-        if not required(authorize(underlying)):
+        if not required(settled_authority(authorize, underlying)):
             raise _reject()
         return restricted_node_test.run_restricted_node_test(
             command,

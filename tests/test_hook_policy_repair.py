@@ -30,7 +30,7 @@ class _Store:
     def __init__(self, health: AuthorityHealth, revision: int = 4) -> None:
         self.view = _View(health, revision)
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> _View:
+    def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> _View:
         assert registry is not None
         return self.view
 
@@ -150,7 +150,7 @@ def test_unreadable_native_result_stays_empty(tmp_path: Path) -> None:
 
 def test_reader_failure_keeps_the_original_denial(tmp_path: Path) -> None:
     class Boom:
-        def read_extension_control_authority_for_registry(self, _registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, _registry: object, **_kwargs) -> object:
             raise RuntimeError("boom")
 
     result = apply_command_policy_repair(Boom(), _blocked(), guard_home=tmp_path)

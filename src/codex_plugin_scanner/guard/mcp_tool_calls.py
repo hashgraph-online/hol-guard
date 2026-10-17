@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
@@ -21,10 +20,7 @@ from .receipts import build_receipt
 from .runtime.approval_context import (
     current_extension_control_binding_digest,
 )
-from .runtime.approval_reuse import (
-    APPROVAL_REUSE_NO_SAVED_DECISION,
-    ApprovalReuseStatus,
-)
+from .runtime.approval_reuse import ApprovalReuseStatus
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
@@ -68,28 +64,22 @@ class ToolCallDecision:
     approval_reuse_claim_disposition: ApprovalReuseClaimDisposition | None = None
     post_claim_revalidated: bool = False
     post_claim_authority: ToolCallAuthority | None = None
+    # The action the native runtime enforces for this call. It differs from
+    # ``action`` only where a rejected reuse of prior authority opens a fresh
+    # approval boundary; Rust owns that derivation.
+    policy_action: GuardAction | None = None
 
 
-def resolve_tool_call_policy_action(
-    decision: ToolCallDecision,
-    *,
-    action: object | None = None,
-) -> GuardAction:
-    """Resolve the exact action enforced for a tool-call decision.
+def resolve_tool_call_policy_action(decision: ToolCallDecision) -> GuardAction:
+    """The action the native runtime enforces for a tool-call decision.
 
-    A first-time review remains ``review``.  A rejected attempt to reuse prior
-    authority is a genuine fresh-approval boundary and is therefore surfaced as
-    ``require-reapproval`` instead of silently making every review look stale.
+    Rust composes it from the decision and its approval-reuse state; a decision
+    that reached Python without one carries no authority and cannot be read.
     """
 
-    normalized = normalize_guard_action(decision.action if action is None else action)
-    stale_prior_authority = (
-        decision.approval_reuse_status == "rejected"
-        and decision.approval_reuse_reason_code not in {None, APPROVAL_REUSE_NO_SAVED_DECISION}
-    )
-    if normalized == "review" and stale_prior_authority:
-        return "require-reapproval"
-    return normalized
+    if decision.policy_action is None:
+        raise ValueError("tool_call_policy_action_missing")
+    return decision.policy_action
 
 
 def _build_dto(

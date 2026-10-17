@@ -4203,7 +4203,7 @@ clearer UX and an implementation plan with technical references.
                 "client_title": "HOL Guard CLI",
                 "client_version": guard_runner_module.__version__,
                 "workspace": "local-machine",
-                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+                "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon", "fleet-posture/v1"],
                 "policy_bundle_versions": [
                     "guard-policy-bundle.v1",
                     "guard-policy-bundle.v2",

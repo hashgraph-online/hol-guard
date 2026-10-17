@@ -145,6 +145,53 @@ test("approval review renders action-eligible scopes and binds the selected cont
   });
 });
 
+test("unbound script review offers no unusable approval or credential prompt on mobile", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const unbound: GuardApprovalRequest = {
+    ...request, harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
+    launch_target: "bash maintenance.sh dry", raw_command_text: "bash maintenance.sh dry",
+    allowed_scopes: ["artifact"], allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+    recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+    scope_restrictions: ["retry_cannot_reuse_approval"], exact_action_persistence_eligible: false,
+  };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mountApprovalFixture(page, bodies, unbound);
+  await page.goto(`/requests/scope-e2e?${DAEMON}`);
+  await expect(page.getByText(/Execution approval is unavailable/)).toBeVisible();
+  await expect(page.getByRole("button", { name: /Allow just this once|Approve and remember/ })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.locator("pre").filter({ hasText: "bash maintenance.sh dry" }).last()).toBeVisible();
+  await expect(page.getByText(/You can allow it once/)).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  expect(bodies).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("persistent-only native review requires explicit duration before submitting", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const persistent: GuardApprovalRequest = {
+    ...request, harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
+    allowed_scopes: ["artifact", "workspace", "harness", "global"],
+    allowed_scopes_by_action: { allow: ["artifact", "workspace", "harness", "global"], block: ["artifact"] },
+    recommended_scope_by_action: { allow: "workspace", block: "artifact" },
+    scope_restrictions: ["retry_cannot_reuse_approval"], exact_action_persistence_eligible: true,
+  };
+  await mountApprovalFixture(page, bodies, persistent);
+  await page.goto(`/requests/scope-e2e?${DAEMON}`);
+  await expect(page.getByRole("radio", { name: /^This time/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: /Allow just this once|Allow and remember for this project/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: /Exact reviewed action/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose an available approval duration" })).toBeDisabled();
+  await page.keyboard.press("a");
+  await expect(page.getByText("Choose 'Always allow exact action' before approving; run once is unavailable.")).toBeVisible();
+  await expect(page.getByText("This action has no eligible approval scope.")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByText("Always allow exact action", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Always allow exact action/ })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Approve and remember", exact: true })).toBeEnabled();
+  expect(bodies).toHaveLength(0);
+});
+
 for (const toolName of ["read", "eval"]) {
   test(`native ${toolName} review shows the exact redacted action`, async ({ page }) => {
     const envelope = JSON.parse(readFileSync(

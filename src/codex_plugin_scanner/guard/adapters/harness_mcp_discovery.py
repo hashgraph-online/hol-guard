@@ -1,24 +1,33 @@
-"""Read configured stdio MCP servers from detected harnesses."""
+"""Read configured MCP servers, stdio and remote, from detected harnesses."""
 
 from __future__ import annotations
 
 import logging
 import os
+import re
 import shlex
+import sqlite3
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ..models import HarnessDetection
+from ..models import GuardArtifact, HarnessDetection
 from ..runtime.local_cli_identity import UnlistedCliIdentity
 from ..runtime.local_mcp_probe import mcp_launch_tokens
 from ..runtime.mcp_connection_identity import McpConnectionIdentity, build_mcp_connection_identity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
+from ..runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
 from .contracts import display_name_for
 from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
+from .remote_mcp_origin import remote_mcp_origin
+
+if TYPE_CHECKING:
+    from .base import HarnessContext
 
 MAX_DISCOVERED_MCP_SERVERS = 100
+_NAMESPACE_UNSAFE = re.compile(r"[^A-Za-z0-9_-]")
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +41,20 @@ class DiscoveredHarnessMcpServer:
     launch_command: str
     env: tuple[tuple[str, str], ...] = ()
     connection_identity: McpConnectionIdentity | None = None
+    harness: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class DiscoveredRemoteMcpServer:
+    """One remote MCP server found in a harness config.
+
+    It shares the identity a call to its tools records, so a configured
+    server and a used one are the same connector. Guard never connects to it.
+    """
+
+    tool: ObservedMcpTool
+    origin: str
+    source_label: str
 
 
 def discover_harness_mcp_servers(
@@ -44,6 +67,31 @@ def discover_harness_mcp_servers(
     """Return unique stdio MCP servers from harness configs. Does not probe."""
 
     loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
+    return _stdio_servers(loaded)
+
+
+def discover_remote_mcp_servers(
+    *,
+    home_dir: Path,
+    guard_home: Path,
+    workspace_dir: Path | None = None,
+    detections: Sequence[HarnessDetection] | None = None,
+) -> tuple[DiscoveredRemoteMcpServer, ...]:
+    """Return unique remote MCP servers from harness configs. Never connects."""
+
+    loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
+    return _remote_servers(loaded)
+
+
+def configured_harness_detections(
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None
+) -> list[HarnessDetection]:
+    """One detection pass that both ``discover_*`` functions can share."""
+
+    return _safe_detections(home_dir, guard_home, workspace_dir)
+
+
+def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnessMcpServer, ...]:
     groups: dict[str, _DiscoveryGroup] = {}
     for detection in loaded:
         for server in observable_stdio_servers_with_proxy(detection):
@@ -64,6 +112,7 @@ def discover_harness_mcp_servers(
                     labels=[label],
                     env=env,
                     connection_identity=connection_identity,
+                    harness=server.harness,
                 )
                 continue
             if label not in current.labels:
@@ -85,8 +134,44 @@ def discover_harness_mcp_servers(
             launch_command=group.launch_command,
             env=group.env,
             connection_identity=group.connection_identity,
+            harness=group.harness,
         )
         for group in ranked[:MAX_DISCOVERED_MCP_SERVERS]
+    )
+
+
+def _remote_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredRemoteMcpServer, ...]:
+    found: dict[str, DiscoveredRemoteMcpServer] = {}
+    for detection in loaded:
+        for artifact in detection.artifacts:
+            server = _remote_server(artifact)
+            if server is None or server.tool.identity.identity_hash in found:
+                continue
+            found[server.tool.identity.identity_hash] = server
+    ranked = sorted(found.values(), key=lambda server: (server.source_label.lower(), server.tool.server_name.lower()))
+    return tuple(ranked[:MAX_DISCOVERED_MCP_SERVERS])
+
+
+def _remote_server(artifact: GuardArtifact) -> DiscoveredRemoteMcpServer | None:
+    if artifact.artifact_type != "mcp_server" or artifact.command or not artifact.url:
+        return None
+    origin = remote_mcp_origin(artifact.url)
+    # Harnesses put the server name in the tool namespace with every
+    # character outside [A-Za-z0-9_-] replaced by `_`.
+    name = _NAMESPACE_UNSAFE.sub("_", artifact.name.strip())
+    if origin is None or not name.strip("_"):
+        return None
+    # The namespace a call to this server's tools carries on this harness. A
+    # name whose calls nest another server under it (`codex_apps`) names no
+    # single connector, so it is left to the calls that use it.
+    tool = observed_mcp_tool(artifact.harness, f"mcp__{name}__tool")
+    nested = observed_mcp_tool(artifact.harness, f"mcp__{name}__server__tool")
+    if tool is None or nested is None or nested.namespace != tool.namespace:
+        return None
+    return DiscoveredRemoteMcpServer(
+        tool=tool,
+        origin=origin,
+        source_label=f"{display_name_for(artifact.harness)} · configured server",
     )
 
 
@@ -95,6 +180,7 @@ def persist_discovered_harness_mcp_servers(
     servers: Sequence[DiscoveredHarnessMcpServer],
     *,
     seen_at: str,
+    remote: Sequence[DiscoveredRemoteMcpServer] = (),
 ) -> dict[str, str]:
     """Persist observations and return cli_id to source_label."""
 
@@ -113,10 +199,46 @@ def persist_discovered_harness_mcp_servers(
             connection_identity_hash=server.connection_identity.identity_hash
             if server.connection_identity is not None
             else None,
+            declared_source=f"{server.harness}:stdio" if server.harness else None,
         )
         if isinstance(cli_id, str) and cli_id:
             labels[cli_id] = server.source_label
+    for declared in remote:
+        server_identity = declared.tool.server_identity
+        cli_id = ensure(
+            declared.tool.identity,
+            seen_at=seen_at,
+            server_identity_hash=server_identity.identity_hash,
+            server_command=server_identity.command,
+            server_args_hash=server_identity.args_hash,
+            source_label=declared.source_label,
+            remote_origin=declared.origin,
+            declared_source=f"{declared.tool.harness}:remote",
+        )
+        if isinstance(cli_id, str) and cli_id:
+            labels[cli_id] = declared.source_label
     return labels
+
+
+def observe_configured_mcp_servers(store: object, *, context: HarnessContext, seen_at: str) -> int:
+    """Record every configured MCP server so Protect lists it before first use.
+
+    Best effort: setup commands must not fail because a harness config is
+    unreadable. Returns the number of connectors recorded.
+    """
+
+    try:
+        detections = _safe_detections(context.home_dir, context.guard_home, context.workspace_dir)
+        labels = persist_discovered_harness_mcp_servers(
+            store,
+            _stdio_servers(detections),
+            seen_at=seen_at,
+            remote=_remote_servers(detections),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
+        logger.debug("configured MCP servers not recorded after %s", type(exc).__name__)
+        return 0
+    return len(labels)
 
 
 def discovered_server_for_observation(
@@ -226,6 +348,7 @@ class _DiscoveryGroup:
     labels: list[str]
     env: tuple[tuple[str, str], ...]
     connection_identity: McpConnectionIdentity
+    harness: str
 
 
 def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:

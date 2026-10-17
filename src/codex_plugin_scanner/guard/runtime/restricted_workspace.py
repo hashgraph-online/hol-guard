@@ -14,6 +14,8 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..native_restricted_pytest import restricted_native
+from .contained_authority import settled_authority
+from .contained_denial_note import denial_note
 from .git_execution_safety import trusted_git_binary_for_cwd
 from .restricted_pytest_model import (
     _DEFAULT_TIMEOUT_SECONDS,
@@ -32,13 +34,6 @@ WORKSPACE_PUBLISH_REASON = (
     "HOL Guard runs the checks in this command in a protected workspace sandbox "
     "(no network, no home access), then runs the Git steps that follow once it "
     "proves them again."
-)
-# Appended when a contained run fails after printing a denied operation.
-WORKSPACE_WRITE_DENIAL_NOTE = (
-    "This run hit a denied operation (EPERM or EROFS). HOL Guard runs this command in a "
-    "workspace sandbox: the workspace and $TMPDIR are writable, except a few protected paths "
-    "such as Git configuration, and there is no network or home access. Keep files the command "
-    "writes inside the workspace or $TMPDIR and run it again."
 )
 _PLAN_FIELDS = frozenset(
     {
@@ -256,7 +251,7 @@ def run_workspace_contained(
         publish=publish,
     )
     # A second receipt taken after planning must still bind the same evidence.
-    second = authorize(payload)
+    second = settled_authority(authorize, payload)
     if not receipt_matches(second) or not isinstance(second, Mapping):
         raise _reject("Guard could not re-authorize this workspace sandbox execution.")
     if second.get("command_binding_digest") != first_receipt.get("command_binding_digest") or (
@@ -334,7 +329,7 @@ def run_workspace_contained(
                 timeout_seconds=timeout_seconds,
                 cwd=cwd,
                 merge_stderr=merge_stderr,
-                write_denial_note=WORKSPACE_WRITE_DENIAL_NOTE,
+                write_denial_note=denial_note,
             )
 
         if isinstance(prefix, str):
@@ -379,7 +374,7 @@ def _run_publish_steps(
     tool_input = payload["tool_input"]
     if not isinstance(tool_input, dict):
         raise _reject("Invalid workspace sandbox request.")
-    response = authorize({**payload, "tool_input": {**tool_input, "command": suffix}})
+    response = settled_authority(authorize, {**payload, "tool_input": {**tool_input, "command": suffix}})
     if (
         not isinstance(response, Mapping)
         or response.get("decision") != "allow"
@@ -485,7 +480,7 @@ def _run_overlay(
             timeout_seconds=timeout_seconds,
             cwd=workspace,
             merge_stderr=merge_stderr,
-            write_denial_note=WORKSPACE_WRITE_DENIAL_NOTE,
+            write_denial_note=denial_note,
         )
         restricted_native(
             "apply_workspace_overlay",

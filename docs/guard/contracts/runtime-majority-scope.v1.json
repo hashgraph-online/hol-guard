@@ -280,7 +280,9 @@
           "src/codex_plugin_scanner/guard/daemon/mcp_discovery_jobs.py",
           "src/codex_plugin_scanner/guard/daemon/mcp_policy_decisions.py",
           "src/codex_plugin_scanner/guard/daemon/catalog_v2_client.py",
-          "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py"
+          "src/codex_plugin_scanner/guard/daemon/catalog_read_v2.py",
+          "src/codex_plugin_scanner/guard/adapters/harness_mcp_discovery.py",
+          "src/codex_plugin_scanner/guard/adapters/remote_mcp_origin.py"
         ]
       },
       {
@@ -368,7 +370,8 @@
           "src/codex_plugin_scanner/guard/cli/commands_dispatch_trust.py",
           "src/codex_plugin_scanner/guard/cli/render_*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_service.py",
-          "src/codex_plugin_scanner/guard/cli/approval_commands.py"
+          "src/codex_plugin_scanner/guard/cli/approval_commands.py",
+          "src/codex_plugin_scanner/guard/cli/inventory_list_commands.py"
         ]
       },
       {
@@ -561,6 +564,10 @@
         "reason": "Reviewed and retained in runtime scope: the direct-evidence drain hands each MCP tool call the native relay decided to the receipt writers the Python MCP proxy calls. It validates the queued record, records a forward or block exactly as the resident decided it, and drops any record it cannot validate; it never recomputes a verdict."
       },
       {
+        "path": "src/codex_plugin_scanner/guard/daemon/mcp_relay_package_evidence_drain.py",
+        "reason": "Reviewed and retained in runtime scope: the package half of the same drain. It writes the receipt the proxy's package lane writes, against the package request's own artifact, rebuilding that artifact from the parser input the resident read and dropping any record whose rebuilt artifact is not the one the resident decided; it never recomputes a verdict."
+      },
+      {
         "path": [
           "src/codex_plugin_scanner/guard/cli/codex_live_hook_completion.py",
           "src/codex_plugin_scanner/guard/cli/commands.py",
@@ -647,7 +654,9 @@
       },
       {
         "path": [
+          "src/codex_plugin_scanner/guard/runtime/contained_authority.py",
           "src/codex_plugin_scanner/guard/runtime/contained_command_prefix.py",
+          "src/codex_plugin_scanner/guard/runtime/contained_denial_note.py",
           "src/codex_plugin_scanner/guard/runtime/contained_output_filters.py",
           "src/codex_plugin_scanner/guard/runtime/contained_run_directory.py",
           "src/codex_plugin_scanner/guard/runtime/contained_test_hook.py",
@@ -670,7 +679,7 @@
           "src/codex_plugin_scanner/guard/runtime/source_paths.py",
           "src/codex_plugin_scanner/guard/runtime/workspace_snapshot_inputs.py"
         ],
-        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory/command_prefix, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
+        "reason": "Reviewed: runtime support modules used by supply-chain evaluation, contained execution, local-CLI/MCP grant decisions and secret-file-request services: js_semver, npm_policy_range, lockfile/manifest evaluation, package_json_scripts, source_paths/skill_paths, workspace_snapshot_inputs, contained_test_hook/wrapper/run_directory/command_prefix/authority, oci isolation, extension and mcp_server contribution, embedded_script_evidence, executable_flag_contract, mcp_connection_identity, and skill_protection (skill-content findings for the MCP skill firewall). Each is imported by an in-scope decision, parser or containment module on the hook/run path."
       },
       {
         "path": [
@@ -994,6 +1003,8 @@
           "_render_diff",
           "_render_receipts",
           "_render_inventory",
+          "_INVENTORY_LIST_TITLES",
+          "_render_inventory_list",
           "_render_policies",
           "_render_advisories",
           "_build_advisory_table",

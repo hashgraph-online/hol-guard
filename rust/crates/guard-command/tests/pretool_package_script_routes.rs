@@ -1,9 +1,10 @@
 #![cfg(unix)]
 
-//! `npm|pnpm|bun run <script>` and `npm|pnpm test` get a narrow protected-sink
-//! receipt only for a script body that sink runs. Any other body is still an
-//! untrusted package script: it never proceeds unprotected, and never gets a
-//! receipt its sink would refuse.
+//! A package-manager command that names a script gets a narrow protected-sink
+//! receipt only for a script body that sink runs. That covers `npm|pnpm|bun|yarn
+//! run <script>`, the bare `pnpm|yarn <script>`, and `npm|pnpm|yarn test`. Any
+//! other body is still an untrusted package script: it never proceeds
+//! unprotected, and never gets a receipt its sink would refuse.
 
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use guard_contracts::PreToolResultV1;

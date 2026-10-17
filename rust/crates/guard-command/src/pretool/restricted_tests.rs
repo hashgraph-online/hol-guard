@@ -189,6 +189,23 @@ pub(super) fn requires_pytest_containment(model: &CanonicalCommandV1) -> bool {
     }
 }
 
+/// The entrypoints Prettier publishes: version 3 moved the executable into
+/// `bin/`, and version 2 is still installed widely enough to name as well.
+pub(crate) const PRETTIER_ENTRIES: [&str; 2] =
+    ["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"];
+
+/// Whether a Prettier command asks only whether the files are formatted.
+/// `--check` and `--list-different` print and exit; every other spelling may
+/// reach `--write`, which rewrites each file it visits.
+pub(crate) fn prettier_checks(arguments: &[String]) -> bool {
+    arguments.iter().any(|argument| {
+        matches!(
+            argument.as_str(),
+            "--check" | "-c" | "--list-different" | "-l"
+        )
+    })
+}
+
 fn executable_is_bunx(executable: &str) -> bool {
     super::executable_basename(executable) == "bunx"
 }
@@ -247,6 +264,84 @@ pub(super) fn bun_inline_eval(model: &CanonicalCommandV1) -> bool {
                 && !segment.path_overridden
                 && segment.executable.as_deref().map(super::executable_basename) == Some("bun")
                 && bun_eval_args(&segment.arguments))
+}
+
+/// `python report.py` or `node report.mjs` on Windows: an ordinary workspace
+/// script whose source only reads (`script_content::read_only`). Windows has
+/// no workspace sandbox to run it in, so it shares the inline evaluation
+/// boundary there; a script that writes, launches or imports a package keeps
+/// its review. The sink accepts the same names (`contained_argv`).
+pub(super) fn windows_script_reason(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> Option<&'static str> {
+    use super::script_content::Language;
+    if model.confidence != "exact"
+        || model.path_overridden
+        || !model.wrapper_chain.is_empty()
+        || model.segments.len() != 1
+    {
+        return None;
+    }
+    let segment = &model.segments[0];
+    if !segment.environment_names.is_empty() || segment.pipeline_index != 0 {
+        return None;
+    }
+    let name = crate::program_basename(segment.executable.as_deref()?).to_ascii_lowercase();
+    let arguments = segment.arguments.as_slice();
+    let (language, script, reason) = if python_runtime_name(&name) {
+        let [script, ..] = python_after_isolation_flags(arguments)? else {
+            return None;
+        };
+        (
+            Language::Python,
+            script,
+            "native_python_eval_readonly_containment_required",
+        )
+    } else if matches!(name.as_str(), "node" | "nodejs") {
+        let [script, ..] = node_after_script_flags(arguments) else {
+            return None;
+        };
+        (
+            Language::Node,
+            script,
+            "native_node_eval_readonly_containment_required",
+        )
+    } else {
+        return None;
+    };
+    let file = script.rsplit('/').next().unwrap_or(script);
+    let (stem, extension) = file.rsplit_once('.')?;
+    let named = !stem.is_empty()
+        && !stem.starts_with('.')
+        && stem
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+        && match language {
+            Language::Python => extension == "py",
+            Language::Node => matches!(extension, "js" | "mjs" | "cjs"),
+        };
+    if !named || !workspace_relative(script) {
+        return None;
+    }
+    let workspace = std::fs::canonicalize(context.cwd?).ok()?;
+    let path = std::fs::canonicalize(workspace.join(script)).ok()?;
+    (path.starts_with(&workspace)
+        && path.is_file()
+        && super::script_content::read_only::read_only(language, &path))
+    .then_some(reason)
+}
+
+/// The script a package-manager command names. npm and Bun need the explicit
+/// `run`; pnpm and Yarn also run a script named directly, and a project that
+/// documents `pnpm lint` or `yarn build` is spelling the same work. The sink
+/// resolves the script body either way, so both spellings reach it together.
+pub(super) fn manager_script_task<'a>(manager: &str, arguments: &'a [String]) -> Option<&'a str> {
+    match arguments {
+        [run, task] if run == "run" => Some(task.as_str()),
+        [task] if matches!(manager, "pnpm" | "yarn") => Some(task.as_str()),
+        _ => None,
+    }
 }
 
 pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'static str> {
@@ -322,7 +417,7 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
     }
     if matches!(
         super::executable_basename(executable),
-        "npm" | "pnpm" | "bun"
+        "npm" | "pnpm" | "bun" | "yarn"
     ) {
         let rest = match arguments {
             [test, rest @ ..] if test == "test" => Some(rest),
@@ -358,8 +453,8 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         _ => (crate::program_basename(executable), arguments),
     };
     let build = match executable {
-        "bun" | "npm" | "pnpm" => {
-            matches!(arguments, [run, task] if run == "run" && task == "build")
+        "bun" | "npm" | "pnpm" | "yarn" => {
+            manager_script_task(executable, arguments) == Some("build")
         }
         "bunx" | "npx" => {
             matches!(arguments, [tool, task, ..] if tool == "vite" && task == "build")
@@ -374,22 +469,26 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         return Some("native_node_build_output_containment_required");
     }
     let read_only_node_tool = match executable {
-        "bun" | "npm" => {
-            matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))
-        }
+        "bun" | "npm" | "yarn" => matches!(
+            manager_script_task(executable, arguments),
+            Some("lint" | "typecheck")
+        ),
         // `pnpm exec` is pnpm's spelling of a local-bin run; only the bare
         // form, with no pnpm option before the tool, reads as one.
         "pnpm" => {
-            matches!(arguments, [run, task] if run == "run" && matches!(task.as_str(), "lint" | "typecheck"))
-                || matches!(arguments, [exec, tool, rest @ ..] if exec == "exec" && (tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit"))))
+            matches!(
+                manager_script_task(executable, arguments),
+                Some("lint" | "typecheck")
+            ) || matches!(arguments, [exec, tool, rest @ ..] if exec == "exec" && (tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")) || (tool == "prettier" && prettier_checks(rest))))
         }
         "bunx" | "npx" => {
-            matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")))
+            matches!(arguments, [tool, rest @ ..] if tool == "eslint" || (tool == "tsc" && rest.iter().any(|arg| arg == "--noEmit")) || (tool == "prettier" && prettier_checks(rest)))
         }
         "eslint" => true,
         "tsc" => arguments.iter().any(|arg| arg == "--noEmit"),
+        "prettier" => prettier_checks(arguments),
         "node" | "nodejs" => {
-            matches!(arguments, [entry, rest @ ..] if local_package_entry(entry, "eslint/bin/eslint.js") || (local_package_entry(entry, "typescript/bin/tsc") && rest.iter().any(|arg| arg == "--noEmit")))
+            matches!(arguments, [entry, rest @ ..] if local_package_entry(entry, "eslint/bin/eslint.js") || (local_package_entry(entry, "typescript/bin/tsc") && rest.iter().any(|arg| arg == "--noEmit")) || (PRETTIER_ENTRIES.iter().any(|name| local_package_entry(entry, name)) && prettier_checks(rest)))
         }
         _ => false,
     };
@@ -397,9 +496,16 @@ pub(super) fn readonly_test_reason(model: &CanonicalCommandV1) -> Option<&'stati
         && !arguments.iter().any(|arg| {
             matches!(
                 arg.as_str(),
-                "--fix" | "--fix-dry-run" | "--output-file" | "-o" | "--emitDeclarationOnly"
+                "--fix"
+                    | "--fix-dry-run"
+                    | "--output-file"
+                    | "-o"
+                    | "--emitDeclarationOnly"
+                    | "--write"
+                    | "-w"
             ) || arg.starts_with("--output-file=")
                 || arg.starts_with("--fix=")
+                || arg.starts_with("--write=")
         })
     {
         return Some("native_node_tool_readonly_containment_required");

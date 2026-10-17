@@ -289,6 +289,7 @@ impl RelayAuthority for ClaimingAuthority {
             message: message.clone(),
             expected: catalog.snapshot(),
             claim: "claim-1".to_owned(),
+            request: json!(null),
         })
     }
 
@@ -363,6 +364,7 @@ fn an_authority_without_claims_answers_a_claim_with_no_decision() {
         message: message.clone(),
         expected: RelayCatalog::default().snapshot(),
         claim: "claim-1".to_owned(),
+        request: json!(null),
     };
     let ToolCallVerdict::Respond(response) = PendingNativeAuthority.claim(ticket) else {
         panic!("a claim without a holder must respond");

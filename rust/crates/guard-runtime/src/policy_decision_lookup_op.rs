@@ -38,7 +38,9 @@ use crate::guard_store_json::dumps_sorted;
 
 pub(crate) const LOCAL_ONCE_LEGACY_AUTHORITY_KIND: &str = "legacy";
 const LOCAL_ONCE_INTEGRITY_PURPOSE: &str = "guard-local-once-approval";
-const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = 256;
+/// The ceiling a non-consuming lookup stops fetching at. The document path
+/// reports the same ceiling, so both read it from the one contract constant.
+const NON_CONSUMING_POLICY_MATCH_LIMIT: i64 = guard_contracts::POLICY_DOCUMENT_MATCH_LIMIT as i64;
 pub(crate) const POLICY_LOOKUP_COLUMNS: &str = "decision_id, harness, scope, artifact_id, action, \
      artifact_hash, workspace, publisher, source, reason, owner, expires_at, updated_at, \
      integrity_version, integrity_generation, payload_hash, payload_mac, integrity_key_id, \
@@ -56,7 +58,7 @@ const POLICY_BUNDLE_SOURCE: &str = "policy-bundle";
 /// get a runtime exact-match key. `mcp`/`prompt-env-read`/`prompt-file` are
 /// approval families but *not* runtime-exact: they intentionally produce no
 /// key so a `family:mcp` allow row still resolves a concrete `*:mcp:*` lookup.
-const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
+pub(crate) const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
     "file-read",
     "mcp-tool",
     "package-request",
@@ -68,7 +70,7 @@ const SCOPED_RUNTIME_EXACT_FAMILIES: [&str; 5] = [
 /// set a scoped artifact may collapse to. `parts[2]` of `harness:scope:family:…`
 /// only becomes a family key when it's an approval family; otherwise unrelated
 /// namespaces would shadow family-scoped rows.
-const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
+pub(crate) const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "file-read",
     "mcp",
     "mcp-tool",
@@ -1016,7 +1018,7 @@ pub(crate) fn policy_row_payload(
     Value::Object(map)
 }
 
-fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8) {
+pub(crate) fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8) {
     let scope = match row_value(row, "scope").as_str().unwrap_or("") {
         "artifact" => 5,
         "workspace" => 4,
@@ -1040,7 +1042,7 @@ fn policy_row_specificity(row: &Value, harness: &str) -> (u8, u8, u8, u8, u8, u8
     )
 }
 
-fn policy_row_outranks(candidate: &Value, selected: &Value, harness: &str) -> bool {
+pub(crate) fn policy_row_outranks(candidate: &Value, selected: &Value, harness: &str) -> bool {
     let candidate_severity =
         guard_action_severity(&row_value(candidate, "action"), GuardAction::Block);
     let selected_severity =

@@ -6,7 +6,7 @@ import hashlib
 import sqlite3
 from typing import Final, cast
 
-LOCAL_CLI_SCHEMA_VERSION: Final = 11
+LOCAL_CLI_SCHEMA_VERSION: Final = 12
 _V1_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v1").hexdigest()
 _V2_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v2").hexdigest()
 _V3_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v3").hexdigest()
@@ -17,7 +17,8 @@ _V7_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v7")
 _V8_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v8").hexdigest()
 _V9_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v9").hexdigest()
 _V10_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v10").hexdigest()
-_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v11").hexdigest()
+_V11_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v11").hexdigest()
+_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.local-cli-allowlist.schema.v12").hexdigest()
 
 
 class LocalCliSchemaError(ValueError):
@@ -120,9 +121,12 @@ def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = 
                 rebuild_tool_authority(connection, cli_id, identity_hash, raw, revision)
             connection.execute(
                 "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
-                (11, _SCHEMA_CHECKSUM),
+                (11, _V11_CHECKSUM),
             )
-            version, checksum = 11, _SCHEMA_CHECKSUM
+            version, checksum = 11, _V11_CHECKSUM
+        if version == 11 and checksum == _V11_CHECKSUM:
+            _migrate_v11_to_v12(connection)
+            version, checksum = 12, _SCHEMA_CHECKSUM
         if version != LOCAL_CLI_SCHEMA_VERSION or checksum != _SCHEMA_CHECKSUM:
             if version > LOCAL_CLI_SCHEMA_VERSION:
                 raise LocalCliSchemaError(
@@ -155,7 +159,9 @@ def ensure_local_cli_schema(connection: sqlite3.Connection, *, for_read: bool = 
             server_identity_hash text,
             server_command text,
             server_args_hash text,
-            source_label text
+            source_label text,
+            remote_origin text,
+            declared_sources_json text
         )
         """
     )
@@ -263,6 +269,20 @@ def _migrate_v4_to_v5(connection: sqlite3.Connection) -> None:
     _ = connection.execute(
         "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
         (5, _V5_CHECKSUM),
+    )
+
+
+def _migrate_v11_to_v12(connection: sqlite3.Connection) -> None:
+    # Harness configs declare remote MCP servers that have no launch command.
+    # Their origin and the configs that declare a connector are recorded so a
+    # config-declared sighting and a call-observed one share one record.
+    columns = _table_column_names(connection, "local_cli_observation")
+    for column in ("remote_origin", "declared_sources_json"):
+        if column not in columns:
+            _ = connection.execute(f"alter table local_cli_observation add column {column} text")
+    _ = connection.execute(
+        "update local_cli_schema_migration set version = ?, checksum = ? where singleton = 1",
+        (12, _SCHEMA_CHECKSUM),
     )
 
 

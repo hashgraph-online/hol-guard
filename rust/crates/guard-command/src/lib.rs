@@ -26,6 +26,11 @@ mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
 mod compound_artifact;
+mod credential_store_names {
+    //! The credential screen is shared with PostToolUse source review, so it
+    //! lives in `guard-secure-fs`.
+    pub(crate) use guard_secure_fs::credential_store_names::*;
+}
 pub mod cursor_shell_command;
 pub mod policy_document;
 pub use codex_output_entry::{review_codex_tool_output, ToolOutputOutcome};
@@ -147,6 +152,7 @@ pub mod package_manager_command;
 pub mod package_manifest_diff;
 #[cfg(not(guard_source_bootstrap))]
 mod packaged_blob;
+mod parser_brace_command;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;

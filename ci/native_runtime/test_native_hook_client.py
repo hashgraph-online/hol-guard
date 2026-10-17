@@ -21,6 +21,7 @@ from native_hook_client_support import (
 from native_hook_client_support import native_runtime as _native_runtime_fixture  # noqa: F401
 
 from ci.native_runtime.native_process_test_support import process_is_alive
+from codex_plugin_scanner.guard.native_command_control_binding import load_native_command_program_metadata
 
 
 def _read_stream_frame(client: subprocess.Popen[bytes], timeout: float = 3) -> bytes:
@@ -123,6 +124,38 @@ def test_native_hook_client_reuses_one_authenticated_generation(
     assert _result(first)["minimum_action"] == "allow"
     assert second == first
     assert len(_state_files(state_dir)) == 1
+
+
+def test_native_hook_client_compiles_the_bound_command_program(
+    native_runtime: tuple[Path, Path],
+    tmp_path: Path,
+) -> None:
+    """Prove the command controls in the pushed snapshot reach the decision.
+
+    A snapshot without a command-control binding still produces decisions, so
+    every other end-to-end assertion here passes while matchers, permission
+    observations and workspace containment are silently inert. Bind the
+    packaged program and read its digests back off the decision.
+    """
+    runtime, state_dir = native_runtime
+    metadata = load_native_command_program_metadata()
+    request = _request(runtime, state_dir.parent, command="npm install lodash")
+    result = _result(_invoke(runtime, state_dir, request))
+
+    extensions = result["command_extensions"]
+    assert isinstance(extensions, dict)
+    binding = extensions["binding"]
+    assert isinstance(binding, dict)
+    assert binding["program_digest"] == metadata.program_digest
+    assert binding["catalog_digest"] == metadata.catalog_digest
+    assert binding["trust_digest"] == metadata.trust_digest
+    assert extensions["evaluation_error"] is None
+
+    permissions = extensions["permission_observations"]
+    assert isinstance(permissions, list) and permissions
+    assert {str(observation["extension_id"]) for observation in permissions} == {"command.package.node"}
+    assert binding["observation_count"] == len(permissions) + len(extensions["observations"])
+    assert binding["uncertainty_count"] == 0
 
 
 def test_native_hook_client_stop_reaps_managed_processes(

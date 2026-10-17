@@ -90,6 +90,8 @@ uses the configured stdio executable even when the server is given another name.
 
 Hosted MCP servers may use `launch.kind: remote-http` with the official HTTPS endpoint and one or more canonical configured server names. When Guard has exact runtime endpoint evidence, the endpoint must match. Query parameters are excluded from endpoint matching and from serialized server identity metadata, so query credentials are not emitted in Guard artifacts. Some harnesses expose only the configured server name and transport; that fallback is permitted only when no endpoint identity is available. A mismatched, malformed, or unrecognized remote endpoint stays on Guard's normal handling.
 
+A remote server with no contribution is still listed on the Protect page under the name its harness config uses, with the same query-free origin. It needs setup there before its tools leave Guard's normal review.
+
 Icons must use an allowlisted `react-icon` name or `kind: none`. Remote icon URLs are rejected. There is no downloaded detector and no Python matcher for v1 contribution metadata.
 
 ## Tool defaults

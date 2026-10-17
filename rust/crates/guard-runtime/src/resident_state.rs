@@ -2,7 +2,6 @@
 
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
@@ -97,18 +96,8 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
     }
     let mut file =
         File::open(executable).map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(hex_bytes(&hasher.finalize()))
+    crate::resident_state_encoding::sha256_hex_from_reader(&mut file)
+        .map_err(|_| "native_resident_runtime_read_failed".to_owned())
 }
 
 pub(crate) fn runtime_digest() -> Result<String, String> {
@@ -167,6 +156,8 @@ pub(crate) fn private_root_for_scope(scope: &Path) -> Result<PathBuf, String> {
 
 #[cfg(unix)]
 fn socket_directory_path(scope: &Path, digest: &str) -> PathBuf {
+    use sha2::{Digest, Sha256};
+
     let mut hasher = Sha256::new();
     hasher.update(scope.as_os_str().as_encoded_bytes());
     let scope_digest = hex_bytes(&hasher.finalize());

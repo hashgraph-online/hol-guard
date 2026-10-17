@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from .catalog import Scenario
+from .claude_tools import claude_tools
 
 HARNESSES = ("omp", "claude-code", "codex", "cursor")
 
@@ -71,6 +72,12 @@ class Harness:
     default_model: str | None = None
     # Reasoning effort pinned on every invocation, for CLIs that accept one.
     reasoning_effort: str | None = None
+    # The catalog's tool names this lane can actually drive. A `native-tools`
+    # case names the tools the model must use, and those names are Oh My Pi's;
+    # a lane runs such a case only when it has its own tool for every one of
+    # them. Keeping this on the adapter is what lets a structured read run
+    # where the harness really makes it, rather than only as a shell spelling.
+    native_tools: frozenset[str] = frozenset({"bash"})
 
     def model(self, requested: str | None) -> str | None:
         """The model this lane runs: the operator's choice, else the lane default."""
@@ -163,7 +170,7 @@ class Harness:
                 "--disable-slash-commands",
                 "--no-session-persistence",
                 "--tools",
-                _claude_tools(scenario),
+                claude_tools(scenario),
             ]
             model = self.model(model)
             return command + (["--model", model] if model else [])
@@ -223,23 +230,6 @@ class Harness:
         )
 
 
-# A full task leaves every step to the model, so Claude gets its ordinary coding tools.
-FULL_TASK_CLAUDE_TOOLS = "Bash,Read,Write,Edit,Glob,Grep,TodoWrite"
-
-
-def _claude_tools(scenario: Scenario) -> str:
-    if scenario.oracle == "full-task":
-        return FULL_TASK_CLAUDE_TOOLS
-    if scenario.oracle == "home-copy-task":
-        return "Bash,Read"
-    if scenario.commands:
-        return "Bash"
-    if scenario.oracle == "blocked-read":
-        return "Read"
-    names = {"bash": "Bash", "read": "Read", "write": "Write", "edit": "Edit"}
-    return ",".join(names[tool] for tool in scenario.required_tools) or "Bash,Read,Write,Edit"
-
-
 ADAPTERS = {
     "claude-code": Harness(
         "claude-code",
@@ -249,6 +239,7 @@ ADAPTERS = {
         extra_env={"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1", "DISABLE_AUTOUPDATER": "1"},
         macos_keychain=True,
         default_model="claude-sonnet-5-5",
+        native_tools=frozenset({"bash", "read", "write", "edit"}),
     ),
     "codex": Harness(
         "codex",
@@ -266,6 +257,7 @@ ADAPTERS = {
         credential_files=(".cursor/cli-config.json", "AppData/Roaming/Cursor/auth.json"),
         credential_env=("CURSOR_API_KEY",),
         macos_keychain=True,
+        native_tools=frozenset({"bash", "read", "write", "edit"}),
     ),
 }
 

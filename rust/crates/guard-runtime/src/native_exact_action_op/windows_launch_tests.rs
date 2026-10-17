@@ -1,6 +1,6 @@
-//! Windows shell launches: an ordinary native image or read-only git from a
-//! POSIX-shell harness mints a token bound to what the loader reads, and every
-//! launch Guard cannot pin to one file and its loader inputs stays one-time.
+//! Windows shell launches: an ordinary native image from a POSIX-shell harness
+//! mints a token bound to what the loader reads, and every launch Guard cannot
+//! pin to one file and its loader inputs stays one-time.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -10,6 +10,11 @@ use serde_json::json;
 
 use super::super::exact_action_token;
 use super::{cmd, query, shell, Tree};
+
+/// A native image under an install root, run by its full path.
+const INSTALLED: &str = "'C:/Program Files/Git/usr/bin/cat.exe' --version";
+/// A workspace image, which binds its own folder.
+const PROBE: &str = "./bin/probe.exe probe";
 
 pub(super) type Edit<'a> = &'a dyn Fn(&mut String, &mut String, &mut BTreeMap<String, String>);
 
@@ -59,14 +64,12 @@ pub(super) fn git_repository(tree: &Tree) {
 #[test]
 fn ordinary_windows_launches_mint_a_token() {
     let tree = Tree::new();
-    git_repository(&tree);
     image(&tree, "ws\\bin\\probe.exe");
     for command in [
-        "git status",
-        "git --no-pager log -1",
-        "cd src && git status",
-        "./bin/probe.exe probe",
+        INSTALLED,
+        PROBE,
         "bin/probe probe",
+        "cd bin && ./probe.exe probe",
     ] {
         let first = shell(&tree, command);
         assert!(first.is_ok(), "{command}: {first:?}");
@@ -82,20 +85,14 @@ fn ordinary_windows_launches_mint_a_token() {
         *tool = "bash".to_owned();
     });
     assert!(pi.is_ok(), "{pi:?}");
-    let gitk = r"C:\Program Files\Git\cmd\gitk.exe";
-    if PathBuf::from(gitk).is_file() {
-        let installed = shell(&tree, "'C:/Program Files/Git/cmd/gitk.exe' --version");
-        assert!(installed.is_ok(), "{installed:?}");
-    }
 }
 
 #[test]
 fn loader_inputs_change_the_token() {
     let tree = Tree::new();
-    git_repository(&tree);
     image(&tree, "ws\\bin\\probe.exe");
     let probe = shell(&tree, "./bin/probe.exe probe").unwrap();
-    let git = shell(&tree, "git status").unwrap();
+    let installed = shell(&tree, INSTALLED).unwrap();
     // A DLL beside a workspace image, or a manifest, loads with it.
     tree.write("ws\\bin\\version.dll", "MZ planted");
     let with_dll = shell(&tree, "./bin/probe.exe probe").unwrap();
@@ -105,16 +102,13 @@ fn loader_inputs_change_the_token() {
     // A DLL in the working directory is in the default search order even for
     // an installed image.
     tree.write("ws\\planted.dll", "MZ planted");
-    assert_ne!(git, shell(&tree, "git status").unwrap());
+    assert_ne!(installed, shell(&tree, INSTALLED).unwrap());
     // The image bytes themselves.
     let before = shell(&tree, "./bin/probe.exe probe").unwrap();
     let mut bytes = std::fs::read(tree.path("ws\\bin\\probe.exe")).unwrap();
     bytes.push(0);
     std::fs::write(tree.path("ws\\bin\\probe.exe"), bytes).unwrap();
     assert_ne!(before, shell(&tree, "./bin/probe.exe probe").unwrap());
-    // Repository config git reads.
-    tree.write("ws\\.git\\info\\attributes", "*.txt -diff\n");
-    assert_ne!(git, shell(&tree, "git status").unwrap());
 }
 
 #[test]
@@ -277,37 +271,18 @@ fn search_path_and_harness_ambiguity_stays_one_time() {
 }
 
 #[test]
-fn git_helpers_on_windows_stay_one_time() {
+fn unpinned_homes_and_workspaces_stay_one_time() {
     let tree = Tree::new();
-    git_repository(&tree);
-    assert!(shell(&tree, "git status").is_ok());
-    let lowercase = launch(&tree, "git status", &|_, _, env| {
-        env.insert("git_pager".to_owned(), "less".to_owned());
-    });
-    assert_eq!(lowercase, Err("git_helper_config"));
-    for config in [
-        "[diff \"x\"]\n\ttextconv = cat\n",
-        "[include]\n\tpath = ~/extra.cfg\n",
-        "[include]\n\tpath = /etc/extra.cfg\n",
-        "[include]\n\tpath = %(prefix)/etc/extra.cfg\n",
-        "[core]\n\thooksPath = ~/hooks\n",
-    ] {
-        tree.write("ws\\.git\\config", config);
-        assert_eq!(
-            shell(&tree, "git status"),
-            Err("git_helper_config"),
-            "{config}"
-        );
-    }
-    tree.write("ws\\.git\\config", "[core]\n\tbare = false\n");
-    let unpinned_home = launch(&tree, "git status", &|_, _, env| {
+    image(&tree, "ws\\bin\\probe.exe");
+    assert!(shell(&tree, PROBE).is_ok());
+    let unpinned_home = launch(&tree, PROBE, &|_, _, env| {
         env.insert("HOME".to_owned(), "/c/Users/someone".to_owned());
     });
     assert_eq!(unpinned_home, Err("unproven_launch"));
     let unc = format!("\\\\localhost\\{}", tree.ws().replacen(':', "$", 1));
-    let request = query(&tree, "Bash", Some("git status"), json!(null), &unc);
+    let request = query(&tree, "Bash", Some(PROBE), json!(null), &unc);
     assert_eq!(exact_action_token(&request), Err("unproven_launch"));
-    let mut request = query(&tree, "Bash", Some("git status"), json!(null), &tree.ws());
+    let mut request = query(&tree, "Bash", Some(PROBE), json!(null), &tree.ws());
     if let NativeExactActionQueryV1::ExactAction { workspace, .. } = &mut request {
         *workspace = Some(unc);
     }
@@ -317,11 +292,10 @@ fn git_helpers_on_windows_stay_one_time() {
 #[test]
 fn dlls_the_search_path_reaches_are_bound() {
     let tree = Tree::new();
-    git_repository(&tree);
     image(&tree, "ws\\bin\\probe.exe");
     put(&tree, "tools\\readme.txt", "no libraries\n");
     let tools = tree.path("tools");
-    let commands = ["git status", "./bin/probe.exe probe"];
+    let commands = [INSTALLED, PROBE];
     let tokens = |tree: &Tree| {
         commands.map(|command| launch(tree, command, &|_, _, env| prepend_path(env, &tools)))
     };
@@ -338,17 +312,17 @@ fn dlls_the_search_path_reaches_are_bound() {
     // leads.
     let program_files = std::env::var("ProgramFiles").unwrap();
     let detour = format!("{program_files}\\..{}", &tools[2..]);
-    let through = |tree: &Tree| launch(tree, "git status", &|_, _, env| prepend_path(env, &detour));
+    let through = |tree: &Tree| launch(tree, PROBE, &|_, _, env| prepend_path(env, &detour));
     let before = through(&tree);
     put(&tree, "tools\\detour.dll", "MZ planted");
     assert!(before.is_ok());
     assert_ne!(before, through(&tree));
-    let git = shell(&tree, "git status");
-    put(&tree, "home\\bin\\version.dll", "MZ planted");
-    assert_ne!(git, shell(&tree, "git status"));
-    assert!(shell(&tree, "git status").is_ok());
-    // More DLLs than the binding caps cover stay once-only.
-    for index in 0..17 {
+    let installed = shell(&tree, INSTALLED);
+    put(&tree, "home\\bin\\libplanted.dll", "MZ planted");
+    assert_ne!(installed, shell(&tree, INSTALLED));
+    assert!(shell(&tree, INSTALLED).is_ok());
+    // More DLLs than the `PATH` budget covers stay once-only.
+    for index in 0..129 {
         put(&tree, &format!("tools\\extra{index}.dll"), "MZ planted");
     }
     for reason in tokens(&tree) {
@@ -357,9 +331,30 @@ fn dlls_the_search_path_reaches_are_bound() {
 }
 
 #[test]
+fn a_long_developer_path_stays_reusable() {
+    let tree = Tree::new();
+    image(&tree, "ws\\bin\\probe.exe");
+    // More DLLs than the application and working directories may bind, as a
+    // Perl, Ruby or Java `bin` directory holds, listed twice.
+    for index in 0..100 {
+        put(&tree, &format!("tools\\lib{index}.dll"), "MZ planted");
+    }
+    let tools = tree.path("tools");
+    let twice = format!("{tools};{tools}\\");
+    let path = |tree: &Tree| launch(tree, PROBE, &|_, _, env| prepend_path(env, &twice));
+    let clean = path(&tree).expect("a long PATH stays reusable");
+    // The loader finds a system DLL in the system directory before it reaches
+    // `PATH`, so a copy there is never loaded and does not change the token.
+    put(&tree, "tools\\version.dll", "MZ planted");
+    assert_eq!(path(&tree), Ok(clean.clone()));
+    put(&tree, "tools\\lib0.dll", "MZ changed");
+    assert_ne!(path(&tree), Ok(clean));
+}
+
+#[test]
 fn unresolved_path_entries_are_bound_instead_of_refusing_the_launch() {
     let tree = Tree::new();
-    git_repository(&tree);
+    image(&tree, "ws\\bin\\probe.exe");
     let tools = tree.path("tools");
     std::fs::create_dir_all(&tools).unwrap();
     // A trailing dot is not a pinned spelling, so `resolve` is None, but
@@ -369,7 +364,7 @@ fn unresolved_path_entries_are_bound_instead_of_refusing_the_launch() {
     let missing = format!("{}\\missing~1", tree.ws());
     let entries = format!("{dotted};{missing}");
     let launch_entries = |tree: &Tree| {
-        launch(tree, "git status", &|_, _, env| {
+        launch(tree, PROBE, &|_, _, env| {
             prepend_path(env, &entries);
         })
     };
@@ -380,18 +375,17 @@ fn unresolved_path_entries_are_bound_instead_of_refusing_the_launch() {
     // trailing dot, is not an install root just because the text starts there.
     let program_files = std::env::var("ProgramFiles").unwrap();
     let detour = format!("{program_files}\\..{}.", &tools[2..]);
-    let before = launch(&tree, "git status", &|_, _, env| prepend_path(env, &detour)).unwrap();
+    let before = launch(&tree, PROBE, &|_, _, env| prepend_path(env, &detour)).unwrap();
     put(&tree, "tools\\detour.dll", "MZ planted");
     assert_ne!(
         before,
-        launch(&tree, "git status", &|_, _, env| prepend_path(env, &detour)).unwrap()
+        launch(&tree, PROBE, &|_, _, env| prepend_path(env, &detour)).unwrap()
     );
 }
 
 #[test]
 fn loader_steering_and_sibling_programs_are_bound_or_refused() {
     let tree = Tree::new();
-    git_repository(&tree);
     image(&tree, "ws\\bin\\probe.exe");
     for name in [
         "COR_ENABLE_PROFILING",
@@ -403,7 +397,7 @@ fn loader_steering_and_sibling_programs_are_bound_or_refused() {
         "QT_PLUGIN_PATH",
         "OPENSSL_MODULES",
     ] {
-        for command in ["git status", "./bin/probe.exe probe"] {
+        for command in [INSTALLED, PROBE] {
             let reason = launch(&tree, command, &|_, _, env| {
                 env.insert(name.to_owned(), "1".to_owned());
             });
@@ -415,7 +409,7 @@ fn loader_steering_and_sibling_programs_are_bound_or_refused() {
     tree.write("ws\\bin\\probe.runtimeconfig.dev.json", "{}");
     assert_ne!(probe, shell(&tree, "./bin/probe.exe probe").unwrap());
     // A bare-name child launch finds the working directory's programs first.
-    let git = shell(&tree, "git status").unwrap();
-    image(&tree, "ws\\git-lfs.exe");
-    assert_ne!(git, shell(&tree, "git status").unwrap());
+    let installed = shell(&tree, INSTALLED).unwrap();
+    image(&tree, "ws\\helper.exe");
+    assert_ne!(installed, shell(&tree, INSTALLED).unwrap());
 }

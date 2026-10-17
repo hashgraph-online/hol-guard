@@ -12,7 +12,6 @@ use guard_contracts::{
 };
 use serde::Deserialize;
 use serde_json::Value;
-use sha2::{Digest, Sha256};
 
 use crate::command_ascii_comparison::lowercase_for_ascii_comparison;
 use crate::command_common_cli_matchers::CommonCliMatcher;
@@ -30,7 +29,7 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 const PROGRAM_SCHEMA: &str = "guard.native-command-program.v1";
 const PROGRAM_DOMAIN: &[u8] = b"hol-guard.native-command-program.v1\0";
 const NODE_DOMAIN: &[u8] = b"hol-guard.native-command-matcher.v1\0";
-const MAX_PROGRAM_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PROGRAM_BYTES: usize = 6 * 1024 * 1024;
 const MAX_RULES: usize = 1_024;
 const MAX_NODES: usize = 16_384;
 const MAX_DEPTH: usize = 32;
@@ -270,11 +269,13 @@ fn digest_json_value(domain: &[u8], value: &Value) -> Result<String, &'static st
     Ok(digest_canonical_bytes(domain, &encoded))
 }
 
+// ring uses the CPU's SHA instructions; the packaged program digest covers
+// megabytes of canonical JSON on every resident start.
 fn digest_canonical_bytes(domain: &[u8], encoded: &[u8]) -> String {
-    let mut digest = Sha256::new();
+    let mut digest = ring::digest::Context::new(&ring::digest::SHA256);
     digest.update(domain);
     digest.update(encoded);
-    hex::encode(digest.finalize())
+    hex::encode(digest.finish())
 }
 
 fn valid_digest(value: &str) -> bool {

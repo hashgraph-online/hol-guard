@@ -1,18 +1,5 @@
 //! Source-faithful shell heredoc and command-substitution structures
-//! (`runtime/shell_structure.py`, 323 lines — verbatim).
-
-use fancy_regex::Regex;
-use std::sync::OnceLock;
-
-fn heredoc_operator_pattern() -> &'static Regex {
-    static RE: OnceLock<Regex> = OnceLock::new();
-    RE.get_or_init(|| {
-        Regex::new(
-            r#"(?<!<)(?P<operator><<-?)[ \t]*(?P<quote>['"]?)(?P<delimiter>(?:[A-Za-z_][A-Za-z0-9_]*|--[A-Za-z0-9][A-Za-z0-9_-]*))(?P=quote)"#, // NOSONAR: rust:S5856; fancy_regex supports the fixed-width (?<!<) lookbehind.
-        )
-        .unwrap()
-    })
-}
+//! (`runtime/shell_structure.py`).
 
 /// `ShellHeredoc` (:10-23).
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -42,7 +29,7 @@ pub struct ShellCommandSubstitution {
 }
 
 /// `extract_heredocs` (:43-88). Bounded POSIX heredocs without interpreting
-/// contents; text is byte-offset exact.
+/// contents; offsets index Unicode scalar values.
 pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
     if command.is_empty() {
         return Vec::new();
@@ -51,9 +38,17 @@ pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
     let n = chars.len();
     let mut results = Vec::new();
     let mut scan_cursor = 0usize;
+    // A quote opened on one line stays open on the next, so the scan state
+    // spans declaration lines. Heredoc bodies are not shell syntax, and the
+    // cursor jumps past them, so they never advance it.
+    let mut state = ShellScanState::new();
+    // A line ending in an unquoted backslash continues the current word onto
+    // the next line, so the word boundary spans lines as well.
+    let mut word_start = true;
     while scan_cursor < n {
         let mut line_end = find_newline(&chars, scan_cursor).unwrap_or(n);
-        let pending = heredoc_declarations(&chars[scan_cursor..line_end]);
+        let pending =
+            heredoc_declarations(&chars[scan_cursor..line_end], &mut state, &mut word_start);
         if pending.is_empty() {
             if line_end == n {
                 break;
@@ -72,7 +67,7 @@ pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
             let (closing_start, closing_end) =
                 find_heredoc_closing_line(&chars, body_start, delimiter, strip_tabs);
             results.push(ShellHeredoc {
-                delimiter: delimiter.clone(),
+                delimiter: m.delimiter,
                 body: chars[body_start..closing_start].iter().collect(),
                 operator_start: scan_cursor + m.start,
                 declaration_end: scan_cursor + m.end,
@@ -85,6 +80,8 @@ pub fn extract_heredocs(command: &str) -> Vec<ShellHeredoc> {
             body_cursor = closing_end;
         }
         scan_cursor = body_cursor;
+        // The line after a closing delimiter starts a fresh command.
+        word_start = true;
         line_end = n;
         let _ = line_end;
     }
@@ -131,54 +128,141 @@ struct HeredocDecl {
 }
 
 /// `_heredoc_declarations` (:91-107).
-fn heredoc_declarations(line: &[char]) -> Vec<HeredocDecl> {
+fn heredoc_declarations(
+    line: &[char],
+    state: &mut ShellScanState,
+    carried_word_start: &mut bool,
+) -> Vec<HeredocDecl> {
     let mut matches = Vec::new();
-    let line_text: String = line.iter().collect();
-    let mut state = ShellScanState::new();
     let mut index = 0usize;
-    let mut byte_index = 0usize;
+    // `#` opens a comment only at the start of a word, so the rest of the line
+    // is not shell syntax and cannot declare a heredoc. Quoting state is
+    // unchanged by a comment, so the next line resumes from the break point.
+    //
+    // Word starts are tracked from the scan's own steps rather than from the
+    // preceding character, because `advance` consumes an escape pair or a
+    // quoted span in one step: bash reads `echo a\ #` as the single word
+    // `a #`, where the `#` is not a comment at all.
+    let mut word_start = *carried_word_start;
+    // Anything but a line continuation ends the command at the newline, so the
+    // next line starts a word.
+    *carried_word_start = true;
     while index < line.len() {
+        // A trailing unquoted backslash joins this line to the next before bash
+        // looks for comments, so the word boundary has to survive the join.
+        // `advance` cannot report this on its own: it clamps the escape pair to
+        // the end of the line, which is indistinguishable from an ordinary
+        // single-character step. A backslash inside single quotes is literal and
+        // joins nothing.
+        let literal_backslash = state.quote == Some('\'') && !state.in_backtick;
+        let escapes_newline = line[index] == '\\' && index + 1 == line.len() && !literal_backslash;
         let next_index = state.advance(line, index);
-        if next_index != index + 1 {
-            byte_index += line[index..next_index]
-                .iter()
-                .map(|ch| ch.len_utf8())
-                .sum::<usize>();
+        if escapes_newline {
+            *carried_word_start = word_start;
             index = next_index;
             continue;
         }
-        if state.is_top_level() && starts_with(line, index, "<<") {
-            // Match the original line so lookbehind can reject here-strings.
-            if let Ok(Some(caps)) =
-                heredoc_operator_pattern().captures_from_pos(&line_text, byte_index)
-            {
-                let whole = caps.get(0).unwrap();
-                if whole.start() == byte_index {
-                    let byte_end = whole.end();
-                    let delim = caps.name("delimiter").unwrap().as_str().to_owned();
-                    let quoted = caps
-                        .name("quote")
-                        .map(|q| !q.as_str().is_empty())
-                        .unwrap_or(false);
-                    let strip_tabs = caps.name("operator").unwrap().as_str() == "<<-";
-                    let char_end = line_text[byte_index..byte_end].chars().count();
-                    matches.push(HeredocDecl {
-                        start: index,
-                        end: index + char_end,
-                        delimiter: delim,
-                        quoted,
-                        strip_tabs,
-                    });
-                    index += char_end;
-                    byte_index = byte_end;
-                    continue;
-                }
+        if next_index != index + 1 {
+            word_start = false;
+            index = next_index;
+            continue;
+        }
+        if state.is_top_level() && line[index] == '#' && word_start {
+            return matches;
+        }
+        let next_word_start = state.is_top_level()
+            && matches!(
+                line[index],
+                ' ' | '\t' | ';' | '&' | '|' | '(' | ')' | '<' | '>'
+            );
+        if state.is_top_level()
+            && line[index] == '<'
+            && line.get(index + 1) == Some(&'<')
+            && (index == 0 || line[index - 1] != '<')
+        {
+            let operator_end = index + 2;
+            let declaration = if line.get(operator_end) == Some(&'-') {
+                // Bash reads `<<-` greedily, so `<<--END` strips tabs and closes
+                // at `-END`. Only fall back to `<<` when no `<<-` delimiter parses.
+                heredoc_declaration(line, index, operator_end + 1, true)
+                    .or_else(|| heredoc_declaration(line, index, operator_end, false))
+            } else {
+                heredoc_declaration(line, index, operator_end, false)
+            };
+            if let Some(declaration) = declaration {
+                index = declaration.end;
+                word_start = false;
+                matches.push(declaration);
+                continue;
             }
         }
-        byte_index += line[index].len_utf8();
+        word_start = next_word_start;
         index += 1;
     }
     matches
+}
+
+fn heredoc_declaration(
+    line: &[char],
+    operator_start: usize,
+    mut cursor: usize,
+    strip_tabs: bool,
+) -> Option<HeredocDecl> {
+    while matches!(line.get(cursor), Some(' ' | '\t')) {
+        cursor += 1;
+    }
+    let quote = line
+        .get(cursor)
+        .copied()
+        .filter(|ch| matches!(ch, '\'' | '"'));
+    if quote.is_some() {
+        cursor += 1;
+    }
+    let delimiter_start = cursor;
+    let allow_hyphen = match line.get(cursor).copied()? {
+        ch if ch.is_ascii_alphabetic() || ch == '_' => {
+            cursor += 1;
+            false
+        }
+        '-' if line.get(cursor + 1) == Some(&'-')
+            && line
+                .get(cursor + 2)
+                .is_some_and(|ch| ch.is_ascii_alphanumeric()) =>
+        {
+            cursor += 3;
+            true
+        }
+        // After the `<<-` operator a single leading hyphen belongs to the delimiter.
+        '-' if strip_tabs
+            && line
+                .get(cursor + 1)
+                .is_some_and(|ch| ch.is_ascii_alphanumeric()) =>
+        {
+            cursor += 2;
+            true
+        }
+        _ => return None,
+    };
+    while line
+        .get(cursor)
+        .is_some_and(|ch| ch.is_ascii_alphanumeric() || *ch == '_' || (allow_hyphen && *ch == '-'))
+    {
+        cursor += 1;
+    }
+    let delimiter_end = cursor;
+    if let Some(quote) = quote {
+        if line.get(cursor) != Some(&quote) {
+            return None;
+        }
+        cursor += 1;
+    }
+    Some(HeredocDecl {
+        start: operator_start,
+        end: cursor,
+        delimiter: line[delimiter_start..delimiter_end].iter().collect(),
+        quoted: quote.is_some(),
+        strip_tabs,
+    })
 }
 
 /// `_find_heredoc_closing_line` (:110-129).
@@ -447,6 +531,15 @@ impl ShellScanState {
     pub fn advance(&mut self, chars: &[char], index: usize) -> usize {
         let n = chars.len();
         let ch = chars[index];
+        // Inside single quotes bash takes every character literally, a
+        // backslash included, so the escape below must not consume the closing
+        // quote and leave the scan holding the opposite quote state to bash.
+        if self.quote == Some('\'') && !self.in_backtick {
+            if ch == '\'' {
+                self.quote = None;
+            }
+            return index + 1;
+        }
         if ch == '\\' {
             return (n).min(index + 2);
         }
@@ -455,12 +548,6 @@ impl ShellScanState {
             return index + 1;
         }
         if self.in_backtick {
-            return index + 1;
-        }
-        if self.quote == Some('\'') {
-            if ch == '\'' {
-                self.quote = None;
-            }
             return index + 1;
         }
         if ch == '\'' && self.quote.is_none() {

@@ -15,6 +15,7 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
 from ..runtime.extension_control_authority import ExtensionControlAuthorityView
@@ -145,12 +146,18 @@ def _native_review_extension_allow_hint(
     if snapshot.authority_failure is not None or budget < _MIN_NATIVE_BUDGET_SECONDS:
         return None
     cwd = _launch_cwd(payload, workspace)
+    # The hint re-reviews the same command the hook just decided, so it reads
+    # the shell the hook was stamped from rather than the daemon's own
+    # environment. A worker that had nothing to stamp passes None and the
+    # rules that need an inherited variable proven away stay at review.
+    stamped = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
     reviewed = review_command_native(
         command,
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
         extension_control_snapshot=snapshot,
+        execution_environment=stamped if isinstance(stamped, Mapping) else None,
         timeout_seconds=budget,
         record_health=False,
     )

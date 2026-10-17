@@ -57,8 +57,10 @@ mod fanout_reads;
 mod find_reads;
 mod for_loop_unroll;
 pub(crate) mod git_branch_listing;
+pub(crate) mod git_clone_local;
 mod git_config;
 pub(crate) mod git_config_reads;
+mod git_config_trust;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
@@ -73,6 +75,8 @@ mod repo_create_reason;
 mod root_removal;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
+mod git_history_reads;
+pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
 mod git_push;
@@ -149,7 +153,9 @@ pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
-pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub use git_push::{
+    install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
+};
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -614,6 +620,40 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
     evaluate_pre_tool_with_context(request, None, None)
 }
 
+/// The same evaluation, told where the command runs.
+///
+/// Every rule that reads a path needs the working directory and the home
+/// directory to resolve `../sibling` and `~/Code`, and refuses the command
+/// when it has neither. A caller that knows them — the hook that received
+/// them from the harness, `guard inspect`, the dashboard's console — passes
+/// them here, and gets the decision the enforced hook lane gives the same
+/// command rather than the one a context-free screen is left with.
+pub fn evaluate_pre_tool_in(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
+    // Several proofs answer for what the command inherits: whether a
+    // `RIPGREP_CONFIG_PATH` can prepend options to `rg`, whether an npm or
+    // rustup variable can move what a tool loads, which HOME a `~` expands
+    // from. A caller that answers for another process's shell — a resident
+    // runtime started with its own sanitized environment, a one-shot
+    // evaluation of a request — knows none of that from its own variables,
+    // so an unstamped request is told so rather than being answered from
+    // this process. An environment with no valid shape is how the contract
+    // spells that, and every rule that needs one of those proofs keeps its
+    // review.
+    let unknown = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+    evaluate_pre_tool_with_execution_context(
+        request,
+        home_dir,
+        cwd,
+        None,
+        Some(execution_environment.unwrap_or(&unknown)),
+    )
+}
+
 pub(super) fn evaluate_pre_tool_with_context(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
@@ -888,6 +928,10 @@ fn evaluate_single_command(
             .or_else(|| {
                 let environment = execution_environment;
                 git_init_target::exact_safe_command(&model, context, deadline, environment)
+            })
+            .or_else(|| {
+                let environment = execution_environment;
+                git_clone_local::exact_safe_command(&model, context, deadline, environment)
             })
     {
         return Ok(pretool_decision(model, "allow", reason_code, reason));

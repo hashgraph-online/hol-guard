@@ -79,7 +79,7 @@ def _read_origin(store: object) -> tuple[bool, str | None]:
     # fallback is not the origin the daemon links once the state lands, so
     # neither case binds an origin; an unreadable state reports itself as
     # unknown so a transient lock reads as no change.
-    from .daemon.hook_native_review_approval import _native_review_approval_center_url
+    from .daemon.native_review_records import native_review_approval_center_url
 
     getter = getattr(store, "get_runtime_state", None)
     if not callable(getter):
@@ -90,7 +90,7 @@ def _read_origin(store: object) -> tuple[bool, str | None]:
         return False, None
     if not _records_listen_origin(state):
         return True, None
-    return True, _text_fact(_native_review_approval_center_url(_ReadState(state)), _MAX_REVIEW_FACT_BYTES)
+    return True, _text_fact(native_review_approval_center_url(_ReadState(state)), _MAX_REVIEW_FACT_BYTES)
 
 
 def approval_center_origin(store: object) -> str | None:

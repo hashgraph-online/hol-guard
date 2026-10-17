@@ -10,6 +10,8 @@ pub(super) fn persist_evidence(
     evaluation: &PackageEvalResult,
     now: &str,
 ) {
+    let held = hold_unresolved_package_cwd(artifact, evaluation.clone());
+    let evaluation = &held;
     if evaluation.decision == "allow" {
         return;
     }

@@ -167,6 +167,16 @@ def main() -> int:
     if identity.sha256 != spec["identity_sha256"] or capabilities.build_sha != spec["build_sha"]:
         raise RuntimeError("installed Guard changed between runner and case worker")
     host_process.group_ledger = Path(spec["groups"])
+    full_task = spec.get("full_task")
+    if full_task is not None:
+        from .full_task_parallel import run_worker_full_task
+
+        case = run_worker_full_task(spec, full_task, identity)
+        result = Path(spec["result"])
+        temporary = result.with_suffix(".tmp")
+        temporary.write_text(json.dumps({"assessment": case["assessment"], "case": case}), encoding="utf-8")
+        os.replace(temporary, result)
+        return 0
     scenario = next(s for s in load_catalog() if s.id == spec["scenario_id"])
     if spec.get("harness", "omp") != "omp":
         from .harness_case import run_harness_case

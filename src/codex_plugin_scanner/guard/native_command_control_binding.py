@@ -35,7 +35,7 @@ if TYPE_CHECKING:
 
 NATIVE_COMMAND_CONTROL_BINDING_SCHEMA = "guard.native-command-control-binding.v1"
 _PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
-_MAX_PROGRAM_BYTES = 4 * 1024 * 1024
+_MAX_PROGRAM_BYTES = 6 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +58,7 @@ def _program_path() -> Path:
 
 
 def load_native_command_program_metadata() -> NativeCommandProgramMetadata:
-    """Capture at most 4 MiB and cache validation by these exact bytes.
+    """Capture at most 6 MiB and cache validation by these exact bytes.
 
     Metadata-only cache keys could miss equal-sized file replacement on a
     filesystem with weak timestamp semantics. At most two captured immutable

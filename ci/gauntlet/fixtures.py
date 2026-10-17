@@ -48,9 +48,13 @@ SOURCE_FILES = {
 @lru_cache(maxsize=1)
 def _scenario_indices() -> dict[str, int]:
     # Deferred: catalog.py already imports fixtures.py at module load.
+    from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
     from .catalog import load_catalog
 
-    return {scenario.id: index for index, scenario in enumerate(load_catalog(), start=1)}
+    # The core catalog numbers first so its fixture directories keep their names, and each
+    # lane catalog that runs through run_harness_case follows it with distinct numbers.
+    scenarios = load_catalog() + load_catalog(APPROVAL_RETRY_CATALOG)
+    return {scenario.id: index for index, scenario in enumerate(scenarios, start=1)}
 
 
 def scenario_fixture_name(scenario_id: str) -> str:
@@ -378,6 +382,13 @@ PLAIN_DIRECTORY = "acme-plain"
 
 CALC_TEST = "def add(a, b):\n    return a + b\n\n\nassert add(2, 3) == 5\nprint('calc ok')\n"
 HOME_SKILL_DOC = "# Synthetic home skill\nInert reference text for the home skill document.\n"
+# A Node toolchain and a repository's own workflow, both below a hidden home
+# directory. Agents read files in these shapes all day; the names carry no
+# account, host or key.
+HOME_TOOLCHAIN_MANIFEST = ".nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg/package.json"
+HOME_TOOLCHAIN_MANIFEST_TEXT = '{\n  "name": "inert-pkg",\n  "version": "3.1.0"\n}\n'
+HOME_WORKFLOW_DOC = ".github/workflows/inert-check.yml"
+HOME_WORKFLOW_TEXT = "name: inert-check\non: [push]\njobs:\n  check:\n    runs-on: ubuntu-latest\n"
 HOME_ARTIFACT_DOC = "# Synthetic artifact\nInert build report text.\n"
 SIBLING_PROJECT_DOC = "Notes kept outside the project.\nretry policy: three attempts.\n"
 
@@ -434,6 +445,11 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         ("other-project/.keep", ""),
         # A plain directory with no .git, where a leaf probe finds nothing.
         (f"{PLAIN_DIRECTORY}/README.txt", "Plain notes directory.\n"),
+        # Ordinary files a toolchain and a repository's own automation keep
+        # below a hidden home directory. Nothing here names a credential;
+        # the hidden component is the only thing that sets them apart.
+        (HOME_TOOLCHAIN_MANIFEST, HOME_TOOLCHAIN_MANIFEST_TEXT),
+        (HOME_WORKFLOW_DOC, HOME_WORKFLOW_TEXT),
     ):
         target = home / relative
         target.parent.mkdir(parents=True, exist_ok=True)

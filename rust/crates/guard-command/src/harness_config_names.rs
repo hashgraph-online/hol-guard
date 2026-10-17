@@ -11,44 +11,9 @@
 //! Names are matched case-insensitively at any depth. A directory name covers
 //! everything below it; a file name covers only that basename.
 
-/// Directories a harness, editor or git hook runner auto-loads from.
-pub(crate) const HARNESS_DIRECTORIES: &[&str] = &[
-    ".agent",
-    ".agents",
-    ".amazonq",
-    ".antigravity",
-    ".augment",
-    ".claude",
-    ".cline",
-    ".clinerules",
-    ".codex",
-    ".continue",
-    ".copilot",
-    ".crush",
-    ".cursor",
-    ".devin",
-    ".gemini",
-    ".githooks",
-    ".goose",
-    ".grok",
-    ".hermes",
-    ".husky",
-    ".junie",
-    ".kimi",
-    ".kiro",
-    ".omp",
-    ".openclaw",
-    ".opencode",
-    ".openhands",
-    ".paseo",
-    ".pi",
-    ".qwen",
-    ".roo",
-    ".trae",
-    ".windsurf",
-    ".zcode",
-    ".zed",
-];
+/// Directories a harness, editor or git hook runner auto-loads from. The list
+/// lives beside the credential screen that also reads it.
+pub(crate) use guard_secure_fs::credential_store_names::HARNESS_DIRECTORIES;
 
 /// Files that register a command a harness or tool launches (MCP servers,
 /// lint and test commands). Writes to them are reviewed in every route.

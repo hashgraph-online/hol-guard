@@ -1,4 +1,4 @@
-//! `rg` roots that name another repository below home.
+//! Search roots and paths that name another repository below home.
 //!
 //! Agents in one repository spell a sibling as an absolute, `~` or `../`
 //! path. A `.git` directory and its ignored build output would make the
@@ -15,9 +15,10 @@
 //! and not plainly ignored, and any `.ignore` or `.rgignore` file sends the
 //! search to review. A negated pattern in a `.gitignore` or the repository's
 //! `info/exclude` is admitted only when it re-includes a literal path, such
-//! as `!.gitkeep` or `!.vscode/settings.json`, whose name is not a secret and
-//! that this walk does not prune; hidden entries with that name are then
-//! screened like any other descendant.
+//! as `!.gitkeep` or `!.env.example`, that this walk does not prune; hidden
+//! entries with that name are then screened like any other descendant, where
+//! the walk meets them. A rule at the repository root therefore holds only
+//! the searches that can reach the file it names.
 use super::{tree, ReadContext};
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -90,7 +91,7 @@ fn reachable_by_default(root: &Path, operand: &Path, ignored: &mut Ignored) -> b
             return false;
         }
         directory.push(name);
-        if directory != operand && !ignored.admit_ignore_file(root, &directory) {
+        if directory != operand && !ignored.admit_ignore_file(&directory) {
             return false;
         }
     }
@@ -122,10 +123,25 @@ fn no_whitelisting_ancestor(operand: &Path, context: ReadContext<'_>) -> bool {
 struct Ignored {
     anywhere: Vec<String>,
     at_root: Vec<String>,
-    /// Final names of the paths negated patterns re-include. `rg` searches
-    /// such an entry even when it is hidden, so the walk screens hidden
-    /// entries with any of these names wherever they appear.
-    whitelisted: Vec<String>,
+    /// The paths negated patterns re-include. `rg` searches such an entry
+    /// even when it is hidden, so the walk screens the hidden entries they
+    /// name.
+    whitelisted: Vec<Whitelist>,
+}
+
+/// One negated pattern, kept with the scope git gives it.
+///
+/// A pattern anchored to its ignore file's directory, by a leading slash or
+/// by a slash anywhere inside it, re-includes that one path and nothing
+/// else: `!/.env.example` in the root says nothing about `src/.env.example`.
+/// A bare name re-includes every entry of that name below the directory.
+struct Whitelist {
+    /// The directory the ignore file applies to.
+    base: PathBuf,
+    /// The re-included path, relative to `base`, lowercased.
+    relative: PathBuf,
+    /// Whether the name is re-included at any depth below `base`.
+    anywhere: bool,
 }
 
 impl Ignored {
@@ -134,34 +150,60 @@ impl Ignored {
             || (directly_below_root && self.at_root.iter().any(|ignored| ignored == name))
     }
 
-    fn whitelists(&self, name: &str) -> bool {
-        self.whitelisted
-            .iter()
-            .any(|whitelisted| whitelisted.eq_ignore_ascii_case(name))
+    /// Whether a negation re-includes `path`, which the walk reached below
+    /// the directory its ignore file applies to.
+    fn whitelists(&self, path: &Path) -> bool {
+        let lowered =
+            |value: &std::ffi::OsStr| PathBuf::from(value.to_string_lossy().to_lowercase());
+        self.whitelisted.iter().any(|whitelisted| {
+            if whitelisted.anywhere {
+                path.file_name()
+                    .is_some_and(|name| lowered(name) == whitelisted.relative)
+            } else {
+                path.strip_prefix(&whitelisted.base)
+                    .is_ok_and(|relative| lowered(relative.as_os_str()) == whitelisted.relative)
+            }
+        })
     }
 
     /// Reads the `.gitignore` in `directory`, if any, and admits its
-    /// negated patterns.
-    fn admit_ignore_file(&mut self, root: &Path, directory: &Path) -> bool {
+    /// negated patterns. They apply to that directory's tree, not to the
+    /// repository's.
+    fn admit_ignore_file(&mut self, directory: &Path) -> bool {
         match optional_ignore_lines(&directory.join(".gitignore")) {
-            Some(Some(lines)) => self.admit_negations(root, directory, &lines),
+            Some(Some(lines)) => self.admit_negations(&lines, directory),
             Some(None) => true,
             None => false,
         }
     }
 
     /// Records the negated patterns among `lines`, read from an ignore file
-    /// that applies below `base`. A negation may only re-include a literal
+    /// that applies to the tree being walked. A negation may only re-include a literal
     /// path whose components this walk never prunes, so a plainly ignored
-    /// directory stays out of `rg`'s reach, and whose name is not a secret
-    /// the descendant screen would refuse.
-    fn admit_negations(&mut self, root: &Path, base: &Path, lines: &[String]) -> bool {
+    /// directory stays out of `rg`'s reach. Whether the name it re-includes
+    /// is one the descendant screen refuses is decided where the walk meets
+    /// the file, so a root rule naming a template beside the searched
+    /// directory does not answer for a search that never reaches it.
+    fn admit_negations(&mut self, lines: &[String], base: &Path) -> bool {
         for line in lines {
             let Some(pattern) = line.strip_prefix('!') else {
                 continue;
             };
-            let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
             let pattern = pattern.strip_suffix('/').unwrap_or(pattern);
+            // A leading `**/` stands for any run of directories, which is
+            // what a bare name already means: `!**/notes.md` re-includes
+            // that name wherever it sits. A `**` anywhere else spans
+            // directories this walk would have to match depth by depth, and
+            // falls to the literal screen below.
+            let (pattern, any_depth) = match pattern.strip_prefix("**/") {
+                Some(rest) => (rest, true),
+                None => (pattern, false),
+            };
+            // Git anchors a pattern to its ignore file's directory as soon as
+            // it carries a slash anywhere but the end, so only a bare name
+            // re-includes entries deeper down.
+            let anchored = !any_depth && (pattern.starts_with('/') || pattern.contains('/'));
+            let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
             let components: Vec<&str> = pattern.split('/').collect();
             let literal = components.iter().all(|component| plain_name(component));
             let pruned = components.iter().any(|component| {
@@ -170,13 +212,17 @@ impl Ignored {
                     .chain(&self.at_root)
                     .any(|ignored| ignored.eq_ignore_ascii_case(component))
             });
-            let Some(name) = components.last().filter(|_| literal && !pruned) else {
-                return false;
-            };
-            if !tree::descendant_allowed(&base.join(pattern), root, true) {
+            if !literal || pruned || (!anchored && components.len() != 1) {
                 return false;
             }
-            self.whitelisted.push((*name).to_owned());
+            self.whitelisted.push(Whitelist {
+                base: base.to_path_buf(),
+                relative: components
+                    .iter()
+                    .map(|component| component.to_lowercase())
+                    .collect(),
+                anywhere: !anchored,
+            });
         }
         true
     }
@@ -218,7 +264,7 @@ fn ignored_names(root: &Path) -> Option<Ignored> {
             ignored.anywhere.push(name.to_owned());
         }
     }
-    (ignored.admit_negations(root, root, &excludes) && ignored.admit_negations(root, root, &lines))
+    (ignored.admit_negations(&excludes, root) && ignored.admit_negations(&lines, root))
         .then_some(ignored)
 }
 
@@ -284,7 +330,7 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
         }
         // The directory's own `.gitignore` applies to its entries, so its
         // negations are admitted before any entry is screened.
-        if directory != root && !ignored.admit_ignore_file(root, &directory) {
+        if directory != root && !ignored.admit_ignore_file(&directory) {
             return false;
         }
         let Ok(entries) = std::fs::read_dir(&directory) else {
@@ -305,7 +351,7 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
             }
             // `rg` skips hidden entries unless a negated pattern re-includes
             // them; ignore files themselves were read above.
-            if name == ".gitignore" || (name.starts_with('.') && !ignored.whitelists(name)) {
+            if name == ".gitignore" || (name.starts_with('.') && !ignored.whitelists(&path)) {
                 continue;
             }
             if ignored.prunes(name, directory == root) {
@@ -325,4 +371,213 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
         }
     }
     true
+}
+
+/// True when `value` names one file inside a git working tree below home, or
+/// a path that does not exist inside one.
+///
+/// `rg` searches a file named on its command line whatever the ignore rules
+/// say, and `grep` reads no ignore file at all, so the walk the directory
+/// rule performs has nothing to decide here:
+/// the command opens that one file and no other. What is left is the screen
+/// every descendant of a sibling root already passes — no hidden component on
+/// the way down, and a name that is not a credential's. A path that does not
+/// exist reads nothing at all: it prints an error, as a probe `ls` of the
+/// same path does, and agents spell one whenever they guess at a file name.
+/// It is admitted under the same component screen, so anything that turns up
+/// there before the command runs is a file this rule would have read anyway.
+pub(in crate::pretool) fn named_path(
+    value: &str,
+    context: ReadContext<'_>,
+    allow_absent: bool,
+) -> bool {
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains(tree::HAZARDS)
+        || value.contains(['*', '?', '[', ']', '{', '}'])
+        || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
+        // A parent step resolves somewhere this screen cannot read off the
+        // spelling, and the directory rule already covers the roots agents
+        // reach that way.
+        || value.split(['/', '\\']).any(|part| part == "..")
+        || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+    {
+        return false;
+    }
+    let Some(operand) = tree::expanded_operand(value, context) else {
+        return false;
+    };
+    let Some((present, missing)) = nearest_present(&operand) else {
+        return false;
+    };
+    let Some(root) = present
+        .ancestors()
+        .find(|path| std::fs::symlink_metadata(path.join(".git")).is_ok())
+    else {
+        return false;
+    };
+    let Ok(relative) = present.strip_prefix(root) else {
+        return false;
+    };
+    if !super::super::git_routes::repository_below_home(root, context) {
+        return false;
+    }
+    let mut named = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(name) = component else {
+            return false;
+        };
+        named.push(name);
+        if !tree::descendant_allowed(&named, root, false) {
+            return false;
+        }
+    }
+    // Everything below the repository root is screened relative to it, so no
+    // screen above sees the directories the repository itself sits in, and
+    // `credential_named_path` stands aside as soon as the last component is
+    // source code: a repository kept inside a store
+    // (`~/Code/secrets/service.ts`) would clear both and open everything it
+    // holds. Only the path down to the root is read here. The components
+    // below it keep the screen they already have, which is the one that
+    // knows a test tree's fixtures from a store and a source file from a
+    // credential, so `src/auth.ts` stays the source file it is named after.
+    if guard_secure_fs::credential_directory_path(root) {
+        return false;
+    }
+    if missing.is_empty() {
+        return present.is_file() && tree::descendant_allowed(&present, root, true);
+    }
+    // Every missing name is screened as a file, not only the last one. The
+    // screen answers for the path as it stands when the command is prepared,
+    // and a name that is absent then may be anything by the time `rg` opens
+    // it; holding each one to the narrower screen means the thing that turns
+    // up there cannot be a store `rg` would then walk.
+    allow_absent
+        && present.is_dir()
+        && missing.iter().all(|name| {
+            named.push(name);
+            tree::descendant_allowed(&named, root, true)
+        })
+}
+
+/// The resolved nearest existing ancestor of `path`, and the names missing
+/// below it, outermost first. `None` when a component cannot be read at all.
+fn nearest_present(path: &Path) -> Option<(PathBuf, Vec<String>)> {
+    let mut missing: Vec<String> = Vec::new();
+    let mut present = path;
+    loop {
+        match std::fs::symlink_metadata(present) {
+            Ok(_) => {
+                missing.reverse();
+                // The spelled path may cross a link, so the screen reads the
+                // place it lands rather than the name it was given.
+                return std::fs::canonicalize(present)
+                    .ok()
+                    .map(|present| (present, missing));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let name = present.file_name()?.to_str()?;
+                missing.push(name.to_owned());
+                present = present.parent()?;
+            }
+            Err(_) => return None,
+        }
+    }
+}
+
+/// Whether the operand, as it was spelled, crosses only names a walk admits.
+///
+/// The screens below read the resolved path, so a link's own name never
+/// reaches them: `service-api/.private` is screened as whatever it points at,
+/// and a hidden name would be laundered through the link. The spelling is
+/// held to the same hidden-name screen first, before anything is resolved.
+fn spelling_allowed(value: &str) -> bool {
+    value
+        .trim_start_matches('~')
+        .split(['/', '\\'])
+        .filter(|part| !part.is_empty() && *part != "." && *part != "..")
+        .all(|part| !part.starts_with('.') || tree::hidden_allowed(part))
+}
+
+/// True when `value` names a directory inside a git working tree below home
+/// that a `grep -r` walk may take as its root.
+///
+/// `grep -r` reads no ignore file: it visits every descendant, so the walk
+/// [`tree::walk`] performs is the whole proof, and it is the same walk a root
+/// inside the current directory gets. The only thing a root outside the
+/// current directory changes is which tree is read, and a repository below
+/// home is one the agent works in. `.git`, `node_modules`, `.env` and every
+/// other screened name still stop the walk wherever they appear, so
+/// `grep -rn pat ~/code/api` is refused for its own `.git` while
+/// `grep -rn pat ~/code/api/tests` is read.
+///
+/// Each component from the repository root down to the operand is screened
+/// too: without that, a root could be named straight through a directory the
+/// walk itself would refuse to enter.
+pub(in crate::pretool) fn grep_walk_root(
+    value: &str,
+    context: ReadContext<'_>,
+    excluded_files: &[&str],
+    excluded_directories: &[&str],
+    git_metadata: bool,
+) -> bool {
+    if value.is_empty()
+        || value.len() > 4096
+        || value.contains(tree::HAZARDS)
+        || value.contains(['*', '?', '[', ']', '{', '}'])
+        || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
+        || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
+    {
+        return false;
+    }
+    if !spelling_allowed(value) {
+        return false;
+    }
+    let Some(operand) =
+        tree::expanded_operand(value, context).and_then(|path| std::fs::canonicalize(path).ok())
+    else {
+        return false;
+    };
+    if !operand.is_dir()
+        || tree::inside_agent_state(&operand, context)
+        // The walk measures its descendants against the operand, so a store
+        // named as the root has its own name stripped before any of them is
+        // screened: `grep -rn pat ~/Code/org/service-api/secrets` would read
+        // the store one file at a time. The directories on the way to the
+        // root are screened on their own.
+        || guard_secure_fs::credential_directory_path(&operand)
+    {
+        return false;
+    }
+    let Some(root) = operand
+        .ancestors()
+        .find(|path| std::fs::symlink_metadata(path.join(".git")).is_ok())
+    else {
+        return false;
+    };
+    let Ok(relative) = operand.strip_prefix(root) else {
+        return false;
+    };
+    if !super::super::git_routes::repository_below_home(root, context) {
+        return false;
+    }
+    let mut named = root.to_path_buf();
+    for component in relative.components() {
+        let std::path::Component::Normal(name) = component else {
+            return false;
+        };
+        named.push(name);
+        if !tree::descendant_allowed(&named, root, false) {
+            return false;
+        }
+    }
+    // The caller reaches this route only where the command follows no
+    // link, so the walk does not either.
+    tree::walk(
+        operand,
+        excluded_files,
+        excluded_directories,
+        git_metadata,
+        false,
+    )
 }

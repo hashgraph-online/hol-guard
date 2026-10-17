@@ -33,6 +33,15 @@ runs:
     shell: bash
   - run: uv sync --frozen --extra dev --python 3.12
     shell: bash
+  - name: Validate harness version coverage manifest
+    # Release PRs must not ship coverage records bound to another Guard build.
+    run: |
+      args=()
+      if [[ "${HEAD_REF}" == release-please--* ]]; then args+=(--release); fi
+      uv run --no-sync python scripts/ci/validate_harness_version_coverage.py "${args[@]}"
+    shell: bash
+    env:
+      HEAD_REF: ${{ github.head_ref }}
   - name: Publish exact test-body duplicate candidates
     run: |
       uv run --no-sync python scripts/ci/test_duplicate_candidates.py \

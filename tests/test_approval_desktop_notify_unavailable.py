@@ -22,7 +22,9 @@ class _UnavailableStore:
 
 
 def _request() -> SimpleNamespace:
-    return SimpleNamespace(request_id="req-1", workspace=None, approval_url="http://127.0.0.1:4781/approvals/req-1")
+    return SimpleNamespace(
+        request_id="req-1", workspace=None, approval_url="http://127.0.0.1:4781/approvals/req-1", queue_group_id=None
+    )
 
 
 def test_an_unreadable_marker_skips_the_notification(monkeypatch: pytest.MonkeyPatch) -> None:

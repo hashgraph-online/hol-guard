@@ -22,7 +22,10 @@ const UNMODELED_GITHUB: &[&str] = &[
     "for n in 1*; do gh pr comment $n --body \"Fixed the node script's env handling.\"; done",
 ];
 
-fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeCommandControls {
+pub(super) fn controls(
+    controls: serde_json::Value,
+    lockdown: bool,
+) -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -39,7 +42,7 @@ fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeComman
     CompiledNativeCommandControls::new(&binding).unwrap()
 }
 
-fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
+pub(super) fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
     GITHUB_PERMISSIONS
         .iter()
         .map(|id| {
@@ -53,7 +56,10 @@ fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
         .collect()
 }
 
-fn decision(controls: &CompiledNativeCommandControls, command: &str) -> (String, String) {
+pub(super) fn decision(
+    controls: &CompiledNativeCommandControls,
+    command: &str,
+) -> (String, String) {
     let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
         "zcode",
         "PreToolUse",

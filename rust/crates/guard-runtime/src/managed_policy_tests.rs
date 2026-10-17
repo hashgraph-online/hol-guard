@@ -279,11 +279,13 @@ fn a_proxy_url_is_an_https_origin_without_credentials() {
 
 #[test]
 fn a_managed_ca_bundle_is_an_absolute_path() {
-    let policy = parse(json!({"network": {"caBundlePath": "/etc/hol/roots.pem"}}));
-    assert_eq!(
-        policy.network.ca_bundle_path,
-        Some(PathBuf::from("/etc/hol/roots.pem"))
-    );
+    let bundle = if cfg!(windows) {
+        r"C:\ProgramData\HOL\roots.pem"
+    } else {
+        "/etc/hol/roots.pem"
+    };
+    let policy = parse(json!({"network": {"caBundlePath": bundle}}));
+    assert_eq!(policy.network.ca_bundle_path, Some(PathBuf::from(bundle)));
     assert!(policy.network.trust_roots_path.is_none());
     assert_eq!(
         refuse(json!({"network": {"caBundlePath": "roots.pem"}})),

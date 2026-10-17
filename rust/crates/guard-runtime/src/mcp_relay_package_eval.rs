@@ -21,10 +21,6 @@
 //! reach production through the resident's own APIs, so an evaluation is run
 //! here without retaining blobs.
 
-// The relay's decide path adopts this with the rest of the native package
-// lane; until it does, only the tests below evaluate a request.
-#![allow(dead_code)]
-
 use guard_command::egress_caller_policy::ManagedEgressPolicy;
 use guard_command::package_intent_common::{build_package_request_artifact, PackageIntent};
 use guard_contracts::{SupplyChainEvalRequestV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA};

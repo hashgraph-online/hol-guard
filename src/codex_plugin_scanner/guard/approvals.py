@@ -341,7 +341,8 @@ def queue_blocked_approvals(
                 payloads.append(request_payload)
                 if notify:
                     notice = cast(dict[str, str], entry["notice"])
-                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice))
+                    group = _string_or_none(request_payload.get("queue_group_id"))
+                    _notify_pending_approval(store=store, request=_QueuedNotice(**notice, queue_group_id=group))
             if error is not None:
                 raise error
     except Exception as failure:
@@ -387,6 +388,7 @@ class _QueuedNotice:
     artifact_name: str
     risk_headline: str | None
     trigger_summary: str | None
+    queue_group_id: str | None = None
 
 
 def silent_review_center_url(guard_home: Path) -> str:
@@ -529,6 +531,17 @@ def apply_approval_resolution(
                 )
         else:
             persist_policy = None
+    if (
+        action == "allow"
+        and not contract.can_run_once
+        and not (scope == "artifact" and persist_policy is True and contract.can_persist_exact_version)
+    ):
+        raise IneligibleApprovalScopeError(
+            "execution_binding_unavailable",
+            contract,
+            action="allow",
+            requested_scope=scope,
+        )
     request_artifact_id = _string_or_none(request.get("artifact_id"))
     request_artifact_hash = _string_or_none(request.get("artifact_hash"))
     resolved_workspace = resolve_request_workspace_scope(request, workspace) if scope == "workspace" else None
@@ -840,12 +853,39 @@ def _notify_pending_approval(*, store: GuardStore, request: _QueuedNotice) -> No
     notify_pending_approval_once(
         DesktopApprovalNotification(
             request_id=request.request_id,
-            title="HOL Guard needs approval",
+            title=_approval_notification_title(request),
             message=_approval_notification_message(request),
             approval_url=approval_url,
         ),
         on_success=lambda: _mark_desktop_notified(store, request.request_id),
     )
+
+
+def notify_connector_setup(store: object, queued: Mapping[str, object], *, connector_name: str) -> None:
+    """Raise the setup notice for a native review row already queued under a connector group.
+
+    Best effort, as ``_notify_pending_approval`` is: the row is in the Inbox either way. Commands that wait on
+    one connector share a group, and the store answers with its first notified sibling's marker, so only the
+    first command raises a notice.
+    """
+
+    fields = {key: _string_or_none(queued.get(key)) for key in ("request_id", "harness", "approval_url")}
+    group = _string_or_none(queued.get("queue_group_id"))
+    request_id, harness, approval_url = fields["request_id"], fields["harness"], fields["approval_url"]
+    if request_id is None or harness is None or approval_url is None or group is None:
+        return
+    notice = _QueuedNotice(
+        request_id=request_id,
+        harness=harness,
+        workspace=_string_or_none(queued.get("workspace")),
+        approval_url=approval_url,
+        artifact_name=connector_name,
+        risk_headline=connector_name,
+        trigger_summary=None,
+        queue_group_id=group,
+    )
+    with contextlib.suppress(Exception):
+        _notify_pending_approval(store=cast(GuardStore, store), request=notice)
 
 
 def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
@@ -855,10 +895,22 @@ def _mark_desktop_notified(store: GuardStore, request_id: str) -> None:
         store.mark_approval_desktop_notified(request_id, _now())
 
 
+def _is_connector_setup(request: _QueuedNotice) -> bool:
+    return (request.queue_group_id or "").startswith("connector:")
+
+
+def _approval_notification_title(request: _QueuedNotice) -> str:
+    # Commands of one connector share a single notice, raised by the first.
+    return "HOL Guard: a connector needs setup" if _is_connector_setup(request) else "HOL Guard needs approval"
+
+
 def _approval_notification_message(request: _QueuedNotice) -> str:
     subject = request.risk_headline or request.trigger_summary or request.artifact_name
     harness = request.harness.replace("-", " ").title()
-    message = f"{harness} wants approval: {subject}"
+    if _is_connector_setup(request):
+        message = f"{harness} is waiting on a connector Guard has not set up yet: {subject}"
+    else:
+        message = f"{harness} wants approval: {subject}"
     if len(message) <= 180:
         return message
     return f"{message[:177].rstrip()}..."

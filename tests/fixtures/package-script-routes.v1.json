@@ -124,6 +124,166 @@
       "reason": "native_package_test_readonly_containment_required"
     },
     {
+      "name": "ready-pnpm-lint-bare",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "pnpm lint",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "ready-pnpm-build-bare",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "pnpm build",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "ready-yarn-lint",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn lint",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "ready-yarn-run-typecheck",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn run typecheck",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "ready-yarn-build",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn build",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "ready-yarn-test",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn test",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "ready-yarn-run-test",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn run test",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_package_test_readonly_containment_required"
+    },
+    {
+      "name": "npm-bare-script",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "npm lint",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "yarn-script-argument",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn lint src",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "yarn-install",
+      "scripts": {
+        "build": "vite build",
+        "lint": "eslint src",
+        "typecheck": "tsc --noEmit -p .",
+        "test": "node --test"
+      },
+      "command": "yarn install",
+      "entries": [
+        "eslint/bin/eslint.js",
+        "typescript/bin/tsc",
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
       "name": "renamed",
       "scripts": {
         "lint": "vite build"

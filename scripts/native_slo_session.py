@@ -437,8 +437,11 @@ class AdapterSession:
                 self._connection.close()
         finally:
             # Stop the resident before worker clients disappear, preserving containment evidence.
-            with suppress(Exception):
-                self.stop_resident()
+            # After a failed stop, leave that failure as the recorded diagnostic;
+            # the final pass below still stops the resident.
+            if getattr(self, "last_stop_diagnostic", {}).get("status") not in _STOP_FAILURE_STATUSES:
+                with suppress(Exception):
+                    self.stop_resident()
             try:
                 self.daemon.stop()
             finally:

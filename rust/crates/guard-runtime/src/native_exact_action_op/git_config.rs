@@ -10,7 +10,7 @@ use serde_json::Value;
 use super::context::Ctx;
 use super::fs_path;
 #[cfg(windows)]
-use super::git_windows::{config_reference_is_pinned, path_helpers_stay_idle, user_config_roots};
+use super::git_windows::{config_reference_is_pinned, helpers_stay_idle, user_config_roots};
 use super::reasons::{Proof, GIT_HELPER_CONFIG, UNPROVEN_LAUNCH};
 
 const MAX_CONFIG_BYTES: u64 = 1_048_576;
@@ -68,7 +68,7 @@ fn include_path() -> &'static Regex {
 /// What scanning the config and attribute files found besides their digests.
 /// Git for Windows runs `git-lfs` and `astextplain` through a `PATH` lookup
 /// whose first hit (`~/bin` in Git Bash) the digest cannot bind, so a reuse
-/// must never reach them (`git_windows::path_helpers_stay_idle`).
+/// must never reach them (`git_windows::helpers_stay_idle`).
 #[derive(Default)]
 #[cfg_attr(not(windows), allow(dead_code))]
 pub(super) struct Found {
@@ -257,7 +257,7 @@ pub(super) fn git_config_digest(
     }
     seen.extend(nested_attribute_digests(root, &mut found, ctx)?);
     #[cfg(windows)]
-    path_helpers_stay_idle(&found, invocation, root, git_dir)?;
+    helpers_stay_idle(&found, invocation, root, git_dir)?;
     #[cfg(not(windows))]
     let _ = invocation;
     // `sorted(seen.items())` as compact JSON pairs.
@@ -336,7 +336,8 @@ fn nested_attribute_digests(
                 let is_link = entry.file_type().is_ok_and(|kind| kind.is_symlink());
                 if name != ".git" && name != "node_modules" && !is_cache_tree(&path) && !is_link {
                     pending.push(path);
-                } else {
+                } else if name != ".git" {
+                    // No index name has a `.git` component.
                     found.skipped(root, &path);
                 }
             } else if name == ".gitattributes"
@@ -436,9 +437,11 @@ fn scan_key(
         return Ok(());
     }
     // Attributes from a tree (`attr.tree`) are objects no digest reads, and
-    // they could route a path to the LFS filter.
+    // the index proof parses only the SHA-1 layout.
     #[cfg(windows)]
-    if section == "attr" && name == "tree" {
+    if (section, name.as_str()) == ("attr", "tree")
+        || ((section, name.as_str()) == ("extensions", "objectformat") && value != "sha1")
+    {
         return Err(GIT_HELPER_CONFIG);
     }
     #[cfg(windows)]

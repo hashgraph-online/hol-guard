@@ -206,7 +206,7 @@ pub(crate) struct PolicySnapshotStore {
     direct_lane_ack_wait: policy_store_direct_lane::DirectLaneAckWait,
     direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue,
     mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
-    mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext>,
+    mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim>,
     mcp_relay_servers: crate::mcp_relay_servers::RelayServers,
 }
 
@@ -337,7 +337,7 @@ impl PolicySnapshotStore {
     /// Relayed decisions' saved-approval claims, waiting for the relay.
     pub(crate) fn mcp_relay_claims(
         &self,
-    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext> {
+    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim> {
         &self.mcp_relay_claims
     }
 

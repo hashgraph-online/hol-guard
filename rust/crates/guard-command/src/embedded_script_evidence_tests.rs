@@ -1,4 +1,9 @@
 //! Replays embedded-script evidence recorded from the retired Python owner.
+//!
+//! A vector may be hand-corrected where the owner disagreed with bash:
+//! `heredoc_comment` recorded a declaration for `<<EOF` written inside a `#`
+//! comment, which bash never reads as one. `record_vectors.py` documents each
+//! such case.
 use crate::embedded_script_evidence::embedded_script_evidence_entries;
 use crate::shell_helpers;
 use serde_json::{json, Value};

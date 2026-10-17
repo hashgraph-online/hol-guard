@@ -221,6 +221,34 @@ test("configure link opens the exact pattern without command text in the URL", a
   expect(url).not.toContain("app.py");
 });
 
+for (const eligible of [false, true]) {
+  test(`retry-restricted extension shortcut ${eligible ? "preserves explicit persistence" : "offers configuration without once approval"}`, async ({ page }) => {
+    const calls: Array<{ path: string; body: Record<string, unknown> }> = [];
+    const item: GuardApprovalRequest = {
+      ...request(recommendation()), harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
+      scope_contract_version: "guard.approval-scopes.v7", scope_contract_digest: DIGEST,
+      allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+      recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+      scope_restrictions: ["retry_cannot_reuse_approval"], exact_action_persistence_eligible: eligible,
+    };
+    await mount(page, item, calls);
+    await page.goto(`/requests/ext-rec-e2e?${DAEMON}`);
+    const card = page.getByTestId("approval-extension-recommendation");
+    await expect(card.getByRole("button", { name: "Configure in Git protection" })).toBeVisible();
+    await expect(card.getByRole("button", { name: /Approve & always allow/ })).toHaveCount(0);
+    expect(calls).toHaveLength(0);
+    if (!eligible) return;
+    await page.getByText("Always allow exact action", { exact: true }).click();
+    await card.getByRole("button", { name: "Approve & always allow git add" }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("Approval password", { exact: true }).fill("test-password");
+    await dialog.getByRole("button", { name: "Approve & always allow git add" }).click();
+    await expect.poll(() => calls.length).toBe(4);
+    expect(calls[3]!.body).toMatchObject({ scope: "artifact", persist_policy: true });
+    await expect(page.getByText("Approved. Git protection now allows git add automatically.")).toBeVisible();
+  });
+}
+
 test("missing approval password offers setup instead of one tap", async ({ page }) => {
   await mount(page, request(recommendation()), [], { enabled: false, configured: false });
   await page.goto(`/requests/ext-rec-e2e?${DAEMON}`);

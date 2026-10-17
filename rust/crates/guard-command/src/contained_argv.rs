@@ -19,12 +19,26 @@ fn local_package_entry(argument: &str, package_entry: &str) -> bool {
         .is_some_and(|prefix| prefix.is_empty() || prefix.ends_with('/'))
 }
 
+/// The program name; on Windows without `.exe`, as the pre-tool parser reads
+/// it, so `node.exe` and a resolved `C:\...\python.exe` plan like `node` and
+/// `python`.
 fn basename(command: &[String]) -> &str {
-    command
+    let name = command
         .first()
         .and_then(|v| Path::new(v).file_name())
         .and_then(|v| v.to_str())
-        .unwrap_or("")
+        .unwrap_or("");
+    match name.len().checked_sub(4) {
+        Some(stem)
+            if cfg!(windows)
+                && stem > 0
+                && name.is_char_boundary(stem)
+                && name[stem..].eq_ignore_ascii_case(".exe") =>
+        {
+            &name[..stem]
+        }
+        _ => name,
+    }
 }
 
 pub fn node_runtime_args(command: &[String]) -> Result<Vec<String>, RestrictedPytestError> {
@@ -54,13 +68,22 @@ pub fn test_script(script: &str) -> bool {
     named_test_script(script, false)
 }
 
-fn named_test_script(script: &str, node: bool) -> bool {
-    static NAME: LazyLock<Regex> = LazyLock::new(|| {
-        Regex::new(
-            r"^(?:test_[A-Za-z0-9_-]*|[A-Za-z0-9_-]*_test|test|tests|runtests|run_tests)\.py$",
-        )
-        .unwrap()
-    });
+/// A workspace script under any plain name. Windows has no workspace sandbox,
+/// so there the read-only boundary also runs an ordinary script that the
+/// pre-tool check found reads no network, credential store or write; it
+/// authorizes the resolved launch again before running it.
+fn windows_plain_script(script: &str, node: bool) -> bool {
+    static NAME: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.py$").unwrap());
+    static NODE_NAME: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:js|mjs|cjs)$").unwrap());
+    let name = if node { &NODE_NAME } else { &NAME };
+    cfg!(windows)
+        && workspace_script_path(script)
+        && name.is_match(script.rsplit('/').next().unwrap_or(""))
+}
+
+fn workspace_script_path(script: &str) -> bool {
     !script.is_empty()
         && !script.starts_with(['-', '/', '~', '$'])
         && !script.contains(['\\', '$', '`'])
@@ -68,6 +91,16 @@ fn named_test_script(script: &str, node: bool) -> bool {
             .trim_end_matches('/')
             .split('/')
             .all(|v| !v.is_empty() && v != "..")
+}
+
+fn named_test_script(script: &str, node: bool) -> bool {
+    static NAME: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(
+            r"^(?:test_[A-Za-z0-9_-]*|[A-Za-z0-9_-]*_test|test|tests|runtests|run_tests)\.py$",
+        )
+        .unwrap()
+    });
+    workspace_script_path(script)
         && if node {
             static NODE_NAME: LazyLock<Regex> = LazyLock::new(|| {
                 Regex::new(r"^(?:[A-Za-z0-9_.-]*(?:\.test|\.spec|_test)|test_[A-Za-z0-9_.-]*|tests?)\.(?:js|mjs|cjs|jsx|ts|mts|cts|tsx)$").unwrap()
@@ -91,7 +124,7 @@ pub fn node_script_index(command: &[String], start: usize) -> Option<usize> {
     }
     command
         .get(index)
-        .filter(|value| named_test_script(value, true))
+        .filter(|value| named_test_script(value, true) || windows_plain_script(value, true))
         .map(|_| index)
 }
 
@@ -150,7 +183,12 @@ pub fn python_runtime_args(command: &[String]) -> Option<Vec<String>> {
         && command[index + 2..]
             .iter()
             .all(|value| !value.contains(['<', '>', '|', '&', ';', '`', '$']));
-    if !inline && !unittest && !command.get(index).is_some_and(|v| test_script(v)) {
+    if !inline
+        && !unittest
+        && !command
+            .get(index)
+            .is_some_and(|v| test_script(v) || windows_plain_script(v, false))
+    {
         return None;
     }
     Some(command[1..index].to_vec())
@@ -343,17 +381,21 @@ fn contained_kind(command: &[String]) -> Result<Value, RestrictedPytestError> {
     let node_tool = bun.is_none()
         && !pnpm_exec_vitest(command)
         && !command.is_empty()
-        && (matches!(name, "eslint" | "tsc" | "vite" | "bun" | "npm" | "pnpm")
-            || (matches!(name, "bunx" | "npx")
-                && entries
-                    .clone()
-                    .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite")))
+        && (matches!(
+            name,
+            "eslint" | "tsc" | "vite" | "prettier" | "bun" | "npm" | "pnpm" | "yarn"
+        ) || (matches!(name, "bunx" | "npx")
+            && entries
+                .clone()
+                .any(|v| matches!(v.as_str(), "eslint" | "tsc" | "vite" | "prettier")))
             || (matches!(name, "node" | "nodejs")
                 && entries.clone().any(|v| {
                     [
                         "eslint/bin/eslint.js",
                         "typescript/bin/tsc",
                         "vite/bin/vite.js",
+                        "prettier/bin/prettier.cjs",
+                        "prettier/bin-prettier.js",
                     ]
                     .iter()
                     .any(|entry| local_package_entry(v, entry))

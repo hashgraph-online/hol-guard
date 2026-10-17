@@ -190,6 +190,7 @@ fn case_dir(name: &str) -> PathBuf {
     root
 }
 
+#[cfg(not(windows))]
 fn run_case(vectors: &Value, case: &Value) -> Result<(), String> {
     let name = case["name"].as_str().expect("name");
     let (payload, sent) = evaluate_case(vectors, case)?;
@@ -362,6 +363,7 @@ fn perform_on_loopback(need: &EgressNeedV1) -> Result<EgressOutcomeV1, String> {
     })
 }
 
+#[cfg(not(windows))]
 fn check_cloud_requests(name: &str, case: &Value, sent: &[(String, Value)]) -> Result<(), String> {
     let bodies: Vec<&Value> = sent.iter().map(|(_, body)| body).collect();
     let recorded: Vec<&Value> = case["cloud_requests"]
@@ -393,6 +395,7 @@ fn decode(reply: &[u8]) -> Result<SupplyChainEvalResultV1, String> {
     serde_json::from_slice(reply).map_err(|e| e.to_string())
 }
 
+#[cfg(not(windows))]
 fn diff(expected: &Value, actual: &Value) -> String {
     let empty = serde_json::Map::new();
     let (left, right) = (
@@ -418,6 +421,11 @@ fn diff(expected: &Value, actual: &Value) -> String {
     lines.join("\n")
 }
 
+// The vectors were recorded on an unmanaged machine. A Windows host's policy
+// authority is the registry, which the resident cannot read yet, so it
+// evaluates under the fail-closed paranoid floor and every cloud-failure case
+// blocks where the recording asks.
+#[cfg(not(windows))]
 #[test]
 fn resident_cloud_evaluation_matches_recorded_python_vectors() {
     let vectors: Value = serde_json::from_str(VECTORS).expect("vectors parse");

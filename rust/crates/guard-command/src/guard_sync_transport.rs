@@ -25,9 +25,13 @@ use sha2::{Digest, Sha256};
 use crate::egress_broker::{self, EgressClass};
 use crate::supply_chain_package_eval::{EvalError, EvalResult, GuardSyncRequest};
 
-/// `runner.py:_GUARD_SYNC_USER_AGENT` — single value shared with Python so
-/// Cloud-side user-agent analytics don't split on transport.
-const GUARD_SYNC_USER_AGENT: &str = "hol-guard-native";
+/// Native counterpart of `runner.py:_GUARD_SYNC_USER_AGENT` (`hol-guard/<version>`).
+/// The `hol-guard-native/` prefix keeps native traffic separable in Cloud-side
+/// analytics while the suffix carries this crate's version, so Cloud can tell
+/// which native build made a request. The Python runner assembles `syncContext`
+/// (including the fleet posture) and sends it through this transport, so this
+/// crate adds no posture fields of its own.
+const GUARD_SYNC_USER_AGENT: &str = concat!("hol-guard-native/", env!("CARGO_PKG_VERSION"));
 
 /// `runner.py:_OAUTH_ACCESS_TOKEN_REFRESH_SKEW_SECONDS` (:4104) — access
 /// tokens inside the skew are treated as expired so the refresh happens
@@ -1473,5 +1477,45 @@ mod cloud_edge_block_tests {
         assert!(is_cloud_edge_block_reason(&reason), "{reason}");
         assert!(!reason.contains("Ray ID"), "{reason}");
         assert!(!reason.contains("<script>"), "{reason}");
+    }
+}
+
+#[cfg(test)]
+mod user_agent_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn user_agent_names_the_native_build_and_its_version() {
+        assert_eq!(
+            GUARD_SYNC_USER_AGENT,
+            format!("hol-guard-native/{}", env!("CARGO_PKG_VERSION"))
+        );
+        let (name, version) = GUARD_SYNC_USER_AGENT
+            .split_once('/')
+            .expect("user agent has a name/version shape");
+        assert_eq!(name, "hol-guard-native");
+        assert!(
+            version.split('.').count() >= 3
+                && version.chars().next().is_some_and(|c| c.is_ascii_digit()),
+            "version looks like semver: {version}"
+        );
+    }
+
+    #[test]
+    fn sync_headers_carry_the_versioned_user_agent() {
+        let auth_context = json!({"access_token": "token"});
+        let headers = guard_sync_headers(
+            &auth_context,
+            "https://guard.example.test/api/guard/receipts/sync",
+            "POST",
+            None,
+            None,
+        )
+        .expect("headers build for a bearer-only auth context");
+        assert_eq!(
+            headers.get("User-Agent").map(String::as_str),
+            Some(GUARD_SYNC_USER_AGENT)
+        );
     }
 }

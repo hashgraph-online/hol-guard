@@ -22,6 +22,10 @@ pub(super) fn unsafe_search_value(
                 value,
                 context.home_dir,
                 context.cwd,
+            ) && !super::super::read_paths::home_hidden_content_read(
+                value,
+                context.home_dir,
+                context.cwd,
             ) && (rooted_operand(value)
                 || value.split(['/', '\\']).any(|part| part == "..")
                 || sensitive_path_argument(value)

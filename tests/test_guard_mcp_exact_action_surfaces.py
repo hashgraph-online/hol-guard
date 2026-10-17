@@ -46,12 +46,13 @@ def test_first_time_tool_call_action_is_preserved(policy_action: GuardAction) ->
         summary="exact action",
         approval_reuse_status="not-applicable",
         approval_reuse_reason_code="approval_reuse_no_saved_decision",
+        policy_action=policy_action,
     )
 
     assert resolve_tool_call_policy_action(decision) == policy_action
 
 
-def test_rejected_prior_authority_upgrades_review_to_reapproval() -> None:
+def test_rejected_prior_authority_surfaces_the_native_reapproval() -> None:
     decision = ToolCallDecision(
         action="review",
         source="policy",
@@ -61,9 +62,24 @@ def test_rejected_prior_authority_upgrades_review_to_reapproval() -> None:
         approval_reuse_reason_code="approval_reuse_content_changed",
         current_action="review",
         saved_action="allow",
+        policy_action="require-reapproval",
     )
 
     assert resolve_tool_call_policy_action(decision) == "require-reapproval"
+
+
+def test_a_decision_without_a_native_policy_action_is_unreadable() -> None:
+    decision = ToolCallDecision(
+        action="review",
+        source="policy",
+        signals=(),
+        summary="no native answer",
+        approval_reuse_status="rejected",
+        approval_reuse_reason_code="approval_reuse_content_changed",
+    )
+
+    with pytest.raises(ValueError, match="tool_call_policy_action_missing"):
+        resolve_tool_call_policy_action(decision)
 
 
 @pytest.mark.parametrize(

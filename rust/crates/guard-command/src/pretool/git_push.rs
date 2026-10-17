@@ -68,6 +68,45 @@ pub(super) const CERTIFICATE_ANCHORS: &[&str] = &[
     "CURL_CA_BUNDLE",
 ];
 
+/// Whether an exported variable changes how Git authenticates, which
+/// transport it uses or how it verifies the server.
+fn routes_transport(name: &str) -> bool {
+    let key = name.to_ascii_uppercase();
+    !CERTIFICATE_ANCHORS.contains(&key.as_str())
+        && (TRANSPORT_ENVIRONMENT.contains(&key.as_str())
+            || TRANSPORT_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix)))
+}
+
+/// The trusted Git a `git push` from `cwd` would run, after the same
+/// environment checks the native push proof makes, or `None` when the agent's
+/// environment could reroute, re-authenticate or inject code into the push.
+/// A one-time approval of a reviewed push binds to the same answer.
+pub fn push_environment_git(
+    execution_environment: &guard_contracts::GuardExecutionEnvironmentV1,
+    home: &Path,
+    cwd: &Path,
+) -> Option<std::path::PathBuf> {
+    let (home, cwd) = (
+        std::fs::canonicalize(home).ok()?,
+        std::fs::canonicalize(cwd).ok()?,
+    );
+    let clean = super::git_config::clean_environment(Some(execution_environment), &home, &cwd)
+        && !execution_environment
+            .environment_names
+            .iter()
+            .any(|name| routes_transport(name))
+        && execution_environment
+            .xdg_config_home
+            .as_deref()
+            .is_none_or(|xdg| Path::new(xdg).is_absolute());
+    if !clean {
+        return None;
+    }
+    super::git_config::trusted_command("git", &home, &cwd, Some(execution_environment))
+}
+
 struct Push<'a> {
     directory: Option<&'a str>,
     branch: &'a str,
@@ -249,14 +288,10 @@ fn proven_push(
     };
     if !segment.environment_names.is_empty()
         || !super::git_config::clean_environment(execution_environment, &home, &cwd)
-        || environment.environment_names.iter().any(|name| {
-            let key = name.to_ascii_uppercase();
-            !CERTIFICATE_ANCHORS.contains(&key.as_str())
-                && (TRANSPORT_ENVIRONMENT.contains(&key.as_str())
-                    || TRANSPORT_PREFIXES
-                        .iter()
-                        .any(|prefix| key.starts_with(prefix)))
-        })
+        || environment
+            .environment_names
+            .iter()
+            .any(|name| routes_transport(name))
     {
         return false;
     }
