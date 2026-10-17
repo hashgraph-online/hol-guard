@@ -70,6 +70,7 @@ fn run_python(workspace: &Path, code: &str, timeout: Duration) -> Option<Capture
                 ..Default::default()
             },
             build: None,
+            stage_executable: false,
         })
         .unwrap(),
     )
@@ -214,6 +215,7 @@ fn snapshot_budget_fails_closed() {
         cancel: &cancel,
         job_limits: Default::default(),
         build: None,
+        stage_executable: false,
     });
     assert!(result.is_err());
 }
@@ -241,6 +243,7 @@ fn hardlinked_files_fail_closed() {
         cancel: &cancel,
         job_limits: Default::default(),
         build: None,
+        stage_executable: false,
     });
     assert!(result.is_err());
 }
@@ -329,6 +332,7 @@ fn build_run_publishes_only_declared_output() {
             ..Default::default()
         },
         build: Some(build_limits(&dependencies, &outputs, &withhold_dependency)),
+        stage_executable: false,
     })
     .unwrap();
     assert_eq!(
@@ -389,6 +393,7 @@ fn failed_build_publishes_nothing() {
         cancel: &cancel,
         job_limits: Default::default(),
         build: Some(build_limits(&[], &outputs, &withhold)),
+        stage_executable: false,
     })
     .unwrap();
     assert_eq!(output.exit_code, Some(3));
@@ -436,6 +441,7 @@ fn build_network_is_unavailable() {
         cancel: &cancel,
         job_limits: Default::default(),
         build: Some(build_limits(&[], &outputs, &withhold)),
+        stage_executable: false,
     })
     .unwrap();
     assert_eq!(

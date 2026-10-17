@@ -57,7 +57,7 @@ def test_unreadable_control_layers_are_flagged_instead_of_raising(tmp_path: Path
         path = tmp_path / "guard-home" / "guard.db"
         guard_home = tmp_path / "guard-home"
 
-        def read_extension_control_authority_for_registry(self, _registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, _registry: object, **_kwargs) -> object:
             raise RuntimeError("control authority requires a native mutation")
 
     ext = build_extension_input(_BrokenStore(), _artifact(_identity(), "read_file"))

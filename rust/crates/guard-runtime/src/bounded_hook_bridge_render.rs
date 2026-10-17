@@ -9,6 +9,7 @@
 
 use guard_contracts::GuardAction;
 
+use crate::blocked_request_mode::is_unlinked_connector_setup_reason;
 use crate::bounded_hook_bridge_hermes::hermes_bridge_response;
 use crate::claude_hook_bridge_render::py_strip;
 use crate::hook_env_stamp::{backslash_surrogates, dumps, set_member};
@@ -675,9 +676,12 @@ pub(crate) fn daemon_response_to_native(
             if decision != "allow" && !reason.is_empty() {
                 payload.push(("reason".to_owned(), text(&reason)));
             }
+            // A default-mode connector setup reason carries no approval link.
+            let unlinked = is_unlinked_connector_setup_reason(&reason);
             for key in COPIED_APPROVAL_KEYS {
                 match member(daemon_response, key) {
                     None | Some(PyVal::Null) => {}
+                    Some(_) if unlinked && key != "reason_code" => {}
                     Some(value) => set_member(&mut payload, key, value.clone()),
                 }
             }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -12,6 +13,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_prompt import fixture_authorization
+from .approval_retry import ReviewApprover, write_review_config
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
@@ -125,6 +127,7 @@ def run_harness_case(
         "filesystem": {},
         "egress_requests": [],
         "approval_delta": 0,
+        "approval_grants": {},
         "returncode": -1,
         "timed_out": False,
         "cleanup_ok": False,
@@ -161,6 +164,10 @@ def run_harness_case(
                     raise ValueError("Watch fixture contract changed")
                 guard_home.mkdir(mode=0o700)
                 (guard_home / "config.toml").write_text('protection_posture = "watch"\nmode = "observe"\n')
+            if scenario.oracle == "approved-retry":
+                # Reviewing ordinary commands is this lane's point: the approve-then-retry
+                # path has no other way in, because a hard block never queues an approval.
+                case["review_policy"] = write_review_config(guard_home)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -216,7 +223,14 @@ def run_harness_case(
                 workspace=fixture.workspace,
                 model=model,
             )
-            with GuardTap(worker, tap_log):
+            # The approve-then-retry lane needs a second phase: an operator granting the
+            # review row while the agent is still running, so the agent issues its own retry.
+            approver = (
+                ReviewApprover(worker.store, known_ids=approval_ids_before, workspace=fixture.workspace)
+                if scenario.oracle == "approved-retry"
+                else None
+            )
+            with GuardTap(worker, tap_log), approver or nullcontext():
                 case["returncode"], case["timed_out"] = run_process(
                     command,
                     cwd=fixture.workspace,
@@ -226,6 +240,8 @@ def run_harness_case(
                     timeout=timeout + 15,
                 )
                 time.sleep(0.2)
+            if approver is not None:
+                case["approval_grants"] = redact_value(approver.report(), replacements)
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["native_routes"] = worker.metrics.snapshot().get("routes", {})

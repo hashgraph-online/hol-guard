@@ -95,6 +95,30 @@ function canonicalLayerValue(layers: ExtensionControlLayer[]): string {
   );
 }
 
+/**
+ * Whether `latest` carries the same authoritative policy as `previous`.
+ *
+ * A committed revision can advance without the policy moving with it. Another
+ * Guard install reading this home under a different command catalog restamps
+ * the controls under its own catalog, and integrity or lockdown transitions
+ * re-publish them unchanged. A draft composed against `previous` overwrites
+ * nothing when it is applied against such a revision, so re-seeding it on the
+ * newer one takes no decision away from the operator. Any difference in the
+ * controls themselves, the catalog they are named under, the lockdown flag or
+ * authority health is a real policy change and is not this.
+ */
+export function extensionPolicyAuthorityUnchanged(
+  previous: EffectiveExtensionControls,
+  latest: EffectiveExtensionControls,
+): boolean {
+  return (
+    latest.catalog_digest === previous.catalog_digest
+    && latest.health === previous.health
+    && latest.global_lockdown === previous.global_lockdown
+    && canonicalLayerValue(latest.layers) === canonicalLayerValue(previous.layers)
+  );
+}
+
 export function extensionPolicyDraftIsDirty(
   effective: EffectiveExtensionControls,
   draftLayers: ExtensionControlLayer[],

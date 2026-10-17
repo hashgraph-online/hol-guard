@@ -12,7 +12,11 @@ mod hidden_listing;
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
 mod omp_targets;
-pub(super) use hidden_listing::{home_hidden_directory, repository_hidden_directory};
+use hidden_listing::resolved_home_hidden_content_read;
+pub(super) use hidden_listing::{
+    home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,
+    repository_hidden_directory,
+};
 #[path = "private_temporary_workspace.rs"]
 mod private_temporary;
 #[path = "workspace_scratch_reads.rs"]
@@ -157,7 +161,7 @@ fn bounded_read_target_with_brackets(
     };
     if let Ok(canonical) = std::fs::canonicalize(&candidate) {
         return (canonical.is_file() || (allow_directory && canonical.is_dir()))
-            && (resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true)
+            && (resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
                 || package_source::installed_package_source(
                     &candidate, &canonical, home_dir, cwd,
                 ));
@@ -243,6 +247,7 @@ pub(super) fn resolved_path_allowed_for_operation(
     if !resolved_location_allowed(canonical, home_dir, cwd, verified_temporary)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
+            || (read_only && project_dotfile_read(canonical, home_dir))
             || guard_safety_doc(canonical, home_dir)
             || (read_only
                 && (agent_skill_document(canonical, home_dir)
@@ -259,6 +264,37 @@ pub(super) fn resolved_path_allowed_for_operation(
         return false;
     }
     true
+}
+
+/// The gate above, plus the hidden-home content screen, for a read whose
+/// spelling the caller still holds.
+///
+/// The screen is asked here rather than inside the gate itself for two
+/// reasons. The gate answers listings and write screens too, and a listing
+/// asks a different question: `ls -la ~/.local/share/data` prints entry names
+/// and has its own screen, which this rule must not stand in for. And a
+/// spelling that reached the path through a link keeps its review, because a
+/// link below an install root or a skill root is exactly how a benign name
+/// reaches a tree whose own rule would refuse it.
+pub(super) fn resolved_read_target_allowed(
+    candidate: &std::path::Path,
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    resolved_path_allowed_for_operation(canonical, home_dir, cwd, false, true)
+        || (!guard_secure_fs::contains_symlink_component(candidate)
+            && resolved_location_allowed(canonical, home_dir, cwd, false)
+            && resolved_home_hidden_content_read(canonical, home_dir))
+}
+
+/// A project's own dotfile in a checkout, read as the document it is.
+///
+/// The home directory is handed over so a dotfiles repository cannot make the
+/// home directory itself the work tree that admits `~/.claude.json`.
+fn project_dotfile_read(canonical: &std::path::Path, home_dir: Option<&str>) -> bool {
+    let home = home_dir.and_then(|home| std::fs::canonicalize(home).ok());
+    guard_secure_fs::hidden_project_document(canonical, home.as_deref())
 }
 
 /// Every resolved-path screen except the hidden-component one: system roots,

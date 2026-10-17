@@ -371,11 +371,11 @@ fn bounded_existing_file_read_target(
     if guard_secure_fs::contains_symlink_component(&candidate) {
         return false;
     }
-    let Ok(canonical) = std::fs::canonicalize(candidate) else {
+    let Ok(canonical) = std::fs::canonicalize(&candidate) else {
         return false;
     };
     canonical.is_file()
-        && resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true)
+        && super::resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
 }
 
 /// Resolve selector targets through the verified context roots first. macOS

@@ -14,6 +14,8 @@ from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as brid
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as flow
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
+from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
+from codex_plugin_scanner.guard.codex_hook_command_line import encode_hook_config_argument
 from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.codex_hook_runtime_trust import TrustedCodexHookLaunch
 from tests.codex_daemon_hook_bridge_fixtures import _bridge_config
@@ -122,6 +124,10 @@ def test_total_outage_blocks_mutating_action_without_authenticated_fallback(
     event: str,
     command: str,
 ) -> None:
+    monkeypatch.setattr(
+        codex_adapter, "encode_hook_config_argument",
+        lambda value: encode_hook_config_argument(value, windows=True),
+    )
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -129,8 +135,8 @@ def test_total_outage_blocks_mutating_action_without_authenticated_fallback(
         home_override_explicit=True,
     )
     codex_adapter.CodexHarnessAdapter().install(context)
-    config_json = codex_adapter._hook_command_parts(context)[3]
-    managed_config = json.loads(config_json)
+    config_argument = codex_adapter._hook_command_parts(context)[-1]
+    managed_config = json.loads(decode_bridge_config_argument(config_argument))
     config = {
         key: managed_config[key]
         for key in (
@@ -142,7 +148,7 @@ def test_total_outage_blocks_mutating_action_without_authenticated_fallback(
             "manifest_path",
         )
     }
-    config["config_json"] = config_json
+    config["config_json"] = config_argument
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(

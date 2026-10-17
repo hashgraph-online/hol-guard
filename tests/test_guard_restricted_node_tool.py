@@ -23,6 +23,7 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["pnpm", "exec", "eslint", "--fix", "src"],
         ["pnpm", "exec"],
         ["eslint", "--fix", "src"],
+        ["prettier", "--check", "--write=true", "src"],
         ["eslint", "--output-file=.env", "src"],
         ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
         ["node", "--require=evil", "typescript/bin/tsc", "--noEmit"],
@@ -253,3 +254,20 @@ def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tm
 )
 def test_local_package_entry_spellings(argument, expected):
     assert tool.is_local_package_entry(argument, "vite/bin/vite.js") is expected
+
+
+def test_the_nearest_installed_prettier_wins_over_a_hoisted_one(tmp_path):
+    """A package that pins its own major runs its own copy, not the root's."""
+    hoisted = tmp_path / "node_modules/prettier/bin/prettier.cjs"
+    hoisted.parent.mkdir(parents=True)
+    hoisted.write_text("// formatter 3")
+    app = tmp_path / "packages/app"
+    local = app / "node_modules/prettier/bin-prettier.js"
+    local.parent.mkdir(parents=True)
+    local.write_text("// formatter 2")
+    modules, relative = tool._tool_entry("prettier", app, tmp_path)
+    assert (modules, relative) == (app / "node_modules", "prettier/bin-prettier.js")
+    assert tool._tool_entry("prettier", tmp_path, tmp_path) == (
+        tmp_path / "node_modules",
+        "prettier/bin/prettier.cjs",
+    )

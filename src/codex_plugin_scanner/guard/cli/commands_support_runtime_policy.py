@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes
 
 
+from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..models import GuardAction
 from ..native_data_flow import detect_data_flow_exfiltration
 from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
@@ -104,7 +105,7 @@ def _native_hook_reason(*values: object | None) -> str:
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
-    if harness != "codex":
+    if harness != "codex" or is_unlinked_connector_setup_reason(reason):
         return reason
     if "open hol guard to approve or keep this blocked:" in reason.lower():
         return reason

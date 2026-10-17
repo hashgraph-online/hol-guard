@@ -84,7 +84,12 @@ fn a_fresh_block_after_the_claim_is_the_proxy_terminal() {
     let mut stored = fresh(GuardAction::Block, HASH);
     stored.decision.saved_action = Some(GuardAction::Block);
     let (routed, _) = postclaim(&claimed(Disposition::Consumed), &stored).unwrap();
-    assert_eq!(routed, Routed::StoredBlock);
+    assert_eq!(
+        routed,
+        Routed::StoredBlock {
+            package_request: false,
+        }
+    );
 }
 
 #[test]
@@ -141,6 +146,7 @@ fn an_unknown_or_spent_ticket_defers() {
     let request = McpRelayClaimRequestV1 {
         guard_home: root.to_string_lossy().into_owned(),
         ticket: "claim-0-0-0:1".to_owned(),
+        package_evaluation: None,
     };
     let answer: Value = serde_json::from_slice(&claim(&request, &store).unwrap()).unwrap();
     assert_eq!(answer["outcome"], "defer");

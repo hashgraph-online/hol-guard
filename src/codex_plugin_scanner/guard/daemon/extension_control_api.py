@@ -120,8 +120,41 @@ class ExtensionControlApiService:
         return payload
 
     def effective(self) -> dict[str, object]:
-        snapshot = self._runtime.current()
-        return effective_controls_payload(self._registry, snapshot, self._store)
+        # Reading the controls must stay a read. Committing a catalog migration
+        # here would move the stored revision under every draft the dashboard
+        # has open, which is the conflict this endpoint is polled to report.
+        return effective_controls_payload(self._registry, self._live_snapshot(read_only=True), self._store)
+
+    def _live_snapshot(self, *, read_only: bool = False) -> ExtensionControlRuntimeSnapshot:
+        """The snapshot a draft is built on, re-read from durable authority.
+
+        The in-process snapshot only advances when this daemon commits, so a
+        catalog migration or another writer moves the stored revision underneath
+        it. A draft built on the stale revision can never be applied, because
+        the commit checks its expected revision against the store rather than
+        against this process. Re-reading keeps the revision the dashboard draws
+        a draft from the one that commit will check.
+
+        Only an authority that is protected and has moved forward replaces the
+        snapshot. A read that comes back unenrolled, degraded, or behind this
+        process must not take protection away from a running daemon; refreshing
+        is here to catch up with another writer, not to downgrade.
+
+        `read_only` keeps the read on the shared lock and off the write path, so
+        a caller that only renders the controls cannot settle a pending catalog
+        migration on the operator's behalf.
+        """
+
+        current = self._runtime.current()
+        try:
+            view = self._store.read_extension_control_authority_for_registry(self._registry, read_only=read_only)
+            if view.health is not AuthorityHealth.PROTECTED or view.revision <= current.revision:
+                return current
+            return self._runtime.refresh(view)
+        except (ExtensionControlAuthorityError, ValueError, OSError):
+            # Authority that cannot be re-read or installed keeps serving the
+            # snapshot the runtime already holds; mutations still fail closed.
+            return current
 
     def refresh(self) -> dict[str, object]:
         view = self._store.read_extension_control_authority_for_registry(self._registry)
@@ -258,8 +291,10 @@ class ExtensionControlApiService:
         return self.effective()
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
-        current = self._runtime.current()
         mutation = self._mutation_from_payload(payload)
+        # Read the snapshot after the payload, which resolves persisted managed
+        # layers and can itself settle a pending catalog migration.
+        current = self._live_snapshot()
         proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
         if current.health is not AuthorityHealth.PROTECTED:
             raise ExtensionControlApiError(423, "authority_unavailable")
@@ -318,7 +353,7 @@ class ExtensionControlApiService:
             return dict(pending.response)
         if pending.mutation.canonical_digest != mutation.canonical_digest:
             raise ExtensionControlApiError(409, "proof_mismatch")
-        current = self._runtime.current()
+        current = self._live_snapshot()
         proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
         semantic_preview = build_extension_control_semantic_preview(
             self._registry,
@@ -334,6 +369,7 @@ class ExtensionControlApiService:
                 idempotency_key=mutation.idempotency_key,
                 nonce=mutation.nonce,
                 proof=pending.proof,
+                migration_registry=self._registry,
             )
         except ExtensionControlProofError as exc:
             raise ExtensionControlApiError(409, "proof_invalid") from exc

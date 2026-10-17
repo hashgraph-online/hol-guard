@@ -66,7 +66,15 @@ fn a_resolved_node_image_takes_the_same_route_as_the_bare_name() {
             harness,
             "node node_modules/vite/bin/vite.js build",
         );
-        assert_eq!(bare.2, NODE_BUILD, "{harness}");
+        // Only harnesses whose shell runs the POSIX-quoted sink take the
+        // build receipt on Windows; Codex has a PowerShell sink for the
+        // Python profile alone, so its build keeps the review prompt.
+        if harness == "codex" {
+            assert_eq!(bare.2, "native_command_review_required", "{harness}");
+            assert_ne!(bare.1, "sandbox-required", "{harness}");
+        } else {
+            assert_eq!(bare.2, NODE_BUILD, "{harness}");
+        }
         for spelling in [
             "node.exe node_modules/vite/bin/vite.js build",
             "node.EXE node_modules/vite/bin/vite.js build",

@@ -179,6 +179,56 @@ fn the_resident_lookup_reports_the_saved_decision_identifier() {
     let _ = std::fs::remove_dir_all(&home);
 }
 
+/// The failure event is written into the same database the lookup could not
+/// query. A store with no schema drops that insert, so the operation result
+/// has to carry the lookup code while the review evaluation stays put.
+#[test]
+fn a_store_without_a_schema_reports_the_lookup_error_on_the_result() {
+    let home = temp_home("lookup-error-op");
+    let mut request = request_for(&home);
+    let mut evaluation = base_evaluation();
+    evaluation["decision"] = json!("review");
+    evaluation["policy_action"] = json!("review");
+    request.evaluation = evaluation.clone();
+    let bytes = evaluate_apply_stored_package_policy(&request).unwrap();
+    let result: ApplyStoredPackagePolicyResultV1 = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.code, "native_policy_decision_lookup_query_failed");
+    assert_eq!(result.payload.as_ref(), Some(&evaluation));
+    let conn = Connection::open(home.join("guard.db")).unwrap();
+    let recorded = conn.query_row(
+        "SELECT COUNT(*) FROM guard_events WHERE event_name = ?1",
+        ["package_policy_lookup_failed"],
+        |row| row.get::<_, i64>(0),
+    );
+    assert!(
+        recorded.is_err(),
+        "the failure event must not land in a store with no schema"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
+#[test]
+fn a_store_the_lookup_cannot_query_reports_the_error_code() {
+    let home = temp_home("lookup-error");
+    let store = ResidentSupplyChainStore::new(&home.join("guard.db"), &home);
+    let lookup = store.resolve_policy_decision_lookup(
+        "claude",
+        "command:install",
+        Some("guard-approval-context:v1:missing"),
+        "package-request-workspace:v2:unused",
+        None,
+        "2026-10-06T00:00:00Z",
+        false,
+    );
+    assert!(lookup.decision.is_none());
+    assert_eq!(
+        lookup.error.as_deref(),
+        Some("native_policy_decision_lookup_query_failed")
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
 #[test]
 fn a_saved_allow_is_claimed_and_applied_to_the_evaluation() {
     let home = temp_home("claimed");

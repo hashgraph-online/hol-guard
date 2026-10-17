@@ -234,10 +234,111 @@ fn written(cli_id: String) -> Value {
     json!({ "cli_id": cli_id })
 }
 
+/// Declared sources kept per record; more harness configs than this collapse.
+const MAX_DECLARED_SOURCES: usize = 16;
+
+/// `<harness>:<stdio|remote>`, the one harness config shape a source names.
+fn valid_declared_source(value: &str) -> bool {
+    let Some((harness, transport)) = value.split_once(':') else {
+        return false;
+    };
+    (1..=40).contains(&harness.len())
+        && harness.bytes().all(|byte| {
+            byte.is_ascii_lowercase() || byte.is_ascii_digit() || matches!(byte, b'-' | b'_' | b'.')
+        })
+        && matches!(transport, "stdio" | "remote")
+}
+
+/// `scheme://host/path` with no query, fragment or credentials.
+fn valid_remote_origin(value: &str) -> bool {
+    let Some(rest) = value
+        .strip_prefix("https://")
+        .or_else(|| value.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    let host = rest.split('/').next().unwrap_or_default();
+    value.len() <= 512
+        && !host.is_empty()
+        && !value.contains(['?', '#', '@', ' '])
+        && value.chars().all(|character| !character.is_control())
+}
+
+/// Record which harness config declares this connector and, for a remote
+/// server, its origin. A config sighting and a call sighting share one record.
+fn record_declaration(connection: &Connection, cli_id: &str, args: &Args) -> StoreResult<()> {
+    let origin = args
+        .opt_str("remote_origin")?
+        .filter(|origin| !origin.is_empty());
+    let source = args
+        .opt_str("declared_source")?
+        .filter(|source| !source.is_empty());
+    if origin.is_some_and(|origin| !valid_remote_origin(origin))
+        || source.is_some_and(|source| !valid_declared_source(source))
+    {
+        return value_error("invalid MCP declaration");
+    }
+    if let Some(origin) = origin {
+        exec(
+            connection,
+            "update local_cli_observation set remote_origin = ? where cli_id = ?",
+            &[Value::from(origin), Value::from(cli_id)],
+        )?;
+    }
+    let Some(source) = source else {
+        return Ok(());
+    };
+    let stored = query_one(
+        connection,
+        "select declared_sources_json from local_cli_observation where cli_id = ?",
+        &[Value::from(cli_id)],
+    )?;
+    let mut sources: Vec<String> = stored
+        .as_ref()
+        .and_then(|row| row.get("declared_sources_json"))
+        .and_then(Value::as_str)
+        .and_then(|raw| serde_json::from_str::<Vec<String>>(raw).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|value| valid_declared_source(value))
+        .collect();
+    if sources.iter().any(|value| value == source) {
+        return Ok(());
+    }
+    sources.push(source.to_owned());
+    sources.sort();
+    sources.truncate(MAX_DECLARED_SOURCES);
+    let encoded = serde_json::to_string(&sources)
+        .map_err(|_| StoreError::Invalid("native_guard_store_declared_sources_invalid"))?;
+    exec(
+        connection,
+        "update local_cli_observation set declared_sources_json = ? where cli_id = ?",
+        &[Value::from(encoded), Value::from(cli_id)],
+    )?;
+    Ok(())
+}
+
 /// `ensure_local_mcp_observation`: insert or refresh one MCP record without
 /// incrementing `observed_count`. With `replayed`, `seen_at` is a history
 /// timestamp: it never moves `last_seen_at` backward and skips pruning.
+/// A config-declared connector also records its declaration.
 pub(crate) fn ensure_observation(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let declared = args
+        .raw("remote_origin")
+        .is_some_and(|value| !value.is_null())
+        || args
+            .raw("declared_source")
+            .is_some_and(|value| !value.is_null());
+    let written = ensure_record(connection, args)?;
+    if declared {
+        if let Some(cli_id) = written.get("cli_id").and_then(Value::as_str) {
+            record_declaration(connection, cli_id, args)?;
+        }
+    }
+    Ok(written)
+}
+
+fn ensure_record(connection: &Connection, args: &Args) -> StoreResult<Value> {
     let cli_id = args.str("cli_id")?;
     if !is_local_cli_id(cli_id) {
         return value_error("invalid local CLI id");
@@ -354,4 +455,46 @@ pub(crate) fn ensure_observation(connection: &Connection, args: &Args) -> StoreR
         prune(connection, current, RETENTION_DAYS, true)?;
     }
     Ok(written(target))
+}
+
+#[cfg(test)]
+mod declaration_tests {
+    use super::{valid_declared_source, valid_remote_origin};
+
+    #[test]
+    fn declared_source_names_a_harness_and_transport() {
+        assert!(valid_declared_source("codex:stdio"));
+        assert!(valid_declared_source("claude-code:remote"));
+        for rejected in [
+            "codex",
+            ":stdio",
+            "codex:http",
+            "Codex:stdio",
+            "co dex:stdio",
+        ] {
+            assert!(!valid_declared_source(rejected), "{rejected}");
+        }
+        assert!(!valid_declared_source(&format!("{}:stdio", "a".repeat(41))));
+    }
+
+    #[test]
+    fn remote_origin_has_no_query_fragment_or_credentials() {
+        assert!(valid_remote_origin("https://mcp.example.test/mcp"));
+        assert!(valid_remote_origin("http://127.0.0.1:8080/v1"));
+        for rejected in [
+            "ftp://mcp.example.test/",
+            "https:///mcp",
+            "https://mcp.example.test/mcp?token=x",
+            "https://mcp.example.test/mcp#frag",
+            "https://user@mcp.example.test/",
+            "https://mcp.example.test/a b",
+            "https://mcp.example.test/\n",
+        ] {
+            assert!(!valid_remote_origin(rejected), "{rejected}");
+        }
+        assert!(!valid_remote_origin(&format!(
+            "https://mcp.example.test/{}",
+            "a".repeat(512)
+        )));
+    }
 }

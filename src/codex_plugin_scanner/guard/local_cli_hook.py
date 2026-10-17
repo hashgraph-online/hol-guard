@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sqlite3
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 from uuid import uuid4
@@ -26,6 +27,19 @@ _TIMEOUT_SECONDS = 10.0
 # The request carries the caller environment, as the identity call it replaces did.
 _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _GRANT_ACTIONS = frozenset({"allow", "block", "review"})
+_CONNECTOR_FIELDS = frozenset({"cli_id", "identity_hash", "name", "surface", "queue_group_id"})
+_CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
+
+
+@dataclass(frozen=True, slots=True)
+class SetupConnector:
+    """A local CLI this device has no allow or block decision for."""
+
+    cli_id: str
+    identity_hash: str
+    name: str
+    surface: str
+    queue_group_id: str
 
 
 def local_cli_grant_action(
@@ -67,6 +81,35 @@ def native_local_cli_hook(
     grant_allowed: bool,
 ) -> GuardAction | None:
     """Return the resident's action, or ``None`` without a bound answer; a store failure raises."""
+
+    reply = _native_local_cli_hook_reply(
+        store, command=command, cwd=cwd, home_dir=home_dir, current_action=current_action, grant_allowed=grant_allowed
+    )
+    return None if reply is None else reply[0]
+
+
+def local_cli_setup_connector(
+    *, store: GuardStore, command: str, cwd: Path, home_dir: Path | None
+) -> SetupConnector | None:
+    """The connector a command review waits on, when Guard was never set up for it on this device."""
+
+    reply = _native_local_cli_hook_reply(
+        store, command=command, cwd=cwd, home_dir=home_dir, current_action="review", grant_allowed=True
+    )
+    if reply is None or reply[0] != "review":
+        return None
+    return reply[1]
+
+
+def _native_local_cli_hook_reply(
+    store: GuardStore,
+    *,
+    command: str,
+    cwd: Path,
+    home_dir: Path | None,
+    current_action: GuardAction,
+    grant_allowed: bool,
+) -> tuple[GuardAction, SetupConnector | None] | None:
 
     # A caller operation clock bounds the call, as it bounds a store call.
     operation_deadline = sqlite_operation_deadline_monotonic()
@@ -115,7 +158,7 @@ def native_local_cli_hook(
     status, code, payload = response.get("status"), response.get("code"), response.get("payload")
     if status == "error" and isinstance(code, str) and code.startswith(_STORE_CODE_PREFIX):
         _raise_store_failure(store, code)
-    if status != "ok" or code != "ok" or not isinstance(payload, dict) or set(payload) != {"action"}:
+    if status != "ok" or code != "ok" or not isinstance(payload, dict) or set(payload) - {"connector"} != {"action"}:
         return None
     action = payload["action"]
     if not isinstance(action, str):
@@ -123,7 +166,22 @@ def native_local_cli_hook(
     # Only a grant can change the action, and only to allow, block or review.
     if action != current_action and action not in _GRANT_ACTIONS:
         return None
-    return cast(GuardAction, action)
+    connector = _setup_connector(payload.get("connector")) if action == "review" else None
+    return cast(GuardAction, action), connector
+
+
+def _setup_connector(value: object) -> SetupConnector | None:
+    if not isinstance(value, dict) or set(value) != _CONNECTOR_FIELDS:
+        return None
+    fields = cast(dict[str, object], value)
+    if not all(isinstance(fields[key], str) and fields[key] for key in _CONNECTOR_FIELDS):
+        return None
+    connector = SetupConnector(**cast(dict[str, str], fields))
+    if connector.surface not in _CONNECTOR_SURFACES or not connector.queue_group_id.startswith(
+        f"connector:{connector.identity_hash}:"
+    ):
+        return None
+    return connector
 
 
 def _raise_store_failure(store: GuardStore, code: str) -> None:

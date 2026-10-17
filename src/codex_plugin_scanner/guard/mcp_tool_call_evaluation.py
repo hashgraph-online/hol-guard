@@ -78,4 +78,5 @@ def evaluate_tool_call(
         approval_reuse_claim_disposition=payload["approval_reuse_claim_disposition"],
         post_claim_revalidated=payload["post_claim_revalidated"],
         post_claim_authority=authority,
+        policy_action=payload["policy_action"],
     )

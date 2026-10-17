@@ -1,14 +1,11 @@
 #![forbid(unsafe_code)]
 
-use sha2::{Digest, Sha256};
 use std::fs;
 use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
-
 pub(crate) fn executable_missing(path: &Path) -> bool {
     path.metadata()
         .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
@@ -140,9 +137,12 @@ pub(crate) fn validate_package_process_identity(
     if process_path != expected_path {
         // Onefile launchers extract identical signed runtimes into distinct
         // directories. Bind to the runtime bytes, not that temporary path.
-        if executable_digest(&process_path)? != crate::resident_state::runtime_digest()? {
-            return Err("native_resident_process_identity_mismatch".to_owned());
-        }
+        return crate::resident_runtime_verification::validate_process_runtime_digest(
+            process_id,
+            expected_start_marker,
+            process_path,
+            &crate::resident_state::runtime_digest()?,
+        );
     }
     validate_process_start_marker(process_id, expected_start_marker)
 }
@@ -206,10 +206,12 @@ pub(crate) fn validate_runtime_process_identity(
     expected_digest: &str,
 ) -> Result<(), String> {
     let process_path = process_executable_path(process_id)?;
-    if executable_digest(&process_path)? != expected_digest {
-        return Err("native_resident_process_identity_mismatch".to_owned());
-    }
-    validate_process_start_marker(process_id, expected_start_marker)
+    crate::resident_runtime_verification::validate_process_runtime_digest(
+        process_id,
+        expected_start_marker,
+        process_path,
+        expected_digest,
+    )
 }
 
 pub(crate) fn validate_process_start_marker(
@@ -239,7 +241,20 @@ fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "android")))]
+#[cfg(windows)]
+fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
+    let executable = guard_runtime_windows_process::running_process_image_path(process_id)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
+    fs::canonicalize(executable)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "linux",
+    target_os = "android",
+    windows
+)))]
 fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
     let pid = Pid::from_u32(process_id);
     let mut system = System::new();
@@ -256,7 +271,7 @@ fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
 }
 
-fn executable_digest(executable: &Path) -> Result<String, String> {
+pub(crate) fn executable_digest(executable: &Path) -> Result<String, String> {
     let metadata = fs::symlink_metadata(executable)
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
     if metadata.file_type().is_symlink()
@@ -267,20 +282,8 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
     }
     let mut file = File::open(executable)
         .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "native_resident_process_identity_unavailable".to_owned())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(crate::resident_state_encoding::hex_bytes(
-        &hasher.finalize(),
-    ))
+    crate::resident_state_encoding::sha256_hex_from_reader(&mut file)
+        .map_err(|_| "native_resident_process_identity_unavailable".to_owned())
 }
 
 #[cfg(all(test, unix))]

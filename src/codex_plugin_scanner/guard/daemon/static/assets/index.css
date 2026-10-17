@@ -475,6 +475,14 @@
   [hidden]:where(:not([hidden="until-found"])) {
     display: none !important;
   }
+
+  a, button, input, select, textarea {
+    font: inherit;
+  }
+
+  button {
+    cursor: pointer;
+  }
 }
 
 @layer components;
@@ -620,6 +628,10 @@
     bottom: 26px;
   }
 
+  .bottom-\[calc\(var\(--guard-shell-mobile-nav-height\,0px\)\+env\(safe-area-inset-bottom\)\)\] {
+    bottom: calc(var(--guard-shell-mobile-nav-height, 0px) + env(safe-area-inset-bottom));
+  }
+
   .bottom-full {
     bottom: 100%;
   }
@@ -716,6 +728,10 @@
 
   .-mx-1 {
     margin-inline: calc(var(--spacing) * -1);
+  }
+
+  .-mx-5 {
+    margin-inline: calc(var(--spacing) * -5);
   }
 
   .mx-1\.5 {
@@ -816,6 +832,10 @@
 
   .mr-2 {
     margin-right: calc(var(--spacing) * 2);
+  }
+
+  .mr-auto {
+    margin-right: auto;
   }
 
   .-mb-px {
@@ -946,6 +966,11 @@
 
   .aspect-square {
     aspect-ratio: 1;
+  }
+
+  .size-1\.5 {
+    width: calc(var(--spacing) * 1.5);
+    height: calc(var(--spacing) * 1.5);
   }
 
   .size-3\.5 {
@@ -1602,6 +1627,10 @@
 
   .shrink-0 {
     flex-shrink: 0;
+  }
+
+  .basis-56 {
+    flex-basis: calc(var(--spacing) * 56);
   }
 
   .basis-full {
@@ -4333,6 +4362,10 @@
     padding-bottom: calc(var(--spacing) * 10);
   }
 
+  .pl-1 {
+    padding-left: var(--spacing);
+  }
+
   .pl-2\.5 {
     padding-left: calc(var(--spacing) * 2.5);
   }
@@ -5514,6 +5547,16 @@
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
 
+  .placeholder\:text-brand-dark\/50::placeholder {
+    color: var(--brand-dark);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .placeholder\:text-brand-dark\/50::placeholder {
+      color: color-mix(in oklab, var(--brand-dark) 50%, transparent);
+    }
+  }
+
   .placeholder\:text-brand-dark\/70::placeholder {
     color: var(--brand-dark);
   }
@@ -5652,6 +5695,16 @@
     @supports (color: color-mix(in lab, red, red)) {
       .hover\:border-brand-blue\/45:hover {
         border-color: color-mix(in oklab, var(--brand-blue) 45%, transparent);
+      }
+    }
+
+    .hover\:border-brand-blue\/60:hover {
+      border-color: var(--brand-blue);
+    }
+
+    @supports (color: color-mix(in lab, red, red)) {
+      .hover\:border-brand-blue\/60:hover {
+        border-color: color-mix(in oklab, var(--brand-blue) 60%, transparent);
       }
     }
 
@@ -6188,6 +6241,10 @@
     border-radius: var(--radius-sm);
   }
 
+  .focus-visible\:border-brand-blue:focus-visible {
+    border-color: var(--brand-blue);
+  }
+
   .focus-visible\:ring-2:focus-visible {
     --tw-ring-shadow: var(--tw-ring-inset, ) 0 0 0 calc(2px + var(--tw-ring-offset-width)) var(--tw-ring-color, currentcolor);
     box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
@@ -6258,6 +6315,10 @@
     outline-width: 2px;
   }
 
+  .focus-visible\:outline-offset-1:focus-visible {
+    outline-offset: 1px;
+  }
+
   .focus-visible\:outline-offset-2:focus-visible {
     outline-offset: 2px;
   }
@@ -6287,6 +6348,10 @@
 
   .disabled\:pointer-events-none:disabled {
     pointer-events: none;
+  }
+
+  .disabled\:cursor-default:disabled {
+    cursor: default;
   }
 
   .disabled\:cursor-not-allowed:disabled {
@@ -6379,6 +6444,16 @@
     color: var(--color-white);
   }
 
+  .aria-\[current\]\:bg-brand-blue\/5[aria-current] {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .aria-\[current\]\:bg-brand-blue\/5[aria-current] {
+      background-color: color-mix(in oklab, var(--brand-blue) 5%, transparent);
+    }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .motion-safe\:transition-\[height\] {
       transition-property: height;
@@ -6436,6 +6511,10 @@
 
     .sm\:col-span-2 {
       grid-column: span 2 / span 2;
+    }
+
+    .sm\:-mx-6 {
+      margin-inline: calc(var(--spacing) * -6);
     }
 
     .sm\:mt-0 {
@@ -6760,6 +6839,10 @@
   }
 
   @media (min-width: 48rem) {
+    .md\:bottom-0 {
+      bottom: 0;
+    }
+
     .md\:col-span-8 {
       grid-column: span 8 / span 8;
     }
@@ -7191,6 +7274,11 @@
     display: none;
   }
 
+  .\[\&\>article\:last-child\]\:border-b-0 > article:last-child {
+    border-bottom-style: var(--tw-border-style);
+    border-bottom-width: 0;
+  }
+
   .\[\&\>svg\]\:pointer-events-none > svg {
     pointer-events: none;
   }
@@ -7419,14 +7507,6 @@ body {
 
 .guard-story-strip {
   background: linear-gradient(135deg, #f8fafc 0%, #fff 60%, #5599fe0a 100%);
-}
-
-a, button, input, select, textarea {
-  font: inherit;
-}
-
-button {
-  cursor: pointer;
 }
 
 input:focus-visible, button:focus-visible, a:focus-visible {

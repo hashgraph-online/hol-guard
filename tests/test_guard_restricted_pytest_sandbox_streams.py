@@ -108,3 +108,18 @@ def test_replay_keeps_crlf_line_ends_and_fits_a_code_page_pipe() -> None:
     _replay_sandbox_output(io.BytesIO(b"calc ok\r\nbar\rbaz \xe2\x9c\x93\n"), destination)
     destination.buffer.seek(0)
     assert destination.buffer.read() == b"calc ok\nbar?baz ?\n"
+
+
+@pytest.mark.usefixtures("_fixed_process_ceiling")
+def test_a_note_chosen_from_the_output_names_the_cause(capsys):
+    from codex_plugin_scanner.guard.runtime.contained_denial_note import CONNECT_NOTE, denial_note
+
+    code = _run_backend_process(
+        _emit("Error: connect EPERM 203.0.113.7:443", 1),
+        env=os.environ,
+        timeout_seconds=5,
+        write_denial_note=denial_note,
+    )
+    captured = capsys.readouterr()
+    assert code == 1
+    assert captured.err.endswith(f"203.0.113.7:443\n\n[HOL Guard] {CONNECT_NOTE}\n")

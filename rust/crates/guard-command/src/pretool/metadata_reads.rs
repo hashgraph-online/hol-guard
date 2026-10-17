@@ -146,7 +146,7 @@ pub(super) fn safe_diff_arguments(arguments: &[String], context: super::PathCont
             )
     }) || [left, right]
         .iter()
-        .all(|operand| search::safe_recursive_search_target(operand, context))
+        .all(|operand| search::safe_recursive_target_through_links(operand, context))
 }
 
 /// Output-format and comparison options. Options that read another file

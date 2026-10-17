@@ -149,6 +149,42 @@ Current Guard support in this repo:
   - blocks by returning exit code `2` and Devin-native stdout JSON `{"decision":"block","reason":"..."}` with a `hookSpecificOutput.permissionDecision: "deny"` envelope; Guard never emits Devin's `decision: "approve"` auto-approve response
   - fails closed (exit `2` deny) when hook input is malformed or the Guard authority denies for `PreToolUse`, `PermissionRequest`, and `UserPromptSubmit`; a timed-out or crashed review continues the session with an allow envelope so a wedged Guard cannot stall Devin, and `PostToolUse` is observation-only
 
+## Reported to Cloud
+
+When a machine is connected to Guard Cloud, [fleet posture](./fleet-posture.md) reports installed items from
+the local inventory. Only five item kinds are reported: `skill`, `mcp_server`, `plugin` (plugins, plugin files
+and extensions), `package` and `hook`. Agents, commands, instructions and rules, prompts, themes, marketplace
+entries, host rows and other settings files stay local, even when Guard detects them. This table lists, per
+harness, the reported kinds that Guard's detectors produce today. `hol-guard extensions list` prints the
+plugin rows from the same local inventory. `hol-guard mcp list` prints the MCP servers the Protect page lists.
+
+| Harness | Reported to Cloud |
+| --- | --- |
+| `codex` | `mcp_server`, `hook`, `skill` |
+| `claude-code` | `mcp_server`, `hook`, `skill` |
+| `copilot` | `mcp_server`, `hook` |
+| `cursor` | `mcp_server`, `hook`, `skill` |
+| `cline` | `mcp_server` |
+| `antigravity` | `mcp_server`, `plugin`, `skill` |
+| `gemini` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `hermes` | `mcp_server`, `skill` |
+| `openclaw` | `mcp_server`, `skill` |
+| `opencode` | `mcp_server`, `plugin`, `skill` |
+| `kimi` | `mcp_server`, `hook`, `skill` |
+| `grok` | `mcp_server`, `hook`, `skill` |
+| `pi` | `plugin`, `package`, `skill` |
+| `omp` (Oh My Pi) | `plugin`, `package`, `skill` |
+| `zcode` | `mcp_server`, `plugin`, `hook`, `skill` |
+| `devin` | `mcp_server`, `hook`, `skill` |
+| `paseo` | none |
+
+For `codex`, `claude-code`, `cursor`, `gemini`, `kimi`, `grok`, `opencode`, `pi`, `omp`, `zcode` and `devin`, `skill`
+rows also come from workspace skill discovery, which runs when Guard has a project workspace.
+
+Items are reported only while reporting is on. With `hol-guard settings set fleet-posture off`, Guard sends
+the inventory digest and no item rows for any harness; managed installs cannot opt out. Item locations are
+sent as keyed hashes, never as raw paths.
+
 Gemini, Antigravity, and shared Codex/AIBOM skill discovery bind approval and
 inventory identity to the complete accepted skill directory rather than only
 `SKILL.md`. See [Skill directory identity](./skill-directory-identity.md) for
@@ -264,6 +300,13 @@ replacement/withholding transport.
 | cline | cline | unknown | unknown | local | UserPromptSubmit | native_hook | screening | observe, block, approval | Prompt hook failure is handled by the native bridge's bounded fail-closed behavior. | Cline must invoke the managed UserPromptSubmit hook for prompt screening. | Prompt screening does not prove final model request redaction. | src/codex_plugin_scanner/guard/adapters/cline_hooks.py:_EVENTS | unverified | not_run | None | None | None | None | None | None | None | None | False |
 
 <!-- END GENERATED HARNESS CAPABILITY REPORT: cline -->
+
+## Harness Version Coverage
+
+The dashboard shows whether the installed app version has been tested with the
+running Guard release. Coverage is display-only and never changes enforcement.
+See [Harness version coverage](harness-version-coverage.md) for the states,
+supported apps, and the maintainer evidence-promotion procedure.
 
 ## Rust Authority Boundary
 

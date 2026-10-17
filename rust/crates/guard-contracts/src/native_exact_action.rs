@@ -102,6 +102,13 @@ pub enum NativeExactActionQueryV1 {
         #[serde(default)]
         receipt: Option<Value>,
         policy_binding: NativePolicyBindingV1,
+        /// The workspace a `git push` approval is proved in.
+        #[serde(default)]
+        workspace: Option<String>,
+        /// The hook's stamped `guard_execution_environment`: the agent's own
+        /// `PATH`, `HOME` and variable names. Without it no launcher binds.
+        #[serde(default)]
+        execution_environment: Option<Value>,
     },
 }
 

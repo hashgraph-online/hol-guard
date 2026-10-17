@@ -3,7 +3,8 @@
 //! workspace sandbox `mktemp -d` creates that directory under the run's
 //! private `TMPDIR`, so the chain runs contained instead of waiting on a
 //! review. The same holds for `export TODO_FILE=$(mktemp -d)/t.json` run as
-//! its own command. A steered, climbed or misplaced temporary directory, a
+//! its own command, and for `tmp=$(mktemp -d) && python3 todo.py --file
+//! "$tmp/tasks.json" list` when every later use follows `&&`. A steered, climbed or misplaced temporary directory, a
 //! sensitive or reused variable name, and any other substitution, stays out
 //! of the sandbox. A quoted heredoc may feed `python3 -` a script that uses
 //! only Python builtins; any other heredoc program keeps the command out.
@@ -127,6 +128,50 @@ fn a_cli_smoke_test_with_a_private_temporary_variable_runs_contained() {
             );
             assert_eq!(result.reason_code, CONTAINED, "{command}: {}", result.reason);
         }
+    }
+}
+
+#[test]
+fn a_script_smoke_test_reusing_a_fresh_temporary_directory_runs_contained() {
+    let (home, project, _cleanup) = fixture("expanded");
+    std::fs::write(project.join("todo.py"), "import sys\nprint(sys.argv)\n").unwrap();
+    let command = "tmp=$(mktemp -d) && python3 todo.py --file \"$tmp/tasks.json\" add \"Test task\" && python3 todo.py --file \"$tmp/tasks.json\" list && python3 todo.py --file \"$tmp/tasks.json\" done 1 && python3 todo.py --file \"$tmp/tasks.json\" delete 1 && python3 todo.py --file \"$tmp/tasks.json\" list";
+    let result = evaluate(&home, &project, command);
+    assert_ne!(result.minimum_action, "allow", "{}", result.reason);
+    if cfg!(target_os = "macos") {
+        assert_eq!(
+            result.minimum_action, "sandbox-required",
+            "{}",
+            result.reason
+        );
+        assert_eq!(result.reason_code, CONTAINED, "{}", result.reason);
+    }
+}
+
+#[test]
+fn a_fresh_temporary_directory_reused_unsafely_stays_out_of_the_sandbox() {
+    let (home, project, _cleanup) = fixture("expanded-refused");
+    std::fs::write(project.join("todo.py"), "import sys\nprint(sys.argv)\n").unwrap();
+    for command in [
+        "tmp=$(mktemp -d); python3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) || python3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) && tmp=/etc && python3 todo.py --file \"$tmp/t.json\" list",
+        "tmp=$(mktemp -d) && python3 todo.py --file \"${tmp:-/etc}/t.json\" list",
+        "tmp=$(mktemp -d) && cd \"$tmp\" && python3 todo.py list > ../../x",
+        // `mktemp -dq` needs review as a command of its own.
+        "tmp=$(mktemp -dq) && python3 todo.py --file \"$tmp/t.json\" list",
+    ] {
+        let result = evaluate(&home, &project, command);
+        assert_ne!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason
+        );
+        assert_ne!(
+            result.reason_code, CONTAINED,
+            "{command}: {}",
+            result.reason
+        );
     }
 }
 

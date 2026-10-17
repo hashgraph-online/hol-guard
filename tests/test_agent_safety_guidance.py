@@ -291,6 +291,11 @@ _BEFORE_SCRIPT_FREE_INSTALLS_BODY = (
 ).read_text(encoding="utf-8")
 
 
+_BEFORE_CONNECTOR_SETUP_BODY = (
+    Path(__file__).parent / "fixtures" / "agent-safety-guidance-before-connector-setup.md"
+).read_text(encoding="utf-8")
+
+
 @pytest.mark.parametrize(
     "legacy",
     [
@@ -303,6 +308,10 @@ _BEFORE_SCRIPT_FREE_INSTALLS_BODY = (
         pytest.param(
             f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_BEFORE_SCRIPT_FREE_INSTALLS_BODY}",
             id="before-script-free-installs",
+        ),
+        pytest.param(
+            f"<!-- HOL GUARD MANAGED SAFETY DOCUMENT v2 -->\n{_BEFORE_CONNECTOR_SETUP_BODY}",
+            id="before-connector-setup",
         ),
     ],
 )

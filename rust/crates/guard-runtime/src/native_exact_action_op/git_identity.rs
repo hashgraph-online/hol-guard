@@ -5,6 +5,8 @@ use serde_json::{json, Value};
 use super::context::Ctx;
 use super::fs_path;
 use super::git_config::git_config_digest;
+#[cfg(windows)]
+use super::git_windows;
 use super::reasons::{Proof, MUTABLE_LAUNCHER, UNPROVEN_LAUNCH};
 
 const GLOBAL_OPTIONS: [&str; 2] = ["--no-pager", "--no-optional-locks"];
@@ -149,6 +151,8 @@ fn repository(start: &str) -> Proof<(String, String, String)> {
     for dir in directories {
         let marker = fs_path::join(&dir, ".git");
         if fs_path::is_dir(&marker) {
+            #[cfg(windows)]
+            git_windows::git_dir_is_plain(&marker, &marker, true)?;
             return Ok((dir, marker.clone(), marker));
         }
         if fs_path::is_file(&marker) {
@@ -164,7 +168,13 @@ fn repository(start: &str) -> Proof<(String, String, String)> {
                 common = fs_path::resolve_strict(&fs_path::join(&git_dir, pointed.trim()))
                     .ok_or(UNPROVEN_LAUNCH)?;
             }
+            #[cfg(windows)]
+            git_windows::git_dir_is_plain(&git_dir, &common, false)?;
             return Ok((dir, git_dir, common));
+        }
+        #[cfg(windows)]
+        if git_windows::may_be_git_dir(&dir) {
+            return Err(UNPROVEN_LAUNCH);
         }
     }
     Err(UNPROVEN_LAUNCH)

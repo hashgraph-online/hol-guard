@@ -31,8 +31,10 @@ if TYPE_CHECKING:
 from ..adapters.diagnostic_probes import without_command_probes
 from ..approval_gate_nudge import approval_gate_posture
 from ..daemon.bounded_http import daemon_admission_snapshot
+from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
 from ..native_runtime_admission import native_resident_admission_snapshot
 from ..runtime.command_queue import command_queue_status, repair_command_queue_state
+from ..runtime.connector_setup_items import connector_setup_status
 from ..shims import package_shim_dashboard_status
 from ._commands_shared import *
 from .commands_dispatch_trust import build_trust_doctor_payload
@@ -332,6 +334,7 @@ def _run_guard_doctor_command(
             "tables": store.list_table_names(),
             "adapters": detected_harnesses,
             "runtime_detector_registry": _runtime_detector_registry_payload(config),
+            "connector_setup": connector_setup_status(store, load_guard_daemon_endpoint_url(guard_home)),
         }
     if getattr(args, "perf", False):
         payload["detector_perf"] = _runtime_detector_perf_payload(config)

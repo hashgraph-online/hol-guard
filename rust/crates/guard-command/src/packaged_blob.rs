@@ -1,5 +1,4 @@
 //! Bounded lazy decode for the packaged command JSON artifacts.
-use sha2::{Digest, Sha256};
 use std::io::Read;
 
 /// Decode a build-time zstd blob, bounded to `expected_len` bytes, and verify
@@ -23,7 +22,7 @@ pub(crate) fn decode(
         .read_to_end(&mut bytes)
         .is_err()
         || bytes.len() != expected_len
-        || hex::encode(Sha256::digest(&bytes)) != expected_sha256
+        || hex::encode(ring::digest::digest(&ring::digest::SHA256, &bytes)) != expected_sha256
     {
         return Box::default();
     }

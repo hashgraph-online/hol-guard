@@ -1,4 +1,6 @@
 use super::*;
+
+use crate::managed_policy_registry::{RegistryAuthority, RegistryRead};
 use std::fs;
 
 use crate::managed_policy_load::MachineSystem;
@@ -51,6 +53,7 @@ impl Dirs {
             policy_path: None,
             write_cache: false,
             machine_root: Some(self.root.join("machine")),
+            registry: RegistryAuthority::Native,
         }
     }
 
@@ -307,6 +310,7 @@ fn an_unreadable_machine_policy_applies_the_fail_closed_floor() {
     .unwrap();
     let source = ManagedPolicySource {
         system: MachineSystem::Windows,
+        registry: RegistryAuthority::Fixed(RegistryRead::Denied),
         ..dirs.unmanaged()
     };
 

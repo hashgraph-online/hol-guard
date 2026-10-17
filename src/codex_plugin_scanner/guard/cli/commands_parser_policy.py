@@ -288,6 +288,13 @@ def _configure_guard_policy_parsers(
     settings_output_parser.add_argument("policy", choices=("off", "warn", "ask"))
     _add_guard_common_args(settings_output_parser, suppress_defaults=True)
     settings_output_parser.add_argument("--json", action="store_true")
+    settings_fleet_posture_parser = settings_set_subparsers.add_parser(
+        "fleet-posture",
+        help="Choose how much machine detail Guard reports to Guard Cloud (on or off)",
+    )
+    settings_fleet_posture_parser.add_argument("fleet_posture", choices=("on", "off"))
+    _add_guard_common_args(settings_fleet_posture_parser, suppress_defaults=True)
+    settings_fleet_posture_parser.add_argument("--json", action="store_true")
     settings_explain_parser = settings_subparsers.add_parser(
         "explain", help="Explain current Guard settings in plain language"
     )

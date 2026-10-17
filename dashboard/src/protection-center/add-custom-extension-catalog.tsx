@@ -1,55 +1,10 @@
-import { useCallback, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, type KeyboardEvent } from "react";
 
 import type { LocalCliCommandState } from "../local-cli-api";
 import {
   extensionPolicyRadioTabStop,
   nextExtensionPolicyRadioIndex,
 } from "../extension-policy-panel";
-import { filterCountCopy } from "./add-custom-extension-support";
-
-export function CatalogPreview(props: {
-  query: string;
-  showFilterCount: boolean;
-  previewNames: string[];
-  visibleCount: number;
-  totalCount: number;
-  reviewing: boolean;
-  adjustLabel: string;
-  hideLabel: string;
-  onOpenReview: () => void;
-  onCloseReview: () => void;
-  children?: ReactNode;
-}) {
-  return (
-    <div className="mt-5">
-      {props.showFilterCount && props.query.trim() !== "" ? (
-        <p className="text-xs leading-5 text-brand-dark/60">{filterCountCopy(props.visibleCount, props.totalCount)}</p>
-      ) : null}
-      {props.previewNames.length > 0 && !props.reviewing ? (
-        <ul className="mt-3 flex flex-wrap gap-2">
-          {props.previewNames.map((name) => (
-            <li key={name} className="rounded-full bg-slate-100 px-3 py-1.5 font-mono text-xs text-brand-dark">
-              {name}
-            </li>
-          ))}
-          {props.visibleCount > props.previewNames.length ? (
-            <li className="rounded-full px-3 py-1.5 text-xs font-semibold text-brand-dark/60">
-              +{props.visibleCount - props.previewNames.length} more
-            </li>
-          ) : null}
-        </ul>
-      ) : null}
-      <button
-        type="button"
-        onClick={props.reviewing ? props.onCloseReview : props.onOpenReview}
-        className="mt-4 min-h-11 text-sm font-semibold text-brand-blue"
-      >
-        {props.reviewing ? props.hideLabel : props.adjustLabel}
-      </button>
-      {props.reviewing ? props.children : null}
-    </div>
-  );
-}
 
 export function BulkPolicyPicker(props: {
   value: LocalCliCommandState | "mixed";
@@ -60,6 +15,7 @@ export function BulkPolicyPicker(props: {
   allowLabel?: string;
   blockLabel?: string;
   mcpPolicy?: boolean;
+  className?: string;
 }) {
   const choices: Array<{ value: LocalCliCommandState; label: string }> = [
     { value: "inherit", label: props.mcpPolicy ? "Use policy" : "Recommended" },
@@ -79,7 +35,7 @@ export function BulkPolicyPicker(props: {
     event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[next]?.focus();
   };
   return (
-    <div className="mt-4" data-testid="custom-extension-bulk-policy">
+    <div className={props.className ?? "mt-4"} data-testid="custom-extension-bulk-policy">
       <div
         role="radiogroup"
         aria-label={mixed ? `${groupLabel}. Custom mix` : groupLabel}

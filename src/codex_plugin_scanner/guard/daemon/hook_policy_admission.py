@@ -9,6 +9,7 @@ from typing import Any
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_PERSISTENT_ERRORS
 from .hook_fail_closed import unmanaged_passthrough
 from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
+from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, policy_update_pending_reason
 
 
 def _native_policy_not_ready_reason(daemon_server: Any) -> str:
@@ -22,6 +23,8 @@ def _native_policy_not_ready_reason(daemon_server: Any) -> str:
     last_error = getattr(publisher, "last_error", None)
     if isinstance(last_error, str) and last_error.strip():
         code = last_error.strip()
+        if code in POLICY_SOURCE_FENCE_ERRORS:
+            return policy_update_pending_reason()
         advice = repair if code in POLICY_SNAPSHOT_PERSISTENT_ERRORS else retry
         return f"{reason} {code}. {advice}"
     return f"{reason} {retry}"

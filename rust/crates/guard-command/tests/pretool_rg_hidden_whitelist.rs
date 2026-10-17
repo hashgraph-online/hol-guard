@@ -333,3 +333,34 @@ fn a_nested_repository_exclude_file_is_honored() {
     );
     assert_actions(&fixture, "outer", &["rg -n foo src"], "allow");
 }
+
+#[test]
+fn a_pipe_into_rg_reads_the_previous_step_rather_than_the_tree() {
+    let fixture = fixture(&[(
+        "template",
+        &[
+            (".gitignore", ".env*\n!.env.example\n"),
+            (".env.example", "KEY=\n"),
+        ],
+    )]);
+    // An ignore rule answers for what a walk would re-include. After a pipe
+    // and without a path operand `rg` reads the previous step's output, so
+    // there is no walk for the rule to reach.
+    assert_actions(
+        &fixture,
+        "template",
+        &[
+            "cat src/main.rs | rg -n foo",
+            "cat src/main.rs | rg foo",
+            "cat src/main.rs | rg -n \"(/Users/|hostname)\"",
+        ],
+        "allow",
+    );
+    // A path operand is still a walk, wherever the segment sits.
+    assert_actions(
+        &fixture,
+        "template",
+        &["cat src/main.rs | rg -n foo .", "rg -n foo"],
+        "review",
+    );
+}

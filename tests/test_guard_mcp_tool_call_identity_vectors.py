@@ -83,6 +83,14 @@ def _recipes() -> dict[str, dict[str, object]]:
         },
         "composio_provider_hash": {
             **base,
+            "tool_name": "mcp__codex_apps__composio__composio_multi_execute_tool",
+            "catalog": None,
+            "provider_hash": _PROVIDER_HASH,
+        },
+        # A discovery wrapper cannot carry a provider action, so the runtime
+        # leaves the provider hash out of its artifact even when one is passed.
+        "composio_discovery_provider_hash": {
+            **base,
             "tool_name": "mcp__codex_apps__composio__composio_search_tools",
             "catalog": None,
             "provider_hash": _PROVIDER_HASH,

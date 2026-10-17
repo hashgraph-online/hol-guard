@@ -11,6 +11,7 @@ from ...argparse_utils import FriendlyArgumentParser
 from ..models import GUARD_ACTION_VALUES
 from .commands_parser_constants import _SERVICE_RUNTIME_CHOICES, DEFAULT_GUARD_CONNECT_URL, DEFAULT_GUARD_SYNC_URL
 from .commands_parser_helpers import *
+from .inventory_list_commands import configure_inventory_list_parser
 
 def _add_cloud_review_connect_consent(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
@@ -242,6 +243,18 @@ def _configure_guard_cloud_parsers(
     _add_guard_common_args(cloud_sync_intel_parser)
     cloud_sync_intel_parser.add_argument("--json", action="store_true")
 
+    cloud_status_parser = cloud_subparsers.add_parser(
+        "status",
+        help="Show the last Guard Cloud sync, the posture this machine last sent, and what Guard Cloud shows",
+    )
+    _add_guard_common_args(cloud_status_parser)
+    cloud_status_parser.add_argument("--json", action="store_true")
+    cloud_status_parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Skip the Guard Cloud lookup and print local state only.",
+    )
+
     supply_chain_parser = guard_subparsers.add_parser(
         "supply-chain",
         help="Inspect and refresh local Guard supply-chain firewall coverage",
@@ -455,7 +468,7 @@ def _configure_guard_cloud_parsers(
 
     mcp_parser = guard_subparsers.add_parser(
         "mcp",
-        help="Serve the local Guard MCP server (guard-mcp.v1)",
+        help="Serve the local Guard MCP server (guard-mcp.v1) or list MCP servers in the local inventory",
     )
     mcp_subparsers = mcp_parser.add_subparsers(
         dest="mcp_command",
@@ -468,6 +481,11 @@ def _configure_guard_cloud_parsers(
     )
     _add_guard_common_args(mcp_serve_parser)
     mcp_serve_parser.add_argument("--stdio", action="store_true", default=True)
+    mcp_list_parser = mcp_subparsers.add_parser(
+        "list",
+        help="List the MCP servers in the local Guard inventory",
+    )
+    configure_inventory_list_parser(mcp_list_parser)
     hidden_commands = {
         "admin",
         "hook",

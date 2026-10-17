@@ -1,8 +1,9 @@
 //! The decision DTO an MCP tool-call policy pass produces.
 
 use guard_command::approval_reuse::{
-    ApprovalReuseDecision, APPROVAL_REUSE_ACCEPTED, APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN,
-    APPROVAL_REUSE_NO_SAVED_DECISION, APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
+    enforced_policy_action, ApprovalReuseDecision, APPROVAL_REUSE_ACCEPTED,
+    APPROVAL_REUSE_CURRENT_ACTION_UNKNOWN, APPROVAL_REUSE_NO_SAVED_DECISION,
+    APPROVAL_REUSE_SAVED_ACTION_UNKNOWN,
 };
 use guard_command::effect_decision::GuardAction;
 use serde_json::{json, Map, Value};
@@ -58,9 +59,21 @@ impl Decision {
         }
     }
 
+    /// The action this decision enforces, including the fresh-approval
+    /// boundary a rejected reuse attempt opens. Consumers read it instead of
+    /// re-deriving the upgrade from the reuse fields.
+    pub(crate) fn policy_action(&self) -> GuardAction {
+        enforced_policy_action(
+            self.action,
+            self.approval_reuse_status,
+            self.approval_reuse_reason_code.as_deref(),
+        )
+    }
+
     pub(crate) fn to_value(&self) -> Value {
         json!({
             "action": self.action.as_str(),
+            "policy_action": self.policy_action().as_str(),
             "source": self.source,
             "signals": self.signals,
             "summary": self.summary,

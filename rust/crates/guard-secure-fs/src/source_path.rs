@@ -485,6 +485,132 @@ pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
         .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
 }
 
+/// Extensions a project writes its own configuration and prose under. A
+/// credential file conventionally carries none of them: `.netrc`, `.npmrc`,
+/// `.pgpass` and `.git-credentials` are named for what they hold and end
+/// there, so requiring one of these already separates a project's documents
+/// from a store of logins.
+const PROJECT_DOCUMENT_EXTENSIONS: &[&str] = &[
+    "cfg", "conf", "ini", "json", "jsonc", "markdown", "md", "toml", "txt", "yaml", "yml",
+];
+
+/// Words that name a tool's own login or keystore rather than a project's
+/// configuration, read over the name's parts so `.mcp.json` and
+/// `.claude.json` keep their review wherever they sit.
+const TOOL_LOGIN_WORDS: &[&str] = &[
+    "agent",
+    "agents",
+    "aider",
+    "aws",
+    "azure",
+    "claude",
+    "codex",
+    "copilot",
+    "cursor",
+    "docker",
+    "dockercfg",
+    "gcloud",
+    "gnupg",
+    "gpg",
+    "hgrc",
+    "htpasswd",
+    "keychain",
+    "keyring",
+    "keystore",
+    "kube",
+    "kubeconfig",
+    "mcp",
+    "netrc",
+    "npmrc",
+    "omp",
+    "pgpass",
+    "pypirc",
+    "ssh",
+    "vault",
+    "windsurf",
+];
+
+/// A hidden file at the leaf of a git work tree that a project keeps its own
+/// configuration or prose in: `.tsconfig-lb-check.json`, `.release-notes.md`,
+/// `.local-ledger.md`.
+///
+/// A hidden name used to read only from a fixed list, so every project that
+/// spells its own dotfile differently collected an approval nobody could
+/// answer, while the file itself is part of the checkout the agent is already
+/// working in. What stands in for that list is the shape such a file has: an
+/// ordinary document extension, a name carrying no credential marker and none
+/// of the words a tool keeps its own login under, every parent component
+/// visible, and a work tree of the home directory's own above it. That work
+/// tree is never the home directory itself, where a dotfiles repository would
+/// otherwise turn `~/.claude.json` into a project document, and never a
+/// checkout above home, which would read every dotfile in the home directory
+/// as that checkout's document.
+pub fn hidden_project_document(path: &Path, home: Option<&Path>) -> bool {
+    if !fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    // Every name screen reads the spelling without the leading dot as well as
+    // with it. A credential name does not stop being one when a project hides
+    // it: `.private-key.txt` has the stem `.private-key`, which no list holds,
+    // and `.id_rsa.txt` splits into `id` and `rsa`, so the dot alone used to
+    // carry such a name past screens that already know it.
+    let bare_name = name.trim_start_matches('.');
+    let bare = Path::new(bare_name);
+    let extension = bare
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stem = bare
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool_login = stem
+        .replace(['-', '.'], "_")
+        .split('_')
+        .any(|word| TOOL_LOGIN_WORDS.contains(&word));
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || !PROJECT_DOCUMENT_EXTENSIONS.contains(&extension.as_str())
+        || tool_login
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || SENSITIVE_SEARCH_BASENAMES.contains(&bare_name)
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&bare_name)
+        || sensitive_external_filename(path)
+        || sensitive_external_filename(bare)
+        || crate::credential_store_names::secret_bearing_file_name(bare_name)
+        // The rule is the project's own document in a checkout an agent is
+        // working in, so every directory above it is one an ordinary listing
+        // shows. A hidden parent is some tool's tree, whatever the leaf is
+        // called.
+        || parents.iter().any(|parent| parent.starts_with('.'))
+    {
+        return false;
+    }
+    let Some(home) = home else {
+        return false;
+    };
+    // The work tree has to be one of the home directory's own: a walk that
+    // keeps climbing finds whatever repository happens to sit above it, and a
+    // home directory nested in a checkout would turn every dotfile it holds
+    // into that checkout's document. The home directory is never the work
+    // tree either, so a dotfiles repository cannot admit `~/.claude.json`.
+    path.ancestors()
+        .skip(1)
+        .take_while(|ancestor| {
+            ancestor
+                .strip_prefix(home)
+                .is_ok_and(|below| below != Path::new(""))
+        })
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
 pub fn source_like(path: &Path) -> bool {
     let parts = lowered_parts(path);
     if parts

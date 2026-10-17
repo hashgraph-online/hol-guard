@@ -146,14 +146,18 @@ def _request_root() -> str | None:
     return str(trusted_windows_local_temp())
 
 
+_WINDOWS_PROFILES = frozenset({"python-eval-readonly-v1", "node-eval-readonly-v1", "node-build-output-v1"})
+
+
 def platform_contains(response: Mapping[str, object]) -> bool:
     """macOS runs every contained profile; Linux runs the workspace sandbox;
-    Windows runs installed Python and Vite builds in an AppContainer."""
+    Windows runs installed Python and Node scripts and Vite builds in an
+    AppContainer."""
     profile = response.get("required_execution_profile")
     return (
         sys.platform == "darwin"
         or (sys.platform == "linux" and profile == "workspace-contained-v1")
-        or (sys.platform == "win32" and profile in {"python-eval-readonly-v1", "node-build-output-v1"})
+        or (sys.platform == "win32" and profile in _WINDOWS_PROFILES)
     )
 
 

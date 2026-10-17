@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+from tests.dashboard_bundle_support import dashboard_chunk
+
 ROOT = Path(__file__).resolve().parents[1]
 DECISION_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "product-decision.json"
 ADR_PATH = ROOT / "docs" / "guard" / "adr" / "0011-extension-first-managed-controls.md"
@@ -16,17 +18,7 @@ APP_TITLE_TEST_PATH = ROOT / "dashboard" / "src" / "scrg171-172.test.ts"
 DASHBOARD_BUNDLE_PATH = (
     ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static" / "assets" / "guard-dashboard.js"
 )
-POLICY_BUNDLE_PATH = (
-    ROOT
-    / "src"
-    / "codex_plugin_scanner"
-    / "guard"
-    / "daemon"
-    / "static"
-    / "assets"
-    / "chunks"
-    / "policy-workspace-page.js"
-)
+POLICY_BUNDLE_PATH = dashboard_chunk("policy-workspace-page")
 MANAGED_CONTROLS_DOCS = (
     ROOT / "docs" / "guard" / "managed-controls-local-extensions.md",
     ROOT / "docs" / "guard" / "managed-controls-cloud-operator-guide.md",

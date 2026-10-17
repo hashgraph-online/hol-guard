@@ -10,6 +10,7 @@ import {
   sponsoredCardLabel,
   featuredWindowLabel,
   orderFeaturedFirst,
+  inFeedSlotIndexes,
   type DiscoveryPlacement,
 } from "./extensions-discover-model";
 
@@ -239,5 +240,14 @@ assert.equal(sponsoredCardLabel(true), "Sponsored · Featured");
   assert.equal(parse([{ ...base, quoteRequired: false }]).length, 0);
   assert.equal(parse(["sponsored"]).length, 0);
 }
+
+// The in-feed offer recurs every ten rows and never trails the list.
+assert.deepEqual(inFeedSlotIndexes(0), []);
+assert.deepEqual(inFeedSlotIndexes(1), []);
+assert.deepEqual(inFeedSlotIndexes(3), [2]);
+assert.deepEqual(inFeedSlotIndexes(8), [6]);
+assert.deepEqual(inFeedSlotIndexes(16), [6]);
+assert.deepEqual(inFeedSlotIndexes(17), [6, 16]);
+assert.deepEqual(inFeedSlotIndexes(45), [6, 16, 26, 36]);
 
 console.log("extensions-discover-model.test.ts: all assertions passed");

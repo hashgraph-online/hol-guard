@@ -260,7 +260,6 @@ fn listings_allow_verified_directories_only() {
         }
         for input in [
             json!({"path": "~/.ssh"}),
-            json!({"path": "~/.codex/sessions"}),
             json!({"path": "../../../etc"}),
             json!({"path": "/etc"}),
             json!({"path": "~/missing-directory"}),
@@ -272,6 +271,18 @@ fn listings_allow_verified_directories_only() {
         ] {
             assert!(!allowed(&omp(&f, tool, input.clone())), "{tool} {input}");
         }
+        // A harness home keeps its login in files the content screens refuse,
+        // so a listing of one of its directories prints session and plan
+        // names and nothing else. `ls ~/.codex/sessions` already gets that
+        // answer in a shell; `find` walks below the directory it is given,
+        // so it keeps its review.
+        let listing = omp(&f, tool, json!({"path": "~/.codex/sessions"}));
+        assert_eq!(
+            allowed(&listing),
+            tool != "find",
+            "{tool}: {}",
+            listing.reason_code
+        );
     }
     assert!(!allowed(&run(
         &f,
@@ -363,12 +374,20 @@ fn project_skill_folders_list_by_name() {
             ".git",
             ".git/skills",
             ".claude",
-            "~/.codex",
             "~/.agents/../project/.agents",
         ] {
             let result = omp(&f, tool, json!({"path": path, "hidden": true}));
             assert!(!allowed(&result), "{tool} {path}");
         }
+        // The harness home itself lists by name for the tools that stay in
+        // the directory they are given, the same as `ls ~/.codex`.
+        let home = omp(&f, tool, json!({"path": "~/.codex", "hidden": true}));
+        assert_eq!(
+            allowed(&home),
+            tool != "find",
+            "{tool}: {}",
+            home.reason_code
+        );
     }
     // A glob inside the folder keeps the full tree proof.
     assert!(!allowed(&omp(

@@ -19,6 +19,8 @@ use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
+#[path = "contained_workspace_sink_denial.rs"]
+mod denial;
 #[path = "contained_workspace_sink_plan.rs"]
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
@@ -46,8 +48,8 @@ pub(crate) const PUBLISH_REASON: &str = concat!(
     "(no network, no home access), then runs the Git steps that follow once it ",
     "proves them again."
 );
-const AUTHORIZATION_FAILED: &str = "contained_test_authorization_failed";
-const AUTHORIZATION_MESSAGE: &str = "Guard could not authorize this protected test execution.";
+const AUTHORIZATION_FAILED: &str = "contained_run_authorization_failed";
+const AUTHORIZATION_MESSAGE: &str = "Guard could not authorize this contained run.";
 const INVALID_COMMAND: &str = "pytest_restricted_invalid_command";
 const SANDBOX_UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";

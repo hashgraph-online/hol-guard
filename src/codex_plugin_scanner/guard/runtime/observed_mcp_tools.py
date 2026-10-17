@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from hashlib import sha256
 from typing import TYPE_CHECKING
 
+from ..adapters.contracts import display_name_for
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..native_policy_snapshot_codec import _normalized_harness_selector_v3
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_MAX_MCP_TOOL_ACTIONS, NativePolicySnapshotError
@@ -168,7 +169,7 @@ def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
                 server_identity_hash=server.identity_hash,
                 server_command=server.command,
                 server_args_hash=server.args_hash,
-                source_label=f"{first.harness.title()} · observed tools",
+                source_label=f"{display_name_for(first.harness)} · observed tools",
             )
         except LocalCliReplaySkippedError:
             continue

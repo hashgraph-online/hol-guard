@@ -4,6 +4,7 @@ import { fetchGuardApi } from "./guard-api";
 import { isGuardDemoMode } from "./guard-demo";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import type { GuardHarnessSetupContract, GuardProtectionAppHealth } from "./guard-types";
+import { normalizeVersionCompatibility, type HarnessVersionCompatibility } from "./harness-version-compatibility";
 
 export type DetectedAppStatus = "protected" | "partial" | "found_unprotected" | "needs_repair" | "not_found";
 
@@ -14,6 +15,8 @@ export type GuardHarnessSetupItem = GuardHarnessSetupContract & {
   command_available: boolean;
   config_paths: string[];
   artifact_count: number;
+  // Added by newer daemons; normalize before rendering.
+  version_compatibility?: unknown;
 };
 
 export type HarnessDetectionState =
@@ -97,4 +100,13 @@ export function resolveDetectedAppStatus(
     return "partial";
   }
   return hasInventory || hasReceipts || detected ? "found_unprotected" : "not_found";
+}
+
+export function versionCompatibilityFor(
+  state: HarnessDetectionState,
+  harness: string,
+): HarnessVersionCompatibility | null {
+  if (state.kind !== "ready") return null;
+  const item = state.items.find((candidate) => candidate.harness === harness);
+  return item ? normalizeVersionCompatibility(harness, item.version_compatibility) : null;
 }

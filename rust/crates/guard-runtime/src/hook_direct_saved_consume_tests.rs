@@ -163,7 +163,7 @@ fn consume_with(
     assert_eq!(artifact_id, "claude-code:native-pretool:Read");
     let receipt: Value = serde_json::from_slice::<Value>(&edge).unwrap()["receipt"].clone();
     let identity =
-        crate::native_exact_action_op::review_binding_for(&exact, Some(&receipt)).unwrap();
+        crate::native_exact_action_op::review_binding_for(&exact, Some(&receipt), None).unwrap();
     let (path, connection) = local_store(tag);
     if seed {
         seed_approval(&path, &connection, &identity, &workspace);

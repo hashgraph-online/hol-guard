@@ -8,10 +8,13 @@ function enrollableCount(item: LocalCliItem): number {
 
 export type EnrollStep = "pick" | "review" | "confirm";
 
+/** Tool-level MCP records: seen in agent calls, or a remote server from a harness config. */
+const OBSERVED_MCP_LABEL_SUFFIXES = [" · observed tools", " · configured server"];
+
 export function isObservedMcpItem(item: LocalCliItem | null): boolean {
   return item?.surface === "mcp"
     && item.example_label.startsWith("mcp__")
-    && item.source_label?.endsWith(" · observed tools") === true;
+    && OBSERVED_MCP_LABEL_SUFFIXES.some((suffix) => item.source_label?.endsWith(suffix) === true);
 }
 
 export function addDialogSubmitLabel(input: {
@@ -107,7 +110,7 @@ export function dialogIntro(
   observedMcp = false,
 ): string {
   if (surface === "package-scripts") {
-    return "Allow these scripts so Protect can stop asking about them. Type a nested name such as guard:audit to inspect one.";
+    return "Adding this project allows its scripts, so Guard stops asking about them. Block any script you want stopped.";
   }
   if (surface === "mcp") {
     if (observedMcp) return "Review each detected tool before saving. Allow listed applies only to the tools shown here.";
@@ -170,12 +173,6 @@ export function McpListingStatus(props: {
       {listToolsAgainLabel()}
     </button>
   );
-}
-
-export function filterCountCopy(visible: number, total: number): string {
-  if (visible === 0) return "No scripts match that name. Try another nested name, or pick a different project.";
-  if (visible === total) return `${visible} scripts in this project.`;
-  return `${visible} of ${total} scripts match. Allow still enrolls the whole project.`;
 }
 
 export function suggestionSummary(item: LocalCliItem): string {
@@ -248,26 +245,6 @@ export function SuggestionPanel(props: {
   );
 }
 
-export function ProjectSwitcher(props: {
-  items: LocalCliItem[];
-  currentId: string;
-  onSelect: (item: LocalCliItem) => void;
-}) {
-  if (props.items.length < 2) return null;
-  return (
-    <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Remembered projects">
-      {props.items.map((item) => (
-        <ProjectChip
-          key={item.cli_id}
-          item={item}
-          selected={item.cli_id === props.currentId}
-          onSelect={props.onSelect}
-        />
-      ))}
-    </div>
-  );
-}
-
 function suggestionEmptyCopy(query: string, discovering: boolean): string {
   if (query.trim() !== "") {
     return "No matching tools. Try npm run, a project folder, or a nested script name. Everyday commands such as rg stay hidden.";
@@ -297,30 +274,6 @@ function SuggestionGroup(props: {
         ))}
       </ul>
     </div>
-  );
-}
-
-function ProjectChip(props: {
-  item: LocalCliItem;
-  selected: boolean;
-  onSelect: (item: LocalCliItem) => void;
-}) {
-  const handleSelect = useCallback(() => {
-    props.onSelect(props.item);
-  }, [props]);
-  return (
-    <button
-      type="button"
-      onClick={handleSelect}
-      aria-pressed={props.selected}
-      className={`min-h-11 rounded-full px-3 text-xs font-semibold ${
-        props.selected
-          ? "bg-brand-blue text-white"
-          : "border border-slate-300 text-brand-dark"
-      }`}
-    >
-      {props.item.source_label ?? props.item.name}
-    </button>
   );
 }
 

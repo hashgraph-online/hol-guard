@@ -166,8 +166,8 @@ fn damaged_schema_marker_fails_instead_of_authorizing() {
 fn newer_and_outdated_schemas_fail_instead_of_guessing() {
     let (rig, server) = allowed_rig(Some("allow"));
     for (version, code) in [
-        (12, "native_local_mcp_grant_schema_unsupported"),
-        (10, "native_local_mcp_grant_schema_outdated"),
+        (13, "native_local_mcp_grant_schema_unsupported"),
+        (11, "native_local_mcp_grant_schema_outdated"),
     ] {
         rig.connection
             .execute(

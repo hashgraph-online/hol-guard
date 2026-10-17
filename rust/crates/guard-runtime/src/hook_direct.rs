@@ -79,7 +79,7 @@ pub(crate) const DIRECT_HARNESSES: [&str; 14] = [
     "omp",
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
-const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
+pub(crate) const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
 const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
 const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
 const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
@@ -386,8 +386,7 @@ fn answer(
         },
         recording_only,
     };
-    let edge = crate::edge::evaluate_envelope_with_store(envelope, policy_store)
-        .map_err(|_| HookDirectDefer::EdgeFailed)?;
+    let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
     let mut answered = match event {
@@ -458,12 +457,12 @@ fn answer(
     let evidence = json!({
         "event": event,
         "harness": request.harness,
-        "workspace": workspace,
-        "home_dir": request_home,
+        "workspace": workspace, "home_dir": request_home,
         "payload": Value::Object(evidence_payload),
         "receipt": answered.get("receipt").cloned().unwrap_or(Value::Null),
         "harness_response": answered["harness_response"].clone(),
     });
+    let evidence = fence::with_wait(evidence, fence_wait);
     if !policy_store.direct_evidence().offer(evidence) {
         return Err(HookDirectDefer::EvidenceFull);
     }
@@ -483,6 +482,8 @@ pub(crate) mod contained;
 mod cursor;
 #[path = "hook_direct_edge.rs"]
 mod edge;
+#[path = "hook_direct_fence.rs"]
+mod fence;
 #[path = "hook_direct_lifecycle.rs"]
 mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]

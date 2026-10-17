@@ -22,7 +22,10 @@ const UNMODELED_GITHUB: &[&str] = &[
     "for n in 1*; do gh pr comment $n --body \"Fixed the node script's env handling.\"; done",
 ];
 
-fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeCommandControls {
+pub(super) fn controls(
+    controls: serde_json::Value,
+    lockdown: bool,
+) -> CompiledNativeCommandControls {
     let program = packaged_command_program().unwrap();
     let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
         "schema": "guard.native-command-control-binding.v1",
@@ -39,7 +42,7 @@ fn controls(controls: serde_json::Value, lockdown: bool) -> CompiledNativeComman
     CompiledNativeCommandControls::new(&binding).unwrap()
 }
 
-fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
+pub(super) fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
     GITHUB_PERMISSIONS
         .iter()
         .map(|id| {
@@ -53,7 +56,10 @@ fn github(state: &str, disabled: Option<&str>) -> serde_json::Value {
         .collect()
 }
 
-fn decision(controls: &CompiledNativeCommandControls, command: &str) -> (String, String) {
+pub(super) fn decision(
+    controls: &CompiledNativeCommandControls,
+    command: &str,
+) -> (String, String) {
     let result = crate::pretool::evaluate_pre_tool_envelope_with_extensions(
         "zcode",
         "PreToolUse",
@@ -87,6 +93,8 @@ fn unmodeled_commands_with_literal_redirects_are_reviewable() {
     for command in [
         "git checkout main 2>/dev/null && gh pr view 12",
         "ln -s a b 2>/dev/null; gh pr view 12 >/dev/null",
+        // `&>` inside an argument is not a separator glued to the interpreter.
+        "python3 app.py \"a&>b\"",
     ] {
         assert_ne!(
             decision(&controls, command).1,
@@ -503,6 +511,11 @@ fn a_looked_up_program_in_command_position_keeps_its_owner() {
 }
 
 #[test]
+fn a_backtick_in_a_redirect_target_does_not_hide_the_interpreter() {
+    assert!(super::unread_file_interpreter("echo hi >`python3 evil.py`"));
+}
+
+#[test]
 fn a_redirect_before_an_awk_program_does_not_hide_it() {
     let controls = controls(serde_json::json!([]), false);
     let command =
@@ -523,6 +536,9 @@ fn awk_ending_at_a_separator_with_a_redirect_does_not_swallow_the_next_command()
     for command in [
         "doctl registry repository list-manifests r | awk '{print}' ;</dev/null sh evil.sh",
         "doctl registry repository list-manifests r | awk '{print}' |>o bash x.sh",
+        "doctl registry repository list-manifests r | awk '{print}' ;>&/dev/null python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;>|log python3 evil.py",
+        "doctl registry repository list-manifests r | awk '{print}' ;< \"in put\" node evil.js",
     ] {
         assert_eq!(decision(&controls, command).1, FAILED, "{command}");
     }

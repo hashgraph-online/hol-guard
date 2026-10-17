@@ -99,10 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
     run.add_argument(
         "--profile",
-        choices=("core", "contained-bun-vitest", "full-tasks"),
+        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry"),
         default="core",
-        help="Complete core qualification, the additive contained Bun/Vitest profile, or full developer tasks "
-        "(never merge-qualifying)",
+        help="Complete core qualification, the additive contained Bun/Vitest profile, full developer tasks, "
+        "or the approve-then-retry lane (only core qualifies a merge)",
     )
     run.add_argument(
         "--full-task-mode",
@@ -301,6 +301,8 @@ def main(argv: list[str] | None = None) -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
+        if args.profile == "approval-retry" and args.harness == "omp":
+            raise ValueError("--profile approval-retry runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
         if args.harness_cli or args.harness_model:
@@ -331,8 +333,8 @@ def main(argv: list[str] | None = None) -> int:
         from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
-        if args.profile != "core" and args.jobs != 1:
-            raise ValueError("--jobs is only supported by the core profile")
+        if args.profile not in ("core", "full-tasks") and args.jobs != 1:
+            raise ValueError("--jobs is only supported by the core and full-tasks profiles")
         if args.profile != "full-tasks" and args.full_task_mode != "enforce":
             raise ValueError("--full-task-mode requires --profile full-tasks")
         if args.profile == "full-tasks" and (
@@ -461,9 +463,9 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
     if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
         raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
-    if args.profile not in {"core", "full-tasks"}:
-        raise ValueError("--harness supports only the core and full-tasks profiles")
-    if args.profile == "core" and args.full_task_mode != "enforce":
+    if args.profile not in {"core", "full-tasks", "approval-retry"}:
+        raise ValueError("--harness supports only the core, full-tasks and approval-retry profiles")
+    if args.profile != "full-tasks" and args.full_task_mode != "enforce":
         raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
         raise ValueError("host timeout is outside supported bounds")
@@ -471,6 +473,20 @@ def _run_harness(args: argparse.Namespace) -> int:
         from .full_task_cli import run_harness_profile
 
         report = run_harness_profile(args)
+    elif args.profile == "approval-retry":
+        from .approval_retry_suite import run_approval_retry_suite
+
+        report = run_approval_retry_suite(
+            harness=args.harness,
+            expected_source_sha=args.expected_source_sha,
+            output=args.output,
+            model_timeout=args.timeout,
+            selected_ids=args.cases,
+            executable=args.harness_cli,
+            model=args.harness_model,
+            work_root=args.work_root,
+            candidate_sha=args.candidate_sha,
+        )
     else:
         from .harness_suite import run_harness_suite
 

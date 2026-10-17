@@ -127,7 +127,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def __init__(self, guard_home: Path) -> None:
             assert guard_home == tmp_path
 
-        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
             assert registry
             return view
 
@@ -204,7 +204,7 @@ def test_degraded_acknowledgement_reports_daemon_startup_failure(
     view = SimpleNamespace(health=SimpleNamespace(value="degraded"), revision=0)
 
     class FakeStore:
-        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
             assert registry
             return view
 

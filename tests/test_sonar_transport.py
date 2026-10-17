@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import ssl
+from types import SimpleNamespace
 from unittest.mock import Mock
 from urllib.error import HTTPError, URLError
 
@@ -15,10 +16,17 @@ from scripts.ci.sonar_quality_client import ORIGIN, SonarClient
 
 @pytest.fixture
 def clock(monkeypatch):
+    """A clock the client alone reads.
+
+    `module.time` is the `time` module itself, so patching its attributes
+    replaces `time.sleep` for everything running in the worker process,
+    including a thread another test left behind. Rebinding the name inside the
+    client's module keeps the mock to the calls this test makes.
+    """
+
     now = [0.0]
-    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
     sleep = Mock(side_effect=lambda duration: now.__setitem__(0, now[0] + duration))
-    monkeypatch.setattr(module.time, "sleep", sleep)
+    monkeypatch.setattr(module, "time", SimpleNamespace(monotonic=lambda: now[0], sleep=sleep))
     return now, sleep
 
 

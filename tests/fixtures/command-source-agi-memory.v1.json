@@ -1611,7 +1611,7 @@
       "enabled_extensions": [
         "command.agi-memory"
       ],
-      "expected_action": "block",
+      "expected_action": "review",
       "expected_effective_segments": [],
       "id": "del-exp-br",
       "rule_id": "command.agi-memory.delete-hard"

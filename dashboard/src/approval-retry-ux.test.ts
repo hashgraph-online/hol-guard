@@ -15,6 +15,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-state";
 import { ReviewScopeControls } from "./review-scope-controls";
+import { buildDecisionPayload, requestSupportsScope } from "./approval-scopes";
 import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
 
 function assert(condition: boolean, message: string): void {
@@ -83,6 +84,17 @@ assert(
 
 // #3838: where "Always allow exact action" is offered, point to it instead of extension patterns.
 const alwaysEligible = { ...unbound, exact_action_persistence_eligible: true };
+assert(!requestSupportsScope(unbound, "allow", "artifact"), "old-runtime unavailable requests cannot offer Allow");
+assert(requestSupportsScope(unbound, "block", "artifact"), "Keep blocked remains available");
+let rejectedOnce = false;
+try {
+  buildDecisionPayload({ item: alwaysEligible, action: "allow", scope: "artifact", reason: "test" });
+} catch { rejectedOnce = true; }
+assert(rejectedOnce, "persistence eligibility cannot make once consent executable");
+assert(
+  buildDecisionPayload({ item: alwaysEligible, action: "allow", scope: "artifact", reason: "test", persistExactAction: true }).persist_policy === true,
+  "a persistent-only action requires the explicit duration choice",
+);
 assert(
   buildRetryAfterApprovalCopy(alwaysEligible, "allow").includes("Always allow exact action"),
   "eligible approval copy points to Always allow exact action",
@@ -231,8 +243,8 @@ const scopeControls = (oneTimeRetryBlocked: boolean) =>
     }),
   );
 assert(
-  scopeControls(true).includes("the agent stays blocked") && !scopeControls(true).includes("Retry within 15 minutes"),
-  "restricted requests describe This time without a retry promise",
+  !scopeControls(true).includes('value="once"') && scopeControls(true).includes('value="always"'),
+  "persistent-only requests omit the unusable This time choice",
 );
 assert(scopeControls(false).includes("Retry within 15 minutes"), "reusable requests keep the default retry window");
 
@@ -249,7 +261,7 @@ const bulkStats = {
 };
 assert(
   buildBulkRiskDisclosure({ ...bulkStats, retryBlockedActionCount: 2 }).bullets.some((bullet) =>
-    bullet.includes("will still be blocked on after approval"),
+    bullet.includes("Run once is unavailable"),
   ),
   "bulk disclosure warns about commands the agent stays blocked on",
 );
@@ -286,8 +298,8 @@ assert(
 // Review feedback: the bulk confirmation never promises a retry for commands that stay blocked.
 const restrictedConsequence = bulkApproveConsequenceCopyForSelection(3, 2, buildBulkApproveConsequenceCopy);
 assert(
-  !restrictedConsequence.includes("retry") && restrictedConsequence.includes("still be blocked"),
-  "restricted bulk confirmation drops the retry promise",
+  restrictedConsequence.includes("Run once is unavailable") && !restrictedConsequence.includes("record your decision"),
+  "restricted bulk confirmation requires inspecting unavailable actions",
 );
 assert(
   bulkApproveConsequenceCopyForSelection(3, 0, buildBulkApproveConsequenceCopy) === buildBulkApproveConsequenceCopy(3),

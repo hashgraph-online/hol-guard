@@ -13,7 +13,7 @@ from ...version import __version__
 from ..cli.install_commands import list_harness_setup_items
 from ..native_daemon_handler import NativeDaemonHandlerError, native_detection_app_statuses, native_requests_list
 from ..store_approvals import InvalidApprovalCursorError
-from .dashboard_bundle import is_pinned_path, pinned_dashboard_file
+from .dashboard_bundle import dashboard_build_id, is_pinned_path, pinned_dashboard_file, stamp_dashboard_build
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION
 from .server_common import _NATIVE_HANDLER_UNAVAILABLE, _is_string_object_dict, _ServerProxy
 from .server_control_health import _HEADLESS_OPERATIONS, _headless_safe_failure_reasons
@@ -273,6 +273,7 @@ class _DashboardSupportRoutes:
     def _write_dashboard_shell(self) -> None:
         encoded = pinned_dashboard_file(m._STATIC_DIR, "index.html")
         if encoded is not None and pinned_dashboard_file(m._STATIC_DIR, "assets/guard-dashboard.js") is not None:
+            encoded = stamp_dashboard_build(encoded, dashboard_build_id(m._STATIC_DIR))
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(encoded)))

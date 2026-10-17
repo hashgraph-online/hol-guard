@@ -59,6 +59,60 @@ fn an_inherited_ripgrep_config_keeps_file_searches_on_review() {
     }
 }
 
+/// A piped search reads its input instead of walking the tree, so the config
+/// proof is the only thing between an inherited RIPGREP_CONFIG_PATH and a
+/// path operand the config adds. The flag clears that config only where
+/// ripgrep parses it as an option: as the value of one it is a pattern or a
+/// replacement, and the config still loads.
+#[test]
+fn a_piped_search_answers_for_a_config_its_pattern_cannot_clear() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/ripgrep-config-pipe")
+        .join(std::process::id().to_string());
+    std::fs::create_dir_all(root.join("home")).unwrap();
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let project = root.join("project");
+    std::fs::write(project.join("notes.txt"), "needle\n").unwrap();
+
+    for harness in ["codex", "claude-code"] {
+        // Without a config the filter stands on its own.
+        assert_eq!(
+            decide_with(harness, &[], "cat notes.txt | rg needle", &home, &project),
+            "allow",
+            "{harness} plain pipe"
+        );
+        // The flag parsed as an option: ripgrep reads no config at all.
+        for command in [
+            "cat notes.txt | rg --no-config needle",
+            "cat notes.txt | rg -n --no-config needle",
+        ] {
+            assert_eq!(
+                decide_with(harness, &["RIPGREP_CONFIG_PATH"], command, &home, &project),
+                "allow",
+                "{harness} `{command}`"
+            );
+        }
+        // The same spelling as a value, and past the end-of-options marker:
+        // the config still loads and can hand the search a path of its own.
+        for command in [
+            "cat notes.txt | rg needle",
+            "cat notes.txt | rg -e --no-config",
+            "cat notes.txt | rg --regexp --no-config",
+            "cat notes.txt | rg --replace --no-config needle",
+            "cat notes.txt | rg needle -- --no-config",
+        ] {
+            assert_ne!(
+                decide_with(harness, &["RIPGREP_CONFIG_PATH"], command, &home, &project),
+                "allow",
+                "{harness} `{command}`"
+            );
+        }
+    }
+}
+
 fn decide_with(
     harness: &str,
     environment_names: &[&str],

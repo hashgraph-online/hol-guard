@@ -10,7 +10,12 @@ from pathlib import Path
 
 from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
 
-_SCHEMA = "guard.native-review-policy-binding.v1"
+# v2 drops ``policy_digest``: it is ``H(config_digest, rule_digest)`` over the
+# whole compiled snapshot, so it moves whenever the publisher republishes, even
+# for observed state that cannot weaken a verdict. The retry's own anchor
+# covers the configured policy, ``rule_digest`` and ``runtime_identity``, and
+# the receipt is still required to carry a well-formed ``policy_digest``.
+_SCHEMA = "guard.native-review-policy-binding.v2"
 
 
 def native_review_policy_binding(
@@ -47,7 +52,6 @@ def native_review_policy_binding(
         raise ValueError("native_review_policy_binding_invalid")
     return {
         "schema": _SCHEMA,
-        "policy_digest": receipt["policy_digest"],
         "rule_digest": receipt["rule_digest"],
         "runtime_identity": receipt["runtime_identity"],
         "command_extensions": dict(command_binding),

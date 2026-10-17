@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.approval_scope_support import RETRY_CANNOT_REUSE_APPROVAL, request_scope_contract
+from codex_plugin_scanner.guard.approval_scope_support import (
+    RETRY_CANNOT_REUSE_APPROVAL,
+    ApprovalScopeContract,
+    _contract_from_native,
+    request_scope_contract,
+)
 
 # The Python constant must name the restriction the resident actually emits.
 RESTRICTION = RETRY_CANNOT_REUSE_APPROVAL
@@ -26,13 +31,24 @@ def _request(**overrides: object) -> dict[str, object]:
 
 
 def test_unbound_native_pre_tool_review_is_marked_not_reusable() -> None:
-    assert RESTRICTION in request_scope_contract(_request()).restrictions
+    contract = request_scope_contract(_request())
+    assert RESTRICTION in contract.restrictions
+    assert contract.allow_scopes == ()
+    assert contract.block_scopes == ("artifact",)
+    assert not contract.can_run_once
+    assert not contract.can_persist_exact_version
+    assert contract.to_dict()["execution_approval"] == {
+        "schema": "guard.execution-approval.v1", "can_record_decision": True,
+        "can_run_once": False, "can_persist_exact_version": False,
+        "delivery_reason": "execution_binding_unavailable",
+    }
 
 
 def test_bound_native_pre_tool_review_keeps_normal_restrictions() -> None:
     contract = request_scope_contract(_request(artifact_hash=BOUND_HASH))
     assert RESTRICTION not in contract.restrictions
     assert "reusable_allow_is_action_bound" in contract.restrictions
+    assert contract.can_run_once
 
 
 @pytest.mark.parametrize("artifact_id", ["omp:mcp:server", "codex:skill:demo", "omp:file:AGENTS.md"])
@@ -45,3 +61,28 @@ def test_restriction_is_part_of_the_scope_contract_digest() -> None:
     bound = request_scope_contract(_request(artifact_hash=BOUND_HASH))
     assert marked.digest != bound.digest
     assert RESTRICTION in marked.to_dict()["scope_restrictions"]
+
+
+def test_contradictory_or_unknown_capability_projection_is_rejected() -> None:
+    contract = ApprovalScopeContract(
+        allow_scopes=(), block_scopes=("artifact",), recommended_allow_scope=None,
+        recommended_block_scope="artifact", restrictions=(RESTRICTION,), digest="a" * 64,
+    )
+    payload = contract.to_dict()
+    assert _contract_from_native(payload) == contract
+    execution = payload["execution_approval"]
+    assert isinstance(execution, dict)
+    payload["execution_approval"] = {**execution, "can_run_once": 0}
+    assert _contract_from_native(payload) is None
+    payload["execution_approval"] = {
+        "schema": "guard.execution-approval.v1", "can_record_decision": True,
+        "can_run_once": True, "can_persist_exact_version": False, "delivery_reason": None,
+    }
+    assert _contract_from_native(payload) is None
+    payload["execution_approval"] = {"schema": "guard.execution-approval.v999"}
+    assert _contract_from_native(payload) is None
+    # A legacy resident still carries the authoritative restriction; absence
+    # of the additive projection cannot turn it into executable once consent.
+    del payload["execution_approval"]
+    parsed = _contract_from_native(payload)
+    assert parsed is not None and not parsed.can_run_once

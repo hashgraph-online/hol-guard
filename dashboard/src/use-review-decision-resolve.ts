@@ -38,6 +38,7 @@ type ReviewDecisionResolveParams = {
   availableScopeChoices: ScopeChoice[];
   blockScopeOptions: unknown[];
   hasAllowScope: boolean;
+  canSubmitAllow: boolean;
   watchOnlyObservation: boolean;
   rememberExactAction: boolean;
   extensionDialogActive: boolean;
@@ -57,6 +58,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
     availableScopeChoices,
     blockScopeOptions,
     hasAllowScope,
+    canSubmitAllow,
     watchOnlyObservation,
     rememberExactAction,
     extensionDialogActive,
@@ -104,6 +106,12 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   const handleResolve = useCallback(
     async (action: "allow" | "block", gateOverride?: GuardApprovalGatePublicConfig | null) => {
       if (!item || resolutionBlockReason !== null) return;
+      if (action === "allow" && !canSubmitAllow) {
+        setErrorMessage(hasAllowScope
+          ? "Choose 'Always allow exact action' before approving; run once is unavailable."
+          : "This action has no eligible approval scope.");
+        return;
+      }
       const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = gateOverride ?? approvalGate;
@@ -198,6 +206,8 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       approvalTotpCode,
       cooldownOptOut,
       resolutionBlockReason,
+      canSubmitAllow,
+      hasAllowScope,
     ]
   );
 
@@ -206,6 +216,10 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       if (resolutionBlockReason !== null || decisionBusy) return;
       if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "allow" && !canSubmitAllow) {
+        setErrorMessage("Choose 'Always allow exact action' before approving; run once is unavailable.");
         return;
       }
       if (action === "block" && blockScopeOptions.length === 0) {
@@ -288,6 +302,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
       decisionContractKey,
       handleResolve,
       hasAllowScope,
+      canSubmitAllow,
       isStillShown,
       item,
       approvalGate,

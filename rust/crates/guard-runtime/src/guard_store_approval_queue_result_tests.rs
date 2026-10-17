@@ -9,9 +9,12 @@ use std::collections::BTreeMap;
 use rusqlite::Connection;
 use serde_json::{json, Value};
 
-use crate::guard_store_approval_reads::tests::{expected, seed, store_call};
+use crate::guard_store_approval_reads::tests::{
+    expected, seed, store_call, with_execution_capabilities,
+};
 use crate::guard_store_approval_sweep::tests::states;
 use crate::guard_store_cmd_vectors_tests::temp_home;
+use crate::guard_store_json::dumps_sorted;
 
 const VECTORS: &str = include_str!("../testdata/guard_store/approval_queue_result_vectors.json");
 
@@ -66,12 +69,16 @@ fn replays_every_recorded_queue_result_resolution() {
             seed_sync_state(&path, &scenario["sync_state"]);
             let before = states(&path);
             let state_before = sync_state(&path);
-            let actual = store_call(
-                &home,
-                call["source"].as_str().unwrap(),
-                method,
-                call["args"].clone(),
-            );
+            let mut args = call["args"].clone();
+            // The exact browser snapshot contains the additive contract too.
+            // Upgrade the recorded snapshot, never a newly read live row.
+            if let Some(snapshot) = args.get("expected_snapshot").and_then(Value::as_str) {
+                if let Ok(value) = serde_json::from_str::<Value>(snapshot) {
+                    args["expected_snapshot"] =
+                        json!(dumps_sorted(&with_execution_capabilities(value)));
+                }
+            }
+            let actual = store_call(&home, call["source"].as_str().unwrap(), method, args);
             assert_eq!(actual, expected(call, usize::MAX), "{label}");
             let changed: Vec<Value> = states(&path)
                 .into_iter()

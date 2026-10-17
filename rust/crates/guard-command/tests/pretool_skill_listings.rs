@@ -80,10 +80,20 @@ fn skill_directories_list_without_review() {
             );
         }
     }
+    // A name pattern prints only the paths it selects, so a second root that
+    // is a home dot-directory clear of the credential stores prints no more
+    // than the skill root does.
+    assert_eq!(
+        action(
+            &home,
+            "zcode",
+            "find ~/.agents ~/.codex -maxdepth 4 -name \"approve.sh\""
+        ),
+        "allow"
+    );
     for command in [
         // Other agent state, hidden entries inside a skill, actions and
         // content reads keep their review.
-        "find ~/.agents ~/.codex -maxdepth 4 -name \"approve.sh\"",
         "ls -R ~/.codex",
         "find ~/.codex -name auth.json",
         "ls ~/.agents/skills/review-loop/.cache",

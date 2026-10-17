@@ -59,12 +59,14 @@ pub(crate) fn evaluate_local_cli_hook_request(
     if request.schema != LOCAL_CLI_HOOK_REQUEST_SCHEMA {
         return Err("native_local_cli_hook_schema_mismatch".to_owned());
     }
-    let (status, code, payload) = match run(request) {
-        Ok(action) => (
-            "ok".to_owned(),
-            "ok".to_owned(),
-            Some(json!({ "action": action })),
-        ),
+    let (status, code, payload) = match run_with_connector(request) {
+        Ok((action, connector)) => {
+            let mut payload = json!({ "action": action });
+            if let Some(connector) = connector {
+                payload["connector"] = connector;
+            }
+            ("ok".to_owned(), "ok".to_owned(), Some(payload))
+        }
         Err(code) => ("error".to_owned(), code.to_owned(), None),
     };
     crate::resident_protocol::encode_response(&LocalCliHookResultV1 {
@@ -89,7 +91,16 @@ fn request_digest(request: &LocalCliHookRequestV1) -> Result<String, String> {
     ))
 }
 
+#[cfg(test)]
 pub(crate) fn run(request: &LocalCliHookRequestV1) -> Result<String, &'static str> {
+    run_with_connector(request).map(|(action, _)| action)
+}
+
+/// The refined action, and the connector a `review` waits on when this device
+/// has no allow or block decision for the CLI the command launches.
+pub(crate) fn run_with_connector(
+    request: &LocalCliHookRequestV1,
+) -> Result<(String, Option<Value>), &'static str> {
     local_store_read::require_store_path(&request.store_path, &request.guard_home)
         .map_err(|_| "native_local_cli_hook_path_invalid")?;
     let package_home = request.home_dir.as_deref().unwrap_or(&request.cwd);
@@ -100,15 +111,17 @@ pub(crate) fn run(request: &LocalCliHookRequestV1) -> Result<String, &'static st
     observe(request, &package)?;
     let current = request.current_action.as_str();
     if !request.grant_allowed || !REFINABLE_ACTIONS.contains(&current) {
-        return Ok(current.to_owned());
+        return Ok((current.to_owned(), None));
     }
-    let action = match grant(request, &package) {
-        Ok(Some("allowed")) => "allow",
-        Ok(Some("blocked")) => "block",
-        Ok(_) => current,
-        Err(()) => unverified_action(request),
+    let (action, connector) = match grant(request, &package) {
+        Ok((Some("allowed"), _)) => ("allow", None),
+        Ok((Some("blocked"), _)) => ("block", None),
+        Ok((_, launch)) => (current, launch.filter(|_| current == "review")),
+        Err(()) => (unverified_action(request), None),
     };
-    Ok(action.to_owned())
+    let connector =
+        connector.and_then(|launch| crate::connector_setup::for_launch(request, &launch));
+    Ok((action.to_owned(), connector))
 }
 
 /// `observe_unlisted_cli`: the package script identity, else every CLI a
@@ -295,10 +308,13 @@ fn unlisted(request: &LocalCliHookRequestV1, compound: bool) -> Result<Vec<Unlis
 
 /// `matching_local_cli_grant`: the grant state for the launched CLI, `None`
 /// when it launches none, and `Err` when no trustworthy answer exists.
-fn grant(request: &LocalCliHookRequestV1, package: &Package) -> Result<Option<&'static str>, ()> {
+fn grant(
+    request: &LocalCliHookRequestV1,
+    package: &Package,
+) -> Result<(Option<&'static str>, Option<Launch>), ()> {
     let package = package.as_ref().map_err(|_| ())?;
     let Some(launch) = launch(request, package.as_ref())? else {
-        return Ok(None);
+        return Ok((None, None));
     };
     let (catalog, _) =
         crate::local_cli_grant_op::command_catalog(&request.guard_home, &launch.cli_id)
@@ -324,9 +340,9 @@ fn grant(request: &LocalCliHookRequestV1, package: &Package) -> Result<Option<&'
         return Err(());
     }
     match answer["state"].as_str() {
-        Some("allowed") => Ok(Some("allowed")),
-        Some("blocked") => Ok(Some("blocked")),
-        Some("none") => Ok(None),
+        Some("allowed") => Ok((Some("allowed"), None)),
+        Some("blocked") => Ok((Some("blocked"), None)),
+        Some("none") => Ok((None, Some(launch))),
         _ => Err(()),
     }
 }

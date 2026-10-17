@@ -136,6 +136,37 @@ pub(crate) fn decide_allowed_launch(
     })
 }
 
+/// Whether this device has no allow or block decision for the CLI: no grant
+/// row, a row in neither state, or one recorded for another identity. A
+/// missing store has none; an unreadable one is an error.
+pub(crate) fn grant_unset(
+    guard_home: &str,
+    cli_id: &str,
+    identity_hash: &str,
+) -> Result<bool, &'static str> {
+    let store_path = local_store_read::require_store_path(&store_text(guard_home), guard_home)
+        .map_err(store_error)?;
+    let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
+    else {
+        return Ok(true);
+    };
+    require_supported_schema(&connection)?;
+    if !table_exists(&connection, "local_cli_grant")? {
+        return Ok(true);
+    }
+    let row: Option<(String, String)> = connection
+        .query_row(
+            "select identity_hash, state from local_cli_grant where cli_id = ?1",
+            params![cli_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()
+        .map_err(|_| STORE_UNAVAILABLE)?;
+    Ok(row.is_none_or(|(stored_hash, state)| {
+        stored_hash != identity_hash || !matches!(state.as_str(), "allowed" | "blocked")
+    }))
+}
+
 fn store_text(guard_home: &str) -> String {
     Path::new(guard_home)
         .join(local_store_read::STORE_FILE_NAME)

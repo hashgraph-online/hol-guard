@@ -12714,6 +12714,511 @@
       },
       "cwd": "worktree",
       "expect": "not_allow"
+    },
+    {
+      "id": "observed-ls-lockfile-globs",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls package-lock.json bun.lock* pnpm-lock.yaml 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-source-glob",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls src/*.ts"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-two-paths",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report\" src/index.ts README.md"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-piped-to-head",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report\" src/index.ts | head -10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-glob-filter",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report\" src -g \"*.ts\""
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-two-patterns",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -rln -e \"report\" -e \"window\" src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-stderr-discarded",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report\" src 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-find-two-roots",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "find src docs -maxdepth 2 -name \"*.md\" 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-sibling-checkout",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report-window-marker\" ${HOME}/other-project/src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-sibling-piped",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report-window-marker\" ${HOME}/other-project/src | head -6"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-lockfile-probe-mixed",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/other-project/*.lock* ${HOME}/other-project/package-lock.json ${HOME}/other-project/pnpm-lock.yaml 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-filtered-pipeline",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -n \"report\" ${HOME}/other-project/src/report.ts | rg -v \"window\" | head -10"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-extract-sort-uniq",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -oE \"^[a-z]+\" ${HOME}/other-project/notes.md | sort -u | head -40"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-two-dirs-separated",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls -la ${HOME}/other-project/ 2>/dev/null; echo \"---\"; ls -la ${HOME}/acme-plain/ 2>/dev/null"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-cd-sibling-read-package",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cd ${HOME}/other-project && grep -E '\"(name|version)\"' package.json | head -10; node --version; which bun 2>&1"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-grep-piped-to-sed-ranges",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n \"export\" ${HOME}/other-project/src/report.ts | sed -n '1,12p;28,40p'"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-ls-find-pid-then-pgrep",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/other-project | head -6; find ${HOME}/other-project -maxdepth 1 -name \"*.pid\" 2>/dev/null; pgrep -fl postgres | head -4"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "observed-rg-files-with-matches",
+      "fix_area": "read",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "rg -rn --files-with-matches \"report\" ${HOME}/other-project/src"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-cat-workflow",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.github/workflows/inert-check.yml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-head-toolchain-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "head -3 ${HOME}/.nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg/package.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-grep-workflow",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "grep -n runs-on ${HOME}/.github/workflows/inert-check.yml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-ls-workflows",
+      "fix_area": "read",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "ls ${HOME}/.github/workflows"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-read-toolchain-manifest",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.nvm/versions/node/v25.2.1/lib/node_modules/inert-pkg/package.json"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "hidden-home-read-workflow",
+      "fix_area": "read",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.github/workflows/inert-check.yml"
+      },
+      "cwd": "worktree",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-read-nested-gcloud-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.config/gcloud/credentials.db"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-cat-nested-gcloud-store",
+      "fix_area": "negative",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat ${HOME}/.config/gcloud/credentials.db"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "neg-read-token-named-file-in-skill-tree",
+      "fix_area": "negative",
+      "harnesses": [
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "read",
+      "tool_input": {
+        "path": "${HOME}/.agents/skills/x/credentials.json"
+      },
+      "cwd": "worktree",
+      "expect": "not_allow"
+    },
+    {
+      "id": "rg-stdin-after-git-diff",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached | rg -n \"(TOKEN|hostname)\""
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-stdin-after-git-diff-head",
+      "fix_area": "git",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git diff --cached | rg -n \"(TOKEN|hostname)\" | head -3"
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-stdin-after-sibling-git-diff",
+      "fix_area": "git-sibling-worktree",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${ORG_WT} diff --cached | rg -n \"worktree\" | head -3"
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
+    },
+    {
+      "id": "rg-stdin-after-cat",
+      "fix_area": "shell",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "cat src/index.ts | rg -n route"
+      },
+      "cwd": "ignore_negation",
+      "expect": "allow"
     }
   ],
   "pending_pr": {

@@ -100,6 +100,18 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_object_reads::read_form(subcommand, &arguments[1..]);
     }
+    if matches!(subcommand, "blame" | "describe" | "reflog") {
+        // History reads page (pager.blame, pager.reflog, core.pager) and
+        // blame converts blobs, so the configuration probe clears them first.
+        return allow_helper_context
+            && super::git_history_reads::read_form(subcommand, &arguments[1..]);
+    }
+    if matches!(subcommand, "shortlog" | "check-ignore") {
+        // A shortlog pages (pager.shortlog) and both run under the
+        // repository's configuration, so the probe clears them first.
+        return allow_helper_context
+            && super::git_listing_reads::read_form(subcommand, &arguments[1..]);
+    }
     if matches!(subcommand, "show-ref" | "for-each-ref") {
         return allow_helper_context
             && super::git_ref_listings::read_form(subcommand, &arguments[1..]);

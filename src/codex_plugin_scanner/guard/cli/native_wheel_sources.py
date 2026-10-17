@@ -92,6 +92,8 @@ Opener = Callable[[urllib.request.Request], AbstractContextManager[_Readable]]
 
 
 _FAILURE_MESSAGES = {
+    "native_wheel_payload_invalid": "The native wheel's runtime files do not match its RECORD.",
+    "native_wheel_payload_install_failed": "The native runtime files could not be written into the installed package.",
     "native_wheel_platform_unsupported": (
         "This release has no native wheel for this platform. The current installation remains active."
     ),

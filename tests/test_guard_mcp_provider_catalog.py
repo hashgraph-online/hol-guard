@@ -3,8 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import store_local_cli, store_mcp_provider_catalog
 from codex_plugin_scanner.guard.daemon.local_cli_api import LocalCliApiError, LocalCliApiService
 from codex_plugin_scanner.guard.runtime.composio_discovery import ComposioActionSchema
+from codex_plugin_scanner.guard.runtime.mcp_classification import McpClassificationUnavailableError
 from codex_plugin_scanner.guard.runtime.observed_mcp_tools import observed_mcp_tool
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -124,3 +126,30 @@ def test_provider_action_api_reads_cached_metadata_without_mutating_choices(tmp_
         with pytest.raises(LocalCliApiError) as error:
             service.provider_actions(payload)
         assert error.value.status == 400
+
+
+def test_an_unavailable_resident_still_lists_connections_and_actions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Advisory classification never gates a listing.
+
+    Describing an action is the resident's job and the answer is display
+    evidence. Without a resident the provider page and the local CLI listing
+    still carry every action, its permission state and its grant state.
+    """
+
+    store = GuardStore(tmp_path / "home")
+    source = observed_mcp_tool("codex", _TOOL)
+    cli_id = store.record_composio_discovery(source, (_action(),), seen_at=_FIRST)
+
+    def unavailable(declarations: object, *, guard_home: Path) -> list[dict[str, object] | None]:
+        del declarations, guard_home
+        raise McpClassificationUnavailableError
+
+    monkeypatch.setattr(store_mcp_provider_catalog, "classify_mcp_actions", unavailable)
+    monkeypatch.setattr(store_local_cli, "classify_mcp_actions", unavailable)
+
+    action = store.read_local_mcp_provider_actions(cli_id)["actions"][0]
+    assert action["permission_state"] == "review"
+    assert "classification" not in action
+    assert store.list_local_cli_items()[0]["cli_id"] == cli_id

@@ -216,6 +216,8 @@ def _assess_observed(
         actual = [call["args"].get("command") for call in calls]
         if any(call["name"] != "bash" for call in calls) or actual != list(scenario.commands):
             return "not-exercised", "required commands were omitted, duplicated, substituted or reordered"
+    if scenario.oracle == "blocked-memory-note" and (len(calls) != 1 or calls[0]["name"] != "learn"):
+        return "not-exercised", "expected one native learn attempt"
     if scenario.oracle == "blocked-read":
         if len(calls) != 1 or calls[0]["name"] != "read":
             return "not-exercised", "expected one native read attempt"

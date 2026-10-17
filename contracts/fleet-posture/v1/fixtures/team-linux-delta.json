@@ -1,0 +1,89 @@
+{
+  "schemaVersion": "fleet-posture/v1",
+  "collectedAt": "2026-10-16T12:00:00Z",
+  "client": {
+    "version": "3.47.0",
+    "channel": "stable",
+    "runtime": "python",
+    "autoUpdate": {
+      "enabled": true,
+      "lastCheckedAt": "2026-10-16T06:00:00Z",
+      "lastResult": "up_to_date"
+    }
+  },
+  "machine": {
+    "osName": "linux",
+    "osVersion": "24.04",
+    "arch": "x86_64",
+    "hostnameHash": "sha256:a7192b059d588054352d7d9eedb2cff0c53a7f43511d168e0487a1852bfde68f"
+  },
+  "aiTools": [
+    {
+      "harness": "codex",
+      "toolVersion": "0.48.0",
+      "setupStatus": "active",
+      "protectionState": "protected",
+      "hooks": {
+        "nativeHooks": true,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": true
+      },
+      "blindSpots": [],
+      "postureOverride": "enforce",
+      "artifactCount": 2,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:df470eea52a6099c3f41ebded9b3949438944820017c92a43ba56de8aa666748"
+    },
+    {
+      "harness": "gemini",
+      "toolVersion": null,
+      "setupStatus": "active",
+      "protectionState": "paused",
+      "hooks": {
+        "nativeHooks": false,
+        "browserFallback": false,
+        "mcpProxy": false,
+        "promptHooks": false
+      },
+      "blindSpots": [],
+      "postureOverride": "off",
+      "artifactCount": 0,
+      "lastActivityAt": "2026-10-16T12:00:00Z",
+      "inventoryDigest": "sha256:8d49cba336f17123110304e9388d02bb5fa2330d7f8863b51594fc47d8bc84cf"
+    }
+  ],
+  "inventory": {
+    "digest": "sha256:183a4c6342fe29ce8162763538a696218916ddec80d372ce48e0249a6800164d",
+    "mode": "delta",
+    "items": [
+      {
+        "kind": "mcp_server",
+        "name": "postgres",
+        "version": "1.2.0",
+        "hash": "sha256:363a09a130f0d5f29650e305b9ce8c8436e25c759df928d340778d244ab093bc",
+        "harness": "codex",
+        "source": "project",
+        "pathHash": "sha256:8eda37334449b74ebf6e0eea1794cc284e15f98ed0a191432ee58862c1b2a3b4",
+        "firstSeenAt": "2026-10-01T09:00:00Z",
+        "lastSeenAt": "2026-10-16T12:00:00Z"
+      }
+    ],
+    "removed": [
+      {
+        "kind": "skill",
+        "name": "old-skill",
+        "harness": "codex",
+        "hash": "sha256:593668a81dd3739089872e2225e57df048d1a15e7a6ca04254cf0320e49295cc"
+      }
+    ]
+  },
+  "policy": {
+    "appliedBundleVersion": 11,
+    "appliedBundleHash": "sha256:c3414688b3f116e8f62b384e3e3729e2d44d21f9df3b4e8be1166e39a9ec60c1",
+    "appliedPolicyVersionNumber": 3,
+    "status": "applied",
+    "errorCode": null,
+    "appliedAt": "2026-10-15T08:00:00Z"
+  }
+}

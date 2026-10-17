@@ -254,7 +254,16 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     monkeypatch.setattr(qualify, "prepare_candidate", fake_candidate)
     monkeypatch.setattr(qualify, "_remove_candidate", lambda *_a: True)
 
-    def fake_attempt(argv: list[str], *, cwd: Path, env: dict, log: Path) -> int:
+    def fake_attempt(
+        argv: list[str],
+        *,
+        cwd: Path,
+        env: dict,
+        log: Path,
+        on_started: Any | None = None,
+    ) -> int:
+        if on_started is not None:
+            on_started()
         evidence = Path(argv[argv.index("--output") + 1])
         summary = summaries.pop(0)
         if summary is not None:
@@ -297,7 +306,13 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     result = json.loads((tmp_path / "run" / "qualification.json").read_text())
     assert result["qualified"] is True and result["independent_verifier"] is True
     assert set(result["phase_seconds"]) == {
-        "preflight", "source", "wheel", "install", "live_cases", "verify", "cleanup",
+        "preflight",
+        "source",
+        "wheel",
+        "install",
+        "live_cases",
+        "verify",
+        "cleanup",
     }
     assert all(seconds >= 0 for seconds in result["phase_seconds"].values())
     assert result["attempts"][0]["pass"] is True
@@ -305,6 +320,30 @@ def test_qualifying_attempt_verifies_and_returns_zero(tmp_path: Path, monkeypatc
     assert result["attempts"][0]["work_root"] == str((tmp_path / "w" / "1").resolve())
     assert not (tmp_path / "w" / "1").exists()
     assert result["attempts"][0]["work_root"] not in result["kept"]
+
+
+def test_a_driven_run_names_the_lane_it_drove(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    cases = [{"id": "a", "outcome": "pass", "reason": "ok"}]
+    _fake_setup(monkeypatch, tmp_path, [_summary(cases, True)])
+    assert qualify.main(_args(tmp_path)) == 0
+    coverage = json.loads((tmp_path / "run" / "qualification.json").read_text())["coverage"]
+    assert coverage["driven"] == {"harness": "omp", "profile": "core"}
+    assert coverage["is_qualifying_lane"] is True
+    assert {"harness": "cursor", "profile": "full-tasks"} not in coverage["not_driven"]
+
+
+def test_a_preparation_only_run_drove_no_lane(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """`--prepare-only` installs the candidate and stops, so nothing ran."""
+    _fake_setup(monkeypatch, tmp_path, [])
+    assert qualify.main(_args(tmp_path, prepare_only=True)) == 0
+    result = json.loads((tmp_path / "run" / "qualification.json").read_text())
+    assert result["prepare_only"] is True and result["attempts"] == []
+    assert result["qualified"] is False
+    coverage = result["coverage"]
+    assert coverage["driven"] is None
+    assert coverage["is_qualifying_lane"] is False
+    assert coverage["lane"] == {"harness": "omp", "profile": "core"}
+    assert {"harness": "omp", "profile": "core"} in coverage["not_driven"]
 
 
 def test_retryable_outcomes_earn_one_fresh_attempt(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -530,3 +569,40 @@ def test_run_cli_rejects_non_finite_load_bounds(tmp_path: Path, flag: str, value
     result = subprocess.run(argv, cwd=qualify.REPO, env=env, capture_output=True, text=True, timeout=60)
     assert result.returncode == 2
     assert "finite" in result.stderr
+
+
+def test_attempt_reports_started_before_it_finishes(tmp_path: Path) -> None:
+    started: list[int] = []
+    rc = qualify.run_attempt(
+        [sys.executable, "-c", "pass"],
+        cwd=qualify.REPO,
+        env=dict(os.environ),
+        log=tmp_path / "attempt.log",
+        on_started=lambda: started.append(1),
+    )
+    assert (rc, started) == (0, [1])
+
+
+def test_an_interrupted_attempt_still_counts_as_driven(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An interrupt leaves no attempt record, and the lane was still driven."""
+
+    class Interrupting(subprocess.Popen):
+        _raised = False
+
+        def wait(self, timeout: float | None = None) -> int:
+            if not self._raised:
+                self._raised = True
+                raise KeyboardInterrupt
+            return super().wait(timeout=timeout)
+
+    monkeypatch.setattr(qualify.subprocess, "Popen", Interrupting)
+    started: list[int] = []
+    with pytest.raises(KeyboardInterrupt):
+        qualify.run_attempt(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            cwd=qualify.REPO,
+            env=dict(os.environ),
+            log=tmp_path / "attempt.log",
+            on_started=lambda: started.append(1),
+        )
+    assert started == [1]

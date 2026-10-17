@@ -330,7 +330,7 @@ pub(super) fn lower_catalog(
     }
     let mut program = serde_json::json!({"schema":PROGRAM_SCHEMA,"compiler_version":1,
         "semantic_profile":"cpython-3.12-ucd15","authoring_semantics_digest":authoring_digest,
-        "catalog_digest":hex::encode(Sha256::digest(&catalog_bytes)),
+        "catalog_digest":hex::encode(<sha2::Sha256 as sha2::Digest>::digest(&catalog_bytes)),
         "trust_digest":digest(b"hol-guard.native-command-trust.v1\0", &serde_json::json!(trusts))?,
         "extensions":extensions,"rules":rules,"coverage":coverage,"nodes":nodes,"matcher_families":families});
     program["program_digest"] = serde_json::json!(digest(PROGRAM_DOMAIN, &program)?);

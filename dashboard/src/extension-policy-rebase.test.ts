@@ -94,4 +94,21 @@ assert.equal(renamed.conflicts.length, 0);
 assert.equal(renamed.remapped_permission_ids[pA.permission_id], renamedPermission.permission_id);
 assert.equal(localPermissionDraftState(renamed.draft_layers, renamedPermission.permission_id), "block");
 
+// Rebasing a draft that touches two tools has to keep both tools' edits. Each
+// call rebases one tool, so the second one must continue from the first one's
+// result rather than start over from the latest authority.
+const pC = permission("command.docker.permission.run-privileged", "command.docker");
+const dockerExtension = extension("command.docker", [pC]);
+const twoToolDraft = setLocalPermissionDraftState(draft, digestA, pC.permission_id, "block");
+const latestTwoTool = effective(digestA, 5, [localLayer(digestA, [])]);
+const firstTool = rebaseExtensionPolicyDraft(
+  oldEffective, latestTwoTool, oldExtension, oldExtension, twoToolDraft,
+);
+const secondTool = rebaseExtensionPolicyDraft(
+  oldEffective, latestTwoTool, dockerExtension, dockerExtension, twoToolDraft, firstTool.draft_layers,
+);
+assert.equal(secondTool.conflicts.length, 0);
+assert.equal(localPermissionDraftState(secondTool.draft_layers, pA.permission_id), "block");
+assert.equal(localPermissionDraftState(secondTool.draft_layers, pC.permission_id), "block");
+
 console.log("extension-policy-rebase.test.ts: all assertions passed");

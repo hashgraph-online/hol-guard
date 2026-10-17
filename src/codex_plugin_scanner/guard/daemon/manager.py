@@ -50,6 +50,7 @@ from ..windows_paths import (
     windows_process_liveness,
     windows_terminate_process_if_creation_time,
 )
+from .atomic_replace import replace_file
 from .auth_token import auth_token_path as _auth_token_path
 from .auth_token import load_guard_daemon_auth_token as load_guard_daemon_auth_token
 from .discovery import (
@@ -2293,7 +2294,7 @@ def _write_private_atomic_text(path: Path, text: str) -> None:
             os.fsync(handle.fileno())
         os.close(descriptor)
         descriptor = -1
-        os.replace(temporary_path, path)
+        replace_file(temporary_path, path)
         _set_private_mode(path, _GUARD_DAEMON_PRIVATE_FILE_MODE)
     finally:
         if descriptor >= 0:

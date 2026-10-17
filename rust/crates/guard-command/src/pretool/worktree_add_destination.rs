@@ -19,7 +19,7 @@ pub(super) fn resolve_chdir(value: &str, context: super::super::PathContext<'_>)
         .then(|| canonical.to_str().map(str::to_owned))?
 }
 
-pub(super) fn fresh_destination(
+pub(in crate::pretool) fn fresh_destination(
     value: &str,
     context: super::super::PathContext<'_>,
 ) -> Option<PathBuf> {
