@@ -1,8 +1,8 @@
-import { r as reactExports, da as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, n as EmptyState, bV as HiMiniArrowTopRightOnSquare, au as Tag, B as formatRelativeTime, V as Badge, T as HiMiniExclamationTriangle, cx as HiMiniBugAnt, cc as guardActionPresentation, db as isSupplyChainScannerEvidence, dc as isBlockedGuardAction, aF as HiMiniArrowPath, d9 as HiMiniDocumentMagnifyingGlass, dd as HiMiniShieldExclamation, de as HiMiniComputerDesktop, N as HiMiniCloud, s as HiMiniCheckCircle, ad as HiMiniWrenchScrewdriver, A as ActionButton, L as HiMiniChevronDown, $ as HiMiniExclamationCircle, cN as fetchReceipts, ap as HiMiniXCircle, i as harnessDisplayName, K as HiMiniChevronUp } from "../guard-dashboard.js";
-import { resolveFeedStaleness } from "./feed-health-workspace.js";
-import { r as resolveHomeProtectionStatus } from "./home-protection-module.js";
-import { b as buildSupplyChainStats, r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats.js";
-import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace.js";
+import { r as reactExports, db as fetchSupplyChainBundle, j as jsxRuntimeExports, S as SectionLabel, n as EmptyState, bV as HiMiniArrowTopRightOnSquare, au as Tag, B as formatRelativeTime, V as Badge, T as HiMiniExclamationTriangle, cy as HiMiniBugAnt, cd as guardActionPresentation, dc as isSupplyChainScannerEvidence, dd as isBlockedGuardAction, aF as HiMiniArrowPath, da as HiMiniDocumentMagnifyingGlass, de as HiMiniShieldExclamation, df as HiMiniComputerDesktop, N as HiMiniCloud, s as HiMiniCheckCircle, ad as HiMiniWrenchScrewdriver, A as ActionButton, L as HiMiniChevronDown, $ as HiMiniExclamationCircle, cO as fetchReceipts, ap as HiMiniXCircle, i as harnessDisplayName, K as HiMiniChevronUp } from "../guard-dashboard.js";
+import { resolveFeedStaleness } from "./feed-health-workspace-CwDi08b5.js";
+import { r as resolveHomeProtectionStatus } from "./home-protection-module-BfY_dHFF.js";
+import { b as buildSupplyChainStats, r as resolveManagerCoverageManagers, a as resolveManagerCoverageStatus } from "./supply-chain-protection-stats-CJkxdP0r.js";
+import { s as supplyChainFixAllIsPending, a as supplyChainFixAllNeedsCloudConnect, b as supplyChainFixAllButtonLabel, S as SUPPLY_CHAIN_WORKSPACE_SHELL_CLASS } from "./supply-chain-hub-workspace-BfyRy8tm.js";
 function SeverityBadge({ severity }) {
   const tone = severity === "critical" || severity === "high" ? "destructive" : severity === "medium" ? "attention" : "default";
   return /* @__PURE__ */ jsxRuntimeExports.jsx(Badge, { tone, children: severity });

@@ -120,7 +120,7 @@ from .command_queue_worker import (
     start_command_queue_worker,
     stop_command_queue_worker,
 )
-from .dashboard_bundle import pin_dashboard_bundle
+from .dashboard_bundle import DASHBOARD_BUILD_HEADER, dashboard_build_id, pin_dashboard_bundle
 from .diagnostics import DaemonDiagnostics
 from .discovery import (
     DAEMON_DISCOVERY_CHALLENGE_TTL_SECONDS,
@@ -1158,6 +1158,14 @@ class _GuardDaemonHandler(
 ):
     _MAX_BODY_BYTES = 1_000_000
     server: _GuardDaemonHttpServer  # pyright: ignore[reportIncompatibleVariableOverride]
+
+    def end_headers(self) -> None:
+        # Every response names the dashboard bundle this daemon serves, so a tab
+        # still running an older bundle notices the restart and reloads.
+        build_id = dashboard_build_id(_STATIC_DIR)
+        if build_id is not None:
+            self.send_header(DASHBOARD_BUILD_HEADER, build_id)
+        super().end_headers()
 
     def parse_request(self) -> bool:
         parsed = super().parse_request()

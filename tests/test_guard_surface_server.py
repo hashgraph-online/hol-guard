@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.daemon_control_patching import patch_daemon_global
 from tests.daemon_hook_test_client import open_authenticated_claude_request
+from tests.dashboard_bundle_support import dashboard_chunk
 from tests.support.network import urlopen_json
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -844,8 +845,8 @@ class TestGuardSurfaceServer:
             daemon.stop()
 
         runtime_overview_chunk = dashboard_bundle
-        feed_health_chunk = (
-            daemon_server_module._STATIC_DIR / "assets" / "chunks" / "feed-health-workspace.js"
+        feed_health_chunk = dashboard_chunk(
+            "feed-health-workspace", daemon_server_module._STATIC_DIR / "assets" / "chunks"
         ).read_text(encoding="utf-8")
 
         assert "Open Guard Cloud" in dashboard_bundle

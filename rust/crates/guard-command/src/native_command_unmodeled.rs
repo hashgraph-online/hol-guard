@@ -435,6 +435,17 @@ fn reviewable_structure(command: &CanonicalCommandV1) -> bool {
     if command.path_overridden || command.confidence != "uncertain" {
         return false;
     }
+    // The parser's scan stops at the first construct it cannot model, so which
+    // reason a command carries depends on where that construct sits in the
+    // text: `echo "${ pwd; }"` is a substitution, while the same brace behind a
+    // `(` is a compound shell. A brace the shell runs owns whatever it runs
+    // whichever reason won that race, so refuse it before the reasons are read
+    // rather than in the one arm it happened to reach.
+    if crate::parser_brace_command::brace_runs_a_command_unquoted(&without_lookups(
+        &command.normalized_text,
+    )) {
+        return false;
+    }
     match command.uncertainty_reason.as_deref() {
         // Backgrounding runs the same programs the foreground text names, so
         // `npm start &` owns exactly what `npm start` owns. Without this arm a
@@ -941,12 +952,7 @@ fn mask_double_quoted_separators(literal: &str) -> String {
 fn span_runs_a_command(quoted: &str) -> bool {
     quoted.contains("$(")
         || quoted.contains('`')
-        || quoted.match_indices("${").any(|(at, _)| {
-            quoted[at + 2..]
-                .chars()
-                .next()
-                .is_some_and(|character| character.is_whitespace() || character == '|')
-        })
+        || crate::parser_brace_command::brace_runs_a_command(quoted)
 }
 
 fn mask_span(quoted: &str) -> String {
@@ -1026,6 +1032,10 @@ mod bounded_tests;
 #[cfg(test)]
 #[path = "native_command_unmodeled_ansi_c_tests.rs"]
 mod ansi_c_tests;
+
+#[cfg(test)]
+#[path = "native_command_unmodeled_funsub_tests.rs"]
+mod funsub_tests;
 
 #[cfg(test)]
 #[path = "native_command_unmodeled_prefix_tests.rs"]
