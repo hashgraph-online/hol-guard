@@ -1,4 +1,4 @@
-import { c6 as fetchGuardApi, r as reactExports, k as isConnectableAppHarness, b9 as isGuardDemoMode, j as jsxRuntimeExports, cp as HiMiniCheckBadge, T as HiMiniExclamationTriangle, X as HiMiniMinusCircle, P as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
+import { c7 as fetchGuardApi, r as reactExports, k as isConnectableAppHarness, b9 as isGuardDemoMode, j as jsxRuntimeExports, cq as HiMiniCheckBadge, T as HiMiniExclamationTriangle, X as HiMiniMinusCircle, P as HiMiniQuestionMarkCircle } from "../guard-dashboard.js";
 const STATES = /* @__PURE__ */ new Set(["tested", "untested", "version_unknown", "coverage_unavailable"]);
 const SCHEMA = "hol-guard-harness-version-compatibility.v1";
 function record(value) {
