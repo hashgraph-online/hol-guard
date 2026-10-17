@@ -31,6 +31,10 @@ type BrowserProps = {
   bulkMixedCopy: string;
   onChange: (commandId: string, state: LocalCliCommandState) => void;
   onBulkChange: (commandIds: ReadonlySet<string>, state: LocalCliCommandState) => void;
+  /** Search text the view opens with, such as a script name pasted into the add flow. */
+  initialQuery?: string;
+  /** What a row that differs from `savedCommands` is called: "Unsaved" on a saved extension, "Changed" while adding one. */
+  changedLabel?: string;
 };
 
 /**
@@ -41,7 +45,8 @@ type BrowserProps = {
 export function CustomExtensionCommandBrowser(props: BrowserProps) {
   const copy = commandBrowserCopy(props.surface);
   const searchId = useId();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(props.initialQuery ?? "");
+  const changedLabel = props.changedLabel ?? "Unsaved";
   const [filter, setFilter] = useState<CommandStateFilter>("all");
   const [sort, setSort] = useState<CommandSort>("catalog");
   const saved = useMemo(() => savedStateMap(props.savedCommands), [props.savedCommands]);
@@ -143,11 +148,15 @@ export function CustomExtensionCommandBrowser(props: BrowserProps) {
             </button>
           ) : null}
         </div>
-        <StateFilterChips surface={props.surface} filter={filter} counts={counts} onChange={setFilter} />
+        <StateFilterChips surface={props.surface} filter={filter} counts={counts} changedLabel={changedLabel} onChange={setFilter} />
       </div>
       {bulkTargets.length > 0 ? (
-        <>
+        <div className="mt-3">
+          <p className="text-sm font-semibold text-brand-dark" aria-hidden="true">
+            {narrowed ? `Set the ${bulkTargets.length} ${copy.unit(bulkTargets.length)} shown` : `Set all ${bulkTargets.length} ${copy.unit(bulkTargets.length)}`}
+          </p>
           <BulkPolicyPicker
+            className="mt-2"
             value={bulkCommandState(bulkTargets)}
             disabled={props.disabled}
             onChange={applyToVisible}
@@ -162,7 +171,7 @@ export function CustomExtensionCommandBrowser(props: BrowserProps) {
               Applies to the {bulkTargets.length} {copy.unit(bulkTargets.length)} shown. Hidden {copy.units} keep their setting.
             </p>
           ) : null}
-        </>
+        </div>
       ) : null}
       <p className="sr-only" role="status" aria-live="polite">
         {narrowed ? `${visible.length} of ${props.commands.length} ${copy.units} shown` : ""}
@@ -188,6 +197,7 @@ export function CustomExtensionCommandBrowser(props: BrowserProps) {
               surface={props.surface}
               disabled={props.disabled}
               saved={saved}
+              changedLabel={changedLabel}
               bulkEligible={props.bulkEligible}
               onToggle={toggleGroup}
               onChange={props.onChange}
@@ -199,7 +209,9 @@ export function CustomExtensionCommandBrowser(props: BrowserProps) {
               command={group.commands[0]!}
               disabled={props.disabled}
               surface={props.surface}
+              groupLabel=""
               changed={commandChanged(group.commands[0]!, saved)}
+              changedLabel={changedLabel}
               onChange={props.onChange}
             />
           ))}
@@ -215,6 +227,7 @@ function StateFilterChips(props: {
   surface?: LocalCliSurface;
   filter: CommandStateFilter;
   counts: Record<CommandStateFilter, number>;
+  changedLabel: string;
   onChange: (filter: CommandStateFilter) => void;
 }) {
   const mcp = props.surface === "mcp";
@@ -224,9 +237,12 @@ function StateFilterChips(props: {
     if (value === "review") return "Ask";
     if (value === "block") return mcp ? "Denied" : "Blocked";
     if (value === "inherit") return mcp ? "Policy" : "Recommended";
-    return "Unsaved";
+    return props.changedLabel;
   };
   const shown = FILTER_ORDER.filter((value) => value === "all" || value === props.filter || props.counts[value] > 0);
+  // When every row shares one setting, no chip narrows the list, so the row is noise.
+  const narrows = shown.some((value) => value !== "all" && props.counts[value] > 0 && props.counts[value] < props.counts.all);
+  if (props.filter === "all" && !narrows) return null;
   return (
     <div role="group" aria-label="Show by setting" className="mt-2 flex flex-wrap gap-1.5">
       {shown.map((value) => (
@@ -235,7 +251,7 @@ function StateFilterChips(props: {
           type="button"
           aria-pressed={props.filter === value}
           onClick={() => props.onChange(value)}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/60 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-pressed:border-brand-blue aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none"
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-full border border-slate-300 bg-white px-3 text-xs font-semibold text-brand-dark/80 transition-colors hover:border-brand-blue/60 hover:text-brand-dark focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue aria-pressed:border-brand-blue aria-pressed:bg-brand-blue/10 aria-pressed:text-brand-dark motion-reduce:transition-none"
         >
           {label(value)}
           <span className="tabular-nums font-medium text-brand-dark/55">{props.counts[value]}</span>
@@ -253,6 +269,7 @@ function CommandFamily(props: {
   surface?: LocalCliSurface;
   disabled: boolean;
   saved: ReadonlyMap<string, LocalCliCommandState>;
+  changedLabel: string;
   bulkEligible: (command: LocalCliCommand) => boolean;
   onToggle: (key: string) => void;
   onChange: (commandId: string, state: LocalCliCommandState) => void;
@@ -285,7 +302,7 @@ function CommandFamily(props: {
             <span className="block truncate font-mono text-sm font-semibold text-brand-dark">{props.group.label}</span>
             <span className="block text-xs text-brand-dark/60">
               {count} {props.unitLabel(count)} · {groupStateSummary(props.group.commands)}
-              {unsaved > 0 ? <span className="font-semibold text-brand-blue"> · {unsaved} unsaved</span> : null}
+              {unsaved > 0 ? <span className="font-semibold text-brand-blue"> · {unsaved} {props.changedLabel.toLowerCase()}</span> : null}
             </span>
           </span>
         </button>
@@ -308,6 +325,7 @@ function CommandFamily(props: {
             surface={props.surface}
             groupLabel={props.group.label}
             changed={commandChanged(command, props.saved)}
+            changedLabel={props.changedLabel}
             onChange={props.onChange}
           />
         )) : null}

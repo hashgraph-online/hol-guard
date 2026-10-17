@@ -40,9 +40,9 @@ pub use windows::{
     is_single_link_file, is_single_link_handle, open_bound_executable_file,
     open_bound_regular_file, open_bound_replaceable_file, open_private_directory,
     open_private_file, open_skill_directory, path_is_within, path_stat, process_liveness,
-    process_start_marker, regular_file_id, remove_file_if_same, running_process_start_marker,
-    terminate_process, terminate_process_verified, wait_for_process_exit, FileId, PathStat,
-    PrivateDirectoryBinding,
+    process_start_marker, regular_file_id, remove_file_if_same, running_process_image_path,
+    running_process_start_marker, terminate_process, terminate_process_verified,
+    wait_for_process_exit, FileId, PathStat, PrivateDirectoryBinding,
 };
 
 #[cfg(windows)]
@@ -97,6 +97,14 @@ pub fn process_liveness(_process_id: u32) -> Option<bool> {
 
 #[cfg(not(windows))]
 pub fn process_start_marker(_process_id: u32) -> io::Result<String> {
+    Err(io::Error::new(
+        io::ErrorKind::Unsupported,
+        "Windows process support is unavailable",
+    ))
+}
+
+#[cfg(not(windows))]
+pub fn running_process_image_path(_process_id: u32) -> io::Result<std::path::PathBuf> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,
         "Windows process support is unavailable",

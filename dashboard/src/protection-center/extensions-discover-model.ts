@@ -12,6 +12,9 @@ export const GUARD_DISCOVERY_CLOUD_ORIGIN = "https://hol.org";
 export const GUARD_DISCOVERY_ADVERTISE_PATH =
   "/guard/extensions/advertise?source=guard_local&intent=extension-promotion";
 export const MIN_ORGANIC_ROWS_BEFORE_IN_FEED = 8;
+/** Rows between repeats of the bookable in-feed row, so a long list keeps offering it. */
+export const IN_FEED_SLOT_INTERVAL = 10;
+const FIRST_IN_FEED_SLOT_INDEX = 6;
 
 export interface DiscoveryCreative {
   headline: string;
@@ -222,6 +225,20 @@ export function featuredWindowLabel(placement: DiscoveryPlacement): string | nul
   const ends = Date.parse(placement.endsAt);
   if (!Number.isFinite(ends)) return null;
   return `Featured until ${new Date(ends).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+}
+
+/**
+ * Row indexes the bookable in-feed row sits in front of: once after the first
+ * few rows, then every IN_FEED_SLOT_INTERVAL rows. It always sits before a
+ * real row, so the list never ends on an offer.
+ */
+export function inFeedSlotIndexes(rowCount: number): number[] {
+  if (rowCount < 2) return [];
+  const indexes: number[] = [];
+  for (let index = Math.min(FIRST_IN_FEED_SLOT_INDEX, rowCount - 1); index < rowCount; index += IN_FEED_SLOT_INTERVAL) {
+    indexes.push(index);
+  }
+  return indexes;
 }
 
 /** Featured extensions lead the list; everything else keeps catalog order. */

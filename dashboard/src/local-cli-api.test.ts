@@ -22,6 +22,7 @@ import {
   suggestedSeenExtensions,
   waitForMcpDiscoveryJob,
 } from "./local-cli-api";
+import { packageScriptQueryFrom } from "./protection-center/add-custom-extension-project";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
 import { fetchLocalCliApi } from "./guard-api";
 
@@ -304,6 +305,11 @@ assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "guard:audit").map((entry) => entry.name),
   ["guard:reddit-targeting:audit"],
 );
+assert.equal(packageScriptQueryFrom("guard:reddit", packageScripts.commands), "guard:reddit");
+assert.equal(packageScriptQueryFrom("no-such-script", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("guard:audit", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("npm run", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("  ", packageScripts.commands), "");
 assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "npm run").map((entry) => entry.name),
   ["guard:reddit-targeting:audit", "build"],

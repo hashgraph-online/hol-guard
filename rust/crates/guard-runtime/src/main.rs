@@ -578,6 +578,7 @@ mod resident_ops;
 mod resident_peer_identity;
 mod resident_process_identity;
 mod resident_protocol;
+mod resident_runtime_verification;
 mod resident_state;
 mod resident_state_encoding;
 mod resident_transport;

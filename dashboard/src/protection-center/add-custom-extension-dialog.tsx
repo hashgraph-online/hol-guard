@@ -10,13 +10,10 @@ import {
   isApprovalProofSubmitDisabled,
 } from "../approval-proof-inline";
 import {
-  applyBulkCommandState,
   applyLocalCliMutation,
-  bulkCommandState,
   enrollablePackageScriptCommands,
   enrollmentCommandStates,
   filterExtensionSuggestions,
-  filterPackageScriptCommands,
   LocalCliApiError,
   previewLocalCliMutation,
   looksLikePackageScriptPaste,
@@ -26,11 +23,11 @@ import {
   suggestedHarnessExtensions,
   suggestedPackageScriptExtensions,
   suggestedSeenExtensions,
+  type LocalCliCommand,
   type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliState,
 } from "../local-cli-api";
-import { BulkPolicyPicker, CatalogPreview } from "./add-custom-extension-catalog";
 import {
   addDialogSubmitLabel,
   allowActionLabel,
@@ -43,12 +40,16 @@ import {
   isObservedMcpItem,
   mcpListingRetryError,
   McpListingStatus,
-  ProjectSwitcher,
   SuggestionPanel,
   suggestionSummary,
   type EnrollStep,
 } from "./add-custom-extension-support";
-import { CustomExtensionCommandList, withCommandState } from "./custom-extension-commands";
+import { CustomExtensionCommandBrowser } from "./custom-extension-command-browser";
+import { packageScriptQueryFrom, SelectedProject } from "./add-custom-extension-project";
+import { groupStateSummary } from "./custom-extension-command-view";
+import { withCommandState } from "./custom-extension-commands";
+import { bulkPolicyCopy, commandBrowserCopy } from "./local-cli-panel-copy";
+import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
 import { McpRegistrySearch } from "./mcp-registry-search";
@@ -71,6 +72,8 @@ export function AddCustomExtensionWorkspace(props: {
   const [command, setCommand] = useState(() => initialAddCommand(window.location.search));
   const [recognized, setRecognized] = useState<LocalCliItem | null>(null);
   const [commands, setCommands] = useState<LocalCliItem["commands"]>([]);
+  // The suggested settings Guard opened with, so edits can be marked as changed.
+  const [baseline, setBaseline] = useState<LocalCliItem["commands"]>([]);
   const [summary, setSummary] = useState<string | null>(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
   const [step, setStep] = useState<EnrollStep>("pick");
@@ -78,8 +81,6 @@ export function AddCustomExtensionWorkspace(props: {
   const [totp, setTotp] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [reviewingScripts, setReviewingScripts] = useState(false);
-  const [toolQuery, setToolQuery] = useState("");
   const [registryOpen, setRegistryOpen] = useState(false);
   const recognizeGeneration = useRef(0);
   const autoRecognizedCommand = useRef("");
@@ -104,10 +105,9 @@ export function AddCustomExtensionWorkspace(props: {
     setBusy(false);
     setRecognized(null);
     setCommands([]);
+    setBaseline([]);
     setSummary(null);
     setPending(null);
-    setReviewingScripts(false);
-    setToolQuery("");
     setStep("pick");
   }, []);
   const handleCommand = useCallback((event: ChangeEvent<HTMLInputElement>) => {
@@ -127,12 +127,12 @@ export function AddCustomExtensionWorkspace(props: {
     setTotp(digits);
   }, []);
   const markRecognized = useCallback((item: LocalCliItem, nextSummary: string | null) => {
+    const prefilled = prefillSuggestedStates(item);
     setRecognized(item);
-    setCommands(prefillSuggestedStates(item));
+    setCommands(prefilled);
+    setBaseline(prefilled);
     setSummary(nextSummary);
     setPending("allowed");
-    setReviewingScripts(item.surface === "mcp");
-    setToolQuery("");
     setStep("review");
   }, []);
   const runRecognize = useCallback(async (
@@ -221,20 +221,40 @@ export function AddCustomExtensionWorkspace(props: {
   }, [busy, command, recognized, runRecognize]);
   const requestAllow = useCallback(() => setPending("allowed"), []);
   const requestBlock = useCallback(() => setPending("blocked"), []);
-  const openScriptReview = useCallback(() => setReviewingScripts(true), []);
-  const closeScriptReview = useCallback(() => setReviewingScripts(false), []);
+  const findAnotherProject = useCallback(() => {
+    resetRecognition();
+    setCommand("");
+    setError(null);
+    window.requestAnimationFrame(() => document.getElementById("custom-extension-command")?.focus());
+  }, [resetRecognition]);
   const backToReview = useCallback(() => {
     setStep("review");
     setError(null);
   }, []);
-  const applyBulk = useCallback((state: LocalCliCommandState) => {
-    setCommands((current) => applyBulkCommandState(
-      current,
-      state,
-      recognized?.surface === "package-scripts" ? new Set(["root", "other"]) : new Set(),
-    ));
-    setPending(state === "block" ? "blocked" : "allowed");
-  }, [recognized]);
+  const showingPackageCatalog = recognized?.surface === "package-scripts";
+  const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
+  const bulkEligible = useCallback((entry: LocalCliCommand) => (
+    recognized?.surface === "mcp" ? mcpToolCanReceiveDirectAllow(entry) : true
+  ), [recognized]);
+  const applyBulk = useCallback((commandIds: ReadonlySet<string>, state: LocalCliCommandState) => {
+    setCommands((current) => current.map((entry) => (
+      commandIds.has(entry.command_id) && bulkEligible(entry) ? { ...entry, state } : entry
+    )));
+    // Blocking every script blocks the project. On a server the bulk choice only covers the
+    // listed tools, so the server stays enrolled and a server-wide block is chosen at confirm.
+    const blocksAll = showingPackageCatalog && state === "block"
+      && enrollable.every((entry) => commandIds.has(entry.command_id));
+    setPending(blocksAll ? "blocked" : "allowed");
+  }, [bulkEligible, enrollable, showingPackageCatalog]);
+  const switchProject = useCallback((item: LocalCliItem) => {
+    setCommand("");
+    selectSuggestion(item);
+  }, [selectSuggestion]);
+  // The footer describes what saving submits, which can differ from the draft rows.
+  const savedStates = recognized === null || pending === null
+    ? null
+    : new Map(enrollmentCommandStates(enrollable, pending, recognized.surface).map((entry) => [entry.command_id, entry.state]));
+  const savedPreview = enrollable.map((entry) => ({ ...entry, state: savedStates?.get(entry.command_id) ?? entry.state }));
   const handleSubmit = useCallback(async (event: FormEvent) => {
     event.preventDefault();
     if (recognized === null) {
@@ -306,27 +326,21 @@ export function AddCustomExtensionWorkspace(props: {
     ),
     busy,
   });
-  const showingPackageCatalog = recognized?.surface === "package-scripts";
   const showingMcpCatalog = recognized?.surface === "mcp";
   const observedMcp = isObservedMcpItem(recognized);
-  const showingCatalog = showingPackageCatalog || showingMcpCatalog;
-  const enrollable = showingPackageCatalog ? enrollablePackageScriptCommands(commands) : commands;
   const mcpHasTools = mcpCatalogHasTools(enrollable);
   const showMcpRetry = showingMcpCatalog && !mcpHasTools;
-  let visibleCommands = commands;
-  if (showingPackageCatalog) {
-    visibleCommands = filterPackageScriptCommands(enrollable, command);
-  } else if (showingMcpCatalog) {
-    visibleCommands = commands.filter((entry) => `${entry.name} ${entry.description}`.toLowerCase().includes(toolQuery.trim().toLowerCase()));
-  }
   let confirmTitle = allowActionLabel(recognized?.surface ?? "cli");
   if (pending === "blocked") {
     confirmTitle = blockActionLabel(recognized?.surface ?? "cli");
   } else if (observedMcp) {
     confirmTitle = "Save tool permissions";
   }
-  const previewNames = visibleCommands.slice(0, 8).map((entry) => entry.name);
-  const bulkState = bulkCommandState(enrollable);
+  const browserCopy = commandBrowserCopy(recognized?.surface);
+  const bulkCopy = bulkPolicyCopy(recognized?.surface ?? "cli");
+  const blockedSummary = observedMcp && pending === "blocked"
+    ? "This connector will be blocked, including tools that have not been listed yet."
+    : summary;
   const recentlySatisfied = approvalProofRecentlySatisfied(resolvedApprovalGate);
   const gateReady = resolvedApprovalGate === null ? null : approvalGateProofReady(resolvedApprovalGate);
 
@@ -381,7 +395,7 @@ export function AddCustomExtensionWorkspace(props: {
               )}
             </p>
           </header>
-          {!observedMcp ? <>
+          {!observedMcp && !showingPackageCatalog ? <>
             <label htmlFor="custom-extension-command" className="mt-4 block text-sm font-semibold text-brand-dark">
               {recognized === null ? "Find an extension" : commandFieldLabel(recognized.surface)}
             </label>
@@ -391,85 +405,56 @@ export function AddCustomExtensionWorkspace(props: {
             onChange={handleCommand}
             spellCheck={false}
             autoComplete="off"
-            placeholder={showingPackageCatalog ? "guard:audit" : "Server name, launch command, or npm run"}
+            placeholder="Project folder, npm run, server name, or launch command"
             className="mt-2 min-h-11 w-full max-w-xl rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/70 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
             />
           </> : null}
-          {recognized !== null && showingPackageCatalog ? (
-            <ProjectSwitcher items={rememberedProjects} currentId={recognized.cli_id} onSelect={selectSuggestion} />
-          ) : null}
           {recognized ? (
-            <section className="mt-5 max-w-3xl" aria-labelledby="custom-extension-selected">
-              <h2 id="custom-extension-selected" className="text-xl font-semibold tracking-tight text-brand-dark">
-                {recognized.name}
-              </h2>
-              <p className={`mt-1 text-xs text-brand-dark/70${observedMcp ? "" : " font-mono"}`}>
-                {observedMcp ? recognized.source_label : recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
-              </p>
-              {summary ? <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/70">{observedMcp && pending === "blocked" ? "This connector will be blocked, including tools that have not been listed yet." : summary}</p> : null}
-              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
-                <BulkPolicyPicker value={bulkState} disabled={busy} onChange={applyBulk} allowLabel={observedMcp ? "Allow listed" : undefined} />
-              ) : null}
-              {showMcpRetry ? (
-                <McpListingStatus name={recognized.name} busy={busy} onRetry={retryMcpListing} />
-              ) : null}
-              {showingCatalog && enrollable.length > 0 && !showMcpRetry ? (
-                <>
-                {showingMcpCatalog ? (
-                  <div className="mt-5 max-w-xl">
-                    <label htmlFor="custom-extension-tool-search" className="block text-sm font-semibold text-brand-dark">Find a tool</label>
-                    <input
-                      id="custom-extension-tool-search"
-                      type="search"
-                      value={toolQuery}
-                      onChange={(event) => setToolQuery(event.target.value)}
-                      placeholder="Search tool names or descriptions"
-                      className="mt-2 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-sm text-brand-dark placeholder:text-brand-dark/70 focus:border-brand-blue focus:outline-none focus:ring-2 focus:ring-brand-blue/30"
-                    />
-                    <p className="mt-2 text-xs text-brand-dark/70" role="status" aria-live="polite">
-                      {visibleCommands.length} of {enrollable.length} tools{observedMcp ? ". More appear as your app uses them." : "."}
-                    </p>
-                  </div>
-                ) : null}
-                <CatalogPreview
-                  query={command}
-                  showFilterCount={showingPackageCatalog}
-                  previewNames={previewNames}
-                  visibleCount={visibleCommands.length}
-                  totalCount={enrollable.length}
-                  reviewing={reviewingScripts}
-                  adjustLabel={showingMcpCatalog ? "Adjust individual tools" : "Adjust individual scripts"}
-                  hideLabel="Hide individual settings"
-                  onOpenReview={openScriptReview}
-                  onCloseReview={closeScriptReview}
-                >
-                  {visibleCommands.length > 0 ? (
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                      <CustomExtensionCommandList
-                        commands={visibleCommands}
-                        disabled={busy}
-                        surface={recognized.surface}
-                        onChange={handleCommandState}
-                      />
-                    </div>
+            <>
+              {showingPackageCatalog ? (
+                <SelectedProject
+                  item={recognized}
+                  projects={rememberedProjects}
+                  disabled={busy}
+                  onSelect={switchProject}
+                  onFindAnother={findAnotherProject}
+                />
+              ) : (
+                <section className="mt-5 max-w-3xl" aria-labelledby="custom-extension-selected">
+                  <h2 id="custom-extension-selected" className="text-xl font-semibold tracking-tight text-brand-dark">
+                    {recognized.name}
+                  </h2>
+                  <p className={`mt-1 text-xs text-brand-dark/70${observedMcp ? "" : " font-mono"}`}>
+                    {observedMcp ? recognized.source_label : recognized.source_label ? `${recognized.source_label} · ${recognized.example_label}` : recognized.example_label}
+                  </p>
+                  {blockedSummary ? <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/70">{blockedSummary}</p> : null}
+                  {showMcpRetry ? (
+                    <McpListingStatus name={recognized.name} busy={busy} onRetry={retryMcpListing} />
                   ) : null}
-                  {showingMcpCatalog && visibleCommands.length === 0 ? (
-                    <p className="mt-4 text-sm text-brand-dark/70">No tools match. Try a different name or clear the search.</p>
-                  ) : null}
-                </CatalogPreview>
-                </>
-              ) : null}
-              {!showingCatalog && visibleCommands.length > 0 ? (
-                <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                  <CustomExtensionCommandList
-                    commands={visibleCommands}
-                    disabled={busy}
+                </section>
+              )}
+              {!showMcpRetry ? (
+                <section className="mt-2 max-w-4xl" aria-label={`${recognized.name} ${browserCopy.units}`}>
+                  <CustomExtensionCommandBrowser
+                    key={recognized.cli_id}
+                    commands={enrollable}
+                    savedCommands={baseline}
                     surface={recognized.surface}
+                    disabled={busy}
+                    bulkEligible={bulkEligible}
+                    bulkGroupLabel={bulkCopy.groupLabel}
+                    bulkMixedCopy={bulkCopy.mixedCopy}
+                    initialQuery={showingPackageCatalog ? packageScriptQueryFrom(command, enrollable) : undefined}
+                    changedLabel="Changed"
                     onChange={handleCommandState}
+                    onBulkChange={applyBulk}
                   />
-                </div>
+                  {observedMcp ? (
+                    <p className="mt-3 text-xs leading-5 text-brand-dark/70">Only tools your app has used are listed. More appear as it uses them.</p>
+                  ) : null}
+                </section>
               ) : null}
-            </section>
+            </>
           ) : (
             <>
             <SuggestionPanel
@@ -488,8 +473,14 @@ export function AddCustomExtensionWorkspace(props: {
         </>
       )}
       {error ? <div className="mt-4 max-w-xl"><InlineError message={error} /></div> : null}
-      <div className={`${registryOpen && !recognized ? "relative" : "sticky bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`}>
+      <div className={`${registryOpen && !recognized ? "relative" : "sticky bottom-[calc(var(--guard-shell-mobile-nav-height,0px)+env(safe-area-inset-bottom))] z-20 md:bottom-0"} mt-auto border-t border-slate-200 bg-white py-4`}>
         <div className="flex flex-wrap items-center gap-3">
+          {recognized && !confirming && enrollable.length > 0 && !showMcpRetry ? (
+            <p className="mr-auto text-sm text-brand-dark/75" data-testid="custom-extension-add-summary">
+              <span className="font-semibold text-brand-dark">{enrollable.length} {browserCopy.unit(enrollable.length)}</span>
+              {" · "}{groupStateSummary(savedPreview)}
+            </p>
+          ) : null}
           <button type="submit" disabled={submitDisabled} className="min-h-11 rounded-xl bg-brand-blue px-5 text-sm font-semibold text-white disabled:opacity-60">
             {addDialogSubmitLabel({ recognized, busy, pending, step: recognized ? step : "pick" })}
           </button>
