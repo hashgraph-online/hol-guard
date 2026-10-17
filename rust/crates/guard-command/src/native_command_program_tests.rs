@@ -64,6 +64,19 @@ fn decision(
 }
 
 #[test]
+fn the_embedded_artifact_compiles_to_the_fully_admitted_program() {
+    let bytes = packaged_command_program_bytes();
+    let embedded = NativeCommandProgram::from_embedded_artifact(bytes).unwrap();
+    let admitted = NativeCommandProgram::from_packaged_bytes(bytes).unwrap();
+    assert_eq!(format!("{embedded:?}"), format!("{admitted:?}"));
+    // A blob that fails its build-time hash decodes to no bytes and stays closed.
+    assert_eq!(
+        NativeCommandProgram::from_embedded_artifact(&[]).unwrap_err(),
+        "native_command_program_json_invalid"
+    );
+}
+
+#[test]
 fn packaged_program_is_admitted_once_and_exposes_explicit_coverage() {
     let first = packaged_command_program().unwrap();
     assert!(Arc::ptr_eq(&first, &packaged_command_program().unwrap()));

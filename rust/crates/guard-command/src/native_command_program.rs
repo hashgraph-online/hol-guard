@@ -241,7 +241,7 @@ pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static 
     static PROGRAM: OnceLock<Result<Arc<NativeCommandProgram>, &'static str>> = OnceLock::new();
     PROGRAM
         .get_or_init(|| {
-            NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())
+            NativeCommandProgram::from_embedded_artifact(packaged_command_program_bytes())
                 .map(Arc::new)
         })
         .clone()
