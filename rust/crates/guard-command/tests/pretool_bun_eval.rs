@@ -390,8 +390,18 @@ fn bun_package_permission_is_accepted_only_for_exact_inline_eval() {
         assert_eq!(result.reason_code, BUN_EVAL);
         assert_eq!(result.minimum_action, "sandbox-required");
     }
+    // The clock bounds how long the eval may run, not what it may touch, so
+    // the wrapped form reaches the same contained profile. A `timeout` named
+    // by path is a different file and keeps the command under review.
     let wrapped = format!("timeout 30 {read}");
     let result = evaluate(&wrapped);
-    assert_ne!(result.reason_code, BUN_EVAL, "{wrapped}");
     assert_ne!(result.decision, "allow", "{wrapped}");
+    if cfg!(target_os = "macos") {
+        assert_eq!(result.reason_code, BUN_EVAL, "{wrapped}");
+        assert_eq!(result.minimum_action, "sandbox-required", "{wrapped}");
+    }
+    let by_path = format!("./timeout 30 {read}");
+    let result = evaluate(&by_path);
+    assert_ne!(result.reason_code, BUN_EVAL, "{by_path}");
+    assert_ne!(result.decision, "allow", "{by_path}");
 }

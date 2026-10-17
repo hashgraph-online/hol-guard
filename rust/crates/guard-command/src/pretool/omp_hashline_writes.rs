@@ -194,6 +194,29 @@ pub(super) fn evaluate_hashline_edit(
     })
 }
 
+/// Whether an Oh My Pi `edit` input is one plain line with no file header.
+///
+/// Every edit mode names its file in a `path` or `edits` field or in a header
+/// line: a `[PATH#TAG]` or legacy `¶` hashline header, or a `***` patch or
+/// sloppy-edit line. Oh My Pi refuses a hashline edit whose first line is not
+/// a header ("input must begin with \"[PATH#HASH]\""), and a single line has
+/// no room for both a header and content. Models send such calls when they
+/// mean another tool, such as a path they meant to read or a command they
+/// meant to run, so the call cannot change a file. Only `input` and a numeric
+/// `timeout` may be present.
+pub(super) fn headerless_edit(input: &serde_json::Map<String, serde_json::Value>) -> bool {
+    let keys = input.iter().all(|(key, value)| match key.as_str() {
+        "input" => value.is_string(),
+        "timeout" => value.is_number(),
+        _ => false,
+    });
+    let Some(line) = input.get("input").and_then(serde_json::Value::as_str) else {
+        return false;
+    };
+    keys && line.len() <= crate::MAX_COMMAND_BYTES
+        && !line.contains(['\n', '\r', '\0', '[', ']', '*', '\u{b6}'])
+}
+
 #[cfg(test)]
 #[path = "omp_hashline_writes_tests.rs"]
 mod tests;

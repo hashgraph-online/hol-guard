@@ -18,22 +18,33 @@
 //!   it inside the page, never in the agent process. Its body may read and
 //!   compute over the DOM but not name a network, navigation, markup or code
 //!   sink, a global object, a URL, or a computed property.
+//! - `await new Promise(r => setTimeout(r, MS))`, a pause.
 //! - `display(...)`, `log(...)` and `console.log(...)` of literals, declared
-//!   names and awaited tab calls.
+//!   names and awaited tab calls, negated or read for their `.length`.
+//! - Waiting for a local server: `fetch` GET of a literal loopback URL, its
+//!   `text()`, `json()`, `status` and `ok`, a counted `for` retry loop with
+//!   `try`/`catch` and `break`, and `if (!NAME) throw Error('...')`.
+//! - `TAB.run(async ({page}) => {...})` whose body only clicks, hovers,
+//!   types, presses keys, waits, reads the title, `goto`s a loopback URL, or
+//!   runs in-page functions through `evaluate`, `$eval` and `$$eval`.
 //!
-//! Anything else (comments, `/`, template interpolation, `tab.run`, file,
-//! cookie and download helpers, other identifiers) keeps the program reviewed.
+//! Anything else (comments, `/`, template interpolation, other `page`
+//! methods, file, cookie and download helpers, other identifiers) keeps the
+//! program reviewed.
 
 use std::collections::HashSet;
 
 const MAX_CODE_BYTES: usize = 16 * 1024;
 const MAX_DEPTH: usize = 12;
 
+#[path = "generic_omp_eval_browser_flow.rs"]
+mod flow;
 #[path = "generic_omp_eval_browser_lex.rs"]
 mod lex;
+#[path = "generic_omp_eval_browser_page.rs"]
+mod page;
 use lex::{
-    loopback_url, page_token, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
-    RESERVED,
+    loopback_url, timer_pause, tokenize, Token, NO_ARGUMENT_METHODS, OPEN_KEYS, OPTION_KEYS,
 };
 
 #[derive(Default)]
@@ -42,8 +53,17 @@ struct Parser {
     pos: usize,
     tabs: HashSet<String>,
     values: HashSet<String>,
+    /// Names bound to a loopback `fetch` response.
+    responses: HashSet<String>,
+    /// `let` names declared without a value, awaiting a `fetch`.
+    unset: HashSet<String>,
     depth: usize,
+    loops: usize,
+    in_run: bool,
     browser_calls: usize,
+    /// Locates the Guard daemon's state file, so its port stays unreachable
+    /// from `fetch` and `page.goto`.
+    home_dir: Option<String>,
 }
 
 impl Parser {
@@ -113,14 +133,19 @@ impl Parser {
     }
 
     fn statement(&mut self) -> Option<()> {
-        match self.ident()?.as_str() {
+        let word = self.ident()?;
+        if self.unset.contains(&word) || self.responses.contains(&word) {
+            return self.assign_fetch(word);
+        }
+        match word.as_str() {
             "const" | "let" => {
                 let name = self.ident()?;
-                if RESERVED.contains(&name.as_str())
-                    || self.tabs.contains(&name)
-                    || self.values.contains(&name)
-                {
+                if !self.fresh(&name) {
                     return None;
+                }
+                if word == "let" && matches!(self.peek(), None | Some(Token::Punct(';'))) {
+                    self.unset.insert(name);
+                    return Some(());
                 }
                 self.punct('=')?;
                 if self.peek_ident("browser") {
@@ -131,8 +156,11 @@ impl Parser {
                     if self.peek_ident("browser") {
                         self.browser_open()?;
                         self.tabs.insert(name);
+                    } else if self.peek_ident("fetch") {
+                        self.fetch_call()?;
+                        self.responses.insert(name);
                     } else {
-                        self.tab_call()?;
+                        self.awaited_value()?;
                         self.values.insert(name);
                     }
                 } else {
@@ -142,7 +170,17 @@ impl Parser {
                 Some(())
             }
             "await" if self.peek_ident("browser") => self.browser_open(),
+            "await" if self.peek_ident("new") => {
+                self.pos = timer_pause(&self.tokens, self.pos)?;
+                Some(())
+            }
+            "await" if self.in_run && self.peek_ident("page") => self.page_call(),
             "await" => self.tab_call(),
+            "for" => self.for_loop(),
+            "try" => self.try_block(),
+            "if" => self.if_throw(),
+            "break" if self.loops > 0 => Some(()),
+            "return" if self.in_run => self.value(),
             "display" | "log" => self.output_args(),
             "console" => {
                 self.punct('.')?;
@@ -244,7 +282,7 @@ impl Parser {
     fn scalar(&mut self) -> Option<()> {
         self.eat_punct('-');
         match self.next()? {
-            Token::Str(_) | Token::Num => Some(()),
+            Token::Str(_) | Token::Num(_) => Some(()),
             Token::Ident(word) if matches!(word.as_str(), "true" | "false" | "null") => Some(()),
             _ => None,
         }
@@ -286,7 +324,7 @@ impl Parser {
             "reload" | "observe" | "screenshot" | "errors" | "console" => {
                 self.options()?;
             }
-            "click" | "hover" | "text" => {
+            "click" | "hover" | "text" | "isVisible" | "isEnabled" | "isChecked" | "count" => {
                 self.string()?;
             }
             "press" | "waitForSelector" | "waitForText" => {
@@ -296,7 +334,7 @@ impl Parser {
                 }
             }
             "waitFor" => {
-                if matches!(self.peek(), Some(Token::Num)) {
+                if matches!(self.peek(), Some(Token::Num(_))) {
                     self.pos += 1;
                 } else {
                     self.string()?;
@@ -305,7 +343,7 @@ impl Parser {
                     }
                 }
             }
-            "fill" | "type" => {
+            "fill" | "type" | "attr" => {
                 self.string()?;
                 self.punct(',')?;
                 self.string()?;
@@ -338,71 +376,10 @@ impl Parser {
                     self.literal()?;
                 }
             }
+            "run" => self.run_callback()?,
             _ => return None,
         }
         self.punct(')')
-    }
-
-    /// The arrow function `evaluate` serializes into the page, with plain
-    /// identifier parameters and a body that passes `page_token`. It must
-    /// end at the argument, so it is passed rather than called in place.
-    fn page_function(&mut self) -> Option<()> {
-        if self.peek_ident("async") {
-            self.pos += 1;
-        }
-        if self.eat_punct('(') {
-            if !self.eat_punct(')') {
-                loop {
-                    let param = self.ident()?;
-                    if RESERVED.contains(&param.as_str()) {
-                        return None;
-                    }
-                    if self.eat_punct(')') {
-                        break;
-                    }
-                    self.punct(',')?;
-                }
-            }
-        } else if RESERVED.contains(&self.ident()?.as_str()) {
-            return None;
-        }
-        self.punct('=')?;
-        self.punct('>')?;
-        let block = self.peek() == Some(&Token::Punct('{'));
-        let mut stack: Vec<char> = Vec::new();
-        loop {
-            if self.pos >= self.tokens.len() || !page_token(&self.tokens, self.pos) {
-                return None;
-            }
-            match self.peek()?.clone() {
-                Token::Punct(',' | ')') if stack.is_empty() => break,
-                Token::Punct(c @ ('(' | '[' | '{')) => {
-                    stack.push(match c {
-                        '(' => ')',
-                        '[' => ']',
-                        _ => '}',
-                    });
-                    if stack.len() > MAX_DEPTH * 4 {
-                        return None;
-                    }
-                }
-                Token::Punct(c @ (')' | ']' | '}')) => {
-                    if stack.pop() != Some(c) {
-                        return None;
-                    }
-                    self.pos += 1;
-                    if block && stack.is_empty() {
-                        // A block body ends at its brace; only the next
-                        // argument or the call's close may follow.
-                        return matches!(self.peek(), Some(Token::Punct(',' | ')'))).then_some(());
-                    }
-                    continue;
-                }
-                _ => {}
-            }
-            self.pos += 1;
-        }
-        Some(())
     }
 
     /// A literal argument handed to the page function.
@@ -437,17 +414,16 @@ impl Parser {
         Some(())
     }
 
-    /// A displayed value: a literal, a declared name, an awaited tab call,
-    /// or an object or array of those.
+    /// A displayed value: a literal, a declared name, an awaited tab call
+    /// (bare, negated, or parenthesized and read for its `.length`), or an
+    /// object or array of those.
     fn value(&mut self) -> Option<()> {
         self.enter()?;
         match self.peek()?.clone() {
             Token::Punct('{') => {
                 self.pos += 1;
                 while !self.eat_punct('}') {
-                    self.key()?;
-                    self.punct(':')?;
-                    self.value()?;
+                    self.object_entry()?;
                     if !self.eat_punct(',') {
                         self.punct('}')?;
                         break;
@@ -466,10 +442,24 @@ impl Parser {
             }
             Token::Ident(word) if word == "await" => {
                 self.pos += 1;
-                self.tab_call()?;
+                self.awaited_value()?;
             }
-            Token::Ident(word) if self.values.contains(&word) => {
+            Token::Punct('!') => {
                 self.pos += 1;
+                self.value()?;
+            }
+            Token::Punct('(') => {
+                self.pos += 1;
+                self.keyword("await")?;
+                self.tab_call()?;
+                self.punct(')')?;
+                if self.eat_punct('.') {
+                    self.keyword("length")?;
+                }
+            }
+            Token::Ident(word) if self.values.contains(&word) || self.responses.contains(&word) => {
+                self.pos += 1;
+                self.member(&word)?;
             }
             _ => self.scalar()?,
         }
@@ -480,7 +470,7 @@ impl Parser {
 
 /// Whether `code` is a JavaScript program that only drives the isolated
 /// browser against loopback pages and displays what it reads.
-pub(super) fn loopback_browser_program(code: &str) -> bool {
+pub(super) fn loopback_browser_program(code: &str, home_dir: Option<&str>) -> bool {
     if code.len() > MAX_CODE_BYTES {
         return false;
     }
@@ -489,6 +479,7 @@ pub(super) fn loopback_browser_program(code: &str) -> bool {
     };
     Parser {
         tokens,
+        home_dir: home_dir.map(str::to_owned),
         ..Parser::default()
     }
     .program()

@@ -470,6 +470,15 @@ fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> Cano
     }
 }
 
+/// `2>&1` and `>&1`. A path or a program never has this shape.
+fn is_fd_dup_redirect(token: &str) -> bool {
+    let bytes = token.as_bytes();
+    let rest = bytes
+        .strip_prefix(b"2>&")
+        .or_else(|| bytes.strip_prefix(b">&"));
+    rest.is_some_and(|rest| !rest.is_empty() && rest.iter().all(|byte| byte.is_ascii_digit()))
+}
+
 fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalCommandV1, String> {
     let raw = request.command.trim();
     if raw.is_empty() {
@@ -515,11 +524,18 @@ fn parse_posix_command(request: &CommandModelRequestV1) -> Result<CanonicalComma
         let mut environment_names = Vec::new();
         let mut executable_index = 0usize;
         while executable_index < tokens.len() {
-            let Some(name) = assignment_name(&tokens[executable_index]) else {
-                break;
-            };
-            environment_names.push(name.to_owned());
-            executable_index += 1;
+            if let Some(name) = assignment_name(&tokens[executable_index]) {
+                environment_names.push(name.to_owned());
+                executable_index += 1;
+                continue;
+            }
+            // `;2>&1 python3 evil.py` tokenizes the redirect as the first word.
+            // It is not the program.
+            if is_fd_dup_redirect(&tokens[executable_index]) {
+                executable_index += 1;
+                continue;
+            }
+            break;
         }
         let (executable_index, wrapper_chain) = match parser_wrappers::unwrap_wrappers(
             &tokens,

@@ -54,7 +54,7 @@ fn non_overridable_reason(facts: &NativeReviewFactsV1) -> &'static str {
 }
 
 /// `launch_cwd`: the payload cwd, else the workspace; it must be an existing absolute directory.
-fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> Option<String> {
+pub(super) fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> Option<String> {
     let candidate = payload_cwd
         .filter(|raw| !raw.trim().is_empty())
         .or(workspace)?;

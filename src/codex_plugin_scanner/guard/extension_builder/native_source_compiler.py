@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import BinaryIO
 
 from ..group_write_trust import writable_only_by_owner
+from ..runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
 
-_MAX_INPUT_BYTES = 4 * 1024 * 1024
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
 _MAX_MANIFEST_BYTES = 64 * 1024
@@ -144,7 +144,11 @@ def _verify_compiler(path: Path, manifest: Mapping[str, object]) -> bytes:
 
 
 def _packaged_program_digest() -> str:
-    raw = _read_regular(_PACKAGED_PROGRAM, limit=_MAX_INPUT_BYTES, label="packaged native command program")
+    raw = _read_regular(
+        _PACKAGED_PROGRAM,
+        limit=MAX_NATIVE_COMMAND_PROGRAM_BYTES,
+        label="packaged native command program",
+    )
     try:
         value = json.loads(raw)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

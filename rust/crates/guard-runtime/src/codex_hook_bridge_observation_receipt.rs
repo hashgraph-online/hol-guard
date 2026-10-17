@@ -39,10 +39,11 @@ const REQUIRED: [&str; 23] = [
     "observe_mode",
     "deadline_budget_ms",
 ];
-const OPTIONAL: [&str; 5] = [
+const OPTIONAL: [&str; 6] = [
     "command_extensions",
     "origin_authentication",
     "execution_intent_digest",
+    "review_anchor_digest",
     "prompt_risk_classes",
     "business_review_binding",
 ];
@@ -259,7 +260,12 @@ fn valid_policy(receipt: &PyVal) -> bool {
         && action("observed_policy_action")
         // `_IDENTIFIER` allows 128 characters, under the 512-byte string cap.
         && string(at(receipt, "reason_code")).is_some_and(|text| identifier(text, true, 128))
-        && ["origin_authentication", "execution_intent_digest", "business_review_binding"]
+        && [
+            "origin_authentication",
+            "execution_intent_digest",
+            "review_anchor_digest",
+            "business_review_binding",
+        ]
             .iter()
             .all(|name| receipt.get(name).is_none_or(|value| string(value).is_some_and(hex64)))
 }

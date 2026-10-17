@@ -17,6 +17,9 @@ mod lex;
 use lex::{identifier, items, names_variable, opaque, tokenize, Token};
 #[path = "chain_literals_inert.rs"]
 pub(crate) mod inert;
+#[path = "chain_literals_launch.rs"]
+mod launch;
+use launch::{launches_as_judged, reviewed};
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
 
@@ -106,6 +109,21 @@ pub(super) fn rejudge(
         evaluate(&super::payload_with_command(payload, &command, body)).minimum_action == "allow"
     };
     let opened = inert::project(&command, allowed);
+    // A fresh `mktemp -d` directory expanded later in its `&&` chain is
+    // judged as `$TMPDIR`, which holds it; only a sandbox launch counts, and
+    // only once `opened` found each substitution allowed on its own.
+    if let Some(expanded) = opened
+        .is_some()
+        .then(|| inert::temp_cd::expanded(&command))
+        .flatten()
+    {
+        let projected = evaluate(&super::payload_with_command(payload, &command, &expanded));
+        if projected.minimum_action == "sandbox-required"
+            && launches_as_judged(&projected, &command, context)
+        {
+            return projected;
+        }
+    }
     let unopened = opened.as_deref().unwrap_or(&command);
     let directory = context.cwd.and_then(|cwd| pwd::project(unopened, cwd));
     let base = directory.as_deref().unwrap_or(unopened);
@@ -131,36 +149,6 @@ pub(super) fn rejudge(
         "sandbox-required" if unevaluated => reviewed(projected),
         _ => raw,
     }
-}
-
-fn reviewed(mut projected: PreToolResultV1) -> PreToolResultV1 {
-    projected.minimum_action = "review".into();
-    projected.policy_action = "review".into();
-    projected.decision = "deny".into();
-    projected.explicitly_benign = false;
-    projected.reason_code = "native_command_review_required".into();
-    projected.reason = "HOL Guard requires review because protected execution cannot run this command as it was judged.".into();
-    projected
-}
-
-fn launches_as_judged(
-    projected: &PreToolResultV1,
-    command: &str,
-    context: PathContext<'_>,
-) -> bool {
-    projected.reason_code == crate::pretool::workspace_contained::REASON
-        && crate::pretool::workspace_contained::admitted_workspace(context)
-            .is_some_and(|workspace| launcher_shape(command, &workspace))
-}
-
-#[cfg(unix)]
-fn launcher_shape(command: &str, workspace: &std::path::Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(command, workspace).is_some()
-}
-
-#[cfg(not(unix))]
-fn launcher_shape(_command: &str, _workspace: &std::path::Path) -> bool {
-    false
 }
 
 /// The command with each `$NAME` / `${NAME}` bound to a literal by an

@@ -113,6 +113,7 @@ pub(crate) fn benign_command_segments(
                         | "file"
                         | "npm"
                         | "jq"
+                        | "pkill"
                 )
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -253,6 +254,7 @@ pub(super) fn exact_safe_segment_with_context(
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
+        "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => {
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)

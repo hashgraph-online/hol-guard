@@ -53,8 +53,13 @@ def run_harness_suite(
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
     # native-tools cases that drive omp-only tools (glob, grep, eval, task, wait) cannot run on other
-    # lanes; the shell-only ones can, and they exercise the realistic developer environment.
-    catalog = tuple(s for s in load_catalog() if s.oracle != "native-tools" or set(s.required_tools) <= {"bash"})
+    # lanes; the shell-only ones can, and they exercise the realistic developer environment. The
+    # memory-note cases drive Oh My Pi's own learn tool, which no other lane has at all.
+    catalog = tuple(
+        s
+        for s in load_catalog()
+        if s.oracle != "blocked-memory-note" and (s.oracle != "native-tools" or set(s.required_tools) <= {"bash"})
+    )
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)

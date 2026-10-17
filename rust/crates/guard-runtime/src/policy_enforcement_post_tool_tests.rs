@@ -216,12 +216,28 @@ fn omp_learn_acknowledgement_is_released_without_lowering_output_floors() {
             &input, harness
         ));
     }
+    // Oh My Pi sends the optional `context` beside the memory, and a note that
+    // ran still has an acknowledgement to return.
+    for tool_input in [
+        json!({"memory": "note", "context": "Learned while fixing the shelf."}),
+        json!({"memory": "note", "scope": "project"}),
+        json!({"memory": "note", "context": concat!("ghp_", "0123456789abcdefghijklmnopqrstuvwxyzA")}),
+    ] {
+        let mut changed = input.clone();
+        changed["tool_input"] = tool_input.clone();
+        assert!(
+            guard_command::pretool::bounded_task_metadata_output(&changed, "omp"),
+            "{tool_input}"
+        );
+    }
     for tool_input in [
         json!({"memory": "note", "scope": "global"}),
         json!({"memory": ["note"]}),
         json!({"memory": "  "}),
         json!({}),
         json!({"memory": "note", "command": "rm -rf build"}),
+        json!({"memory": "note", "context": ["not", "a", "string"]}),
+        json!({"context": "a context without a memory"}),
     ] {
         let mut changed = input.clone();
         changed["tool_input"] = tool_input.clone();
@@ -230,6 +246,40 @@ fn omp_learn_acknowledgement_is_released_without_lowering_output_floors() {
             "{tool_input}"
         );
     }
+}
+
+#[test]
+fn omp_learn_with_its_optional_context_is_released_too() {
+    // Current Oh My Pi sends the schema's optional `context` with every lesson;
+    // the approved call's acknowledgement must still reach the agent.
+    let input = json!({
+        "hook_event_name": "PostToolUse",
+        "tool_call_id": "call-learn-2",
+        "tool_name": "learn",
+        "tool_input": {
+            "memory": "GitrueNAS/test: hello.py and jokes.py build again after the merge-marker fix.",
+            "context": "Code review turn on ~/Documents/G/GitrueNAS/test; the earlier memory is stale"
+        },
+        "tool_response": {"content": [{"type": "text", "text": "Memory saved."}]},
+        "is_error": false
+    });
+    assert!(guard_command::pretool::bounded_task_metadata_output(
+        &input, "omp"
+    ));
+    let mut request = post_request(input);
+    request.harness = "omp".into();
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let output = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(output.decision, "allow");
 }
 
 #[test]

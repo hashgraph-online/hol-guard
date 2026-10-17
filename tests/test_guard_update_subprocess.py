@@ -869,6 +869,26 @@ def test_pipx_runpip_execution_is_source_pinned(
     ]
 
 
+@pytest.mark.parametrize("flags", [[], ["--force-reinstall", "--no-deps"]])
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable as the pipx manager fixture",
+)
+def test_pipx_runpip_accepts_local_wheel_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+) -> None:
+    context, manager = _build_manager_context(tmp_path, monkeypatch, "pipx")
+    wheel = str(tmp_path / "hol_guard-3.0.0-py3-none-win_arm64.whl")
+
+    command = context.build_installer_command(["pipx", "runpip", "hol-guard", "install", *flags, wheel])
+
+    assert command[:4] == [str(manager), "runpip", "hol-guard", "install"]
+    assert command[4:-3] == [*flags, "--no-cache-dir"]
+    assert command[-3] == wheel
+
+
 @pytest.mark.parametrize(
     "display",
     [
@@ -876,6 +896,7 @@ def test_pipx_runpip_execution_is_source_pinned(
         ["pipx", "runpip", "hol-guard", "uninstall", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--index-url", "https://example.test", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--force-reinstall"],
+        ["pipx", "runpip", "hol-guard", "install", "--no-deps", "hol-guard==3.0.0"],
     ],
 )
 @pytest.mark.skipif(

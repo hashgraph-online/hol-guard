@@ -1,148 +1,85 @@
-//! Windows git reuse: Git for Windows finds `astextplain`, the converters it
-//! calls and `git-lfs` on `PATH`, `~/bin` first, so a reused read-only git
-//! must never reach one, whatever spelling, folder or index layout hides it.
+//! Windows git stays one-time: git reads repository config, attributes,
+//! hooks and `PATH` helpers that no digest binds there, so no approval of a
+//! git launch is reused, whatever the repository looks like.
 
-use super::launch::{git_repository, launch, put};
-use super::{cmd, shell, Tree};
+use std::path::PathBuf;
 
-const LFS_CONFIG: &str = "[filter \"lfs\"]\n\tclean = git-lfs clean -- %f\n\tsmudge = git-lfs smudge -- %f\n\tprocess = git-lfs filter-process\n\trequired = true\n";
+use super::launch::{git_repository, put};
+use super::{cmd, exact_action_token, json, query, shell, Tree};
+
+const READS: [&str; 10] = [
+    "git status",
+    "git status --short",
+    "git --no-pager log -1",
+    "git diff",
+    "git show",
+    "git ls-files",
+    "git rev-parse HEAD",
+    "git branch --list",
+    "git.exe status",
+    "'C:/Program Files/Git/cmd/git.exe' status",
+];
+
+fn assert_one_time(tree: &Tree, context: &str) {
+    for command in READS {
+        let reason = shell(tree, command);
+        assert_eq!(reason, Err("git_helper_config"), "{context}: {command}");
+    }
+    let compound = shell(tree, "cd src && git status");
+    assert!(compound.is_err(), "{context}: {compound:?}");
+}
+
+/// `git status` run from `relative` under the tree.
+fn status_in(tree: &Tree, relative: &str) -> Result<String, &'static str> {
+    let cwd = tree.path(relative);
+    exact_action_token(&query(tree, "Bash", Some("git status"), json!(null), &cwd))
+}
 
 #[test]
-fn git_path_helpers_never_run_on_reuse() {
-    // Git for Windows finds `astextplain` and `git-lfs` on `PATH`, `~/bin`
-    // first, so a reused git must not reach either.
+fn git_reads_on_windows_stay_one_time() {
     let tree = Tree::new();
     git_repository(&tree);
-    tree.write(
-        "ws\\.git\\config",
-        "[diff \"astextplain\"]\n\ttextconv = astextplain\n",
-    );
-    for command in [
-        "git diff",
-        "git show",
-        "git log -p",
-        "git log --stat",
-        "git status -v",
-    ] {
-        assert_eq!(shell(&tree, command), Err("git_helper_config"), "{command}");
-    }
-    for command in [
-        "git diff --no-textconv",
-        "git status",
-        "git log -1 --oneline",
-    ] {
-        assert!(shell(&tree, command).is_ok(), "{command}");
-    }
-    tree.write("ws\\.git\\config", LFS_CONFIG);
-    assert!(shell(&tree, "git status").is_ok());
-    // NTFS opens a nested `.GitAttributes` for git's `.gitattributes`.
-    put(&tree, "ws\\src\\.GitAttributes", "*.bin filter=lfs\n");
-    assert_eq!(shell(&tree, "git status"), Err("git_helper_config"));
-    std::fs::remove_file(tree.path("ws\\src\\.GitAttributes")).unwrap();
-    tree.write("ws\\.gitattributes", "*.bin filter=lfs -text\n");
-    assert_eq!(shell(&tree, "git status"), Err("git_helper_config"));
-    assert!(shell(&tree, "git log -1").is_ok());
-    // An indexed `.gitattributes` missing from the worktree is read from
-    // the index, which no digest binds.
-    cmd(&tree.ws(), "git add .gitattributes");
-    std::fs::remove_file(tree.path("ws\\.gitattributes")).unwrap();
-    assert_eq!(shell(&tree, "git status"), Err("git_helper_config"));
-    assert!(shell(&tree, "git log -1").is_ok());
-    for name in [
-        "GIT_DIR",
-        "git_work_tree",
-        "GIT_EXEC_PATH",
-        "GIT_COMMON_DIR",
-        "git_index_file",
-    ] {
-        let reason = launch(&tree, "git log -1", &|_, _, env| {
-            env.insert(name.to_owned(), tree.ws());
-        });
-        assert_eq!(reason, Err("git_helper_config"), "{name}");
+    let commit = "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m t";
+    cmd(&tree.ws(), commit);
+    assert_one_time(&tree, "plain repository");
+    // The programs Git for Windows ships that run git on the repository.
+    for program in ["gitk", "git-gui", "scalar"] {
+        let path = format!(r"C:\Program Files\Git\cmd\{program}.exe");
+        if PathBuf::from(&path).is_file() {
+            let command = format!("'{}' --version", path.replace('\\', "/"));
+            assert_eq!(
+                shell(&tree, &command),
+                Err("git_helper_config"),
+                "{program}"
+            );
+        }
     }
 }
 
 #[test]
-fn git_option_spellings_cannot_turn_textconv_on() {
+fn repository_shapes_that_escaped_the_git_digest_stay_one_time() {
     let tree = Tree::new();
     git_repository(&tree);
-    tree.write(
-        "ws\\.git\\config",
-        "[diff \"astextplain\"]\n\ttextconv = astextplain\n",
-    );
-    // Status takes unique abbreviations, and `--no-textconv` past `--` is a
-    // path, not an option.
-    for command in [
-        "git status --verb",
-        "git status --v",
-        "git status -sv",
-        "git show HEAD -- --no-textconv",
-        "git diff -- --no-textconv",
+    let commit = "git -c user.name=t -c user.email=t@t commit -q --allow-empty -m t";
+    cmd(&tree.ws(), commit);
+    cmd(&tree.ws(), "git worktree add -q wt");
+    // A `HEAD` git rejects sends it to the parent repository.
+    put(&tree, "ws\\src\\.git\\HEAD", "not a ref\n");
+    std::fs::create_dir_all(tree.path("ws\\src\\.git\\objects")).unwrap();
+    std::fs::create_dir_all(tree.path("ws\\src\\.git\\refs")).unwrap();
+    assert_eq!(status_in(&tree, "ws\\src"), Err("git_helper_config"));
+    // Git reads `gitdir: ` exactly, so a padded value names another folder.
+    let target = std::fs::read_to_string(tree.path("ws\\wt\\.git")).unwrap();
+    let padded = target.replacen("gitdir: ", "gitdir:  ", 1);
+    tree.write("ws\\wt\\.git", &padded);
+    assert_eq!(status_in(&tree, "ws\\wt"), Err("git_helper_config"));
+    // Submodules found through commit trees, and a worktree elsewhere.
+    for config in [
+        "[diff]\n\tsubmodule = diff\n",
+        "[status]\n\tsubmoduleSummary = true\n",
+        "[core]\n\tworktree = ../outside\n",
     ] {
-        assert_eq!(shell(&tree, command), Err("git_helper_config"), "{command}");
+        tree.write("ws\\.git\\config", config);
+        assert_one_time(&tree, config);
     }
-    for command in [
-        "git status --short --branch",
-        "git status -sb",
-        "git show --no-textconv HEAD",
-    ] {
-        assert!(shell(&tree, command).is_ok(), "{command}");
-    }
-}
-
-#[test]
-fn attributes_the_walk_skips_or_the_index_hides_stay_one_time() {
-    let tree = Tree::new();
-    git_repository(&tree);
-    tree.write("ws\\.git\\config", LFS_CONFIG);
-    put(&tree, "ws\\src\\tracked.txt", "tracked\n");
-    put(
-        &tree,
-        "ws\\target\\CACHEDIR.TAG",
-        "Signature: 8a477f597d28d172789f06886806bc55\n",
-    );
-    put(&tree, "ws\\target\\.gitattributes", "* filter=lfs\n");
-    cmd(&tree.ws(), "git add src/tracked.txt");
-    cmd(&tree.ws(), "git write-tree");
-    // An index with only optional extensions and a skipped folder with no
-    // tracked path stay reusable.
-    assert!(shell(&tree, "git status").is_ok());
-    // A build-cache or package folder the walk skips still feeds git the
-    // attributes of the tracked paths inside it.
-    for marker in ["CACHEDIR.TAG", "pyvenv.cfg"] {
-        put(&tree, &format!("ws\\src\\{marker}"), "home = C:\\\n");
-        put(&tree, "ws\\src\\.gitattributes", "* filter=lfs\n");
-        assert_eq!(
-            shell(&tree, "git status"),
-            Err("git_helper_config"),
-            "{marker}"
-        );
-        std::fs::remove_file(tree.path(&format!("ws\\src\\{marker}"))).unwrap();
-        std::fs::remove_file(tree.path("ws\\src\\.gitattributes")).unwrap();
-    }
-    // Attributes read from a tree object are bound by no digest.
-    tree.write("ws\\.git\\config", "[attr]\n\ttree = HEAD\n");
-    assert_eq!(shell(&tree, "git log -1"), Err("git_helper_config"));
-}
-
-#[test]
-fn split_indexes_fail_closed() {
-    let tree = Tree::new();
-    git_repository(&tree);
-    tree.write("ws\\.git\\config", LFS_CONFIG);
-    put(&tree, "ws\\src\\tracked.txt", "tracked\n");
-    cmd(&tree.ws(), "git add src/tracked.txt");
-    // A split index keeps entries in `sharedindex.<sha>`, out of the parser's
-    // sight, so it fails closed.
-    assert!(shell(&tree, "git status").is_ok());
-    cmd(&tree.ws(), "git update-index --split-index");
-    assert!(std::fs::read_dir(tree.path("ws\\.git"))
-        .unwrap()
-        .flatten()
-        .any(|entry| entry
-            .file_name()
-            .to_string_lossy()
-            .starts_with("sharedindex.")));
-    assert_eq!(shell(&tree, "git status"), Err("unproven_launch"));
-    assert!(shell(&tree, "git log -1").is_ok());
 }

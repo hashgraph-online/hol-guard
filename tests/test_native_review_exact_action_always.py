@@ -140,7 +140,11 @@ def test_token_changes_when_native_rules_change(
     for value in (changed_result["command_extensions"]["binding"], changed_receipt["command_extensions"]):
         value["control_revision"] += 1
     identity = {
-        **{key: value for key, value in changed_receipt.items() if key not in {"authority", "decision_id"}},
+        **{
+            key: value
+            for key, value in changed_receipt.items()
+            if key not in {"authority", "decision_id", "review_anchor_digest"}
+        },
         "schema": "guard-native-hook-decision-identity.v1",
     }
     changed_receipt["decision_id"] = hashlib.sha256(

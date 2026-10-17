@@ -18,6 +18,7 @@ const WRITE_REDIRECTS: [&str; 4] = [">", ">>", ">&", "&>"];
 const READ_REDIRECT: &str = "<";
 const MAX_STDIN_BYTES: u64 = 4 * 1024 * 1024;
 const STDIN_DOMAIN: &[u8] = b"hol-guard.native-review-stdin-binding.v1\0";
+const LAUNCHER_DOMAIN: &[u8] = b"hol-guard.native-review-launcher-binding.v1\0";
 
 /// Programs whose effect their argv determines once their options are checked.
 const ARGV_BOUND_COMMANDS: &[&str] = &[
@@ -120,6 +121,8 @@ pub(super) enum Reuse {
     Argv,
     /// The digest of the local files a remote program reads on standard input.
     Stdin(String),
+    /// The digest of the files a mutable launcher runs (`git_push::push_state`).
+    Launcher(String),
 }
 
 impl Reuse {
@@ -128,6 +131,7 @@ impl Reuse {
         match self {
             Self::Argv => None,
             Self::Stdin(digest) => Some([STDIN_DOMAIN, digest.as_bytes()].concat()),
+            Self::Launcher(digest) => Some([LAUNCHER_DOMAIN, digest.as_bytes()].concat()),
         }
     }
 }

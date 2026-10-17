@@ -60,12 +60,33 @@ pub(in crate::pretool) fn dev_server_port(
         && !daemon_may_listen(port, home_dir)
 }
 
-fn daemon_may_listen(port: u16, home_dir: Option<&str>) -> bool {
-    if std::env::var("GUARD_DAEMON_PORT")
+/// Whether a server the agent started on a port of its own choosing, such as
+/// `PORT=3147 npm start`, may answer on `port`: an unprivileged port below the
+/// ephemeral ranges (Linux from 32768, macOS and Windows from 49152) that
+/// none of the `admin` services holds, while the daemon's state file records
+/// that Guard listens on another port. Without that record the daemon may sit
+/// on any fixed port, so only the dev-server list stays reachable.
+pub(in crate::pretool) fn chosen_server_port(
+    port: u16,
+    admin: &[u16],
+    home_dir: Option<&str>,
+) -> bool {
+    (1024..32768).contains(&port)
+        && !admin.contains(&port)
+        && fixed_port() != Some(port)
+        && guard_home(home_dir)
+            .and_then(|home| state_port(&home))
+            .is_some_and(|recorded| recorded != port)
+}
+
+fn fixed_port() -> Option<u16> {
+    std::env::var("GUARD_DAEMON_PORT")
         .ok()
         .and_then(|value| value.trim().parse::<u16>().ok())
-        == Some(port)
-    {
+}
+
+fn daemon_may_listen(port: u16, home_dir: Option<&str>) -> bool {
+    if fixed_port() == Some(port) {
         return true;
     }
     match guard_home(home_dir).and_then(|home| state_port(&home)) {

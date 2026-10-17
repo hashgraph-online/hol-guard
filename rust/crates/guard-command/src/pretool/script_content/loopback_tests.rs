@@ -174,6 +174,95 @@ fn the_sandbox_reads_the_ports_from_the_command_it_runs() {
     assert!(launch_ports(&other).is_empty());
 }
 
+/// A smoke test of a todo API that fetches every route off one loopback base.
+const TODO_SMOKE: &str = "const base=\"http://127.0.0.1:3000\"; const page=await fetch(base); if(!page.ok) throw Error(\"web interface failed\"); let r=await fetch(base+\"/api/todos\",{method:\"POST\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({title:\"Smoke test\"})}); const todo=await r.json(); r=await fetch(base+\"/api/todos/\"+todo.id,{method:\"DELETE\"}); if(r.status!==204) throw Error(\"delete failed\"); console.log(\"smoke passed\");";
+
+#[test]
+fn a_loopback_base_bound_once_may_be_fetched() {
+    assert_eq!(ports(TODO_SMOKE), set(&[3000]));
+    assert_eq!(
+        ports("const base = 'http://localhost:4173/app';\nconst page = await fetch(base, { method: 'HEAD' });\nconsole.log(page.status);\n"),
+        set(&[4173])
+    );
+    assert_eq!(
+        ports("const base = 'http://localhost:4173'\nconst page = await fetch(base)\nconsole.log(page.status)\n"),
+        set(&[4173])
+    );
+    for source in [
+        // A binding that can change, or one read anywhere but `fetch`.
+        TODO_SMOKE.replace("const base=", "let base="),
+        // A declaration's parameter is not a call of the global fetch.
+        "const base='http://localhost:3000'; function fetch(base){}".to_owned(),
+        "const base='http://localhost:3000'; function  fetch(base){}".to_owned(),
+        "const base='http://localhost:3000'; function* fetch(base){}".to_owned(),
+        "const base='http://localhost:3000'; const o={fetch(base){}};".to_owned(),
+        TODO_SMOKE.replace(
+            "const page=await fetch(base)",
+            "const url=base; const page=await fetch(url)",
+        ),
+        TODO_SMOKE.replace(
+            "const page=",
+            "const base2=((base)=>fetch(base))(process.env.TARGET); const page=",
+        ),
+        TODO_SMOKE.replace(
+            "const todo=",
+            "{ const base=process.env.TARGET; await fetch(base) } const todo=",
+        ),
+        TODO_SMOKE.replace(
+            "fetch(base+\"/api/todos\"",
+            "other.fetch(base+\"/api/todos\"",
+        ),
+        // Text appended to the base that could name another host.
+        TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+\"@example.com/\""),
+        TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+process.env.SUFFIX"),
+        // A line break that continues the binding's expression.
+        TODO_SMOKE.replace("3000\";", "3000\"\n+ \"@example.com\";"),
+        TODO_SMOKE.replace(
+            "3000\";",
+            "3000\"\n  .replace(\"127.0.0.1\", \"example.com\");",
+        ),
+        // Other bases.
+        TODO_SMOKE.replace("127.0.0.1:3000", "127.0.0.1:2375"),
+        TODO_SMOKE.replace("127.0.0.1:3000", "127.0.0.1"),
+        TODO_SMOKE.replace("http://127.0.0.1:3000", "https://example.com"),
+        TODO_SMOKE.replace("127.0.0.1:3000", "127.0.0.2:3000"),
+        // A port the agent chose, with no daemon state to rule Guard out.
+        TODO_SMOKE.replace("3000", "3147"),
+    ] {
+        assert_eq!(ports(&source), None, "{source}");
+    }
+}
+
+#[test]
+fn a_chosen_port_is_granted_while_the_daemon_records_another() {
+    let home = std::env::temp_dir().join(format!("script-loopback-chosen-{}", std::process::id()));
+    let guard = home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    let home_dir = home.to_str();
+    let chosen = code_lines(Language::Node, &TODO_SMOKE.replace("3000", "3147"));
+    assert_eq!(
+        node_loopback_ports(&chosen, home_dir),
+        None,
+        "no daemon state"
+    );
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert_eq!(node_loopback_ports(&chosen, home_dir), set(&[3147]));
+    // Proxies, automation drivers and model servers stay closed.
+    for port in [
+        "1080", "4444", "5901", "8888", "9515", "11434", "4781", "49152",
+    ] {
+        let source = code_lines(Language::Node, &TODO_SMOKE.replace("3000", port));
+        assert_eq!(node_loopback_ports(&source, home_dir), None, "{port}");
+    }
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 3147}"#).unwrap();
+    assert_eq!(
+        node_loopback_ports(&chosen, home_dir),
+        None,
+        "daemon on 3147"
+    );
+    let _ = std::fs::remove_dir_all(&home);
+}
+
 #[test]
 fn a_dev_port_in_the_daemon_range_follows_the_daemon_state() {
     let home = std::env::temp_dir().join(format!("script-loopback-daemon-{}", std::process::id()));

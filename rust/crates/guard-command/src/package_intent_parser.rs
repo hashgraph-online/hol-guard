@@ -70,6 +70,10 @@ mod tests;
 #[path = "package_intent_parser/uvx_value_options_tests.rs"]
 mod uvx_value_options_tests;
 
+#[cfg(test)]
+#[path = "package_intent_parser/bun_value_options_tests.rs"]
+mod bun_value_options_tests;
+
 // ---------------------------------------------------------------------------
 // Module constants  (package_intent_parser.py :51-131)
 // ---------------------------------------------------------------------------
@@ -273,6 +277,18 @@ pub fn parse_package_intent(
         } else {
             None
         };
+        let package_cwd = manager_install_cwd(
+            &name,
+            &segment.tokens,
+            segment.context_complete,
+            segment.effective_cwd.as_deref(),
+            workspace,
+        );
+        let discovery_workspace = match &package_cwd {
+            ManagerCwd::Inside(directory) => Some(directory.as_path()),
+            ManagerCwd::Unresolved => None,
+            ManagerCwd::NotDeclared => segment_workspace.as_deref(),
+        };
         let mut intent = if LOCAL_EXECUTION_COMMANDS.contains(name.as_str()) {
             parse_exec_intent(
                 &segment.tokens,
@@ -285,13 +301,37 @@ pub fn parse_package_intent(
                 segment.context_complete,
             )
         } else {
-            dispatch_intent(&name, &segment.tokens, segment_workspace.as_deref())
+            dispatch_intent(&name, &segment.tokens, discovery_workspace)
         };
         if let Some(mut i) = intent.take() {
-            if segment.context_complete && segment_workspace.is_some() {
-                i = rebase_intent_paths(i, segment_workspace.as_deref().unwrap(), workspace);
-            } else if let Some(reason) = &segment.context_reason_code {
-                i.notes.push(reason.clone());
+            match &package_cwd {
+                ManagerCwd::Unresolved => {
+                    // Do not keep the caller's manifests: they are not the
+                    // project `--cwd` named, and an empty intent would allow.
+                    i.manifest_paths.clear();
+                    i.lockfile_paths.clear();
+                    if !i
+                        .notes
+                        .iter()
+                        .any(|note| note == PACKAGE_CWD_UNRESOLVED_NOTE)
+                    {
+                        i.notes.push(PACKAGE_CWD_UNRESOLVED_NOTE.to_owned());
+                    }
+                }
+                ManagerCwd::Inside(directory) => {
+                    i = rebase_intent_paths(i, directory, workspace);
+                }
+                ManagerCwd::NotDeclared => {
+                    if segment.context_complete && segment_workspace.is_some() {
+                        i = rebase_intent_paths(
+                            i,
+                            segment_workspace.as_deref().unwrap(),
+                            workspace,
+                        );
+                    } else if let Some(reason) = &segment.context_reason_code {
+                        i.notes.push(reason.clone());
+                    }
+                }
             }
             if segment.cwd_source.starts_with("shell_")
                 || segment.cwd_source.starts_with("env_chdir")

@@ -21,10 +21,17 @@ downloads and binds the wheel to the release's own attestation.
 
 from __future__ import annotations
 
+import base64
+import csv
+import hashlib
+import io
 import json
 import os
 import shutil
+import stat
+import sys
 import tempfile
+import zipfile
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -148,15 +155,50 @@ def plan_native_wheel_update(
     return None
 
 
-def manual_install_command(version: str, *, tags: Iterable[str] | None = None) -> str | None:
-    """Return the pip command that installs this host's native wheel when the download is blocked."""
+def _windows_short_path(path: str) -> str:
+    try:
+        import ctypes
+
+        buffer = ctypes.create_unicode_buffer(32768)
+        length = ctypes.windll.kernel32.GetShortPathNameW(path, buffer, len(buffer))  # type: ignore[attr-defined]
+    except (AttributeError, OSError):
+        return path
+    return buffer.value if 0 < length < len(buffer) else path
+
+
+def _manual_installer_prefix(installer: str) -> str:
+    # Point the command at the environment running Guard, not whichever Python is first on PATH.
+    if installer == "pipx":
+        return "pipx runpip hol-guard install"
+    executable = sys.executable or "python"
+    if any(character.isspace() for character in executable) and os.name == "nt":
+        # The 8.3 short path has no spaces, so the command pastes into PowerShell, cmd.exe and Git Bash alike.
+        executable = _windows_short_path(executable)
+    if any(character.isspace() for character in executable):
+        executable = f'"{executable}"'
+        if os.name == "nt" and installer != "uv":
+            # Without a short path, PowerShell (the default Windows shell) needs the call operator.
+            executable = f"& {executable}"
+    if installer == "uv":
+        return f"uv pip install --python {executable}"
+    return f"{executable} -m pip install"
+
+
+def manual_install_command(
+    version: str,
+    *,
+    tags: Iterable[str] | None = None,
+    installer: str = "pip",
+) -> str | None:
+    """Return the command that installs this host's native wheel when the download is blocked."""
 
     if SAFE_VERSION_RE.fullmatch(version) is None:
         return None
     for tag in tags if tags is not None else _platform_tags():
         if tag in PUBLISHED_PLATFORM_TAGS:
             url = release_url(version, f"hol_guard-{version}-py3-none-{tag}.whl")
-            return f'python -m pip install --force-reinstall --no-deps "{url}"'
+            reinstall = "--reinstall-package hol-guard" if installer == "uv" else "--force-reinstall"
+            return f'{_manual_installer_prefix(installer)} {reinstall} --no-deps "{url}"'
     return None
 
 
@@ -165,6 +207,7 @@ def native_runtime_payload(
     *,
     platform_supported: bool = True,
     version: str | None = None,
+    installer: str = "pip",
 ) -> dict[str, object]:
     if not runtime_missing:
         return {"status": "present", "bundled": True}
@@ -176,15 +219,21 @@ def native_runtime_payload(
             "This install has no bundled native runtime (PyPI only carries the pure wheel for this platform). "
             f"Run `{fix}` to install the native wheel from the GitHub release."
         )
-        manual = manual_install_command(version) if version is not None else None
+        manual = manual_install_command(version, installer=installer) if version is not None else None
         if manual is not None:
             payload["manual_install"] = manual
     return payload
 
 
-def failure_payload(payload: dict[str, object], error: NativeWheelError, *, version: str | None = None) -> None:
+def failure_payload(
+    payload: dict[str, object],
+    error: NativeWheelError,
+    *,
+    version: str | None = None,
+    installer: str = "pip",
+) -> None:
     message = error.message
-    manual = manual_install_command(version) if version is not None else None
+    manual = manual_install_command(version, installer=installer) if version is not None else None
     if manual is not None:
         payload["manual_install"] = manual
         message = f"{message} To install it by hand, run: {manual}"
@@ -297,6 +346,113 @@ def record_native_wheel_install(guard_home: Path, *, version: str, sha256: str) 
         temporary.write_text(payload, encoding="utf-8")
         os.replace(temporary, guard_home / _MARKER_NAME)
     except OSError:
+        temporary.unlink(missing_ok=True)
+
+
+_NATIVE_PAYLOAD_PREFIX = "codex_plugin_scanner/_native/"
+
+
+def install_native_payload(wheel: Path, *, package_root: Path | None = None) -> None:
+    """Copy the runtime files of a same-version native wheel into the installed package.
+
+    The native wheel differs from the pure wheel only by ``codex_plugin_scanner/_native``, so the
+    repair adds those files instead of reinstalling the package. That keeps it working on Windows,
+    where pip cannot replace the package of the running ``hol-guard.exe``. Every file is checked
+    against the wheel's RECORD and written beside its target before any target changes. The files
+    then move into place with the runtime last, and the installed RECORD lists them so uninstalling
+    removes them. A failure at any step removes what this call placed, so a later repair starts clean.
+    """
+
+    root = package_root or _bundled_runtime_candidate().parent.parent
+    payload, record_name = _read_native_payload(wheel)
+    installed_record = root.parent / record_name
+    staged: list[tuple[Path, Path]] = []
+    placed: list[Path] = []
+    try:
+        existing_record = installed_record.read_text(encoding="utf-8")
+        for relative, data, mode in payload:
+            target = root / "_native" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            temporary = target.with_name(f".{relative}.{os.getpid()}.tmp")
+            staged.append((temporary, target))
+            temporary.write_bytes(data)
+            temporary.chmod(mode | stat.S_IRUSR | stat.S_IWUSR if mode else 0o644)
+        for temporary, target in staged:
+            os.replace(temporary, target)
+            placed.append(target)
+        _write_record(installed_record, existing_record, [row for _relative, row in _payload_rows(payload)])
+    except OSError as error:
+        for target in reversed(placed):
+            target.unlink(missing_ok=True)
+        raise NativeWheelError("native_wheel_payload_install_failed") from error
+    finally:
+        for temporary, _target in staged:
+            temporary.unlink(missing_ok=True)
+
+
+def _read_native_payload(wheel: Path) -> tuple[list[tuple[str, bytes, int]], str]:
+    """Return the verified ``_native`` files of ``wheel``, runtime last, and its RECORD name."""
+
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            names = archive.namelist()
+            record_name = next(
+                (name for name in names if name.endswith(".dist-info/RECORD") and name.count("/") == 1), None
+            )
+            if record_name is None:
+                raise NativeWheelError("native_wheel_payload_invalid")
+            hashes = {
+                row[0]: row[1]
+                for row in csv.reader(io.StringIO(archive.read(record_name).decode("utf-8")))
+                if len(row) >= 2
+            }
+            # The runtime goes last: Guard treats it as present once the executable exists.
+            members = sorted(
+                (name for name in names if name.startswith(_NATIVE_PAYLOAD_PREFIX) and not name.endswith("/")),
+                key=lambda name: name.rsplit("/", 1)[-1].startswith("hol-guard-runtime"),
+            )
+            if not members:
+                raise NativeWheelError("native_wheel_payload_invalid")
+            payload: list[tuple[str, bytes, int]] = []
+            for name in members:
+                relative = name[len(_NATIVE_PAYLOAD_PREFIX) :]
+                if not relative or "/" in relative or "\\" in relative or relative in {".", ".."}:
+                    raise NativeWheelError("native_wheel_payload_invalid")
+                data = archive.read(name)
+                if hashes.get(name) != _record_digest(data):
+                    raise NativeWheelError("native_wheel_payload_invalid")
+                payload.append((relative, data, (archive.getinfo(name).external_attr >> 16) & 0o777))
+    except (OSError, zipfile.BadZipFile, UnicodeDecodeError, csv.Error) as error:
+        raise NativeWheelError("native_wheel_payload_install_failed") from error
+    return payload, record_name
+
+
+def _record_digest(data: bytes) -> str:
+    return "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+
+
+def _payload_rows(payload: list[tuple[str, bytes, int]]) -> list[tuple[str, list[str]]]:
+    return [
+        (relative, [_NATIVE_PAYLOAD_PREFIX + relative, _record_digest(data), str(len(data))])
+        for relative, data, _mode in payload
+    ]
+
+
+def _write_record(record: Path, existing: str, rows: list[list[str]]) -> None:
+    """Add the payload files to the installed RECORD so uninstalling removes them."""
+
+    listed = {row[0] for row in csv.reader(io.StringIO(existing)) if row}
+    added = [row for row in rows if row[0] not in listed]
+    if not added:
+        return
+    buffer = io.StringIO()
+    csv.writer(buffer, lineterminator="\n").writerows(added)
+    separator = "" if not existing or existing.endswith("\n") else "\n"
+    temporary = record.with_name(f".RECORD.{os.getpid()}.tmp")
+    try:
+        temporary.write_text(existing + separator + buffer.getvalue(), encoding="utf-8")
+        os.replace(temporary, record)
+    finally:
         temporary.unlink(missing_ok=True)
 
 

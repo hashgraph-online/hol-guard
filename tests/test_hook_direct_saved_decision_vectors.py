@@ -46,7 +46,11 @@ _TOKEN = "guard-exact-action:v1:" + "f" * 64
 
 def _rehash(receipt: dict[str, Any]) -> dict[str, Any]:
     identity = {
-        **{key: value for key, value in receipt.items() if key not in {"authority", "decision_id"}},
+        **{
+            key: value
+            for key, value in receipt.items()
+            if key not in {"authority", "decision_id", "review_anchor_digest"}
+        },
         "schema": "guard-native-hook-decision-identity.v1",
     }
     receipt["decision_id"] = hashlib.sha256(
@@ -58,7 +62,7 @@ def _rehash(receipt: dict[str, Any]) -> dict[str, Any]:
 def _reviewed(**changes: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
     observations = _observations()
     result = {**_edge(observations)["result"], "minimum_action": "review", "action": {"action_type": "shell"}}
-    receipt: dict[str, Any] | None = _receipt(observations)
+    receipt: dict[str, Any] | None = _receipt(observations, review_anchor=True)
     for key, value in changes.items():
         if key == "receipt":
             receipt = value(receipt)
@@ -70,7 +74,7 @@ def _reviewed(**changes: Any) -> tuple[dict[str, Any], dict[str, Any] | None]:
 def _without_extensions() -> tuple[dict[str, Any], dict[str, Any]]:
     result, _ = _reviewed()
     result.pop("command_extensions")
-    return result, _receipt(None)
+    return result, _receipt(None, review_anchor=True)
 
 
 def _receipt_with(**fields: Any):

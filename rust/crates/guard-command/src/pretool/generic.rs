@@ -657,6 +657,24 @@ fn evaluate_envelope(
                 result
             }
         }
+    } else if harness == "omp"
+        && event == "PreToolUse"
+        && signals.tool_name.as_deref() == Some("edit")
+        && omp::strict_tool_input(payload).is_some_and(super::omp_hashline_writes::headerless_edit)
+    {
+        generic_result(
+            generic_action(
+                harness,
+                event,
+                PreToolActionTypeV1::Harness,
+                PreToolOperationV1::Set,
+                true,
+                false,
+            ),
+            "allow",
+            "native_omp_edit_without_header",
+            "The Rust authority found an edit with no file header: Oh My Pi refuses it, so it cannot change any file.",
+        )
     } else if let Some(omp_result) = omp_result {
         omp_result
     } else if let Some(pure_result) = pure_eval::evaluate(harness, event, payload, &signals) {

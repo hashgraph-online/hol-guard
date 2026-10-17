@@ -42,7 +42,7 @@ from .harness_judge import _observed_lifecycle_answers
 from .harnesses import CredentialSeed, adapter, credential_environment, keep_login_shell_path, read_transcript
 from .host_process import run_process
 from .input_evidence import redact_value
-from .parallel import terminate_as_exit
+from .parallel import terminate_as_exit, validate_jobs
 from .provider import LoopbackCollector
 from .source_identity import source_identity
 
@@ -268,12 +268,14 @@ def run_harness_full_tasks(
     executable: str | None = None,
     model: str | None = None,
     work_root: Path | None = None,
+    jobs: int = 1,
 ) -> dict[str, Any]:
-    """Run the selected local tasks one at a time and write the false-positive report."""
+    """Run the selected local tasks (``jobs`` isolated workers at once) and write the false-positive report."""
     if harness not in FULL_TASK_HARNESSES:
         raise ValueError("the local full-task harness runner supports --harness claude-code or codex")
     if mode not in MODES:
         raise ValueError("full-task mode must be discover or enforce")
+    jobs = validate_jobs(jobs)
     selected = local_tasks(selected_ids)
     spec = adapter(harness)
     resolved = spec.executable(executable)
@@ -299,27 +301,55 @@ def run_harness_full_tasks(
         "mode": mode,
         # Vendor inference bypasses the relay's round transcript and canary backstop.
         "merge_qualified": False,
+        "jobs": jobs,
         "cases": [],
     }
-    cases = []
-    # SIGTERM/SIGHUP must unwind each task so its agent and daemon are reaped.
-    with terminate_as_exit():
-        for index, task in enumerate(selected, start=1):
-            case = run_harness_full_task(
-                task,
-                harness=harness,
-                root=root,
-                public=output / "cases",
-                executable=resolved,
-                identity=identity,
-                timeout=model_timeout,
-                mode=mode,
-                index=index,
-                model=model,
-            )
-            cases.append(case)
-            report["cases"].append({"id": task.id, **case["assessment"], "elapsed_seconds": case["elapsed_seconds"]})
-            print(json.dumps({"task": task.id, "harness": harness, **case["assessment"]}), flush=True)
-            (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+    cases: list[dict[str, Any]] = []
+    rows: dict[str, dict[str, Any]] = {}
+
+    def record(task: Scenario, case: dict[str, Any]) -> None:
+        """Keep summary rows in selection order; progress lines print as tasks finish."""
+        cases.append(case)
+        rows[task.id] = {"id": task.id, **case["assessment"], "elapsed_seconds": case["elapsed_seconds"]}
+        report["cases"] = [rows[t.id] for t in selected if t.id in rows]
+        print(json.dumps({"task": task.id, "harness": harness, **case["assessment"]}), flush=True)
+        (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
+
+    if jobs == 1:
+        # SIGTERM/SIGHUP must unwind each task so its agent and daemon are reaped.
+        with terminate_as_exit():
+            for index, task in enumerate(selected, start=1):
+                record(
+                    task,
+                    run_harness_full_task(
+                        task,
+                        harness=harness,
+                        root=root,
+                        public=output / "cases",
+                        executable=resolved,
+                        identity=identity,
+                        timeout=model_timeout,
+                        mode=mode,
+                        index=index,
+                        model=model,
+                    ),
+                )
+    else:
+        from .full_task_parallel import schedule_full_tasks
+
+        schedule_full_tasks(
+            selected,
+            jobs=jobs,
+            root=root,
+            public=output / "cases",
+            executable=resolved,
+            identity=identity,
+            build_sha=capabilities.build_sha,
+            timeout=model_timeout,
+            mode=mode,
+            spec_extra={"harness": harness, "harness_model": spec.model(model)},
+            on_case=record,
+        )
+        cases[:] = [case for task in selected for case in cases if case["id"] == task.id]
     report["outcomes"] = dict(Counter(row["outcome"] for row in report["cases"]))
     return finish_report(report, cases, mode, output)
