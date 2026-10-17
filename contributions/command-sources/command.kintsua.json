@@ -1,0 +1,717 @@
+{
+  "extension": {
+    "action_classes": [
+      "Kintsua hosted snapshot push",
+      "Kintsua lockfile baseline rewrite"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews Kintsua CLI commands that rewrite the committed MCP/OpenAPI tool lockfile or push captured tool schemas to a hosted service. Read-only diff and report runs stay automatic.",
+    "ecosystem_ids": [
+      "kintsua"
+    ],
+    "executables": [
+      "kintsua"
+    ],
+    "extension_id": "command.kintsua",
+    "homepage": "https://github.com/hr7657316/Kintusa-Ai",
+    "icon": {
+      "background": "#0F172A",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": "Apache-2.0",
+    "name": "Kintsua command protection",
+    "permissions": [
+      {
+        "action_classes": [
+          "Kintsua hosted snapshot push"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `kintsua watch snapshot --push` and `kintsua watch diff --push`, which send the captured tool schemas to a hosted Kintsua service authenticated by an SDK key. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "kintsua watch diff --server https://mcp.vendor.com/mcp --name vendor --push --repo acme/agent",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Kintsua hosted snapshot push",
+        "permission_id": "command.kintsua.permission.hosted-push",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run without `--push` to keep the snapshot local; the lockfile and history.jsonl are sufficient for CI gating.",
+          "Review `--repo`, `--url` and the `KINTSUA_KEY` environment variable before sending a snapshot to a hosted service."
+        ],
+        "typed_capabilities": []
+      },
+      {
+        "action_classes": [
+          "Kintsua lockfile baseline rewrite"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies `kintsua watch snapshot` and `kintsua watch diff --update`, which overwrite the committed `.kintsua/<name>.lock.json` baseline that later diffs are judged against. A rewritten baseline can silently accept an upstream breaking change. exec and xargs launches are blocked by Guard's wrapper floor.",
+        "example_command": "kintsua watch snapshot --server https://mcp.vendor.com/mcp --name vendor",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "1.0.0",
+        "label": "Kintsua lockfile baseline rewrite",
+        "permission_id": "command.kintsua.permission.lockfile-rewrite",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Run `kintsua watch diff` first and read the classified change table before rewriting the lockfile.",
+          "Keep `.kintsua/*.lock.json` under version control so a baseline rewrite is visible in the pull request diff."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [
+      ".kintsua.yml",
+      ".kintsua"
+    ],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.kintsua",
+      "url": "https://github.com/hr7657316/Kintusa-Ai"
+    },
+    "reference_urls": [
+      "https://github.com/hr7657316/Kintusa-Ai#readme"
+    ],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell",
+      "network_egress"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "Kintsua lockfile baseline rewrite"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kintsua watch snapshot`, which writes or overwrites `<dir>/<name>.lock.json`, the baseline later `kintsua watch diff` runs compare against.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kintsua",
+                  "kintsua.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--auth-env",
+                  "--dir",
+                  "--env",
+                  "--header",
+                  "--key",
+                  "--name",
+                  "--repo",
+                  "--server",
+                  "--spec",
+                  "--timeout",
+                  "--url",
+                  "-H",
+                  "-s"
+                ],
+                "required_flags": [],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "watch",
+                  "snapshot"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.kintsua.permission.lockfile-rewrite",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.kintsua.watch-snapshot",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "snapshot"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "snapshot"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Kintsua watch snapshot help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `kintsua watch diff` first and read the classified change table before rewriting the lockfile.",
+          "Keep `.kintsua/*.lock.json` under version control so a baseline rewrite is visible in the pull request diff."
+        ],
+        "severity": "medium",
+        "title": "Kintsua watch snapshot"
+      },
+      {
+        "action_classes": [
+          "Kintsua lockfile baseline rewrite"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kintsua watch diff --update`, which rewrites the lockfile after diffing and so accepts the current upstream state as the new baseline. A plain `kintsua watch diff` is read-only and stays automatic.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kintsua",
+                  "kintsua.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--auth-env",
+                  "--dir",
+                  "--env",
+                  "--fail-on",
+                  "--header",
+                  "--key",
+                  "--name",
+                  "--repo",
+                  "--server",
+                  "--spec",
+                  "--timeout",
+                  "--url",
+                  "-H",
+                  "-s"
+                ],
+                "required_flags": [
+                  "--update"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "watch",
+                  "diff"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.kintsua.permission.lockfile-rewrite",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.kintsua.watch-diff-update",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--fail-on",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--update",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "diff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--fail-on",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--update",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "diff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Kintsua watch diff help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run `kintsua watch diff` first and read the classified change table before rewriting the lockfile.",
+          "Keep `.kintsua/*.lock.json` under version control so a baseline rewrite is visible in the pull request diff."
+        ],
+        "severity": "medium",
+        "title": "Kintsua watch diff with baseline update"
+      },
+      {
+        "action_classes": [
+          "Kintsua hosted snapshot push"
+        ],
+        "default_mode": "review",
+        "description": "Identifies `kintsua watch snapshot --push` and `kintsua watch diff --push`, which upload the captured tool schemas to the hosted service named by `--url` using the SDK key from `--key` or `KINTSUA_KEY`.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kintsua",
+                  "kintsua.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--auth-env",
+                  "--dir",
+                  "--env",
+                  "--header",
+                  "--key",
+                  "--name",
+                  "--repo",
+                  "--server",
+                  "--spec",
+                  "--timeout",
+                  "--url",
+                  "-H",
+                  "-s"
+                ],
+                "required_flags": [
+                  "--push"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "watch",
+                  "snapshot"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "kintsua",
+                  "kintsua.exe"
+                ],
+                "fail_secure_unknown_options": true,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [
+                  "--auth-env",
+                  "--dir",
+                  "--env",
+                  "--fail-on",
+                  "--header",
+                  "--key",
+                  "--name",
+                  "--repo",
+                  "--server",
+                  "--spec",
+                  "--timeout",
+                  "--url",
+                  "-H",
+                  "-s"
+                ],
+                "required_flags": [
+                  "--push"
+                ],
+                "required_flags_in_all_arguments": false,
+                "required_option_values": [],
+                "subcommands": [
+                  "watch",
+                  "diff"
+                ]
+              },
+              "op": "executable.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.kintsua.permission.hosted-push",
+        "risk_classes": [
+          "network_egress"
+        ],
+        "rule_id": "command.kintsua.watch-push",
+        "rule_version": "1.0.0",
+        "safe_variants": [
+          {
+            "matcher": {
+              "config": {},
+              "matchers": [
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--push",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "snapshot"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--push",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "snapshot"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--fail-on",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--push",
+                      "--help"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "diff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                },
+                {
+                  "config": {
+                    "allow_leading_options": false,
+                    "executables": [
+                      "kintsua",
+                      "kintsua.exe"
+                    ],
+                    "fail_secure_unknown_options": true,
+                    "forbidden_flags": [],
+                    "interspersed_flags": [],
+                    "interspersed_options_with_values": [],
+                    "inverse_flag_pairs": [],
+                    "leading_options_with_values": [],
+                    "options_with_values": [
+                      "--auth-env",
+                      "--dir",
+                      "--env",
+                      "--fail-on",
+                      "--header",
+                      "--key",
+                      "--name",
+                      "--repo",
+                      "--server",
+                      "--spec",
+                      "--timeout",
+                      "--url",
+                      "-H",
+                      "-s"
+                    ],
+                    "required_flags": [
+                      "--push",
+                      "-h"
+                    ],
+                    "required_flags_in_all_arguments": true,
+                    "required_option_values": [],
+                    "subcommands": [
+                      "watch",
+                      "diff"
+                    ]
+                  },
+                  "op": "executable.v1"
+                }
+              ],
+              "op": "any.v1"
+            },
+            "title": "Kintsua watch push help",
+            "variant_id": "help"
+          }
+        ],
+        "safer_alternatives": [
+          "Run without `--push` to keep the snapshot local; the lockfile and history.jsonl are sufficient for CI gating.",
+          "Review `--repo`, `--url` and the `KINTSUA_KEY` environment variable before sending a snapshot to a hosted service."
+        ],
+        "severity": "medium",
+        "title": "Kintsua hosted snapshot push"
+      }
+    ],
+    "safer_alternatives": [
+      "Prefer `kintsua watch diff` and `kintsua watch report`, which only read the lockfile and history.",
+      "Review the classified change table before accepting a new baseline with `--update` or re-snapshotting."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}
