@@ -4,6 +4,7 @@
 //! credential's and a target that does not exist yet, while the directories
 //! a secret is actually kept in keep their review.
 
+use crate::git_helper_fixture::shell_word;
 use crate::pretool_home_layout_reads::{assert_decision, layout};
 
 #[test]
@@ -17,11 +18,11 @@ fn a_metadata_predicate_answers_for_a_credential_named_file() {
     for command in [
         format!(
             "test -f {}/kubeconfig.digitalocean && echo VISIBLE",
-            org.display()
+            shell_word(org)
         ),
-        format!("[ -f {}/kubeconfig.digitalocean ]", org.display()),
-        format!("test -s {}/deploy-kubeconfig.yaml", service.display()),
-        format!("test -r {}/kubeconfig.digitalocean", org.display()),
+        format!("[ -f {}/kubeconfig.digitalocean ]", shell_word(org)),
+        format!("test -s {}/deploy-kubeconfig.yaml", shell_word(&service)),
+        format!("test -r {}/kubeconfig.digitalocean", shell_word(org)),
     ] {
         assert_decision(&cwd, home, &command, true);
     }
@@ -34,10 +35,13 @@ fn a_metadata_predicate_answers_for_a_path_that_is_not_there() {
     let service = org.join("service-api");
     let cwd = org.join("app-portal");
     for command in [
-        format!("test -f {}/dist/bundle.js && echo built", service.display()),
-        format!("test -d {}/dist", service.display()),
+        format!(
+            "test -f {}/dist/bundle.js && echo built",
+            shell_word(&service)
+        ),
+        format!("test -d {}/dist", shell_word(&service)),
         "test -f ../service-api/dist/bundle.js".to_owned(),
-        format!("[ -e {}/target/release/app ]", service.display()),
+        format!("[ -e {}/target/release/app ]", shell_word(&service)),
     ] {
         assert_decision(&cwd, home, &command, true);
     }
@@ -61,9 +65,9 @@ fn a_predicate_on_a_credential_store_keeps_its_review() {
         // Absent below a store: the answer would map the store's contents.
         "test -f ~/.ssh/id_ed25519".to_owned(),
         "test -f ~/.config/gh/hosts.yml".to_owned(),
-        format!("test -s {}/.env", service.display()),
+        format!("test -s {}/.env", shell_word(&service)),
         // A missing hidden name is where a tool keeps its own login.
-        format!("test -f {}/.aws-session", service.display()),
+        format!("test -f {}/.aws-session", shell_word(&service)),
     ] {
         assert_decision(&cwd, home, &command, false);
     }

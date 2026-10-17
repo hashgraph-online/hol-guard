@@ -40,6 +40,7 @@ fn reason(harness: &str, home: &Path, cwd: &Path, command: &str) -> String {
 
 /// The stamped shell environment a harness sends with a command, naming the
 /// HOME the shell would expand `~` from.
+#[cfg(unix)]
 fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
     guard_contracts::GuardExecutionEnvironmentV1 {
         path: std::env::var("PATH").unwrap_or_default(),
@@ -59,6 +60,7 @@ fn environment(home: &Path) -> guard_contracts::GuardExecutionEnvironmentV1 {
 /// that HOME is the declared one. The runtime rebuilds the path context from
 /// that stamp, so the fixture's home has to arrive stamped: without it the
 /// runtime reads its own HOME, which is never a fixture's.
+#[cfg(unix)]
 fn home_result(
     harness: &str,
     home: &Path,
@@ -90,6 +92,7 @@ fn home_result(
 /// What the containment screens read besides the command itself, so a
 /// spelling that loses containment names the evidence that refused it
 /// rather than only the reason it ended with.
+#[cfg(unix)]
 fn evidence(result: &guard_contracts::PreToolResultV1) -> String {
     let Some(extensions) = result.command_extensions.as_ref() else {
         return format!("{} without extension evidence", result.reason_code);

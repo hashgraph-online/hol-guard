@@ -1029,7 +1029,9 @@ mod sourced_tests;
 #[path = "native_command_unmodeled_bounded_tests.rs"]
 mod bounded_tests;
 
-#[cfg(test)]
+// A Windows shell keeps an unquoted backslash literal, so the evaluator refuses
+// `$'…'` there rather than read it a second way; these vectors are POSIX-only.
+#[cfg(all(test, not(windows)))]
 #[path = "native_command_unmodeled_ansi_c_tests.rs"]
 mod ansi_c_tests;
 

@@ -69,7 +69,6 @@ UNCERTAIN_FIXTURES = (
     "while true; do break; done",
     'case "$value" in one) echo one;; esac',
     "[[ -f Cargo.toml ]]",
-    "echo $'non-posix quote'",
     'echo $"localized quote"',
     "xargs rm -rf",
     "parallel rm ::: one",
