@@ -98,6 +98,7 @@ mod lookup_reads;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
+mod npmrc_keys;
 mod pip_reads;
 mod postgres_reads;
 mod process_stops;

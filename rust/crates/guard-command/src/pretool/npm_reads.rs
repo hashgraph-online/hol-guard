@@ -8,6 +8,7 @@
 //! needs every `.npmrc` npm could read to leave the fetch, its trust and npm's
 //! own paths alone, and no inherited npm or Node override.
 
+use super::npmrc_keys;
 use std::fs;
 use std::io::ErrorKind;
 use std::path::Path;
@@ -170,7 +171,9 @@ pub(in crate::pretool) fn npmrc_inert(path: &Path) -> bool {
     if !metadata.is_file() || metadata.len() > MAX_NPMRC_BYTES {
         return false;
     }
-    fs::read_to_string(path).is_ok_and(|text| text.lines().all(inert_line))
+    // A bare carriage return starts a new line for npm's ini parser, so it
+    // ends one here too.
+    fs::read_to_string(path).is_ok_and(|text| text.split(['\n', '\r']).all(inert_line))
 }
 
 /// Settings that move where npm fetches from, how it trusts that transport,
@@ -216,12 +219,12 @@ fn inert_line(line: &str) -> bool {
     if line.starts_with('[') {
         return false;
     }
-    let key = line
-        .split('=')
-        .next()
-        .unwrap_or_default()
-        .trim()
-        .trim_matches(['"', '\''])
+    // The key npm acts on is the one its ini parser decodes, not the written
+    // text; a line this proof cannot decode is not shown to be inert.
+    let Some(key) = npmrc_keys::parsed_key(line) else {
+        return false;
+    };
+    let key = key
         .trim_end_matches("[]")
         .to_ascii_lowercase()
         .replace('_', "-");

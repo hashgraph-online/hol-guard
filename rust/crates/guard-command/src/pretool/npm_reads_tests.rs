@@ -133,6 +133,28 @@ fn npmrc_lines_that_move_the_fetch_or_send_credentials_are_unsafe() {
 }
 
 #[test]
+fn npmrc_lines_are_screened_as_npm_decodes_them() {
+    for line in [
+        "\"save-exact\"=true",
+        "'save-exact'=true",
+        "save-exact=true ; registry=https://registry.example.test/",
+        "\"registry=https://registry.example.test/",
+    ] {
+        assert!(inert_line(line), "{line}");
+    }
+    for line in [
+        "\"\\u0072egistry\"=https://registry.example.test/",
+        "\"regist\\u0072y\"=https://registry.example.test/",
+        "'registry'=https://registry.example.test/",
+        "registry;ignored=https://registry.example.test/",
+        "registry#ignored=https://registry.example.test/",
+        "\"\\u0063afile\"=/tmp/ca.pem",
+    ] {
+        assert!(!inert_line(line), "{line}");
+    }
+}
+
+#[test]
 fn npmrc_files_are_inert_only_when_absent_or_regular_and_clean() {
     let root = std::env::temp_dir().join(format!("guard-npmrc-{}", std::process::id()));
     std::fs::create_dir_all(&root).unwrap();
@@ -142,12 +164,19 @@ fn npmrc_files_are_inert_only_when_absent_or_regular_and_clean() {
     std::fs::write(&moved, "registry=https://registry.example.test/\n").unwrap();
     let directory = root.join("directory");
     std::fs::create_dir_all(&directory).unwrap();
+    let carriage_return = root.join("carriage-return");
+    std::fs::write(
+        &carriage_return,
+        "save-exact=true\rregistry=https://registry.example.test/\n",
+    )
+    .unwrap();
     let oversized = root.join("oversized");
     std::fs::write(&oversized, "a=b\n".repeat(20_000)).unwrap();
 
     assert!(npmrc_inert(&root.join("absent")));
     assert!(npmrc_inert(&clean));
     assert!(!npmrc_inert(&moved));
+    assert!(!npmrc_inert(&carriage_return));
     assert!(!npmrc_inert(&directory));
     assert!(!npmrc_inert(&oversized));
     #[cfg(unix)]
