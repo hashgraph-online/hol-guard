@@ -231,6 +231,12 @@ def pause_native_pre_tool_for_approval(
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False
         response["blocked_request_mode"] = "safe-alternative"
+        # The OMP extension waits for this approval in the background and then
+        # asks the agent to run the identical call again. Only a review bound
+        # to that retry gets the handle: approving any other row cannot let it run.
+        request_id = queued.get("request_id") if queued is not None else None
+        if identity is not None and isinstance(request_id, str) and request_id and canonical_harness(harness) == "omp":
+            response["approval_resume"] = {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
         return response
 
     queued = queue_native_pre_tool_review(
