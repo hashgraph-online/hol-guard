@@ -94,3 +94,45 @@ fn a_request_without_fields_gets_the_conservative_contract() {
     assert_eq!(item["exact_action_persistence_eligible"], json!(false));
     assert_eq!(item["exact_context_token"], Value::Null);
 }
+
+#[test]
+fn a_package_that_requires_fresh_approval_offers_only_this_once() {
+    // A package retry under `require-reapproval` reuses only a one-time
+    // artifact approval, so a project approval would be saved and refused.
+    let vectors = gunzip_json(VECTORS);
+    let cases = vectors["cases"].as_array().expect("cases");
+    let mut checked = 0;
+    for case in cases {
+        let request = &case["request"];
+        let workspace_target = &case["expected"]["workspace_target"];
+        if request["artifact_type"] != json!("package_request") || workspace_target.is_null() {
+            continue;
+        }
+        // The requests a project approval can cover under plain review.
+        let mut reviewed = request.clone();
+        reviewed["policy_action"] = json!("review");
+        let under_review = evaluate_one(item_for(&reviewed, workspace_target));
+        if !under_review["allowed_scopes_by_action"]["allow"]
+            .as_array()
+            .is_some_and(|scopes| scopes.contains(&json!("workspace")))
+        {
+            continue;
+        }
+        let mut fresh = request.clone();
+        fresh["policy_action"] = json!("require-reapproval");
+        let item = evaluate_one(item_for(&fresh, workspace_target));
+        assert_eq!(
+            item["allowed_scopes_by_action"]["allow"],
+            json!(["artifact"])
+        );
+        assert_eq!(
+            item["recommended_scope_by_action"]["allow"],
+            json!("artifact")
+        );
+        checked += 1;
+    }
+    assert!(
+        checked >= 13,
+        "recorded portable package requests: {checked}"
+    );
+}

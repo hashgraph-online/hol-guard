@@ -204,7 +204,13 @@ fn reusable_allow_scopes(
         )
     {
         scopes.push("workspace");
-    } else if workspace && artifact_type == Some("package_request") {
+    } else if workspace
+        && artifact_type == Some("package_request")
+        // Under a policy that requires fresh approval, a package retry reuses
+        // only a one-time artifact approval (`package_policy_resolve_op`), so
+        // a remembered project approval would be saved and then refused.
+        && text(item.policy_action.as_ref()) != Some("require-reapproval")
+    {
         let evidence = item.scanner_evidence.clone().unwrap_or(Value::Null);
         if package_execution_context_from_scanner_evidence(&evidence)
             .is_some_and(|context| context.portable)
