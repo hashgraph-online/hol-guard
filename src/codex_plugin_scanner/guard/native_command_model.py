@@ -12,7 +12,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .native_command_model_wrappers import decode_sudo_prefix
+from .native_command_model_wrappers import decode_sudo_prefix, inline_shell_script
 from .native_resident_client import (
     native_resident_client_request,
     record_native_resident_client_failure_code,
@@ -47,6 +47,22 @@ def _assignment_name(token: str) -> str | None:
     return name
 
 
+def _bound_to_request(normalized_text: str, command: str) -> bool:
+    """Report whether one native model answers this exact request.
+
+    The model normally repeats the request word for word. The one exception is
+    a shell that carries its whole script and nothing else: it runs exactly
+    that script, so the parser reads the command as the script and reports the
+    script's own text. That spelling is recognized here from the request alone,
+    so the model still has to be the one those same words produce.
+    """
+
+    if normalized_text == command:
+        return True
+    script = inline_shell_script(command)
+    return script is not None and normalized_text == script
+
+
 def _decode_command_model(
     payload: object,
     *,
@@ -68,7 +84,7 @@ def _decode_command_model(
     if (
         not isinstance(normalized_text, str)
         or not normalized_text
-        or normalized_text != command.strip()
+        or not _bound_to_request(normalized_text, command.strip())
         or payload.get("dialect") != dialect
         or payload.get("transport") != transport
         or payload.get("extraction_provenance") != extraction_provenance

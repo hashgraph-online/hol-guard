@@ -82,3 +82,62 @@ def test_mismatched_wrapper_evidence_is_rejected(mutation: str) -> None:
     elif mutation == "dialect":
         model["dialect"] = "powershell"
     assert _canonical_command_from_native(command, model) is None
+
+
+def _script_model(script: str) -> dict:
+    return {
+        "normalized_text": script,
+        "dialect": "posix",
+        "transport": "shell_string",
+        "extraction_provenance": "guard-shell",
+        "wrapper_chain": [],
+        "segments": [
+            {
+                "text": script,
+                "tokens": script.split(),
+                "executable": script.split()[0],
+                "arguments": script.split()[1:],
+                "environment_names": [],
+                "wrapper_chain": [],
+                "path_overridden": False,
+                "execution_context": "top:0",
+                "pipeline_index": 0,
+                "span": {"source": "normalized", "start": 0, "end": len(script)},
+            }
+        ],
+        "confidence": "exact",
+        "uncertainty_reason": None,
+        "path_overridden": False,
+        "parser_profile": "posix-simple-v1",
+    }
+
+
+def test_a_shell_carrying_its_whole_script_is_bound_to_that_script() -> None:
+    script = "gh pr view 12"
+    for command in (
+        f"sh -c '{script}'",
+        f"bash -lc '{script}'",
+        f'zsh -cl "{script}"',
+    ):
+        canonical = _canonical_command_from_native(command, _script_model(script))
+        assert canonical is not None, command
+        # The script is what runs, and the words it was written with are kept.
+        assert canonical.normalized_text == script
+        assert canonical.raw_text == command
+        assert canonical.segments[0].executable == "gh"
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "sh -c 'gh pr view 12' -- argument",
+        "command sh -c 'gh pr view 12'",
+        "env CI=1 sh -c 'gh pr view 12'",
+        'sh -c "$COMMAND"',
+        "perl -e 'gh pr view 12'",
+        "sh -x 'gh pr view 12'",
+        "gh pr view 12 ; true",
+    ],
+)
+def test_any_other_spelling_keeps_the_strict_request_binding(command: str) -> None:
+    assert _canonical_command_from_native(command, _script_model("gh pr view 12")) is None

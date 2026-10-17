@@ -69,6 +69,7 @@ def main() -> int:
         "dd if=/dev/zero of=/dev/sda",
         "mkfs.ext4 /dev/sda1",
         "shutdown -h now",
+        "bash -lc 'shred ~/.ssh/id_ed25519'",
         "reboot",
         "wipefs -a /dev/sda",
     )
@@ -88,7 +89,7 @@ def main() -> int:
         "kubectl apply -f deployment.yaml",
         "ssh host.example",
         "PATH=/tmp:$PATH ls",
-        "bash -lc 'pwd'",
+        "bash -lc 'npm install package'",
         "cat ~/.env",
         "rg token ~/.ssh",
         "git push origin main",
@@ -97,6 +98,12 @@ def main() -> int:
         result = decision(runtime, command, f"review-{index}")
         assert result["decision"] == "deny", (command, result)
         assert result["policy_action"] in {"review", "block"}, (command, result)
+
+    # A shell that carries its whole script runs exactly that script, so the
+    # command reaches the same decision the script reaches on its own.
+    for index, command in enumerate(("bash -lc 'pwd'", "sh -c 'pwd'")):
+        result = decision(runtime, command, f"inline-shell-{index}")
+        assert result["decision"] == "allow", (command, result)
 
     for index, command in enumerate(("python -c 'print(1)'", "node -e 'console.log(1)'")):
         result = decision(runtime, command, f"bounded-expression-{index}")

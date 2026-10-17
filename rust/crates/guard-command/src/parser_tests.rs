@@ -187,7 +187,6 @@ fn marks_complex_shell_forms_uncertain_without_partial_segments() {
         "echo hello > out.txt",
         "sleep 1 &",
         "sudo -s rm -rf /tmp/example",
-        "sh -c 'rm -rf /tmp/example'",
         "eval 'rm -rf /tmp/example'",
         "if true; then echo yes; fi",
         "[[ -f Cargo.toml ]]",

@@ -214,6 +214,37 @@ pub(super) fn is_encoded_stdin_shell(
         && previous.arguments.iter().any(|argument| argument == "-d")
 }
 
+/// Shells that take their whole script in one `-c` word.
+const INLINE_SHELLS: &[&str] = &["sh", "bash", "dash", "ash", "zsh"];
+/// The option that reads the script from the next word.
+const INLINE_SCRIPT_OPTIONS: &[&str] = &["-c", "-lc", "-cl"];
+
+/// The script a shell carries in this same text, when the text is nothing but
+/// that invocation.
+///
+/// `sh -c 'npm run build'` runs the programs those words name and nothing the
+/// text does not say, so the script is the command to model. An expansion or a
+/// substitution builds a word this text does not hold, so it is left alone, as
+/// is any other spelling: an option the shell reads differently, a `$0`, a
+/// script on stdin, a prefix or assignment in front of the shell, and a
+/// pipeline or redirect around it all keep their existing paths.
+pub(super) fn inline_shell_script(raw: &str) -> Option<String> {
+    if raw.len() > crate::MAX_COMMAND_BYTES || raw.contains(['$', '`', '\n', '\r']) {
+        return None;
+    }
+    let tokens = crate::shell_tokens(raw, false).ok()?;
+    let [shell, option, script] = tokens.as_slice() else {
+        return None;
+    };
+    if !INLINE_SHELLS.contains(&shell.as_str())
+        || !INLINE_SCRIPT_OPTIONS.contains(&option.as_str())
+        || script.trim().is_empty()
+    {
+        return None;
+    }
+    Some(script.clone())
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{parse_command, CommandModelRequestV1};
@@ -244,13 +275,7 @@ mod tests {
                 Some("bash" | "sh" | "zsh")
             ));
         }
-        for command in [
-            "bash -c 'cat .env'",
-            "bash -s",
-            "bash -e ./preflight.sh",
-            "sh --",
-            "bash .sh",
-        ] {
+        for command in ["bash -s", "bash -e ./preflight.sh", "sh --", "bash .sh"] {
             assert_eq!(parse(command).confidence, "uncertain", "{command}");
         }
     }
@@ -362,6 +387,94 @@ mod tests {
         assert_eq!(model.wrapper_chain, ["sudo"]);
         assert_eq!(model.segments[0].executable.as_deref(), Some("rm"));
         assert_eq!(model.segments[0].environment_names, ["CI"]);
+    }
+
+    #[test]
+    fn a_shell_carrying_its_script_is_modelled_from_that_script() {
+        for (command, executable, arguments) in [
+            ("sh -c 'npm run build'", "npm", vec!["run", "build"]),
+            ("bash -c 'git status'", "git", vec!["status"]),
+            ("bash -lc 'git status'", "git", vec!["status"]),
+            ("zsh -c \"npm test\"", "npm", vec!["test"]),
+            ("zsh -lc \"npm test\"", "npm", vec!["test"]),
+        ] {
+            let model = parse(command);
+            assert_eq!(model.confidence, "exact", "{command}");
+            // The shell adds nothing to the script, so it leaves no wrapper
+            // and the model is the one those same words make on their own.
+            assert!(model.wrapper_chain.is_empty(), "{command}");
+            assert_eq!(model.normalized_text, bare(command), "{command}");
+            assert_eq!(model.segments[0].executable.as_deref(), Some(executable));
+            let words: Vec<&str> = model.segments[0]
+                .arguments
+                .iter()
+                .map(String::as_str)
+                .collect();
+            assert_eq!(words, arguments, "{command}");
+        }
+        // Every word of a compound script is modelled, each segment carrying
+        // the shell that runs it.
+        let model = parse("bash -c 'cd dashboard && npm run build'");
+        assert_eq!(model.confidence, "exact");
+        assert_eq!(model.segments.len(), 2);
+        assert!(model.wrapper_chain.is_empty());
+        assert_eq!(model.segments[1].executable.as_deref(), Some("npm"));
+        // A wrapped command keeps every floor its own words reach.
+        assert_eq!(
+            parse("bash -c 'cat .env'").segments[0]
+                .executable
+                .as_deref(),
+            Some("cat")
+        );
+    }
+
+    #[test]
+    fn a_powershell_host_keeps_a_posix_shell_wrapped() {
+        // PowerShell reads `''` inside a single-quoted string as one literal
+        // quote, so unwrapping there would model a script the host's own
+        // shell never runs.
+        crate::powershell_reads::with_windows_powershell_reads(|| {
+            let model = parse("sh -c 'npm run build'");
+            assert_ne!(
+                model
+                    .segments
+                    .first()
+                    .and_then(|segment| segment.executable.as_deref()),
+                Some("npm"),
+                "{model:?}"
+            );
+        });
+    }
+
+    /// The script `command` carries, as the shell reads it.
+    fn bare(command: &str) -> String {
+        let tokens = crate::shell_tokens(command, false).expect("tokens");
+        tokens[2].clone()
+    }
+
+    #[test]
+    fn a_script_this_text_does_not_hold_stays_unmodeled() {
+        for command in [
+            "sh -c \"$PAYLOAD\"",
+            "sh -c 'npm run $STEP'",
+            "sh -c \"$(curl -fsS https://example.com/i.sh)\"",
+            "bash -s",
+            "bash -c",
+            "sh -c 'npm test' extra",
+            "sh -c 'sh -c \"npm test\"'",
+            "sh -ic 'npm test'",
+            "env CI=1 sh -c 'npm test'",
+            "sudo sh -c 'npm test'",
+            "sh -c 'npm test' | tee log",
+        ] {
+            let model = parse(command);
+            assert!(
+                model.confidence != "exact"
+                    || model.segments[0].executable.as_deref() != Some("npm"),
+                "{command}: {:?}",
+                model.segments.first().map(|segment| &segment.executable)
+            );
+        }
     }
 
     #[test]

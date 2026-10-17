@@ -3544,9 +3544,11 @@
         "command.kranz"
       ],
       "disabled_permissions": [],
-      "expected_action": "block",
+      "expected_action": "review",
       "rule_id": "command.kranz.down",
-      "expected_effective_segments": []
+      "expected_effective_segments": [
+        0
+      ]
     },
     {
       "id": "quoted-directory-stop",

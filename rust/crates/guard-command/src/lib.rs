@@ -442,6 +442,9 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
     if request.dialect == "powershell" && request.transport == "shell_string" && !raw.is_empty() {
         return Ok(parse_explicit_powershell(request, raw));
     }
+    if let Some(model) = parse_inline_shell_script(request, raw) {
+        return Ok(model);
+    }
     let posix = parse_posix_command(request)?;
     if request.dialect != "posix" || !powershell_reads::windows_powershell_host() {
         return Ok(posix);
@@ -462,6 +465,58 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
         }
     }
     Ok(posix)
+}
+
+/// A shell whose whole script is in this same text, modelled from that script.
+///
+/// `sh -c 'npm run build'` runs the programs those words name, yet every `-c`
+/// form reached `transparent_wrapper_not_yet_supported` and blocked outright,
+/// with no approval left to give it, while the same words without the shell in
+/// front modelled exactly. The script is parsed as the command text it is, so
+/// it reaches the rules, proofs and floors its own words reach, and nothing
+/// else: a wrapped `rm -rf /` still blocks and a wrapped `gh pr merge --auto`
+/// still needs fresh approval.
+///
+/// The shell leaves no wrapper behind, because this spelling adds no power to
+/// the script. The harness already runs the command text through a shell, so
+/// the startup files a nested `-lc` reads have run before this command is
+/// read, and a payload planted in one runs at the next prompt whatever this
+/// command says. The bounded shape is what keeps that true: three words, a
+/// known shell, a known script option, and no expansion the parser would have
+/// to guess at. Anything else — an extra operand, `-s`, a prefix, a shell this
+/// text only names — keeps the wrapper's own uncertainty, as does a script
+/// this parser cannot model exactly.
+///
+/// A Windows agent runs PowerShell, which reads quotes differently from the
+/// shell this text names: `''` closes and reopens a POSIX single-quoted word
+/// while PowerShell hands the shell a literal `'`. The two readings disagree
+/// about where the script ends, so on that host the text keeps the existing
+/// PowerShell path instead of becoming an exact model of a command the shell
+/// would never run.
+///
+/// The raw text is no longer the command, so `exact_raw_text` is false and a
+/// matcher that reads the literal raw spelling keeps failing closed.
+fn parse_inline_shell_script(
+    request: &CommandModelRequestV1,
+    raw: &str,
+) -> Option<CanonicalCommandV1> {
+    if request.dialect != "posix"
+        || request.transport != "shell_string"
+        || powershell_reads::windows_powershell_host()
+    {
+        return None;
+    }
+    let script = parser_wrappers::inline_shell_script(raw)?;
+    let mut model = parse_posix_command(&CommandModelRequestV1 {
+        command: script,
+        ..request.clone()
+    })
+    .ok()?;
+    if model.confidence != "exact" || model.segments.is_empty() {
+        return None;
+    }
+    model.exact_raw_text = false;
+    Some(model)
 }
 
 fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> CanonicalCommandV1 {

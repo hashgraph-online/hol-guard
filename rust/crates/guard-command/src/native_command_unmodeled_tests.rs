@@ -143,8 +143,15 @@ fn unmodeled_commands_take_the_strongest_floor_of_their_possible_owners() {
             "native_command_extension_uncertain".to_owned()
         )
     );
-    // An interpreter could reach any extension, so all of them are consulted.
-    assert_eq!(decision(&controls, "sh -c 'gh pr view 12'").0, "block");
+    // An interpreter reading its script from somewhere else could reach any
+    // extension, so all of them are consulted.
+    assert_eq!(
+        decision(&controls, "sh <<'EOF'\ngh pr view 12\nEOF").0,
+        "block"
+    );
+    // A shell carrying its whole script runs exactly that script, so the
+    // command reaches the floor those same words reach on their own.
+    assert_eq!(decision(&controls, "sh -c 'gh pr view 12'").0, "allow");
     assert_eq!(
         decision(&controls, "for f in *; do echo $f; done").0,
         "review"
@@ -193,7 +200,7 @@ fn a_disabled_extension_for_another_program_does_not_block_unmodeled_commands() 
     // extension is disabled, and the disabled program itself is still named.
     // A docker listing the native proof admits is blocked as well.
     for command in [
-        "sh -c 'gh pr view 12'",
+        "sh <<'EOF'\ngh pr view 12\nEOF",
         "for x in a; do docker ps; done",
         "docker ps",
         "docker ps --format '{{.Names}}' | head -5",
@@ -261,9 +268,7 @@ fn unmodeled_commands_that_move_data_or_hide_programs_keep_the_evaluation_failur
         "gh pr comment 12 --body-file - <<'EOF' > out.txt\nFixed.\nEOF",
         "gh pr comment 12 --body-file - <<'EOF'\nFixed.\nEOF\ngh pr view 12",
         "sh <<'EOF'\ngh pr view 12\nEOF",
-        "sh -c 'gh pr view 12'",
         "command sh -c 'gh pr view 12'",
-        "env CI=1 sh -c 'gh pr view 12'",
         "env GH_HOST=example.com gh pr view 12",
         "fd -x gh pr view {}",
         "for x in a; do PATH=/tmp:$PATH gh pr view 12; done",
@@ -277,6 +282,13 @@ fn unmodeled_commands_that_move_data_or_hide_programs_keep_the_evaluation_failur
             "{command}"
         );
     }
+    // An inert assignment in front of a shell that carries its whole script
+    // adds nothing to the script: both spellings name the same program, so
+    // the command reaches the floor that program reaches on its own.
+    assert_eq!(
+        decision(&controls, "env CI=1 sh -c 'gh pr view 12'"),
+        decision(&controls, "gh pr view 12"),
+    );
 }
 
 #[test]

@@ -930,8 +930,10 @@ def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path:
             "allow",
         ),
         ("gh repo sync example/project --force", (), "block"),
+        # A shell that carries its whole script runs exactly that script, so an
+        # Allow for another permission leaves the script's own floor standing.
         (
-            "sh -c 'gh pr merge 5115 --repo example/project --squash --auto'",
+            "sh -c 'gh repo sync example/project --force'",
             ("command.github.permission.merge-remote",),
             "block",
         ),

@@ -28,12 +28,7 @@ GIT_PORCELAIN_REVIEW_CASES: tuple[tuple[str, str, str], ...] = (
 
 
 def test_git_porcelain_mutating_commands_are_reviewed(tmp_path: Path) -> None:
-    wrapper_cases = {case[0] for case in GIT_PORCELAIN_REVIEW_CASES if case[0].startswith("zsh -lc")}
-    assert_reviewed_command_cases(
-        tuple(case for case in GIT_PORCELAIN_REVIEW_CASES if case[0] not in wrapper_cases), tmp_path
-    )
-    for command in wrapper_cases:
-        assert real_native_command_evaluation(command, cwd=tmp_path).native_minimum_action == "block"
+    assert_reviewed_command_cases(GIT_PORCELAIN_REVIEW_CASES, tmp_path)
 
 
 GIT_PORCELAIN_SAFE_COMMANDS: tuple[str, ...] = (

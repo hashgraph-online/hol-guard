@@ -13,7 +13,7 @@ from tests.command_extension_contracts import (
     assert_safe_command_cases,
     enable_local_admin_extension_layer,
 )
-from tests.native_command_test_support import real_native_command_evaluation, real_native_review_fixture
+from tests.native_command_test_support import real_native_command_evaluation
 
 _PUSH_ACTION = "Ollama model publication command"
 _RM_ACTION = "Ollama model removal command"
@@ -58,9 +58,6 @@ def test_enabled_ollama_publication_and_removal_reach_review(tmp_path: Path) -> 
             home_dir=tmp_path,
             extension_control_layers=(enable_local_admin_extension_layer("command.ollama"),),
         ).evaluation
-        if evaluation.command.confidence != "exact":
-            assert evaluation.command.uncertainty_reason == "transparent_wrapper_not_yet_supported"
-            continue
         matched = {
             item.rule.rule_id
             for item in evaluation.extension_observations
@@ -73,15 +70,6 @@ def test_enabled_ollama_publication_and_removal_reach_review(tmp_path: Path) -> 
 
 def test_registry_observations_attribute_push_and_rm(tmp_path: Path) -> None:
     for command, _action_class, expected_rule in OLLAMA_REVIEW_CASES:
-        if command.startswith("zsh -lc"):
-            fixture = real_native_review_fixture(
-                command,
-                controls=(("extension", "command.ollama", "enabled"),),
-            )
-            assert fixture.payload["command_extensions"]["evaluation_error"] == "native_command_evaluation_failed"
-            assert fixture.payload["command_extensions"]["observations"] == []
-            assert fixture.payload["command_model"]["uncertainty_reason"] == "transparent_wrapper_not_yet_supported"
-            continue
         observations = real_native_command_evaluation(
             command,
             cwd=tmp_path,
