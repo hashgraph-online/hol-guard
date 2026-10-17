@@ -1,0 +1,45 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.seminara",
+  "version": "1.0.0",
+  "name": "Seminara MCP",
+  "description": "Orchestrates autonomous live presentation sessions, slide synchronization, knowledge base injection, and lead capture for Seminara. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "online.seminara",
+    "displayName": "Seminara",
+    "url": "https://seminara.online"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniGlobeAlt",
+    "background": "#1D6FF4"
+  },
+  "homepage": "https://seminara.online",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "seminara-cli"
+  },
+  "riskClasses": ["external-session-creation", "external-lead-export"],
+  "tools": [
+    { "name": "create_session", "state": "review" },
+    { "name": "export_leads", "state": "review" },
+    { "name": "list_sessions", "state": "inherit" },
+    { "name": "get_session", "state": "inherit" },
+    { "name": "get_session_analytics", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://seminara.online",
+    "https://github.com/shivamselam/seminara-agentic-suite",
+    "https://www.npmjs.com/package/seminara-cli"
+  ],
+  "saferAlternatives": [
+    "Keep create_session on Review so an agent cannot provision new presentation sessions or consume account minutes without explicit confirmation.",
+    "Keep export_leads on Review so captured attendee contact information and PII cannot be exported without explicit user approval.",
+    "Use list_sessions, get_session, and get_session_analytics for read-only inspection of active presentations without modifying state or exposing attendee PII."
+  ]
+}
