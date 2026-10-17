@@ -117,6 +117,14 @@ fn unsupported_loops_fall_back_to_review() {
         "for f in README.md; do unset f; cat $f; done",
         "for f in a,b; do export IFS=,; cat $f; done",
         "for f in README.md; do cat $f \u{1}; done",
+        // Quoting splits the name in the written text, not in the word the
+        // shell builds.
+        "for file in README.md; do fi''le=secret; cat $file; done",
+        "for file in README.md; do fi\"\"le=secret; cat $file; done",
+        "for file in README.md; do fi\\le=secret; cat $file; done",
+        "for file in README.md; do read fi''le; cat $file; done",
+        "for file in README.md; do printf -v fi''le %s secret; cat $file; done",
+        "for file in a,b; do export I''FS=,; cat $file; done",
     ] {
         assert_eq!(decide(command).0, "review", "{command}");
     }
