@@ -68,6 +68,7 @@ pub mod pretool_git_filter_config;
 pub mod pretool_git_global_config;
 pub mod pretool_git_hash_object;
 pub mod pretool_git_helper_config;
+pub mod pretool_git_history_reads;
 pub mod pretool_git_init_chain;
 pub mod pretool_git_large_listing;
 pub mod pretool_git_merge_integration;

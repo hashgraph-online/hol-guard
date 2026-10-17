@@ -54,6 +54,9 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // an object read can fetch from a partial clone's promisor.
                         "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
                         | "rev-list" => true,
+                        // blame and reflog page by default; describe honors
+                        // pager.describe when it is set.
+                        "blame" | "describe" | "reflog" => true,
                         // grep pages by default through pager.grep or core.pager.
                         "grep" => true,
                         _ => false,

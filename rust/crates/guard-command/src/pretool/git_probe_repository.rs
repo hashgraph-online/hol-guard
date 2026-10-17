@@ -22,7 +22,13 @@ pub(in crate::pretool) fn repository_inert(
     arguments: &[String],
     deadline: Instant,
 ) -> Option<bool> {
-    let refreshes = matches!(operation, "status" | "diff");
+    // `git describe --dirty` and `--broken` refresh the index before they
+    // answer, so they reach the `post-index-change` hook the same way.
+    let refreshes = matches!(operation, "status" | "diff")
+        || super::super::git_history_reads::refreshes_the_index(
+            operation,
+            arguments.get(1..).unwrap_or_default(),
+        );
     if refreshes && !super::submodules_are_inert(base, arguments, deadline)? {
         return Some(false);
     }

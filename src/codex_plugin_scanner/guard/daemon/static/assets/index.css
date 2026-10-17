@@ -628,6 +628,10 @@
     bottom: 26px;
   }
 
+  .bottom-\[calc\(var\(--guard-shell-mobile-nav-height\,0px\)\+env\(safe-area-inset-bottom\)\)\] {
+    bottom: calc(var(--guard-shell-mobile-nav-height, 0px) + env(safe-area-inset-bottom));
+  }
+
   .bottom-full {
     bottom: 100%;
   }
@@ -828,6 +832,10 @@
 
   .mr-2 {
     margin-right: calc(var(--spacing) * 2);
+  }
+
+  .mr-auto {
+    margin-right: auto;
   }
 
   .-mb-px {
@@ -6436,6 +6444,16 @@
     color: var(--color-white);
   }
 
+  .aria-\[current\]\:bg-brand-blue\/5[aria-current] {
+    background-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .aria-\[current\]\:bg-brand-blue\/5[aria-current] {
+      background-color: color-mix(in oklab, var(--brand-blue) 5%, transparent);
+    }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .motion-safe\:transition-\[height\] {
       transition-property: height;
@@ -6821,6 +6839,10 @@
   }
 
   @media (min-width: 48rem) {
+    .md\:bottom-0 {
+      bottom: 0;
+    }
+
     .md\:col-span-8 {
       grid-column: span 8 / span 8;
     }
