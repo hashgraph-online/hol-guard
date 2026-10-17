@@ -1263,6 +1263,43 @@
       "expected_effective_segments": [],
       "id": "unrelated-git",
       "rule_id": "command.kintsua.watch-snapshot"
+    },
+    {
+      "command": "kintsua watch diff --server https://mcp.deepwiki.com/mcp $UPDATE_FLAG",
+      "disabled_permissions": [
+        "command.kintsua.permission.lockfile-rewrite"
+      ],
+      "enabled_extensions": [
+        "command.kintsua"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "update-expansion-disabled-permission",
+      "rule_id": "command.kintsua.watch-diff-update"
+    },
+    {
+      "command": "kintsua watch diff --server https://mcp.deepwiki.com/mcp $PUSH_FLAG",
+      "disabled_permissions": [
+        "command.kintsua.permission.hosted-push"
+      ],
+      "enabled_extensions": [
+        "command.kintsua"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "push-expansion-disabled-permission",
+      "rule_id": "command.kintsua.watch-push"
+    },
+    {
+      "command": "kintsua watch diff --server https://mcp.deepwiki.com/mcp $PUSH_FLAG",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.kintsua"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [],
+      "id": "push-expansion",
+      "rule_id": "command.kintsua.watch-push"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
