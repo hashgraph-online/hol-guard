@@ -93,6 +93,21 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.49.0](https://github.com/hashgraph-online/hol-guard/compare/v3.48.0...v3.49.0) (2026-10-17)
+
+
+### Features
+
+* **guard:** add extensions list and mcp list inventory commands ([#5022](https://github.com/hashgraph-online/hol-guard/issues/5022)) ([bb05a30](https://github.com/hashgraph-online/hol-guard/commit/bb05a30258932a24dca5e30719288c07e2a0e6e2))
+* **guard:** decide relayed package calls in the native runtime ([#5017](https://github.com/hashgraph-online/hol-guard/issues/5017)) ([512b92f](https://github.com/hashgraph-online/hol-guard/commit/512b92f070cdbf5c6513ceb3f03cef7ddebc49dd))
+
+
+### Bug Fixes
+
+* **guard:** copy a local repository without an approval ([#5020](https://github.com/hashgraph-online/hol-guard/issues/5020)) ([f766b0b](https://github.com/hashgraph-online/hol-guard/commit/f766b0b8157e5383f5d545f6244cd5c7a3634ec5))
+* **guard:** let a sibling search answer for the files it actually reads ([#5005](https://github.com/hashgraph-online/hol-guard/issues/5005)) ([a2e237d](https://github.com/hashgraph-online/hol-guard/commit/a2e237dfb80d1d82eb804474008f8ae6cb547f65))
+* **guard:** search a neighbouring repository with grep, not only with rg ([#5011](https://github.com/hashgraph-online/hol-guard/issues/5011)) ([c295801](https://github.com/hashgraph-online/hol-guard/commit/c295801baa5f8f65893a99ae3ddf41345e825cb3))
+
 ## [3.48.0](https://github.com/hashgraph-online/hol-guard/compare/v3.47.0...v3.48.0) (2026-10-17)
 
 
