@@ -152,6 +152,7 @@ pub mod package_manager_command;
 pub mod package_manifest_diff;
 #[cfg(not(guard_source_bootstrap))]
 mod packaged_blob;
+mod parser_brace_command;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
