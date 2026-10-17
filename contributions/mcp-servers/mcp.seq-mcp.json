@@ -13,7 +13,7 @@
   },
   "icon": {
     "kind": "react-icon",
-    "name": "HiServer",
+    "name": "HiMiniCloud",
     "background": "#0B1220"
   },
   "homepage": "https://github.com/itachiuchihadev/seq-mcp",
