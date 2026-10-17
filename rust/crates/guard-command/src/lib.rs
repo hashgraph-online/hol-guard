@@ -754,6 +754,8 @@ pub mod hook_adapter_value;
 #[cfg(all(test, unix))]
 mod hook_adapter_vector_tests;
 pub mod hook_evidence_writer;
+#[cfg(test)]
+mod hook_evidence_writer_tests;
 pub mod hook_responses;
 pub mod inventory_contract;
 pub mod js_semver;
