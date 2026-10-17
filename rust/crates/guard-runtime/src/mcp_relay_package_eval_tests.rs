@@ -5,6 +5,8 @@
 
 use super::*;
 
+use crate::managed_policy_registry::{RegistryAuthority, RegistryRead};
+
 use std::fs;
 use std::path::Path;
 
@@ -44,6 +46,7 @@ fn explicit(path: &Path) -> ManagedPolicySource {
         policy_path: Some(path.to_path_buf()),
         write_cache: false,
         machine_root: None,
+        registry: RegistryAuthority::Native,
     }
 }
 
@@ -300,10 +303,10 @@ fn a_policy_this_caller_cannot_honour_does_not_settle_a_round_that_needs_the_net
 
 #[test]
 fn a_machine_whose_registry_policy_is_unread_does_not_settle_a_round_that_needs_the_network() {
-    // Windows keeps the administrator's policy in the registry, which this
-    // runtime does not read, so a proxy, CA, or public-registry rule set there
-    // is invisible to this caller. The exchange is refused rather than
-    // performed under the unmanaged default.
+    // Windows keeps the administrator's policy in the registry. A key this
+    // account may not read hides any proxy, CA, or public-registry rule set
+    // there, so the exchange is refused rather than performed under the
+    // unmanaged default.
     let needs = vec![need("https://registry.npmjs.org/left-pad")];
     let mut resident = ScriptedResident::new(vec![(
         EGRESS_REQUIRED_CODE,
@@ -314,6 +317,7 @@ fn a_machine_whose_registry_policy_is_unread_does_not_settle_a_round_that_needs_
         policy_path: None,
         write_cache: false,
         machine_root: None,
+        registry: RegistryAuthority::Fixed(RegistryRead::Denied),
     };
 
     let refused = evaluate_package_request(

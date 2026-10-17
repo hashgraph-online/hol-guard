@@ -9,8 +9,19 @@
 //! sends that ticket back to spend the claim. A ticket names this holder's
 //! epoch, is taken once, and expires, so a relay can only claim for a call
 //! this resident decided, and never twice.
+//!
+//! A package call's claim takes one more round trip. Its post-claim
+//! revalidation re-resolves the package policy against the registry and the
+//! archive, which the resident cannot reach, so a claim that needs that
+//! evaluation is answered with a ticket held afresh and spent by the claim
+//! the relay sends the evaluation back with. The TTL of that second ticket
+//! runs from the answer rather than from the decision, because an evaluation
+//! may outlast it; the staleness the TTL bounds is caught by the spend
+//! itself, which refuses any admission that is not the very snapshot and
+//! binding the decision was made under.
 
 use serde::Deserialize;
+use serde_json::{Map, Value};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
@@ -26,6 +37,11 @@ pub(crate) const CLAIM_TTL: Duration = Duration::from_secs(30);
 pub(crate) struct McpRelayClaimRequestV1 {
     pub(crate) guard_home: String,
     pub(crate) ticket: String,
+    /// The post-claim supply-chain evaluation of a package call's request,
+    /// which the relay performs and sends with the second claim of the same
+    /// ticket. A tool call's claim carries none.
+    #[serde(default)]
+    pub(crate) package_evaluation: Option<Map<String, Value>>,
 }
 
 struct Held<T> {
@@ -104,6 +120,27 @@ impl<T> HeldClaims<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_claim_states_the_evaluation_it_carries_or_none_at_all() {
+        let plain: McpRelayClaimRequestV1 = serde_json::from_value(serde_json::json!({
+            "guard_home": "/guard",
+            "ticket": "claim-0-0-0:1",
+        }))
+        .expect("a tool call's claim carries no evaluation");
+        assert_eq!(plain.package_evaluation, None);
+
+        let package: McpRelayClaimRequestV1 = serde_json::from_value(serde_json::json!({
+            "guard_home": "/guard",
+            "ticket": "claim-0-0-0:1",
+            "package_evaluation": {"decision": "allow"},
+        }))
+        .expect("a package call's second claim carries the evaluation");
+        assert_eq!(
+            package.package_evaluation.expect("the evaluation")["decision"],
+            serde_json::json!("allow")
+        );
+    }
 
     #[test]
     fn a_ticket_is_taken_once() {

@@ -9,6 +9,7 @@
 //! the script's fixed fail-closed payload, and an approval wait only applies
 //! the resolution the daemon reports for the request it opened.
 
+use crate::blocked_request_mode::is_unlinked_connector_setup_reason;
 use crate::bounded_hook_bridge_render::{member, FAILURE_REASON};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::hook_env_stamp::{dumps, set_member};
@@ -299,9 +300,11 @@ pub(crate) fn to_native(
             if decision != "allow" && !reason.is_empty() {
                 payload.push(("reason".to_owned(), PyVal::Str(reason.clone())));
             }
+            let unlinked = is_unlinked_connector_setup_reason(&reason);
             for key in APPROVAL_KEYS {
                 match member(response, key) {
                     None | Some(PyVal::Null) => {}
+                    Some(_) if unlinked && key != "reason_code" => {}
                     Some(value) => set_member(&mut payload, key, value.clone()),
                 }
             }

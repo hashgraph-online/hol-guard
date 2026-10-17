@@ -436,6 +436,11 @@ def _configure_guard_local_parsers(
     _add_guard_common_args(inventory_parser)
     inventory_parser.add_argument("--json", action="store_true")
     _add_aibom_cli_args(inventory_parser)
+    inventory_parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Report the full inventory to Guard Cloud on the next sync instead of only changes.",
+    )
 
     abom_parser = guard_subparsers.add_parser("abom", help="Export a local Guard artifact bill of materials")
     _add_guard_common_args(abom_parser)

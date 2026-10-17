@@ -12,11 +12,42 @@ pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool 
         crate::pretool::PathContext::default(),
         true,
         true,
+        true,
     )
 }
 
 pub(super) fn safe_rg_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
-    safe_rg_arguments_inner(arguments, context, false, true)
+    safe_rg_arguments_inner(arguments, context, false, true, true)
+}
+
+/// An `rg` segment inside its command. A missing operand is proven only
+/// while it stays missing: no other segment may create a file, directory or
+/// link there, because `rg` reads whatever appears at that path and walks it
+/// when it turns out to be a directory.
+pub(super) fn safe_rg_segment(
+    model: &crate::CanonicalCommandV1,
+    segment: &crate::CommandSegmentV1,
+    context: ReadContext<'_>,
+) -> bool {
+    // Downstream of a pipe and with no path operand, `rg` reads the previous
+    // step's output: it opens no file and walks no directory, so the ignore
+    // files below the working directory have nothing to re-include and the
+    // root proof has no root to answer for. Without this, every
+    // `git diff | rg PATTERN` in a repository whose `.gitignore` carries a
+    // `!.env.example` rule went to review for a search that never touches
+    // the tree.
+    if segment.pipeline_index > 0
+        && config_cannot_add_arguments(&segment.arguments, context)
+        && safe_rg_stdin_arguments(&segment.arguments)
+    {
+        return true;
+    }
+    let absent = model
+        .segments
+        .iter()
+        .filter(|other| other.span != segment.span)
+        .all(|other| super::grep::creates_nothing(other, true));
+    safe_rg_arguments_inner(&segment.arguments, context, false, true, absent)
 }
 
 /// A review reason for a lone `rg` held back only because an ignore file
@@ -36,12 +67,79 @@ pub(in crate::pretool) fn rg_hidden_whitelist_reason(
         && model.wrapper_chain.is_empty()
         && segment.environment_names.is_empty()
         && super::super::executable_basename(segment.executable.as_deref()?) == "rg"
-        && safe_rg_arguments_inner(&segment.arguments, context, false, false)
-        && !safe_rg_arguments_inner(&segment.arguments, context, false, true);
+        && safe_rg_arguments_inner(&segment.arguments, context, false, false, true)
+        && !safe_rg_arguments_inner(&segment.arguments, context, false, true, true);
     held.then(|| {
         "HOL Guard requires review because an ignore file here re-includes a hidden file (for example a `!.env.example` rule), so rg would read that file too. Name the directories to search, such as `rg PATTERN src docs`, or list names with `rg --files`."
             .to_owned()
     })
+}
+
+/// Whether no inherited `RIPGREP_CONFIG_PATH` can add arguments to this
+/// `rg`.
+///
+/// A config file's lines become command-line arguments, so one can hand the
+/// command a path of its own. A filter that only reads its input would then
+/// search that file instead, which is why a piped `rg` still has to answer
+/// for the config even though it walks no tree itself.
+fn config_cannot_add_arguments(arguments: &[String], context: ReadContext<'_>) -> bool {
+    context.ripgrep_config_absent || config_option_present(arguments)
+}
+
+/// Short options that take the next argument as their value, as the parsed
+/// pass below reads them.
+const RG_SHORT_VALUE_OPTIONS: [char; 13] = [
+    'e', 'f', 'g', 'A', 'B', 'C', 'E', 'j', 'm', 'M', 'r', 't', 'T',
+];
+
+/// Whether `--no-config` is here as an option rather than as the value of
+/// one.
+///
+/// `rg -e --no-config` searches its input for that string, and
+/// `rg --replace --no-config` writes it over every match: an option takes
+/// the next argument whatever it looks like. Reading either as the flag
+/// would clear a config the command still loads, and the config's lines
+/// become arguments of their own, so option values are stepped over here the
+/// way the parsed pass steps over them, and `--` ends the options.
+fn config_option_present(arguments: &[String]) -> bool {
+    let mut pending_value = false;
+    for argument in arguments {
+        if std::mem::take(&mut pending_value) {
+            continue;
+        }
+        if argument == "--" {
+            return false;
+        }
+        if let Some(name) = argument.strip_prefix("--").filter(|name| !name.is_empty()) {
+            match name.split_once('=') {
+                // `--opt=value` carries its value, so the next argument is an
+                // option or an operand again.
+                Some((name, _)) => {
+                    if name == "no-config" {
+                        return true;
+                    }
+                }
+                None => {
+                    if name == "no-config" {
+                        return true;
+                    }
+                    pending_value = options::rg_value_role(argument).is_some();
+                }
+            }
+            continue;
+        }
+        if let Some(cluster) = argument.strip_prefix('-').filter(|rest| !rest.is_empty()) {
+            // The first value-taking letter consumes the rest of the cluster,
+            // and the next argument only when nothing is attached to it.
+            if let Some((offset, option)) = cluster
+                .char_indices()
+                .find(|(_, option)| RG_SHORT_VALUE_OPTIONS.contains(option))
+            {
+                pending_value = cluster[offset + option.len_utf8()..].is_empty();
+            }
+        }
+    }
+    false
 }
 
 fn safe_rg_arguments_inner(
@@ -49,8 +147,16 @@ fn safe_rg_arguments_inner(
     context: ReadContext<'_>,
     stdin_only: bool,
     prove_roots: bool,
+    allow_absent: bool,
 ) -> bool {
-    rg_arguments_pass(arguments, context, stdin_only, prove_roots, false)
+    rg_arguments_pass(
+        arguments,
+        context,
+        stdin_only,
+        prove_roots,
+        false,
+        allow_absent,
+    )
 }
 
 /// One pass over `rg` arguments. With `pattern_from_option`, every
@@ -61,6 +167,7 @@ fn rg_arguments_pass(
     stdin_only: bool,
     prove_roots: bool,
     pattern_from_option: bool,
+    allow_absent: bool,
 ) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
     // `-g`/`--glob` (not the case-blind `--iglob`) awaiting its value.
@@ -219,6 +326,7 @@ fn rg_arguments_pass(
             if unsafe_search_value(SearchValueRole::Path, argument, context)
                 && !tree::rg_root_inside_cwd(argument, context)
                 && !sibling::rg_sibling_repository_root(argument, context)
+                && !sibling::named_path(argument, context, allow_absent)
                 && !tree::safe_recursive_search_target(argument, context)
                 && (!argument.contains(['*', '?', '['])
                     || !tree::safe_glob_search_operand(argument, context))
@@ -233,7 +341,14 @@ fn rg_arguments_pass(
     // `-f` supplies one, wherever that option appears: in `rg .env -e KEY`,
     // `.env` is a path. Check again with every positional as a path.
     if pattern_option_seen && !pattern_from_option {
-        return rg_arguments_pass(arguments, context, stdin_only, prove_roots, true);
+        return rg_arguments_pass(
+            arguments,
+            context,
+            stdin_only,
+            prove_roots,
+            true,
+            allow_absent,
+        );
     }
     // An inherited RIPGREP_CONFIG_PATH prepends its lines to these
     // arguments, so `--pre`, `--hidden` or `--no-ignore` there would undo
@@ -251,4 +366,43 @@ fn rg_arguments_pass(
                 context.home_dir,
                 context.cwd,
             ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::config_option_present;
+
+    fn arguments(line: &str) -> Vec<String> {
+        line.split_whitespace().map(str::to_owned).collect()
+    }
+
+    #[test]
+    fn the_flag_counts_only_where_ripgrep_reads_it_as_an_option() {
+        for line in [
+            "--no-config PATTERN",
+            "-n --no-config PATTERN",
+            "--no-config -e PATTERN",
+            "-e PATTERN --no-config",
+            "-A3 --no-config PATTERN",
+            "--max-count=2 --no-config PATTERN",
+            "-in --no-config PATTERN",
+        ] {
+            assert!(config_option_present(&arguments(line)), "{line}");
+        }
+        for line in [
+            "PATTERN",
+            // The value of an option, whatever it is spelled like.
+            "-e --no-config",
+            "--max-count --no-config",
+            "--replace --no-config",
+            "-f --no-config",
+            "-C --no-config -e PATTERN",
+            "-ie --no-config",
+            // Past `--` every argument is an operand.
+            "-- --no-config",
+            "PATTERN -- --no-config",
+        ] {
+            assert!(!config_option_present(&arguments(line)), "{line}");
+        }
+    }
 }

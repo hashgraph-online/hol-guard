@@ -256,16 +256,19 @@ body {
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 60%, rgba(85,153,254,0.04) 100%);
 }
 
-a,
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
+/* Base layer so Tailwind text and weight utilities on controls still apply. */
+@layer base {
+  a,
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
 
-button {
-  cursor: pointer;
+  button {
+    cursor: pointer;
+  }
 }
 
 input:focus-visible,

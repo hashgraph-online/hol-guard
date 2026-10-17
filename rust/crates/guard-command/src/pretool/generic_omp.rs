@@ -7,6 +7,8 @@
 
 #[path = "generic_omp_eval.rs"]
 mod eval;
+#[path = "generic_omp_learn.rs"]
+mod learn;
 #[path = "generic_omp_yield.rs"]
 mod yield_report;
 
@@ -95,16 +97,15 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
         && signals.path_values.is_empty()
 }
 
-/// `learn` stores one memory note and returns the store's acknowledgement.
+/// `learn` stores one memory note, optionally with one managed skill, and
+/// returns the store's acknowledgement.
 /// Its PreToolUse stays an unknown-tool review, so under enforce the call has
-/// run only after a person approved it. Without this, that approved call's
-/// result is withheld with nothing left to approve.
+/// run only after a person approved it, and the result it returns has nothing
+/// left to approve. Withholding it would leave Oh My Pi without the
+/// acknowledgement for a call that already happened. The note shapes this
+/// covers are named in `generic_omp_learn`.
 fn learn_input(input: &Map<String, Value>) -> bool {
-    input.len() == 1
-        && input
-            .get("memory")
-            .and_then(Value::as_str)
-            .is_some_and(|memory| !memory.trim().is_empty())
+    learn::note_input(input)
 }
 
 /// `Some` only when a bounded proof applies; `None` keeps the normal path.
@@ -464,7 +465,31 @@ fn listing_target_proven(
             context.path.home_dir,
             context.path.cwd,
         )
+        || home_dot_directory_listing(target, has_glob_selector, recursive, context)
         || (!has_glob_selector && project_skill_listing(target, context))
+}
+
+/// A names-only listing of a dot-directory in the home directory, the same
+/// one `ls ~/.nvm` already gets.
+///
+/// The shared screen is bounded to the directory's own entries, because a
+/// walk below `~/.config` prints the names inside `~/.config/gh`. The host
+/// recurses only for `find` or a `pattern`, and a selector walks below its
+/// prefix, so both are left out and the entry names of one directory are
+/// what remains.
+fn home_dot_directory_listing(
+    target: &str,
+    has_glob_selector: bool,
+    recursive: bool,
+    context: &OmpContext<'_>,
+) -> bool {
+    !has_glob_selector
+        && !recursive
+        && super::super::read_paths::home_hidden_directory(
+            target,
+            context.path.home_dir,
+            context.path.cwd,
+        )
 }
 
 /// A names-only listing of the session's own project skill folders. Only a

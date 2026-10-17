@@ -93,8 +93,13 @@ impl Rig {
         connection.execute_batch(SCHEMA).unwrap();
         connection
             .execute(
-                "insert into local_cli_schema_migration values (1, 11, ?1)",
-                [crate::local_store_read::schema_checksum(11)],
+                "insert into local_cli_schema_migration values (1, ?1, ?2)",
+                rusqlite::params![
+                    crate::local_store_read::SUPPORTED_SCHEMA_VERSION,
+                    crate::local_store_read::schema_checksum(
+                        crate::local_store_read::SUPPORTED_SCHEMA_VERSION
+                    )
+                ],
             )
             .unwrap();
         Self { home, connection }

@@ -39,14 +39,26 @@ pub(crate) fn get_approval_extension_allow_hint(
 }
 
 /// `approval_desktop_notified_at`: the stored marker when it is a non-empty
-/// string.
+/// string. A request in a `connector:<identity>:<action>` group also reads
+/// the earliest marker of another pending request for the same connector
+/// identity, so setting up one connector raises one notice however many of
+/// its commands are waiting.
 pub(crate) fn approval_desktop_notified_at(
     connection: &Connection,
     args: &Args<'_>,
 ) -> StoreResult<Value> {
     let row = query_one(
         connection,
-        "select desktop_notified_at from approval_requests where request_id = ?",
+        "select coalesce(nullif(own.desktop_notified_at, ''), ( \
+           select min(nullif(other.desktop_notified_at, '')) from approval_requests other \
+           where own.queue_group_id like 'connector:%' \
+             and instr(substr(own.queue_group_id, 11), ':') > 1 \
+             and other.status = 'pending' and other.request_id != own.request_id \
+             and other.oauth_source is own.oauth_source \
+             and substr(other.queue_group_id, 1, 10 + instr(substr(own.queue_group_id, 11), ':')) \
+               = substr(own.queue_group_id, 1, 10 + instr(substr(own.queue_group_id, 11), ':')) \
+         )) as desktop_notified_at \
+         from approval_requests own where own.request_id = ?",
         &[Value::from(args.str("request_id")?)],
     )?;
     Ok(non_empty_text(

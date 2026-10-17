@@ -9,7 +9,8 @@
 //! because the expression prints names, never contents. The Oh My Pi
 //! `~/.agent` root may be one when its tree clears the walk `ls -R` needs.
 //! Another home dot-directory may be one when `-maxdepth 1` keeps the walk to
-//! its own entries.
+//! its own entries, or when the expression prints only the paths an ordinary
+//! name pattern selects.
 
 use super::safe_reads::{bounded_read_target, verified_path_context};
 
@@ -43,6 +44,12 @@ pub(super) fn safe_find_listing_arguments(
                             root,
                             context.home_dir,
                             context.cwd,
+                        ))
+                    || (match_bounded(expression)
+                        && super::read_paths::home_hidden_tool_directory(
+                            root,
+                            context.home_dir,
+                            context.cwd,
                         )))
         })
         && safe_expression(expression)
@@ -71,6 +78,97 @@ fn entries_only(expression: &[String]) -> bool {
         }
     }
     bounded
+}
+
+/// Whether the expression prints only the paths a name pattern selects.
+///
+/// `find` walks whatever its root holds, but what it prints is what the
+/// expression matches, and the depth bound is there for what a deeper walk
+/// would print rather than for the walking itself. A conjunction of `-name`
+/// patterns, none of which can name a credential store or the file a tool
+/// keeps its own login in, bounds the output to paths that name no account,
+/// host or key, however deep the walk goes: `find ~/.agents -maxdepth 4
+/// -name pr-approve-merge.sh` can print nothing else.
+///
+/// Alternation and negation both widen the output back to the whole tree
+/// (`-not -name '*.md'` prints everything else), so the expression must be a
+/// plain conjunction, and it must carry at least one pattern: an expression
+/// that only bounds depth or type still enumerates the tree. `-path` and its
+/// spellings match the whole path rather than the entry name, so a directory
+/// prefix alone satisfies them and they bound nothing here.
+fn match_bounded(expression: &[String]) -> bool {
+    let mut bounded = false;
+    let mut index = 0;
+    while index < expression.len() {
+        let token = expression[index].as_str();
+        index += 1;
+        match token {
+            "!" | "-not" | "-o" | "-or" | "(" | ")" | "-path" | "-ipath" | "-wholename"
+            | "-iwholename" => return false,
+            "-name" | "-iname" => {
+                let Some(pattern) = expression.get(index) else {
+                    return false;
+                };
+                index += 1;
+                if !selects_ordinary_names(pattern) {
+                    return false;
+                }
+                bounded = true;
+            }
+            // `find` evaluates left to right, so a print that runs before the
+            // first pattern prints every entry the walk reaches and the
+            // pattern after it filters nothing:
+            // `find ~/.codex -print -name run.sh` prints the whole tree.
+            "-print" | "-print0" if !bounded => return false,
+            "-type" | "-maxdepth" | "-mindepth" => index += 1,
+            _ => {}
+        }
+    }
+    bounded
+}
+
+/// Names prose is written under. A pattern anchored to one of these ends
+/// matches only documents: a token is not written in Markdown, and no
+/// credential, key or login file this screen refuses carries such a suffix.
+const DOCUMENT_SUFFIXES: [&str; 3] = [".md", ".markdown", ".rst"];
+
+/// Whether `pattern` names entries specifically enough that the walk prints
+/// only what the agent already named, and can name nothing a secret is kept
+/// in.
+///
+/// A wildcard stands for whatever the tree happens to hold, so a pattern
+/// built around one selects names the agent never wrote: `*.json` prints
+/// `auth.json`, `aut*` and `a?th.json` print it too. Deciding which names a
+/// glob can reach means deciding it for every secret-bearing spelling, so a
+/// glob survives only as a document suffix anchored at the end of the name:
+/// `find ~/.codex -name "*.md"` is how an agent finds the notes a harness
+/// keeps, and every path it can print is prose. What is left of such a
+/// pattern is still read through [`pattern_can_select_secret`], which lets a
+/// wildcard stand for the letters it could take, so `cred?ntials*.md` is
+/// refused along with the name it spells.
+///
+/// Without a wildcard the pattern is the name itself, so it is read the way a
+/// file name is read: the stems and suffixes a token, key or login file is
+/// written under, refused as whole names rather than as letters appearing
+/// somewhere, which is what keeps `keyboard` a name and not a key. `.env`
+/// files are refused wherever the word appears, because an environment file
+/// is named for what it holds wherever it sits, and a pattern aimed at a
+/// hidden entry is refused outright: that is where a tool keeps its own
+/// login.
+fn selects_ordinary_names(pattern: &str) -> bool {
+    let lowered = pattern.to_ascii_lowercase();
+    if lowered.starts_with('.') || lowered.contains(['/', '\\']) || lowered.contains("..") {
+        return false;
+    }
+    if lowered.contains(['*', '?', '[', ']', '{', '}']) {
+        return DOCUMENT_SUFFIXES
+            .iter()
+            .any(|suffix| lowered.ends_with(suffix))
+            && !crate::credential_store_names::pattern_can_select_secret(&lowered);
+    }
+    lowered.chars().count() >= 3
+        && !lowered.contains("env")
+        && !crate::credential_store_names::secret_bearing_file_name(&lowered)
 }
 
 fn safe_expression(expression: &[String]) -> bool {

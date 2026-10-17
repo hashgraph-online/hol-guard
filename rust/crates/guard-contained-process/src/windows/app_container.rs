@@ -52,7 +52,7 @@ impl AppContainer {
     /// Lets the container read registry keys that grant `registryRead`. Node
     /// cannot start without it: libuv aborts when Winsock fails to start, and
     /// the Winsock catalog is readable only by that capability or by every
-    /// AppContainer. It also exposes HKCU, so only build runs request it; the
+    /// AppContainer. It also exposes HKCU, so only Node runs request it; the
     /// container still has no network capability.
     pub fn allow_registry_read(&mut self) -> io::Result<()> {
         // The well-known SID Windows derives for the `registryRead` capability.

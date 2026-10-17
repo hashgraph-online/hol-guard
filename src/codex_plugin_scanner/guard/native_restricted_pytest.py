@@ -194,7 +194,12 @@ def decode_native_plan(result: dict[str, Any], profiles: tuple[str, ...]):
             or (
                 result["backend"] == "windows-appcontainer"
                 and sys.platform == "win32"
-                and result["profile_version"] in {"python-eval-readonly-v1", "node-build-output-v1"}
+                and result["profile_version"]
+                in {
+                    "python-eval-readonly-v1",
+                    "node-eval-readonly-v1",
+                    "node-build-output-v1",
+                }
             )
         )
         or not result["command"]

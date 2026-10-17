@@ -25,6 +25,29 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 
 
+def lane_catalog(harness: str) -> tuple[Scenario, ...]:
+    """The catalog this lane can drive.
+
+    A ``native-tools`` case names the tools the model must use, in Oh My Pi's
+    vocabulary. The lane runs it when the harness has its own tool for every one
+    of them: Claude Code and Cursor read, write and edit with structured tools,
+    Codex does that work through its shell. The rest (glob, grep, eval, task,
+    wait) are Oh My Pi's alone, and the memory-note cases drive its learn tool,
+    which no other lane has at all.
+
+    This is the lane's reach, so it decides which false positives a harness run
+    can see at all. A read the harness makes with its own tool is a different
+    request from the shell spelling of the same read, and only a lane that drives
+    the structured tool exercises it.
+    """
+    tools = adapter(harness).native_tools
+    return tuple(
+        s
+        for s in load_catalog()
+        if s.oracle != "blocked-memory-note" and (s.oracle != "native-tools" or set(s.required_tools) <= tools)
+    )
+
+
 def run_harness_suite(
     *,
     harness: str,
@@ -52,9 +75,7 @@ def run_harness_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    # native-tools cases that drive omp-only tools (glob, grep, eval, task, wait) cannot run on other
-    # lanes; the shell-only ones can, and they exercise the realistic developer environment.
-    catalog = tuple(s for s in load_catalog() if s.oracle != "native-tools" or set(s.required_tools) <= {"bash"})
+    catalog = lane_catalog(harness)
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)

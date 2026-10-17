@@ -8,6 +8,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
 
 def envelope(command: str, request_id: str = "adversarial") -> bytes:
     return json.dumps(
@@ -20,6 +22,13 @@ def envelope(command: str, request_id: str = "adversarial") -> bytes:
             "cwd": os.getcwd(),
             "home_dir": os.getcwd(),
             "guard_home": os.getcwd(),
+            # The runtime answers for what the command inherits from the shell
+            # it would run in, and it cannot read that shell itself. A hook
+            # bridge stamps it on the way in; this harness runs the commands'
+            # own shell, so it stamps its own. Without it the rules that have
+            # to prove an inherited variable away, such as an rg that a
+            # RIPGREP_CONFIG_PATH could hand a path operand, stay at review.
+            "execution_environment": collect_hook_execution_environment(),
             "deadline_budget_ms": 5_000,
         },
         separators=(",", ":"),

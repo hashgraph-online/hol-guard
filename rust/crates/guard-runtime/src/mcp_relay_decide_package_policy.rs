@@ -31,8 +31,9 @@
 //! never asked for, because a relayed call resolves read-only: `claim_saved_approval`
 //! is false, so a saved approval is reported, never consumed.
 
-// The decide path reads this with the rest of the native package lane; until it
-// does, only the tests below resolve a stored policy.
+// What the lookup would have done with the saved row is recorded here for the
+// claim lane to hold against the row it spends, so the field outlives its
+// current readers.
 #![allow(dead_code)]
 
 use super::package_snapshot::{approval_request, feed_snapshot_hash};
@@ -105,6 +106,7 @@ pub(super) struct ProcessFacts<'a> {
 }
 
 /// What the stored policy settles for a relayed package call.
+#[derive(Clone)]
 pub(super) struct PackagePolicy {
     /// The caller's evaluation with the override's rewrite applied.
     pub(super) evaluation: Map<String, Value>,

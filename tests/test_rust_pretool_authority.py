@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any
 
@@ -294,3 +295,144 @@ def test_hook_worker_leaves_out_of_scope_events_to_existing_handling(
         result["reason_code"] == "native_hook_event_unavailable"
         and result["hookSpecificOutput"]["decision"]["behavior"] == "deny"
     )
+
+
+def _status(
+    tmp_path: Path,
+    features: tuple[str, ...],
+) -> runtime.NativeRuntimeStatus:
+    runtime_path = tmp_path / "hol-guard-runtime"
+    runtime_path.write_bytes(b"runtime")
+    return runtime.NativeRuntimeStatus(
+        mode="auto",
+        available=True,
+        compatible=True,
+        reason="ready",
+        identity=runtime.NativeRuntimeIdentity(
+            path=runtime_path,
+            size=runtime_path.stat().st_size,
+            mtime_ns=runtime_path.stat().st_mtime_ns,
+            sha256="0" * 64,
+        ),
+        capabilities=runtime.NativeRuntimeCapabilities(
+            protocol_version=2,
+            runtime_version="test",
+            rule_digest="1" * 64,
+            build_sha="2" * 40,
+            target="test",
+            features=features,
+        ),
+    )
+
+
+def _sent_request(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    features: tuple[str, ...],
+    execution_environment: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_runtime_status",
+        lambda: _status(tmp_path, features),
+    )
+    sent: dict[str, Any] = {}
+
+    class SentError(Exception):
+        """Stops the review once the request has been read."""
+
+    def capture(**kwargs: Any) -> bytes | None:
+        sent.update(json.loads(kwargs["payload"]))
+        raise SentError
+
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.native_pretool.native_resident_client_request",
+        capture,
+    )
+    routes.reset_native_hook_route()
+    with pytest.raises(SentError):
+        pretool.review_pre_tool_native(
+            "rg -n fixture ../service-api",
+            guard_home=tmp_path,
+            cwd=tmp_path / "app-portal",
+            home_dir=tmp_path,
+            execution_environment=execution_environment,
+        )
+    return sent
+
+
+def test_pre_tool_request_carries_the_directories_the_command_runs_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(
+        tmp_path,
+        monkeypatch,
+        ("pre-tool-command-authority-v1", "resident-protocol-v2", "pre-tool-path-context-v1"),
+    )
+    assert sent["request"]["cwd"] == str(tmp_path / "app-portal")
+    assert sent["request"]["home_dir"] == str(tmp_path)
+
+
+def test_the_request_carries_the_shell_the_command_will_run_in(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runtime cannot read the agent's shell, so the hook says what it is.
+
+    A resident daemon is started with its own sanitized environment, so the
+    variables it can read are not the ones the command inherits. Every rule
+    that proves an inherited variable away — a ``RIPGREP_CONFIG_PATH`` that
+    prepends options to ``rg``, an npm or rustup variable that moves what a
+    tool loads — is answered from this stamp or not at all.
+    """
+
+    stamp = {"path": "/usr/bin:/bin", "environment_names": ["PATH"], "environment_digest": "0" * 64}
+    sent = _sent_request(
+        tmp_path,
+        monkeypatch,
+        (
+            "pre-tool-command-authority-v1",
+            "resident-protocol-v2",
+            "pre-tool-path-context-v1",
+            "pre-tool-execution-environment-v1",
+        ),
+        execution_environment=stamp,
+    )
+    assert sent["request"]["execution_environment"] == stamp
+
+
+def test_a_caller_that_cannot_name_the_shell_sends_no_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unstamped request leaves the environment proofs unproven.
+
+    The alternative is worse than a review: the runtime would answer them
+    from its own variables, and a shell that exports a search config would
+    have the command admitted because the daemon exports none.
+    """
+
+    sent = _sent_request(
+        tmp_path,
+        monkeypatch,
+        (
+            "pre-tool-command-authority-v1",
+            "resident-protocol-v2",
+            "pre-tool-path-context-v1",
+            "pre-tool-execution-environment-v1",
+        ),
+    )
+    assert "execution_environment" not in sent["request"]
+
+
+def test_a_runtime_without_the_feature_is_asked_the_question_it_understands(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent = _sent_request(
+        tmp_path,
+        monkeypatch,
+        ("pre-tool-command-authority-v1", "resident-protocol-v2"),
+    )
+    assert "cwd" not in sent["request"]
+    assert "home_dir" not in sent["request"]

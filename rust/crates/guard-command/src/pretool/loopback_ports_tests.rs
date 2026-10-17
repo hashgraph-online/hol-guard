@@ -1,4 +1,4 @@
-use super::dev_server_port;
+use super::{chosen_server_port, dev_server_port};
 
 const ADMIN: [u16; 2] = [2375, 8001];
 
@@ -60,4 +60,28 @@ fn an_unreadable_state_falls_back_to_the_whole_range() {
         assert!(!dev_server_port(5173, &ADMIN, home.0.to_str()), "{name}");
         assert!(dev_server_port(4173, &ADMIN, home.0.to_str()), "{name}");
     }
+}
+
+#[test]
+fn a_chosen_port_opens_only_while_the_daemon_records_another() {
+    let recorded = home("chosen", Some(r#"{"port": 4781}"#));
+    for port in [1024, 3147, 4782, 7392, 32767] {
+        assert!(
+            chosen_server_port(port, &ADMIN, recorded.0.to_str()),
+            "{port}"
+        );
+    }
+    // Privileged and ephemeral ports, listed services and the daemon's own.
+    for port in [80, 1023, 2375, 8001, 4781, 32768, 49152, 54321] {
+        assert!(
+            !chosen_server_port(port, &ADMIN, recorded.0.to_str()),
+            "{port}"
+        );
+    }
+    // With no readable record the daemon may hold any fixed port.
+    for (name, state) in [("chosen-none", None), ("chosen-garbage", Some("not json"))] {
+        let home = home(name, state);
+        assert!(!chosen_server_port(3147, &ADMIN, home.0.to_str()), "{name}");
+    }
+    assert!(!chosen_server_port(3147, &ADMIN, None));
 }

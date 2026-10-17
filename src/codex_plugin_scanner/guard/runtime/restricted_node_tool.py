@@ -26,7 +26,16 @@ from .restricted_vite_output import config_bundle_directory, declared_vite_outpu
 from .restricted_vitest import run_restricted_node_plan
 from .secret_sensitivity import classify_secret_path
 
-_ENTRIES = {"eslint": "eslint/bin/eslint.js", "tsc": "typescript/bin/tsc", "vite": "vite/bin/vite.js"}
+# Each tool names the entrypoints its published versions install. Prettier 3
+# moved its executable into `bin/`, and version 2 remains common enough to name.
+_ENTRIES: dict[str, tuple[str, ...]] = {
+    "eslint": ("eslint/bin/eslint.js",),
+    "tsc": ("typescript/bin/tsc",),
+    "vite": ("vite/bin/vite.js",),
+    "prettier": ("prettier/bin/prettier.cjs", "prettier/bin-prettier.js"),
+}
+# Prettier reports in these two modes and rewrites files in every other one.
+_PRETTIER_CHECKS = {"--check", "-c", "--list-different", "-l"}
 
 # How much longer than the build's own deadline this waits for the native
 # runner. The runner counts that deadline against the build alone: staging a
@@ -61,6 +70,48 @@ def is_local_package_entry(argument: str, package_entry: str) -> bool:
     """`node_modules/<entry>`, `./node_modules/<entry>` or `<dir>/node_modules/<entry>`."""
     prefix = argument.removesuffix("node_modules/" + package_entry)
     return prefix != argument and (prefix == "" or prefix.endswith("/"))
+
+
+def _tool_entry(name: str, cwd: Path, workspace: Path) -> tuple[Path, str]:
+    """The `node_modules` directory holding the tool and its path below it.
+
+    A tool may publish its executable under more than one name across major
+    versions, so look for every spelling and keep the one the nearest project
+    installs: a package that pins its own major is what the command would run,
+    not a copy hoisted further up a monorepo. When no project has any of them,
+    name the first spelling so the caller reports a missing dependency.
+    """
+    installed = []
+    for relative in _ENTRIES[name]:
+        try:
+            modules = nearest_project_root(cwd, workspace, "node_modules/" + relative) / "node_modules"
+        except OSError:
+            continue
+        if (modules / relative).is_file():
+            installed.append((len(modules.parts), modules, relative))
+    if installed:
+        # Deepest wins, and a tie keeps the order the spellings are declared in.
+        depth = max(entry[0] for entry in installed)
+        _, modules, relative = next(entry for entry in installed if entry[0] == depth)
+        return modules, relative
+    first = _ENTRIES[name][0]
+    return nearest_project_root(cwd, workspace, "node_modules/" + first) / "node_modules", first
+
+
+def _script_task(manager: str, args: Sequence[str]) -> str | None:
+    """The lint/typecheck/build script a package-manager command names.
+
+    npm and Bun need the explicit `run`. pnpm and Yarn also run a script named
+    directly, and a project that documents `pnpm lint` or `yarn build` means
+    the same script, so both spellings resolve the same way here.
+    """
+    if len(args) == 2 and args[0] == "run":
+        task = args[1]
+    elif len(args) == 1 and manager in {"pnpm", "yarn"}:
+        task = args[0]
+    else:
+        return None
+    return task if task in {"lint", "typecheck", "build"} else None
 
 
 def _package_directory(directory: Path, workspace: Path) -> bool:
@@ -256,8 +307,9 @@ def prepare_restricted_node_tool(
         if len(args) < 2 or args[1].startswith("-"):
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local runner.")
         name, args = args[1], args[2:]
-    elif name in {"bun", "npm", "pnpm"}:
-        if len(args) != 2 or args[0] != "run" or args[1] not in {"lint", "typecheck", "build"}:
+    elif name in {"bun", "npm", "pnpm", "yarn"}:
+        task = _script_task(name, args)
+        if task is None:
             raise RestrictedPytestError(
                 "node_tool_invalid_command", "Only direct lint/typecheck scripts are supported."
             )
@@ -268,11 +320,11 @@ def prepare_restricted_node_tool(
         package = nearest_project_root(cwd or workspace, workspace, "package.json")
         manifest, _digest = read_json_with_integrity(package / "package.json")
         scripts = manifest.get("scripts") if isinstance(manifest, dict) else None
-        if isinstance(scripts, dict) and any(scripts.get(phase + args[1]) for phase in ("pre", "post")):
+        if isinstance(scripts, dict) and any(scripts.get(phase + task) for phase in ("pre", "post")):
             raise RestrictedPytestError(
                 "node_tool_invalid_command", "This script has lifecycle actions that need separate evaluation."
             )
-        script = scripts.get(args[1]) if isinstance(scripts, dict) else None
+        script = scripts.get(task) if isinstance(scripts, dict) else None
         if not isinstance(script, str):
             raise RestrictedPytestError("node_tool_invalid_command", "The requested local script is unavailable.")
         try:
@@ -297,20 +349,45 @@ def prepare_restricted_node_tool(
         if not args:
             raise RestrictedPytestError("node_tool_invalid_command", "Missing local entrypoint.")
         expected_entry = Path(args[0])
-        name = next((tool for tool, entry in _ENTRIES.items() if is_local_package_entry(args[0], entry)), "")
+        name = next(
+            (
+                tool
+                for tool, entries in _ENTRIES.items()
+                if any(is_local_package_entry(args[0], entry) for entry in entries)
+            ),
+            "",
+        )
         args = args[1:]
     if (
         name not in _ENTRIES
         or (name == "tsc" and "--noEmit" not in args)
         or (name == "vite" and (not args or args[0] != "build"))
+        or (name == "prettier" and not _PRETTIER_CHECKS.intersection(args))
     ):
         raise RestrictedPytestError(
-            "node_tool_invalid_command", "Only local ESLint and no-emit TypeScript are supported."
+            "node_tool_invalid_command",
+            "Only local ESLint, no-emit TypeScript and Prettier in a checking mode are supported.",
         )
     if any(
         token
-        in {";", "&&", "||", "|", "|&", "&", "--fix", "--fix-dry-run", "--output-file", "-o", "--emitDeclarationOnly"}
-        or token.startswith(("--fix=", "--output-file="))
+        in {
+            ";",
+            "&&",
+            "||",
+            "|",
+            "|&",
+            "&",
+            "--fix",
+            "--fix-dry-run",
+            "--output-file",
+            "-o",
+            "--emitDeclarationOnly",
+            "--write",
+            "-w",
+        }
+        # A value spelling enables the same write: `--write=true` turns
+        # Prettier's rewrite on just as `--write` does.
+        or token.startswith(("--fix=", "--output-file=", "--write="))
         for token in args
     ):
         raise RestrictedPytestError("node_tool_invalid_command", "The lint/typecheck input has write or shell effects.")
@@ -323,8 +400,8 @@ def prepare_restricted_node_tool(
     if name == "vite":
         output_roots = (_vite_output(args, workspace=base.workspace, cwd=base.cwd),)
     try:
-        modules = nearest_project_root(base.cwd, base.workspace, "node_modules/" + _ENTRIES[name]) / "node_modules"
-        entry = (modules / _ENTRIES[name]).resolve(strict=True)
+        modules, relative = _tool_entry(name, base.cwd, base.workspace)
+        entry = (modules / relative).resolve(strict=True)
         if not entry.is_file() or not _path_is_within(entry, modules):
             raise OSError("external tool entrypoint")
         # A relative entrypoint names a file below the command's directory.

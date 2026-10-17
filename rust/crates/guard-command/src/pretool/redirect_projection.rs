@@ -151,7 +151,10 @@ pub(super) fn project(
     // parser models those, and the command as written already gets the full
     // evaluation with every control, so a join with an uncontrolled raw
     // evaluation could only lose a proven allow or a configured denial.
-    if command.split_whitespace().eq(raw.split_whitespace()) {
+    // A copy glued to a separator (`;2>&1`) is the same command as the
+    // spaced form. Reparsing the spaced form would name the redirect as the
+    // program and review an interpreter the raw text still fails closed on.
+    if same_command_aside_from_descriptor_spacing(raw, &command) {
         return None;
     }
     let command = relative_saved_reads(command, &targets, context.cwd);
@@ -334,6 +337,42 @@ fn rank(action: &str) -> u8 {
     }
 }
 
+/// `2>&1` and `2>/dev/null` glued to `;`, `|`, or `&` name the same command
+/// as the form with a space. Other redirects stay in the comparison, so
+/// removing `> out` beside a kept copy still counts as a change.
+fn same_command_aside_from_descriptor_spacing(raw: &str, command: &str) -> bool {
+    spaced_descriptor_copies(raw)
+        .split_whitespace()
+        .eq(spaced_descriptor_copies(command).split_whitespace())
+}
+
+fn spaced_descriptor_copies(text: &str) -> String {
+    const COPIES: &[&str] = &["2>&1", "2>/dev/null"];
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = String::with_capacity(text.len() + 4);
+    let mut index = 0usize;
+    while index < chars.len() {
+        if matches!(chars[index], ';' | '|' | '&') {
+            if let Some(copy) = COPIES.iter().copied().find(|copy| {
+                chars[index + 1..]
+                    .iter()
+                    .copied()
+                    .take(copy.chars().count())
+                    .eq(copy.chars())
+            }) {
+                out.push(chars[index]);
+                out.push(' ');
+                out.push_str(copy);
+                index += 1 + copy.chars().count();
+                continue;
+            }
+        }
+        out.push(chars[index]);
+        index += 1;
+    }
+    out
+}
+
 fn remove_output_redirect(
     chars: &[char],
     start: usize,
@@ -488,7 +527,7 @@ pub(super) fn trailing_word(out: &str) -> &str {
 }
 
 pub(super) fn boundary(value: Option<&char>) -> bool {
-    value.is_none_or(|value| value.is_whitespace() || matches!(value, ';' | '|' | '&'))
+    value.is_none_or(|value| value.is_whitespace() || matches!(value, ';' | '|' | '&' | '<' | '>'))
 }
 
 #[cfg(test)]

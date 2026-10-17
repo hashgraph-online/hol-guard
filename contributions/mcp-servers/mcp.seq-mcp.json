@@ -1,0 +1,49 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.seq-mcp",
+  "version": "1.0.1",
+  "name": "Seq MCP Server",
+  "description": "Exposes Datalust Seq structured logs, SQL analytics, signal filters, and live event streaming to AI agents over MCP. Read-only search and query tools stay on inherit. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.itachiuchihadev",
+    "displayName": "Abhishek Kumar",
+    "url": "https://github.com/itachiuchihadev/seq-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCloud",
+    "background": "#0B1220"
+  },
+  "homepage": "https://github.com/itachiuchihadev/seq-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@abhishekkumar00019/seq-mcp"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-log-read"
+  ],
+  "tools": [
+    { "name": "seq_search", "state": "inherit" },
+    { "name": "seq_query", "state": "inherit" },
+    { "name": "seq_convert_filter", "state": "inherit" },
+    { "name": "seq_tail_events", "state": "inherit" },
+    { "name": "seq_list_signals", "state": "inherit" },
+    { "name": "seq_get_signal", "state": "inherit" },
+    { "name": "other", "state": "inherit" }
+  ],
+  "referenceUrls": [
+    "https://github.com/itachiuchihadev/seq-mcp",
+    "https://github.com/itachiuchihadev/seq-mcp#readme",
+    "https://www.npmjs.com/package/@abhishekkumar00019/seq-mcp"
+  ],
+  "saferAlternatives": [
+    "All tools in seq-mcp are read-only search and telemetry inspection queries against your Seq instance.",
+    "Configure Seq API keys with read-only permissions for agent environments.",
+    "Use scoped time windows (fromDateUtc/toDateUtc) and count limits when searching high-throughput event streams."
+  ]
+}

@@ -1,5 +1,6 @@
 #![cfg(unix)]
 
+use guard_command::contained_execution::read_verified_output;
 use guard_command::pretool::evaluate_pre_tool_envelope_with_context;
 use serde_json::json;
 
@@ -164,29 +165,59 @@ fn other_wrappers_stay_out_of_containment() {
     }
 }
 
-/// The contained sink refuses a relative `cd` into the workspace, so the
-/// edge must not issue a narrower receipt for one: every harness would then
-/// fail the call at the sink with `contained_test_authorization_failed`.
 #[test]
-fn relative_cd_inside_the_workspace_gets_no_narrower_receipt() {
+fn captured_output_binds_current_bytes_and_rejects_links_and_directories() {
     let root = fixture();
-    for harness in ["omp", "claude-code", "codex"] {
-        for command in [
-            "cd ./web && ./node_modules/.bin/vite build 2>&1 | tail -15",
-            "cd ./web && bunx vitest run x | tail -20",
-            "cd ./web && bun run build",
-        ] {
-            let result = classify(&root, harness, command);
-            assert!(
-                !result
-                    .reason_code
-                    .ends_with("_readonly_containment_required")
-                    && result.reason_code != "native_node_build_output_containment_required",
-                "{harness}: {command}: {}",
-                result.reason_code
-            );
-        }
-    }
+    let output_path = root.join("output.bin");
+    std::fs::write(&output_path, b"abc").unwrap();
+
+    let output = read_verified_output(&output_path).unwrap();
+    assert_eq!(output.size_bytes, 3);
+    assert_eq!(
+        output.sha256,
+        "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
+
+    std::fs::write(&output_path, []).unwrap();
+    let empty = read_verified_output(&output_path).unwrap();
+    assert_eq!(empty.size_bytes, 0);
+    assert_eq!(
+        empty.sha256,
+        "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    );
+
+    let link = root.join("linked-output.bin");
+    std::os::unix::fs::symlink(&output_path, &link).unwrap();
+    assert_eq!(
+        read_verified_output(&link).unwrap_err(),
+        "output_not_regular"
+    );
+    assert_eq!(
+        read_verified_output(&root).unwrap_err(),
+        "output_not_regular"
+    );
+    std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn captured_output_accepts_the_byte_limit_and_rejects_one_byte_more() {
+    let root = fixture();
+    let output_path = root.join("bounded-output.bin");
+    let output_file = std::fs::File::create(&output_path).unwrap();
+    let limit = 8 * 1024 * 1024;
+    output_file.set_len(limit).unwrap();
+    assert_eq!(
+        read_verified_output(&output_path).unwrap().size_bytes,
+        limit
+    );
+
+    output_file.set_len(limit + 1).unwrap();
+    assert_eq!(
+        read_verified_output(&output_path).unwrap_err(),
+        "output_too_large"
+    );
+    drop(output_file);
+    std::fs::remove_dir_all(root).unwrap();
 }
 
 /// Agents step from one checkout into a sibling repository or worktree by

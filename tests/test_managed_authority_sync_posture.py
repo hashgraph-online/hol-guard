@@ -23,7 +23,9 @@ def test_cloud_sync_preserves_independent_protected_revisions(
     authority = ExtensionControlAuthorityView(
         AuthorityHealth.PROTECTED, local_revision, "a" * 64, (), managed_revision=managed_revision
     )
-    monkeypatch.setattr(GuardStore, "read_extension_control_authority_for_registry", lambda *_args: authority)
+    monkeypatch.setattr(
+        GuardStore, "read_extension_control_authority_for_registry", lambda *_args, **_kwargs: authority
+    )
     payload = runner._cloud_runtime_session_payload(
         GuardStore(tmp_path / "guard-home"),
         {"session_id": "runtime-session-1", "updated_at": "2026-08-25T00:00:00Z"},
@@ -43,7 +45,9 @@ def test_unavailable_authority_does_not_fabricate_managed_revision(
     monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
     monkeypatch.setenv("GUARD_MANAGED_EXTENSION_CONTROLS_V1", "true")
     authority = ExtensionControlAuthorityView(AuthorityHealth.TAMPERED, 7, "a" * 64, (), managed_revision=2)
-    monkeypatch.setattr(GuardStore, "read_extension_control_authority_for_registry", lambda *_args: authority)
+    monkeypatch.setattr(
+        GuardStore, "read_extension_control_authority_for_registry", lambda *_args, **_kwargs: authority
+    )
     posture = runner._managed_controls_runtime_sync_posture(
         GuardStore(tmp_path / "guard-home"), generated_at="2026-08-25T00:00:00Z"
     )

@@ -1,4 +1,4 @@
-"""Windows contains only installed Python, and only for Claude Code's Git Bash sink."""
+"""Windows contains installed Python and Node scripts, and only for harnesses with a sink."""
 
 import hashlib
 import json
@@ -46,12 +46,14 @@ def _receipt(profile: str = "python-eval-readonly-v1") -> dict[str, object]:
     }
 
 
-def test_windows_backend_decodes_only_for_python_on_windows(monkeypatch, tmp_path):
+def test_windows_backend_decodes_only_for_eval_profiles_on_windows(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
     assert plan.backend == "windows-appcontainer"
+    node = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+    assert node.backend == "windows-appcontainer"
     with pytest.raises(RestrictedPytestError):
-        transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+        transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
     monkeypatch.setattr(sys, "platform", "darwin")
     with pytest.raises(RestrictedPytestError):
         transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -88,6 +90,15 @@ def test_windows_inline_eval_runs_through_the_native_runner(monkeypatch, tmp_pat
     assert kwargs["timeout_seconds"] == 30
 
 
+def test_windows_node_script_names_the_node_profile(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "win32")
+    plan = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
+    calls = []
+    monkeypatch.setattr(restricted_inline_eval, "_run_backend_process", lambda argv, **_kwargs: calls.append(argv) or 0)
+    restricted_inline_eval.run_restricted_inline_eval(plan, timeout_seconds=30, authorize_capability=lambda _argv: None)
+    assert calls[0][7:11] == ["30", "--profile", "node-eval-readonly-v1", "--"]
+
+
 def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -97,9 +108,10 @@ def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
         _backend_argv(plan, private_root=tmp_path)
 
 
-def test_windows_contains_python_eval_only(monkeypatch):
+def test_windows_contains_eval_profiles_only(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     assert platform_contains(_receipt())
+    assert platform_contains({"required_execution_profile": "node-eval-readonly-v1"})
     assert not platform_contains(_receipt("pytest-readonly-v2"))
     assert not platform_contains(_receipt("workspace-contained-v1"))
 

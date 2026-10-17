@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import coerce_guard_action
+from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..package_firewall_entitlement import resolve_package_firewall_entitlement
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -467,7 +468,7 @@ def _copilot_hook_reason(*values: object | None) -> str:
     reason = _native_hook_reason(*values)
     if reason.startswith("Guard "):
         reason = f"HOL {reason}"
-    if "approve" in reason.lower():
+    if "approve" in reason.lower() or is_unlinked_connector_setup_reason(reason):
         return reason
     return f"{reason} Approve it in HOL Guard, then retry."
 

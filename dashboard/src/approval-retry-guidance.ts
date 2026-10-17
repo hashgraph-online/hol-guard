@@ -24,7 +24,7 @@ function allowPermissionLabels(item: GuardApprovalRequest): string | null {
 
 /** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
 export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
-  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
+  const base = `Guard cannot bind ${harness}'s one-time retry to the reviewed action. Run once is unavailable.`;
   if (item.exact_action_persistence_eligible === true) {
     return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
   }
@@ -99,6 +99,5 @@ export function bulkApproveConsequenceCopyForSelection(
   defaultCopy: (count: number) => string,
 ): string {
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
-  const blocked = `${retryBlockedActionCount} of them ${retryBlockedActionCount === 1 ? "is a command" : "are commands"} the agent will still be blocked on.`;
-  return `Guard will record your decision for ${actionCount} ${actionCount === 1 ? "action" : "actions"} once and won't remember it. ${blocked} Mass approval skips opening each request, so an unexpected action is harder to catch.`;
+  return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
 }

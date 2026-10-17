@@ -61,9 +61,15 @@ fn the_observe_mode_override_answers_the_native_prompt() {
     let payload = proxy_payload(&input("complete", "observe"), &pending, opencode);
 
     assert_eq!(payload["gate"]["disable"], json!(false));
+    // The override carries the enforced action the runtime derives for it, so
+    // the caller never recomputes one from the decision it is handed.
     assert_eq!(
         payload["route"]["decision_override"],
-        json!({"action": "review", "source": "observe-current-policy"})
+        json!({
+            "action": "review",
+            "source": "observe-current-policy",
+            "policy_action": "review",
+        })
     );
     assert_eq!(route(&payload)["decision_source"], json!("native-approved"));
 }

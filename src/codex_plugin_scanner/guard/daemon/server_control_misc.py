@@ -32,6 +32,7 @@ from ..desktop_notifications import (
     macos_notification_guidance,
 )
 from ..harness_disconnect_gate import require_harness_disconnect_gate
+from ..harness_versions.service import invalidate as invalidate_harness_versions
 from ..insights_share import publish_insights_share
 from ..native_daemon_handler import (
     native_harness_action,
@@ -133,6 +134,8 @@ class _ControlMiscRoutes:
                 status=409,
             )
             return
+        # A reinstall or repair may change which harness build is in use.
+        invalidate_harness_versions(context.guard_home, adapter.harness)
         self._write_json({"harness": adapter.harness, "action": action, "dry_run": False, **result})
 
     def _handle_notification_setup(self, payload: dict[str, object]) -> None:

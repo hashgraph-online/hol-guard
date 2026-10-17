@@ -40,6 +40,10 @@ pub(crate) struct ClaimTicket {
     pub(crate) expected: CatalogSnapshot,
     /// The authority's handle on the held claim.
     pub(crate) claim: String,
+    /// The decide request this call was decided from. A package call's claim
+    /// is spent against a post-claim evaluation of the package request this
+    /// carries, which the relay performs when the authority asks for it.
+    pub(crate) request: Value,
 }
 
 impl ClaimTicket {

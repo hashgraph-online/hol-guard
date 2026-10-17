@@ -8,7 +8,7 @@ import signal
 import subprocess
 import sys
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
 from types import FrameType
 from typing import BinaryIO, TextIO
@@ -175,7 +175,7 @@ def _run_backend_process(
     stdout_capture: bytearray | None = None,
     node_virtual_address_space: bool = False,
     merge_stderr: bool = False,
-    write_denial_note: str | None = None,
+    write_denial_note: str | Callable[[Iterable[bytes]], str | None] | None = None,
 ) -> int:
     if (
         node_virtual_address_space
@@ -277,21 +277,31 @@ def _run_backend_process(
                 stdout_capture.extend(stdout_file.read(_MAX_REPLAY_BYTES))
             if not merge_stderr:
                 _replay_sandbox_output(stderr_file, sys.stderr)
-        if (
-            write_denial_note is not None
-            and return_code != 0
-            and (_write_denied(stdout_file) or (not merge_stderr and _write_denied(stderr_file)))
-        ):
+        note = (
+            _denial_note(write_denial_note, stdout_file, None if merge_stderr else stderr_file)
+            if return_code != 0
+            else None
+        )
+        if note is not None:
             destination = sys.stdout if merge_stderr else sys.stderr
-            destination.write(f"\n[HOL Guard] {write_denial_note}\n")
+            destination.write(f"\n[HOL Guard] {note}\n")
             destination.flush()
         return return_code if return_code >= 0 else 128 + abs(return_code)
 
 
-def _write_denied(source: BinaryIO) -> bool:
-    source.seek(0)
-    text = source.read(_MAX_REPLAY_BYTES).lower()
-    return any(marker in text for marker in _WRITE_DENIAL_MARKERS)
+def _denial_note(note: str | Callable[[Iterable[bytes]], str | None] | None, *sources: BinaryIO | None) -> str | None:
+    """`note` for output that names a denial: a fixed note, or one chosen from the output."""
+    if note is None:
+        return None
+    outputs = []
+    for source in sources:
+        if source is not None:
+            source.seek(0)
+            outputs.append(source.read(_MAX_REPLAY_BYTES))
+    if callable(note):
+        return note(outputs)
+    denied = any(marker in output.lower() for output in outputs for marker in _WRITE_DENIAL_MARKERS)
+    return note if denied else None
 
 
 def _replay_sandbox_output(source: BinaryIO, destination: TextIO) -> None:

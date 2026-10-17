@@ -66,7 +66,7 @@ def _rehash(value: dict[str, Any]) -> None:
     ).hexdigest()
 
 
-def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
+def _receipt(extensions: dict[str, Any] | None, *, review_anchor: bool = False) -> dict[str, Any]:
     value: dict[str, Any] = {
         "schema": "guard-native-hook-decision-receipt.v1",
         "version": 1,
@@ -92,10 +92,14 @@ def _receipt(extensions: dict[str, Any] | None) -> dict[str, Any]:
         "observe_mode": False,
         "deadline_budget_ms": 750,
     }
+    if review_anchor:
+        # Evidence only; the store never persists it and it stays out of the
+        # decision identity.
+        value["review_anchor_digest"] = "9" * 64
     if extensions is not None:
         value["command_extensions"] = copy.deepcopy(extensions["binding"])
     identity = {
-        **{key: item for key, item in value.items() if key not in {"authority", "decision_id"}},
+        **{key: item for key, item in value.items() if key not in {"authority", "decision_id", "review_anchor_digest"}},
         "schema": "guard-native-hook-decision-identity.v1",
     }
     value["decision_id"] = hashlib.sha256(

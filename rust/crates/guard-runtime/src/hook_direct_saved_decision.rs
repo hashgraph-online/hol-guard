@@ -166,6 +166,9 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
     parsed["harness_response"] =
         match consume::answer(context, &result, &exact, receipt, &artifact_id)? {
             Some(response) => response,
+            None if connector_setup_candidate(context, &result) => {
+                return Err(HookDirectDefer::ReviewQueue);
+            }
             None => review_queue::answer(context, &result, receipt, &exact, &token)?,
         };
     Ok(parsed)
@@ -336,6 +339,19 @@ fn overridable(result: &Object) -> bool {
         _ => true,
     };
     review("policy_action") && review("minimum_action") && overridable_type
+}
+
+/// A review due only to non-recognition of a command that launches a local
+/// CLI (or may): the daemon reads whether this device was ever set up for the
+/// CLI and groups the row under its connector, so the resident leaves it.
+fn connector_setup_candidate(context: &Context<'_>, result: &Object) -> bool {
+    crate::connector_setup::is_non_recognition(result.get("reason_code").and_then(Value::as_str))
+        && super::local_cli::launches_local_cli(
+            context.payload,
+            context.workspace,
+            context.home_dir,
+        )
+        .unwrap_or(true)
 }
 
 /// Python truthiness of an optional JSON value.

@@ -115,7 +115,7 @@ pub(super) fn evaluate_browser(
     });
     if !modeled
         || input.get("language")?.as_str()? != "js"
-        || !browser::loopback_browser_program(input.get("code")?.as_str()?)
+        || !browser::loopback_browser_program(input.get("code")?.as_str()?, context.path.home_dir)
     {
         return None;
     }
@@ -130,7 +130,7 @@ pub(super) fn evaluate_browser(
         ),
         "allow",
         "native_omp_eval_loopback_browser",
-        "The Rust authority read this eval program and found only isolated-browser reads and interactions on loopback pages, with page functions that run inside the page: no files, processes, modules or other hosts.",
+        "The Rust authority read this eval program and found only isolated-browser reads and interactions on loopback pages and GET requests to loopback URLs, with page functions that run inside the page: no files, processes, modules or other hosts.",
     ))
 }
 

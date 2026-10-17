@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 from collections.abc import Mapping
@@ -52,7 +53,7 @@ def _with_suggestions(items: list[dict[str, object]]) -> list[dict[str, object]]
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
-    values = _row_values(row, 14)
+    values = _row_values(row, 16)
     surface = values[10] if values[10] in {"cli", "mcp", "package-scripts"} else "cli"
     source_label = values[12]
     command = values[13]
@@ -76,7 +77,25 @@ def _observation_from_row(row: object) -> dict[str, object]:
         "server_identity_hash": values[11],
         "source_label": source_label if isinstance(source_label, str) and source_label else None,
         **({"permission_scope": scope} if surface == "mcp" else {}),
+        **(_declaration(values[14], values[15]) if surface == "mcp" else {}),
     }
+
+
+def _declaration(remote_origin: object, declared_sources_json: object) -> dict[str, object]:
+    """Which harness configs declare an MCP connector; a remote one adds its origin."""
+
+    sources: list[str] = []
+    if isinstance(declared_sources_json, str):
+        try:
+            decoded = json.loads(declared_sources_json)
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, list):
+            sources = [value for value in decoded if isinstance(value, str)][:16]
+    declaration: dict[str, object] = {"declared_sources": sources}
+    if isinstance(remote_origin, str) and remote_origin:
+        declaration["remote_origin"] = remote_origin
+    return declaration
 
 
 def _grant_from_row(row: object) -> dict[str, object]:

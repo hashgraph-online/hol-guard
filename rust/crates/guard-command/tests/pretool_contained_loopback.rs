@@ -240,6 +240,50 @@ fn servers_on_other_ports_or_hosts_and_scripts_using_other_network_keep_their_re
     }
 }
 
+/// The smoke test an agent runs against the todo server it started, then the
+/// project's tests.
+const TODO_SMOKE: &str = "node --input-type=module -e 'const base=\"http://127.0.0.1:3000\"; const page=await fetch(base); if(!page.ok) throw Error(\"web interface failed\"); let r=await fetch(base+\"/api/todos\",{method:\"POST\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({title:\"Smoke test\"})}); const todo=await r.json(); r=await fetch(base+\"/api/todos/\"+todo.id,{method:\"PATCH\",headers:{\"content-type\":\"application/json\"},body:JSON.stringify({completed:true})}); r=await fetch(base+\"/api/todos/\"+todo.id,{method:\"DELETE\"}); if(r.status!==204) throw Error(\"delete failed\"); console.log(\"smoke passed\");' && npm test";
+
+#[test]
+fn a_smoke_test_fetching_one_loopback_base_runs_in_the_sandbox() {
+    let fixture = Fixture::new();
+    let chosen = TODO_SMOKE.replace("3000", "3147");
+    let assert_contained = |command: &str| {
+        for harness in ["omp", "claude-code", "codex"] {
+            let result = fixture.classify(harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    (result.minimum_action.as_str(), result.reason_code.as_str()),
+                    ("sandbox-required", CONTAINED),
+                    "{harness}: {command}: {}",
+                    result.reason
+                );
+            }
+        }
+    };
+    assert_contained(TODO_SMOKE);
+    // A port the agent chose opens once Guard's daemon is known to be
+    // elsewhere.
+    let guard = fixture.home.join(".hol-guard");
+    std::fs::create_dir_all(&guard).unwrap();
+    std::fs::write(guard.join("daemon-state.json"), r#"{"port": 4781}"#).unwrap();
+    assert_contained(&chosen);
+    for command in [
+        TODO_SMOKE.replace("127.0.0.1:3000", "example.com"),
+        TODO_SMOKE.replace("const base=", "let base="),
+        TODO_SMOKE.replace("fetch(base+\"/api/todos\"", "fetch(base+\"@example.com/\""),
+        TODO_SMOKE.replace("3000", "11434"),
+        TODO_SMOKE.replace("3000", "54321"),
+    ] {
+        for harness in ["omp", "claude-code", "codex"] {
+            let result = fixture.classify(harness, &command);
+            assert_eq!(result.minimum_action, "review", "{harness}: {command}");
+            assert_ne!(result.reason_code, CONTAINED, "{harness}: {command}");
+        }
+    }
+}
+
 /// Inline source that reads its port from the environment earns the grant;
 /// one that also reads the whole environment or another variable keeps the
 /// sensitive-access review.

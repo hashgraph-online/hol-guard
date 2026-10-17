@@ -7,6 +7,13 @@ truncation were Python). That module now delegates to the native
 ``embedded_script_evidence`` shell helper action, so this script documents how
 ``vectors.json`` was produced rather than re-running against the current tree.
 
+Two cases carry hand-edited entries rather than what the owner produced.
+``heredoc_comment`` recorded a heredoc for ``echo hi # <<EOF``; a word-initial
+``#`` opens a comment, so bash reads no declaration there and the native scan
+now agrees with bash instead of with the owner. That divergence is deliberate:
+anything the scan masks as heredoc body is invisible to command review while
+bash still runs it.
+
 The recording ran on POSIX. ``windows_style_path`` also carries hand-added
 ``windows_entries``: on Windows the owner's tokenizer keeps unquoted
 backslashes literal, so the executable is ``python.exe``.
@@ -95,6 +102,9 @@ def _cases() -> list[tuple[str, str]]:
         ("unbalanced_quote_body", "bash <<EOF\necho 'oops\nEOF"),
         ("unbalanced_double_quote_after", 'bash <<EOF\necho x\nEOF\necho "dangling'),
         ("heredoc_in_quotes", "echo '<<EOF'\nEOF"),
+        # The Python owner read `<<EOF` inside a comment as a declaration. Bash
+        # never does, so this vector now records no entries; see the module
+        # docstring on corrected cases.
         ("heredoc_comment", "echo hi # <<EOF\nEOF"),
         ("delimiter_with_dash", "bash <<END-OF-SCRIPT\necho x\nEND-OF-SCRIPT"),
         ("delimiter_indented_not_closed", "bash <<EOF\necho x\n  EOF\nEOF"),

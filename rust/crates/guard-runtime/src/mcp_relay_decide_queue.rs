@@ -27,7 +27,7 @@ use crate::mcp_tool_policy_decision::Decision;
 use serde_json::{json, Value};
 
 /// `blocked_request_mode`, under which the queue route blocks in place.
-const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
+pub(super) const SAFE_ALTERNATIVE_MODE: &str = "safe-alternative";
 /// The decision source `_queue_approval_center_response` records.
 pub(super) const SAFE_ALTERNATIVE_SOURCE: &str = "policy-safe-alternative";
 /// The one fact the relay gathers itself, by raising the client's prompt.
@@ -66,7 +66,11 @@ pub(super) fn route(
     let text = |key: &str| route.get(key).and_then(Value::as_str).map(str::to_owned);
     let pending = decision.pending.is_some();
     match route.get("kind").and_then(Value::as_str) {
-        Some("stored_block") if !pending => Ok(Routed::StoredBlock),
+        Some("stored_block") if !pending => Ok(Routed::StoredBlock {
+            // The tool-only route never carries a package request; the
+            // package lane names its own stored tool block.
+            package_request: false,
+        }),
         Some("terminal") if !pending => Ok(Routed::Terminal {
             policy_action: text("policy_action").ok_or(ROUTE_UNSUPPORTED)?,
         }),

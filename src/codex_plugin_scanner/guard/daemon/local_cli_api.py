@@ -11,8 +11,11 @@ from typing import TYPE_CHECKING
 
 from ..adapters.harness_mcp_discovery import (
     DiscoveredHarnessMcpServer,
+    DiscoveredRemoteMcpServer,
     apply_source_labels,
+    configured_harness_detections,
     discover_harness_mcp_servers,
+    discover_remote_mcp_servers,
     discovered_server_for_observation,
     extra_env_for_mcp_launch,
     persist_discovered_harness_mcp_servers,
@@ -25,6 +28,7 @@ from ..approval_gate import (
 )
 from ..local_cli_errors import LocalCliCatalogLimitError
 from ..local_cli_trust import utc_now
+from ..runtime.connector_setup_items import listed_public_items
 from ..runtime.custom_extension_continuity import (
     record_local_custom_extension_mutation,
 )
@@ -65,7 +69,6 @@ from ..runtime.mcp_protection import build_mcp_server_identity
 from ..runtime.observed_local_clis import backfill_observed_local_clis
 from ..runtime.observed_mcp_tools import discover_observed_mcp_tools
 from ..runtime.package_json_script_memory import (
-    _package_item_available,
     operator_working_directory,
     public_local_cli_item,
     recognize_operator_package_scripts,
@@ -125,6 +128,7 @@ class LocalCliApiService:
         self._store = store
         self._codex_host_inventory = CodexHostInventoryCache()
         self._discovery_cache: tuple[float, tuple[DiscoveredHarnessMcpServer, ...]] | None = None
+        self._remote_discovery_cache: tuple[float, tuple[DiscoveredRemoteMcpServer, ...]] | None = None
         self._discovery_jobs = McpDiscoveryJobs()
         self._registry_setup_lock = threading.Lock()
         self._registry_setup_undo = RegistrySetupUndo(store)
@@ -531,25 +535,7 @@ class LocalCliApiService:
         return result
 
     def _listed_public_items(self) -> list[dict[str, object]]:
-        stored = self._store.list_local_cli_items()
-        configured = {
-            (item.get("server_identity_hash"), item.get("server_command"), item.get("server_args_hash"))
-            for item in stored
-            if item.get("surface") == "mcp" and item.get("identity_hash") != item.get("server_identity_hash")
-        }
-        return [
-            public_local_cli_item(item)
-            for item in stored
-            if _package_item_available(item)
-            and not (
-                item.get("surface") == "mcp"
-                and isinstance(item.get("server_identity_hash"), str)
-                and item.get("cli_id") == f"local-cli.mcp-{str(item.get('server_identity_hash'))[:8]}"
-                and item.get("identity_hash") == item.get("server_identity_hash")
-                and (item.get("server_identity_hash"), item.get("server_command"), item.get("server_args_hash"))
-                in configured
-            )
-        ]
+        return listed_public_items(self._store)
 
     def _list_payload(self, items: list[dict[str, object]]) -> dict[str, object]:
         from ..native_policy_snapshot import local_cli_publication_status
@@ -848,37 +834,59 @@ class LocalCliApiService:
                 self._store,
                 self._discovered_servers(strict=True) if strict else self._discovered_servers(),
                 seen_at=utc_now(),
+                remote=self._discovered_remote_servers(),
             )
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
             if strict:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return {}
 
+    def _discovery_workspace(self) -> Path | None:
+        codex_install = self._store.get_managed_install("codex")
+        managed_workspace = codex_install.get("workspace") if codex_install and codex_install.get("active") else None
+        if isinstance(managed_workspace, str) and Path(managed_workspace).is_absolute():
+            return Path(managed_workspace)
+        return None
+
+    def _discovered_remote_servers(self) -> tuple[DiscoveredRemoteMcpServer, ...]:
+        # Remote servers are listed, never launched; a failed read lists none.
+        cached = self._remote_discovery_cache
+        if cached is None or time.monotonic() - cached[0] >= _DISCOVERY_TTL_SECONDS:
+            _ = self._discovered_servers()
+            cached = self._remote_discovery_cache
+        return cached[1] if cached is not None else ()
+
     def _discovered_servers(self, *, strict: bool = False) -> tuple[DiscoveredHarnessMcpServer, ...]:
         now = time.monotonic()
         cached = self._discovery_cache
         if cached is not None and now - cached[0] < _DISCOVERY_TTL_SECONDS:
             return cached[1]
+        home_dir = Path.home()
+        workspace_dir = self._discovery_workspace()
         try:
-            codex_install = self._store.get_managed_install("codex")
-            managed_workspace = (
-                codex_install.get("workspace") if codex_install and codex_install.get("active") else None
-            )
-            workspace_dir = (
-                Path(managed_workspace)
-                if isinstance(managed_workspace, str) and Path(managed_workspace).is_absolute()
-                else None
-            )
+            # One detection pass feeds both the stdio and the remote list.
+            detections = configured_harness_detections(home_dir, self._store.guard_home, workspace_dir)
             servers = discover_harness_mcp_servers(
-                home_dir=Path.home(),
+                home_dir=home_dir,
                 guard_home=self._store.guard_home,
                 workspace_dir=workspace_dir,
+                detections=detections,
             )
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
             if strict:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
+        try:
+            remote = discover_remote_mcp_servers(
+                home_dir=home_dir,
+                guard_home=self._store.guard_home,
+                workspace_dir=workspace_dir,
+                detections=detections,
+            )
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+            remote = ()
+        self._remote_discovery_cache = (now, remote)
         return servers
 
     def _live_mcp_launch_command(self, payload: dict[str, object]) -> str | None:

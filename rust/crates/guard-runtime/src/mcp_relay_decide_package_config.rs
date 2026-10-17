@@ -16,10 +16,6 @@
 //! map is "no override", an absent `managed_locked_settings` is an unlocked
 //! setting — so a view this cannot read is not a config to decide under.
 
-// The decide path reads this with the rest of the native package lane; until
-// it does, only the tests below hydrate a policy view.
-#![allow(dead_code)]
-
 use super::view::HarnessView;
 use guard_command::local_supply_chain::{package_config_policy_context, GuardConfig};
 use guard_command::package_intent_common::GuardArtifact;

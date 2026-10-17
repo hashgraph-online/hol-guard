@@ -434,7 +434,9 @@ fn copilot_hook_reason(values: &[&str]) -> String {
     if reason.starts_with("Guard ") {
         reason = format!("HOL {reason}");
     }
-    if reason.to_lowercase().contains("approve") {
+    if reason.to_lowercase().contains("approve")
+        || crate::blocked_request_mode::is_unlinked_connector_setup_reason(&reason)
+    {
         return reason;
     }
     format!("{reason} Approve it in HOL Guard, then retry.")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .local_cli_errors import LocalCliCatalogLimitError
 from .runtime.local_cli_commands import (
@@ -17,7 +17,7 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
-from .runtime.mcp_classification import classify_mcp_action
+from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
 from .store_custom_extension_continuity import _write_local_cli_grant
 from .store_local_cli_retention import mark_shared_enrolled_servers, utc_now_iso
 from .store_local_cli_rows import (
@@ -33,6 +33,9 @@ from .store_local_cli_rows import (
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
 from .store_mcp_provider_catalog import load_provider_catalog_summaries
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 class StoreLocalCliMixin:
@@ -87,7 +90,8 @@ class StoreLocalCliMixin:
                 """
                 select cli_id, identity_hash, kind, name, interpreter_name, example_label,
                        observed_count, last_seen_at, source_path, help_status, surface,
-                       server_identity_hash, source_label, server_command
+                       server_identity_hash, source_label, server_command,
+                       remote_origin, declared_sources_json
                 from local_cli_observation
                 order by last_seen_at desc, cli_id asc
                 """
@@ -132,6 +136,7 @@ class StoreLocalCliMixin:
                 }
             )
         _with_suggestions(items)
+        undescribed: list[tuple[dict[str, object], Mapping[str, object]]] = []
         mark_shared_enrolled_servers(items, grants)
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:
@@ -153,13 +158,29 @@ class StoreLocalCliMixin:
                 for command in command_map.get(str(item["cli_id"]), []):
                     definition = by_name.get(command.get("usage"))
                     if definition is not None:
-                        command["classification"] = classify_mcp_action(
-                            str(definition["name"]),
-                            definition.get("inputSchema"),
-                            annotations=definition.get("annotations"),
-                        )
+                        undescribed.append((command, definition))
             if str(item["cli_id"]) in provider_map:
                 item["provider_catalog"] = provider_map[str(item["cli_id"])]
+        try:
+            described = classify_mcp_actions(
+                [
+                    {
+                        "name": str(definition["name"]),
+                        "schema": definition.get("inputSchema"),
+                        "annotations": definition.get("annotations"),
+                    }
+                    for _, definition in undescribed
+                ],
+                guard_home=cast("GuardStore", self).guard_home,
+            )
+        except McpClassificationUnavailableError:
+            # The classification is advisory display evidence. Without the
+            # resident it is simply absent: listing a CLI, its identity and its
+            # grant state never depended on it.
+            return items
+        for (command, _), classification in zip(undescribed, described, strict=True):
+            if classification is not None:
+                command["classification"] = classification
         return items
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:

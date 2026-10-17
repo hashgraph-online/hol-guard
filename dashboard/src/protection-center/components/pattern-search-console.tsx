@@ -10,6 +10,7 @@ import {
 } from "../../extension-control-center-model";
 import type { CatalogReadModel } from "../../extension-catalog-v2";
 import type { EffectiveExtensionControls, ExtensionCatalogSummary, ExtensionPermission } from "../../extension-controls-api";
+import { type ExtensionPolicyRebaseConflict } from "../../extension-policy-rebase";
 import {
   PermissionPolicyRow,
   PolicyReviewSheet,
@@ -86,10 +87,17 @@ export function PatternSearchConsole(props: {
   const { resolvedApprovalGate, resolveApprovalGate } = useResolvedApprovalGate(null);
   const {
     baseEffective, dirty, preview, previewBusy, applyBusy, reviewOpen,
-    error, stale, refreshRequired, lastApplied, undoLastApplied,
+    error, stale, pendingRebase, refreshRequired, lastApplied, undoLastApplied,
     changedPermissionCount, setReviewOpen, setPermissionState, setPermissionStates,
-    resetDraft, runPreview, apply, permissionState,
+    resetDraft, runPreview, apply, permissionState, rebaseDraft, keepConflicts, useCurrent,
   } = draft;
+  // Rebasing reads one detail record per extension the draft touched, so the
+  // console remembers which tools the edits came from rather than re-reading
+  // the whole catalog when the committed policy moves under an open draft.
+  const touchedExtensionIds = useRef(new Set<string>());
+  const rememberTouched = useCallback((extensionIds: readonly string[]) => {
+    for (const extensionId of extensionIds) touchedExtensionIds.current.add(extensionId);
+  }, []);
 
   useEffect(() => {
     if (!searchActive) return;
@@ -133,6 +141,16 @@ export function PatternSearchConsole(props: {
     return [...groups.values()];
   }, [matches]);
   const involvedPermissions = useMemo(() => allMatches.map((match) => match.permission), [allMatches]);
+  const handleRebase = useCallback(async () => {
+    const extensionIds = touchedExtensionIds.current.size
+      ? [...touchedExtensionIds.current]
+      : grouped.map((group) => group.extension.extension_id);
+    // Every touched tool has to resolve. Dropping the ones whose detail read
+    // failed would rebase the rest onto the latest authority and quietly take
+    // the missing tool's unsaved edits with it, so let the failure reach the
+    // hook, which reports it and leaves the draft alone.
+    await rebaseDraft(() => Promise.all(extensionIds.map((extensionId) => props.readModel.detail(extensionId))));
+  }, [grouped, props.readModel, rebaseDraft]);
   const changeCount = changedPermissionCount;
   const showResults = query.trim().length > 0;
 
@@ -210,7 +228,10 @@ export function PatternSearchConsole(props: {
                 effective={baseEffective}
                 disabled={refreshRequired || previewBusy || applyBusy || baseEffective.health !== "protected"}
                 permissionState={permissionState}
-                onApply={setPermissionStates}
+                onApply={(permissionIds, state) => {
+                  rememberTouched(allMatches.map((match) => match.extension.extension_id));
+                  setPermissionStates(permissionIds, state);
+                }}
               />
               {allMatches.length > matches.length ? (
                 <p role="status" className="mt-3 text-xs text-brand-dark/65">
@@ -240,7 +261,10 @@ export function PatternSearchConsole(props: {
                   effective={baseEffective}
                   draftState={permissionState(permission.permission_id)}
                   disabled={refreshRequired}
-                  onChange={(state) => setPermissionState(permission.permission_id, state)}
+                  onChange={(state) => {
+                    rememberTouched([group.extension.extension_id]);
+                    setPermissionState(permission.permission_id, state);
+                  }}
                 />;
               })}
             </section>
@@ -296,6 +320,25 @@ export function PatternSearchConsole(props: {
           <HiMiniExclamationTriangle className="mt-0.5 size-5 shrink-0" />
           <span>{error}</span>
         </div>
+        {stale && !pendingRebase ? (
+          <button type="button" disabled={previewBusy} onClick={() => { void handleRebase(); }} className="mt-3 min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb] disabled:opacity-40">Update draft with latest protection</button>
+        ) : null}
+        {pendingRebase ? (
+          <div className="mt-4">
+            <ul className="space-y-2">
+              {pendingRebase.result.conflicts.map((conflict: ExtensionPolicyRebaseConflict) => (
+                <li key={conflict.original_permission_id} className="text-xs text-brand-dark">
+                  <code className="break-all">{conflict.original_permission_id}</code>
+                  <div className="mt-1">{conflict.kind === "removed" ? "Target removed from the current catalog." : `Current ${conflict.latest_state}; your draft requests ${conflict.requested_state}.`}</div>
+                </li>
+              ))}
+            </ul>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" onClick={keepConflicts} className="min-h-11 rounded-xl bg-red-800 px-4 text-sm font-semibold text-[#f4f7fb]">Keep my compatible changes</button>
+              <button type="button" onClick={useCurrent} className="min-h-11 rounded-xl border border-red-300 px-4 text-sm font-semibold text-red-950">Use current protection</button>
+            </div>
+          </div>
+        ) : null}
       </div>
     ) : dirty && !preview ? (
       <div className="mt-4 flex items-start gap-3 text-sm text-brand-dark">

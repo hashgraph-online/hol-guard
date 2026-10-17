@@ -117,3 +117,57 @@ def test_large_environment_fits_the_request(monkeypatch: pytest.MonkeyPatch, tmp
     _ask(tmp_path)
 
     assert calls[0]["max_request_bytes"] == 2 * 1024 * 1024
+
+
+_CONNECTOR = {
+    "cli_id": "local-cli.lanectl-0123abcd",
+    "identity_hash": "a" * 64,
+    "name": "lanectl",
+    "surface": "cli",
+    "queue_group_id": "connector:" + "a" * 64 + ":0123456789abcdef",
+}
+
+
+def _setup(tmp_path: Path) -> object:
+    store = SimpleNamespace(
+        path=tmp_path / "guard.db",
+        guard_home=tmp_path,
+        guard_source="local",
+        _repair_store_permissions=lambda: None,
+        _recover_fatal_sqlite_store=lambda _error: None,
+    )
+    return client.local_cli_setup_connector(store=store, command="lanectl status", cwd=tmp_path, home_dir=None)
+
+
+def test_a_review_names_the_connector_to_set_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    calls = _reply(monkeypatch, payload={"action": "review", "connector": _CONNECTOR})
+
+    connector = _setup(tmp_path)
+
+    assert connector == client.SetupConnector(**_CONNECTOR)
+    request = calls[0]["request"]
+    assert isinstance(request, dict)
+    assert request["current_action"] == "review"
+    assert request["grant_allowed"] is True
+    # The plain action call ignores the connector and keeps its answer.
+    assert _ask(tmp_path) == "review"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"action": "allow", "connector": _CONNECTOR},
+        {"action": "review"},
+        {"action": "review", "connector": {**_CONNECTOR, "surface": "mcp"}},
+        {"action": "review", "connector": {**_CONNECTOR, "queue_group_id": "connector:other:0123456789abcdef"}},
+        {"action": "review", "connector": {**_CONNECTOR, "name": ""}},
+        {"action": "review", "connector": {**_CONNECTOR, "extra": "x"}},
+        {"action": "review", "connector": "lanectl"},
+    ],
+)
+def test_no_connector_without_a_valid_review_answer(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, payload: dict[str, object]
+) -> None:
+    _reply(monkeypatch, payload=payload)
+
+    assert _setup(tmp_path) is None

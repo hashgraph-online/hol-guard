@@ -172,14 +172,17 @@ fn normalizes_the_workspace() {
         normalize_workspace(&format!("  {}  ", root.display())),
         Some(root.clone())
     );
+    // `join` uses the native separator: a canonical Windows root is a
+    // verbatim `\\?\` path, where `/` is not a separator.
     assert_eq!(
-        normalize_workspace(&format!("{}/None", root.display())),
+        normalize_workspace(&root.join("None").display().to_string()),
         Some(root.clone())
     );
-    assert_eq!(
-        normalize_workspace("/guard-relay-missing/workspace"),
-        Some(PathBuf::from("/guard-relay-missing/workspace"))
-    );
+    let missing = normalize_workspace("/guard-relay-missing/workspace").unwrap();
+    assert!(missing.is_absolute());
+    assert!(missing.ends_with("guard-relay-missing/workspace"));
+    #[cfg(unix)]
+    assert_eq!(missing, PathBuf::from("/guard-relay-missing/workspace"));
     let relative = normalize_workspace("guard-relay-missing-relative").unwrap();
     assert!(relative.is_absolute());
     assert!(relative.ends_with("guard-relay-missing-relative"));

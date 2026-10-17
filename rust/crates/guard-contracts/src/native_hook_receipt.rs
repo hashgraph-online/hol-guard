@@ -27,6 +27,11 @@ pub struct NativeHookDecisionReceiptV1 {
     /// This is integrity evidence only, never an approval or execution grant.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub execution_intent_digest: Option<String>,
+    /// The action, source and verdict-relevant policy identity a one-time
+    /// review approval is fenced to.  It deliberately excludes snapshot
+    /// bookkeeping that republishes without changing any verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub review_anchor_digest: Option<String>,
     /// Commitment to a private prepared business review, not provider identity
     /// evidence or an execution grant. Ordinary hook evaluation omits it.
     #[serde(

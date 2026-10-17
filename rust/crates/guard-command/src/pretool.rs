@@ -57,8 +57,10 @@ mod fanout_reads;
 mod find_reads;
 mod for_loop_unroll;
 pub(crate) mod git_branch_listing;
+pub(crate) mod git_clone_local;
 mod git_config;
 pub(crate) mod git_config_reads;
+mod git_config_trust;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
@@ -73,6 +75,8 @@ mod repo_create_reason;
 mod root_removal;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
+mod git_history_reads;
+pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
 mod git_push;
@@ -89,6 +93,7 @@ mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
 mod postgres_reads;
+mod process_stops;
 mod pytest_contained;
 mod tool_bin_listing;
 mod trailing_group;
@@ -148,7 +153,9 @@ pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
 pub use generic::{bounded_task_metadata_output, evaluate_pre_tool_envelope};
-pub use git_push::{install_git_push_verdict, GitPushRequest, GitPushVerdict};
+pub use git_push::{
+    install_git_push_verdict, push_environment_git, GitPushRequest, GitPushVerdict,
+};
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
@@ -613,6 +620,40 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
     evaluate_pre_tool_with_context(request, None, None)
 }
 
+/// The same evaluation, told where the command runs.
+///
+/// Every rule that reads a path needs the working directory and the home
+/// directory to resolve `../sibling` and `~/Code`, and refuses the command
+/// when it has neither. A caller that knows them — the hook that received
+/// them from the harness, `guard inspect`, the dashboard's console — passes
+/// them here, and gets the decision the enforced hook lane gives the same
+/// command rather than the one a context-free screen is left with.
+pub fn evaluate_pre_tool_in(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
+    // Several proofs answer for what the command inherits: whether a
+    // `RIPGREP_CONFIG_PATH` can prepend options to `rg`, whether an npm or
+    // rustup variable can move what a tool loads, which HOME a `~` expands
+    // from. A caller that answers for another process's shell — a resident
+    // runtime started with its own sanitized environment, a one-shot
+    // evaluation of a request — knows none of that from its own variables,
+    // so an unstamped request is told so rather than being answered from
+    // this process. An environment with no valid shape is how the contract
+    // spells that, and every rule that needs one of those proofs keeps its
+    // review.
+    let unknown = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+    evaluate_pre_tool_with_execution_context(
+        request,
+        home_dir,
+        cwd,
+        None,
+        Some(execution_environment.unwrap_or(&unknown)),
+    )
+}
+
 pub(super) fn evaluate_pre_tool_with_context(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
@@ -692,6 +733,78 @@ fn ungrouped_decision(
         Ok(plain) if matches!(plain.minimum_action.as_str(), "allow" | "block") => plain,
         _ => decision,
     }
+}
+
+/// A redirect glued to a separator, as in `;2>&1`, `;&>/dev/null`, or `;</dev/null`.
+/// `cmd 2>&1` keeps its space, so an ordinary stderr copy is not this shape.
+fn separator_glued_redirect(command: &str) -> bool {
+    let chars: Vec<char> = command.chars().collect();
+    for index in 0..chars.len().saturating_sub(1) {
+        if !matches!(chars[index], ';' | '|' | '&' | '\n' | '(') {
+            continue;
+        }
+        // `&>`, `>&` and `<&` are one redirect. The `&` is not a separator,
+        // so `python3 app.py &>log` stays the ordinary command it was.
+        if chars[index] == '&'
+            && (chars[index + 1] == '>' || (index > 0 && matches!(chars[index - 1], '>' | '<')))
+        {
+            continue;
+        }
+        let next = chars[index + 1];
+        if matches!(next, '<' | '>') || (next == '&' && chars.get(index + 2) == Some(&'>')) {
+            return true;
+        }
+        if !next.is_ascii_digit() {
+            continue;
+        }
+        let rest = &chars[index + 1..];
+        let end = rest
+            .iter()
+            .position(|value| value.is_whitespace())
+            .unwrap_or(rest.len());
+        if rest[..end].contains(&'>') || rest[..end].contains(&'<') {
+            return true;
+        }
+    }
+    false
+}
+
+fn interpreter_runs_unread_file(model: &CanonicalCommandV1) -> bool {
+    model.segments.iter().any(|segment| {
+        let Some(executable) = segment.executable.as_deref() else {
+            return false;
+        };
+        let base = executable.rsplit(['/', '\\']).next().unwrap_or(executable);
+        let base = base
+            .strip_suffix(".exe")
+            .unwrap_or(base)
+            .to_ascii_lowercase();
+        if !matches!(
+            base.as_str(),
+            "sh" | "bash"
+                | "dash"
+                | "zsh"
+                | "python"
+                | "python2"
+                | "python3"
+                | "node"
+                | "ruby"
+                | "perl"
+                | "php"
+        ) {
+            return false;
+        }
+        for argument in &segment.arguments {
+            if matches!(argument.as_str(), "-c" | "-m" | "-e") {
+                return false;
+            }
+            if argument.starts_with('-') {
+                continue;
+            }
+            return true;
+        }
+        false
+    })
 }
 
 fn evaluate_single_command(
@@ -816,6 +929,10 @@ fn evaluate_single_command(
                 let environment = execution_environment;
                 git_init_target::exact_safe_command(&model, context, deadline, environment)
             })
+            .or_else(|| {
+                let environment = execution_environment;
+                git_clone_local::exact_safe_command(&model, context, deadline, environment)
+            })
     {
         return Ok(pretool_decision(model, "allow", reason_code, reason));
     }
@@ -894,6 +1011,21 @@ fn evaluate_single_command(
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
+    // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the
+    // simple parser from naming that interpreter, and reviewing the redirect
+    // would hide the launch. Only that glued form.
+    if cwd.is_none()
+        && separator_glued_redirect(&request.command)
+        && (interpreter_runs_unread_file(&model)
+            || crate::native_command_controls::unread_file_interpreter(&request.command))
+    {
+        return Ok(pretool_decision(
+            model,
+            "block",
+            "native_command_extension_evaluation_failed",
+            "HOL Guard could not match this command to the installed extension controls, so it stays blocked. A command that runs a script or another program (such as `bash script.sh`, `env`, `xargs`, `node -e` or a `$(...)` that runs one) cannot be matched. Run the program directly, or use a built-in tool. If an ordinary command keeps getting this, ask the user to run `hol-guard doctor`.",
+        ));
+    }
     Ok(pretool_decision(
         model,
         "review",

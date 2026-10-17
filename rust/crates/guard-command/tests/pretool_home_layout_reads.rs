@@ -42,7 +42,7 @@ fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolRes
     )
 }
 
-fn repository(path: &Path) {
+pub(crate) fn repository(path: &Path) {
     std::fs::create_dir_all(path.join(".github/workflows")).unwrap();
     std::fs::create_dir_all(path.join("src")).unwrap();
     std::fs::write(path.join(".github/workflows/ci.yml"), "name: ci\n").unwrap();
@@ -413,6 +413,9 @@ fn sibling_search_prunes_plainly_gitignored_directories() {
     );
 }
 
+/// Each case re-includes a file the search then reaches, which is what makes
+/// the rule matter. A rule naming a file that is not there decides nothing,
+/// and is covered beside the negation tests.
 #[test]
 fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
     let cases: [(&str, &[(&str, &str)]); 6] = [
@@ -421,9 +424,27 @@ fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
             &[(".ignore", "!.env\n"), (".env", "TOKEN=fixture\n")],
         ),
         ("rgignore", &[("src/.rgignore", "!.env\n")]),
-        ("negated", &[(".gitignore", "target\n!.env\n")]),
-        ("nested-negated", &[("src/.gitignore", "!.env\n")]),
-        ("exclude", &[(".git/info/exclude", "!.env\n")]),
+        (
+            "negated",
+            &[
+                (".gitignore", "target\n!.env\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
+        (
+            "nested-negated",
+            &[
+                ("src/.gitignore", "!.env\n"),
+                ("src/.env", "TOKEN=fixture\n"),
+            ],
+        ),
+        (
+            "exclude",
+            &[
+                (".git/info/exclude", "!.env\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
         (
             "credentials",
             &[("config/credentials.txt", "TOKEN=fixture\n")],
@@ -446,6 +467,7 @@ fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
     let nested = self::layout("rg-sibling-subdirectory");
     let sibling = nested.org.join("service-api");
     write(sibling.join("web/.gitignore"), "!.env\n");
+    write(sibling.join("web/src/.env"), "TOKEN=fixture\n");
     write(sibling.join("web/src/main.rs"), "fn main() {}\n");
     let cwd = nested.org.join("app-portal");
     assert_decision(

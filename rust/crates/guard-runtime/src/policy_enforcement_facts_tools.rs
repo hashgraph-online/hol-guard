@@ -205,6 +205,7 @@ pub(crate) fn risk_classes(
                 reason_code,
                 "native_agent_task_metadata"
                     | "native_omp_agent_task"
+                    | "native_omp_edit_without_header"
                     | "native_omp_edit_without_target"
                     | "native_pure_constant_eval"
             ) => {}

@@ -31,12 +31,32 @@ pub(super) fn safe_file_predicate_arguments(
     verified_path_context(context.home_dir, context.cwd)
         && matches!(predicate.as_str(), "-f" | "-d" | "-e" | "-r" | "-x" | "-s")
         && !target.starts_with('-')
-        && bounded_read_target(
+        && (bounded_read_target(
             target,
             context.home_dir,
             context.cwd,
             matches!(predicate.as_str(), "-d" | "-e" | "-x"),
-        )
+        ) || metadata_only_target(target, context))
+}
+
+/// A target a read screen holds back although the predicate returns nothing
+/// the screen protects.
+///
+/// `test -f ~/work/kubeconfig.digitalocean && …` is how a script decides
+/// whether it has the file it was written for. What comes back is one bit
+/// about that file, the same bit `ls` already prints for it, so a name that
+/// reads like a credential's is no reason to hold the question back. The
+/// store the credential is actually kept in is not admitted either way: the
+/// listing rule answers for a file whose directory a read may already name.
+///
+/// A predicate is as often asked about a path that is not there yet, so an
+/// unresolvable target is the ordinary case here rather than a spelling the
+/// screens could not follow. A listing answers that question too, with the
+/// bounds it needs: every missing component visible, and the nearest
+/// existing ancestor a directory this context may name.
+fn metadata_only_target(target: &str, context: super::PathContext<'_>) -> bool {
+    super::tool_bin_listing::credential_file_metadata_operand(target, context)
+        || super::listing_reads::absent_listing_operand(target, context)
 }
 
 pub(super) fn safe_listing_arguments(
@@ -79,6 +99,12 @@ pub(super) fn command_read_target(
             || (!allow_directory && read_globs::bounded_glob_file_read_target(value, context))
             || (!allow_directory
                 && super::chain_temporary::absent_temporary_read_target(
+                    value,
+                    context.home_dir,
+                    context.cwd,
+                ))
+            || (!allow_directory
+                && super::read_paths::home_hidden_content_read(
                     value,
                     context.home_dir,
                     context.cwd,

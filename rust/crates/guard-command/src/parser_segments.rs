@@ -1,5 +1,8 @@
 use super::*;
 
+#[path = "parser_ansi_c.rs"]
+mod ansi_c;
+
 pub(super) fn split_execution_segments(
     command: &str,
     preserve_unquoted_backslash: bool,
@@ -51,7 +54,15 @@ fn split_execution_segments_inner(
                     quote = Quote::None;
                 } else if current == '\\' {
                     escaped = true;
-                } else if current == '`' || (current == '$' && chars.get(index + 1) == Some(&'(')) {
+                } else if current == '`'
+                    || (current == '$' && chars.get(index + 1) == Some(&'('))
+                    || (current == '$'
+                        && chars.get(index + 1) == Some(&'{')
+                        && chars
+                            .get(index + 2)
+                            .copied()
+                            .is_some_and(crate::parser_brace_command::opens_brace_command))
+                {
                     return Err("command_substitution_not_yet_supported");
                 }
                 index += 1;
@@ -72,10 +83,12 @@ fn split_execution_segments_inner(
             '$' if chars.get(index + 1) == Some(&'{') => {
                 return Err("parameter_expansion_not_yet_supported");
             }
-            '$' if chars
-                .get(index + 1)
-                .is_some_and(|next| *next == '\'' || *next == '"') =>
-            {
+            // The word runs nothing, so carry on past the text it spells.
+            '$' if chars.get(index + 1) == Some(&'\'') => {
+                index = ansi_c::word(&chars, index, preserve_unquoted_backslash)?.1 + 1;
+                continue;
+            }
+            '$' if chars.get(index + 1) == Some(&'"') => {
                 return Err("non_posix_quoting_not_yet_supported");
             }
             '<' | '>'
@@ -434,6 +447,14 @@ fn shell_tokens_mode(
                         characters.next();
                     }
                 }
+                '$' if chars.get(index + 1) == Some(&'\'') => {
+                    let (literal, end) = ansi_c::word(&chars, index, preserve_backslash)?;
+                    token.push_str(&literal);
+                    token_started = true;
+                    for _ in index..end {
+                        characters.next();
+                    }
+                }
                 '\'' => {
                     quote = Quote::Single;
                     token_started = true;
@@ -471,3 +492,7 @@ fn shell_tokens_mode(
     }
     Ok(tokens)
 }
+
+#[cfg(test)]
+#[path = "parser_segments_ansi_c_tests.rs"]
+mod ansi_c_tests;

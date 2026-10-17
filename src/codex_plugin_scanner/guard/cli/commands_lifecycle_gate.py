@@ -7,7 +7,7 @@ import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TextIO, cast
+from typing import TYPE_CHECKING, TextIO, cast
 
 from ..approval_gate import ApprovalGateError, public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
@@ -15,6 +15,9 @@ from ..harness_disconnect_gate import disconnect_requires_fresh_authenticator
 from ..native_resident_revival import revive_native_resident
 from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
+
+if TYPE_CHECKING:
+    from ..adapters.base import HarnessContext
 
 _ENROLLMENT_NOTICE = (
     "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
@@ -152,6 +155,68 @@ def enforce_lifecycle_gate(
         action=requirement.action,
         scope="local-protection",
         subject=requirement.subject,
+    )
+
+
+def restore_missing_native_runtime(
+    error: ApprovalGateError,
+    *,
+    context: HarnessContext | None,
+    guard_home: Path,
+    error_stream: TextIO | None = None,
+) -> bool:
+    """Install the native runtime when its absence is the only reason the authority cannot answer.
+
+    The repair reinstalls the installed version with the native wheel whose digest the installed
+    pure wheel pins, so it cannot change the version or turn protection off. It restores the
+    authority; the caller still runs the full gate afterwards.
+    """
+
+    if error.code != "native_approval_gate_unavailable":
+        return False
+    try:
+        from .update_commands import bundled_native_runtime_missing, repair_native_runtime_if_missing
+
+        if not bundled_native_runtime_missing():
+            return False
+        print(
+            "Installing the missing native runtime from the HOL Guard GitHub release.", file=error_stream or sys.stderr
+        )
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=None,
+            workspace=None,
+            now=None,
+            guard_home=guard_home,
+        )
+        return repair is not None and repair[1] == 0 and not bundled_native_runtime_missing()
+    except Exception:
+        return False
+
+
+def explain_missing_native_runtime(error: ApprovalGateError) -> ApprovalGateError:
+    """Name the way out when the authority is silent because this install has no native runtime.
+
+    The gate still fails closed; the message only replaces "retry", which cannot succeed, with the
+    command that installs the runtime outside Guard.
+    """
+
+    if error.code != "native_approval_gate_unavailable":
+        return error
+    try:
+        from .update_commands import bundled_native_runtime_report
+
+        report = bundled_native_runtime_report()
+    except Exception:
+        return error
+    manual = report.get("manual_install") if report is not None and report.get("status") == "missing" else None
+    if not isinstance(manual, str):
+        return error
+    return ApprovalGateError(
+        error.code,
+        "This install has no native runtime, so the native approval authority cannot answer. "
+        f"Install the runtime with `{manual}`, then run the command again.",
+        status=error.status,
     )
 
 

@@ -113,6 +113,7 @@ pub(crate) fn benign_command_segments(
                         | "file"
                         | "npm"
                         | "jq"
+                        | "pkill"
                 )
                 // A file operand prints a source line on a syntax error, so it
                 // gets the same session proof as `cat`.
@@ -201,8 +202,14 @@ pub(super) fn exact_safe_segment_with_context(
     let jq_filter = (basename == "jq")
         .then(|| safe_reads::jq_filter_position(&segment.arguments, segment.pipeline_index > 0))
         .flatten();
-    let inert_search = matches!(basename, "rg" | "grep" | "fd")
-        && search::safe_search_arguments_with_context(basename, &segment.arguments, context);
+    // The same proof the admission arm runs below, so a search segment that
+    // arm refuses cannot shed its sensitive-text screen here.
+    let inert_search = match basename {
+        "grep" => search::grep::safe_grep_segment(model, segment, context),
+        "rg" => search::safe_rg_segment(model, segment, context),
+        "fd" => search::safe_search_arguments_with_context(basename, &segment.arguments, context),
+        _ => false,
+    };
     let search_text = if basename == "git" {
         super::git_search_text::pattern_positions(&segment.arguments)
     } else {
@@ -253,6 +260,7 @@ pub(super) fn exact_safe_segment_with_context(
         "pgrep" => super::safe_scalar::safe_pgrep_arguments(&segment.arguments),
         "ps" => super::safe_scalar::safe_ps_arguments(&segment.arguments),
         "lsof" => super::safe_scalar::safe_lsof_arguments(&segment.arguments),
+        "pkill" => super::process_stops::safe_pkill_arguments(&segment.arguments, context),
         "pg_isready" => super::safe_scalar::safe_pg_isready_arguments(&segment.arguments),
         "ls" => {
             super::listing_reads::safe_listing_segment(&segment.text, &segment.arguments, context)
@@ -365,10 +373,14 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::stdin_filters::safe_arguments(basename, &segment.arguments)
         }
         "rg" | "grep" | "fd" => {
-            (if basename == "grep" {
-                search::grep::safe_grep_segment(model, segment, context)
-            } else {
-                search::safe_search_arguments_with_context(basename, &segment.arguments, context)
+            (match basename {
+                "grep" => search::grep::safe_grep_segment(model, segment, context),
+                "rg" => search::safe_rg_segment(model, segment, context),
+                _ => search::safe_search_arguments_with_context(
+                    basename,
+                    &segment.arguments,
+                    context,
+                ),
             }) && super::directory_targets::search_home_targets_safe(
                 segment,
                 context.cwd,

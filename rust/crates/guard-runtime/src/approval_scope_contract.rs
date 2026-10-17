@@ -43,7 +43,6 @@ const ONCE_ONLY_REASONS: [&str; 11] = [
     "destructive_command",
     "git_helper_config",
 ];
-const NATIVE_REVIEW_BINDING_PREFIX: &str = "native-review-v4:";
 const GITHUB_WORKFLOW_RECORD_SOURCE: &str = "github_workflow_approval_record";
 
 /// The derived contract plus the exact-action token bound to the request.
@@ -99,7 +98,7 @@ pub(crate) fn contract(view: &View<'_>) -> ScopeContract {
     };
     let non_overridable = allow_is_non_overridable(view);
     let unverified = unverified_provider_execution(view);
-    let allow_scopes = if non_overridable {
+    let mut allow_scopes = if non_overridable {
         Vec::new()
     } else {
         reusable_allow_scopes(view, &artifact_scopes, unverified)
@@ -130,6 +129,12 @@ pub(crate) fn contract(view: &View<'_>) -> ScopeContract {
     let mut restrictions = vec!["reusable_allow_is_action_bound"];
     if native_retry_cannot_reuse_approval(view) {
         restrictions.push("retry_cannot_reuse_approval");
+        if !persistence_eligible {
+            allow_scopes.clear();
+            restrictions.push("execution_binding_unavailable");
+        } else {
+            allow_scopes.retain(|scope| *scope == "artifact");
+        }
     }
     if unverified {
         restrictions.push("provider_account_unverified_once_only");
@@ -273,7 +278,9 @@ fn native_retry_cannot_reuse_approval(view: &View<'_>) -> bool {
         .artifact_hash
         .as_ref()
         .and_then(Value::as_str)
-        .is_some_and(|hash| hash.starts_with(NATIVE_REVIEW_BINDING_PREFIX))
+        .is_some_and(|hash| {
+            crate::guard_store_native_review_consume::binding_pattern().is_match(hash)
+        })
 }
 
 fn is_context_token(value: &str) -> bool {

@@ -239,6 +239,7 @@ export function filterPackageScriptCommands(
   return commands.filter((command) => commandMatchesQuery(command, needle));
 }
 
+/** The script name in a pasted `npm run guard:audit`, when it names a script in the catalog. */
 export function commandMatchesQuery(command: LocalCliCommand, needle: string): boolean {
   const haystacks = [command.name, command.usage, command.description];
   if (haystacks.some((value) => value.toLowerCase().includes(needle))) return true;
@@ -307,7 +308,7 @@ function colonPartsMatch(name: string, needle: string): boolean {
   return index === queryParts.length;
 }
 
-function packageScriptFilterNeedle(query: string): string {
+export function packageScriptFilterNeedle(query: string): string {
   const trimmed = query.trim().toLowerCase();
   if (!trimmed) return "";
   return trimmed.replace(/^(npm|pnpm|yarn|bun)(?:\.cmd)?(?:\s+run(?:-script)?)?\s*/, "").trim();

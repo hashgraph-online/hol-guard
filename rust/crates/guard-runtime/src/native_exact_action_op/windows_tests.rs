@@ -81,26 +81,30 @@ fn environment() -> BTreeMap<String, String> {
         .filter_map(|name| Some((name.to_owned(), std::env::var(name).ok()?)))
         .collect();
     if let Some(path) = env.get_mut("PATH") {
-        *path = without_build_dirs(path);
+        *path = system_and_install_dirs(path);
     }
     env
 }
 
-/// Drop the toolchain and target directories cargo prepends to the test
-/// process `PATH`: their DLLs would exceed the binding caps of every launch.
-fn without_build_dirs(path: &str) -> String {
-    let exe = std::env::current_exe().unwrap();
-    let target = exe
-        .ancestors()
-        .find(|dir| dir.file_name().is_some_and(|name| name == "target"))
-        .map(|dir| dir.to_string_lossy().to_ascii_lowercase());
+/// Keep only the `PATH` entries under the Windows folder or Program Files,
+/// whose DLLs the launch proof does not bind. Toolchain, cargo and tool-cache
+/// folders (a CI image puts dozens on `PATH`) would exceed the binding caps of
+/// every launch, so the tests would depend on the host's `PATH`.
+fn system_and_install_dirs(path: &str) -> String {
+    let roots: Vec<String> = [
+        "SystemRoot",
+        "ProgramFiles",
+        "ProgramW6432",
+        "ProgramFiles(x86)",
+    ]
+    .into_iter()
+    .filter_map(|name| std::env::var(name).ok())
+    .map(|root| format!("{}\\", root.trim_end_matches('\\').to_ascii_lowercase()))
+    .collect();
     path.split(';')
         .filter(|entry| {
-            let lowered = entry.to_ascii_lowercase();
-            !lowered.contains("\\.rustup\\")
-                && !target
-                    .as_ref()
-                    .is_some_and(|dir| lowered.starts_with(dir.as_str()))
+            let lowered = format!("{}\\", entry.trim_end_matches('\\').to_ascii_lowercase());
+            roots.iter().any(|root| lowered.starts_with(root.as_str()))
         })
         .collect::<Vec<_>>()
         .join(";")

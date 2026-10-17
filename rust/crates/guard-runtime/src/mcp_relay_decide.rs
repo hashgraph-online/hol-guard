@@ -7,14 +7,20 @@
 //! the publisher's ACK holds, a harness the binding's MCP view covers, and a
 //! store whose saved lookups the resident reads as the proxy would: none at
 //! all, or only local rows the daemon's published integrity key verifies (see
-//! `mcp_relay_decide_store.rs` and `mcp_relay_decide_saved.rs`), for a call
-//! the package parser finds no intent in (`mcp_relay_decide_package.rs`).
+//! `mcp_relay_decide_store.rs` and `mcp_relay_decide_saved.rs`).
 //! Such a call is forwarded (an allow or warn) or blocked (a terminal or
 //! stored block). A block's evidence is queued for the daemon's drain first.
 //! The proxy records a forward only after the child answered it, so a
 //! forward's evidence is held under a ticket the relay commits once the child
 //! responded; a forward the relay never completes (a catalog boundary change,
 //! a lost answer) leaves no allow receipt.
+//!
+//! A call that installs or runs a package goes through the package lane
+//! instead (`mcp_relay_decide_package.rs`), which decides it from an
+//! evaluation the relay cannot perform inside one round trip: the first decide
+//! of such a call answers `evaluate`, and the relay sends the same call again
+//! with the evaluation attached (`mcp_relay_decide_package_leg.rs`). Its
+//! receipt is the package request's own (`mcp_relay_decide_package_receipt.rs`).
 //!
 //! A call the proxy forwards only after claiming its saved allow or one-shot
 //! approval is held for the relay to claim (see `mcp_relay_decide_claim.rs`).
@@ -30,11 +36,13 @@
 //! saved policy, a call that needs an inline elicitation the resident cannot
 //! raise, and any binding, lane or evidence failure.
 
+use self::package_route::ToolLeg;
 use crate::approval_proof_op::Disposition;
 use crate::mcp_tool_policy_decision::Decision;
 use crate::policy_enforcement::AdmittedPolicySnapshot;
 use crate::policy_store::policy_store_direct_lane::DirectLaneBinding;
 use crate::policy_store::PolicySnapshotStore;
+use guard_command::package_intent_common::PackageIntent;
 use guard_contracts::{
     McpToolArgumentsV1, McpToolCallBuildV1, McpToolCallHashInputV1, McpToolCallIdentityPayloadV1,
     McpToolPolicyProxyInputV1,
@@ -42,6 +50,7 @@ use guard_contracts::{
 use rusqlite::Connection;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Instant;
@@ -64,6 +73,10 @@ const IDENTITY_FAILED: &str = "mcp_relay_identity_failed";
 const POLICY_NEED: &str = "mcp_relay_policy_need";
 const ROUTE_UNSUPPORTED: &str = "mcp_relay_route_unsupported";
 const EVIDENCE_FULL: &str = "mcp_relay_evidence_full";
+/// Every defer the package lane answers with, which is what hands a server to
+/// the proxy. The gate's workspace check is not one of them: it fires before
+/// an intent is known, for a call that may carry no package request at all.
+const PACKAGE_DEFER_PREFIX: &str = "mcp_relay_package";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -83,9 +96,18 @@ pub(crate) struct McpRelayDecideRequestV1 {
     #[serde(default)]
     pub(crate) path: Option<String>,
     pub(crate) launcher_home: String,
-    /// The proxy's working directory, which a queued approval row records.
+    /// The proxy's working directory, which a queued approval row records and
+    /// a package call's execution context is bound to.
     #[serde(default)]
     pub(crate) cwd: Option<String>,
+    /// The proxy's `os.environ`, which only a package call's execution context
+    /// is built from (`_resident_environment`).
+    #[serde(default)]
+    pub(crate) environment: BTreeMap<String, String>,
+    /// The supply-chain evaluation of this call's package request, which the
+    /// relay performs and sends with the second decide of the same call.
+    #[serde(default)]
+    pub(crate) package_evaluation: Option<Map<String, Value>>,
     pub(crate) catalog_state: String,
     /// The `tools/call` params, which the daemon projects into evidence.
     pub(crate) params: Value,
@@ -125,9 +147,17 @@ enum Answer {
     Elicit {
         params: Value,
     },
+    /// Evaluate this call's package request and ask again with the evaluation
+    /// attached. A decide answers with no ticket and is decided again; a claim
+    /// answers with the ticket its rows are held against again, which the
+    /// second claim of the same call spends.
+    Evaluate {
+        ticket: Option<String>,
+    },
 }
 
 /// The lane admission one decision was made under.
+#[derive(Clone)]
 struct Admitted {
     workspace: String,
     snapshot: Arc<AdmittedPolicySnapshot>,
@@ -139,6 +169,27 @@ pub(crate) struct ClaimContext {
     request: McpRelayDecideRequestV1,
     admitted: Admitted,
     claimed: Claimed,
+}
+
+/// One held claim: a tool call's, or a package call's.
+///
+/// The two spend differently — a package claim re-resolves twice and carries
+/// an evaluation of its own — so the lane holds which it raised, and the claim
+/// request is answered by the spend that matches.
+pub(crate) enum HeldClaim {
+    Tool(ClaimContext),
+    Package(PackageClaimContext),
+}
+
+/// A package call that forwards only once the approvals its two policies
+/// left are claimed. Unlike a tool call's, the claim carries an evaluation of
+/// its own: the relay re-reads the package request after the claim, with the
+/// external archive network authorized, and the policy is re-resolved from
+/// that (`mcp_relay_decide_package_spend.rs`).
+pub(crate) struct PackageClaimContext {
+    request: McpRelayDecideRequestV1,
+    admitted: Admitted,
+    claimed: package_claim::PackageClaimed,
 }
 
 /// The approval a decision claims and the forward it then routes.
@@ -160,6 +211,41 @@ struct Resolved {
     redaction_level: Option<String>,
 }
 
+/// What one resolve does with the package request the gate found.
+enum PackageLeg<'a> {
+    /// Decide it, from the request's own evaluation: the stored policy, and
+    /// the route the lane takes over it and the tool authority together.
+    Decide(&'a PackageIntent),
+    /// Re-resolve a claimed one, from the evaluation the relay re-read the
+    /// request with after the claim: the stored policy alone, because the
+    /// route a claimed call takes is the post-claim revalidation's.
+    Claimed(&'a PackageIntent, &'a Map<String, Value>),
+}
+
+/// The package leg one resolve produced, for the caller that asked for it.
+enum Legged {
+    Decided(Box<package_leg::Packaged>),
+    Reresolved(Box<package_leg::Reresolved>),
+}
+
+impl Legged {
+    /// The decided leg, for the decide path that asked for a route.
+    fn decided(&self) -> Option<&package_leg::Packaged> {
+        match self {
+            Self::Decided(packaged) => Some(packaged.as_ref()),
+            Self::Reresolved(_) => None,
+        }
+    }
+
+    /// The re-resolution, for the claim that asked for a policy.
+    fn reresolved(self) -> Option<package_leg::Reresolved> {
+        match self {
+            Self::Reresolved(reresolved) => Some(*reresolved),
+            Self::Decided(_) => None,
+        }
+    }
+}
+
 /// The route the proxy takes for a decided call.
 #[derive(Debug, Clone, PartialEq)]
 enum Routed {
@@ -173,7 +259,11 @@ enum Routed {
     Terminal {
         policy_action: String,
     },
-    StoredBlock,
+    /// `_stored_tool_block_response`, whose message names the call a package
+    /// tool call when the request it carries went to the package lane.
+    StoredBlock {
+        package_request: bool,
+    },
     /// Forward once the pending saved approval is claimed.
     Claim {
         source: String,
@@ -215,13 +305,24 @@ pub(crate) fn evaluate(
     policy_store: &PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
     let answer = decide(&request, policy_store);
-    if matches!(
-        answer,
-        Err(package::PACKAGE_INTENT | package::PACKAGE_AMBIGUOUS)
-    ) {
+    // Every package-lane defer, from the gate's own to the lane's, so a server
+    // whose package call the relay could not answer goes to the proxy whole.
+    if matches!(&answer, Err(reason) if reason.starts_with(PACKAGE_DEFER_PREFIX)) {
         mark_package_server(&request, policy_store);
     }
     encode(answer)
+}
+
+/// The package request one decide request carries, as this gate reads it.
+///
+/// The relay parses the intent of the call it is evaluating in process, from
+/// the request it sent. `PackageIntent` is not wire-serializable, so the two
+/// halves each parse the same inputs rather than shipping one to the other
+/// (`mcp_relay_decide_package.rs`). A request this gate refuses carries no
+/// intent for the relay either, so the call is evaluated by neither.
+pub(crate) fn relayed_package_intent(request: Value) -> Option<PackageIntent> {
+    let request: McpRelayDecideRequestV1 = serde_json::from_value(request).ok()?;
+    package::package_gate(&request).ok().flatten()
 }
 
 /// Hand later sessions of a server whose call went to the package policy to
@@ -253,6 +354,12 @@ fn encode(answer: Result<Answer, &'static str>) -> Result<Vec<u8>, String> {
         Ok(Answer::Elicit { params }) => {
             json!({"schema": RESULT_SCHEMA, "outcome": "elicit", "params": params})
         }
+        Ok(Answer::Evaluate { ticket }) => match ticket {
+            Some(ticket) => {
+                json!({"schema": RESULT_SCHEMA, "outcome": "evaluate", "ticket": ticket})
+            }
+            None => json!({"schema": RESULT_SCHEMA, "outcome": "evaluate"}),
+        },
         Ok(Answer::Block { message, data }) => json!({
             "schema": RESULT_SCHEMA,
             "outcome": "block",
@@ -269,6 +376,14 @@ fn decide(
     policy_store: &PolicySnapshotStore,
 ) -> Result<Answer, &'static str> {
     let admitted = admit(request, policy_store)?;
+    let intent = package::package_gate(request)?;
+    // The package lane decides from an evaluation whose archive and registry
+    // rounds the relay performs, which no single round trip can hold. So the
+    // first decide of a package call asks for it, and the relay decides the
+    // same call again with the evaluation attached.
+    if intent.is_some() && request.package_evaluation.is_none() {
+        return Ok(Answer::Evaluate { ticket: None });
+    }
     let connection = store::open(Path::new(&request.guard_home))?;
     // One read snapshot for the store checks and every lookup they gate, so a
     // row or state the daemon commits between them cannot slip past.
@@ -277,8 +392,19 @@ fn decide(
         .map(Connection::unchecked_transaction)
         .transpose()
         .map_err(|_| store::STORE_UNREADABLE)?;
-    let mut resolved = resolve(request, &admitted, connection.as_deref())?;
+    let (mut resolved, legged) = resolve(
+        request,
+        &admitted,
+        connection.as_deref(),
+        intent.as_ref().map(PackageLeg::Decide),
+    )?;
     drop(snapshot);
+    // A package call is answered by its own lane, under the package policy and
+    // the tool authority together, so none of the tool-only route below runs
+    // for it.
+    if let Some(packaged) = legged.as_ref().and_then(Legged::decided) {
+        return settle_package(request, &admitted, &resolved, packaged, policy_store);
+    }
     let asks = admitted.binding.review.blocked_request_mode.as_deref() == Some(ASK_MODE);
     let proxy = crate::mcp_tool_policy_proxy::proxy_payload(
         &McpToolPolicyProxyInputV1 {
@@ -341,7 +467,7 @@ fn decide(
             };
             policy_store
                 .mcp_relay_claims()
-                .hold(context, Instant::now())
+                .hold(HeldClaim::Tool(context), Instant::now())
                 .map(|ticket| Answer::Claim { ticket })
                 .ok_or(EVIDENCE_FULL)
         }
@@ -430,14 +556,18 @@ fn admit(
     })
 }
 
-/// Pass the package check, build the identity and run the tool policy,
-/// reading saved lookups on `connection`, held in one transaction.
+/// Build the identity and run the tool policy, reading saved lookups on
+/// `connection`, held in one transaction. A call the gate found a package
+/// intent in also resolves its package leg, on that same snapshot: the lane's
+/// second resolution reads the store again, so it belongs inside it. What
+/// that leg is depends on who asked — a route for the decide path, the policy
+/// alone for a claim that routes it by the post-claim revalidation instead.
 fn resolve(
     request: &McpRelayDecideRequestV1,
     admitted: &Admitted,
     connection: Option<&Connection>,
-) -> Result<Resolved, &'static str> {
-    package::package_gate(request)?;
+    leg: Option<PackageLeg<'_>>,
+) -> Result<(Resolved, Option<Legged>), &'static str> {
     let binding = &admitted.binding;
     let control_digest = binding
         .exact_action_control_digest
@@ -453,15 +583,54 @@ fn resolve(
         )?,
         None => None,
     };
-    let identity = identity(request, &view, control_digest)?;
+    let identity = identity(request, &view, control_digest.clone())?;
     let subject = subject::subject(request, &identity, &view)?;
-    let decision = run_policy(&subject, saved.as_ref())?;
-    Ok(Resolved {
-        identity,
-        decision,
-        mode: view.mode,
-        redaction_level: view.receipt_redaction_level,
-    })
+    let decision = run_policy(&subject, saved.as_ref(), connection)?;
+    let packaged = match leg {
+        Some(PackageLeg::Decide(intent)) => {
+            let inputs = package_leg::package_inputs(
+                request,
+                &view,
+                saved.as_ref(),
+                &control_digest,
+                &identity,
+                intent,
+                request.package_evaluation.as_ref(),
+            )?;
+            Some(Legged::Decided(Box::new(package_leg::decide_package_leg(
+                request,
+                inputs,
+                &subject,
+                // The queue route of the package lane is answered by the same
+                // bound mode and redaction level the tool lane's queue route is.
+                package_lane::QueueBinding {
+                    blocked_request_mode: binding.review.blocked_request_mode.as_deref(),
+                    redaction_level: view.receipt_redaction_level.as_deref(),
+                },
+            )?)))
+        }
+        Some(PackageLeg::Claimed(intent, evaluation)) => Some(Legged::Reresolved(Box::new(
+            package_leg::reresolve_package_leg(
+                request,
+                &view,
+                saved.as_ref(),
+                &control_digest,
+                &identity,
+                intent,
+                evaluation,
+            )?,
+        ))),
+        None => None,
+    };
+    Ok((
+        Resolved {
+            identity,
+            decision,
+            mode: view.mode,
+            redaction_level: view.receipt_redaction_level,
+        },
+        packaged,
+    ))
 }
 
 /// Answer a forward or block route and queue or hold its evidence; a claimed
@@ -510,12 +679,19 @@ fn settle(
                 policy_action,
             )
         }
-        Routed::StoredBlock => (
+        Routed::StoredBlock { package_request } => (
             Some(Answer::Block {
-                message: format!(
-                    "HOL Guard blocked tool call {tool} from {server}. This exact request is \
-                     already blocked by authenticated saved policy."
-                ),
+                message: {
+                    let kind = if package_request {
+                        "package tool call"
+                    } else {
+                        "tool call"
+                    };
+                    format!(
+                        "HOL Guard blocked {kind} {tool} from {server}. This exact request is \
+                         already blocked by authenticated saved policy."
+                    )
+                },
                 data: json!({"approvalRequests": [], "guardPolicyAction": "block"}),
             }),
             "block",
@@ -603,6 +779,110 @@ fn settle(
     }
 }
 
+/// Answer one decided package call.
+///
+/// A leg the package policy decided is answered here and queues the receipt
+/// the drain writes it from: the package request's own, not the tool call's.
+/// A leg the tool policy decided is the plain tool-policy response the proxy
+/// renders for any other call, so it goes through `settle` and leaves the
+/// ordinary `mcp_tool_call` receipt against the tool artifact. The decision it
+/// is answered under is `resolved.decision`, which is the re-resolution the
+/// lane composed from: both are `run_policy` over the same subject on the
+/// snapshot this decide still holds.
+fn settle_package(
+    request: &McpRelayDecideRequestV1,
+    admitted: &Admitted,
+    resolved: &Resolved,
+    packaged: &package_leg::Packaged,
+    policy_store: &PolicySnapshotStore,
+) -> Result<Answer, &'static str> {
+    let queued;
+    let answer = match &packaged.outcome {
+        package_lane::PackageOutcome::Answered(answer) => answer,
+        // The row the bound `ask` mode writes reads the store this holds, so
+        // the answer is only completed here.
+        package_lane::PackageOutcome::AskPackage(asked) => {
+            queued = package_ask::queue(request, admitted, resolved, &packaged.artifact, asked)?;
+            &queued
+        }
+        // So do the observed rows the forward is queued with, which the
+        // answer carries the notices of once they are written.
+        package_lane::PackageOutcome::ObservePackage { answer, observed } => {
+            queued = package_observe::queue(
+                request,
+                admitted,
+                resolved,
+                &packaged.artifact,
+                answer,
+                observed,
+            )?;
+            &queued
+        }
+        // Nothing is answered and nothing is written: the rows are held
+        // against a ticket, and the call is decided again once the claim that
+        // spends them commits.
+        package_lane::PackageOutcome::ClaimPackage(leg) => {
+            let claimed = package_claim::claimed(leg, resolved, &packaged.artifact)?;
+            let context = PackageClaimContext {
+                request: request.clone(),
+                admitted: admitted.clone(),
+                claimed,
+            };
+            return policy_store
+                .mcp_relay_claims()
+                .hold(HeldClaim::Package(context), Instant::now())
+                .map(|ticket| Answer::Claim { ticket })
+                .ok_or(EVIDENCE_FULL);
+        }
+        package_lane::PackageOutcome::ToolLeg(leg) => {
+            let routed = match leg {
+                ToolLeg::StoredBlock => Routed::StoredBlock {
+                    package_request: true,
+                },
+                ToolLeg::Terminal { policy_action } => Routed::Terminal {
+                    policy_action: policy_action.clone(),
+                },
+                ToolLeg::Queue { policy_action } => {
+                    let mode = admitted.binding.review.blocked_request_mode.as_deref();
+                    match mode {
+                        Some(ASK_MODE) => {
+                            ask::queue(request, admitted, resolved, policy_action.clone())?
+                        }
+                        _ => queue::safe_alternative(
+                            mode,
+                            resolved.redaction_level.as_deref(),
+                            policy_action.clone(),
+                        )?,
+                    }
+                }
+            };
+            return settle(request, resolved, routed, None, policy_store);
+        }
+    };
+    let identity = serde_json::to_value(&resolved.identity).map_err(|_| IDENTITY_FAILED)?;
+    let evidence = package_receipt::record(
+        request,
+        &identity,
+        &resolved.decision,
+        &packaged.artifact,
+        &packaged.workspace,
+        answer,
+    )?;
+    match answer.block.clone() {
+        // As for a tool call, the relay commits the ticket once the child
+        // answered the forward.
+        None => policy_store
+            .mcp_relay_pending()
+            .hold(evidence, Instant::now())
+            .map(|ticket| Answer::Forward { ticket })
+            .ok_or(EVIDENCE_FULL),
+        Some((message, data)) if policy_store.direct_evidence().offer(evidence) => {
+            Ok(Answer::Block { message, data })
+        }
+        Some(_) => Err(EVIDENCE_FULL),
+    }
+}
+
 /// `Path.resolve(strict=True)` of a directory, as the lane settles it.
 fn settled_directory(candidate: &str) -> Result<String, &'static str> {
     let resolved = std::fs::canonicalize(Path::new(candidate)).map_err(|_| WORKSPACE_INVALID)?;
@@ -654,15 +934,43 @@ pub(crate) mod inline;
 mod observe;
 #[path = "mcp_relay_decide_package.rs"]
 mod package;
+#[path = "mcp_relay_decide_package_answer.rs"]
+mod package_answer;
+#[path = "mcp_relay_decide_package_archive.rs"]
+mod package_archive;
+#[path = "mcp_relay_decide_package_ask.rs"]
+mod package_ask;
+// What the claimed package lane composes, short of the store write.
+#[path = "mcp_relay_decide_package_claim.rs"]
+mod package_claim;
 #[path = "mcp_relay_decide_package_config.rs"]
 mod package_config;
+#[path = "mcp_relay_decide_package_lane.rs"]
+mod package_lane;
+#[path = "mcp_relay_decide_package_leg.rs"]
+mod package_leg;
+#[path = "mcp_relay_decide_package_observe.rs"]
+mod package_observe;
 #[path = "mcp_relay_decide_package_policy.rs"]
 mod package_policy;
+// The revalidation a claimed package call is decided again by.
+#[path = "mcp_relay_decide_package_postclaim.rs"]
+mod package_postclaim;
+#[path = "mcp_relay_decide_package_receipt.rs"]
+mod package_receipt;
+#[path = "mcp_relay_decide_package_route.rs"]
+mod package_route;
 #[path = "mcp_relay_decide_package_snapshot.rs"]
 mod package_snapshot;
+// What a claimed package call spends, and the answer it commits with.
+#[path = "mcp_relay_decide_package_spend.rs"]
+mod package_spend;
 #[path = "mcp_relay_decide_policy.rs"]
 mod policy;
 use policy::run_policy;
+// The provider lookups a reviewed provider action is steered by.
+#[path = "mcp_relay_decide_provider.rs"]
+mod provider;
 #[path = "mcp_relay_decide_queue.rs"]
 mod queue;
 use queue::route;

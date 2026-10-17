@@ -5,7 +5,13 @@ use serde_json::json;
 
 /// A decide request for `tool` with `arguments` in the relay's wire form.
 fn request(tool: &str, arguments: Value) -> McpRelayDecideRequestV1 {
-    serde_json::from_value(json!({
+    serde_json::from_value(wire(tool, arguments)).unwrap()
+}
+
+/// The same request as the relay sends it, which the relay's own gate reads
+/// back to evaluate the call.
+fn wire(tool: &str, arguments: Value) -> Value {
+    json!({
         "guard_home": "/guard",
         "hash_workspace": "/work",
         "build": {
@@ -26,12 +32,17 @@ fn request(tool: &str, arguments: Value) -> McpRelayDecideRequestV1 {
         "launcher_home": "/home/user",
         "catalog_state": "present",
         "params": {"name": tool},
-    }))
-    .unwrap()
+    })
 }
 
 fn mapping(entries: Value) -> Value {
     json!({"format": "mapping", "entries": entries})
+}
+
+/// Whether the gate found a package request. The intent itself is the gate's
+/// answer, and `PackageIntent` is not comparable.
+fn gate(request: &McpRelayDecideRequestV1) -> Result<bool, &'static str> {
+    package_gate(request).map(|intent| intent.is_some())
 }
 
 #[test]
@@ -49,15 +60,15 @@ fn a_call_without_a_package_intent_goes_on() {
         ("read", json!({"format": "other", "value": null})),
     ] {
         assert_eq!(
-            package_gate(&request(tool, arguments.clone())),
-            Ok(()),
+            gate(&request(tool, arguments.clone())),
+            Ok(false),
             "{tool} {arguments}"
         );
     }
 }
 
 #[test]
-fn a_package_intent_defers() {
+fn a_package_intent_is_the_gate_s_answer() {
     for (tool, arguments) in [
         (
             "bash",
@@ -79,33 +90,43 @@ fn a_package_intent_defers() {
         ),
     ] {
         assert_eq!(
-            package_gate(&request(tool, arguments.clone())),
-            Err(PACKAGE_INTENT),
+            gate(&request(tool, arguments.clone())),
+            Ok(true),
             "{tool} {arguments}"
         );
     }
 }
 
+/// The relay evaluates the request it sent, so both halves of one call read
+/// the same intent out of the same gate.
+#[test]
+fn the_relay_reads_the_same_intent_out_of_the_request_it_sent() {
+    let intent = |tool, arguments| {
+        crate::mcp_relay_decide::relayed_package_intent(wire(tool, arguments)).is_some()
+    };
+    let install = mapping(json!([["command", "npm install left-pad"]]));
+    assert!(intent("bash", install));
+    assert!(!intent("bash", mapping(json!([["command", "ls -la"]]))));
+    // A request the gate refuses carries no intent for the relay either.
+    let separated = mapping(json!([["command", "\u{1c}npm install left-pad"]]));
+    assert!(!intent("read", separated));
+    // Nor does one this process cannot read as a decide request at all.
+    assert!(
+        crate::mcp_relay_decide::relayed_package_intent(json!({"guard_home": "/guard"})).is_none()
+    );
+}
+
 #[test]
 fn a_command_the_two_strips_read_differently_defers() {
     let separated = mapping(json!([["command", "\u{1c}npm install left-pad"]]));
-    assert_eq!(
-        package_gate(&request("read", separated)),
-        Err(PACKAGE_AMBIGUOUS)
-    );
+    assert_eq!(gate(&request("read", separated)), Err(PACKAGE_AMBIGUOUS));
     let nested = mapping(json!([["steps", [{"run": "ls\u{1f}"}]]]));
-    assert_eq!(
-        package_gate(&request("bash", nested)),
-        Err(PACKAGE_AMBIGUOUS)
-    );
+    assert_eq!(gate(&request("bash", nested)), Err(PACKAGE_AMBIGUOUS));
     let tool = mapping(json!([["command", "ls"]]));
-    assert_eq!(
-        package_gate(&request("\u{1d}bash", tool)),
-        Err(PACKAGE_AMBIGUOUS)
-    );
+    assert_eq!(gate(&request("\u{1d}bash", tool)), Err(PACKAGE_AMBIGUOUS));
     // Separators inside a command are no stripping matter.
     let inner = mapping(json!([["command", "ls\u{1c}-la"]]));
-    assert_eq!(package_gate(&request("read", inner)), Ok(()));
+    assert_eq!(gate(&request("read", inner)), Ok(false));
 }
 
 #[test]
@@ -114,7 +135,7 @@ fn only_a_resolved_workspace_reaches_the_parser() {
     for workspace in ["/", "/work", "/work/a.b", "/work/..a"] {
         let mut request = call();
         request.workspace = Some(workspace.to_owned());
-        assert_eq!(package_gate(&request), Ok(()), "{workspace}");
+        assert_eq!(gate(&request), Ok(false), "{workspace}");
     }
     for workspace in [
         "//work",
@@ -130,11 +151,7 @@ fn only_a_resolved_workspace_reaches_the_parser() {
     ] {
         let mut request = call();
         request.workspace = Some(workspace.to_owned());
-        assert_eq!(
-            package_gate(&request),
-            Err(WORKSPACE_UNNORMALIZED),
-            "{workspace:?}"
-        );
+        assert_eq!(gate(&request), Err(WORKSPACE_UNNORMALIZED), "{workspace:?}");
     }
 }
 
@@ -147,17 +164,22 @@ fn a_package_intent_after_the_claim_rolls_it_back() {
     for id in [ONE_SHOT, LOCAL_POLICY] {
         let case = case(id);
         let before = dump_store(&case.connection);
-        // As `after_claim` maps the fresh resolve's refusal.
+        // As `after_claim` refuses the call the gate now finds a package
+        // request in.
         let mut refused = None;
-        let answer = claim::<()>(&case, &mut |_| match package_gate(&intent) {
-            Ok(()) => Ok(Some(())),
+        let answer = claim::<()>(&case, &mut |_| match gate(&intent) {
+            Ok(false) => Ok(Some(())),
+            Ok(true) => {
+                refused = Some(PACKAGE_CLAIMED);
+                Ok(None)
+            }
             Err(reason) => {
                 refused = Some(reason);
                 Ok(None)
             }
         });
         assert_eq!(answer.unwrap(), None, "{id}");
-        assert_eq!(refused, Some(PACKAGE_INTENT), "{id}");
+        assert_eq!(refused, Some(PACKAGE_CLAIMED), "{id}");
         assert_eq!(dump_store(&case.connection), before, "{id}: nothing spent");
         assert!(case.connection.is_autocommit(), "{id}: no open transaction");
     }

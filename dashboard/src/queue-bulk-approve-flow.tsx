@@ -240,6 +240,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
     return Array.from(map.entries());
   }, [riskLines]);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const executionApprovalAvailable = (props.retryBlockedActionCount ?? 0) === 0;
 
   const actionFooter = (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -253,7 +254,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       </button>
       <button
         type="submit"
-        disabled={props.step === "submitting" || !props.canConfirm}
+        disabled={props.step === "submitting" || !props.canConfirm || !executionApprovalAvailable}
         className="min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50"
       >
         {submitLabel}
@@ -268,7 +269,7 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
       footer={actionFooter}
       onSubmit={(event) => {
         event.preventDefault();
-        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+        if (props.step !== "submitting" && props.canConfirm && executionApprovalAvailable) props.onConfirmApprove();
       }}
     >
       {/* Header zone — generous top space, clear count hierarchy */}
@@ -392,7 +393,11 @@ export function QueueBulkDrawer(props: QueueBulkDrawerProps) {
           <span className="h-px flex-1 bg-slate-200" aria-hidden="true" />
         </div>
 
-        {gateReady ? (
+        {!executionApprovalAvailable ? (
+          <p className="mt-3 text-sm text-brand-attention" role="status">
+            Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions.
+          </p>
+        ) : gateReady ? (
           <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4">
             {bulkApproveCooldownOpen(props.approvalGate) && (
               <p className="text-sm text-brand-dark/80">

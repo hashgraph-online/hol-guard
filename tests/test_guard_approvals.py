@@ -3082,6 +3082,24 @@ class TestGuardApprovals:
         assert logo_type == "image/png"
         assert len(logo_bytes) > 0
 
+    def test_guard_daemon_stamps_the_dashboard_build_on_the_shell_and_every_response(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/inbox", timeout=5) as response:
+                shell = response.read().decode("utf-8")
+                shell_build = response.headers.get("X-Guard-Dashboard-Build")
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
+                api_build = response.headers.get("X-Guard-Dashboard-Build")
+        finally:
+            daemon.stop()
+
+        assert shell_build
+        assert api_build == shell_build
+        assert f'<meta name="guard-dashboard-build" content="{shell_build}" />' in shell
+
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"
         workspace_dir = tmp_path / "workspace"

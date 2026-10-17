@@ -31,6 +31,7 @@ winapi = { workspace = true, features = [
     "wincred",
     "wincrypt",
     "winnt",
+    "winreg",
 ] }
 windows-permissions.workspace = true
 getrandom.workspace = true

@@ -121,3 +121,10 @@ hol-guard policy import <file> (--merge | --replace) [--dry-run | --apply] [--ye
 `--check` exits 1 if it is not already canonical (a missing modeline alone does not count). `import` is a dry run unless you pass `--apply`: it prints the diff against Live and stops. With
 `--apply` it asks you to confirm the diff, or you can pass `--yes`. With `--format json` there is no prompt: run a dry run to see the diff, then pass `--yes`. Applying still goes
 through Guard's approval gate; `--yes` only skips the diff confirmation. No environment variable is needed.
+
+## Related commands
+
+The policy that a device applied is also part of the [fleet posture](../guard/fleet-posture.md) that Guard
+reports to Guard Cloud. `hol-guard cloud status` shows the last posture sent and what Cloud currently shows
+for this machine, and `hol-guard settings set fleet-posture off` limits that report to version, protection
+state and policy status (not available on managed installs).

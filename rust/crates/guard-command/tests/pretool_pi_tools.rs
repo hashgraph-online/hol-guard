@@ -161,14 +161,27 @@ fn omp_learn_stays_reviewed_before_it_runs() {
     // guard-runtime releases a `learn` result after execution because this
     // review means a person approved the call. Revisit that before allowing it here.
     let f = fixture("omp-learn");
-    let result = run(
-        &f,
-        "omp",
-        "learn",
+    for input in [
         json!({"memory": "Run the project tests with cargo test before pushing."}),
-    );
-    assert_eq!(result.minimum_action, "review");
-    assert_eq!(result.reason_code, "native_pre_tool_unknown_review");
+        json!({"memory": "Run the project tests before pushing.", "context": "Code review turn"}),
+        // A skill is a file later runs read; writing one stays a person's call.
+        json!({
+            "memory": "Run the project tests before pushing.",
+            "skill": {
+                "action": "create",
+                "name": "project-tests",
+                "description": "How to run this project's tests.",
+                "body": "# Project tests\n\nRun the suite from the repository root."
+            }
+        }),
+    ] {
+        let result = run(&f, "omp", "learn", input.clone());
+        assert_eq!(result.minimum_action, "review", "{input}");
+        assert_eq!(
+            result.reason_code, "native_pre_tool_unknown_review",
+            "{input}"
+        );
+    }
 }
 
 #[test]

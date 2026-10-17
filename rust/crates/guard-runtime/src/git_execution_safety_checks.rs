@@ -20,6 +20,10 @@ use crate::git_execution_safety_config::{
 };
 use crate::git_execution_safety_probe::{pushed_branch, ProbeOutput, Prober};
 
+#[path = "git_execution_safety_once.rs"]
+mod once;
+pub(crate) use once::push_once_state;
+
 pub(crate) struct Verdict {
     pub(crate) allowed: bool,
     pub(crate) resolved_path: Option<String>,
@@ -85,8 +89,10 @@ pub(crate) fn decide(request: &GitExecutionSafetyRequestV1) -> Verdict {
     Verdict::of(match request.check {
         GitExecutionSafetyCheckV1::StatusConfig => context.status_config(),
         GitExecutionSafetyCheckV1::ObjectQuery => context.object_query(),
-        GitExecutionSafetyCheckV1::FetchOrigin => context.fetch_origin(),
-        GitExecutionSafetyCheckV1::PushOrigin => context.push_origin(),
+        GitExecutionSafetyCheckV1::FetchOrigin => {
+            context.fetch_origin(&safe_github_https_remote_url)
+        }
+        GitExecutionSafetyCheckV1::PushOrigin => context.push_origin(&safe_github_https_remote_url),
         GitExecutionSafetyCheckV1::WorktreeAdd => context.worktree_add(),
         _ => false,
     })
@@ -246,7 +252,9 @@ impl Context<'_> {
                 .is_some_and(|config| !checkout_config_can_fetch(&config))
     }
 
-    fn fetch_origin(&self) -> bool {
+    /// `remote_ok` judges origin's rewritten URL: the native GitHub HTTPS
+    /// check, or `once::transport` for a one-time push approval.
+    fn fetch_origin(&self, remote_ok: &dyn Fn(&str) -> bool) -> bool {
         let environment = self.environment();
         if !routing_environment_is_clean(environment) || fetch_environment_is_set(environment) {
             return false;
@@ -267,8 +275,7 @@ impl Context<'_> {
         match config.get("remote.origin.url") {
             Some(urls)
                 if urls.iter().all(|url| {
-                    rewritten_remote_url(&config, url)
-                        .is_some_and(|url| safe_github_https_remote_url(&url))
+                    rewritten_remote_url(&config, url).is_some_and(|url| remote_ok(&url))
                 }) => {}
             _ => return false,
         }
@@ -311,7 +318,7 @@ impl Context<'_> {
         resolved.is_some_and(|path| binary_path_is_trusted(&path, cwd, home, &self.request.groups))
     }
 
-    fn push_origin(&self) -> bool {
+    fn push_origin(&self, remote_ok: &dyn Fn(&str) -> bool) -> bool {
         let Some(branch) = self
             .request
             .branch
@@ -323,7 +330,7 @@ impl Context<'_> {
         if !global_config_environment_is_stable(
             self.environment(),
             self.request.account_home.as_deref(),
-        ) || !self.fetch_origin()
+        ) || !self.fetch_origin(remote_ok)
         {
             return false;
         }

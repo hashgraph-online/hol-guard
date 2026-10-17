@@ -71,6 +71,7 @@ def _receipt(**overrides: object) -> dict[str, object]:
                 "decision_id",
                 "origin_authentication",
                 "execution_intent_digest",
+                "review_anchor_digest",
             }
         },
     }
@@ -147,6 +148,18 @@ def test_execution_intent_evidence_is_optional_and_not_decision_identity() -> No
     for invalid in (None, 1, "", "f" * 63, "F" * 64, "f" * 65):
         malformed = dict(evidence)
         malformed["execution_intent_digest"] = invalid
+        assert validate_native_decision_receipt(malformed) is None
+
+
+def test_review_anchor_is_optional_and_not_decision_identity() -> None:
+    legacy = _receipt()
+    anchored = _receipt(review_anchor_digest="a" * 64)
+    assert validate_native_decision_receipt(anchored) == anchored
+    assert anchored["decision_id"] == legacy["decision_id"]
+    assert canonical_receipt_bytes(anchored) == canonical_receipt_bytes(legacy)
+    for invalid in (None, 1, "", "a" * 63, "A" * 64, "a" * 65):
+        malformed = dict(anchored)
+        malformed["review_anchor_digest"] = invalid
         assert validate_native_decision_receipt(malformed) is None
 
 

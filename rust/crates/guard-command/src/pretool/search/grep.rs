@@ -1,5 +1,5 @@
 use super::{
-    options, short_search_option, tree, unsafe_search_value, ReadContext, SearchValueRole,
+    options, short_search_option, sibling, tree, unsafe_search_value, ReadContext, SearchValueRole,
 };
 
 /// Which missing operands a proof may accept.
@@ -43,7 +43,7 @@ pub(crate) fn safe_grep_segment(
 /// A peer that cannot create a filesystem entry: no output redirect beyond
 /// `/dev/null`, and a command that only prints, filters or changes directory.
 /// `strict` admits only `cd` and stdin filters after a pipe.
-fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
+pub(super) fn creates_nothing(segment: &crate::CommandSegmentV1, strict: bool) -> bool {
     let text = ["2>&1", "2>/dev/null", ">/dev/null"]
         .iter()
         .fold(segment.text.clone(), |text, quiet| text.replace(quiet, ""));
@@ -116,6 +116,7 @@ fn arguments_pass(
     let mut pattern_option_seen = false;
     let mut options_enabled = true;
     let mut recursive = false;
+    let mut dereference = false;
     let mut targets = Vec::new();
     let mut excluded_files = Vec::new();
     let mut excluded_directories = Vec::new();
@@ -184,6 +185,7 @@ fn arguments_pass(
                     return false;
                 }
                 recursive = true;
+                dereference |= name == "--dereference-recursive";
                 continue;
             }
             if matches!(name, "--file" | "--exclude-from") {
@@ -223,10 +225,18 @@ fn arguments_pass(
             {
                 return false;
             }
-            recursive |= argument[1..]
-                .chars()
-                .take_while(|option| !matches!(option, 'e' | 'f' | 'd' | 'A' | 'B' | 'C' | 'm'))
-                .any(|option| matches!(option, 'r' | 'R'));
+            // `-R` reads through every link it meets; `-r` follows one only
+            // when it is named as an operand. The proof differs, so the two
+            // are counted apart. BSD grep spells the same reach-through as
+            // `-S` beside a recursive flag, and `-O` for an operand that is
+            // itself a link, so both count as reading through as well.
+            let bundled = || {
+                argument[1..]
+                    .chars()
+                    .take_while(|option| !matches!(option, 'e' | 'f' | 'd' | 'A' | 'B' | 'C' | 'm'))
+            };
+            recursive |= bundled().any(|option| matches!(option, 'r' | 'R'));
+            dereference |= bundled().any(|option| matches!(option, 'R' | 'S' | 'O'));
             let parsed = short_search_option(
                 argument,
                 &[],
@@ -256,6 +266,7 @@ fn arguments_pass(
             targets.push(argument.as_str());
             let proven = recursive
                 || proven_glob(argument, context)
+                || sibling::named_path(argument, context, absent.plain)
                 || (absent.plain && absent_target(argument, context));
             if !proven && unsafe_search_value(SearchValueRole::Path, argument, context) {
                 return false;
@@ -286,7 +297,15 @@ fn arguments_pass(
                     &excluded_files,
                     &excluded_directories,
                     true,
-                ) || proven_glob(target, context)
+                    dereference,
+                ) || (!dereference
+                    && (sibling::grep_walk_root(
+                        target,
+                        context,
+                        &excluded_files,
+                        &excluded_directories,
+                        true,
+                    ) || proven_glob(target, context)))
             };
             recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })
