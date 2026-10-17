@@ -386,6 +386,61 @@
     "complete": false,
     "error_reason": "syntax_error"
    }
+  },
+  {
+   "name": "npm_scoped_package_lockfile_preserves_scope",
+   "path": "package-lock.json",
+   "text": "{\"lockfileVersion\": 3, \"packages\": {\"node_modules/@playwright/test\": {\"version\": \"1.60.0\"}}}",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "@playwright/test",
+      "@playwright/test",
+      "1.60.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "npm_two_scoped_packages_same_unscoped_name",
+   "path": "package-lock.json",
+   "text": "{\"lockfileVersion\": 3, \"packages\": {\"node_modules/@oh-my-pi/pi-coding-agent\": {\"version\": \"0.1.0\"}, \"node_modules/@earendil-works/pi-coding-agent\": {\"version\": \"0.1.0\"}}}",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "@earendil-works/pi-coding-agent",
+      "@earendil-works/pi-coding-agent",
+      "0.1.0"
+     ],
+     [
+      "@oh-my-pi/pi-coding-agent",
+      "@oh-my-pi/pi-coding-agent",
+      "0.1.0"
+     ]
+    ]
+   }
+  },
+  {
+   "name": "npm_scoped_nested_under_scoped",
+   "path": "package-lock.json",
+   "text": "{\"lockfileVersion\": 3, \"packages\": {\"node_modules/@types/node\": {\"version\": \"20.0.0\"}, \"node_modules/@playwright/test/node_modules/@types/node\": {\"version\": \"20.0.0\"}}}",
+   "expect": {
+    "complete": true,
+    "entries": [
+     [
+      "@playwright/test/node_modules/@types/node",
+      "@types/node",
+      "20.0.0"
+     ],
+     [
+      "@types/node",
+      "@types/node",
+      "20.0.0"
+     ]
+    ]
+   }
   }
  ],
  "evaluation": [
