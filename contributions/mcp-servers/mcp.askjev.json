@@ -7,7 +7,7 @@
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
-    "id": "github.com/ranjan2829",
+    "id": "github.ranjan2829",
     "displayName": "AskJev",
     "url": "https://github.com/ranjan2829/AskJev"
   },
