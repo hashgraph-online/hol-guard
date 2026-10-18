@@ -21,7 +21,7 @@ use std::time::Duration;
 use nix::sys::signal::{kill, killpg, SigSet, Signal};
 use nix::unistd::Pid;
 
-use super::denial::denial_note;
+use super::denial::{denial_note, loopback_denied};
 use super::{envelope, Failure, Outcome, LAUNCH_COMMAND, SANDBOX_UNAVAILABLE};
 
 const OUTPUT_LIMIT: usize = 1024 * 1024;
@@ -117,6 +117,7 @@ pub(super) fn run_backend(
     scratch: &Path,
     signals: &Signals,
     timeout_seconds: u64,
+    on_loopback_denied: &dyn Fn(),
 ) -> Outcome<i32> {
     let deadline = std::time::Instant::now() + CEILING_BUDGET;
     let ceiling = envelope(crate::restricted_process_ceiling::evaluate(deadline))?
@@ -175,9 +176,11 @@ pub(super) fn run_backend(
         ));
     }
     let code = status.map_or(1, exit_code);
-    let note = (code != 0)
-        .then(|| denial_note(&[stdout_text.as_slice(), stderr_text.as_slice()]))
-        .flatten();
+    let outputs = [stdout_text.as_slice(), stderr_text.as_slice()];
+    let note = (code != 0).then(|| denial_note(&outputs)).flatten();
+    if note.is_some() && loopback_denied(&outputs) {
+        on_loopback_denied();
+    }
     if let Some(note) = note {
         let mut stderr = std::io::stderr().lock();
         let _ = writeln!(stderr, "\n[HOL Guard] {note}");

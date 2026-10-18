@@ -296,3 +296,18 @@ def retry_assessment(case: dict[str, Any], decisions: list[dict[str, Any]] | Non
         last = [d for d in stopped if action_key(str(d["command"])) == blocked[0]][-1]
         return "fail", f"the agent never got a retry past Guard after approval ({last['reason_code']})"
     return "pass", "one approval let the agent's own retry through with no second review"
+
+
+def pinned_retry_outcome(commands: tuple[str, ...], decisions: list[dict[str, Any]]) -> tuple[str, str] | None:
+    """For a case that pins its command, did an allowed retry carry exactly those bytes?
+
+    ``retry_assessment`` ties a retry to the approval by program and subcommand, so it
+    alone would pass a retry that changed an environment setting or an argument. A
+    pinned case claims the identical command runs, so it also needs an allowed attempt
+    whose text matches a pinned command byte for byte.
+    """
+    if not commands:
+        return None
+    if any(d.get("decision") == "allow" and d.get("command") in commands for d in decisions):
+        return None
+    return "not-exercised", "no allowed retry matched the pinned command byte for byte"

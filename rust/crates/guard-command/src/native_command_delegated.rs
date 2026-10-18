@@ -26,7 +26,8 @@ impl CompiledNativeCommandControls {
         deadline: Option<Instant>,
     ) -> Result<&'static str, &'static str> {
         let mut floor = "allow";
-        for extension in &self.program.extensions {
+        for &index in self.candidate_index.extension_indices() {
+            let extension = &self.program.extensions[index];
             if deadline.is_some_and(|limit| Instant::now() >= limit) {
                 return Err("native_command_deadline_exceeded");
             }

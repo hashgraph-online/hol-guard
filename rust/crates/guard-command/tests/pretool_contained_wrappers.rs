@@ -345,6 +345,70 @@ fn standard_input_grep_filters_reach_containment() {
     }
 }
 
+/// `rg` reads its standard input the way `grep` does, and the harnesses
+/// reach for it by habit, so a stage that names no file, reads no pattern
+/// file and opts into no other engine filters the captured output too.
+/// ripgrep spells its own switches: `-E` and `-g` take a value there and
+/// `-P` picks a second engine, so none of them passes as a switch.
+#[test]
+fn standard_input_ripgrep_filters_reach_containment() {
+    let root = fixture();
+    let sibling = root.join("sibling-worktree");
+    std::fs::create_dir_all(sibling.join("dashboard")).unwrap();
+    std::fs::write(sibling.join(".git"), "gitdir: /nonexistent\n").unwrap();
+    package(&sibling);
+    let sibling = sibling.to_str().unwrap();
+    let runner = format!("cd {sibling}/dashboard && bunx vitest run x 2>&1");
+    for harness in ["omp", "zcode", "claude-code", "codex"] {
+        for command in [
+            format!("{runner} | rg -A 12 \"FAIL|AssertionError\" | head -40"),
+            format!("{runner} | rg -n FAIL"),
+            format!("{runner} | rg -B2 -A6 -i error"),
+            format!("{runner} | rg -NU -e FAIL -e Error"),
+            format!("{runner} | rg -v ok | tail -3"),
+            format!("{runner} | rg -c FAIL | head -1"),
+            format!(
+                "cd {sibling}/dashboard && ./node_modules/.bin/vite build 2>&1 | rg -v warning | head -20"
+            ),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_eq!(result.decision, "deny", "{harness}: {command}");
+            if cfg!(target_os = "macos") {
+                assert_eq!(
+                    result.minimum_action, "sandbox-required",
+                    "{harness}: {command}"
+                );
+                assert!(
+                    result.reason_code.ends_with("_containment_required"),
+                    "{harness}: {command}: {}",
+                    result.reason_code
+                );
+            }
+        }
+        for command in [
+            format!("{runner} | rg -f ~/.ssh/id_rsa"),
+            format!("{runner} | rg x ~/.aws/credentials"),
+            format!("{runner} | rg -l x"),
+            format!("{runner} | rg -P x"),
+            format!("{runner} | rg -z x"),
+            format!("{runner} | rg -g \"*.ts\" x"),
+            format!("{runner} | rg -E utf-8 x"),
+            format!("{runner} | rg --pre cat x"),
+            format!("{runner} | rg --files"),
+            format!("{runner} | rg x > ~/.bashrc"),
+            format!("{runner} | rg x | sh"),
+            format!("{runner} | RIPGREP_CONFIG_PATH=/tmp/rc rg x"),
+        ] {
+            let result = classify(&root, harness, &command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+            assert_ne!(
+                result.minimum_action, "sandbox-required",
+                "{harness}: {command}"
+            );
+        }
+    }
+}
+
 /// The execution sink peels a `cd` only to an absolute directory or to a
 /// relative sibling repository root. A relative `cd` into a workspace
 /// subdirectory therefore stays on the workspace sandbox, which the sink

@@ -1,10 +1,11 @@
 #![cfg(unix)]
 
-//! In a linked worktree, `git rebase --continue` after a resolved conflict
-//! and a commit the agent signs with `-S` are local writes when the rebase
-//! state names no program and the signing program is the user's installed
-//! one. An `exec` step, a saved strategy or signing key, `--skip`, `--abort`
-//! and a repository or untrusted signing program keep the review.
+//! In a linked worktree, `git rebase <upstream>`, `git rebase --continue`
+//! after a resolved conflict and a commit the agent signs with `-S` are local
+//! writes when no rebase state or configuration names a program and the
+//! signing program is the user's installed one. An `exec` step, a saved
+//! strategy or signing key, the apply backend, `--skip`, `--abort` and a
+//! repository or untrusted signing program keep the review.
 
 use crate::pretool_git_session_ops::{executable_hook, git, session, Session};
 use std::path::Path;
@@ -121,6 +122,62 @@ fn rebase_continue_is_quiet_only_with_replay_steps_and_no_programs() {
     // No rebase in progress.
     git_may_fail(&session.home, &session.worktree, &["rebase", "--abort"]);
     assert!(allowed(&session, resume).is_err());
+}
+
+#[test]
+fn starting_a_rebase_onto_a_local_ref_is_a_local_write() {
+    let session = session("rebase-start");
+    for command in [
+        "git rebase main",
+        "git rebase -q main",
+        "git rebase main 2>&1 | tail -2",
+        "git add tracked.txt && git commit -m 'fix: x' && git rebase main",
+    ] {
+        allowed(&session, command).unwrap();
+    }
+    // Options that run a program, replay somewhere else or write over the
+    // working tree, and a second operand that checks a branch out first.
+    for command in [
+        "git rebase -i main",
+        "git rebase --interactive main",
+        "git rebase -x id main",
+        "git rebase --exec=id main",
+        "git rebase --onto main topic",
+        "git rebase --root",
+        "git rebase -s ort main",
+        "git rebase -X theirs main",
+        "git rebase -S main",
+        "git rebase --autostash main",
+        "git rebase main fix/report-lane",
+        "git -c core.hooksPath=/tmp/hooks rebase main",
+        "git rebase main; rm -rf build",
+    ] {
+        assert!(allowed(&session, command).is_err(), "{command}");
+    }
+    // Configuration that replays with `git am` and its own hooks, or that
+    // names a program the replayed commits would start.
+    for (key, value) in [
+        ("rebase.backend", "apply"),
+        ("merge.custom.driver", "sh -c id"),
+        ("commit.gpgSign", "true"),
+        ("hook.post-rewrite.command", "id"),
+    ] {
+        session.config(&[key, value]);
+        assert!(allowed(&session, "git rebase main").is_err(), "{key}");
+        session.config(&["--unset-all", key]);
+    }
+    session.config(&["rebase.backend", "merge"]);
+    allowed(&session, "git rebase main").unwrap();
+    session.config(&["--unset-all", "rebase.backend"]);
+    executable_hook(&session.primary.join(".git/hooks/post-rewrite"));
+    assert!(allowed(&session, "git rebase main").is_err());
+    std::fs::remove_file(session.primary.join(".git/hooks/post-rewrite")).unwrap();
+    // A rebase already in progress carries a saved todo list this form does
+    // not read.
+    stopped_rebase(&session, &[]);
+    assert!(allowed(&session, "git rebase main").is_err());
+    git_may_fail(&session.home, &session.worktree, &["rebase", "--abort"]);
+    allowed(&session, "git rebase main").unwrap();
 }
 
 #[test]

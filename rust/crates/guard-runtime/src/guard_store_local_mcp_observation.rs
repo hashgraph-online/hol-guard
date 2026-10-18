@@ -238,7 +238,7 @@ fn written(cli_id: String) -> Value {
 const MAX_DECLARED_SOURCES: usize = 16;
 
 /// `<harness>:<stdio|remote>`, the one harness config shape a source names.
-fn valid_declared_source(value: &str) -> bool {
+pub(crate) fn valid_declared_source(value: &str) -> bool {
     let Some((harness, transport)) = value.split_once(':') else {
         return false;
     };

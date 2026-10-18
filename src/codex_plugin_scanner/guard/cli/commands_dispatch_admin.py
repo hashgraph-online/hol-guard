@@ -402,7 +402,7 @@ def _run_guard_doctor_command(
         )
         native_runtime_repair = repair[0] if repair is not None else None
     with nullcontext() if args.harness else without_command_probes():
-        availability = doctor_native_availability()
+        availability = doctor_native_availability(guard_home)
     native_runtime: dict[str, object] = {
         "availability": availability,
         "admission": native_resident_admission_snapshot(),

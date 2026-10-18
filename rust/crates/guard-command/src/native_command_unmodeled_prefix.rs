@@ -118,7 +118,13 @@ fn grammar(prefix: &str) -> Option<&'static Grammar> {
 /// Whether a backgrounded or prefixed interpreter still names a program file
 /// this scan did not read. A `python -m` module launch does not: the module is
 /// an argument, same as the foreground command.
-pub(super) fn interpreter_launch_reads_a_file(shell: &str) -> bool {
+///
+/// `sourcing_read` says the files this command sources were read, so the
+/// question is asked of everything beside the sourcing. Without it the
+/// `source` answered for the whole command: `source .venv/bin/activate &&
+/// python -m pytest` reads one file, that file is already in hand, and the
+/// module launch next to it was still refused for naming a file nobody read.
+pub(super) fn interpreter_launch_reads_a_file(shell: &str, sourcing_read: bool) -> bool {
     without_redirections(shell)
         .split(|character: char| {
             matches!(
@@ -126,7 +132,19 @@ pub(super) fn interpreter_launch_reads_a_file(shell: &str) -> bool {
                 ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
             )
         })
+        .filter(|piece: &&str| !(sourcing_read && sources_a_file(piece)))
         .any(command_reads_a_program_file)
+}
+
+/// Whether the piece runs the shell's `source` builtin. A path-qualified
+/// `./source` is a program of the user's own, so only the bare spellings
+/// count, the same way the segment scan reads them.
+fn sources_a_file(piece: &str) -> bool {
+    piece
+        .split_whitespace()
+        .map(|word| word.trim_matches(['\'', '"']))
+        .find(|word| !word.is_empty() && !is_assignment(word))
+        .is_some_and(|word| matches!(word, "." | "source"))
 }
 
 /// Whether the text is a scheduling prefix standing in front of the program it
@@ -139,7 +157,7 @@ pub(super) fn launch_only(literal: &str) -> bool {
     let Some(first) = words.first() else {
         return false;
     };
-    is_launcher(first) && !interpreter_launch_reads_a_file(literal)
+    is_launcher(first) && !interpreter_launch_reads_a_file(literal, false)
 }
 
 fn command_reads_a_program_file(piece: &str) -> bool {

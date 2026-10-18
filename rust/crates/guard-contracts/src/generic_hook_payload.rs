@@ -188,6 +188,79 @@ const GENERIC_HOOK_NON_CONTENT_FIELDS: &[&str] = &[
     "user_override",
 ];
 
+/// `cursor_observer_event_for_blocking`
+/// (`adapters/cursor_native_approval.py:169-170`): the after-observer event
+/// that answers a blocking Cursor event, if any.
+pub fn cursor_observer_event_for_blocking(blocking_event: &str) -> Option<&'static str> {
+    match blocking_event.trim() {
+        "beforeShellExecution" => Some("afterShellExecution"),
+        "beforeMCPExecution" => Some("afterMCPExecution"),
+        _ => None,
+    }
+}
+
+/// `cursor_observer_event_for_payload`
+/// (`adapters/cursor_native_approval.py:173-183`): which observer event this
+/// payload is attested under.
+///
+/// The answer is a field of the message the after-observer proof is computed
+/// over, and the side that issues a proof and the side that checks it both
+/// derive it from a payload the harness supplies. Two copies of this
+/// selection would silently invalidate every proof the moment they disagreed,
+/// so the resident answers for both. A key naming an event that is neither an
+/// observer event nor a blocking event it answers is passed over rather than
+/// taken, and a payload naming none of them is attested under
+/// `afterShellExecution`.
+pub fn cursor_observer_event_for_payload(payload: &Map<String, Value>) -> &'static str {
+    for key in [
+        "hook_event_name",
+        "hookEventName",
+        "cursor_source_hook_event",
+    ] {
+        let Some(text) = payload.get(key).and_then(Value::as_str) else {
+            continue;
+        };
+        let normalized = text.trim();
+        if normalized.is_empty() {
+            continue;
+        }
+        match normalized {
+            "afterShellExecution" => return "afterShellExecution",
+            "afterMCPExecution" => return "afterMCPExecution",
+            _ => {}
+        }
+        if let Some(mapped) = cursor_observer_event_for_blocking(normalized) {
+            return mapped;
+        }
+    }
+    "afterShellExecution"
+}
+
+/// `_cursor_after_shell_observed`
+/// (`commands_support_hook_state.py:443-453`): whether this Cursor payload is
+/// a report that the command already ran.
+///
+/// It gates the step that turns a pending approval into a durable session
+/// allowance, so reading a before-event as an after-report would mint an
+/// allowance for a command nobody watched finish. A numeric `duration` is the
+/// harness timing its own completed call and settles it on its own; an MCP
+/// execution has to carry a non-blank `result_json`; anything else needs a
+/// string `output`, present even when the command printed nothing. A boolean
+/// is not a duration - JSON keeps the two apart, where Python had to say so.
+pub fn cursor_after_shell_observed(payload: &Map<String, Value>) -> bool {
+    if let Some(duration) = payload.get("duration").and_then(Value::as_f64) {
+        return duration >= 0.0;
+    }
+    let event = hook_event_name(payload).unwrap_or_default().to_lowercase();
+    if event == "aftermcpexecution" {
+        return payload
+            .get("result_json")
+            .and_then(Value::as_str)
+            .is_some_and(|text| !text.trim().is_empty());
+    }
+    payload.get("output").is_some_and(Value::is_string)
+}
+
 /// `_generic_hook_content_key` (`commands_hook_native_generic.py:292-295`):
 /// canonicalize a top-level hook key across snake/camel/kebab transports —
 /// `re.sub(r"(?<!^)(?=[A-Z])", "_", key)` then `-` → `_` then lowercase.
@@ -230,29 +303,6 @@ pub fn generic_hook_payload_digest(payload: &Map<String, Value>) -> String {
     // binding, which is the safe outcome).
     let _ = write_canonical_json(&Value::Object(content), &mut encoded);
     hex_sha256(&encoded)
-}
-
-/// `_generic_hook_workspace_identity` (`commands_hook_native_generic.py:298-303`):
-/// the runtime workspace root normalized to a forward-slash resolved path
-/// string; `None`/empty → empty string. `Path::resolve`/`as_posix` in Python
-/// collapse `.`/`..` and platform separators.
-pub fn generic_hook_workspace_identity(runtime_workspace: Option<&str>) -> String {
-    let Some(raw) = runtime_workspace else {
-        return String::new();
-    };
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return String::new();
-    }
-    // Normalize separators the way Path.as_posix() does; `.`/`..` resolution
-    // is a host-side Path operation the caller performs before crossing the
-    // boundary — Rust keeps the string-level normalization (trailing slash
-    // strip + backslash→slash) only.
-    let mut normalized = trimmed.replace('\\', "/");
-    while normalized.len() > 1 && normalized.ends_with('/') {
-        normalized.pop();
-    }
-    normalized
 }
 
 // ─── memory command derivation ───────────────────────────────────────────
@@ -577,17 +627,6 @@ mod tests {
     }
 
     #[test]
-    fn workspace_identity_normalizes() {
-        assert_eq!(generic_hook_workspace_identity(None), "");
-        assert_eq!(generic_hook_workspace_identity(Some("  ")), "");
-        assert_eq!(
-            generic_hook_workspace_identity(Some("C:\\proj\\x")),
-            "C:/proj/x"
-        );
-        assert_eq!(generic_hook_workspace_identity(Some("/a/b/")), "/a/b");
-    }
-
-    #[test]
     fn memory_command_resolves_command_key() {
         let tool_input = json!({"command": "git status"})
             .as_object()
@@ -637,5 +676,88 @@ mod tests {
         assert_eq!(shlex_join(&["a b".into()]), "'a b'");
         assert_eq!(shlex_join(&["it's".into()]), "'it'\"'\"'s'");
         assert_eq!(shlex_join(&["".into()]), "''");
+    }
+
+    #[test]
+    fn after_shell_observed_is_a_report_that_the_command_already_ran() {
+        let observed = |value: Value| {
+            let Value::Object(payload) = value else {
+                unreachable!("test payloads are objects");
+            };
+            cursor_after_shell_observed(&payload)
+        };
+
+        assert!(observed(json!({"duration": 0})));
+        assert!(observed(json!({"duration": 12.5})));
+        assert!(!observed(json!({"duration": -1})));
+        // A boolean is not a timing, so it falls through to the other reads
+        // rather than being treated as a duration of zero.
+        assert!(!observed(json!({"duration": true})));
+        assert!(observed(json!({"duration": true, "output": ""})));
+
+        assert!(observed(
+            json!({"event": "afterMCPExecution", "result_json": "{}"})
+        ));
+        assert!(!observed(
+            json!({"event": "afterMCPExecution", "result_json": "  "})
+        ));
+        assert!(!observed(json!({"event": "afterMCPExecution"})));
+        // An MCP execution is judged on its result, not on an output field it
+        // does not carry.
+        assert!(!observed(
+            json!({"event": "afterMCPExecution", "output": ""})
+        ));
+
+        // A command that printed nothing still reported, so an empty string
+        // output counts and a missing one does not.
+        assert!(observed(
+            json!({"event": "afterShellExecution", "output": ""})
+        ));
+        assert!(!observed(json!({"event": "afterShellExecution"})));
+        assert!(!observed(json!({"output": 3})));
+        assert!(!observed(json!({})));
+    }
+
+    #[test]
+    fn observer_event_is_what_the_proof_message_is_attested_under() {
+        let event = |value: Value| {
+            let Value::Object(payload) = value else {
+                unreachable!("test payloads are objects");
+            };
+            cursor_observer_event_for_payload(&payload)
+        };
+
+        assert_eq!(
+            event(json!({"hook_event_name": "afterMCPExecution"})),
+            "afterMCPExecution"
+        );
+        assert_eq!(
+            event(json!({"hookEventName": " beforeMCPExecution "})),
+            "afterMCPExecution"
+        );
+        assert_eq!(
+            event(json!({"cursor_source_hook_event": "beforeShellExecution"})),
+            "afterShellExecution"
+        );
+
+        // A key naming neither an observer event nor a blocking event it
+        // answers is passed over, so a later key still decides.
+        assert_eq!(
+            event(json!({"hook_event_name": "stop", "hookEventName": "beforeMCPExecution"})),
+            "afterMCPExecution"
+        );
+        assert_eq!(
+            event(json!({"hook_event_name": "   "})),
+            "afterShellExecution"
+        );
+        assert_eq!(event(json!({"hook_event_name": 7})), "afterShellExecution");
+        assert_eq!(event(json!({})), "afterShellExecution");
+
+        // The map is exact: the blocking names are not matched case-insensitively.
+        assert_eq!(
+            event(json!({"hook_event_name": "beforeshellexecution"})),
+            "afterShellExecution"
+        );
+        assert_eq!(cursor_observer_event_for_blocking("stop"), None);
     }
 }

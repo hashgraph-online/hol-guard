@@ -6,11 +6,9 @@ export { isLocalCliId } from "./local-cli-fields";
 export { normalizeLocalCliItem, normalizeLocalCliCommand, normalizeLocalCliList } from "./local-cli-normalize";
 import { startCancelableDiscoveryJob } from "./discovery-job-start";
 import type { LocalCliContinuity } from "./custom-extension-continuity-api";
+import type { LocalCliCapabilityChoices, LocalCliCapabilityFields } from "./local-cli-capability";
 
-export type {
-  LocalCliContinuity,
-  LocalCliContinuityStatus,
-} from "./custom-extension-continuity-api";
+export type { LocalCliContinuity, LocalCliContinuityStatus } from "./custom-extension-continuity-api";
 
 export type LocalCliKind = "executable" | "script";
 export type LocalCliState = "unset" | "allowed" | "blocked";
@@ -81,12 +79,13 @@ export type LocalCliItem = {
     account_binding: "unverified";
   };
   permission_scope?: "configured-connection" | "host-namespace" | "legacy-device";
+  remote_origin?: string; // a remote server; Guard never connects to it
   profile_id?: string;
   brand?: string;
   display_name?: string;
   seeded?: boolean;
   installed?: boolean;
-};
+} & LocalCliCapabilityFields;
 
 export type LocalCliListResponse = {
   host_inventory?: import("./codex-host-inventory").CodexHostInventory;
@@ -121,6 +120,7 @@ export type LocalCliMutationPayload = {
   provider_actions?: Array<{ tool_slug: string; state: "review" | "block"; revision: number }>;
   approval_password?: string;
   approval_totp_code?: string;
+  capabilities?: LocalCliCapabilityChoices;
 };
 
 export class LocalCliApiError extends Error {
@@ -357,8 +357,8 @@ export async function readJson(response: Response): Promise<unknown> {
   if (!response.ok) {
     const record = isRecord(payload) ? payload : {};
     const code = typeof record.error === "string" ? record.error : "local_cli_request_failed";
-    const message = typeof record.message === "string"
-      ? record.message
+    const message = typeof record.message === "string" && record.message.trim() ? record.message : response.status === 401
+      ? "Guard could not confirm this dashboard session. Reload this page, then try again."
       : "Guard could not update this custom extension.";
     throw new LocalCliApiError(code, message);
   }
@@ -410,8 +410,8 @@ export async function recognizeLocalCli(
   };
 }
 
-export async function applyLocalCliMutation(payload: LocalCliMutationPayload): Promise<void> {
-  await readJson(await fetchLocalCliApi("/v1/local-clis/apply", {
+export async function applyLocalCliMutation(payload: LocalCliMutationPayload): Promise<unknown> {
+  return readJson(await fetchLocalCliApi("/v1/local-clis/apply", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

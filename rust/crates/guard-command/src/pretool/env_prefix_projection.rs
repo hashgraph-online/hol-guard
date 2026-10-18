@@ -463,6 +463,17 @@ fn reviewable_assignment(name: &str, value: &str, context: PathContext<'_>) -> b
         && !code_loading_name(&upper)
 }
 
+/// Whether `NAME=value` is a setting a one-time approval may bind by its
+/// spelling: a reviewable name (the same test as above) with a short plain
+/// value. A search path, a file or any text a program could parse as a
+/// program stays outside, so the approved retry runs what was reviewed.
+pub fn bindable_setting(name: &str, value: &str) -> bool {
+    assignment_name_shape(name)
+        && !name.eq_ignore_ascii_case("NODE_PATH")
+        && reviewable_assignment(name, value, PathContext::default())
+        && plain_scalar(value)
+}
+
 /// `NODE_PATH` as one canonical, existing `node_modules` directory inside the
 /// working directory or home, with no hidden component, symlink or list
 /// separator. Module lookup then falls back to a dependency tree the project

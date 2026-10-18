@@ -138,6 +138,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 "delete from extension_control_authority_transition where revision = ?",
                 (revision,),
             )
+            from .catalog_delivery.activation_journal import abandon
+
+            abandon(connection, revision)
             return None
         if (
             anchor.revision == revision
@@ -389,6 +392,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
 
     def _commit_pending_transition(self, connection: sqlite3.Connection, row: sqlite3.Row) -> None:
         self._validate_serialized_layers(_row_str(row, "layers_json"))
+        from .catalog_delivery.activation_journal import finish
+
+        finish(self, connection, row)
         _ = connection.execute(
             """
             update extension_control_authority_snapshot

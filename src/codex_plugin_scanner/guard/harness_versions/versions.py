@@ -19,7 +19,7 @@ _VERSION_PATTERN = re.compile(
     rf"(?:-(?P<prerelease>{_IDENTIFIER}(?:\.{_IDENTIFIER})*))?"
     rf"(?:\+(?P<build>{_IDENTIFIER}(?:\.{_IDENTIFIER})*))?$"
 )
-_BANNER_TOKEN = re.compile(r"v?\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
+_BANNER_TOKEN = re.compile(r"(?<!\d)v?\d{1,6}\.\d{1,6}\.\d{1,6}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?")
 
 
 @dataclass(frozen=True, slots=True)

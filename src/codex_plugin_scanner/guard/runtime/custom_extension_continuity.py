@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, cast
 
 from ..native_context import _resolve_digest_home, native_context_digest
 from ..store_custom_extension_continuity import CustomExtensionContinuityMutation
+from ..store_local_cli_capabilities import LocalCliCapabilityError
 from .local_cli_commands import LocalCliCommand, LocalCliCommandState
 from .local_cli_identity import LocalCliKind, UnlistedCliIdentity
 
@@ -186,8 +187,13 @@ def record_local_custom_extension_mutation(
     now: str,
     provider_updates: Sequence[tuple[str, str, int]] = (),
     catalog_seed: Sequence[LocalCliCommand] = (),
+    capabilities: Mapping[str, str] | None = None,
 ) -> int:
-    """Commit a local grant and its continuity tombstone/state/receipt atomically."""
+    """Commit a local grant and its continuity tombstone/state/receipt atomically.
+
+    ``capabilities`` are the operator's ``{name: on|off}`` choices from the
+    authority apply; signed continuity never carries them.
+    """
 
     raw = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_REMOVALS_STATE_KEY)
     active = store.get_sync_payload(CUSTOM_EXTENSION_CONTINUITY_STATE_KEY)
@@ -234,9 +240,12 @@ def record_local_custom_extension_mutation(
             observation_preconditions={identity.cli_id: answer["observation_precondition"]},
             provider_updates={identity.cli_id: provider_updates} if provider_updates else None,
             catalog_seeds={identity.cli_id: catalog_seed} if catalog_seed else None,
+            capability_updates={identity.cli_id: capabilities} if capabilities else None,
         )
     except ValueError as error:
         if str(error) in {"local_cli_revision_conflict", "provider_action_revision_conflict"}:
+            raise
+        if isinstance(error, LocalCliCapabilityError):
             raise
         raise CustomExtensionContinuityError("local continuity state changed during local mutation") from error
 

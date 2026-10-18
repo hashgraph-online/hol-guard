@@ -10,7 +10,6 @@ messages can tell agents how to make one-off scripts auditable.
 from __future__ import annotations
 
 from ..native_shell_helpers import call
-from .shell_structure import extract_heredocs
 
 EMBEDDED_SCRIPT_REMEDIATION_GUIDANCE = (
     "Put the script in a workspace file and run it by path so HOL Guard can audit it."
@@ -31,5 +30,13 @@ def embedded_script_evidence_entries(command_text: str | None) -> list[dict[str,
 
 
 def command_has_embedded_script(command_text: str | None) -> bool:
-    """True when the command carries an inline script body via heredoc."""
-    return isinstance(command_text, str) and bool(extract_heredocs(command_text))
+    """True when the command carries an inline script body via heredoc.
+
+    Reading the heredoc rows to test them for emptiness would carry every
+    script body across the boundary only to discard it, so the native helper
+    answers the question itself. The owner of the parse is the owner of the
+    answer, as it already is for the evidence entries above.
+    """
+    if not isinstance(command_text, str):
+        return False
+    return bool(call("has_embedded_script", command_text))

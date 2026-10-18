@@ -3,10 +3,14 @@
 
 use sha2::{Digest, Sha256};
 
+use crate::contained_workspace_grant_plan::ExpectedGrant;
+
 use super::*;
 
 /// A plan `prepare_workspace_contained` returned and the checks admitted.
 pub(super) struct Plan {
+    pub(super) profile_version: String,
+    pub(super) capabilities: Value,
     pub(super) argv: Vec<String>,
     pub(super) prefix: Option<String>,
     pub(super) bootstrap: Option<Value>,
@@ -18,7 +22,12 @@ pub(super) struct Plan {
     pub(super) write_denials: Value,
 }
 
-pub(super) fn validated_plan(plan: Value, command: &str, workspace: &str) -> Outcome<Plan> {
+pub(super) fn validated_plan(
+    plan: Value,
+    command: &str,
+    workspace: &str,
+    grant: Option<&ExpectedGrant>,
+) -> Outcome<Plan> {
     let Value::Object(mut plan) = plan else {
         return Err(Failure::invalid(INVALID_PLAN));
     };
@@ -26,9 +35,12 @@ pub(super) fn validated_plan(plan: Value, command: &str, workspace: &str) -> Out
     keys.sort_unstable();
     let mut expected = PLAN_FIELDS;
     expected.sort_unstable();
-    if keys != expected || plan["profile_version"] != json!(WORKSPACE_PROFILE) {
+    if keys != expected {
         return Err(Failure::invalid(INVALID_PLAN));
     }
+    // A base plan without a decided grant; with one, a plan widened by it.
+    let scripts = crate::contained_workspace_grant_plan::grant_script_roots(&plan, grant)
+        .ok_or_else(|| Failure::invalid(INVALID_PLAN))?;
     if !plan["native_suffix"].is_null() {
         return Err(Failure::invalid(PLAN_MISMATCH));
     }
@@ -74,13 +86,16 @@ pub(super) fn validated_plan(plan: Value, command: &str, workspace: &str) -> Out
             .as_str()
             .is_none_or(|text| py_normal(text) != workspace)
         || plan["allowed_executables"] != json!([])
-        || !read_grants_match(&plan["read_only_roots"], command, workspace)
+        || !read_grants_match(&scripts, command, workspace)
         || !(plan["linked_git"].is_null() || linked_git(&plan["linked_git"]))
     {
         return Err(mismatch());
     }
     let text = |value: &Value| value.as_str().map(str::to_owned);
     Ok(Plan {
+        profile_version: text(&plan["profile_version"])
+            .ok_or_else(|| Failure::invalid(INVALID_PLAN))?,
+        capabilities: plan["capabilities"].clone(),
         prefix,
         bootstrap,
         backend_executable: text(&plan["backend_executable"])

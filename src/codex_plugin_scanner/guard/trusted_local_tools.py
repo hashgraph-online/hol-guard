@@ -232,6 +232,9 @@ def local_tool_grant_decision(
     )
 
 
+_GRANT_REUSING_ACTIONS: frozenset[GuardAction] = frozenset({"review", "require-reapproval"})
+
+
 def matching_local_tool_grant(
     *,
     store: object,
@@ -239,26 +242,28 @@ def matching_local_tool_grant(
     eligibility: LocalToolApprovalEligibility | None,
     current_action: GuardAction,
 ) -> dict[str, object] | None:
-    if eligibility is None or current_action not in {"review", "require-reapproval"}:
+    """The saved grant a reviewable command may reuse, or ``None``.
+
+    The resident derives each target's selector and decides which row counts as
+    a grant; the recomputed action travels with the probe so the gate on it is
+    applied in the same place.
+
+    A command the policy already allowed or blocked cannot reuse a grant, so it
+    is answered here rather than paying for the evidence load and the resident
+    round trip that answer would need. The resident applies the same gate.
+    """
+    if eligibility is None or current_action not in _GRANT_REUSING_ACTIONS:
         return None
-    resolver = getattr(store, "resolve_policy_decision_lookup", None)
+    resolver = getattr(store, "resolve_local_tool_grant", None)
     if not callable(resolver):
         return None
-    for target in LOCAL_TOOL_GRANT_TARGETS:
-        lookup = resolver(
-            harness,
-            local_tool_grant_selector(eligibility, target=target),
-            consume_one_shot=False,
-        )
-        if not isinstance(lookup, Mapping):
-            continue
-        normalized_lookup = dict(cast(Mapping[str, object], lookup))
-        decision = normalized_lookup.get("decision")
-        if isinstance(decision, Mapping):
-            normalized_decision = dict(cast(Mapping[str, object], decision))
-            if normalized_decision.get("action") == "allow" and normalized_decision.get("source") == _POLICY_SOURCE:
-                return normalized_decision
-    return None
+    decision = resolver(
+        harness,
+        tool_identity_hash=eligibility.tool_identity_hash,
+        capability=eligibility.capability,
+        current_action=current_action,
+    )
+    return dict(cast(Mapping[str, object], decision)) if isinstance(decision, Mapping) else None
 
 
 def local_tool_grant_selector(

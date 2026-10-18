@@ -42,12 +42,16 @@ use crate::guard_store_cmd_feedback as feedback;
 use crate::guard_store_cmd_lifecycle as lifecycle;
 use crate::guard_store_cmd_maintenance as maintenance;
 use crate::guard_store_cmd_privacy as privacy;
+use crate::guard_store_composio_catalog as composio_catalog;
 use crate::guard_store_connect as connect;
+use crate::guard_store_connector_context as connector_context;
 use crate::guard_store_db::{exec, query_all, query_one, text, StoreError, StoreResult};
 use crate::guard_store_inventory as inventory;
 use crate::guard_store_local_cli as local_cli;
 use crate::guard_store_local_cli_grants as local_cli_grants;
+use crate::guard_store_local_mcp_declarations as local_mcp_declarations;
 use crate::guard_store_local_mcp_observation as local_mcp;
+use crate::guard_store_native_receipts as native_receipts;
 use crate::guard_store_native_review_consume as native_review_consume;
 use crate::guard_store_observed_mcp as observed_mcp;
 use crate::guard_store_outbox_binding::{
@@ -372,6 +376,7 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "next_aibom_trust_attestation_sequence"
         | "add_receipt"
         | "record_tool_call_evidence"
+        | "record_native_decision_receipt"
         | "set_receipt_action_envelope"
         | "update_receipt_policy_decision"
         | "update_receipt_approval_context"
@@ -384,11 +389,14 @@ fn method_kind(method: &str) -> Option<Kind> {
         | "record_local_cli_observation"
         | "replace_local_cli_commands"
         | "forget_local_cli_observation"
+        | "record_connector_setup_context"
         | "local_cli_replay_allowed"
         | "prune_inactive_local_cli_observations"
         | "cache_advisories" => Kind::Write,
         "find_local_mcp_observation" => Kind::Read,
-        "ensure_local_mcp_observation" => Kind::Write,
+        "ensure_local_mcp_observation"
+        | "reconcile_remote_mcp_declarations"
+        | "record_composio_discovery" => Kind::Write,
         _ if connect::is_state_read(method) => Kind::Read,
         _ if connect::handles(method) => Kind::Write,
         _ => return None,
@@ -511,10 +519,17 @@ fn dispatch(
         "record_local_cli_observation" => local_cli::record_observation(connection, args),
         "replace_local_cli_commands" => local_cli::replace_commands(connection, args),
         "forget_local_cli_observation" => local_cli::forget_observation(connection, args),
+        "record_connector_setup_context" => connector_context::record_context(connection, args),
         "local_cli_replay_allowed" => local_cli::replay_allowed_op(connection, args),
         "prune_inactive_local_cli_observations" => local_cli::prune_inactive(connection, args),
         "find_local_mcp_observation" => local_mcp::find_observation(connection, args),
         "ensure_local_mcp_observation" => local_mcp::ensure_observation(connection, args),
+        "reconcile_remote_mcp_declarations" => {
+            local_mcp_declarations::reconcile_remote_declarations(connection, args)
+        }
+        "record_composio_discovery" => {
+            composio_catalog::record_composio_discovery(connection, args)
+        }
         "upsert_guard_session" => sessions::upsert_session(connection, args),
         "get_guard_session" => sessions::get_session(connection, args),
         "list_guard_sessions" => sessions::list_sessions(connection, args),
@@ -550,6 +565,9 @@ fn dispatch(
         "add_receipt" => receipt_writes::add_receipt(connection, args),
         "record_tool_call_evidence" => {
             tool_call_evidence::record_tool_call_evidence(connection, args)
+        }
+        "record_native_decision_receipt" => {
+            native_receipts::record_native_decision_receipt(connection, args)
         }
         "set_receipt_action_envelope" => receipt_writes::set_action_envelope(connection, args),
         "update_receipt_policy_decision" => {

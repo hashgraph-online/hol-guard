@@ -8,14 +8,14 @@ use guard_contracts::{
     ApprovalValidateRequestV3, ApprovalValidateRequestV4, ArtifactRiskRequestV1,
     CiscoPreflightRequestV1, ClaimApprovalReuseDecisionsRequestV1, CodexRequestResumeRequestV1,
     CodexToolOutputRequestV1, CommandEffectBatchRequestV1, CommandEffectRequestV1,
-    CompoundGitInspectionRequestV1, ConsumerArtifactComposeRequestV1,
-    ConsumerArtifactProjectRequestV1, ContainedExecuteRequestV1, ContainedNodeExecuteRequestV1,
-    ContainedPackageScriptExecuteRequestV1, ContainedTypescriptExecuteRequestV1,
-    ContainedWorkspaceWriteExecuteRequestV1, ContextDigestRequestV1,
-    ContributedMcpDecisionRequestV1, CursorObserverProofRequestV1, DaemonHandlerRequestV1,
-    DaemonLifecycleDecisionRequestV1, DaemonRouteRequestV1, DataFlowAnalyzeRequestV1,
-    GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1, GuardHookEnvelopeV2,
-    GuardStoreRequestV1, HookAdapterRequestV1, HookArtifactComposeRequestV1,
+    CompoundGitInspectionRequestV1, ConnectorSetupContextRequestV1,
+    ConsumerArtifactComposeRequestV1, ConsumerArtifactProjectRequestV1, ContainedExecuteRequestV1,
+    ContainedNodeExecuteRequestV1, ContainedPackageScriptExecuteRequestV1,
+    ContainedTypescriptExecuteRequestV1, ContainedWorkspaceWriteExecuteRequestV1,
+    ContextDigestRequestV1, ContributedMcpDecisionRequestV1, CursorObserverProofRequestV1,
+    DaemonHandlerRequestV1, DaemonLifecycleDecisionRequestV1, DaemonRouteRequestV1,
+    DataFlowAnalyzeRequestV1, GitExecutionSafetyRequestV1, GithubCliClassifyRequestV1,
+    GuardHookEnvelopeV2, GuardStoreRequestV1, HookAdapterRequestV1, HookArtifactComposeRequestV1,
     HookAuthorityStateRequestV1, HookDecisionRequestV1, LocalCliGrantRequestV1,
     LocalCliHookRequestV1, LocalMcpGrantRequestV1, LocalToolEligibilityRequestV1,
     McpClassificationRequestV1, McpProxyDecisionRequestV1, McpRuntimeEvidenceRequestV1,
@@ -131,6 +131,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         features.push(crate::binding_capture_op::BINDING_CAPTURE_FEATURE.into());
     }
     features.push(crate::mcp_relay::RELAY_FEATURE.into());
+    features.push(crate::hook_evidence_writer_op::HOOK_EVIDENCE_WRITER_FEATURE.into());
     features.push(crate::claude_session_start::SESSION_START_FEATURE.into());
     features.push(crate::claude_hook_bridge::BRIDGE_FEATURE.into());
     features.push(crate::codex_hook_bridge::BRIDGE_FEATURE.into());
@@ -196,6 +197,7 @@ pub(crate) enum ResidentOperationV1 {
     ApprovalScope(ApprovalScopeRequestV1),
     HookRender(guard_contracts::HookRenderRequestV1),
     GuardStore(GuardStoreRequestV1),
+    HookEvidenceWriter(crate::hook_evidence_writer_op::HookEvidenceWriterRequestV1),
     ApprovalGate(ApprovalGateRequestV1),
     PackageIntentParse(PackageIntentParseRequestV1),
     SupplyChainEval(SupplyChainEvalRequestV1),
@@ -227,8 +229,11 @@ pub(crate) enum ResidentOperationV1 {
     PackagePosture(PackagePostureRequestV1),
     PackageAuditProjection(PackageAuditProjectionRequestV1),
     WorkspaceInventory(WorkspaceInventoryRequestV1),
-    PolicyDecisionLookup(PolicyDecisionLookupRequestV1),
+    PolicyDecisionLookup(Box<PolicyDecisionLookupRequestV1>),
     PolicyDocumentDecide(guard_contracts::PolicyDocumentDecisionRequestV1),
+    CommandPolicyDecide(guard_contracts::CommandPolicyDecisionRequestV1),
+    CommandExpressionValidate(guard_contracts::CommandExpressionValidationRequestV1),
+    ReviewedInvocationBindingsValidate(guard_contracts::ReviewedInvocationBindingsRequestV1),
     GitExecutionSafety(GitExecutionSafetyRequestV1),
     CompoundGitInspection(CompoundGitInspectionRequestV1),
     CodexToolOutput(CodexToolOutputRequestV1),
@@ -238,6 +243,7 @@ pub(crate) enum ResidentOperationV1 {
     RunnerAuthority(RunnerAuthorityRequestV1),
     LocalCliGrantDecide(LocalCliGrantRequestV1),
     LocalCliHook(LocalCliHookRequestV1),
+    ConnectorSetupContext(ConnectorSetupContextRequestV1),
     ArtifactRisk(ArtifactRiskRequestV1),
     LocalToolEligibility(LocalToolEligibilityRequestV1),
     ShellHelpers(crate::shell_helpers_op::ShellHelpersRequest),
@@ -264,6 +270,7 @@ pub(crate) enum ResidentOperationV1 {
     McpClassify(McpClassificationRequestV1),
     NativeExactAction(NativeExactActionRequestV1),
     SkillDirectoryIdentity(SkillDirectoryIdentityRequestV1),
+    SkillWorkflowPreflight(guard_contracts::SkillWorkflowPreflightRequestV1),
     #[cfg(unix)]
     CodexBindingCapture(crate::binding_capture_op::CodexBindingCaptureRequestV1),
     #[allow(dead_code)]

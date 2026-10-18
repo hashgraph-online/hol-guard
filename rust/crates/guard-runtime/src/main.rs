@@ -147,6 +147,9 @@ mod codex_value;
 #[cfg(all(test, unix))]
 mod codex_vectors_tests;
 mod command_effect;
+mod command_expression_validate_op;
+mod command_policy_decide_op;
+mod command_policy_repair;
 mod composio_role_op;
 mod compound_git_args;
 mod compound_git_chain;
@@ -161,6 +164,7 @@ mod compound_git_inspection_vectors_tests;
 mod compound_git_paths;
 mod compound_git_segments;
 mod connector_setup;
+mod connector_setup_context_op;
 mod consumer_artifact_compose_op;
 mod consumer_artifact_compose_runtime;
 mod consumer_artifact_project_op;
@@ -172,6 +176,8 @@ mod consumer_result;
 mod consumer_url;
 #[cfg(unix)]
 mod contained_op;
+#[cfg(unix)]
+mod contained_workspace_grant_plan;
 #[cfg(unix)]
 mod contained_workspace_sink;
 mod content_sensitivity_op;
@@ -293,10 +299,14 @@ mod guard_store_cmd_rollups;
 #[cfg(test)]
 mod guard_store_cmd_vectors_tests;
 mod guard_store_cmd_wire;
+mod guard_store_composio_catalog;
+#[cfg(test)]
+mod guard_store_composio_catalog_tests;
 mod guard_store_connect;
 mod guard_store_connect_effective;
 #[cfg(test)]
 mod guard_store_connect_vectors_tests;
+mod guard_store_connector_context;
 mod guard_store_db;
 mod guard_store_guard_event;
 #[cfg(test)]
@@ -314,7 +324,11 @@ mod guard_store_local_cli_grant_vectors_tests;
 mod guard_store_local_cli_grants;
 #[cfg(test)]
 mod guard_store_local_cli_vectors_tests;
+mod guard_store_local_mcp_declarations;
 mod guard_store_local_mcp_observation;
+mod guard_store_native_receipts;
+#[cfg(test)]
+mod guard_store_native_receipts_tests;
 mod guard_store_native_review_consume;
 #[cfg(test)]
 mod guard_store_native_review_consume_tests;
@@ -394,6 +408,7 @@ mod hook_artifact_compose_reuse;
 mod hook_authority_state_op;
 mod hook_bridge_daemon_start;
 mod hook_bridge_fallback;
+mod hook_cli_claude_text;
 #[cfg(all(test, unix))]
 mod hook_decision_benign_tool_action_tests;
 mod hook_decision_compose;
@@ -408,11 +423,29 @@ mod hook_direct;
 mod hook_direct_counters;
 mod hook_direct_evidence;
 mod hook_env_stamp;
+// The seams the evidence writer runs on. Each is reached through
+// hook_evidence_writer_op; the readers also have their own tests.
+#[allow(dead_code)]
+mod hook_evidence_activity;
+#[allow(dead_code)]
+mod hook_evidence_composio;
+#[allow(dead_code)]
+mod hook_evidence_correlation;
+#[allow(dead_code)]
+mod hook_evidence_store;
+#[allow(dead_code)]
+mod hook_evidence_store_gate;
+#[allow(dead_code)]
+mod hook_evidence_store_timeout;
+#[allow(dead_code)]
+mod hook_evidence_store_wire;
+mod hook_evidence_writer_op;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
 mod kimi_detect;
 mod local_cli_grant_op;
+mod local_cli_hook_contained;
 mod local_cli_hook_op;
 mod local_cli_identify;
 mod local_mcp_grant_identity;
@@ -477,6 +510,7 @@ mod mcp_tool_call_identity_build;
 mod mcp_tool_call_identity_op;
 mod mcp_tool_evidence_op;
 mod mcp_tool_policy_composio;
+mod mcp_tool_policy_connector;
 mod mcp_tool_policy_decide_op;
 mod mcp_tool_policy_decision;
 mod mcp_tool_policy_extension;
@@ -486,6 +520,7 @@ mod mcp_tool_policy_lookup;
 mod mcp_tool_policy_proxy;
 mod mcp_tool_policy_revalidate;
 mod memory_pattern;
+mod native_decision_receipt;
 mod native_exact_action_op;
 mod native_hook_receipt;
 mod native_review_link;
@@ -517,6 +552,7 @@ mod package_policy_resolve_op;
 mod package_posture_op;
 mod package_protect_finalize_op;
 mod package_protect_projection_op;
+mod persistence_action_class;
 mod pi_detect;
 mod pi_glob;
 mod pi_hook_bridge;
@@ -556,6 +592,8 @@ mod policy_integrity_generation;
 mod policy_integrity_resolver;
 mod policy_integrity_rows_op;
 mod policy_lookup_groups;
+mod policy_lookup_local_tool_grant;
+mod policy_lookup_portable;
 mod policy_lookup_reuse;
 mod policy_runtime_saved;
 mod policy_runtime_saved_reuse;
@@ -588,6 +626,7 @@ mod resident_update_lock;
 mod restricted_linux_launch;
 mod restricted_process_ceiling;
 mod restricted_pytest_op;
+mod reviewed_invocation_bindings_op;
 mod rich_command_model_op;
 mod runner_authority_detector;
 mod runner_authority_evaluation;
@@ -620,6 +659,7 @@ mod skill_identity_discovery;
 mod skill_identity_inspect;
 mod skill_identity_platform;
 mod skill_identity_walk;
+mod skill_workflow_preflight_op;
 #[cfg(unix)]
 mod state_directory_lock;
 #[cfg(test)]
@@ -835,6 +875,25 @@ mod tests {
                 .join(",")
         );
         assert!(strict_json_value(wide.as_bytes()).is_err());
+    }
+
+    #[test]
+    fn strict_json_carries_strings_up_to_the_operation_request_bound() {
+        let catalog_capacity_overflow =
+            format!("{{\"description\":\"{}\"}}", "x".repeat(2_000_001));
+        let parsed = strict_json_value(catalog_capacity_overflow.as_bytes()).unwrap();
+        assert_eq!(
+            parsed["description"].as_str().map(str::len),
+            Some(2_000_001)
+        );
+        let over_cap = format!(
+            "{{\"description\":\"{}\"}}",
+            "x".repeat(strict_json::TEST_MAX_JSON_STRING_BYTES + 1)
+        );
+        assert_eq!(
+            strict_json_value(over_cap.as_bytes()).unwrap_err(),
+            "native_json_string_too_large"
+        );
     }
 
     #[test]

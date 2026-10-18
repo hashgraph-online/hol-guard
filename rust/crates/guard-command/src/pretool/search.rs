@@ -19,9 +19,11 @@ pub(super) use agent_root::{
 };
 use options::unsafe_search_value;
 pub(super) use rg::{rg_hidden_whitelist_reason, safe_rg_stdin_arguments};
+pub(super) use sibling::named_path as sibling_repository_named_file;
 pub(super) use tree::{
-    safe_glob_operand, safe_literal_bracket_tree, safe_recursive_target,
-    safe_recursive_target_through_links, safe_unmatched_glob_operand, SECRET_EXTENSIONS,
+    safe_glob_operand, safe_literal_bracket_read_target, safe_literal_bracket_tree,
+    safe_recursive_target, safe_recursive_target_through_links, safe_unmatched_glob_operand,
+    SECRET_EXTENSIONS,
 };
 pub(super) use walk_memo::with_walk_memo;
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {

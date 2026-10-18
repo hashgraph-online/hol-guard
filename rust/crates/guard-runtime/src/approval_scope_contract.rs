@@ -24,12 +24,6 @@ const SCOPED_APPROVAL_FAMILIES: [&str; 8] = [
     "prompt-file",
     "tool-action",
 ];
-const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
-    "guard_control",
-    "guard-control",
-    "guard_control_operation",
-    "guard-control-operation",
-];
 const ONCE_ONLY_REASONS: [&str; 11] = [
     "no_command_identity",
     "mutable_launcher",
@@ -255,15 +249,14 @@ fn tool_action_has_exact_context(view: &View<'_>) -> bool {
         || envelope_text(view, "command").is_some()
 }
 
+/// Only a request that is not a review has no allow. Every review, Guard
+/// control and package actions included, offers Allow once and Always allow
+/// (`docs/guard/approval-invariant.md`).
 pub(crate) fn allow_is_non_overridable(view: &View<'_>) -> bool {
-    if !matches!(
+    !matches!(
         text(view.item.policy_action.as_ref()),
         Some("require-reapproval" | "review")
-    ) {
-        return true;
-    }
-    envelope_text(view, "action_type")
-        .is_some_and(|action_type| GUARD_CONTROL_ACTION_TYPES.contains(&action_type))
+    )
 }
 
 fn native_retry_cannot_reuse_approval(view: &View<'_>) -> bool {
@@ -302,18 +295,7 @@ fn exact_action_once_only_reason(view: &View<'_>) -> Option<String> {
         return Some("provider_unverified".to_owned());
     }
     if allow_is_non_overridable(view) {
-        let action_type = view
-            .envelope
-            .and_then(|envelope| envelope.get("action_type"))
-            .and_then(Value::as_str);
-        return Some(
-            if action_type.is_some_and(|value| GUARD_CONTROL_ACTION_TYPES.contains(&value)) {
-                "guard_control"
-            } else {
-                "non_overridable"
-            }
-            .to_owned(),
-        );
+        return Some("non_overridable".to_owned());
     }
     match text(view.item.artifact_type.as_ref()) {
         Some("package_request") => return Some("package_action".to_owned()),

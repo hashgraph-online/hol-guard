@@ -196,6 +196,7 @@ def record_mcp_relay_evidence(store: object, guard_home: Path, record: object) -
                 policy_action=policy_action,
                 scanner_evidence=scanner_evidence,
                 redaction_level=redaction_level,
+                connector_setup=decision.connector_setup if policy_action == "review" else None,
             )
         if queued is not None:
             # After the receipt, as the proxy raises them.
@@ -333,6 +334,7 @@ def _record_unprompted_review(
     policy_action: str,
     scanner_evidence: tuple[dict[str, object], ...],
     redaction_level: str,
+    connector_setup: Any = None,
 ) -> None:
     """The silent inbox row ``_queue_approval_center_response`` leaves.
 
@@ -361,6 +363,7 @@ def _record_unprompted_review(
                     signals,
                     policy_action=policy_action,
                     scanner_evidence=scanner_evidence,
+                    connector_setup=connector_setup,
                 )
             ]
         },
@@ -394,6 +397,7 @@ def _decision(value: object) -> Any:
         approval_reuse_claim_disposition=payload["approval_reuse_claim_disposition"],
         post_claim_revalidated=payload["post_claim_revalidated"],
         policy_action=payload["policy_action"],
+        connector_setup=payload.get("connector_setup"),
     )
 
 

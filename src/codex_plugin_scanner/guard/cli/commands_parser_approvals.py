@@ -54,6 +54,13 @@ def add_approval_parser(
         decision_parser.add_argument("--json", action="store_true")
         decision_parser.set_defaults(approval_action=action)
 
+    list_parser = approvals_subparsers.add_parser(
+        "list",
+        help="List pending approval requests and recent receipts without opening the approval center",
+    )
+    add_common_args(list_parser)
+    list_parser.add_argument("--json", action="store_true")
+
     clear_history_parser = approvals_subparsers.add_parser(
         "clear-history",
         help="Clear remembered rules and resolved approval history so flows can be re-tested",

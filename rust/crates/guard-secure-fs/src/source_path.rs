@@ -196,10 +196,21 @@ fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
                 BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
             })
         || path
-            .extension()
+            .file_name()
             .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase)
-            .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
+            .is_some_and(source_extension)
+}
+
+/// Whether a file name carries an extension this crate reads as source text.
+///
+/// A name with no extension at all, or one this list does not hold, is bytes
+/// of some other kind: a compiled program, an archive, an image.
+pub(crate) fn source_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
 }
 
 fn canonical_dir(path: &Path) -> Option<PathBuf> {

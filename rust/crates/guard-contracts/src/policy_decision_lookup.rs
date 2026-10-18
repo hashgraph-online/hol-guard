@@ -13,6 +13,7 @@
 //! candidate rows and to classify `TrustStatus`. Remote policy sources skip
 //! local integrity verification on both sides.
 
+use crate::claim_approval_reuse::ClaimEvidenceBindingV1;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -31,6 +32,19 @@ pub const RUNTIME_SAVED_REUSE_FEATURE: &str = "runtime-saved-reuse-v1";
 /// unexpanded groups with it, and the probe-groups contract denies unknown
 /// fields, so a runtime without this capability must not be sent either.
 pub const POLICY_LOOKUP_MEMORY_FEATURE: &str = "policy-decision-lookup-memory-v1";
+/// Capability advertised when the resident derives the trusted-local-tool grant
+/// selectors itself and probes them (`PolicyLookupProbeGroupsV1::local_tool_grant`).
+/// The probe-groups contract denies unknown fields, so a caller must not send
+/// the field to a runtime that does not advertise this.
+pub const LOCAL_TOOL_GRANT_LOOKUP_FEATURE: &str = "policy-decision-lookup-local-tool-grant-v1";
+/// Capability advertised when the resident composes a portable-project lookup
+/// with the local one itself, strips portable permission elevation, and claims
+/// the effective allow in the same connection
+/// (`store_portable_project_memory.resolve_policy_decision_lookup`). The
+/// request contract denies unknown fields, so `portable_workspace` and
+/// `evidence_binding` must not be sent to a runtime without this.
+pub const PORTABLE_COMPOSITION_LOOKUP_FEATURE: &str =
+    "policy-decision-lookup-portable-composition-v1";
 
 /// Largest canonical request serialization the op will accept.
 pub const POLICY_DECISION_LOOKUP_MAX_BYTES: usize = 512 * 1024;
@@ -96,6 +110,20 @@ pub struct PolicyDecisionLookupRequestV1 {
     /// token the resident builds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub probe_groups: Option<PolicyLookupProbeGroupsV1>,
+    /// The portable-project identity the caller derived for `workspace`. Set,
+    /// the resident previews the portable selector non-consuming, discards any
+    /// one-shot or permission-lowering decision it carries, composes it with
+    /// the local preview, and claims the effective allow itself. Portable Git
+    /// metadata is classification, not authentication: local-path authority is
+    /// the only source allowed to lower enforcement below review.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub portable_workspace: Option<String>,
+    /// The store-resident sources the shipped integrity evidence was gathered
+    /// against, read before that evidence was derived. Required with
+    /// `portable_workspace` for a claim over a policy-state or bundle member,
+    /// since the resident re-reads them under the claim's write lock.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence_binding: Option<ClaimEvidenceBindingV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -117,6 +145,24 @@ pub struct PolicyLookupProbeGroupsV1 {
     /// candidates.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub memory: Option<PolicyLookupMemoryV1>,
+    /// A trusted-local-tool grant probe, composed in place of `groups` (which
+    /// is then empty).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub local_tool_grant: Option<LocalToolGrantLookupV1>,
+}
+
+/// The eligibility a trusted-local-tool grant probe is keyed by. The resident
+/// derives the grant selector of every target from it, so the capability
+/// digest is computed once, in the place that compares it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct LocalToolGrantLookupV1 {
+    /// The verified tool identity (sha256 hex) the grant is bound to.
+    pub tool_identity_hash: String,
+    /// The read-only capability the command was classified as.
+    pub capability: String,
+    /// The action the hook recomputed; a grant only answers a reviewable one.
+    pub current_action: String,
 }
 
 /// The fields a remembered decision is fingerprinted from.

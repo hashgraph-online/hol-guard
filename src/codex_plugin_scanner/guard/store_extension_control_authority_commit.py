@@ -73,7 +73,12 @@ class ExtensionControlAuthorityCommitMixin:
         nonce: str,
         proof: ExtensionControlProof,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
+        pack_activation=None,
     ) -> ExtensionControlAuthorityView:
+        if pack_activation is not None:
+            if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
+                raise ExtensionControlAuthorityError("pack activation requires its verified registry")
+            self._catalog_target_manifest(migration_registry)
         self._validate_commit_input(
             layers,
             catalog_digest=catalog_digest,
@@ -104,7 +109,10 @@ class ExtensionControlAuthorityCommitMixin:
             # digest, every apply answers 409, and the only way out of the
             # conflict is to stop running one of the two installs.
             current = self._read_extension_control_authority_locked(
-                catalog_digest, migration_registry=migration_registry, _healed=True
+                catalog_digest,
+                migration_registry=migration_registry,
+                _healed=True,
+                allow_migration=pack_activation is None,
             )
             key = self._authority_key(required=True)
             assert key is not None
@@ -186,13 +194,13 @@ class ExtensionControlAuthorityCommitMixin:
                         )
                         proof_already_consumed = True
                     current = self._read_extension_control_authority_locked(
-                        catalog_digest, migration_registry=migration_registry
+                        catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
                     )
             if current.health is AuthorityHealth.RECOVERY_REQUIRED:
                 # A different request abandoned its prepared transition before
                 # anchoring it; roll that back so this request can proceed.
                 current = self._read_extension_control_authority_locked(
-                    catalog_digest, migration_registry=migration_registry
+                    catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
                 )
             if current.health is not AuthorityHealth.PROTECTED:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
@@ -232,6 +240,7 @@ class ExtensionControlAuthorityCommitMixin:
                     "layers_json": layers_json,
                     "previous_digest": previous_digest,
                     "committed_at": created_at,
+                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
                 },
                 key=key,
                 purpose=SNAPSHOT_PURPOSE,
@@ -248,6 +257,7 @@ class ExtensionControlAuthorityCommitMixin:
                     "nonce_hash": nonce_hash,
                     "created_at": created_at,
                     "phase": AuthorityPhase.PREPARED.value,
+                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
                 },
                 key=key,
                 purpose=TRANSITION_PURPOSE,
@@ -288,6 +298,18 @@ class ExtensionControlAuthorityCommitMixin:
                         created_at,
                     ),
                 )
+                if pack_activation is not None:
+                    from .catalog_delivery.activation_journal import reserve
+
+                    reserve(
+                        self,
+                        connection,
+                        pack_activation,
+                        control_revision=revision,
+                        snapshot_digest=snapshot_digest,
+                        catalog_digest=catalog_digest,
+                        recorded_at=created_at,
+                    )
             if not proof_already_consumed:
                 consume_extension_control_proof(self.guard_home, proof, mutation)
             anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
@@ -296,6 +318,12 @@ class ExtensionControlAuthorityCommitMixin:
             except Exception as exc:
                 raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
             with self._connect() as connection:
+                from .catalog_delivery.activation_journal import finish
+
+                pending = connection.execute(
+                    "select * from extension_control_authority_transition where revision=?", (revision,)
+                ).fetchone()
+                finish(self, connection, pending)
                 connection.execute(
                     "update extension_control_authority_transition set phase = ? where revision = ?",
                     (AuthorityPhase.ANCHORED.value, revision),

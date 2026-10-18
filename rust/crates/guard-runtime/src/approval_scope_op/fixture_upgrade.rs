@@ -3,12 +3,23 @@
 use guard_contracts::ApprovalScopeItemV1;
 use serde_json::{json, Value};
 
-use crate::approval_scope_contract::View;
+use crate::approval_scope_contract::{contract, View};
 use crate::approval_scope_material::scope_contract_digest;
 
-/// Apply only the specified unavailable-delivery change to recorded contracts.
+const GUARD_CONTROL_ACTION_TYPES: [&str; 4] = [
+    "guard_control",
+    "guard-control",
+    "guard_control_operation",
+    "guard-control-operation",
+];
+
+/// Apply only the specified changes to recorded contracts: unavailable
+/// delivery for unbound native reviews, and approvable Guard-control reviews.
 /// All other permission expectations remain the historical fixture oracle.
 pub(crate) fn upgrade_recorded_contract(item: &ApprovalScopeItemV1, want: &mut Value) {
+    if upgrade_guard_control(item, want) {
+        return;
+    }
     let unbound_native = item
         .artifact_id
         .as_ref()
@@ -55,6 +66,55 @@ pub(crate) fn upgrade_recorded_contract(item: &ApprovalScopeItemV1, want: &mut V
             restrictions.insert(2, json!("execution_binding_unavailable"));
         }
     }
+    redigest(item, want);
+}
+
+/// Guard-control reviews offer Allow once and Always allow like any other
+/// review (`docs/guard/approval-invariant.md`). A recorded Guard-control
+/// review now expects the contract of the same request under an ordinary
+/// action type, and a recorded terminal verdict reports `non_overridable`.
+/// Returns whether the review migration replaced the whole contract.
+fn upgrade_guard_control(item: &ApprovalScopeItemV1, want: &mut Value) -> bool {
+    let Some(envelope) = item
+        .action_envelope_json
+        .as_ref()
+        .and_then(Value::as_object)
+    else {
+        return false;
+    };
+    let guard_control = envelope
+        .get("action_type")
+        .and_then(Value::as_str)
+        .is_some_and(|action_type| GUARD_CONTROL_ACTION_TYPES.contains(&action_type));
+    if !guard_control {
+        return false;
+    }
+    let review = matches!(
+        item.policy_action.as_ref().and_then(Value::as_str),
+        Some("review" | "require-reapproval")
+    );
+    if !review {
+        if want["once_only_reason"] == json!("guard_control") {
+            want["once_only_reason"] = json!("non_overridable");
+        }
+        // The rest of a terminal verdict's contract migrates as before.
+        return false;
+    }
+    let mut ordinary = item.clone();
+    let mut envelope = envelope.clone();
+    envelope.insert("action_type".to_owned(), json!("shell"));
+    ordinary.action_envelope_json = Some(Value::Object(envelope));
+    let mut upgraded = super::contract_value(&contract(&View::new(&ordinary)));
+    let object = upgraded.as_object_mut().unwrap();
+    object.remove("execution_approval");
+    object.remove("exact_context_token");
+    *want = upgraded;
+    redigest(item, want);
+    true
+}
+
+fn redigest(item: &ApprovalScopeItemV1, want: &mut Value) {
+    let persistence = want["exact_action_persistence_eligible"].as_bool().unwrap();
     let strings = |value: &Value| -> Vec<String> {
         value
             .as_array()

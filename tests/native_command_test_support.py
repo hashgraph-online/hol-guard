@@ -58,17 +58,9 @@ def native_test_guard_home(*, seed_key_only: bool = False) -> Path:
         home = Path(tempfile.mkdtemp(prefix="hol-guard-native-test-")).resolve()
         atexit.register(shutil.rmtree, home, ignore_errors=True)
         if seed_key_only:
-            from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
-                NATIVE_POLICY_VERIFIER_KEY_NAME,
-                NATIVE_RUNTIME_STATE_DIRECTORY,
-            )
+            from tests.native_guard_home_key import seed_private_verifier_key
 
-            state_dir = home / NATIVE_RUNTIME_STATE_DIRECTORY
-            state_dir.mkdir(mode=0o700)
-            key_path = state_dir / NATIVE_POLICY_VERIFIER_KEY_NAME
-            descriptor = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-            with os.fdopen(descriptor, "wb") as handle:
-                handle.write(os.urandom(32))
+            seed_private_verifier_key(home)
         else:
             # Provision the resident prerequisite up front so its one-time store
             # initialisation never eats the first command's request deadline.
@@ -448,8 +440,10 @@ def real_native_review_fixtures(
         timeout=30,
     )
     assert completed.returncode == 0, completed.stderr.decode(errors="replace")
-    result = json.loads(completed.stdout)
-    del completed  # drop the raw JSON bytes before the parsed rows are retained
+    output = completed.stdout.decode(json.detect_encoding(completed.stdout), "surrogatepass")
+    del completed  # release wire bytes before allocating the parsed rows
+    result = json.loads(output)
+    del output
     assert result["schema"] == "guard.command-extension-evaluation-batch-results.v1"
     binding = result["control_binding"]
     assert binding["program_digest"] == BUILT_IN_COMMAND_EXTENSION_REGISTRY.program_digest

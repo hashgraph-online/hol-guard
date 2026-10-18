@@ -2252,7 +2252,19 @@
    }
   },
   {
-   "expected": null,
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "guard-control-operation"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
    "lookup": {
     "decision": {
      "action": "allow",
@@ -2276,7 +2288,19 @@
    }
   },
   {
-   "expected": null,
+   "expected": {
+    "status": "accepted",
+    "verdict": {
+     "action": {
+      "action_type": "package"
+     },
+     "decision": "allow",
+     "minimum_action": "allow",
+     "policy_action": "allow",
+     "reason": "Review this command.",
+     "reason_code": "native_command_extension_review"
+    }
+   },
    "lookup": {
     "decision": {
      "action": "allow",

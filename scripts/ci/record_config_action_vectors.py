@@ -146,20 +146,23 @@ def _typed_override(value: object) -> object:
 
 
 def _old_data_flow_action(config: GuardConfig, strong: bool) -> object:
-    """The configured data-flow action the previous Python hook evaluation sent."""
+    """The configured data-flow action the previous Python hook evaluation sent.
+
+    The posture ladder this reproduces is the resident's now, so the rule is
+    written out here rather than imported: a recorded oracle that calls into
+    the code it is meant to check stops being an oracle. Strong data-flow
+    exfiltration was terminal under either protecting posture, whether or not
+    the posture had been set explicitly; everything else kept the configured
+    action.
+    """
     from codex_plugin_scanner.guard.config import resolve_risk_action
-    from codex_plugin_scanner.guard.protection_posture import apply_posture_confidence
 
     action = resolve_risk_action(config, "data_flow_exfiltration", harness=HARNESS)
     if action is None:
         return None
-    return apply_posture_confidence(
-        posture=config.protection_posture,
-        explicit=config.protection_posture_explicit,
-        risk_class="data_flow_exfiltration",
-        action=action,
-        confidence="strong" if strong else None,
-    )
+    if strong and config.protection_posture in {"protected", "extra_careful"}:
+        return "block"
+    return action
 
 
 def record() -> list[dict[str, object]]:
@@ -215,6 +218,7 @@ def record() -> list[dict[str, object]]:
                 "confidence_text": str(confidence or ""),
                 "confidence_strong": is_high_confidence(confidence),
                 "writes_launch_agent": runtime_policy._artifact_writes_launch_agent(artifact),
+                "action_class": runtime_policy._artifact_action_class(artifact),
                 "skill_is_known_bad": runtime_policy._artifact_skill_is_known_bad(artifact),
             },
         }

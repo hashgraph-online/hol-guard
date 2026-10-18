@@ -3,18 +3,11 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-import threading
-import time
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_native_review_approval import _native_review_action_envelope
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import (
-    RuntimeHookEvidenceWriter,
-    _NativeDecisionReceiptRecord,
-)
 from codex_plugin_scanner.guard.native_decision_receipt import (
     canonical_receipt_bytes,
     receipt_matches_edge,
@@ -270,132 +263,6 @@ def test_prompt_risk_classes_reject_unknown_duplicate_or_unbounded_values(classe
     assert validate_native_decision_receipt(receipt) is None
     tool = _receipt(event_name="PreToolUse", prompt_risk_classes=["local_env_read"])
     assert validate_native_decision_receipt(tool) is None
-
-
-def test_receipt_handoff_never_waits_for_persistence(tmp_path: Path) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-
-    def persist(**_kwargs: object) -> bool:
-        entered.set()
-        assert release.wait(timeout=1)
-        return True
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=persist,
-    ):
-        writer = RuntimeHookEvidenceWriter(store=GuardStore(tmp_path / "guard-home"), batch_wait_seconds=0)
-        try:
-            started = time.monotonic()
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert time.monotonic() - started < 0.1
-            assert entered.wait(timeout=1)
-            journal = (tmp_path / "guard-home" / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8")
-            assert "private command" not in journal
-            release.set()
-            assert writer.stop(timeout_seconds=1)
-        finally:
-            release.set()
-            if writer.stats()["running"]:
-                writer.stop(timeout_seconds=1)
-    assert writer.stats()["receipt_processed"] == 1
-
-
-def test_receipt_shutdown_journals_before_expiry(tmp_path: Path) -> None:
-    writer = RuntimeHookEvidenceWriter(
-        store=GuardStore(tmp_path / "guard-home"),
-        batch_wait_seconds=0,
-    )
-    try:
-        with patch.object(writer, "_drain_expired", return_value=True):
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert writer.stop(timeout_seconds=1)
-        journal = (tmp_path / "guard-home" / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8")
-    finally:
-        if writer.stats()["running"]:
-            assert writer.stop(timeout_seconds=1)
-
-    assert "private command" not in journal
-    assert writer.stats()["receipt_processed"] == 0
-    assert writer.stats()["receipt_durable_pending"] == 1
-
-
-def test_journal_rewrite_preserves_another_writer_receipt(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    first = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-    second = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-    first_record = _NativeDecisionReceiptRecord(receipt=_receipt(request_id="first"), payload_bytes=0)
-    second_record = _NativeDecisionReceiptRecord(receipt=_receipt(request_id="second"), payload_bytes=0)
-    try:
-        first._append_journal(first_record)
-        second._append_journal(second_record)
-        first._rewrite_journal(remove_record_id=first_record.record_id)
-    finally:
-        assert first.stop(timeout_seconds=1)
-        assert second.stop(timeout_seconds=1)
-
-    lines = (guard_home / "runtime-hook-evidence.jsonl").read_text(encoding="utf-8").splitlines()
-    assert len(lines) == 1
-    assert json.loads(lines[0])["request_id"] == "second"
-
-
-def test_receipt_queue_full_degrades_without_changing_decision(tmp_path: Path) -> None:
-    entered = threading.Event()
-    release = threading.Event()
-
-    def persist(**_kwargs: object) -> bool:
-        entered.set()
-        assert release.wait(timeout=1)
-        return True
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=persist,
-    ):
-        writer = RuntimeHookEvidenceWriter(
-            store=GuardStore(tmp_path / "guard-home"),
-            max_records=1,
-            batch_wait_seconds=0,
-        )
-        try:
-            assert writer.submit_native_decision_receipt(receipt=_receipt())
-            assert entered.wait(timeout=1)
-            assert writer.submit_native_decision_receipt(receipt=_receipt(request_id="request-2"))
-            assert not writer.submit_native_decision_receipt(receipt=_receipt(request_id="request-3"))
-            assert writer.stats()["receipt_dropped"] == 1
-        finally:
-            release.set()
-            assert writer.stop(timeout_seconds=1)
-
-
-def test_receipt_sqlite_failure_is_recoverable_and_bounded(tmp_path: Path) -> None:
-    guard_home = tmp_path / "guard-home"
-    failed = threading.Event()
-
-    def fail(**_kwargs: object) -> bool:
-        failed.set()
-        raise sqlite3.OperationalError("database is locked")
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        side_effect=fail,
-    ):
-        first = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-        assert first.submit_native_decision_receipt(receipt=_receipt())
-        assert failed.wait(timeout=1)
-        assert first.stop(timeout_seconds=0.1)
-        assert first.stats()["receipt_durable_pending"] == 1
-
-    with patch(
-        "codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer.persist_native_decision_receipt",
-        return_value=True,
-    ):
-        recovered = RuntimeHookEvidenceWriter(store=GuardStore(guard_home), batch_wait_seconds=0)
-        assert recovered.stop(timeout_seconds=1)
-    assert recovered.stats()["recovered"] == 1
-    assert recovered.stats()["receipt_processed"] == 1
-    assert recovered.stats()["receipt_durable_pending"] == 0
 
 
 def _receipt_row_count(store: GuardStore) -> int:

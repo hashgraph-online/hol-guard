@@ -33,6 +33,10 @@ pub(super) fn safe_git_arguments(
             Some((subcommand, rest)) if subcommand == "branch" => {
                 return leading_safe && super::git_branch_listing::is_listing(rest);
             }
+            // Tag patterns are ref names too, and a listing prints names only.
+            Some((subcommand, rest)) if subcommand == "tag" => {
+                return leading_safe && super::git_tag_listing::is_listing(rest);
+            }
             // The pattern is search text, not a path: only the revisions and
             // pathspecs pass the path screen. Grep pages by default, so the
             // configuration probe has to clear the pager first.
@@ -125,6 +129,30 @@ pub(super) fn safe_git_arguments(
         // Only the configuration probe can prove what the read prints.
         return allow_helper_context
             && super::git_config_reads::read_form(&arguments[1..]).is_some();
+    }
+    if subcommand == "clean" {
+        // A dry run prints the untracked paths it would remove and removes
+        // nothing, but reading the index to find them can start a configured
+        // `core.fsmonitor`, so the configuration probe clears it first.
+        return allow_helper_context && super::git_clean_preview::is_dry_run(&arguments[1..]);
+    }
+    if subcommand == "apply" {
+        // `--check` reports whether the patch would apply and writes nothing,
+        // but reading the files it names can start a configured
+        // `core.fsmonitor`, so the configuration probe clears it first. Git
+        // quotes the line it could not read, so each named patch goes through
+        // the ordinary read screen: a workspace name that is a link to a
+        // private file is not a patch this proof read.
+        return allow_helper_context
+            && super::git_apply_check::patch_targets(&arguments[1..]).is_some_and(|patches| {
+                patches.iter().all(|patch| {
+                    super::read_paths::bounded_file_read_target(
+                        patch,
+                        context.home_dir,
+                        context.cwd,
+                    )
+                })
+            });
     }
     if !matches!(
         subcommand,

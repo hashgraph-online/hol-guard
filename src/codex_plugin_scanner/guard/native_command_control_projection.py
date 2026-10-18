@@ -87,20 +87,27 @@ def read_control_projection(
     store: GuardStore,
     metadata: NativeCommandProgramMetadata,
     runtime: ExtensionControlRuntime | None,
+    *,
+    registry=None,
+    record_digest=None,
 ) -> tuple[dict[str, object], ExtensionControlRuntime]:
     from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
-    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY if registry is None else registry
     if registry.catalog_digest != metadata.catalog_digest:
         raise NativePolicySnapshotError("native_command_control_catalog_mismatch")
     # Compile the frozen trusted target manifest before excluding native readers.
     store._catalog_target_manifest(registry)
     try:
-        return _read_control_projection_locked(store, metadata, runtime, read_only=True)
+        return _read_control_projection_locked(
+            store, metadata, runtime, read_only=True, registry=registry, record_digest=record_digest
+        )
     except NativeCommandControlMutationRequiredError:
         # No upgrade is attempted while holding SH. Re-read all authenticated
         # authority under a new EX lease before any semantic mutation/marker write.
-        return _read_control_projection_locked(store, metadata, runtime, read_only=False)
+        return _read_control_projection_locked(
+            store, metadata, runtime, read_only=False, registry=registry, record_digest=record_digest
+        )
 
 
 def _read_control_projection_locked(
@@ -109,18 +116,19 @@ def _read_control_projection_locked(
     runtime: ExtensionControlRuntime | None,
     *,
     read_only: bool,
+    registry,
+    record_digest,
 ) -> tuple[dict[str, object], ExtensionControlRuntime]:
+    from .catalog_delivery.projection import require_current
     from .native_command_control_binding import build_native_command_control_binding
-    from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     # All leases are released before the caller performs resident push IPC.
     # Reuse connection setup only within this fenced projection. Each store
     # method retains its own transaction; authority and floors are reverified
     # on every call, and the connection closes before resident push IPC.
     with store._extension_control_authority_lock(shared=read_only), store.connection_scope():
-        view = store.read_extension_control_authority_for_registry(
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=read_only
-        )
+        require_current(store, _key(store), record_digest)
+        view = store.read_extension_control_authority_for_registry(registry, read_only=read_only)
         snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
         binding = build_native_command_control_binding(snapshot, metadata)
         authority = (

@@ -57,11 +57,18 @@ impl Drop for Tree {
 }
 
 #[test]
-fn a_sealed_user_bin_directory_is_granted() {
+fn a_sealed_user_tool_directory_is_granted() {
     let tree = Tree::new();
     let home = tree.dir("home", 0o755);
     let workspace = tree.dir("repo", 0o755);
-    for tool in [".local/bin", "sdk/google-cloud-sdk/bin", "bin"] {
+    for tool in [
+        ".local/bin",
+        "sdk/google-cloud-sdk/bin",
+        "bin",
+        ".pyenv/shims",
+        ".rye/shims",
+        ".asdf/shims",
+    ] {
         let entry = tree.dir(&format!("home/{tool}"), 0o755);
         let granted = tool_root(&entry, std::slice::from_ref(&home), &workspace);
         assert_eq!(granted, tree.sealed.then(|| entry.clone()), "{tool}");
@@ -109,6 +116,9 @@ fn workspace_agent_state_and_credential_directories_are_refused() {
         "home/.hol-guard/bin",
         "home/.claude/plugins/cache/tool/bin",
         "home/.codex/bin",
+        "home/.codex/shims",
+        "home/.hol-guard/shims",
+        "home/.ssh/shims",
         "home/.omp/bin",
         "home/.ssh/bin",
         "home/.config/tool/bin",
@@ -168,4 +178,113 @@ fn corepack_cache_is_granted_only_when_sealed_and_inside_home() {
     )
     .unwrap();
     assert_eq!(corepack_home(&other), None);
+}
+
+#[test]
+fn the_go_module_cache_is_granted_only_when_sealed_and_inside_home() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    assert_eq!(go_module_cache(&home), None);
+    let cache = tree.dir("home/go/pkg/mod", 0o755);
+    assert_eq!(go_module_cache(&home), tree.sealed.then(|| cache.clone()));
+    fs::set_permissions(home.join("go/pkg"), fs::Permissions::from_mode(0o777)).unwrap();
+    assert_eq!(go_module_cache(&home), None);
+
+    // A GOPATH that leaves HOME takes the cache out of reach.
+    let other = tree.dir("other", 0o755);
+    let elsewhere = tree.dir("elsewhere/pkg/mod", 0o755);
+    symlink(
+        elsewhere.parent().unwrap().parent().unwrap(),
+        other.join("go"),
+    )
+    .unwrap();
+    assert_eq!(go_module_cache(&other), None);
+}
+
+#[test]
+fn the_cargo_caches_and_rustup_are_granted_only_when_sealed() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    assert!(cargo_caches(&home).is_empty());
+    assert_eq!(rustup_home(&home), None);
+
+    let registry = tree.dir("home/.cargo/registry", 0o755);
+    let git = tree.dir("home/.cargo/git", 0o755);
+    let rustup = tree.dir("home/.rustup", 0o755);
+    if !tree.sealed {
+        assert!(cargo_caches(&home).is_empty());
+        assert_eq!(rustup_home(&home), None);
+        return;
+    }
+    assert_eq!(
+        cargo_caches(&home),
+        vec![("registry", registry), ("git", git)]
+    );
+    assert_eq!(rustup_home(&home), Some(rustup));
+
+    // Credentials and the host config sit beside the caches and are never
+    // named, so neither reaches the run.
+    fs::write(tree.root.join("home/.cargo/credentials.toml"), "").unwrap();
+    fs::write(tree.root.join("home/.cargo/config.toml"), "").unwrap();
+    assert!(cargo_caches(&home)
+        .iter()
+        .all(|(name, _)| *name == "registry" || *name == "git"));
+
+    // A writable `.cargo` lets anything be dropped into the granted trees.
+    fs::set_permissions(home.join(".cargo"), fs::Permissions::from_mode(0o777)).unwrap();
+    assert!(cargo_caches(&home).is_empty());
+}
+
+#[test]
+fn shim_siblings_grant_the_machinery_a_shim_dispatches_to() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let homes = std::slice::from_ref(&home);
+    let workspace = tree.dir("repo", 0o755);
+    let shims = tree.dir("home/.pyenv/shims", 0o755);
+    let versions = tree.dir("home/.pyenv/versions/3.12.1/bin", 0o755);
+    let libexec = tree.dir("home/.pyenv/libexec", 0o755);
+    let loose = tree.dir("home/.pyenv/plugins", 0o777);
+    fs::write(tree.root.join("home/.pyenv/version"), "3.12.1\n").unwrap();
+    let granted = shim_siblings(&shims, homes, &workspace);
+    if !tree.sealed {
+        assert!(granted.is_empty());
+        return;
+    }
+    let versions_root = versions.parent().unwrap().parent().unwrap().to_path_buf();
+    assert!(granted.contains(&versions_root), "{granted:?}");
+    assert!(granted.contains(&libexec), "{granted:?}");
+    // A world-writable sibling and a plain file beside the shims stay out.
+    assert!(!granted.contains(&loose), "{granted:?}");
+    assert!(granted.iter().all(|path| path.is_dir()), "{granted:?}");
+    // Only a directory named `shims` brings its siblings along.
+    let bin = tree.dir("home/.local/bin", 0o755);
+    tree.dir("home/.local/share", 0o755);
+    assert!(shim_siblings(&bin, homes, &workspace).is_empty());
+    // A sibling that holds the workspace would expose it whole.
+    let nested = tree.dir("home/.pyenv/projects/checkout", 0o755);
+    let held = nested.parent().unwrap().to_path_buf();
+    assert!(!shim_siblings(&shims, homes, &nested).contains(&held));
+}
+
+#[test]
+fn shims_in_a_shared_directory_grant_no_siblings() {
+    let tree = Tree::new();
+    let home = tree.dir("home", 0o755);
+    let homes = std::slice::from_ref(&home);
+    let workspace = tree.dir("repo", 0o755);
+    // HOME itself, a shared area and agent state each hold directories that
+    // have nothing to do with the manager whose shims sit among them.
+    for parent in ["home", "home/.local", "home/.cache", "home/.codex"] {
+        let shims = tree.dir(&format!("{parent}/shims"), 0o755);
+        tree.dir(&format!("{parent}/machinery"), 0o755);
+        assert!(
+            shim_siblings(&shims, homes, &workspace).is_empty(),
+            "{parent}"
+        );
+    }
+    // Without a known HOME the manager root cannot be identified.
+    let shims = tree.dir("home/.pyenv/shims", 0o755);
+    tree.dir("home/.pyenv/libexec", 0o755);
+    assert!(shim_siblings(&shims, &[], &workspace).is_empty());
 }

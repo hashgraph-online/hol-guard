@@ -621,6 +621,203 @@
         "vite/bin/vite.js"
       ],
       "reason": null
+    },
+    {
+      "name": "format-check-script",
+      "scripts": {
+        "format:check": "prettier --check ."
+      },
+      "command": "npm run format:check",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "format-check-legacy-entry",
+      "scripts": {
+        "format:check": "prettier --check src"
+      },
+      "command": "pnpm run format:check",
+      "entries": [
+        "prettier/bin-prettier.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "format-check-pnpm-bare",
+      "scripts": {
+        "format:check": "prettier --check ."
+      },
+      "command": "pnpm format:check",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "format-check-yarn-bare",
+      "scripts": {
+        "format:check": "prettier -c ."
+      },
+      "command": "yarn format:check",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "format-list-different",
+      "scripts": {
+        "fmt": "prettier --list-different ."
+      },
+      "command": "npm run fmt",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "format-write",
+      "scripts": {
+        "format": "prettier --write src"
+      },
+      "command": "npm run format",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": null
+    },
+    {
+      "name": "format-check-and-write",
+      "scripts": {
+        "format": "prettier --check --write=true ."
+      },
+      "command": "npm run format",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": null
+    },
+    {
+      "name": "format-unflagged",
+      "scripts": {
+        "fmt": "prettier ."
+      },
+      "command": "npm run fmt",
+      "entries": [
+        "prettier/bin/prettier.cjs"
+      ],
+      "reason": null
+    },
+    {
+      "name": "format-check-absent-entry",
+      "scripts": {
+        "format:check": "prettier --check ."
+      },
+      "command": "npm run format:check",
+      "entries": [],
+      "reason": null
+    },
+    {
+      "name": "renamed-lint-task",
+      "scripts": {
+        "ci:lint": "eslint src"
+      },
+      "command": "bun run ci:lint",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "renamed-typecheck-task",
+      "scripts": {
+        "types": "tsc --noEmit -p ."
+      },
+      "command": "pnpm types",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
+    },
+    {
+      "name": "renamed-build-task",
+      "scripts": {
+        "bundle": "vite build"
+      },
+      "command": "npm run bundle",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": "native_node_build_output_containment_required"
+    },
+    {
+      "name": "renamed-unknown-body",
+      "scripts": {
+        "deploy": "./scripts/deploy.sh"
+      },
+      "command": "npm run deploy",
+      "entries": [
+        "vite/bin/vite.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "renamed-lifecycle",
+      "scripts": {
+        "ci:lint": "eslint src",
+        "preci:lint": "rm -rf dist"
+      },
+      "command": "npm run ci:lint",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "manager-builtin-yarn-check",
+      "scripts": {
+        "check": "tsc --noEmit -p ."
+      },
+      "command": "yarn check",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": null
+    },
+    {
+      "name": "manager-builtin-pnpm-exec",
+      "scripts": {
+        "exec": "eslint src"
+      },
+      "command": "pnpm exec",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "manager-builtin-pnpm-install",
+      "scripts": {
+        "install": "eslint src"
+      },
+      "command": "pnpm install",
+      "entries": [
+        "eslint/bin/eslint.js"
+      ],
+      "reason": null
+    },
+    {
+      "name": "manager-builtin-explicit-run",
+      "scripts": {
+        "check": "tsc --noEmit -p ."
+      },
+      "command": "yarn run check",
+      "entries": [
+        "typescript/bin/tsc"
+      ],
+      "reason": "native_node_tool_readonly_containment_required"
     }
   ]
 }

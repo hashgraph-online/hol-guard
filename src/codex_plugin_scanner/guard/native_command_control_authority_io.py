@@ -29,6 +29,14 @@ def require_command_control_mutation_lease(guard_home: Path) -> None:
         raise NativeCommandControlMutationRequiredError()
 
 
+def require_exclusive_command_control_mutation_lease(guard_home: Path) -> None:
+    """New activation writes require a held EX lease, including same-thread use."""
+    active = getattr(_LOCKS, "active", {})
+    key = os.path.normcase(os.path.abspath(guard_home))
+    if getattr(_LOCKS, "process_id", None) != os.getpid() or key not in active or active[key] is not False:
+        raise NativePolicySnapshotError("native_command_control_mutation_lease_missing")
+
+
 def _invalid() -> NativePolicySnapshotError:
     return NativePolicySnapshotError("native_command_control_authority_path_invalid")
 

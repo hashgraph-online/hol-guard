@@ -1093,6 +1093,8 @@ impl SupplyChainStore for ResidentSupplyChainStore {
             local_once_integrity_key_id: key_id,
             policy_bundle_decision_identities: None,
             probe_groups: None,
+            portable_workspace: None,
+            evidence_binding: None,
         };
         let payload = match crate::policy_decision_lookup_op::evaluate(&request) {
             Ok(payload) => payload,

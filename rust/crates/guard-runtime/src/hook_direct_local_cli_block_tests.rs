@@ -1,6 +1,6 @@
 use super::{
     block_response, block_verdict, blocked_reason, command_selector, grant_verdict, launch,
-    match_command_id, CommandSelector, Launch, Verdict, BLOCKED_REASON_CODE, WATCH_REASON,
+    match_command_id, Launch, Verdict, BLOCKED_REASON_CODE, WATCH_REASON,
 };
 use guard_command::hook_responses::{pre_tool, recording_only_pre_tool, Object};
 use guard_contracts::{LocalCliIdentitySourceV1, PackageJsonScriptsV1, UnlistedCliV1};
@@ -37,6 +37,8 @@ fn fixture_launch(cli_id: &str, identity_hash: &str) -> Launch {
         cli_id: cli_id.to_owned(),
         name: "demo-tool".to_owned(),
         identity_hash: identity_hash.to_owned(),
+        kind: "executable".to_owned(),
+        runner: None,
         source: source(),
         tokens: None,
     }
@@ -50,19 +52,11 @@ fn command_ids_match_the_daemon() {
         let catalog: BTreeSet<String> = strings(&case["catalog"]).into_iter().collect();
         let expected = case["expected"].as_str().unwrap();
         assert_eq!(match_command_id(&tokens, &catalog), expected, "{case}");
-        let selected = command_selector(&catalog, Some(&tokens));
+        let selected = command_selector(&catalog, &tokens);
         if catalog.is_empty() {
-            assert_eq!(selected, CommandSelector::Known(None), "{case}");
+            assert_eq!(selected, None, "{case}");
         } else {
-            assert_eq!(
-                selected,
-                CommandSelector::Known(Some(expected.to_owned())),
-                "{case}"
-            );
-            assert_eq!(
-                command_selector(&catalog, None),
-                CommandSelector::Unresolved
-            );
+            assert_eq!(selected, Some(expected.to_owned()), "{case}");
         }
     }
 }
@@ -207,6 +201,8 @@ fn the_launch_takes_the_package_identity_then_the_first_unlisted_cli() {
     .unwrap()
     .unwrap();
     assert_eq!(fallback.cli_id, "local-cli.first");
+    assert_eq!(fallback.kind, "script");
+    assert_eq!(fallback.runner, None);
     assert_eq!(fallback.tokens, Some(vec!["build".to_owned()]));
 
     assert_eq!(launch(None, || Ok(Vec::new())), Ok(None));

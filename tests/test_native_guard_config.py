@@ -160,6 +160,22 @@ def test_freshly_written_config_is_never_memoized(tmp_path: Path, monkeypatch: p
     assert len(calls) == 2
 
 
+def test_unreadable_config_metadata_is_never_memoized(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config_path = tmp_path / "config.toml"
+    config_path.write_text('mode = "enforce"\n', encoding="utf-8")
+    _age_clock(monkeypatch)
+    real_lstat = os.lstat
+
+    def denied_lstat(path: object, *args: object, **kwargs: object) -> os.stat_result:
+        if Path(path) == config_path:
+            raise PermissionError(path)
+        return real_lstat(path, *args, **kwargs)
+
+    monkeypatch.setattr(native_guard_config.os, "lstat", denied_lstat)
+
+    assert native_guard_config._signatures(tmp_path, None) is None
+
+
 def test_memo_hit_still_requires_the_native_runtime(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (tmp_path / "config.toml").write_text('mode = "enforce"\n', encoding="utf-8")
     _age_clock(monkeypatch)

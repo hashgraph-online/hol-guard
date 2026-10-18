@@ -12,6 +12,7 @@ import time
 from ...version import __version__
 from ..cli.install_commands import list_harness_setup_items
 from ..native_daemon_handler import NativeDaemonHandlerError, native_detection_app_statuses, native_requests_list
+from ..native_hook_evidence_writer import unreachable_writer_stats
 from ..store_approvals import InvalidApprovalCursorError
 from .dashboard_bundle import dashboard_build_id, is_pinned_path, pinned_dashboard_file, stamp_dashboard_build
 from .manager import GUARD_DAEMON_COMPATIBILITY_VERSION
@@ -120,9 +121,14 @@ class _DashboardSupportRoutes:
     def _operator_health_payload(self) -> dict[str, object]:
         daemon_server = self._daemon_server()
         scheduler = daemon_server.runtime_hook_scheduler.stats()
-        evidence_writer = daemon_server.runtime_hook_evidence_writer.stats()
+        try:
+            evidence_writer = daemon_server.runtime_hook_evidence_writer.stats()
+        except Exception:
+            evidence_writer = unreachable_writer_stats()
         activity_health = daemon_server.store.get_command_activity_persistence_health()
-        evidence_fault = not evidence_writer["running"]
+        # A writer the resident has not built yet is idle, not broken: a daemon
+        # that has admitted no hook since it started has nothing to repair.
+        evidence_fault = bool(evidence_writer.get("started", True)) and not evidence_writer["running"]
         store_busy = (
             activity_health.persistence_error_count > 0
             and activity_health.last_error_code is not None

@@ -178,6 +178,8 @@ fn plan(workspace: &str, command: &str) -> Map<String, Value> {
         "prefix_command": null,
         "native_suffix": null,
         "denied_capabilities": [],
+        "grant_identity_hash": null,
+        "capabilities": [],
     })
     .as_object()
     .unwrap()
@@ -186,7 +188,16 @@ fn plan(workspace: &str, command: &str) -> Map<String, Value> {
 
 #[cfg(target_os = "macos")]
 fn validate(plan: Map<String, Value>, command: &str) -> Result<(), String> {
-    validated_plan(Value::Object(plan), command, "/w")
+    validate_granted(plan, command, None)
+}
+
+#[cfg(target_os = "macos")]
+fn validate_granted(
+    plan: Map<String, Value>,
+    command: &str,
+    grant: Option<&crate::contained_workspace_grant_plan::ExpectedGrant>,
+) -> Result<(), String> {
+    validated_plan(Value::Object(plan), command, "/w", grant)
         .map(|_| ())
         .map_err(|failure| failure.message)
 }
@@ -214,6 +225,40 @@ fn a_plan_must_run_exactly_the_authorized_command() {
     let mut profile = plan("/w", "pytest");
     profile["profile_version"] = json!("test-contained-v1");
     assert_eq!(validate(profile, "pytest"), Err(INVALID_PLAN.to_owned()));
+    // A grant plan needs the grant the store decided, field for field.
+    let mut granted = plan("/w", "pytest");
+    granted["profile_version"] = json!("workspace-contained-grant-v1");
+    granted["grant_identity_hash"] = json!("a".repeat(64));
+    granted["capabilities"] = json!(["loopback-network"]);
+    let decided = crate::contained_workspace_grant_plan::ExpectedGrant {
+        identity_hash: "a".repeat(64),
+        capabilities: vec!["loopback-network".to_owned()],
+        state_dir: None,
+    };
+    assert_eq!(
+        validate(granted.clone(), "pytest"),
+        Err(INVALID_PLAN.to_owned())
+    );
+    assert_eq!(
+        validate_granted(granted.clone(), "pytest", Some(&decided)),
+        Ok(())
+    );
+    let mut tampered = granted.clone();
+    tampered["grant_identity_hash"] = json!("b".repeat(64));
+    let mut widened = granted;
+    widened["capabilities"] = json!(["loopback-network", "state-dir-read"]);
+    for plan in [tampered, widened] {
+        assert_eq!(
+            validate_granted(plan, "pytest", Some(&decided)),
+            Err(INVALID_PLAN.to_owned())
+        );
+    }
+    let mut base_capability = plan("/w", "pytest");
+    base_capability["capabilities"] = json!(["loopback-network"]);
+    assert_eq!(
+        validate(base_capability, "pytest"),
+        Err(INVALID_PLAN.to_owned())
+    );
 }
 
 #[cfg(target_os = "macos")]
@@ -223,7 +268,9 @@ fn a_bootstrapped_plan_runs_the_rest_after_git_init() {
     let mut bootstrapped = plan("/w", "pytest");
     bootstrapped["bootstrap_git"] = json!([]);
     bootstrapped["prefix_command"] = json!("npm ci");
-    let accepted = validated_plan(Value::Object(bootstrapped.clone()), command, "/w").unwrap();
+    let accepted =
+        validated_plan(Value::Object(bootstrapped.clone()), command, "/w", None).unwrap();
+    assert_eq!(accepted.profile_version, WORKSPACE_PROFILE);
     assert_eq!(accepted.prefix.as_deref(), Some("npm ci"));
     assert_eq!(accepted.bootstrap, Some(json!([])));
     // A prefix only ever comes with a bootstrap, and must lead the command.

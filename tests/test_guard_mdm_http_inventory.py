@@ -99,6 +99,7 @@ def test_external_runtime_paths_import_the_managed_transport() -> None:
         "cli/connect_flow.py",
         "cli/remote_pair_flow.py",
         "cli/update_commands.py",
+        "catalog_delivery/transport.py",
         "local_supply_chain.py",
         "proxy/remote.py",
         "runtime/runner.py",

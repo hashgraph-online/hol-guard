@@ -74,23 +74,15 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     if arguments == ["rev-parse", "--show-toplevel"] {
         return true;
     }
-    let [command, mode, patch] = arguments else {
+    let Some((command, rest)) = arguments.split_first() else {
         return false;
     };
-    // These fixed built-ins cannot be replaced by aliases. This admits their
-    // capability attribution only; patch read and workspace proofs remain the
-    // responsibility of the ordinary command decision, not this classifier.
-    command == "apply"
-        && mode == "--check"
-        && !patch.is_empty()
-        && patch.len() <= 4096
-        && !patch.starts_with(['-', '/', '\\'])
-        && patch
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
-        && patch
-            .split('/')
-            .all(|part| !matches!(part, "" | "." | ".."))
+    // These fixed built-ins cannot be replaced by aliases. The check grammar
+    // proves the invocation writes nothing, whichever of its options the
+    // caller spelled. This admits their capability attribution only; patch
+    // read and workspace proofs remain the responsibility of the ordinary
+    // command decision, not this classifier.
+    command == "apply" && crate::pretool::git_apply_check::is_check_only(rest)
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -185,35 +177,24 @@ pub(super) fn inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     let remaining = routed(arguments, context, true)?;
-    matches!(
-        remaining.first().map(String::as_str),
+    let subcommand = remaining.first().map(String::as_str);
+    let admitted = match subcommand {
         Some(
-            "status"
-                | "diff"
-                | "log"
-                | "show"
-                | "blame"
-                | "describe"
-                | "reflog"
-                | "branch"
-                | "hash-object"
-                | "rev-parse"
-                | "merge-base"
-                | "ls-files"
-                | "remote"
-                | "worktree"
-                | "config"
-                | "grep"
-                | "ls-tree"
-                | "cat-file"
-                | "show-ref"
-                | "for-each-ref"
-                | "rev-list"
-                | "shortlog"
-                | "check-ignore"
-        )
-    )
-    .then_some(remaining)
+            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
+            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
+            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
+            | "shortlog" | "check-ignore",
+        ) => true,
+        // A tag listing, a clean preview and a patch check only print, but the
+        // same three subcommands also write a tag, remove a file and patch the
+        // tree, so each is admitted only in the spelling its own grammar
+        // proves.
+        Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
+        Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
+        Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        _ => false,
+    };
+    admitted.then_some(remaining)
 }
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {

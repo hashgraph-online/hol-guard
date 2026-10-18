@@ -44,7 +44,7 @@ def test_policy_capabilities_advertise_command_expression_runtime(
         "glob",
         "regex",
     ]
-    assert payload["command_pattern_expressions"]["regex_timeout_ms"] == 50
+    assert payload["command_pattern_expressions"]["regex_backtrack_limit"] == 100000
 
 
 def test_policy_evaluate_command_returns_highest_matching_action(

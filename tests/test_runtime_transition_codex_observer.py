@@ -16,7 +16,7 @@ from codex_plugin_scanner.guard.adapters.codex import CodexHarnessAdapter
 from codex_plugin_scanner.guard.codex_hook_integrity import hook_manifest_path
 from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProcessResult
 from codex_plugin_scanner.guard.codex_install_transaction import codex_install_transaction
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
+from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.native_runtime import NativeRuntimeIdentity, native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     COMMAND_ACTIVITY_CORRELATION_KEY_FILE,
@@ -245,7 +245,9 @@ def test_desktop_bridge_runs_proxy_and_preserves_its_hook_channels(monkeypatch, 
         ("stale_receipt", "legacy_probe_receipt_invalid"),
     ],
 )
-def test_legacy_observer_refuses_unverified_state_without_relaunch(tmp_path, monkeypatch, fault, reason):
+def test_legacy_observer_refuses_unverified_state_without_relaunch(
+    native_hook_force, tmp_path, monkeypatch, fault, reason
+):
     with monkeypatch.context() as role_patch:
         paths = codex_adapter._hook_packaged_file_paths
         role_patch.setattr(
@@ -263,7 +265,7 @@ def test_legacy_observer_refuses_unverified_state_without_relaunch(tmp_path, mon
     elif fault == "malformed_key":
         (context.guard_home / COMMAND_ACTIVITY_CORRELATION_KEY_FILE).write_text('{"invalid":"fixture"}')
     if fault in {"unrelated_nonce", "wrong_runtime", "changed_receipt", "stale_receipt"}:
-        writer = RuntimeHookEvidenceWriter(store=store)
+        writer = NativeHookEvidenceWriter(store=store)
         # The deadline measures the observer, not one-time native store provisioning.
         _ = store.count_command_shadow_observations()
     launched = []

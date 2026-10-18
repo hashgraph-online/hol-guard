@@ -29,7 +29,8 @@ fn home(name: &str) -> PathBuf {
     let home = root.join("home");
     for directory in [
         ".agents/skills/release-check/scripts",
-        ".cargo/registry/src/index.crates.io/serde-1.0.0/src",
+        ".cargo/registry/src/index.crates.io/serde-1.0.0/src/bin",
+        ".bun/install/global/node_modules/pkg/bin",
         ".certs",
         ".claude/projects/app",
         ".claude/shell-snapshots",
@@ -37,6 +38,8 @@ fn home(name: &str) -> PathBuf {
         ".codex/sessions/2026-10-16",
         ".codex/skills/release-check",
         ".bun/bin",
+        ".alohajet/bin",
+        ".cargo/bin",
         ".local/bin/helpers",
         ".config/doctl",
         ".config/gcloud",
@@ -65,7 +68,19 @@ fn home(name: &str) -> PathBuf {
             ".cargo/registry/src/index.crates.io/serde-1.0.0/src/lib.rs",
             "pub fn parse() {}\n",
         ),
+        (
+            ".cargo/registry/src/index.crates.io/serde-1.0.0/src/bin/cli.rs",
+            "fn main() {}\n",
+        ),
+        (
+            ".bun/install/global/node_modules/pkg/bin/cli.js",
+            "export const run = () => {};\n",
+        ),
         (".bun/bin/bun", "\u{7f}ELF\n"),
+        (".alohajet/bin/cdp-shim.js", "export const port = 9303;\n"),
+        (".alohajet/bin/alohajet", "\u{7f}ELF\n"),
+        (".local/bin/deploy.sh", "#!/bin/sh\nexec deploy \"$@\"\n"),
+        (".cargo/bin/deploy.sh", "#!/bin/sh\nexec deploy \"$@\"\n"),
         (".local/bin/helpers/run", "#!/bin/sh\n"),
         (".certs/server.pem", "-----BEGIN CERTIFICATE-----\n"),
         (".claude/.credentials.json", "{}\n"),
@@ -254,6 +269,83 @@ fn a_tools_program_directory_keeps_review() {
             "allow",
             "{harness} {tool}"
         );
+    }
+}
+
+/// A tool ships readable programs beside its executables. `~/.alohajet/bin`
+/// holds the wrapper script the tool installed, which is the same text as the
+/// file one directory over that this screen already reads, so an agent
+/// debugging the tool it just ran reads it without an approval.
+#[test]
+fn a_tools_own_script_reads_from_its_program_directory() {
+    let home = home("program-scripts");
+    assert_eq!(
+        action(&home, "codex", "head -50 ~/.alohajet/bin/cdp-shim.js"),
+        "allow"
+    );
+    for (harness, tool) in [("claude-code", "Read"), ("omp", "read")] {
+        assert_eq!(
+            native_action(&home, harness, tool, ".alohajet/bin/cdp-shim.js"),
+            "allow",
+            "{harness} {tool}"
+        );
+    }
+    // The executable beside it is still a program, whoever installed it.
+    assert_ne!(
+        action(&home, "codex", "cat ~/.alohajet/bin/alohajet"),
+        "allow"
+    );
+}
+
+/// `~/.local/bin` is a shared drawer, so no tool owns what is written there:
+/// it is where a user keeps their own commands, and one of those scripts
+/// commonly carries the credential it deploys with. `~/.cargo/bin` is the
+/// same drawer by another name, holding whatever `cargo install` put there
+/// rather than cargo's own source. A script in either keeps its review even
+/// though its name reads as source.
+#[test]
+fn the_users_own_command_drawer_keeps_review() {
+    let home = home("command-drawer");
+    for path in [".local/bin/deploy.sh", ".cargo/bin/deploy.sh"] {
+        assert_ne!(
+            action(&home, "codex", &format!("cat ~/{path}")),
+            "allow",
+            "{path}"
+        );
+        for (harness, tool) in [("claude-code", "Read"), ("omp", "read")] {
+            assert_ne!(
+                native_action(&home, harness, tool, path),
+                "allow",
+                "{harness} {tool} {path}"
+            );
+        }
+    }
+}
+
+/// A package manager's drawer is the `bin` directly below its root. Deeper
+/// down is the package content it unpacked, where `bin` names the package's
+/// own entry point: a crate's `src/bin/cli.rs` and an installed module's
+/// `bin/cli.js` are the same source as the files beside them, which this
+/// screen already reads.
+#[test]
+fn an_unpacked_packages_entry_point_reads_like_its_source() {
+    let home = home("unpacked-entry-points");
+    for path in [
+        ".cargo/registry/src/index.crates.io/serde-1.0.0/src/bin/cli.rs",
+        ".bun/install/global/node_modules/pkg/bin/cli.js",
+    ] {
+        assert_eq!(
+            action(&home, "codex", &format!("cat ~/{path}")),
+            "allow",
+            "{path}"
+        );
+        for (harness, tool) in [("claude-code", "Read"), ("omp", "read")] {
+            assert_eq!(
+                native_action(&home, harness, tool, path),
+                "allow",
+                "{harness} {tool} {path}"
+            );
+        }
     }
 }
 

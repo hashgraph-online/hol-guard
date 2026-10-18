@@ -128,8 +128,7 @@ fn resolved(
         return direct_tool(reason, &segment.arguments, cwd, context);
     }
     let arguments = segment.arguments.as_slice();
-    let task = super::manager_script_task(manager, arguments)
-        .filter(|task| matches!(*task, "lint" | "typecheck" | "build"));
+    let task = super::manager_script_task(manager, arguments);
     let test = reason == PACKAGE_TEST;
     if test && manager == "bun" && arguments.first().is_some_and(|word| word == "test") {
         // `bun test` is Bun's own runner, never the package `test` script.
@@ -142,8 +141,12 @@ fn resolved(
     }
     let Some((workspace, directory)) = cwd.and_then(|cwd| locations(&cwd, context)) else {
         // No real directory to read: the sink cannot run it either, and no
-        // narrower or broader execution is offered.
-        return Some(reason);
+        // narrower or broader execution is offered. A conventional name says
+        // what the script does on its own; any other name is only as good as
+        // the body behind it, so without the manifest it stays a package
+        // script and keeps the generic route.
+        return (test || task.is_some_and(|task| matches!(task, "lint" | "typecheck" | "build")))
+            .then_some(reason);
     };
     let package = nearest(&directory, &workspace, "package.json");
     let (manifest, _) = read_json_with_integrity(&package.join("package.json"), false);
@@ -348,13 +351,16 @@ fn tool_script(
     }
     let tokens = split_with(PLAIN_LEXER, scripts.get(task)?.as_str()?).ok()?;
     let (tool, arguments) = tokens.split_first()?;
-    let (entry, reason) = match tool.as_str() {
-        "eslint" => ("eslint/bin/eslint.js", NODE_TOOL),
+    let (entries, reason): (&[&str], &'static str) = match tool.as_str() {
+        "eslint" => (&["eslint/bin/eslint.js"], NODE_TOOL),
         "tsc" if arguments.iter().any(|word| word == "--noEmit") => {
-            ("typescript/bin/tsc", NODE_TOOL)
+            (&["typescript/bin/tsc"], NODE_TOOL)
         }
+        // Prettier publishes one entrypoint per major, and only a checking
+        // mode reports instead of rewriting the files it visits.
+        "prettier" if super::prettier_checks(arguments) => (&super::PRETTIER_ENTRIES, NODE_TOOL),
         "vite" if arguments.first().is_some_and(|word| word == "build") => {
-            ("vite/bin/vite.js", NODE_BUILD)
+            (&["vite/bin/vite.js"], NODE_BUILD)
         }
         _ => return None,
     };
@@ -374,17 +380,27 @@ fn tool_script(
                 | "--output-file"
                 | "-o"
                 | "--emitDeclarationOnly"
+                | "--write"
+                | "-w"
         ) || word.starts_with("--fix=")
             || word.starts_with("--output-file=")
+            || word.starts_with("--write=")
     }) {
         return None;
     }
-    let relative = format!("node_modules/{entry}");
-    let modules = nearest(directory, workspace, &relative).join("node_modules");
-    // `node_modules` may be a link to another directory in the workspace.
-    // Compare the entry with that directory after both are canonical, which
-    // is what the sink's path check does.
-    let modules = std::fs::canonicalize(&modules).ok()?;
-    let resolved = std::fs::canonicalize(modules.join(entry)).ok()?;
-    (resolved.is_file() && resolved.starts_with(&modules)).then_some(reason)
+    // A tool that publishes one entrypoint per major is installed under
+    // whichever spelling its version uses, and the sink resolves the same set.
+    let installed = entries.iter().any(|entry| {
+        let relative = format!("node_modules/{entry}");
+        let modules = nearest(directory, workspace, &relative).join("node_modules");
+        // `node_modules` may be a link to another directory in the workspace.
+        // Compare the entry with that directory after both are canonical,
+        // which is what the sink's path check does.
+        let Ok(modules) = std::fs::canonicalize(&modules) else {
+            return false;
+        };
+        std::fs::canonicalize(modules.join(entry))
+            .is_ok_and(|resolved| resolved.is_file() && resolved.starts_with(&modules))
+    });
+    installed.then_some(reason)
 }

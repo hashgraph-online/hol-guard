@@ -122,6 +122,16 @@ def daemon_state_matches_current_runtime(
         return False
     if not isinstance(fingerprint, str) or not fingerprint.strip():
         return False
+    # Same package version in another source root already accepts below, after
+    # the content hash. A frozen child publishes state from a new extract
+    # directory, and hashing that tree holds the in-flight wait until the
+    # start deadline. Decide the version match first. A same-root fingerprint
+    # mismatch still rejects, and a different version still needs the hash.
+    if (
+        payload.get("package_version") == installed_version
+        and payload.get("source_root") != _current_guard_daemon_source_root()
+    ):
+        return True
     if fingerprint == _current_guard_daemon_runtime_fingerprint():
         return True
     if payload.get("source_root") == _current_guard_daemon_source_root():

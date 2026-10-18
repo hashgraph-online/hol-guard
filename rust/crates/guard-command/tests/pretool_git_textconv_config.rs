@@ -112,6 +112,7 @@ fn textconv_driver_is_reviewed_only_where_git_can_run_it() {
                 cdpath_unset: false,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),

@@ -3,84 +3,19 @@
 
 use std::time::Instant;
 
-use serde::de::{Deserialize, Deserializer, Error as DeError, MapAccess, SeqAccess, Visitor};
-
 use super::lockfile_parse::{reason, within, Reason, LOCKFILE_MAX_DEPTH, LOCKFILE_MAX_NODES};
 use super::*;
 use crate::jsonc::{loads_jsonc_pairs_checked, JsoncError, JsoncPairs};
 use crate::package_manifest_diff::py_splitlines;
-
-/// `json.loads(..., object_pairs_hook=_unique_object)`: duplicate keys fail.
-struct UniqueJson(Value);
-
-impl<'de> Deserialize<'de> for UniqueJson {
-    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        struct UniqueVisitor;
-        impl<'de> Visitor<'de> for UniqueVisitor {
-            type Value = Value;
-            fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                f.write_str("a JSON value")
-            }
-            fn visit_bool<E>(self, v: bool) -> Result<Value, E> {
-                Ok(Value::Bool(v))
-            }
-            fn visit_i64<E>(self, v: i64) -> Result<Value, E> {
-                Ok(Value::from(v))
-            }
-            fn visit_u64<E>(self, v: u64) -> Result<Value, E> {
-                Ok(Value::from(v))
-            }
-            fn visit_f64<E>(self, v: f64) -> Result<Value, E> {
-                Ok(Value::from(v))
-            }
-            fn visit_str<E>(self, v: &str) -> Result<Value, E> {
-                Ok(Value::String(v.to_owned()))
-            }
-            fn visit_string<E>(self, v: String) -> Result<Value, E> {
-                Ok(Value::String(v))
-            }
-            fn visit_unit<E>(self) -> Result<Value, E> {
-                Ok(Value::Null)
-            }
-            fn visit_none<E>(self) -> Result<Value, E> {
-                Ok(Value::Null)
-            }
-            fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
-                let mut items = Vec::new();
-                while let Some(item) = seq.next_element::<UniqueJson>()? {
-                    items.push(item.0);
-                }
-                Ok(Value::Array(items))
-            }
-            fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
-                let mut object = Map::new();
-                while let Some((key, value)) = map.next_entry::<String, UniqueJson>()? {
-                    if object.contains_key(&key) {
-                        return Err(A::Error::custom("duplicate_key"));
-                    }
-                    object.insert(key, value.0);
-                }
-                Ok(Value::Object(object))
-            }
-        }
-        deserializer.deserialize_any(UniqueVisitor).map(UniqueJson)
-    }
-}
+use crate::strict_json::StrictJsonError;
 
 fn parse_unique_json(text: &str) -> Result<Value, Reason> {
     let source = if text.is_empty() { "{}" } else { text };
-    serde_json::from_str::<UniqueJson>(source)
-        .map(|value| value.0)
-        .map_err(|error| {
-            let message = error.to_string();
-            if message.starts_with("duplicate_key") {
-                reason("duplicate_key")
-            } else if message.contains("recursion limit") {
-                reason("depth_limit_exceeded")
-            } else {
-                reason("syntax_error")
-            }
-        })
+    crate::strict_json::parse_unique_json(source).map_err(|error| match error {
+        StrictJsonError::DuplicateKey => reason("duplicate_key"),
+        StrictJsonError::DepthLimit => reason("depth_limit_exceeded"),
+        StrictJsonError::Syntax => reason("syntax_error"),
+    })
 }
 
 fn pairs_to_value(pairs: &JsoncPairs, depth: usize) -> Result<Value, Reason> {

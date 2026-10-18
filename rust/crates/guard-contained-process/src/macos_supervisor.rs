@@ -15,7 +15,7 @@ pub(super) struct DescriptorTable {
 }
 
 impl DescriptorTable {
-    pub(super) fn prepare() -> io::Result<Self> {
+    pub(super) fn prepare(extra_descriptors: usize) -> io::Result<Self> {
         let bytes = unsafe {
             libc::proc_pidinfo(
                 libc::getpid(),
@@ -32,6 +32,7 @@ impl DescriptorTable {
         let entries = (bytes as usize)
             .checked_div(entry_size)
             .and_then(|count| count.checked_add(16))
+            .and_then(|count| count.checked_add(extra_descriptors))
             .ok_or_else(crate::bound_fs::changed)?;
         let bytes = entries
             .checked_mul(entry_size)

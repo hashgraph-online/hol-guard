@@ -145,7 +145,7 @@ test("approval review renders action-eligible scopes and binds the selected cont
   });
 });
 
-test("unbound script review offers no unusable approval or credential prompt on mobile", async ({ page }) => {
+test("a request from an older Guard sends the user to a fresh request, never to run it themselves", async ({ page }) => {
   const bodies: Array<Record<string, unknown>> = [];
   const unbound: GuardApprovalRequest = {
     ...request, harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
@@ -157,10 +157,11 @@ test("unbound script review offers no unusable approval or credential prompt on 
   await page.setViewportSize({ width: 390, height: 844 });
   await mountApprovalFixture(page, bodies, unbound);
   await page.goto(`/requests/scope-e2e?${DAEMON}`);
-  await expect(page.getByText(/Execution approval is unavailable/)).toBeVisible();
+  await expect(page.getByText(/the new request offers Allow once and Always allow/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Run this yourself" })).toHaveCount(0);
+  await expect(page.getByText(/run it yourself|change nothing/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Allow just this once|Approve and remember/ })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await expect(page.locator("pre").filter({ hasText: "bash maintenance.sh dry" }).last()).toBeVisible();
   await expect(page.getByText(/You can allow it once/)).toHaveCount(0);
   await page.keyboard.press("Enter");
   expect(bodies).toHaveLength(0);

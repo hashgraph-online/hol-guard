@@ -212,6 +212,15 @@ def find_packaged_source_compiler() -> Path:
     return _NATIVE_PACKAGE / _COMPILER_NAME
 
 
+def installed_compiler_identity() -> tuple[str, str]:
+    """Return release-bound source and implementation floors for data activation."""
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    return (
+        _hex(manifest["source_sha"], length=_SHA40, field="source SHA"),
+        _hex(manifest["implementation_digest"], length=_SHA64, field="implementation digest"),
+    )
+
+
 def _canonical_request(request: Mapping[str, object]) -> bytes:
     if not isinstance(request, Mapping):
         raise NativeSourceCompilerError("compiler request must be an object")
@@ -436,6 +445,30 @@ def run_source_compiler(
             raise NativeSourceCompilerError("source compiler implementation identity does not match its manifest")
         if binding_result.get("base_program_digest") != manifest.get("base_program_digest"):
             raise NativeSourceCompilerError("source compiler base program identity does not match its manifest")
+    return result
+
+
+def check_pack_cache(directory: Path, expected_program: str, *, timeout: float = 60.0) -> dict[str, object]:
+    """Check prepared IR using the manifest-bound installed native executable.
+
+    This returns identities only. It neither signs a snapshot nor activates it.
+    """
+    _hex(expected_program, length=_SHA64, field="program digest")
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    raw = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
+    with _verified_executable(raw) as executable:
+        returncode, stdout, stderr = _run_bounded(
+            [str(executable), "check-pack-cache", str(directory), expected_program], b"", timeout=timeout
+        )
+    result = _decode_output(stdout, returncode=returncode, stderr=stderr)
+    if (
+        result.get("schema") != "guard.command-pack-cache-check.v1"
+        or result.get("engine") != manifest["implementation_digest"]
+        or result.get("program_digest") != expected_program
+    ):
+        raise NativeSourceCompilerError("pack cache does not match the packaged native implementation")
+    for field in ("program_digest", "catalog_digest", "trust_digest"):
+        _hex(result.get(field), length=_SHA64, field=field)
     return result
 
 

@@ -71,7 +71,7 @@ fn store_without_local_cli_tables_has_no_actions() {
 #[test]
 fn newer_or_missing_store_schema_is_not_read() {
     for marker in [
-        "insert into local_cli_schema_migration values (1, 13, 'newer')",
+        "insert into local_cli_schema_migration values (1, 15, 'newer')",
         "select 1",
     ] {
         let connection = Connection::open_in_memory().unwrap();

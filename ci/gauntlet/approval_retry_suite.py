@@ -22,6 +22,7 @@ from typing import Any
 from ci.native_runtime import probe_installed_pi_output as probe
 
 from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
+from .approval_rows import connector_classes
 from .catalog import catalog_digest, load_catalog
 from .fixtures import create_run_root, digest_file
 from .harness_case import run_harness_case
@@ -36,6 +37,7 @@ REPO = HERE.parents[1]
 
 def run_approval_retry_suite(
     *,
+    catalog_path: Path | None = None,
     harness: str,
     expected_source_sha: str,
     output: Path,
@@ -46,7 +48,12 @@ def run_approval_retry_suite(
     work_root: Path | None = None,
     candidate_sha: str | None = None,
 ) -> dict[str, Any]:
-    """Run each approve-then-retry scenario and write ``summary.json``."""
+    """Run each scenario of an additive harness-only catalog and write ``summary.json``.
+
+    The approve-then-retry catalog is the default; the connector-setup catalog shares
+    this lane because it has the same constraints and its own oracles.
+    """
+    catalog_path = catalog_path or APPROVAL_RETRY_CATALOG
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
         raise ValueError("expected source SHA must be a full Git commit")
     spec = adapter(harness)
@@ -57,7 +64,7 @@ def run_approval_retry_suite(
     _, identity, capabilities = probe._probe_native_identity()
     if capabilities.build_sha != expected_source_sha:
         raise RuntimeError("installed Guard source SHA does not match the expected build")
-    catalog = load_catalog(APPROVAL_RETRY_CATALOG)
+    catalog = load_catalog(catalog_path)
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
@@ -67,7 +74,8 @@ def run_approval_retry_suite(
     report: dict[str, Any] = {
         "started_at": datetime.now(timezone.utc).isoformat(),
         "schema": "hol.guard-gauntlet.harness-evidence.v1",
-        "name": "Guard Gauntlet approve-then-retry",
+        "name": "Guard Gauntlet "
+        + ("approve-then-retry" if catalog_path == APPROVAL_RETRY_CATALOG else catalog_path.stem),
         **source_identity(REPO, candidate_sha),
         "harness": harness,
         "harness_version": version,
@@ -76,7 +84,7 @@ def run_approval_retry_suite(
         "native_binary_sha256": identity.sha256,
         "guard_version": capabilities.runtime_version,
         "platform": platform.system().lower(),
-        "catalog_sha256": catalog_digest(APPROVAL_RETRY_CATALOG),
+        "catalog_sha256": catalog_digest(catalog_path),
         "expected_scenarios": [s.id for s in catalog],
         "full_profile": selected == catalog,
         "cases": [],
@@ -92,6 +100,7 @@ def run_approval_retry_suite(
                 "id": row["id"],
                 **row["assessment"],
                 "approval_grants": len((row.get("approval_grants") or {}).get("granted") or []),
+                "connector_classes": connector_classes(row.get("approval_rows")),
                 "evidence_sha256": digest_file(output / "cases" / f"{row['id']}.json"),
             }
             for row in (completed[s.id] for s in selected if s.id in completed)

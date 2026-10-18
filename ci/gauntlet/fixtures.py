@@ -49,11 +49,11 @@ SOURCE_FILES = {
 def _scenario_indices() -> dict[str, int]:
     # Deferred: catalog.py already imports fixtures.py at module load.
     from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
-    from .catalog import load_catalog
+    from .catalog import CONNECTOR_CATALOG, load_catalog
 
     # The core catalog numbers first so its fixture directories keep their names, and each
     # lane catalog that runs through run_harness_case follows it with distinct numbers.
-    scenarios = load_catalog() + load_catalog(APPROVAL_RETRY_CATALOG)
+    scenarios = load_catalog() + load_catalog(APPROVAL_RETRY_CATALOG) + load_catalog(CONNECTOR_CATALOG)
     return {scenario.id: index for index, scenario in enumerate(scenarios, start=1)}
 
 

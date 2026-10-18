@@ -440,18 +440,6 @@ def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> 
     return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
 
-def _cursor_after_shell_observed(payload: Mapping[str, object]) -> bool:
-    event_name = (_hook_event_name(payload) or "").strip().lower()
-    duration = payload.get("duration")
-    if isinstance(duration, (int, float)) and not isinstance(duration, bool):
-        return duration >= 0
-    if event_name == "aftermcpexecution":
-        result_json = payload.get("result_json")
-        return isinstance(result_json, str) and bool(result_json.strip())
-    output = payload.get("output")
-    return isinstance(output, str)
-
-
 def _record_cursor_native_shell_allow_state(
     *,
     store: GuardStore,
@@ -510,7 +498,6 @@ __all__ = [
     "_claude_guard_approval_question_text",
     "_claude_pending_permission_index_key",
     "_claude_pending_permission_state_key",
-    "_cursor_after_shell_observed",
     "_cursor_conversation_id",
     "_cursor_native_shell_allow_state_key",
     "_cursor_native_shell_is_approved",

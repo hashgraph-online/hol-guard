@@ -4,12 +4,16 @@ import { connectorWorkspaceItems, normalizeLocalCliList } from "../local-cli-api
 import { extensionBrandTestId, resolveExtensionBrand } from "./model/extension-brand";
 import {
   addCustomExtensionPrefillHref,
+  connectorGroupOutcome,
+  connectorSetupLinkFromSearch,
+  connectorSetupMatch,
   customExtensionBadge,
   customExtensionDisplayName,
   initialAddCommand,
   prefillSuggestedStates,
   profileSetupCommand,
 } from "./custom-extension-profile";
+import { connectorGroupOutcomeCopy, connectorSetupCopy } from "./local-cli-panel-copy";
 
 const hash = "a".repeat(64);
 const item = (extra: Record<string, unknown> = {}) => ({
@@ -70,3 +74,26 @@ assert.equal(addCustomExtensionPrefillHref("/extensions/add", "npx wrangler"), "
 assert.equal(addCustomExtensionPrefillHref("/extensions/add", "rm -rf /"), "/extensions/add");
 assert.equal(initialAddCommand("?command=npx%20wrangler"), "npx wrangler");
 assert.equal(initialAddCommand("?command=curl%20evil"), "");
+
+// Connector setup deep link: only a bounded request id plus an exact identity hash.
+assert.deepEqual(connectorSetupLinkFromSearch(`?setup=req-1&identity=${hash}`), { requestId: "req-1", identityHash: hash });
+assert.equal(connectorSetupLinkFromSearch("?setup=req-1"), null);
+assert.equal(connectorSetupLinkFromSearch(`?setup=req%201&identity=${hash}`), null);
+assert.equal(connectorSetupLinkFromSearch(`?setup=req-1&identity=${"A".repeat(64)}`), null);
+assert.equal(connectorSetupLinkFromSearch(`?setup=${"r".repeat(129)}&identity=${hash}`), null);
+const link = { requestId: "req-1", identityHash: hash };
+assert.equal(connectorSetupMatch({ identity_hash: hash, state: "unset" }, link), "ready");
+assert.equal(connectorSetupMatch({ identity_hash: hash, state: "allowed" }, link), "decided");
+assert.equal(connectorSetupMatch({ identity_hash: "b".repeat(64), state: "unset" }, link), "identity_changed");
+
+// Apply response: connector_group outcome and retry copy.
+assert.equal(connectorGroupOutcome({ ok: true }), null);
+assert.equal(connectorGroupOutcome(null), null);
+const resolved = connectorGroupOutcome({ connector_group: { status: "resolved", resolved_count: 2,
+  continuation: { retry_hint: "Return to Claude and retry" } } })!;
+assert.deepEqual(resolved, { status: "resolved", resolvedCount: 2, retryHint: "Return to Claude and retry" });
+assert.equal(connectorGroupOutcomeCopy(resolved), "Set up. Guard approved 2 held requests once. Return to Claude and retry.");
+assert.match(connectorGroupOutcomeCopy({ status: "partial", resolvedCount: 1, retryHint: null }), /1 held request once; the rest/);
+assert.match(connectorGroupOutcomeCopy(connectorGroupOutcome({ connector_group: { status: 5 } })!), /still in the Inbox/);
+assert.match(connectorSetupCopy("ready", "lanectl").body, /nothing changes until you confirm/);
+assert.match(connectorSetupCopy("identity_changed", "lanectl").title, /changed/);

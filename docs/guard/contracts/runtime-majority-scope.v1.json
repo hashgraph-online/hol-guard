@@ -408,7 +408,10 @@
           "src/codex_plugin_scanner/guard/daemon/dashboard_reconnect.py",
           "src/codex_plugin_scanner/guard/daemon/diagnostics.py",
           "src/codex_plugin_scanner/guard/daemon/orphaned_daemon_workers.py",
-          "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py"
+          "src/codex_plugin_scanner/guard/daemon/approval_extension_recommendation.py",
+          "src/codex_plugin_scanner/guard/daemon/approval_connector_recommendation.py",
+          "src/codex_plugin_scanner/guard/daemon/local_cli_connector_group.py",
+          "src/codex_plugin_scanner/guard/daemon/local_cli_capability_api.py"
         ]
       },
       {
@@ -516,6 +519,10 @@
       }
     ],
     "reviewed_runtime": [
+      {
+        "path": "src/codex_plugin_scanner/guard/catalog_delivery/*.py",
+        "reason": "Retained conservatively in runtime scope: generated_command_catalog and native_command_control_binding reach authenticated pack metadata, activation projection and recovery through lazy imports. Count the complete shared delivery modules, including preparation and transport helpers, rather than exclude code reachable through those authority boundaries. Pack admission and hook evaluation remain native."
+      },
       {
         "path": [
           "src/codex_plugin_scanner/guard/runtime/data_flow.py",
@@ -692,6 +699,7 @@
           "src/codex_plugin_scanner/guard/inventory_item_description.py",
           "src/codex_plugin_scanner/guard/local_cli_grant_decision.py",
           "src/codex_plugin_scanner/guard/local_cli_hook.py",
+          "src/codex_plugin_scanner/guard/connector_setup_context.py",
           "src/codex_plugin_scanner/guard/local_cli_trust.py",
           "src/codex_plugin_scanner/guard/product_model.py",
           "src/codex_plugin_scanner/guard/runtime_transition_hook_probe.py",

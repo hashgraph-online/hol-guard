@@ -1,9 +1,9 @@
 #![cfg(unix)]
 
 //! Bringing a checkout up to date: `git merge` of one revision, `git
-//! cherry-pick` of named commits and `git pull origin <branch>` that may
-//! write a merge commit, in a sibling repository behind `git -C` or after a
-//! `sleep`. They stay quiet only while no hook, merge driver, configured
+//! cherry-pick` of named commits, `git rebase` onto a local ref and `git pull
+//! origin <branch>` that may write a merge commit, in a sibling repository
+//! behind `git -C` or after a `sleep`. They stay quiet only while no hook, merge driver, configured
 //! strategy, signing step or repository-chosen editor can run; every option
 //! that picks a program or discards work keeps the review.
 
@@ -32,6 +32,13 @@ fn sibling(label: &str) -> (Session, PathBuf) {
         &session.home,
         &service,
         &["commit", "--quiet", "-m", "fixture"],
+    );
+    // A rebase start proves its upstream resolves to a commit, so the sibling
+    // carries the remote-tracking ref an ordinary checkout holds.
+    git(
+        &session.home,
+        &service,
+        &["update-ref", "refs/remotes/origin/main", "HEAD"],
     );
     (session, service)
 }
@@ -74,6 +81,7 @@ fn sibling_merge_and_cherry_pick_behind_git_c_are_local_writes() {
         format!("git -C {sib} cherry-pick 36b51d1428 300395d837 64b5fdf03e 2>&1 | tail -4"),
         format!("sleep 420; git -C {sib} cherry-pick 36b51d1428 2>&1 | tail -2"),
         format!("git -C {sib} cherry-pick -x 36b51d1428"),
+        format!("git -C {sib} rebase origin/main"),
     ] {
         assert_allowed(&session, &command, &cwd, LOCAL_WRITE);
     }
@@ -90,9 +98,11 @@ fn sibling_merge_and_cherry_pick_behind_git_c_are_local_writes() {
         format!("git -C {sib} cherry-pick --strategy=custom 36b51d1428"),
         format!("git -C {sib} -c merge.ff=false merge origin/main"),
         format!("GIT_EDITOR=/tmp/editor git -C {sib} merge origin/main"),
-        // Neighbours that discard or rewrite work.
+        // Neighbours that discard work, and rebase forms that run a program.
         format!("git -C {sib} reset --hard origin/main"),
-        format!("git -C {sib} rebase origin/main"),
+        format!("git -C {sib} rebase --abort"),
+        format!("git -C {sib} rebase -x id origin/main"),
+        format!("git -C {sib} rebase --onto main origin/main topic"),
         format!("git -C {sib} checkout -- README.md"),
         // Steps other than Git run from the shell's directory.
         format!("git -C {sib} merge origin/main --no-edit && rm -rf build"),
@@ -145,6 +155,37 @@ fn merge_stays_reviewed_when_configuration_or_hooks_can_start_a_program() {
         assert_reviewed(&session, &pick, &cwd);
         std::fs::remove_file(path).unwrap();
     }
+}
+
+/// A start replays onto the upstream and checks it out first, so the hooks
+/// that run and the configuration that moves more than the branch keep it
+/// under review.
+#[test]
+fn a_rebase_start_stays_reviewed_when_configuration_or_hooks_change_the_replay() {
+    let (session, service) = sibling("rebase-config");
+    let cwd = session.primary.clone();
+    let sib = service.display();
+    let rebase = format!("git -C {sib} rebase origin/main");
+    assert_allowed(&session, &rebase, &cwd, LOCAL_WRITE);
+    for (key, value) in [
+        ("rebase.backend", "apply"),
+        ("rebase.autoStash", "true"),
+        ("rebase.updateRefs", "true"),
+    ] {
+        configured(&session, &service, key, Some(value));
+        assert_reviewed(&session, &rebase, &cwd);
+        configured(&session, &service, key, None);
+    }
+    assert_allowed(&session, &rebase, &cwd, LOCAL_WRITE);
+    for hook in ["pre-rebase", "post-checkout"] {
+        let path = service.join(".git/hooks").join(hook);
+        executable_hook(&path);
+        assert_reviewed(&session, &rebase, &cwd);
+        std::fs::remove_file(path).unwrap();
+    }
+    // The rebase writes `ORIG_HEAD` as it starts, so replaying onto it could
+    // leave the commit it named with no ref of its own.
+    assert_reviewed(&session, &format!("git -C {sib} rebase ORIG_HEAD"), &cwd);
 }
 
 #[test]

@@ -12,12 +12,18 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 pub mod bound_fs;
+#[cfg(unix)]
+pub mod bound_output;
 pub mod probe;
 pub use probe::main as probe_main;
 pub mod runtime_files;
 pub mod runtime_resources;
 #[cfg(unix)]
+mod source_launch;
+#[cfg(unix)]
 mod unix;
+#[cfg(unix)]
+pub use source_launch::SourceLaunchGate;
 #[cfg(windows)]
 mod windows;
 
@@ -67,7 +73,7 @@ pub struct Isolation {
     pub resources: Option<ResourceLimits>,
     pub output_per_stream: bool,
     pub node_virtual_address_space: bool,
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     pub inherited_files: Vec<File>,
     #[cfg(windows)]
     pub app_container: Option<windows::AppContainer>,
@@ -213,7 +219,7 @@ impl PinnedCommand {
             ));
         }
         #[cfg(unix)]
-        return unix::capture(self, input, cap, deadline, cancel, isolation);
+        return unix::capture(self, input, cap, deadline, cancel, isolation, None);
         #[cfg(windows)]
         return windows::capture(self, input, cap, deadline, cancel, isolation);
         #[cfg(not(any(unix, windows)))]

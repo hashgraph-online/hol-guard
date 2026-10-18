@@ -110,3 +110,200 @@ fn cli_kinds_require_params() {
     assert_eq!(result.status, "error");
     assert_eq!(result.code, "native_hook_render_invalid");
 }
+
+#[test]
+fn copilot_hook_response_kind_always_renders_a_document() {
+    let mut req = request("copilot_hook_response");
+    req.harness = "copilot".to_owned();
+    req.cli = Some(json!({"policy_action": "block", "reason": "no"}));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["permissionDecision"], "deny");
+    assert_eq!(payload["response"]["permissionDecisionReason"], "no");
+
+    req.cli = Some(json!({"policy_action": "allow", "reason": "no"}));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["permissionDecision"], "allow");
+    assert!(payload["response"]["permissionDecisionReason"].is_null());
+}
+
+#[test]
+fn claude_approval_copy_kind_returns_one_named_piece_of_text() {
+    let mut req = request("claude_approval_copy");
+    req.harness = "claude-code".to_owned();
+    req.cli = Some(json!({
+        "which": "permission_request_terminal_notice",
+        "payload": {"tool_name": "Bash"},
+        "reason": "Reviewing this",
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(
+        payload["response"]["value"],
+        "HOL Guard: reviewing Claude approval for Bash. Reviewing this."
+    );
+
+    req.cli = Some(json!({"which": "not-a-name", "payload": {}}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn artifact_id_kind_names_the_artifact_an_event_belongs_to() {
+    let mut req = request("artifact_id");
+    req.cli = Some(json!({
+        "canonical_harness": "codex",
+        "payload": {"source_scope": "project", "tool_name": "shell"},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["outcome"], "document");
+    assert_eq!(payload["response"]["value"], "codex:project:shell");
+
+    // No tool name: the event name scopes the id, lowercased.
+    req.cli = Some(json!({
+        "canonical_harness": "codex",
+        "payload": {"hook_event_name": "preToolUse"},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], "codex:project:pretooluse");
+
+    // Neither: the bare hook fallback.
+    req.cli = Some(json!({"canonical_harness": "codex", "payload": {}}));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], "codex:project:hook");
+}
+
+#[test]
+fn artifact_id_kind_folds_claude_tools_through_the_builtin_split() {
+    let mut req = request("artifact_id");
+    req.harness = "claude".to_owned();
+    req.cli = Some(json!({
+        "canonical_harness": "claude-code",
+        "payload": {"source_scope": "user", "tool_name": "Bash"},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], "claude-code:user:Bash");
+
+    req.cli = Some(json!({
+        "canonical_harness": "claude-code",
+        "payload": {"source_scope": "user", "tool_name": "mcp__linear__issue"},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(
+        payload["response"]["value"],
+        "claude-code:user:mcp:mcp__linear__issue"
+    );
+}
+
+#[test]
+fn artifact_id_kind_requires_the_canonical_harness() {
+    let mut req = request("artifact_id");
+    req.cli = Some(json!({"payload": {"tool_name": "shell"}}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn terminal_policy_action_kind_answers_whether_an_approval_could_still_matter() {
+    let mut req = request("terminal_policy_action");
+    req.cli = Some(json!({
+        "evaluation": {"artifacts": [{"policy_action": "block"}]},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], true);
+
+    // A reviewable action still has a question worth asking.
+    req.cli = Some(json!({
+        "evaluation": {"artifacts": [{"policy_action": "review"}]},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], false);
+}
+
+#[test]
+fn terminal_policy_action_kind_requires_an_evaluation_object() {
+    let mut req = request("terminal_policy_action");
+    req.cli = Some(json!({"evaluation": "block"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn cursor_after_shell_observed_kind_answers_whether_the_command_already_ran() {
+    let mut req = request("cursor_after_shell_observed");
+    req.cli = Some(json!({
+        "payload": {"event": "afterShellExecution", "duration": 4},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], true);
+
+    // A before-event carries no report of a finished command.
+    req.cli = Some(json!({
+        "payload": {"event": "beforeShellExecution", "command": "ls"},
+    }));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], false);
+}
+
+#[test]
+fn cursor_after_shell_observed_kind_requires_a_payload_object() {
+    let mut req = request("cursor_after_shell_observed");
+    req.cli = Some(json!({"payload": "afterShellExecution"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}
+
+#[test]
+fn cursor_observer_event_kind_answers_what_a_proof_is_attested_under() {
+    let mut req = request("cursor_observer_event");
+    req.cli = Some(json!({"payload": {"hook_event_name": "beforeMCPExecution"}}));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], "afterMCPExecution");
+
+    // A payload naming no event Guard observes falls back to the shell event.
+    req.cli = Some(json!({"payload": {}}));
+    let payload = decode(evaluate_hook_render_request(&req).expect("encoded"))
+        .payload
+        .expect("payload");
+    assert_eq!(payload["response"]["value"], "afterShellExecution");
+}
+
+#[test]
+fn cursor_observer_event_kind_requires_a_payload_object() {
+    let mut req = request("cursor_observer_event");
+    req.cli = Some(json!({"payload": "beforeMCPExecution"}));
+    let result = decode(evaluate_hook_render_request(&req).expect("encoded"));
+    assert_eq!(result.status, "error");
+    assert_eq!(result.code, "native_hook_render_invalid");
+}

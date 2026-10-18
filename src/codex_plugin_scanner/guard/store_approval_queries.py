@@ -13,6 +13,20 @@ from .store_base import *
 from .temporary_mcp_approvals import temporary_mcp_approval_payload
 from .trusted_local_tools import local_tool_approval_payload
 
+_NO_ANSWER = "native_guard_store_unavailable"
+_RETRYABLE_READS = frozenset(
+    {
+        "approval_desktop_notified_at",
+        "count_approval_requests",
+        "get_approval_extension_allow_hint",
+        "get_approval_request",
+        "get_next_pending_request",
+        "list_approval_request_page",
+        "list_approval_requests",
+        "oldest_approval_request_created_at",
+    }
+)
+
 
 def _with_approval_hints(payload: dict[str, object]) -> dict[str, object]:
     """Attach the queue hints the resident leaves to Python, as the scope payload did."""
@@ -133,9 +147,21 @@ class StoreApprovalQueriesMixin:
         except OSError:
             cwd = None
         try:
-            return self._native_store_call(method, {**args, "cwd": cwd})
+            return self._native_approval_call(method, {**args, "cwd": cwd})
+        except NativeGuardStoreUnavailable as error:
+            if method not in _RETRYABLE_READS or error.reason != _NO_ANSWER:
+                raise ApprovalScopeUnavailableError from error
+        # A read changes nothing, so a resident that dropped one round trip
+        # (a restart, a busy socket) gets one more before the queue reads as
+        # unavailable. Writes are never retried: the first may have landed.
+        try:
+            return self._native_approval_call(method, {**args, "cwd": cwd})
         except NativeGuardStoreUnavailable as error:
             raise ApprovalScopeUnavailableError from error
+
+    def _native_approval_call(self, method: str, args: dict[str, object]) -> Any:
+        try:
+            return self._native_store_call(method, args)
         except ValueError as error:
             if str(error) == SCOPE_UNAVAILABLE:
                 raise ApprovalScopeUnavailableError from error

@@ -98,7 +98,11 @@ impl GwsGmailSendCommandInputV1 {
             extraction_provenance: "business-gws-inline-v1".to_owned(),
         };
         let parsed = parse_command(&request).map_err(|_| Error::InvalidCommand)?;
+        // A send is committed to the exact words it was read from, so a
+        // spelling the model no longer stands for word for word - a shell
+        // carrying the whole send as its script, say - is not one of them.
         if parsed.confidence != "exact"
+            || !parsed.exact_raw_text
             || parsed.uncertainty_reason.is_some()
             || parsed.segments.len() != 1
             || !parsed.wrapper_chain.is_empty()

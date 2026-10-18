@@ -10,8 +10,6 @@ use std::{
 };
 
 const MAX_INPUT_BYTES: u64 = 8 * 1024 * 1024;
-// The canonical corpus plus one acceptance source no longer fits in 4MiB.
-const MAX_ENVELOPE_BYTES: u64 = 8 * 1024 * 1024;
 
 fn read_input(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).expect("input inside source tree");
@@ -61,10 +59,17 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
         .collect();
     paths.sort();
     assert!(paths.len() <= 512, "canonical source count exceeded");
+    let mut remaining = guard_command_build::native_command_program::source::MAX_SOURCE_INPUT_BYTES;
     paths
         .iter()
         .map(|path| {
-            let text = read_input(root, path);
+            let mut text = read_input(root, path);
+            if matches!(directory, "contributions/command-sources" | "contributions/mcp-servers") {
+                let (bytes, _) = guard_command_build::native_command_program::source::validate_and_compact_source(
+                    text.as_bytes(), directory == "contributions/mcp-servers", &mut remaining,
+                ).unwrap_or_else(|error| panic!("invalid canonical source {}: {error}", path.display()));
+                text = String::from_utf8(bytes).expect("validated source UTF-8");
+            }
             if command {
                 let value: Value = serde_json::from_str(&text).expect("source JSON");
                 assert_eq!(
@@ -90,7 +95,9 @@ fn sources(root: &Path, directory: &str, command: bool) -> Vec<String> {
 }
 
 fn write_json(path: &Path, value: &Value) -> Vec<u8> {
-    let mut bytes = serde_json::to_vec(value).expect("generated JSON");
+    let mut canonical = value.clone();
+    canonical.sort_all_objects();
+    let mut bytes = serde_json::to_vec(&canonical).expect("generated JSON");
     bytes.push(b'\n');
     fs::write(path, &bytes).expect("write generated build output");
     bytes
@@ -169,28 +176,44 @@ fn main() {
         "canonical source inventory invalid"
     );
     let trust = trust_map(root);
-    // Keep raw JSON until the native duplicate-key/depth/budget validator runs.
-    // Parsing then reserializing here would silently discard duplicate keys.
-    let request = format!(
-        r#"{{"schema":"guard.command-extension-build.v1","sources":[{}],"mcp_sources":[{}],"trust":{}}}"#,
-        commands.join(","),
-        mcp.join(","),
-        trust
-    );
-    assert!(
-        request.len() as u64 <= MAX_ENVELOPE_BYTES,
-        "canonical source envelope exceeds budget"
-    );
-    let mut compiled = guard_command_build::native_command_program::source::compile_build_request(
-        request.as_bytes(),
-    )
-    .unwrap_or_else(|error| panic!("canonical source compilation failed: {error}"));
+    // Each raw record reaches native strict validation independently. Do not
+    // normalize authored JSON or construct a formatting-sensitive corpus envelope.
+    let commands: Vec<_> = commands.iter().map(|text| text.as_bytes()).collect();
+    let mcp: Vec<_> = mcp.iter().map(|text| text.as_bytes()).collect();
+    let mut compiled =
+        guard_command_build::native_command_program::source::compile_catalog_with_mcp(
+            &commands,
+            &mcp,
+            &serde_json::to_vec(&trust).expect("trust encoding"),
+        )
+        .unwrap_or_else(|error| panic!("canonical source compilation failed: {error}"));
     assert_eq!(compiled.catalog_projection_kind, "complete");
     assert_eq!(
         compiled.implementation_digest, identity,
         "host/target compiler identity mismatch"
     );
     let out = PathBuf::from(env::var_os("OUT_DIR").expect("Cargo output directory"));
+    println!(
+        "cargo:rustc-env=GUARD_PACKAGED_PROGRAM_ID={}",
+        compiled.program["program_digest"]
+            .as_str()
+            .expect("program identity")
+    );
+    let required: Vec<_> = compiled.program["extensions"]
+        .as_array()
+        .expect("program extensions")
+        .iter()
+        .filter(|extension| extension["required"] == true || extension["trust_class"] != "external")
+        .map(|extension| {
+            extension["extension_id"]
+                .as_str()
+                .expect("extension identity")
+        })
+        .collect();
+    println!(
+        "cargo:rustc-env=GUARD_DEFAULT_COMMAND_PACK_IDS={}",
+        required.join(",")
+    );
     write_json(&out.join("trust-class-map.v1.json"), &trust);
     write_embedded_json(
         &out,

@@ -243,6 +243,8 @@ impl Saved<'_> {
             local_once_integrity_key_id: Some(self.key_id.clone()),
             policy_bundle_decision_identities: None,
             probe_groups: None,
+            portable_workspace: None,
+            evidence_binding: None,
         }
     }
 

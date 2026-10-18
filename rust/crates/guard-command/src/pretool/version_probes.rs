@@ -15,8 +15,9 @@
 //!   it prints its version, so the probe can run workspace code.
 //! - `yarn` and `pnpm`: Yarn's `yarnPath` and Corepack's `packageManager`
 //!   field select a workspace-supplied binary that the probe would execute.
-//! - `docker version` and bare `kubectl version`: both contact a server.
-//!   `kubectl_reads` admits the kubectl form after its kubeconfig checks.
+//! - bare `kubectl version`: it contacts a server, and `kubectl_reads` admits
+//!   that form after its kubeconfig checks. `docker_reads` admits
+//!   `docker version`, whose daemon connection `docker ps` already uses.
 //! - `cargo` and `rustc`: a workspace `rust-toolchain.toml` with a `path`
 //!   makes the rustup proxy run that directory's binary. `rust_toolchain`
 //!   admits their version queries only after checking the toolchain file.
@@ -100,7 +101,6 @@ mod tests {
             ("kubectl", vec!["version"]),
             ("kubectl", vec!["--version"]),
             ("kubectl", vec!["version", "--output=yaml"]),
-            ("docker", vec!["version"]),
             ("pytest", vec!["--version"]),
             ("pytest", vec!["-v"]),
             ("pytest", vec!["-V", "extra"]),

@@ -1063,6 +1063,7 @@ def _render_doctor(console: Console, payload: dict[str, object]) -> None:
         if isinstance(supply_chain, dict):
             console.print(_build_supply_chain_posture_panel(supply_chain))
     _print_bundled_runtime_warning(console, payload)
+    _print_native_availability_note(console, payload)
     trust = payload.get("trust")
     if isinstance(trust, dict):
         console.print(_build_trust_doctor_panel(trust))
@@ -1095,6 +1096,14 @@ def _print_bundled_runtime_warning(console: Console, payload: dict[str, object])
     if isinstance(manual, str) and manual:
         lines.append(f"If the download is blocked, install it by hand: {manual}")
     console.print(Panel(Text("\n".join(lines)), title="Native runtime missing", border_style="red"))
+
+
+def _print_native_availability_note(console: Console, payload: dict[str, object]) -> None:
+    native_runtime = payload.get("native_runtime")
+    availability = native_runtime.get("availability") if isinstance(native_runtime, dict) else None
+    message = availability.get("message") if isinstance(availability, dict) else None
+    if isinstance(message, str) and message:
+        console.print(Panel(Text(message), title="Native runtime shared", border_style="yellow"))
 
 
 def _build_trust_doctor_panel(trust: dict[str, object]) -> Panel:

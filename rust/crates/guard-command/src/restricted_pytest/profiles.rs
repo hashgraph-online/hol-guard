@@ -24,8 +24,16 @@ struct Input {
     linked_git: Option<super::workspace_linked::LinkedGit>,
     #[serde(rename = "search_path")]
     _search_path: String,
+    /// `workspace-contained-grant-v1` only: the plan's grant capabilities.
+    capabilities: Vec<String>,
+    /// `workspace-contained-grant-v1` only: the home a state directory must
+    /// sit in; without it no state capability composes.
+    home: Option<PathBuf>,
 }
 
+#[cfg(test)]
+#[path = "workspace_grant_profile_tests.rs"]
+mod workspace_grant_profile_tests;
 #[path = "workspace_profile.rs"]
 pub(super) mod workspace_profile;
 #[cfg(test)]
@@ -132,8 +140,30 @@ fn collection_link_metadata(input: &Input) -> Result<Vec<PathBuf>, RestrictedPyt
 }
 
 fn macos_profile(input: &Input) -> Result<String, RestrictedPytestError> {
+    // Capabilities widen only the grant profile; on any other they are refused.
+    if !input.capabilities.is_empty()
+        && input.profile_version != super::workspace_grant::GRANT_PROFILE
+    {
+        return Err(RestrictedPytestError::new(
+            PYTEST_INVALID_COMMAND_REASON_CODE,
+            "Invalid restricted execution request.",
+        ));
+    }
     if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
         return workspace_profile::compose(input, &existing(MAC_ROOTS), &existing(MAC_FILES));
+    }
+    if input.profile_version == super::workspace_grant::GRANT_PROFILE {
+        let rules = super::workspace_grant::rules(
+            &input.capabilities,
+            &input.read_only_roots,
+            input.home.as_deref(),
+        )?;
+        return workspace_profile::compose_with(
+            input,
+            &existing(MAC_ROOTS),
+            &existing(MAC_FILES),
+            &rules,
+        );
     }
     let mut files = existing(MAC_FILES);
     if matches!(
@@ -256,7 +286,10 @@ pub(super) fn replay_profile(input: &Value, grants: &Value) -> Value {
 fn bubblewrap_argv(input: &Input) -> Result<Vec<String>, RestrictedPytestError> {
     // A non-read-only profile gets a writable workspace here, which would drop
     // this profile's protected paths. Linux containment is a separate change.
-    if input.profile_version == WORKSPACE_CONTAINED_PROFILE {
+    if input.profile_version == WORKSPACE_CONTAINED_PROFILE
+        || input.profile_version == super::workspace_grant::GRANT_PROFILE
+        || !input.capabilities.is_empty()
+    {
         return Err(RestrictedPytestError::new(
             PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
             "The workspace sandbox profile is not available on Linux.",

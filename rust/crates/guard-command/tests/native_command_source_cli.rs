@@ -50,6 +50,33 @@ fn offline_cli_exports_build_derived_trust_without_stdin() {
 }
 
 #[test]
+fn offline_cli_bounds_each_stream_frame_and_rejects_extra_arguments() {
+    let mut input = b"HGCS\x01".to_vec();
+    input.extend_from_slice(&(8 * 1024 * 1024 + 1u32).to_be_bytes());
+    let output = invoke(&["compile-stream"], &input);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["code"],
+        "command_source_bytes_invalid"
+    );
+    assert!(!invoke(&["compile-stream", "extra"], &[]).status.success());
+}
+
+#[test]
+fn offline_pack_cli_bounds_frames_without_emitting_a_partial_root() {
+    let mut input = b"HGPS\x01".to_vec();
+    input.extend_from_slice(&(8 * 1024 * 1024 + 1u32).to_be_bytes());
+    let output = invoke(&["compile-packs"], &input);
+    assert_eq!(output.status.code(), Some(2));
+    let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure["code"], "command_source_bytes_invalid");
+    assert!(failure.get("index").is_none());
+    assert!(!invoke(&["compile-packs", "arbitrary-file.json"], &[])
+        .status
+        .success());
+}
+
+#[test]
 fn offline_cli_compiles_deterministically_and_checks_exact_identity() {
     let input = request();
     let first = invoke(&["compile"], &input);

@@ -17,6 +17,19 @@ const MAX_OBJECT_MEMBERS: usize = 4_096;
 // packaged program (offline parity) must decode that same envelope.
 pub(super) const MAX_PROGRAM_OBJECT_MEMBERS: usize = 16_384;
 
+/// Retained work in one complete-program compilation stays within the existing
+/// compiler input budget. Charge validated compact bytes, never raw formatting.
+pub(super) fn compact_record(
+    value: &Value,
+    remaining: &mut usize,
+) -> Result<Vec<u8>, &'static str> {
+    let bytes = serde_json::to_vec(value).map_err(|_| "command_source_encoding_failed")?;
+    *remaining = remaining
+        .checked_sub(bytes.len())
+        .ok_or("command_source_catalog_work_budget_exceeded")?;
+    Ok(bytes)
+}
+
 pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
     decode_with_object_members(bytes, MAX_OBJECT_MEMBERS)
 }
@@ -25,6 +38,20 @@ pub(super) fn decode_with_object_members(
     bytes: &[u8],
     max_object_members: usize,
 ) -> Result<Value, &'static str> {
+    let value = decode_value(bytes, max_object_members)?;
+    // Authored source envelopes remain objects; immutable compiled metadata
+    // also contains arrays and uses the same strict bounded value decoder.
+    let is_number_marker = value
+        .as_object()
+        .map(|map| map.len() == 1 && map.contains_key("$serde_json::private::Number"))
+        .unwrap_or(false);
+    if !value.is_object() || is_number_marker {
+        return Err("command_source_json_invalid");
+    }
+    Ok(value)
+}
+
+pub(super) fn decode_value(bytes: &[u8], max_object_members: usize) -> Result<Value, &'static str> {
     if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
         return Err("command_source_bytes_invalid");
     }
@@ -38,18 +65,6 @@ pub(super) fn decode_with_object_members(
     .deserialize(&mut decoder)
     .map_err(|_| "command_source_json_invalid")?;
     decoder.end().map_err(|_| "command_source_json_invalid")?;
-    // A source program must be a JSON object. Under serde_json
-    // `arbitrary_precision`, a bare number decodes through the private
-    // `$serde_json::private::Number` marker map and `is_object()` reports true;
-    // reject that marker shape too so scalars and ambiguous top-levels are
-    // refused regardless of numeric encoding.
-    let is_number_marker = value
-        .as_object()
-        .map(|map| map.len() == 1 && map.contains_key("$serde_json::private::Number"))
-        .unwrap_or(false);
-    if !value.is_object() || is_number_marker {
-        return Err("command_source_json_invalid");
-    }
     Ok(value)
 }
 
@@ -194,6 +209,25 @@ mod tests {
         assert_eq!(
             serde_json::to_string(&value).unwrap(),
             "{\"a\":true,\"z\":[\"ß\",\"İ\",-2,1]}"
+        );
+    }
+
+    #[test]
+    fn compact_work_budget_is_shared_and_independent_of_raw_whitespace() {
+        let padded = format!(
+            "{}{{\"value\":\"é\"}}{}",
+            " ".repeat(1000),
+            "\n".repeat(1000)
+        );
+        let value = decode(padded.as_bytes()).unwrap();
+        let compact = serde_json::to_vec(&value).unwrap();
+        let mut remaining = compact.len() * 2;
+        assert_eq!(compact_record(&value, &mut remaining).unwrap(), compact);
+        assert!(compact_record(&value, &mut remaining).is_ok());
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            compact_record(&value, &mut remaining).unwrap_err(),
+            "command_source_catalog_work_budget_exceeded"
         );
     }
 }

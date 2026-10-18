@@ -10,9 +10,9 @@ use rusqlite::params;
 use std::collections::BTreeMap;
 
 const VECTORS: &str = include_str!("../tests/fixtures/hook_direct_saved_decision_vectors.json");
-const KEY: [u8; 32] = [7u8; 32];
-const KEY_ID: &str = "test-policy-key";
-pub(super) const SIGNED_AT: &str = "2026-01-01T00:00:00+00:00";
+pub(crate) const KEY: [u8; 32] = [7u8; 32];
+pub(crate) const KEY_ID: &str = "test-policy-key";
+pub(crate) const SIGNED_AT: &str = "2026-01-01T00:00:00+00:00";
 
 pub(super) fn vectors() -> Value {
     serde_json::from_str(VECTORS).expect("saved-decision vectors parse")
@@ -96,7 +96,7 @@ fn render_marks_the_reuse_status_and_refuses_an_oversize_verdict() {
     assert!(render("claude-code", &oversize, "accepted").is_none());
 }
 
-fn integrity_state() -> DirectLanePolicyIntegrityStateV1 {
+pub(crate) fn integrity_state() -> DirectLanePolicyIntegrityStateV1 {
     DirectLanePolicyIntegrityStateV1 {
         backend: "encrypted-file".to_owned(),
         cutover_complete: true,
@@ -110,7 +110,7 @@ fn integrity_state() -> DirectLanePolicyIntegrityStateV1 {
 
 /// A store with the schema marker, the published integrity state and no
 /// decisions.
-pub(super) fn local_store(tag: &str) -> (std::path::PathBuf, Connection) {
+pub(crate) fn local_store(tag: &str) -> (std::path::PathBuf, Connection) {
     let path = tmp_store(&format!("saved-{tag}"));
     let _ = std::fs::remove_file(&path);
     seed_store(&path);
@@ -163,7 +163,7 @@ fn insert_decision(
 }
 
 /// Sign the decision `id` with the published integrity key.
-pub(super) fn sign_decision(connection: &Connection, id: i64) {
+pub(crate) fn sign_decision(connection: &Connection, id: i64) {
     let row = connection
         .query_row(
             &format!("select {POLICY_LOOKUP_COLUMNS} from policy_decisions where decision_id = ?1"),

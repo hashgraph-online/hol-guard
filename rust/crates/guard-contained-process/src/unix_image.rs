@@ -119,6 +119,13 @@ pub(crate) struct PinnedImage {
     directory: Option<tempfile::TempDir>,
     binding: std::sync::Arc<crate::bound_fs::Directory>,
     mode_lease: Option<RootModeLease>,
+    readonly_system_root: bool,
+}
+#[cfg(target_os = "macos")]
+impl PinnedImage {
+    pub(crate) fn on_readonly_system_root(&self) -> io::Result<bool> {
+        Ok(self.readonly_system_root && on_readonly_root(&self.file)?)
+    }
 }
 #[cfg(target_os = "macos")]
 impl Drop for PinnedImage {
@@ -214,6 +221,7 @@ pub(crate) fn seal_executable(
             directory: None,
             binding: source_directory,
             mode_lease: None,
+            readonly_system_root: true,
         });
     }
     if let Some(root) = root {
@@ -251,6 +259,7 @@ pub(crate) fn seal_executable(
             directory: None,
             binding: source_directory,
             mode_lease: Some(mode_lease),
+            readonly_system_root: false,
         });
     }
     let directory = tempfile::Builder::new()
@@ -281,6 +290,7 @@ pub(crate) fn seal_executable(
         directory: Some(directory),
         binding,
         mode_lease: Some(mode_lease),
+        readonly_system_root: false,
     })
 }
 
