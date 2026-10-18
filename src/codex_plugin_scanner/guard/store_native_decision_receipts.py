@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from contextlib import AbstractContextManager
 from datetime import datetime, timezone
-from typing import Final, Protocol, cast
+from typing import TYPE_CHECKING, Any, Final, Protocol
 
 from .native_decision_receipt import validate_native_decision_receipt
 
@@ -114,10 +114,22 @@ def native_decision_receipt_schema_statements(*prefix: str) -> tuple[str, ...]:
 
 
 class StoreNativeDecisionReceiptsMixin:
-    def record_native_decision_receipt(self: _ConnectionOwner, receipt: Mapping[str, object]) -> bool:
+    if TYPE_CHECKING:
+
+        def _native_store_call(
+            self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+        ) -> Any: ...
+
+    def record_native_decision_receipt(self, receipt: Mapping[str, object]) -> bool:
         """Store one validated receipt; duplicate decision IDs are harmless."""
 
-        _record_native_decision_receipts(self, (receipt,))
+        # The decision ID commits to a canonical encoding of the receipt's own
+        # fields, so the resident validates the wire text rather than a shape
+        # this process has already rebuilt.
+        self._native_store_call(
+            "record_native_decision_receipt",
+            {"receipt": _receipt_wire(receipt), "now": datetime.now(timezone.utc).isoformat()},
+        )
         return True
 
     def get_native_decision_receipt(self: _ConnectionOwner, decision_id: str) -> dict[str, object] | None:
@@ -137,6 +149,24 @@ class StoreNativeDecisionReceiptsMixin:
         if row is None:
             return None
         return validate_stored_native_decision_receipt(dict(row))
+
+
+def _receipt_wire(receipt: Mapping[str, object]) -> str:
+    """Encode one receipt as the JSON text the resident validates."""
+    try:
+        return json.dumps(receipt, ensure_ascii=False, allow_nan=False, default=_mapping_as_object)
+    except (TypeError, ValueError) as error:
+        raise ValueError("native decision receipt is invalid") from error
+
+
+def _mapping_as_object(value: object) -> dict[str, object]:
+    # Callers hand us any mapping, and the command binding nested inside one is
+    # a mapping of its own. JSON only knows how to write a dict, and a receipt
+    # that reads like an object has always been storable whatever type carried
+    # it, so keep that true rather than rejecting the carrier.
+    if isinstance(value, Mapping):
+        return dict(value)
+    raise TypeError("native decision receipt is not JSON data")
 
 
 def validate_stored_native_decision_receipt(row: Mapping[str, object]) -> dict[str, object] | None:
@@ -166,107 +196,6 @@ def validate_stored_native_decision_receipt(row: Mapping[str, object]) -> dict[s
             return None
         result[field] = bool(result[field])
     return validate_native_decision_receipt(result)
-
-
-def _record_native_decision_receipts(
-    owner: _ConnectionOwner, receipts: Sequence[Mapping[str, object]]
-) -> tuple[str, ...]:
-    if len(receipts) > 50:
-        raise ValueError("native decision receipt batch exceeds 50 records")
-    validated_receipts: list[dict[str, object]] = []
-    for receipt in receipts:
-        validated = validate_native_decision_receipt(receipt)
-        if validated is None:
-            raise ValueError("native decision receipt is invalid")
-        # The command binding is nested. Detach it before batching so a caller
-        # cannot mutate that mapping after validation and change the stored
-        # binding without changing the receipt identity.
-        detached = json.loads(json.dumps(validated, sort_keys=True, separators=(",", ":"), allow_nan=False))
-        validated = validate_native_decision_receipt(detached)
-        if validated is None:
-            raise ValueError("native decision receipt changed during capture")
-        validated_receipts.append(validated)
-    if not validated_receipts:
-        return ()
-    recorded_at = datetime.now(timezone.utc).isoformat()
-    groups = (
-        ("native_hook_decision_receipts", {"PreToolUse", "PostToolUse"}),
-        ("native_prompt_decision_receipts", {"UserPromptSubmit"}),
-    )
-    with owner._connect() as connection:
-        for table, events in groups:
-            selected = [receipt for receipt in validated_receipts if receipt["event_name"] in events]
-            if not selected:
-                continue
-            prompt_table = table == "native_prompt_decision_receipts"
-            risk_column = ", prompt_risk_classes_json" if prompt_table else ""
-            risk_value = ", ?" if prompt_table else ""
-            connection.executemany(
-                f"""
-                insert or ignore into {table} (
-                  decision_id, schema, version, authority, request_id,
-                  request_digest, harness, event_name, payload_kind,
-                  policy_generation, policy_digest, rule_digest,
-                  runtime_identity, decision, model_output_action,
-                  policy_action, observed_policy_action, reason_code,
-                  workspace_bound, source_ref_external_allowed,
-                  reviewed_output_sha256, observe_mode, deadline_budget_ms,
-                  command_extensions_json, recorded_at{risk_column}
-                ) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?{risk_value})
-                """,
-                [
-                    (
-                        validated["decision_id"],
-                        validated["schema"],
-                        validated["version"],
-                        validated["authority"],
-                        validated["request_id"],
-                        validated["request_digest"],
-                        validated["harness"],
-                        validated["event_name"],
-                        validated["payload_kind"],
-                        validated["policy_generation"],
-                        validated["policy_digest"],
-                        validated["rule_digest"],
-                        validated["runtime_identity"],
-                        validated["decision"],
-                        validated["model_output_action"],
-                        validated["policy_action"],
-                        validated["observed_policy_action"],
-                        validated["reason_code"],
-                        int(cast_bool(validated["workspace_bound"])),
-                        int(cast_bool(validated["source_ref_external_allowed"])),
-                        validated["reviewed_output_sha256"],
-                        int(cast_bool(validated["observe_mode"])),
-                        validated["deadline_budget_ms"],
-                        (
-                            json.dumps(validated["command_extensions"], sort_keys=True, separators=(",", ":"))
-                            if "command_extensions" in validated
-                            else None
-                        ),
-                        recorded_at,
-                        *(
-                            (
-                                json.dumps(
-                                    validated.get("prompt_risk_classes", []),
-                                    sort_keys=True,
-                                    separators=(",", ":"),
-                                ),
-                            )
-                            if prompt_table
-                            else ()
-                        ),
-                    )
-                    for validated in selected
-                ],
-            )
-    return tuple(cast(str, receipt["decision_id"]) for receipt in validated_receipts)
-
-
-def cast_bool(value: object) -> bool:
-    if not isinstance(value, bool):
-        raise ValueError("native decision receipt boolean is invalid")
-    return value
 
 
 __all__ = [

@@ -36,7 +36,7 @@ pub struct CompiledSourceCatalog {
 }
 
 fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
-    let bytes = serde_json::to_vec(value).map_err(|_| "command_source_encoding_failed")?;
+    let bytes = canonical_json_bytes(value).map_err(|_| "command_source_encoding_failed")?;
     Ok(digest_canonical_bytes(domain, &bytes))
 }
 
@@ -74,32 +74,43 @@ fn trust_rows(bytes: &[u8]) -> Result<(TrustMap, BTreeMap<String, String>), &'st
     Ok((map, classes))
 }
 
+pub(super) fn validate_trust(bytes: &[u8]) -> Result<(), &'static str> {
+    trust_rows(bytes).map(|_| ())
+}
+
 /// Existing MCP JSON remains canonical and is lowered alongside command sources.
 pub(super) fn lower_catalog(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
 ) -> Result<CompiledSourceCatalog, &'static str> {
-    if (sources.is_empty() && mcp_sources.is_empty())
-        || sources.len() + mcp_sources.len() > 512
-        || sources
-            .iter()
-            .chain(mcp_sources.iter())
-            .try_fold(0usize, |total, bytes| total.checked_add(bytes.len()))
-            .is_none_or(|size| size > MAX_SOURCE_CATALOG_BYTES)
-    {
+    lower_catalog_inner(sources, mcp_sources, trust, true)
+}
+
+fn lower_catalog_inner(
+    sources: &[&[u8]],
+    mcp_sources: &[&[u8]],
+    trust: &[u8],
+    complete_relationships: bool,
+) -> Result<CompiledSourceCatalog, &'static str> {
+    if (sources.is_empty() && mcp_sources.is_empty()) || sources.len() + mcp_sources.len() > 512 {
         return Err("command_source_catalog_bytes_invalid");
     }
+    let mut remaining = json::MAX_SOURCE_BYTES;
     let mut documents: Vec<SourceDocument> = sources
         .iter()
         .map(|bytes| {
-            serde_json::from_value(json::decode(bytes)?)
-                .map_err(|_| "command_source_contract_invalid")
+            let value = json::decode(bytes)?;
+            json::compact_record(&value, &mut remaining)?;
+            serde_json::from_value(value).map_err(|_| "command_source_contract_invalid")
         })
         .collect::<Result<_, _>>()?;
     let mut mcp_documents = mcp_sources
         .iter()
-        .map(|bytes| mcp::lower(bytes))
+        .map(|bytes| {
+            json::compact_record(&json::decode(bytes)?, &mut remaining)?;
+            mcp::lower(bytes)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     mcp_documents.sort_by(|a, b| {
         a.document
@@ -122,7 +133,19 @@ pub(super) fn lower_catalog(
         documents.push(lowered.document);
         mcp_canonical.push(lowered.canonical);
     }
-    validation::validate_relationships(&documents, &mcp_wire.keys().map(String::as_str).collect())?;
+    if complete_relationships {
+        validation::validate_relationships(
+            &documents,
+            &mcp_wire.keys().map(String::as_str).collect(),
+        )?;
+    } else {
+        for document in &documents {
+            validation::validate(
+                document,
+                mcp_wire.contains_key(&document.extension.extension_id),
+            )?;
+        }
+    }
     documents.sort_by(|a, b| a.extension.extension_id.cmp(&b.extension.extension_id));
     for document in &mut documents {
         document
@@ -315,7 +338,8 @@ pub(super) fn lower_catalog(
             "executables":extension.executables,"trust_class":class,"activation":activation,"publisher":publisher,
             "delegated_protection":extension.delegated_protection,"mcp":mcp_wire.get(&extension.extension_id),"permissions":native_permissions}));
     }
-    let catalog = Value::Array(catalog);
+    let mut catalog = Value::Array(catalog);
+    catalog.sort_all_objects();
     let catalog_bytes =
         serde_json::to_vec(&catalog).map_err(|_| "command_source_encoding_failed")?;
     if catalog_bytes.len() > MAX_NATIVE_CATALOG_PROJECTION_BYTES {
@@ -345,7 +369,12 @@ pub(super) fn lower_catalog(
     })
 }
 
-fn admit(output: CompiledSourceCatalog) -> Result<CompiledSourceCatalog, &'static str> {
+fn admit(mut output: CompiledSourceCatalog) -> Result<CompiledSourceCatalog, &'static str> {
+    output.program.sort_all_objects();
+    output.catalog.sort_all_objects();
+    for descriptor in &mut output.descriptors {
+        descriptor.sort_all_objects();
+    }
     let bytes =
         serde_json::to_vec(&output.program).map_err(|_| "command_source_encoding_failed")?;
     NativeCommandProgram::from_packaged_bytes(&bytes)?;
@@ -369,93 +398,23 @@ pub fn compile_catalog_with_mcp(
     admit(lower_catalog(sources, mcp_sources, trust)?)
 }
 
-/// Additive onboarding proof against the immutable packaged base. Existing
-/// extensions cannot be replaced. The catalog projection contains additions,
-/// explicitly distinguished from a complete release catalog.
-pub fn compile_addition(
-    sources: &[&[u8]],
-    trust: &[u8],
-) -> Result<CompiledSourceCatalog, &'static str> {
-    compile_addition_with_mcp(sources, &[], trust)
-}
-
-pub fn compile_addition_with_mcp(
+pub(super) fn compile_pack(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
+    interfaces: (&BTreeSet<String>, &BTreeSet<String>),
 ) -> Result<CompiledSourceCatalog, &'static str> {
-    let mut output = lower_catalog(sources, mcp_sources, trust)?;
-    NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
-    let mut base: Value = serde_json::from_slice(packaged_command_program_bytes())
-        .map_err(|_| "command_source_packaged_base_invalid")?;
-    let base_digest = base["program_digest"].as_str().unwrap().to_owned();
-    let existing: BTreeSet<_> = base["extensions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|extension| extension["extension_id"].as_str().unwrap())
-        .collect();
-    if output.program["extensions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|extension| existing.contains(extension["extension_id"].as_str().unwrap()))
-    {
-        return Err("command_source_addition_cannot_replace_extension");
-    }
-    for field in ["extensions", "rules", "coverage"] {
-        base[field]
-            .as_array_mut()
-            .unwrap()
-            .extend(output.program[field].as_array().unwrap().iter().cloned());
-    }
-    for (id, node) in output.program["nodes"].as_object().unwrap() {
-        if base["nodes"]
-            .get(id)
-            .is_some_and(|existing| existing != node)
-        {
-            return Err("command_source_node_digest_conflict");
-        }
-        base["nodes"][id] = node.clone();
-    }
-    for (family, count) in output.program["matcher_families"].as_object().unwrap() {
-        let old = base["matcher_families"][family].as_u64().unwrap_or(0);
-        base["matcher_families"][family] = serde_json::json!(old + count.as_u64().unwrap());
-    }
-    base["catalog_digest"] = serde_json::json!(digest(
-        b"hol-guard.additive-catalog.v1\0",
-        &serde_json::json!({
-            "base_catalog_digest":base["catalog_digest"],"additions":output.catalog,
-        })
-    )?);
-    base["authoring_semantics_digest"] = serde_json::json!(digest(
-        b"hol-guard.additive-semantics.v1\0",
-        &serde_json::json!({
-            "base_program_digest":base_digest,"addition_semantics":output.program["authoring_semantics_digest"],
-        })
-    )?);
-    let trusts: Vec<_> = base["extensions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|extension| {
-            serde_json::json!({
-                "extension_id":extension["extension_id"],"trust_class":extension["trust_class"],
-                "activation":extension["activation"],"publisher":extension["publisher"],
-            })
-        })
-        .collect();
-    base["trust_digest"] = serde_json::json!(digest(
-        b"hol-guard.native-command-trust.v1\0",
-        &serde_json::json!(trusts)
-    )?);
-    base.as_object_mut().unwrap().remove("program_digest");
-    base["program_digest"] = serde_json::json!(digest(PROGRAM_DOMAIN, &base)?);
-    output.program = base;
-    output.catalog_projection_kind = "addition-only-not-release-catalog".to_owned();
-    output.base_program_digest = Some(base_digest);
-    admit(output)
+    let output = lower_catalog_inner(sources, mcp_sources, trust, false)?;
+    let bytes =
+        serde_json::to_vec(&output.program).map_err(|_| "command_source_encoding_failed")?;
+    NativeCommandProgram::validate_compiler_pack_with_interfaces(&bytes, interfaces)?;
+    mcp::validate_inventory(&output.program)?;
+    Ok(output)
 }
+
+#[path = "native_command_source_addition.rs"]
+mod addition;
+pub use addition::{compile_addition, compile_addition_with_mcp};
 
 #[cfg(test)]
 mod tests {
@@ -470,7 +429,7 @@ mod tests {
         let mut source = EXAMPLE_SOURCE.to_vec();
         source.resize(MAX_PROGRAM_BYTES + 1, b' ');
         assert!(source.len() > MAX_PROGRAM_BYTES);
-        assert!(source.len() <= MAX_SOURCE_CATALOG_BYTES);
+        assert!(source.len() <= MAX_SOURCE_INPUT_BYTES);
 
         let output = compile_addition(&[source.as_slice()], TRUST_MAP)
             .expect("a valid source catalog above 4 MiB must compile as an addition");

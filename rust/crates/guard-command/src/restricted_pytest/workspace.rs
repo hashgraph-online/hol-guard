@@ -27,6 +27,8 @@ struct Input {
     /// The receipt runs the checks contained and the trailing Git steps after
     /// them, outside the sandbox, once Guard proves those steps again.
     publish_suffix: bool,
+    /// The local CLI grant that widens the plan to `workspace-contained-grant-v1`.
+    grant: Option<super::workspace_grant::GrantInput>,
 }
 
 fn invalid(message: &str) -> RestrictedPytestError {
@@ -131,8 +133,13 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
     let write_denials = workspace_write_denials(&workspace, input.home.as_deref(), &variables)
         .ok_or_else(|| invalid("The repository configuration is not eligible."))?;
     let text = shape.remainder.clone().unwrap_or(contained);
-    let (exec_roots, sandbox_path) =
-        workspace_exec_roots(&input.search_path, input.home.as_deref(), &workspace);
+    let (exec_roots, sandbox_path) = workspace_exec_roots(
+        &input.search_path,
+        input.home.as_deref(),
+        &workspace,
+        reaches_go_modules(&input.text, &workspace),
+        reaches_cargo_caches(&input.text, &workspace),
+    );
     // A linked worktree's index, HEAD and objects live in the main checkout's
     // `.git`, which the backend must also let the run write.
     // Its main checkout becomes readable too, so it must be admissible as a
@@ -145,7 +152,8 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         }
         linked => linked.map(|(common, admin)| json!({"common": common, "admin": admin})),
     };
-    Ok(json!({
+    let whole = runs_whole(&shape);
+    let mut plan = json!({
         "profile_version": WORKSPACE_PROFILE,
         "backend": backend,
         "backend_executable": backend_executable,
@@ -167,7 +175,56 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
             "network", "host-home-read", "host-secret-environment", "docker-socket",
             "workspace-credential-read", "git-execution-config-write", "privileged-operation"
         ],
-    }))
+        "grant_identity_hash": null,
+        "capabilities": [],
+    });
+    if let Some(grant) = &input.grant {
+        // A grant widens only a command that runs whole and is one plain
+        // invocation of the granted program: another program in the same
+        // shell would run with the capabilities granted for the first.
+        let program = whole
+            .then(|| sole_program(&text))
+            .flatten()
+            .ok_or_else(|| invalid("The granted command is not eligible for the sandbox."))?;
+        super::workspace_grant::widen(
+            &mut plan,
+            grant,
+            &program,
+            &input.search_path,
+            input.home.as_deref(),
+            &workspace,
+            &input.platform,
+        )?;
+    }
+    Ok(plan)
+}
+
+/// The program `text` runs when it is exactly one plain invocation: a single
+/// top-level segment with no wrapper, environment assignment or `PATH`
+/// override, from a command the parser reads exactly. Anything else, such as
+/// a chain, a pipeline, a substitution or a wrapped program, names no sole
+/// program.
+fn sole_program(text: &str) -> Option<String> {
+    let model = parse_command(&CommandModelRequestV1 {
+        command: text.to_owned(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "pre-tool-generic".into(),
+    })
+    .ok()?;
+    let [segment] = model.segments.as_slice() else {
+        return None;
+    };
+    (model.confidence == "exact"
+        && !model.path_overridden
+        && model.wrapper_chain.is_empty()
+        && segment.execution_context == "top:0"
+        && segment.pipeline_index == 0
+        && segment.environment_names.is_empty()
+        && segment.wrapper_chain.is_empty()
+        && !segment.path_overridden)
+        .then(|| segment.executable.clone())
+        .flatten()
 }
 
 /// The scripts outside `workspace` that `text` runs and the sandbox may read,
@@ -176,6 +233,75 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
 pub fn workspace_script_reads(text: &str, workspace: &Path) -> Option<Vec<PathBuf>> {
     exact_shape(text, workspace).map(|shape| shape.read_files)
 }
+
+/// Whether this run has a reason to read the Go module cache.
+///
+/// A text that names the toolchain does, and so does any run inside a module
+/// or workspace the root holds: `make test` and `./scripts/ci.sh` drive `go`
+/// without naming it, and a build that cannot read its dependencies fails
+/// where it used to pass. A multi-module repository carries only `go.work` at
+/// its root, with every `go.mod` in a subdirectory, so reading `go.mod` alone
+/// would strand exactly those builds. A workspace with neither marker and no
+/// `go` in its text - a Node or Python project - has no such reason.
+fn reaches_go_modules(text: &str, workspace: &Path) -> bool {
+    runs_toolchain(text, "go")
+        || workspace.join("go.mod").is_file()
+        || workspace.join("go.work").is_file()
+}
+
+/// Whether a contained run may read the host's Cargo caches and rustup home.
+///
+/// The registry and the git checkouts below the real HOME are dependency
+/// source a Cargo build compiles, and they hold whatever the host has
+/// fetched, a private registry or a private git dependency included. A text
+/// that runs cargo, rustc or rustup reaches them, and so does any run inside
+/// a package the root holds: `make test` and `./scripts/ci.sh` drive cargo
+/// without naming it, and a build that cannot read its dependencies fails
+/// where it used to pass. A workspace with no manifest and no toolchain in
+/// its text - a Node or Python project - has no such reason, and the plan
+/// grants neither the caches nor the links that name them.
+fn reaches_cargo_caches(text: &str, workspace: &Path) -> bool {
+    CARGO_TOOLCHAIN
+        .iter()
+        .any(|name| runs_toolchain(text, name))
+        || workspace.join("Cargo.toml").is_file()
+}
+
+/// The programs that compile from the Cargo caches. `rustup run stable cargo
+/// build` and a bare `rustc` reach the same fetched sources `cargo` does.
+const CARGO_TOOLCHAIN: &[&str] = &["cargo", "rustc", "rustup"];
+
+/// Whether the command runs the toolchain `program` names.
+///
+/// A dependency cache below the real HOME is source the toolchain compiles,
+/// and the plan grants it beside the workspace. It holds whatever the host
+/// has fetched, a private module or registry included, so a text that never
+/// runs the toolchain does not get it. Only a command word counts: `pytest -k
+/// go` and `rg cargo` pass the name as an argument and compile nothing.
+/// Reading the whole text rather than the contained remainder keeps a
+/// toolchain named in a bootstrap or a publish suffix in view, so each stage
+/// of the text is read in turn.
+fn runs_toolchain(text: &str, program: &str) -> bool {
+    text.split([';', '&', '|', '(', ')', '\n']).any(|stage| {
+        stage
+            .split_whitespace()
+            .map(|word| word.trim_matches(['"', '\'']))
+            // `FOO=bar sudo go build` runs the toolchain, and so does a
+            // stage a `then` or a `do` opens. None of those words is the
+            // program itself.
+            .find(|word| {
+                !(PROGRAM_PREFIXES.contains(word) || (word.contains('=') && !word.starts_with('-')))
+            })
+            .and_then(|word| word.rsplit('/').next())
+            .is_some_and(|name| name == program)
+    })
+}
+
+/// Words that stand where the program stands without being the program.
+const PROGRAM_PREFIXES: &[&str] = &[
+    "do", "then", "else", "elif", "!", "time", "command", "builtin", "nohup", "sudo", "env",
+    "exec", "nice", "ionice", "stdbuf",
+];
 
 pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {
     if operation != "prepare_workspace_contained" {
@@ -189,3 +315,7 @@ pub(super) fn evaluate(operation: &str, input: &Value) -> Option<Value> {
         Err(error) => crate::restricted_command::error_reply(error),
     })
 }
+
+#[cfg(test)]
+#[path = "workspace_sole_tests.rs"]
+mod sole_tests;

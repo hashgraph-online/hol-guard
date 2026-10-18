@@ -34,7 +34,7 @@ DIAGNOSTICS_TTL_SECONDS = 600
 _LOGGER = logging.getLogger(__name__)
 
 _SETUP_STATUSES = frozenset({"active", "broken", "partial", "not_found"})
-_VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+[0-9A-Za-z.+-]*$")
+_VERSION_PATTERN = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[A-Za-z.+-][0-9A-Za-z.+-]*)?$")
 _PRERELEASE_PATTERN = re.compile(r"[0-9](a|b|rc|dev|alpha|beta)[0-9]*", re.IGNORECASE)
 
 

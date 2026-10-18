@@ -304,19 +304,9 @@ fn uuid4_dashed() -> String {
 
 /// `datetime.now(timezone.utc).isoformat()` — microsecond precision; the
 /// fraction is dropped when it lands exactly on a second, matching CPython's
-/// `timespec="auto"` default. `Timestamp::isoformat()` alone truncates to
-/// seconds, so the fraction is spliced in here.
+/// `timespec="auto"` default.
 fn isoformat_now_utc() -> String {
-    let micros = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_micros() as i64)
-        .unwrap_or(0);
-    let base = Timestamp::from_unix_micros(micros).isoformat();
-    let frac = micros.rem_euclid(1_000_000);
-    if frac == 0 {
-        return base;
-    }
-    base.replacen("+00:00", &format!(".{frac:06}+00:00"), 1)
+    Timestamp::now_utc().isoformat()
 }
 
 /// `build_package_guard_receipt` → `GuardReceipt.to_dict()` (models.py:185).

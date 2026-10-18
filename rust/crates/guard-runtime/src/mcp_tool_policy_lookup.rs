@@ -22,7 +22,7 @@ use crate::policy_decision_lookup_op::{evaluate_non_consuming, open_lookup_conne
 
 pub(crate) const ERR_LOOKUP: &str = "native_mcp_tool_policy_decide_lookup_failed";
 const MAX_CANDIDATES: usize = 8;
-const REVIEW_FLOOR: u8 = 2;
+pub(crate) const REVIEW_FLOOR: u8 = 2;
 
 /// Rank of a saved action; an unrecognized action ranks as `block`.
 pub(crate) fn severity(action: Option<&Value>) -> u8 {
@@ -140,6 +140,8 @@ impl Prober<'_> {
             local_once_integrity_key_id: input.local_once_integrity_key_id.clone(),
             policy_bundle_decision_identities: input.policy_bundle_decision_identities.clone(),
             probe_groups: None,
+            portable_workspace: None,
+            evidence_binding: None,
         };
         evaluate_non_consuming(&request, connection).map_err(|_| ERR_LOOKUP)
     }

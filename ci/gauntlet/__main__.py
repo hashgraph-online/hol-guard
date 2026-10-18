@@ -11,7 +11,7 @@ import signal
 import sys
 from pathlib import Path
 
-from .catalog import load_catalog
+from .catalog import CATALOG, CONNECTOR_CATALOG, load_catalog
 from .parallel import qualification_jobs
 from .provider import REASONING_EFFORTS
 
@@ -20,7 +20,8 @@ def main(argv: list[str] | None = None) -> int:
     """Dispatch Gauntlet commands and return a process exit status."""
     parser = argparse.ArgumentParser(description="Guard Gauntlet: real agents, real tools, observed protection")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("list", help="List the fixed required scenarios without running them")
+    listing = sub.add_parser("list", help="List the fixed required scenarios without running them")
+    listing.add_argument("--catalog", choices=("core", "connector-setup"), default="core")
     run = sub.add_parser("run", help="Run actual Oh My Pi with a live inference provider")
     run.add_argument("--expected-source-sha")
     run.add_argument("--candidate-sha", help="PR head when testing its exact two-parent merge")
@@ -99,10 +100,10 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
     run.add_argument(
         "--profile",
-        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry"),
+        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry", "connector-setup"),
         default="core",
         help="Complete core qualification, the additive contained Bun/Vitest profile, full developer tasks, "
-        "or the approve-then-retry lane (only core qualifies a merge)",
+        "the approve-then-retry lane or the connector-setup lane (only core qualifies a merge)",
     )
     run.add_argument(
         "--full-task-mode",
@@ -232,11 +233,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "list":
-            print(
-                json.dumps(
-                    [{"id": s.id, "expectation": s.expectation, "oracle": s.oracle} for s in load_catalog()], indent=2
-                )
-            )
+            catalog = load_catalog(CONNECTOR_CATALOG if args.catalog == "connector-setup" else CATALOG)
+            rows = [{"id": s.id, "expectation": s.expectation, "oracle": s.oracle} for s in catalog]
+            print(json.dumps(rows, indent=2))
             return 0
         if args.command == "installed":
             from .installed_lane import run_lane
@@ -301,8 +300,8 @@ def main(argv: list[str] | None = None) -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
-        if args.profile == "approval-retry" and args.harness == "omp":
-            raise ValueError("--profile approval-retry runs through an installed harness CLI, not the omp lane")
+        if args.profile in {"approval-retry", "connector-setup"} and args.harness == "omp":
+            raise ValueError(f"--profile {args.profile} runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
         if args.harness_cli or args.harness_model:
@@ -463,8 +462,8 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
     if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
         raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
-    if args.profile not in {"core", "full-tasks", "approval-retry"}:
-        raise ValueError("--harness supports only the core, full-tasks and approval-retry profiles")
+    if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
+        raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
     if args.profile != "full-tasks" and args.full_task_mode != "enforce":
         raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
@@ -473,10 +472,11 @@ def _run_harness(args: argparse.Namespace) -> int:
         from .full_task_cli import run_harness_profile
 
         report = run_harness_profile(args)
-    elif args.profile == "approval-retry":
+    elif args.profile in {"approval-retry", "connector-setup"}:
         from .approval_retry_suite import run_approval_retry_suite
 
         report = run_approval_retry_suite(
+            catalog_path=CONNECTOR_CATALOG if args.profile == "connector-setup" else None,
             harness=args.harness,
             expected_source_sha=args.expected_source_sha,
             output=args.output,

@@ -64,7 +64,7 @@ fn bundled_listing_flags(value: &str) -> Option<&str> {
     (!flags.is_empty() && flags.chars().all(|flag| "arvli".contains(flag))).then_some(flags)
 }
 
-fn bounded_revision(value: &str) -> bool {
+pub(crate) fn bounded_revision(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && !value.starts_with(['-', '/', '.', ':'])
@@ -73,7 +73,7 @@ fn bounded_revision(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-/~^".contains(&byte))
 }
 
-fn bounded_sort_key(value: &str) -> bool {
+pub(crate) fn bounded_sort_key(value: &str) -> bool {
     let key = value.strip_prefix('-').unwrap_or(value);
     !key.is_empty()
         && key.len() <= 64
@@ -82,7 +82,7 @@ fn bounded_sort_key(value: &str) -> bool {
         })
 }
 
-fn bounded_pattern(value: &str) -> bool {
+pub(crate) fn bounded_pattern(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 256
         && value

@@ -51,6 +51,8 @@ def plan(workspace: Path, text: str = COMMAND, **changes: object) -> dict[str, o
         "prefix_command": None,
         "native_suffix": None,
         "denied_capabilities": [],
+        "grant_identity_hash": None,
+        "capabilities": [],
     }
     return value | changes
 

@@ -89,6 +89,6 @@ pub(in crate::pretool) fn as_absolute_cd(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "workspace_contained_home_cd_tests.rs"]
 mod tests;

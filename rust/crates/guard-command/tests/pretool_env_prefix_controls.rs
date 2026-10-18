@@ -2,17 +2,16 @@
 
 use crate::git_helper_fixture as fixture;
 
-use fixture::{evaluate_pre_tool_envelope_with_context, git_github_controls, FixtureCleanup};
+use fixture::{evaluate_with_node, git_github_controls, FixtureCleanup};
 use serde_json::json;
 
 fn evaluate(root: &std::path::Path, command: &str) -> guard_contracts::PreToolResultV1 {
-    evaluate_pre_tool_envelope_with_context(
+    evaluate_with_node(
         "zcode",
         "PreToolUse",
         &json!({"tool_name":"bash", "tool_input":{"command":command}}),
         Some(&git_github_controls("default", "default")),
-        None,
-        root.to_str(),
+        root,
         root.join("project").to_str(),
     )
 }

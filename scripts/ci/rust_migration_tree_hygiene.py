@@ -29,6 +29,8 @@ RETIRED_PATHS = (
     "scripts/ci/record_shell_helper_vectors.py",
     "scripts/ci/record_shell_request_authority_parity.py",
     "scripts/ci/record_skill_directory_portable_parity.py",
+    "scripts/record_claude_permission_text_vectors.py",
+    "tests/test_claude_permission_text_vectors.py",
     # Retired Python-only command source converters and their orphaned tests.
     "scripts/command_source_backlog.py",
     "scripts/migrate_command_extension_sources.py",

@@ -83,6 +83,7 @@ def runtime_policy_config_facts(config: GuardConfig, harness: str) -> dict[str, 
 
 def runtime_policy_artifact_facts(config: GuardConfig, artifact: GuardArtifact, harness: str) -> dict[str, object]:
     from .commands_support_runtime_policy import (
+        _artifact_action_class,
         _artifact_risk_confidence,
         _artifact_skill_is_known_bad,
         _artifact_writes_launch_agent,
@@ -110,6 +111,7 @@ def runtime_policy_artifact_facts(config: GuardConfig, artifact: GuardArtifact, 
         "confidence_text": str(confidence or ""),
         "confidence_strong": is_high_confidence(confidence),
         "writes_launch_agent": _artifact_writes_launch_agent(artifact),
+        "action_class": _artifact_action_class(artifact),
         "skill_is_known_bad": _artifact_skill_is_known_bad(artifact),
     }
 

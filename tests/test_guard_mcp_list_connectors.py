@@ -240,15 +240,26 @@ def test_mcp_list_shows_markup_in_names_literally(tmp_path: Path, capsys: pytest
     assert "[bold" in out
 
 
+def _declare_remote(
+    store: GuardStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, *servers: HarnessDetection
+) -> None:
+    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+
+    # `mcp list` scans the configs again; this one is what the scan finds.
+    monkeypatch.setattr(harness_mcp_discovery, "_safe_detections", lambda *_args: list(servers))
+    detection = _remote_detection("codex", "echo-mcp", "https://mcp.example.test/mcp")
+    remote = discover_remote_mcp_servers(home_dir=tmp_path, guard_home=store.guard_home, detections=(detection,))
+    persist_discovered_harness_mcp_servers(store, (), seen_at=_NOW, remote=remote)
+
+
 def test_mcp_list_json_keeps_the_configs_that_declare_a_server(
-    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     home = tmp_path / "home"
     store = GuardStore(home)
     _observe(store, "codex", "echo-mcp")
     detection = _remote_detection("codex", "echo-mcp", "https://mcp.example.test/mcp")
-    remote = discover_remote_mcp_servers(home_dir=tmp_path, guard_home=home, detections=(detection,))
-    persist_discovered_harness_mcp_servers(store, (), seen_at=_NOW, remote=remote)
+    _declare_remote(store, tmp_path, monkeypatch, detection)
     _observe(store, "codex", "echo-mcp")
 
     rc, out = _run(capsys, "mcp", "list", "--home", str(home), "--json")
@@ -256,3 +267,59 @@ def test_mcp_list_json_keeps_the_configs_that_declare_a_server(
     assert rc == 0
     (item,) = json.loads(out)["items"]
     assert item["declared_sources"] == ["codex:remote"]
+    assert item["remote_origin"] == "https://mcp.example.test/mcp"
+
+
+def test_mcp_list_json_forgets_a_server_removed_from_its_config(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    home = tmp_path / "home"
+    store = GuardStore(home)
+    cli_id = _observe(store, "codex", "echo-mcp")
+    other = _remote_detection("codex", "other-mcp", "https://other.example.test/mcp")
+    _declare_remote(store, tmp_path, monkeypatch, other)
+
+    rc, out = _run(capsys, "mcp", "list", "--home", str(home), "--json")
+
+    assert rc == 0
+    items = {item["cli_id"]: item for item in json.loads(out)["items"]}
+    # The record and its history stay; the stale declaration and origin go.
+    assert items[cli_id]["declared_sources"] == []
+    assert items[cli_id]["remote_origin"] is None
+
+
+def test_mcp_list_names_the_endpoint_of_a_remote_server_first_seen_through_its_calls(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "home"
+    store = GuardStore(home)
+    _observe(store, "zcode", "echo-mcp")
+    config = home / ".zcode" / "cli" / "config.json"
+    config.parent.mkdir(parents=True)
+    config.write_text(
+        json.dumps({"mcp": {"servers": {"echo-mcp": {"type": "http", "url": "https://mcp.example.test/mcp"}}}}),
+        encoding="utf-8",
+    )
+
+    rc, out = _run(capsys, "mcp", "list", "--home", str(home), "--json")
+
+    assert rc == 0
+    (item,) = json.loads(out)["items"]
+    assert item["remote_origin"] == "https://mcp.example.test/mcp"
+    assert item["declared_sources"] == ["zcode:remote"]
+
+
+def test_mcp_list_records_no_stdio_server(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # A stdio observation can carry a legacy denial into a new grant; listing must not.
+    from codex_plugin_scanner.guard.adapters import harness_mcp_discovery
+
+    def no_stdio(_detections: object) -> list[object]:
+        raise AssertionError("mcp list recorded a stdio server")
+
+    monkeypatch.setattr(harness_mcp_discovery, "_stdio_servers", no_stdio)
+
+    rc, _out = _run(capsys, "mcp", "list", "--home", str(tmp_path / "home"), "--json")
+
+    assert rc == 0

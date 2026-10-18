@@ -19,10 +19,8 @@ from codex_plugin_scanner.guard.extension_builder.listing import (
     category_for_extension,
     validate_listing,
 )
-from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_contribution import validate_contribution
 from codex_plugin_scanner.guard.runtime.extension_directory_operations import public_operations
-from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 from codex_plugin_scanner.guard.runtime.mcp_server_contribution import (
     catalog_id_for_mcp_id,
     validate_mcp_contribution,
@@ -156,17 +154,23 @@ def _summary_for(listing: dict[str, object], entry: dict[str, object]) -> str:
 def _export_directory(
     sources: dict[str, tuple[str, dict[str, object], str]],
     listing_sources: dict[str, tuple[str, dict[str, object], str]],
+    *,
+    extensions=None,
 ) -> dict[str, object]:
+    if extensions is None:
+        from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+
+        extensions = BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions
     listings = {extension_id: item[1] for extension_id, item in listing_sources.items()}
     mcp_ids = {catalog_id_for_mcp_id(key): key for key in sources if key.startswith("mcp.")}
     entries: list[dict[str, object]] = []
     seen: set[str] = set()
-    for native in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
+    for native in extensions:
         extension_id = mcp_ids.get(native.extension_id, native.extension_id)
         source = sources.get(extension_id)
         payload: dict[str, object] = source[1] if source else {}
         listing = listings.get(extension_id, {})
-        external = trust_class_for(native.extension_id) == "external"
+        external = native.trust_class == "external"
         if external and source is None:
             raise ValueError("An external native extension must have a canonical contribution source")
         if native.required:
@@ -195,7 +199,7 @@ def _export_directory(
                     "https://github.com/hashgraph-online/hol-guard/blob/main/docs/guard/extensions/README.md",
                 ),
                 "protectionModel": model,
-                "trustClass": trust_class_for(native.extension_id),
+                "trustClass": native.trust_class,
                 "claimPolicy": "provenance" if external else "project",
                 "maintainerGithubIds": listing.get("maintainerGithubIds", []),
                 "sourcePath": source[0] if source else f"contributions/command-sources/{native.extension_id}.json",

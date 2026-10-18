@@ -19,13 +19,17 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 from yaml.nodes import MappingNode, Node, SequenceNode
 
+from .native_command_expression_validation import (
+    CommandExpressionValidationUnavailableError,
+    native_command_expression_validation,
+)
 from .native_policy_document import NativePolicyDocumentError, bounds_claim, policy_query
 from .policy_document import GuardPolicyDocument
 from .policy_document_business_bounds import oversized_business_selector_path
 from .runtime.command_expression import (
+    CommandExpression,
     CommandExpressionError,
     command_expression_from_mapping,
-    validate_command_expression,
 )
 
 MAX_POLICY_BYTES = 1_048_576
@@ -402,13 +406,36 @@ def _validate_native_metadata(value: object, query: str) -> None:
         raise PolicyDocumentError((PolicyDiagnostic(result["code"], cast(JsonPath, tuple(result["path"]))),))
 
 
+def _command_expression_wire(expression: CommandExpression) -> dict[str, object]:
+    return {
+        "combinator": expression.combinator,
+        "conditions": [
+            {
+                "operator": condition.operator,
+                "value": condition.value,
+                "case_sensitive": condition.case_sensitive,
+            }
+            for condition in expression.conditions
+        ],
+    }
+
+
 def _validate_command_expressions(value: dict[str, object]) -> None:
+    """Compile every command pattern the document carries, in the runtime.
+
+    The dialect's shape is Python's to parse; whether a glob or a regex
+    compiles belongs to the engine that will match it, so the expressions go
+    to the runtime together and the first one it refuses names its own rule.
+    """
+
     spec = value.get("spec")
     if not isinstance(spec, dict):
         return
     rules = spec.get("rules")
     if not isinstance(rules, list):
         return
+    paths: list[JsonPath] = []
+    expressions: list[dict[str, object]] = []
     for index, rule in enumerate(rules):
         if not isinstance(rule, dict):
             continue
@@ -418,9 +445,22 @@ def _validate_command_expressions(value: dict[str, object]) -> None:
         path: JsonPath = ("spec", "rules", index, "match", "commands")
         try:
             expression = command_expression_from_mapping(match["commands"])
-            validate_command_expression(expression)
         except CommandExpressionError as error:
             raise PolicyDocumentError((PolicyDiagnostic(str(error), path),)) from error
+        paths.append(path)
+        expressions.append(_command_expression_wire(expression))
+    if not expressions:
+        return
+    try:
+        refused = native_command_expression_validation(expressions)
+    except CommandExpressionValidationUnavailableError as error:
+        raise NativePolicyDocumentError(error.code) from error
+    if refused is None:
+        return
+    index, code = refused
+    if index >= len(paths):
+        raise NativePolicyDocumentError("native_command_expression_validation_unavailable")
+    raise PolicyDocumentError((PolicyDiagnostic(code, paths[index]),))
 
 
 def parse_policy_document_yaml(

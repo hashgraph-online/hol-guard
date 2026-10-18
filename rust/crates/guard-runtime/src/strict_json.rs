@@ -13,7 +13,14 @@ pub(crate) fn from_value<T: serde::de::DeserializeOwned>(
 
 const MAX_JSON_DEPTH: usize = 32;
 const MAX_JSON_COLLECTION_ITEMS: usize = 4_096;
-const MAX_JSON_STRING_BYTES: usize = 1024 * 1024;
+/// A single string may carry a whole operation payload, so this sits at the
+/// largest per-operation request bound (`GUARD_STORE_MAX_REQUEST_BYTES`). The
+/// frame length check in `managed_resident_client_stream` is the real memory
+/// bound; a smaller cap here only turns an operation's own rule into a
+/// transport error. The provider metadata catalog, for one, measures stored
+/// bytes up to 2,000,000 and must reject an oversize batch with its capacity
+/// error rather than have the parser refuse the frame.
+const MAX_JSON_STRING_BYTES: usize = 4 * 1024 * 1024;
 
 /// Parse containers directly so arbitrary-precision numbers cannot appear as
 /// serde's synthetic map tokens. Primitive escape/number syntax remains owned
@@ -186,3 +193,6 @@ pub(crate) const TEST_MAX_JSON_DEPTH: usize = MAX_JSON_DEPTH;
 
 #[cfg(test)]
 pub(crate) const TEST_MAX_JSON_COLLECTION_ITEMS: usize = MAX_JSON_COLLECTION_ITEMS;
+
+#[cfg(test)]
+pub(crate) const TEST_MAX_JSON_STRING_BYTES: usize = MAX_JSON_STRING_BYTES;

@@ -187,7 +187,10 @@ def test_a_network_policy_change_is_never_served_from_the_cache(monkeypatch: pyt
     policies = iter([ManagedNetworkPolicy(), ManagedNetworkPolicy(allow_public_registries=False)])
     monkeypatch.setattr(egress, "resolved_network_policy", lambda _policy: (next(policies), True))
 
-    assert egress._registry_cache_key(_need()) != egress._registry_cache_key(_need())
+    before_change = egress._registry_cache_key(_need())
+    after_change = egress._registry_cache_key(_need())
+
+    assert before_change != after_change
 
 
 def test_an_unreadable_network_policy_is_never_cached(monkeypatch: pytest.MonkeyPatch) -> None:

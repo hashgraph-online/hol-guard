@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -43,6 +42,7 @@ from ..local_supply_chain import (
 )
 from ..models import GuardAction
 from ..native_hook_artifact_compose import NativeHookComposeError, _answer_valid, native_hook_compose
+from ..native_shell_helpers import NativeShellHelpersError, call
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..protection_posture import is_high_confidence
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -120,25 +120,23 @@ def _compose_reuse(
 
 
 def _runtime_external_archive_command_matches_executable(raw_command: str | None, executable: str) -> bool:
-    if (
-        raw_command is None
-        or os.name == "nt"
-        or "`" in raw_command
-        or "$(" in raw_command
-        or "\n" in raw_command
-        or "\r" in raw_command
-    ):
+    """True when the command is a bare launch of ``executable`` and nothing else.
+
+    The shim can only bind a digest to the download it performs itself, so a
+    command that reaches a second program disqualifies it. Deciding that means
+    parsing the command, and the resident owns shell parsing; a second
+    tokenizer here could disagree with it about the same bytes. Windows is
+    short-circuited because the rule is written for POSIX shell words, and an
+    unreachable resident is treated as no match, which leaves the approval
+    with the user rather than with an unverified shim.
+    """
+
+    if raw_command is None or os.name == "nt":
         return False
-    lexer = shlex.shlex(raw_command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
     try:
-        tokens = list(lexer)
-    except ValueError:
+        return bool(call("invokes_executable", raw_command, executable=executable))
+    except NativeShellHelpersError:
         return False
-    if not tokens or tokens[0] != executable:
-        return False
-    return not any(token and all(character in "();<>|&" for character in token) for token in tokens)
 
 
 def _runtime_external_archive_has_digest_binding_sink(
@@ -202,11 +200,6 @@ def _stamp_runtime_posture_metadata(artifact: object, signals: object) -> None:
         ]
         if any(getattr(signal, "confidence", None) == "strong" for signal in signals):
             metadata["risk_confidence"] = "strong"
-    action_class = metadata.get("action_class")
-    if isinstance(action_class, str):
-        lowered = action_class.lower()
-        if any(token in lowered for token in ("launch agent", "login item", "launchctl", "cron", "systemd", "launchd")):
-            metadata["persistence_writes_launch_agent"] = True
 
 
 def _embedded_script_evidence(command_text: str) -> list[dict[str, object]]:

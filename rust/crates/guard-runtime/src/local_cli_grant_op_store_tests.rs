@@ -40,7 +40,7 @@ fn newer_schema_fails_instead_of_guessing() {
     fixture.grant(&identity, "blocked", None);
     fixture
         .connection
-        .execute("update local_cli_schema_migration set version = 13", [])
+        .execute("update local_cli_schema_migration set version = 15", [])
         .unwrap();
     let request = fixture.request(&identity.source, "review", None);
     let reply: Value =

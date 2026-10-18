@@ -16,9 +16,11 @@ from ..business_policy_document_import import (
     plan_document_for_import,
     read_business_document_for_store,
 )
+from ..native_command_policy_decision import CommandPolicyDecisionUnavailableError
 from ..native_policy_document import NativePolicyDocumentError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
+from ..policy_decision_engine import decide_command
 from ..policy_decision_explain import active_policy_document
 from ..policy_document import policy_document_digest
 from ..policy_document_authority import policy_import_approval_binding
@@ -34,7 +36,6 @@ from ..policy_document_io import (
 )
 from ..policy_document_yaml import PolicyDocumentError, format_policy_document_yaml
 from ..policy_starters import LEGACY_POLICY_MODELINES, with_modeline
-from ..runtime.command_policy import compile_command_policy_rules, evaluate_command_policy_rules
 from ..store import GuardStore
 from ..store_policy_document import PolicyImportMode
 from .approval_gate_prompt import prompt_for_approval_gate
@@ -116,7 +117,9 @@ def _run_guard_policy_document_command(
                             "glob",
                             "regex",
                         ],
-                        "regex_timeout_ms": 50,
+                        # The runtime bounds a pattern by backtracking steps, which decides
+                        # the same way on every machine instead of with the load of the moment.
+                        "regex_backtrack_limit": 100000,
                     },
                     "message": "Command-pattern policy expressions are supported.",
                 },
@@ -127,19 +130,29 @@ def _run_guard_policy_document_command(
 
         if command == "evaluate-command":
             document = load_trusted_policy_document(Path(args.file))
-            evaluation = evaluate_command_policy_rules(
-                compile_command_policy_rules(document),
+            decision = decide_command(
+                document,
                 str(args.command_text),
+                now=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                guard_home=store.guard_home if store is not None else None,
             )
+            # The runtime reports every rule it considered; the ones it did not rule out are the
+            # matches this command has always named.
+            matching = [
+                str(candidate["ruleId"])
+                for candidate in cast(list[dict[str, object]], decision["candidates"])
+                if candidate["state"] != "unmatched"
+            ]
+            action = str(decision.get("action") or "allow")
             _write_payload(
                 "policy evaluate-command",
                 {
-                    "action": evaluation.action,
-                    "matching_rule_ids": list(evaluation.matching_rule_ids),
+                    "action": action,
+                    "matching_rule_ids": matching,
                     "message": (
                         "No command expression matched; default allow."
-                        if not evaluation.matching_rule_ids
-                        else f"Command matched {len(evaluation.matching_rule_ids)} policy rule(s): {evaluation.action}."
+                        if not matching
+                        else f"Command matched {len(matching)} policy rule(s): {action}."
                     ),
                 },
                 as_json=as_json,
@@ -408,6 +421,7 @@ def _run_guard_policy_document_command(
         PolicyFileTrustError,
         NativePolicySnapshotError,
         NativePolicyDocumentError,
+        CommandPolicyDecisionUnavailableError,
     ) as error:
         code = getattr(error, "code", error.__class__.__name__)
         _write_payload(

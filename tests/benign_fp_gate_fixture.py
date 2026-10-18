@@ -22,6 +22,8 @@ never exercises:
 * an installed, gitignored ``node_modules`` in the working directory with the
   project's locked CLI packages, so a runner such as ``npx`` resolves to a
   content-hashed local binary instead of a registry fetch;
+* connectors that need setup: a ``lanectl`` CLI in ``~/.local/bin`` with a ``~/.lanectl``
+  state directory, and a Codex MCP config with a stdio and a remote server;
 * the rest of a working project's toolchain in that same directory: the type
   checker, linter, formatter and task runner npm links into ``node_modules``,
   a ``.venv`` holding the console scripts ``uv sync`` installs, and the
@@ -46,6 +48,7 @@ import pytest
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
 from codex_plugin_scanner.guard.adapters import codex_contained_tests
+from tests.benign_fp_gate_connectors import write_connectors
 from tests.benign_fp_gate_projects import (
     _INSTALLED_PACKAGES,
     _NODE_PACKAGES,
@@ -275,6 +278,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
     _write(home / "kubeconfig.yaml", _KUBECONFIG)
+    # Connectors Guard has no decision for: a local CLI with its state directory, and harness MCP servers.
+    write_connectors(home)
     _write(home / ".ssh" / "id_rsa", "-----BEGIN FIXTURE KEY-----\nnot-a-real-key\n-----END FIXTURE KEY-----\n")
     # Sibling repository outside the workspace, as in the live Gauntlet fixture.
     _git(home / "other-project", "init", "--quiet", "--initial-branch=main", home=home)

@@ -35,6 +35,9 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git config --global --get user.email",
         "git config --list --show-origin",
         "git apply --check workspace/patches/change.patch",
+        "git apply --check -p1 workspace/patches/change.patch",
+        "git apply --check --stat --summary change.patch",
+        "git apply --check -- patches/one.diff patches/two.diff",
     ] {
         assert!(observations(command).rule_matches.is_empty(), "{command}");
     }
@@ -124,6 +127,8 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git apply --check --unsafe-paths change.patch",
         "git apply --check ../change.patch",
         "git apply --check -",
+        "git apply --check --whitespace=fix change.patch",
+        "git apply --check --index change.patch",
     ] {
         let result = observations(command);
         assert!(!result.rule_matches.is_empty(), "{command}");

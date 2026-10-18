@@ -4,11 +4,21 @@
 //! Pure: the caller ships the adjusted verdict (and the queued approval for a
 //! review), the resident returns the exact harness JSON. Rendering itself
 //! lives in `guard_command::hook_responses`, shared with the edge decision.
+//!
+//! The op also answers the named-string questions the CLI hook path asks
+//! before it has a verdict - the approval copy a Claude prompt shows, and the
+//! artifact id an event is filed under - so no rule that decides what a user
+//! sees or which override applies is evaluated outside the runtime.
 
-use guard_command::hook_responses::cli_documents::{cli_document, cli_response, CliOutcome};
+use crate::hook_cli_claude_text::claude_approval_copy;
+use guard_command::hook_responses::cli_documents::{
+    cli_document, cli_response, copilot_hook_response, CliOutcome,
+};
 use guard_command::hook_responses::{pre_tool, pre_tool_review, recording_only_pre_tool, Object};
 use guard_contracts::{
-    HookRenderRequestV1, HookRenderResultV1, HOOK_RENDER_MAX_BYTES, HOOK_RENDER_RESULT_SCHEMA,
+    artifact_id_from_event, cursor_after_shell_observed, cursor_observer_event_for_payload,
+    evaluation_has_terminal_policy_action, HookRenderRequestV1, HookRenderResultV1,
+    HOOK_RENDER_MAX_BYTES, HOOK_RENDER_RESULT_SCHEMA,
 };
 use serde_json::{json, Value};
 
@@ -49,14 +59,97 @@ fn cli_payload(outcome: CliOutcome) -> Value {
 
 fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
     let harness = request.harness.as_str();
-    if matches!(request.kind.as_str(), "cli_response" | "cli_document") {
+    if request.kind == "claude_approval_copy" {
         let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
-        return Ok(if request.kind == "cli_response" {
-            cli_payload(
+        let which = params
+            .get("which")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload"))
+            .cloned()
+            .unwrap_or_default();
+        let notice = object_of(params.get("notice")).cloned();
+        let reason = params.get("reason").and_then(Value::as_str).unwrap_or("");
+        let value = claude_approval_copy(which, &payload, notice.as_ref(), reason)
+            .ok_or("native_hook_render_invalid")?;
+        let mut document = Object::new();
+        document.insert("value".into(), value);
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "artifact_id" {
+        // The artifact an event belongs to is what a configured action
+        // override is keyed on, so the resident names it rather than reading a
+        // name Python derived. Only the payload fields the rule reads travel.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let canonical_harness = params
+            .get("canonical_harness")
+            .and_then(Value::as_str)
+            .ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload"))
+            .cloned()
+            .unwrap_or_default();
+        let mut document = Object::new();
+        document.insert(
+            "value".into(),
+            Value::String(artifact_id_from_event(harness, canonical_harness, &payload)),
+        );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "terminal_policy_action" {
+        // Whether an approval could still change the outcome is a verdict about
+        // the verdict: a block or sandbox-required answer is not a question to
+        // put to a user. The resident reads its own evaluation rather than
+        // letting the caller re-rank the actions it just returned.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let evaluation = object_of(params.get("evaluation")).ok_or("native_hook_render_invalid")?;
+        let mut document = Object::new();
+        document.insert(
+            "value".into(),
+            Value::Bool(evaluation_has_terminal_policy_action(evaluation)),
+        );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "cursor_observer_event" {
+        // The event names a field of the message an after-observer proof is
+        // computed over, and the side that issues a proof and the side that
+        // checks it both derive it from the same harness-supplied payload.
+        // One answer keeps them from drifting apart.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+        let mut document = Object::new();
+        document.insert(
+            "value".into(),
+            Value::String(cursor_observer_event_for_payload(payload).to_string()),
+        );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "cursor_after_shell_observed" {
+        // Reading a before-event as an after-report would turn a pending
+        // approval into a durable allowance for a command nobody watched
+        // finish, so the resident reads the payload rather than trusting the
+        // caller's account of what the harness reported.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let payload = object_of(params.get("payload")).ok_or("native_hook_render_invalid")?;
+        let mut document = Object::new();
+        document.insert(
+            "value".into(),
+            Value::Bool(cursor_after_shell_observed(payload)),
+        );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if matches!(
+        request.kind.as_str(),
+        "cli_response" | "cli_document" | "copilot_hook_response"
+    ) {
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        return Ok(match request.kind.as_str() {
+            "cli_response" => cli_payload(
                 cli_response(harness, params).map_or(CliOutcome::Silent, CliOutcome::Document),
-            )
-        } else {
-            cli_payload(cli_document(harness, params))
+            ),
+            "copilot_hook_response" => {
+                cli_payload(CliOutcome::Document(copilot_hook_response(params)))
+            }
+            _ => cli_payload(cli_document(harness, params)),
         });
     }
     render_edge(request).map(|response| json!({ "response": Value::Object(response) }))

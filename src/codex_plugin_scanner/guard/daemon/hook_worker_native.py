@@ -26,6 +26,8 @@ from ..runtime.structured_output_mediation import (
     resolve_managed_structured_output_resolution,
 )
 from .hook_availability_policy import availability_harness_response
+from .hook_contained_grant import granted_containment_response
+from .hook_evidence_dispatch import run_hook_evidence
 from .hook_fail_closed import render_pre_tool, render_recording_only_pre_tool
 from .hook_native_cli_observer import observe_native_pre_tool_cli
 from .hook_native_local_cli import native_local_cli_block_response
@@ -35,7 +37,6 @@ from .hook_native_review_approval import (
 )
 from .hook_native_review_fence import native_review_fence
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
-from .hook_policy_repair import apply_command_policy_repair
 from .hook_worker_native_review import (
     CONTROL_BINDING_REFRESH_ERRORS,
     SNAPSHOT_NOT_CURRENT_ERROR,
@@ -137,6 +138,9 @@ class _HookWorkerNativeHost(Protocol):
     @property
     def activity_writer(self) -> object | None: ...
 
+    @property
+    def evidence_dispatch(self) -> object | None: ...
+
     _last_native_decision_receipt: dict[str, object] | None
     _native_policy_snapshot: Callable[..., dict[str, object] | None]
     _native_runtime_status: Callable[[], NativeRuntimeStatus]
@@ -188,17 +192,23 @@ def _record_native_pre_activity(
         response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_command_activity", None)
     if callable(submit):
-        with suppress(Exception):
-            submit(
+        receipt_id = receipt.get("decision_id") if receipt is not None else None
+        # The hook has its verdict; the activity row records it. The writer
+        # lives in the resident, so submitting here would spend a round trip
+        # in front of the response rather than behind it.
+        run_hook_evidence(
+            host,
+            lambda: submit(
                 harness=harness,
                 event="PreToolUse",
                 payload=payload,
                 succeeded=True,
                 policy_action=response.get("policy_action"),
-                receipt_id=receipt.get("decision_id") if receipt is not None else None,
+                receipt_id=receipt_id,
                 prompted=response.get("prompted") is True,
                 approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
-            )
+            ),
+        )
     return response
 
 
@@ -251,14 +261,16 @@ def _record_unavailable_native(
         writer = host.activity_writer
         submit = getattr(writer, "submit_command_activity", None)
         if callable(submit):
-            with suppress(Exception):
-                _ = submit(
+            run_hook_evidence(
+                host,
+                lambda: submit(
                     harness=harness,
                     event=event_name,
                     payload=payload,
                     succeeded=str(response.get("policy_action") or "") != "block",
                     policy_action=response.get("policy_action"),
-                )
+                ),
+            )
     return response
 
 
@@ -596,6 +608,18 @@ class HookWorkerNativeMixin:
                         ),
                         True,
                     )
+            contained = granted_containment_response(
+                self.store,
+                native_result,
+                harness=native_harness,
+                payload=payload,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                workspace=workspace,
+                deadline=deadline,
+            )
+            if contained is not None:
+                return (_record_native_pre_activity(self, native_harness, payload, contained, accepted_receipt), True)
             action = str(native_result.get("minimum_action") or "")
             if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                 response = pause_native_pre_tool_for_approval(
@@ -645,17 +669,11 @@ class HookWorkerNativeMixin:
                     _record_native_pre_activity(self, native_harness, payload, custom_block, accepted_receipt),
                     True,
                 )
-            repaired_result = apply_command_policy_repair(
-                self.store,
-                native_result,
-                guard_home=guard_home,
-            )
             from ..adapters.zcode_contained_tests import route_zcode_containment
 
             rendered = route_zcode_containment(
-                render_pre_tool(native_harness, repaired_result, guard_home=guard_home, deadline=deadline)
-                if repaired_result
-                and (repaired_result != dict(native_result) or not isinstance(edge.get("harness_response"), dict))
+                render_pre_tool(native_harness, native_result, guard_home=guard_home, deadline=deadline)
+                if native_result and not isinstance(edge.get("harness_response"), dict)
                 else _edge_harness_response(edge),
                 harness=native_harness,
                 payload=payload,
@@ -832,7 +850,8 @@ class HookWorkerNativeMixin:
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
         if callable(submit):
-            with suppress(Exception):
-                submit(receipt=accepted)
+            # Ordered behind nothing and in front of this hook's activity row,
+            # which links to the receipt by its decision id.
+            run_hook_evidence(self, lambda: submit(receipt=accepted))
         self._last_native_decision_receipt = accepted
         return accepted

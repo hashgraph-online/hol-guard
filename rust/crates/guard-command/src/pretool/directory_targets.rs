@@ -372,6 +372,22 @@ impl<'a> super::PathContext<'a> {
                     && !super::npm_environment::inert_npm_config_name(&name)
             }),
         };
+        // pip reads `PIP_<OPTION>` for every option the running subcommand
+        // takes, so an inherited variable can add the index query or the log
+        // file the command itself leaves out. `XDG_CONFIG_HOME` moves the
+        // user configuration file that does the same, out of the directory
+        // the file check below can see.
+        let pip_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| pip_selector(name))
+            }
+            None => !std::env::vars_os()
+                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy())),
+        };
         // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
         // `--no-config`, and ignores it only when it is empty. A stamped
         // environment carries names without values, so any name counts.
@@ -409,6 +425,7 @@ impl<'a> super::PathContext<'a> {
             cdpath_unset,
             rustup_override_absent,
             npm_config_inert,
+            pip_config_inert,
             shell_home_matches,
             ripgrep_config_absent,
             psql_environment,
@@ -429,6 +446,35 @@ fn rustup_selector(name: &str) -> bool {
 /// usually for a company's TLS-inspecting proxy that already sees all of the
 /// user's traffic; it leaves the registry where it was, and the agent's own
 /// command cannot set the hook's environment.
+/// Variables pip reads before any option on the command line, beyond the ones
+/// that only change how it prints.
+///
+/// pip asks platformdirs where its user and global configuration files live,
+/// so the four names platformdirs resolves those directories from move a
+/// `pip.conf` out of the directories the file check reads: the config names
+/// on Linux, and the data names on macOS, where a configuration directory is
+/// a data directory. The remaining `XDG_` names, `XDG_RUNTIME_DIR` among
+/// them, name no directory pip reads configuration from.
+fn pip_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "XDG_CONFIG_HOME" | "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
+    ) {
+        return true;
+    }
+    upper.starts_with("PIP_")
+        && !matches!(
+            upper.as_str(),
+            "PIP_DISABLE_PIP_VERSION_CHECK"
+                | "PIP_REQUIRE_VIRTUALENV"
+                | "PIP_NO_COLOR"
+                | "PIP_NO_INPUT"
+                | "PIP_QUIET"
+                | "PIP_VERBOSE"
+        )
+}
+
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     upper.starts_with("NPM_CONFIG_")

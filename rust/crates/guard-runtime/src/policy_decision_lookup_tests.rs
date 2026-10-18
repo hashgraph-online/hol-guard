@@ -87,6 +87,8 @@ fn base_request(store_path: &std::path::Path) -> PolicyDecisionLookupRequestV1 {
         local_once_integrity_key_id: None,
         policy_bundle_decision_identities: None,
         probe_groups: None,
+        portable_workspace: None,
+        evidence_binding: None,
     }
 }
 

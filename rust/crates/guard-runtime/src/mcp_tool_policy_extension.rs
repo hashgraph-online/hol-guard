@@ -13,6 +13,7 @@ use guard_contracts::{
 };
 use serde_json::{json, Value};
 
+use crate::local_mcp_grant_identity::{normalized_hash, observed_mcp_tool};
 use crate::local_store_read;
 
 type Decided = (String, String, String);
@@ -58,15 +59,8 @@ fn decided(action: &str, source: &str, summary: &str) -> Option<Decided> {
     Some((action.to_owned(), source.to_owned(), summary.to_owned()))
 }
 
-/// `Err` means the resident has no answer for the grant state, and says why.
-fn local_grant(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided>, Code> {
-    if !GRANT_REFINABLE.contains(&action) {
-        return Ok(None);
-    }
-    if ext.local_unavailable {
-        return Err("local_unavailable");
-    }
-    let request = LocalMcpGrantRequestV1 {
+fn grant_request(ext: &McpExtensionInputV1, action: &str) -> LocalMcpGrantRequestV1 {
+    LocalMcpGrantRequestV1 {
         schema: LOCAL_MCP_GRANT_REQUEST_SCHEMA.to_owned(),
         request_id: String::new(),
         store_path: ext.store_path.clone(),
@@ -79,8 +73,18 @@ fn local_grant(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided
         tool_authority_hash: ext.tool_authority_hash.clone(),
         launcher_path: ext.launcher_path.clone(),
         launcher_home: ext.launcher_home.clone(),
-    };
-    let payload = crate::local_mcp_grant_op::decide(&request)?;
+    }
+}
+
+/// `Err` means the resident has no answer for the grant state, and says why.
+fn local_grant(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided>, Code> {
+    if !GRANT_REFINABLE.contains(&action) {
+        return Ok(None);
+    }
+    if ext.local_unavailable {
+        return Err("local_unavailable");
+    }
+    let payload = crate::local_mcp_grant_op::decide(&grant_request(ext, action))?;
     Ok(match payload.get("state").and_then(Value::as_str) {
         Some("blocked") => decided(
             "block",
@@ -219,6 +223,72 @@ fn may_hold_mcp_grants(ext: &McpExtensionInputV1) -> bool {
         unanswered("grant_probe", code);
         true
     })
+}
+
+/// The tool name as the harness qualifies it (`mcp__<server>__<tool>`). A
+/// proxied call carries the bare tool name, so the configured server name
+/// restores the qualified form an observed identity is derived from.
+fn qualified_tool_name(ext: &McpExtensionInputV1) -> String {
+    if ext.tool_name.starts_with("mcp__") {
+        return ext.tool_name.clone();
+    }
+    match ext.server_name.as_ref().and_then(Value::as_str) {
+        Some(server) if !server.is_empty() => format!("mcp__{server}__{}", ext.tool_name),
+        _ => ext.tool_name.clone(),
+    }
+}
+
+/// Whether the device has no grant row at all for the target `request` resolves.
+/// An unreadable store is an answer, so it is not "none".
+fn no_grant_row(request: &LocalMcpGrantRequestV1) -> bool {
+    crate::local_mcp_grant_op::decide(request).is_ok_and(|grant| {
+        grant.get("state").and_then(Value::as_str) == Some("none") && grant["cli_id"].is_null()
+    })
+}
+
+/// The connector a call waits on when this device has no answer for it at all:
+/// no grant row (allowed or blocked) for the server, no catalog contribution
+/// deciding the tool, and nothing left unverified. `None` keeps the generic
+/// review. A stdio server keeps its launch identity (executable + arguments);
+/// a remote or observed server is named by harness and namespace, so no URL,
+/// query or credential ever enters the identity. A remote server is checked
+/// for a grant under that observed identity and under its configured identity,
+/// the one the resident's own grant lookup uses: a row under either is an answer.
+pub(crate) fn unset_connector(ext: &McpExtensionInputV1) -> Option<String> {
+    if ext.local_unavailable || ext.layers_unavailable {
+        return None;
+    }
+    let unbound = ext
+        .server
+        .env_values_hash
+        .as_deref()
+        .is_some_and(|hash| hash.starts_with("guard-context-unbound:"));
+    if unbound {
+        return None;
+    }
+    let mut lookups = vec![grant_request(ext, "review")];
+    let identity = if ext.server.transport.as_deref() == Some("stdio") {
+        normalized_hash(ext.server.identity_hash.as_deref())?
+    } else {
+        let qualified = qualified_tool_name(ext);
+        let identity = observed_mcp_tool(&ext.harness, &qualified)?.identity_hash;
+        let mut observed = grant_request(ext, "review");
+        observed.tool_name = qualified;
+        observed.server.transport = Some("observed".to_owned());
+        lookups.push(observed);
+        identity
+    };
+    // A grant row in any state (or an unreadable store) is an answer: only
+    // "no row at all" is a setup decision.
+    if !lookups.iter().all(no_grant_row) {
+        return None;
+    }
+    for action in ["review", "allow"] {
+        if !matches!(contributed_once(ext, action), Ok(None)) {
+            return None;
+        }
+    }
+    Some(identity)
 }
 
 #[cfg(test)]

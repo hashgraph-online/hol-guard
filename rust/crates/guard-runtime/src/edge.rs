@@ -312,7 +312,7 @@ fn evaluate_validated_envelope(
     if kind == GuardHookPayloadKindV2::EncryptedPayloadRef {
         return Err("native_hook_encrypted_payload_unsupported".to_owned());
     }
-    let (result, mut receipt) = match event_name.as_str() {
+    let (mut result, mut receipt) = match event_name.as_str() {
         "PreToolUse" | "UserPromptSubmit" => {
             let unavailable_environment =
                 guard_contracts::GuardExecutionEnvironmentV1::unavailable();
@@ -334,6 +334,7 @@ fn evaluate_validated_envelope(
                     cdpath_unset: false,
                     rustup_override_absent: false,
                     npm_config_inert: false,
+                    pip_config_inert: false,
                     shell_home_matches: false,
                     ripgrep_config_absent: false,
                     psql_environment: Default::default(),
@@ -421,6 +422,15 @@ fn evaluate_validated_envelope(
     };
     if let Some(store) = origin_store {
         crate::policy_store::native_review_origin::authenticate(store, &mut receipt)?;
+    }
+    if event_name == "PreToolUse" {
+        crate::command_policy_repair::apply(
+            &mut result,
+            policy_snapshot
+                .and_then(|snapshot| snapshot.command_extensions.as_ref())
+                .map(guard_command::native_command_controls::CompiledNativeCommandControls::health),
+            std::path::Path::new(&envelope.source.guard_home),
+        );
     }
     let harness_response = guard_command::hook_responses::render_edge_response(
         &harness,

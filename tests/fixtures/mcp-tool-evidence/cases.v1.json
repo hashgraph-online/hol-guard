@@ -121,6 +121,7 @@
     "name": "git",
     "publisher": " Acme ",
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": [
      "read",
@@ -227,6 +228,7 @@
     "name": "remote",
     "publisher": null,
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -262,6 +264,7 @@
     "name": "blank",
     "publisher": null,
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -297,6 +300,7 @@
     "name": "none",
     "publisher": null,
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -396,6 +400,7 @@
     "name": "camel",
     "publisher": null,
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": [],
     "tool_names_camel": [
@@ -486,6 +491,7 @@
     "name": "empty",
     "publisher": null,
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -604,6 +610,7 @@
     "name": "chrome-devtools:navigate_page",
     "publisher": null,
     "server_name": "chrome-devtools",
+    "skill_content": null,
     "tool_description": "Navigate",
     "tool_names": null,
     "tool_names_camel": null,
@@ -836,6 +843,7 @@
     "name": "chrome-devtools:click",
     "publisher": null,
     "server_name": "chrome-devtools",
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -1068,6 +1076,7 @@
     "name": "git:status",
     "publisher": null,
     "server_name": "git",
+    "skill_content": null,
     "tool_description": "Shows status",
     "tool_names": null,
     "tool_names_camel": null,
@@ -1299,6 +1308,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": "srv",
+    "skill_content": null,
     "tool_description": "d",
     "tool_names": null,
     "tool_names_camel": null,
@@ -1509,6 +1519,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": "srv",
+    "skill_content": null,
     "tool_description": "d",
     "tool_names": null,
     "tool_names_camel": null,
@@ -1703,6 +1714,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": "srv",
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -1804,6 +1816,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -1843,6 +1856,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -1960,6 +1974,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": null,
+    "skill_content": null,
     "tool_description": "x",
     "tool_names": null,
     "tool_names_camel": null,
@@ -2097,6 +2112,7 @@
     "name": "srv:do_thing",
     "publisher": "Pub",
     "server_name": null,
+    "skill_content": null,
     "tool_description": null,
     "tool_names": null,
     "tool_names_camel": null,
@@ -2127,6 +2143,210 @@
     "publisher": "Pub",
     "transport": null,
     "url": null
+   }
+  },
+  {
+   "expected_metadata": {
+    "mcpSkillFirewall": {
+     "mcpTools": [],
+     "skill": {
+      "dependencyHashes": [],
+      "descriptorHash": "d3ab0c34e09d5b3b7b460de8c5fc3b1b78917b3a7d16328986072f523eb33691",
+      "identityHash": "2dd95e1e1cb53b3f4696462d0c88c63bf4f9344d0437a211acc4cdf2517d9540",
+      "publisherStableId": "publisher:eb737e40d6ac063f0352520f443534d3300ad596c69ed775c6962b488b001f8f",
+      "skillHash": "70b95622f35ad2c5a5cb0ae54a1a4890880d0416d2efba99aaf464830273dd1c",
+      "stableId": "skill:2dd95e1e1cb53b3f4696462d"
+     }
+    },
+    "mcp_skill_identity": {
+     "dependency_hashes": [],
+     "descriptor_hash": "d3ab0c34e09d5b3b7b460de8c5fc3b1b78917b3a7d16328986072f523eb33691",
+     "identity_hash": "2dd95e1e1cb53b3f4696462d0c88c63bf4f9344d0437a211acc4cdf2517d9540",
+     "publisher_stable_id": "publisher:eb737e40d6ac063f0352520f443534d3300ad596c69ed775c6962b488b001f8f",
+     "skill_hash": "70b95622f35ad2c5a5cb0ae54a1a4890880d0416d2efba99aaf464830273dd1c",
+     "stable_id": "skill:2dd95e1e1cb53b3f4696462d"
+    }
+   },
+   "expected_patch_changed_keys": [
+    "mcpSkillFirewall",
+    "mcp_skill_identity"
+   ],
+   "input": {
+    "args": [],
+    "artifact_type": "skill",
+    "command": null,
+    "config_path": "/home/u/.claude/skills/deploy/SKILL.md",
+    "env": [],
+    "has_url": false,
+    "mcp_server_identity": null,
+    "mcp_tool_identity": null,
+    "name": "deploy",
+    "publisher": " Acme ",
+    "server_name": null,
+    "skill_content": "---\nname: deploy\n---\n\nRun the [runbook](./references/runbook.md) before you start.\n\nSet {{environment}} and {{region}} first.\n\n```bash\nkubectl rollout status deploy/api\n```\n\nSee also [the dashboard](https://example.test/dash).\n",
+    "tool_description": null,
+    "tool_names": null,
+    "tool_names_camel": null,
+    "tool_schema": null,
+    "transport": null
+   },
+   "metadata_before": {},
+   "name": "skill_rich_document",
+   "source": {
+    "artifact_type": "skill",
+    "config_path": "/home/u/.claude/skills/deploy/SKILL.md",
+    "name": "deploy",
+    "publisher": " Acme ",
+    "skill_content": "---\nname: deploy\n---\n\nRun the [runbook](./references/runbook.md) before you start.\n\nSet {{environment}} and {{region}} first.\n\n```bash\nkubectl rollout status deploy/api\n```\n\nSee also [the dashboard](https://example.test/dash).\n"
+   }
+  },
+  {
+   "expected_metadata": {
+    "mcpSkillFirewall": {
+     "mcpTools": [],
+     "skill": {
+      "dependencyHashes": [],
+      "descriptorHash": "93e83a5370fa7d01c960967f9f3d0dfcb5b734b92f9ec2561b371f5e6c347225",
+      "identityHash": "bc303affa63d77db08ea0066e185d0cbfb09dbb27b8a1cef34c7776820cabfd8",
+      "publisherStableId": null,
+      "skillHash": "162a2c6fe39b60621ffcac942567bce3681ce56cf907e7f5e70b8977fd1fc8e7",
+      "stableId": "skill:bc303affa63d77db08ea0066"
+     }
+    },
+    "mcp_skill_identity": {
+     "dependency_hashes": [],
+     "descriptor_hash": "93e83a5370fa7d01c960967f9f3d0dfcb5b734b92f9ec2561b371f5e6c347225",
+     "identity_hash": "bc303affa63d77db08ea0066e185d0cbfb09dbb27b8a1cef34c7776820cabfd8",
+     "publisher_stable_id": null,
+     "skill_hash": "162a2c6fe39b60621ffcac942567bce3681ce56cf907e7f5e70b8977fd1fc8e7",
+     "stable_id": "skill:bc303affa63d77db08ea0066"
+    },
+    "source": "workspace"
+   },
+   "expected_patch_changed_keys": [
+    "mcpSkillFirewall",
+    "mcp_skill_identity"
+   ],
+   "input": {
+    "args": [],
+    "artifact_type": "skill",
+    "command": null,
+    "config_path": "/home/u/.claude/skills/notes/SKILL.md",
+    "env": [],
+    "has_url": false,
+    "mcp_server_identity": null,
+    "mcp_tool_identity": null,
+    "name": "notes",
+    "publisher": null,
+    "server_name": null,
+    "skill_content": "Plain prose with no markup.\n",
+    "tool_description": null,
+    "tool_names": null,
+    "tool_names_camel": null,
+    "tool_schema": null,
+    "transport": null
+   },
+   "metadata_before": {
+    "source": "workspace"
+   },
+   "name": "skill_no_publisher",
+   "source": {
+    "artifact_type": "skill",
+    "config_path": "/home/u/.claude/skills/notes/SKILL.md",
+    "name": "notes",
+    "publisher": null,
+    "skill_content": "Plain prose with no markup.\n"
+   }
+  },
+  {
+   "expected_metadata": {
+    "mcpSkillFirewall": {
+     "mcpTools": [],
+     "skill": {
+      "dependencyHashes": [],
+      "descriptorHash": "93e83a5370fa7d01c960967f9f3d0dfcb5b734b92f9ec2561b371f5e6c347225",
+      "identityHash": "20c818868b2643059b3605fffb6afe4a5c6283a87a3119c3b6d28114ceabc1e4",
+      "publisherStableId": null,
+      "skillHash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stableId": "skill:20c818868b2643059b3605ff"
+     }
+    },
+    "mcp_skill_identity": {
+     "dependency_hashes": [],
+     "descriptor_hash": "93e83a5370fa7d01c960967f9f3d0dfcb5b734b92f9ec2561b371f5e6c347225",
+     "identity_hash": "20c818868b2643059b3605fffb6afe4a5c6283a87a3119c3b6d28114ceabc1e4",
+     "publisher_stable_id": null,
+     "skill_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+     "stable_id": "skill:20c818868b2643059b3605ff"
+    }
+   },
+   "expected_patch_changed_keys": [
+    "mcpSkillFirewall",
+    "mcp_skill_identity"
+   ],
+   "input": {
+    "args": [],
+    "artifact_type": "skill",
+    "command": null,
+    "config_path": "/home/u/.claude/skills/empty/SKILL.md",
+    "env": [],
+    "has_url": false,
+    "mcp_server_identity": null,
+    "mcp_tool_identity": null,
+    "name": "empty",
+    "publisher": "   ",
+    "server_name": null,
+    "skill_content": "",
+    "tool_description": null,
+    "tool_names": null,
+    "tool_names_camel": null,
+    "tool_schema": null,
+    "transport": null
+   },
+   "metadata_before": {},
+   "name": "skill_blank_publisher_empty_content",
+   "source": {
+    "artifact_type": "skill",
+    "config_path": "/home/u/.claude/skills/empty/SKILL.md",
+    "name": "empty",
+    "publisher": "   ",
+    "skill_content": ""
+   }
+  },
+  {
+   "expected_metadata": {
+    "source": "workspace"
+   },
+   "expected_patch_changed_keys": null,
+   "input": {
+    "args": [],
+    "artifact_type": "skill",
+    "command": null,
+    "config_path": "/home/u/.claude/skills/missing/SKILL.md",
+    "env": [],
+    "has_url": false,
+    "mcp_server_identity": null,
+    "mcp_tool_identity": null,
+    "name": "missing",
+    "publisher": "Acme",
+    "server_name": null,
+    "skill_content": null,
+    "tool_description": null,
+    "tool_names": null,
+    "tool_names_camel": null,
+    "tool_schema": null,
+    "transport": null
+   },
+   "metadata_before": {
+    "source": "workspace"
+   },
+   "name": "skill_unreadable_document",
+   "source": {
+    "artifact_type": "skill",
+    "config_path": "/home/u/.claude/skills/missing/SKILL.md",
+    "name": "missing",
+    "publisher": "Acme",
+    "skill_content": null
    }
   }
  ],

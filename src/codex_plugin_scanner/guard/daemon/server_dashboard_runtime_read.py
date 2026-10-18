@@ -51,7 +51,7 @@ class _DashboardRuntimeReadRoutes:
             self._write_json(history, extra_headers={"Cache-Control": "no-store"})
             return True
         if parsed.path == "/v1/local-clis":
-            handle_local_cli_list(self)
+            handle_local_cli_list(self, parsed.query)
             return True
         if parsed.path == "/v1/capabilities":
             self._handle_capabilities()

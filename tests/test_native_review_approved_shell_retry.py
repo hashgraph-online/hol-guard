@@ -87,7 +87,6 @@ def _approve_then_retry(
     use_id: str,
     retry_command: str | None = None,
     retry_use_id: str | None = None,
-    expect_unavailable: bool = False,
 ) -> dict[str, Any]:
     """Review one command, grant that row, and report what its retry got.
 
@@ -110,14 +109,7 @@ def _approve_then_retry(
     assert first["policy_action"] != "allow", first
     assert len(queued) == 1, (first, queued)
     assert queued[0]["policy_action"] in REVIEW_ACTIONS, queued[0]
-    if expect_unavailable:
-        from codex_plugin_scanner.guard.approval_scope_support import IneligibleApprovalScopeError
-
-        with pytest.raises(IneligibleApprovalScopeError):
-            _grant(store, queued[0]["request_id"], workspace)
-        assert store.get_approval_request(queued[0]["request_id"])["status"] == "pending"
-    else:
-        _grant(store, queued[0]["request_id"], workspace)
+    _grant(store, queued[0]["request_id"], workspace)
 
     retry_payload = _payload(retry_command or command, retry_use_id or use_id, workspace)
     retry = worker.review_http_payload(
@@ -180,14 +172,13 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
             use_id="toolu_read",
             retry_command="head -c 200 ledger.txt",
         )
-        unbindable = _approve_then_retry(
-            worker, store, kwargs, workspace, seen, command="git status --short", use_id="toolu_git",
-            expect_unavailable=True,
+        unproven = _approve_then_retry(
+            worker, store, kwargs, workspace, seen, command="git status --short", use_id="toolu_git"
         )
     finally:
         worker.close()
 
-    outcomes = {"same_id": same_id, "new_id": new_id, "reworded": reworded, "unbindable": unbindable}
+    outcomes = {"same_id": same_id, "new_id": new_id, "reworded": reworded, "unproven": unproven}
     # The whole point of the grant: the request it was queued for runs, once.
     assert same_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
     assert same_id["policy_action"] == "allow", outcomes
@@ -202,7 +193,8 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
     # Same intent, the model's own wording: a different action, so a new review.
     assert reworded["policy_action"] != "allow", outcomes
     assert len(reworded["requeued_bindings"]) == 1, outcomes
-    # A reviewed git-status row has no once-retry contract. Resolution was
-    # rejected above; the identical retry cannot spend nonexistent consent.
-    assert not unbindable["granted_binding"].startswith(RETRY_CONTRACT), outcomes
-    assert unbindable["policy_action"] != "allow", outcomes
+    # Guard cannot prove what git status runs, but every review can be
+    # approved: the identical retry runs (docs/guard/approval-invariant.md).
+    assert unproven["granted_binding"].startswith(RETRY_CONTRACT), outcomes
+    assert unproven["policy_action"] == "allow", outcomes
+    assert unproven["requeued_bindings"] == [], outcomes

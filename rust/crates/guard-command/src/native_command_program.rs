@@ -1,7 +1,7 @@
 //! Immutable, content-bound command extension program. No Python or IPC runs
 //! here. The only production program input is packaged with the resident.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -45,6 +45,17 @@ pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = env!("GUARD_PACKAGED_PROGRAM_S
 #[cfg(guard_source_bootstrap)]
 pub const PACKAGED_COMMAND_PROGRAM_SHA256: &str = "";
 
+/// Program identity without decoding the legacy embedded artifact.
+#[cfg(not(guard_source_bootstrap))]
+pub const PACKAGED_COMMAND_PROGRAM_ID: &str = env!("GUARD_PACKAGED_PROGRAM_ID");
+#[cfg(guard_source_bootstrap)]
+pub const PACKAGED_COMMAND_PROGRAM_ID: &str = "";
+
+#[cfg(not(guard_source_bootstrap))]
+const DEFAULT_COMMAND_PACK_IDS: &str = env!("GUARD_DEFAULT_COMMAND_PACK_IDS");
+#[cfg(guard_source_bootstrap)]
+const DEFAULT_COMMAND_PACK_IDS: &str = "";
+
 /// The exact program admitted by the runtime, also used for rule attestation.
 // One shared allocation and accessor keep multi-megabyte data out of caller
 // codegen units. Constant propagation otherwise emits redundant binary copies.
@@ -74,10 +85,23 @@ pub fn packaged_command_program_bytes() -> &'static [u8] {
 #[path = "native_command_program_admission.rs"]
 mod admission;
 pub(crate) use admission::{public_ipv4, public_ipv6};
+#[path = "native_command_program_collection.rs"]
+mod collection;
+#[path = "native_command_program_collection_reader.rs"]
+mod collection_reader;
+pub use collection_reader::PackAdmissionBudget;
 #[path = "native_command_program_compile.rs"]
 mod compile;
+#[path = "native_command_program_dispatch.rs"]
+mod dispatch;
 #[path = "native_command_program_evaluation.rs"]
 mod evaluation;
+#[path = "native_command_program_pack_cache.rs"]
+mod pack_cache;
+pub(crate) use dispatch::CommandCandidateIndex;
+#[path = "native_command_program_memo.rs"]
+mod memo;
+use memo::{MemoLayout, NodeMemo};
 #[path = "native_command_program_observations.rs"]
 mod observations;
 #[path = "native_command_source.rs"]
@@ -89,6 +113,40 @@ use evaluation::Evaluation;
 use wire::*;
 
 type MatchResult = Result<Arc<[usize]>, &'static str>;
+
+/// `ExecutableInvocationMatcher` - one executable matcher, built outside a
+/// compiled program.
+///
+/// Extension review has to decide which discovered operation owns a reviewed
+/// literal invocation. Python answered that with matchers of its own, so a
+/// vector could be bound by one grammar at review time and enforced by
+/// another at run time. This hands that caller the node a compiled program
+/// would hold, matched by the same code.
+#[derive(Debug)]
+pub struct ExecutableInvocationMatcher {
+    node: ExecutableNode,
+}
+
+impl ExecutableInvocationMatcher {
+    /// Builds the matcher from the config an `executable.v1` or
+    /// `executable-path-set.v1` node carries, with the same validation the
+    /// program compiler applies.
+    pub fn from_config(operation: &str, config: Value) -> Result<Self, &'static str> {
+        Ok(Self {
+            node: compile::compile_executable(operation, config)?,
+        })
+    }
+
+    /// Whether any segment of the command matches.
+    pub fn matches(
+        &self,
+        command: &CanonicalCommandV1,
+        deadline: Option<Instant>,
+    ) -> Result<bool, &'static str> {
+        evaluation::executable_evidence(&self.node, command, deadline)
+            .map(|evidence| !evidence.is_empty())
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -231,17 +289,20 @@ pub struct NativeCommandProgram {
     pub extensions: Vec<ProgramExtension>,
     pub rules: Vec<ProgramRule>,
     nodes: Vec<Node>,
+    node_ids: Vec<String>,
     executable_index: BTreeMap<String, Vec<usize>>,
     keyword_index: BTreeMap<String, Vec<usize>>,
     unindexed: Vec<usize>,
     rule_indices: BTreeMap<String, usize>,
+    extension_rule_indices: Vec<Vec<usize>>,
+    baseline_allow_permissions: BTreeSet<String>,
 }
 
 pub fn packaged_command_program() -> Result<Arc<NativeCommandProgram>, &'static str> {
     static PROGRAM: OnceLock<Result<Arc<NativeCommandProgram>, &'static str>> = OnceLock::new();
     PROGRAM
         .get_or_init(|| {
-            NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())
+            NativeCommandProgram::from_embedded_artifact(packaged_command_program_bytes())
                 .map(Arc::new)
         })
         .clone()
@@ -265,8 +326,17 @@ pub fn digest_value(domain: &[u8], value: &impl serde::Serialize) -> Result<Stri
 }
 
 fn digest_json_value(domain: &[u8], value: &Value) -> Result<String, &'static str> {
-    let encoded = serde_json::to_vec(value).map_err(|_| "native_command_encoding_failed")?;
+    let encoded = canonical_json_bytes(value).map_err(|_| "native_command_encoding_failed")?;
     Ok(digest_canonical_bytes(domain, &encoded))
+}
+
+// Do not depend on serde_json's selected Map implementation. Build dependencies
+// may enable preserve_order, while the packaged/runtime contract requires
+// recursively sorted object keys and the usual UTF-8 JSON string encoding.
+fn canonical_json_bytes(value: &Value) -> Result<Vec<u8>, serde_json::Error> {
+    let mut canonical = value.clone();
+    canonical.sort_all_objects();
+    serde_json::to_vec(&canonical)
 }
 
 // ring uses the CPU's SHA instructions; the packaged program digest covers
@@ -290,38 +360,23 @@ fn bounded_id(value: &str) -> bool {
 }
 
 impl NativeCommandProgram {
+    pub(crate) fn permission_baseline_allows(&self, id: &str) -> bool {
+        self.baseline_allow_permissions.contains(id)
+    }
+
+    pub(crate) fn extension_rules(&self, index: usize) -> impl Iterator<Item = &ProgramRule> {
+        self.extension_rule_indices[index]
+            .iter()
+            .map(|index| &self.rules[*index])
+    }
+
     pub fn candidate_rule_indices(&self, command: &CanonicalCommandV1) -> Vec<usize> {
-        let mut candidates = vec![false; self.rules.len()];
-        for index in &self.unindexed {
-            candidates[*index] = true;
-        }
-        for segment in &command.segments {
-            if let Some(executable) = segment.executable.as_deref() {
-                if let Some(indices) = self
-                    .executable_index
-                    .get(&lowercase_for_ascii_comparison(basename(executable)))
-                {
-                    for index in indices {
-                        candidates[*index] = true;
-                    }
-                }
-            }
-            for token in &segment.tokens {
-                if let Some(indices) = self
-                    .keyword_index
-                    .get(&lowercase_for_ascii_comparison(token))
-                {
-                    for index in indices {
-                        candidates[*index] = true;
-                    }
-                }
-            }
-        }
-        candidates
-            .into_iter()
-            .enumerate()
-            .filter_map(|(index, selected)| selected.then_some(index))
-            .collect()
+        dispatch::candidates(
+            command,
+            &self.executable_index,
+            &self.keyword_index,
+            &self.unindexed,
+        )
     }
 
     pub fn runtime_coverage(&self) -> Vec<(&str, bool)> {
@@ -357,11 +412,7 @@ impl NativeCommandProgram {
             .iter()
             .map(|name| lowercase_for_ascii_comparison(basename(name)))
             .collect();
-        for rule in self
-            .rules
-            .iter()
-            .filter(|rule| rule.extension_index == extension_index)
-        {
+        for rule in self.extension_rules(extension_index) {
             match rule.matcher {
                 Some(node) => names.extend(self.required_executables(node, 0)?),
                 None => names.extend(compatibility?.iter().map(|name| (*name).to_owned())),

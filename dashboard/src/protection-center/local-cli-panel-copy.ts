@@ -2,7 +2,7 @@ import { approvalProofRecentlySatisfied } from "../approval-proof-inline";
 import type { GuardApprovalGatePublicConfig } from "../guard-types";
 import type { LocalCliItem, LocalCliListResponse, LocalCliState } from "../local-cli-api";
 import { customExtensionContinuityView } from "../managed-controls/custom-extension-continuity";
-import { hasSuggestedRules } from "./custom-extension-profile";
+import { hasSuggestedRules, type ConnectorGroupOutcome, type ConnectorSetupMatch } from "./custom-extension-profile";
 import { mcpToolCanReceiveDirectAllow } from "./mcp-catalog-state";
 
 export function customExtensionActionLabel(item: LocalCliItem): string | null {
@@ -160,7 +160,9 @@ export function customExtensionStateLabel(item: LocalCliItem): string {
   if (item.state === "allowed") {
     if (item.surface === "mcp") {
       const tools = item.commands.filter((command) => command.command_id !== "other");
-      if (tools.length === 0) return "No tools allowed yet. List the inventory to choose permissions.";
+      if (tools.length === 0) return item.remote_origin
+        ? "No tools seen yet. Use one of its tools in your host app, then choose permissions here."
+        : "No tools allowed yet. List the inventory to choose permissions.";
       const allowed = tools.filter((command) => command.state === "allow" && mcpToolCanReceiveDirectAllow(command)).length;
       const denied = tools.filter((command) => command.state === "block").length;
       const ask = tools.filter((command) => command.state === "review"
@@ -189,4 +191,37 @@ export function continuityCopy(item: LocalCliItem): { title: string; description
   if (status === "removed") return customExtensionContinuityView("removed");
   if (status === "stale") return customExtensionContinuityView("stale");
   return null;
+}
+
+export function connectorSetupCopy(match: ConnectorSetupMatch, name: string): { title: string; body: string } {
+  if (match === "identity_changed") {
+    return {
+      title: "This connector changed since the request was held",
+      body: `The ${name} Guard sees now has a different identity from the one an agent was held on. Review it before you allow it. The held request stays in the Inbox.`,
+    };
+  }
+  if (match === "decided") {
+    return {
+      title: `${name} already has a decision`,
+      body: "Requests held on it stay in the Inbox for a normal decision.",
+    };
+  }
+  return {
+    title: `Set up ${name} for the held request`,
+    body: "Guard held an agent action because it does not know this connector yet. Setting it up with the recommended settings allows its commands on this device, then approves the requests held on it once. Detector floors and sensitive-file reviews still apply, and nothing changes until you confirm.",
+  };
+}
+
+function heldRequests(count: number): string {
+  return `${count} held request${count === 1 ? "" : "s"}`;
+}
+
+export function connectorGroupOutcomeCopy(outcome: ConnectorGroupOutcome): string {
+  const hint = outcome.retryHint ? ` ${outcome.retryHint.replace(/\.?$/, ".")}` : "";
+  if (outcome.status === "resolved") return `Set up. Guard approved ${heldRequests(outcome.resolvedCount)} once.${hint}`;
+  if (outcome.status === "partial") {
+    return `Set up. Guard approved ${heldRequests(outcome.resolvedCount)} once; the rest still need a decision in the Inbox.${hint}`;
+  }
+  if (outcome.status === "not_in_group") return "Set up. The held request is no longer waiting on this connector.";
+  return "Set up. Guard could not approve the held requests here, so they are still in the Inbox.";
 }

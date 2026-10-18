@@ -9360,7 +9360,168 @@
               ],
               "rule_id": "command.git.tag",
               "rule_version": "1.0.0",
-              "safe_variants": [],
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "git"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [
+                            "--annotate",
+                            "--cleanup",
+                            "--create-reflog",
+                            "--delete",
+                            "--edit",
+                            "--file",
+                            "--force",
+                            "--format",
+                            "--help",
+                            "--local-user",
+                            "--message",
+                            "--sign",
+                            "--verify",
+                            "--version",
+                            "-F",
+                            "-a",
+                            "-d",
+                            "-f",
+                            "-h",
+                            "-m",
+                            "-n",
+                            "-s",
+                            "-u",
+                            "-v"
+                          ],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--config-env",
+                            "--exec-path",
+                            "--git-dir",
+                            "--help",
+                            "--namespace",
+                            "--super-prefix",
+                            "--version",
+                            "--work-tree",
+                            "-c",
+                            "-h"
+                          ],
+                          "options_with_values": [
+                            "--cleanup",
+                            "--contains",
+                            "--file",
+                            "--format",
+                            "--local-user",
+                            "--merged",
+                            "--message",
+                            "--no-contains",
+                            "--no-merged",
+                            "--points-at",
+                            "--sort",
+                            "-F",
+                            "-m",
+                            "-u"
+                          ],
+                          "required_flags": [
+                            "--list"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "tag"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "git"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [
+                            "--annotate",
+                            "--cleanup",
+                            "--create-reflog",
+                            "--delete",
+                            "--edit",
+                            "--file",
+                            "--force",
+                            "--format",
+                            "--help",
+                            "--local-user",
+                            "--message",
+                            "--sign",
+                            "--verify",
+                            "--version",
+                            "-F",
+                            "-a",
+                            "-d",
+                            "-f",
+                            "-h",
+                            "-m",
+                            "-n",
+                            "-s",
+                            "-u",
+                            "-v"
+                          ],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [],
+                          "leading_options_with_values": [
+                            "--config-env",
+                            "--exec-path",
+                            "--git-dir",
+                            "--help",
+                            "--namespace",
+                            "--super-prefix",
+                            "--version",
+                            "--work-tree",
+                            "-c",
+                            "-h"
+                          ],
+                          "options_with_values": [
+                            "--cleanup",
+                            "--contains",
+                            "--file",
+                            "--format",
+                            "--local-user",
+                            "--merged",
+                            "--message",
+                            "--no-contains",
+                            "--no-merged",
+                            "--points-at",
+                            "--sort",
+                            "-F",
+                            "-m",
+                            "-u"
+                          ],
+                          "required_flags": [
+                            "-l"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "tag"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Git tag listing",
+                  "variant_id": "list"
+                }
+              ],
               "safer_alternatives": [
                 "Inspect the current branch and working tree before changing them."
               ],
@@ -9426,7 +9587,120 @@
               ],
               "rule_id": "command.git.clean",
               "rule_version": "1.0.0",
-              "safe_variants": [],
+              "safe_variants": [
+                {
+                  "matcher": {
+                    "config": {},
+                    "matchers": [
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "git"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [
+                            "--force",
+                            "--help",
+                            "--interactive",
+                            "--version",
+                            "-f",
+                            "-h",
+                            "-i"
+                          ],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [
+                            [
+                              "-n",
+                              "--no-dry-run"
+                            ]
+                          ],
+                          "leading_options_with_values": [
+                            "--config-env",
+                            "--exec-path",
+                            "--git-dir",
+                            "--help",
+                            "--namespace",
+                            "--super-prefix",
+                            "--version",
+                            "--work-tree",
+                            "-c",
+                            "-h"
+                          ],
+                          "options_with_values": [
+                            "--exclude",
+                            "-e"
+                          ],
+                          "required_flags": [
+                            "-n"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "clean"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      },
+                      {
+                        "config": {
+                          "allow_leading_options": true,
+                          "executables": [
+                            "git"
+                          ],
+                          "fail_secure_unknown_options": false,
+                          "forbidden_flags": [
+                            "--force",
+                            "--help",
+                            "--interactive",
+                            "--version",
+                            "-f",
+                            "-h",
+                            "-i"
+                          ],
+                          "interspersed_flags": [],
+                          "interspersed_options_with_values": [],
+                          "inverse_flag_pairs": [
+                            [
+                              "--dry-run",
+                              "--no-dry-run"
+                            ]
+                          ],
+                          "leading_options_with_values": [
+                            "--config-env",
+                            "--exec-path",
+                            "--git-dir",
+                            "--help",
+                            "--namespace",
+                            "--super-prefix",
+                            "--version",
+                            "--work-tree",
+                            "-c",
+                            "-h"
+                          ],
+                          "options_with_values": [
+                            "--exclude",
+                            "-e"
+                          ],
+                          "required_flags": [
+                            "--dry-run"
+                          ],
+                          "required_flags_in_all_arguments": false,
+                          "required_option_values": [],
+                          "subcommands": [
+                            "clean"
+                          ]
+                        },
+                        "op": "executable.v1"
+                      }
+                    ],
+                    "op": "any.v1"
+                  },
+                  "title": "Git clean preview",
+                  "variant_id": "dry-run"
+                }
+              ],
               "safer_alternatives": [
                 "Inspect the current branch and working tree before changing them."
               ],

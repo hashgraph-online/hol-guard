@@ -343,14 +343,13 @@ def test_command_id_resolution_never_converts_parser_errors_to_root_tokens(monke
 def test_reviewed_invocation_native_outage_is_structured_builder_failure(monkeypatch):
     from types import SimpleNamespace
 
+    from codex_plugin_scanner.guard import native_reviewed_invocation_bindings as bindings
     from codex_plugin_scanner.guard.extension_builder import review_invocations
     from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 
-    owner = SimpleNamespace(operation_id="fixture")
+    owner = SimpleNamespace(operation_id="fixture", path=(), flags=frozenset(), options_with_values=frozenset())
     discovery = SimpleNamespace(operations=(owner,), metadata=SimpleNamespace(executable="echo"))
-    monkeypatch.setattr(review_invocations, "_matcher", lambda *args: None)
-    monkeypatch.setattr(review_invocations, "validate_known_options", lambda *args: None)
-    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda _: False)
+    monkeypatch.setattr(bindings, "ensure_resident_prerequisite", lambda _: False)
     with pytest.raises(BuilderError) as raised:
         review_invocations.validate_native_bindings(discovery, ((owner, ("hi",)),), frozenset())
     assert raised.value.code == "native_unavailable"

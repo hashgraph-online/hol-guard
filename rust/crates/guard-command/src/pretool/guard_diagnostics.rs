@@ -11,6 +11,15 @@
 //! It changes no policy, approval or harness state, and it takes no root
 //! override, so it cannot point Guard at another home.
 //!
+//! `hol-guard approvals`, `approvals list` and `approvals retry-hint <id>` are
+//! admitted too (`approval_inspection`). They print the approval queue and the
+//! retry hint of a resolved request. Resolving, resuming, opening, unlocking and
+//! clearing approvals are separate subcommands and stay reviewed or blocked. The
+//! bare `approvals` form, like `dashboard`, may open the user's own approval
+//! center once for the next pending request; it resolves nothing. Building the
+//! queue snapshot also applies a due Watch-posture revert, which only moves a
+//! posture back to protected and never weakens one.
+//!
 //! Like every other bare-name proof here, the inherited `PATH` is a host trust
 //! input: Rust has no resolved executable identity. A launcher sitting in the
 //! working directory is the one shadow this proof can see, so it fails closed
@@ -60,6 +69,32 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
             | ["dashboard", "--json"]
     ) || help_request(&words)
         || command_inspection(&words)
+        || approval_inspection(&words)
+}
+
+/// The approval queue and the retry hint of one resolved request. The decision
+/// subcommands (`approve`, `deny`), `resume`, `open`, `lock`, `unlock` and
+/// `clear-history`, and every root override (`--home`, `--guard-home`,
+/// `--workspace`), are not admitted.
+fn approval_inspection(words: &[&str]) -> bool {
+    match words {
+        ["approvals"]
+        | ["approvals", "--json"]
+        | ["approvals", "list"]
+        | ["approvals", "list", "--json"] => true,
+        ["approvals", "retry-hint", id] | ["approvals", "retry-hint", id, "--json"] => {
+            request_id(id)
+        }
+        _ => false,
+    }
+}
+
+fn request_id(id: &str) -> bool {
+    !id.starts_with('-')
+        && id.len() <= 64
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
 /// `hol-guard command test|explain <text>` classifies one command without
@@ -147,6 +182,7 @@ const HELP_SUBCOMMANDS: &[&str] = &[
     "policy",
     "receipts",
     "repair",
+    "retry-hint",
     "risk-report",
     "run",
     "scan",
@@ -205,6 +241,15 @@ mod tests {
             "guard help",
             "guard doctor --help",
             "guard help doctor",
+            "approvals",
+            "approvals --json",
+            "approvals list",
+            "approvals list --json",
+            "approvals retry-hint 0123456789abcdef0123456789abcdef",
+            "approvals retry-hint req-1 --json",
+            "approvals --help",
+            "approvals list --help",
+            "approvals retry-hint --help",
         ] {
             assert!(safe_hol_guard_arguments(&arguments(command)), "{command}");
         }
@@ -273,6 +318,31 @@ mod tests {
             "dashboard --json --json",
             "dashboard open",
             "--home /tmp dashboard",
+            "approvals approve req-1",
+            "approvals approve req-1 --scope global",
+            "approvals deny req-1",
+            "approvals resume req-1",
+            "approvals open req-1",
+            "approvals unlock",
+            "approvals lock",
+            "approvals clear-history --all",
+            "approvals list extra",
+            "approvals list --home /tmp",
+            "approvals --home /tmp",
+            "approvals --guard-home /tmp --json",
+            "approvals --workspace /tmp",
+            "approvals --json --json",
+            "approvals --json list",
+            "approvals retry-hint",
+            "approvals retry-hint --json",
+            "approvals retry-hint --home /tmp",
+            "approvals retry-hint -x",
+            "approvals retry-hint req-1 --home /tmp",
+            "approvals retry-hint req-1 req-2",
+            "approvals retry-hint ../req",
+            "approvals retry-hint req/1",
+            "list approvals",
+            "approve req-1",
         ] {
             assert!(!safe_hol_guard_arguments(&arguments(command)), "{command}");
         }

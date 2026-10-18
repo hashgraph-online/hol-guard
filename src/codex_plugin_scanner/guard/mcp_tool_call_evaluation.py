@@ -79,4 +79,5 @@ def evaluate_tool_call(
         post_claim_revalidated=payload["post_claim_revalidated"],
         post_claim_authority=authority,
         policy_action=payload["policy_action"],
+        connector_setup=payload.get("connector_setup"),
     )

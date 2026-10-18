@@ -84,6 +84,8 @@ mod consumer_artifact_compose;
 pub use consumer_artifact_compose::*;
 mod consumer_artifact_project;
 pub use consumer_artifact_project::*;
+mod connector_setup;
+pub use connector_setup::*;
 mod local_cli_grant;
 pub use local_cli_grant::*;
 mod artifact_risk;
@@ -128,6 +130,10 @@ mod mcp_stdio_session;
 pub use mcp_stdio_session::*;
 mod command_effect;
 pub use command_effect::*;
+mod command_policy_decision;
+pub use command_policy_decision::*;
+mod reviewed_invocation_bindings;
+pub use reviewed_invocation_bindings::*;
 mod canonical_json;
 pub use canonical_json::*;
 
@@ -148,6 +154,8 @@ mod daemon_route;
 pub use daemon_route::*;
 mod native_exact_action;
 pub use native_exact_action::*;
+mod native_bash_subject;
+pub use native_bash_subject::*;
 
 mod workflow_capability;
 pub use workflow_capability::*;
@@ -188,6 +196,8 @@ mod business_action;
 pub use business_action::*;
 mod business_dispatch_receipt;
 pub use business_dispatch_receipt::*;
+mod skill_workflow_preflight;
+pub use skill_workflow_preflight::*;
 
 pub const NATIVE_PROTOCOL_VERSION: u16 = 1;
 pub const GUARD_HOOK_ENVELOPE_V2_SCHEMA: &str = "guard-hook-envelope.v2";

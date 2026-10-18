@@ -12,6 +12,9 @@
 //! in Watch, and a Cursor `PreToolUse` or `UserPromptSubmit` its hook client
 //! renders as it would the daemon's answer.
 //! The bounded bridge harnesses, Grok among them, are answered as Codex is.
+//! An Oh My Pi `PostToolUse` also carries the structured output mediation the
+//! daemon would attach, resolved from the managed-policy view the publisher
+//! bound.
 //! The daemon never changes those responses. Every other request, and every
 //! `PreToolUse` verdict the daemon turns into an approval or a repair link,
 //! defers so the caller takes the daemon path, which is unchanged; a
@@ -41,6 +44,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 #[cfg(all(test, unix))]
 use workspace::{expanduser, normalized_workspace, normpath};
 use workspace::{settled_directory, workspace_candidate};
@@ -54,8 +58,9 @@ pub(crate) const HOOK_DIRECT_PERMISSION_NOTICE_FEATURE: &str = "hook-direct-perm
 /// The resident answers a reviewed `PreToolUse` from a saved exact-action
 /// decision when the binding carries what the daemon reads it with.
 pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-decision-v1";
-/// The resident takes the bound managed-policy view and answers an Oh My Pi
-/// `PostToolUse` for which it requires no structured output mediation.
+/// The resident takes the bound managed-policy view, resolves an Oh My Pi
+/// `PostToolUse`'s structured output mediation from it, and answers the hook
+/// with the mediation the daemon would have attached.
 pub(crate) const HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE: &str = "hook-direct-structured-output-v1";
 const HOOK_DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 /// The harnesses whose allow the daemon returns as the edge rendered it.
@@ -82,6 +87,9 @@ const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
 pub(crate) const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
 const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
 const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
+/// The model-visible content an Oh My Pi `PostToolUse` carries, which
+/// structured output mediation scans.
+const STRUCTURED_OUTPUT_FIELD: &str = "structured_output_json";
 const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
 const EVENT_NAME_FIELDS: [&str; 6] = [
     "event",
@@ -93,8 +101,6 @@ const EVENT_NAME_FIELDS: [&str; 6] = [
 ];
 const PRE_TOOL_USE: &str = "PreToolUse";
 const POST_TOOL_USE: &str = "PostToolUse";
-/// The denial the daemon adds a command-control repair link to.
-const REPAIRABLE_BLOCK_REASON: &str = "native_command_control_authority_block";
 const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
 const USER_PROMPT_EVENT_NAMES: [&str; 3] = ["prompt", "userpromptsubmit", "userpromptsubmitted"];
 const CLAUDE_CODE: &str = "claude-code";
@@ -163,6 +169,9 @@ pub(crate) enum HookDirectDefer {
     SavedDecision,
     ReviewQueue,
     RuntimeSuperseded,
+    /// An Oh My Pi `PostToolUse` whose managed-policy view the binding does
+    /// not carry, or does not carry readably: only the daemon can resolve
+    /// what its structured output requires.
     StructuredMediation,
 }
 
@@ -236,6 +245,9 @@ fn answer(
     request: HookDirectRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Value, HookDirectDefer> {
+    // The deadline every bounded step of this hook shares, as the daemon
+    // starts its own when the request arrives.
+    let started = Instant::now();
     if !DIRECT_HARNESSES.contains(&request.harness.as_str()) {
         return Err(HookDirectDefer::HarnessUnsupported);
     }
@@ -296,14 +308,15 @@ fn answer(
     let (snapshot, binding) = policy_store
         .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(HookDirectDefer::Lane)?;
-    if structured_mediation
-        && !pi::structured_output_unrequired(
-            &request.harness,
-            binding.structured_output_config.as_ref(),
-        )
-    {
-        return Err(HookDirectDefer::StructuredMediation);
-    }
+    // The daemon resolves what the managed policy requires of this hook's
+    // structured output from the config it loads. The resident resolves the
+    // same thing from the view the publisher bound, and mediates once the
+    // edge has decided; without a resolvable view it has nothing to mediate
+    // against and leaves the hook to the daemon.
+    let structured_resolution = structured_mediation
+        .then(|| pi::resolution(&request.harness, binding.structured_output_config.as_ref()))
+        .map(|resolution| resolution.ok_or(HookDirectDefer::StructuredMediation))
+        .transpose()?;
 
     let home_dir = binding
         .home_dir
@@ -359,18 +372,17 @@ fn answer(
     // decisions the user saved once no custom grant applies to its command,
     // which the saved-decision read checks against the store it reads.
     let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
+    let deadline_budget_ms = request
+        .deadline_budget_ms
+        .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
+        .clamp(1, MAX_DEADLINE_BUDGET_MS);
     let envelope = GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: None,
         harness: request.harness.clone(),
         event: event.to_owned(),
         raw_payload: Value::Object(payload),
-        deadline_budget_ms: Some(
-            request
-                .deadline_budget_ms
-                .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
-                .clamp(1, MAX_DEADLINE_BUDGET_MS),
-        ),
+        deadline_budget_ms: Some(deadline_budget_ms),
         policy_generation: snapshot.generation,
         policy_snapshot: json!({
             "generation": snapshot.generation,
@@ -437,6 +449,49 @@ fn answer(
         POST_TOOL_USE => post_tool_answer(&edge)?,
         _ => prompt_answer(&edge, prompt_notice)?,
     };
+    if let Some(resolution) = structured_resolution {
+        let result = answered["result"].clone();
+        // The edge's own receipt, which the daemon mediates against once it
+        // has recorded it; the resident queues it for the same drain.
+        let receipt = answered.get("receipt").cloned().unwrap_or(Value::Null);
+        let content = evidence_payload
+            .get(STRUCTURED_OUTPUT_FIELD)
+            .cloned()
+            .unwrap_or(Value::Null);
+        let deadline = started + Duration::from_millis(deadline_budget_ms);
+        let context = pi::Mediation {
+            harness: &request.harness,
+            resolution: &resolution,
+            result: &result,
+            receipt: &receipt,
+            content: &content,
+            recording_only,
+            deadline,
+        };
+        // Readmitting the workspace settles an ACK the publisher may still be
+        // writing, which is a wait of its own. That wait is capped by the
+        // deadline, and past the deadline it can no longer change the answer,
+        // so the recheck reports no binding and `mediate_finish` withholds on
+        // the deadline it has already missed.
+        let refresh = || {
+            if Instant::now() >= deadline {
+                return Value::Null;
+            }
+            policy_store
+                .admit_direct_hook_or_subdirectory_by(&workspace, deadline)
+                .ok()
+                .and_then(|(_, refreshed)| {
+                    pi::resolution(
+                        &request.harness,
+                        refreshed.structured_output_config.as_ref(),
+                    )
+                })
+                .map_or(Value::Null, |refreshed| pi::resolved_binding(&refreshed))
+        };
+        if let Some(mediation) = pi::mediate(&context, refresh) {
+            answered["harness_response"]["structured_content_mediation"] = mediation;
+        }
+    }
     let rule_check = local_cli::RuleCheck {
         payload: rule_payload.as_ref(),
         harness: &request.harness,
@@ -444,7 +499,6 @@ fn answer(
         home_dir: &request_home,
         guard_home: &guard_home,
         recording_only,
-        own_shape: cursor_harness,
     };
     // The daemon's custom block replaces the edge response before it routes
     // a sandbox requirement, so a block also drops any routed snapshot.
@@ -473,7 +527,7 @@ fn answer(
 }
 
 #[path = "hook_direct_claude_permission_text.rs"]
-mod claude_permission_text;
+pub(crate) mod claude_permission_text;
 #[path = "hook_direct_claude_prompt_text.rs"]
 mod claude_prompt_text;
 #[path = "hook_direct_contained.rs"]

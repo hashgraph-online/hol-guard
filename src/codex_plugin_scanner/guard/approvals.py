@@ -431,24 +431,6 @@ def record_unprompted_review(
         return []
 
 
-def evaluation_has_terminal_policy_action(evaluation: Mapping[str, object]) -> bool:
-    """Return whether an evaluation contains a non-overridable policy action."""
-
-    artifacts = evaluation.get("artifacts")
-    if not isinstance(artifacts, list):
-        return False
-    for item in artifacts:
-        if not isinstance(item, Mapping):
-            continue
-        action = normalize_guard_action_result(
-            item.get("policy_action"),
-            unknown_action="require-reapproval",
-        ).action
-        if action in {"block", "sandbox-required"}:
-            return True
-    return False
-
-
 @_serialize_approval_resolution
 def apply_approval_resolution(
     *,

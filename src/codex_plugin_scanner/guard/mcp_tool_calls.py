@@ -33,6 +33,9 @@ _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
+# A review held only because this device never set up the MCP server. It is an
+# agent-facing reason code; the receipt event keeps ``review`` taxonomy above.
+RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED = "runtime_tool_call_connector_setup_required"
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,6 +71,9 @@ class ToolCallDecision:
     # ``action`` only where a rejected reuse of prior authority opens a fresh
     # approval boundary; Rust owns that derivation.
     policy_action: GuardAction | None = None
+    # Set only when the review is due solely to Guard not recognising the MCP
+    # server: ``{identity_hash, surface, name, queue_group_id, reason_code}``.
+    connector_setup: Mapping[str, object] | None = None
 
 
 def resolve_tool_call_policy_action(decision: ToolCallDecision) -> GuardAction:

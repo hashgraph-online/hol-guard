@@ -9,7 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use guard_contracts::ContextDigestComponentsV1;
+use guard_contracts::{generic_hook_payload_digest, ContextDigestComponentsV1};
 use serde_json::{json, Map, Value};
 
 use crate::context_digest::{
@@ -87,7 +87,25 @@ pub(crate) fn runtime_hook_token(inputs: &Value) -> Result<String, &'static str>
 }
 
 pub(crate) fn generic_hook_token(inputs: &Value) -> Result<String, &'static str> {
-    with_native_effects(|effects| build_context_token(&generic_hook_components(inputs, effects)?))
+    // The content digest binds a saved approval to the action that was
+    // reviewed. Python used to hash the payload and send the digest down with
+    // the request; the resident now hashes the payload the harness sent, so
+    // nothing outside it decides what a reused approval covers. The composer
+    // still reads the digest as an input: its recorded parity vectors predate
+    // this move and carry the digest rather than the payload it came from.
+    let input = inputs.as_object().ok_or(ERR_INPUT)?;
+    let content = field(input, "payload_content")
+        .as_object()
+        .ok_or(ERR_INPUT)?;
+    let mut composed = input.clone();
+    composed.insert(
+        "payload_digest".to_owned(),
+        Value::String(generic_hook_payload_digest(content)),
+    );
+    let composed = Value::Object(composed);
+    with_native_effects(|effects| {
+        build_context_token(&generic_hook_components(&composed, effects)?)
+    })
 }
 
 /// `_runtime_hook_approval_context_token`.

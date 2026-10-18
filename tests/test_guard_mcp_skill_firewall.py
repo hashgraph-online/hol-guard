@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from hashlib import sha256
+
 import pytest
 
 from codex_plugin_scanner.guard.mcp_tool_calls import build_tool_call_artifact
@@ -9,12 +11,7 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.native_mcp_tool_evidence import NativeMcpToolEvidenceError
 from codex_plugin_scanner.guard.runtime import mcp_skill_firewall
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
-from codex_plugin_scanner.guard.runtime.mcp_skill_firewall import (
-    enrich_artifact_with_mcp_skill_firewall,
-    portal_skill_identity,
-    skill_identity_metadata,
-)
-from codex_plugin_scanner.guard.runtime.skill_protection import build_skill_identity
+from codex_plugin_scanner.guard.runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 
 pytestmark = pytest.mark.usefixtures("native_context_digest")
 
@@ -177,33 +174,66 @@ def test_legacy_tool_call_missing_environment_hash_gets_stable_non_secret_fallba
     assert legacy_server["env_values_hash"] == fallback_hash
 
 
+def _skill_artifact(skill_path) -> GuardArtifact:
+    return GuardArtifact(
+        artifact_id="opencode:global:skill:claude:docs/SKILL.md",
+        name="docs/SKILL.md",
+        harness="opencode",
+        artifact_type="skill",
+        source_scope="global",
+        config_path=str(skill_path),
+        metadata={},
+    )
+
+
 def test_skill_artifact_emits_skill_firewall_metadata(tmp_path) -> None:
     content = "---\nname: docs-helper\n---\n# Docs helper\n"
     skill_path = tmp_path / "SKILL.md"
     skill_path.write_text(content, encoding="utf-8")
-    identity = build_skill_identity(content, skill_path=str(skill_path))
-    artifact = enrich_artifact_with_mcp_skill_firewall(
-        GuardArtifact(
-            artifact_id="opencode:global:skill:claude:docs/SKILL.md",
-            name="docs/SKILL.md",
-            harness="opencode",
-            artifact_type="skill",
-            source_scope="global",
-            config_path=str(skill_path),
-            metadata={},
-        )
-    )
+    artifact = enrich_artifact_with_mcp_skill_firewall(_skill_artifact(skill_path))
 
     firewall = artifact.metadata["mcpSkillFirewall"]
     assert isinstance(firewall, dict)
+    assert firewall["mcpTools"] == []
     skill = firewall["skill"]
     assert isinstance(skill, dict)
-    assert skill["skillHash"] == identity.skill_hash
-    metadata = skill_identity_metadata(identity)
-    assert metadata["identity_hash"] == identity.identity_hash
-    stable_id = portal_skill_identity(identity)["stableId"]
-    assert isinstance(stable_id, str)
-    assert stable_id.startswith("skill:")
+    # The resident hashes the document text Python shipped, nothing else.
+    assert skill["skillHash"] == sha256(content.encode()).hexdigest()
+    assert skill["publisherStableId"] is None
+    identity_hash = skill["identityHash"]
+    assert isinstance(identity_hash, str)
+    assert skill["stableId"] == f"skill:{identity_hash[:24]}"
+    legacy = artifact.metadata["mcp_skill_identity"]
+    assert isinstance(legacy, dict)
+    assert legacy["identity_hash"] == identity_hash
+    assert legacy["skill_hash"] == skill["skillHash"]
+    assert legacy["descriptor_hash"] == skill["descriptorHash"]
+
+
+def test_unreadable_skill_document_never_needs_the_resident(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    def forbidden(**_kwargs):
+        raise AssertionError("an unreadable document has no text to project")
+
+    monkeypatch.setattr(mcp_skill_firewall, "native_skill_firewall_metadata_patch", forbidden)
+    artifact = _skill_artifact(tmp_path / "missing" / "SKILL.md")
+    assert enrich_artifact_with_mcp_skill_firewall(artifact) is artifact
+
+
+def test_skill_enrichment_fails_closed_without_native_authority(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    def unavailable(**_kwargs):
+        raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unavailable")
+
+    monkeypatch.setattr(mcp_skill_firewall, "native_skill_firewall_metadata_patch", unavailable)
+    skill_path = tmp_path / "SKILL.md"
+    skill_path.write_text("# Docs helper\n", encoding="utf-8")
+    with pytest.raises(NativeMcpToolEvidenceError, match=r"^native_mcp_tool_evidence_unavailable$"):
+        enrich_artifact_with_mcp_skill_firewall(_skill_artifact(skill_path))
 
 
 def test_firewall_enriches_mcp_server_metadata() -> None:
@@ -223,18 +253,3 @@ def test_firewall_enriches_mcp_server_metadata() -> None:
     )
 
     assert "mcpSkillFirewall" in enriched.metadata
-
-
-def test_descriptor_digest_failure_names_the_native_reason(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(mcp_skill_firewall, "context_sha256_digest", lambda *_a, **_k: "guard-context-unbound:x:y")
-    monkeypatch.setattr(mcp_skill_firewall, "is_unbound_context_digest", lambda _digest: True)
-    monkeypatch.setattr(
-        mcp_skill_firewall, "native_context_failure_reason", lambda: "native_resident_runtime_identity_mismatch"
-    )
-    with pytest.raises(
-        ValueError, match=r"^native_mcp_descriptor_digest_unavailable:native_resident_runtime_identity_mismatch$"
-    ):
-        mcp_skill_firewall._descriptor_digest({"a": 1})
-    monkeypatch.setattr(mcp_skill_firewall, "native_context_failure_reason", lambda: None)
-    with pytest.raises(ValueError, match=r"^native_mcp_descriptor_digest_unavailable$"):
-        mcp_skill_firewall._descriptor_digest({"a": 1})

@@ -37,6 +37,7 @@ from ..local_supply_chain import (
     package_external_archive_override,
 )
 from ..mcp_tool_calls import (
+    RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
@@ -83,7 +84,7 @@ from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
 from ._env import _build_scrubbed_env
 from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _NativeMcpChildIo
-from .runtime_mcp_projection import McpCallProjector, review_artifact_payload
+from .runtime_mcp_projection import McpCallProjector, connector_agent_text, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
     _approval_surface_policy_for_browser,
@@ -1165,6 +1166,7 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 scanner_evidence=decision_scanner_evidence,
                 policy_action=tool_policy_action,
+                connector_setup=decision.connector_setup if tool_policy_action == "review" else None,
             )
 
         if kind == "stored_block":
@@ -3217,6 +3219,7 @@ class RuntimeMcpGuardProxy:
         *,
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
+        connector_setup: Mapping[str, object] | None = None,
     ) -> dict[str, Any]:
         """Build the artifact payload for approval center queueing."""
         projection = self._call_projector.project(tool_name, params, artifact)
@@ -3227,6 +3230,7 @@ class RuntimeMcpGuardProxy:
             signals,
             policy_action=policy_action,
             scanner_evidence=scanner_evidence,
+            connector_setup=connector_setup,
         )
 
     def _queue_approval_center_response(
@@ -3240,7 +3244,11 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
+        connector_setup: Mapping[str, object] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        connector_code = (
+            {} if connector_setup is None else {"guardReasonCode": RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED}
+        )
         if not asks_for_approval(self.config):
             block_tool_call(
                 store=self.store,
@@ -3274,6 +3282,7 @@ class RuntimeMcpGuardProxy:
                             signals,
                             policy_action=policy_action,
                             scanner_evidence=scanner_evidence,
+                            connector_setup=connector_setup,
                         )
                     ]
                 },
@@ -3285,8 +3294,15 @@ class RuntimeMcpGuardProxy:
                 tool_name,
                 safe_alternative_reason(
                     f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
-                ),
-                {"approvalRequests": [], "guardPolicyAction": "block", "transportOutcome": "not-forwarded"},
+                )
+                if connector_setup is None
+                else connector_agent_text(connector_setup, ask=False),
+                {
+                    "approvalRequests": [],
+                    "guardPolicyAction": "block",
+                    "transportOutcome": "not-forwarded",
+                    **connector_code,
+                },
             ), {
                 "method": "tools/call",
                 "tool_name": tool_name,
@@ -3316,6 +3332,7 @@ class RuntimeMcpGuardProxy:
                         signals,
                         policy_action=policy_action,
                         scanner_evidence=scanner_evidence,
+                        connector_setup=connector_setup,
                     ),
                 ]
             },
@@ -3347,6 +3364,7 @@ class RuntimeMcpGuardProxy:
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
             "reviewUrl": review_url,
+            **connector_code,
         }
         response = _blocked_tool_response(
             message_id,
@@ -3354,7 +3372,9 @@ class RuntimeMcpGuardProxy:
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
                 f"Approve request {request_id} at {review_url}, then retry the same action."
-            ),
+            )
+            if connector_setup is None
+            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {review_url}.",
             response_data,
         )
         queued_event: dict[str, Any] = {

@@ -62,6 +62,12 @@ fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext
                         // A shortlog pages under pager.shortlog, and both
                         // listings read the repository's configuration.
                         "shortlog" | "check-ignore" => true,
+                        // Finding the untracked paths refreshes the index,
+                        // which starts a configured core.fsmonitor.
+                        "clean" => true,
+                        // Reading the files the patch names refreshes the
+                        // index, which starts a configured core.fsmonitor.
+                        "apply" => true,
                         _ => false,
                     }
                 })

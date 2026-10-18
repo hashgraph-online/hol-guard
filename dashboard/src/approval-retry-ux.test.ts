@@ -74,9 +74,9 @@ assert(retryCannotReuseApproval(unbound), "unbound native review is flagged as n
 assert(!retryCannotReuseApproval(bound), "bound native review is not flagged");
 const unboundCopy = buildRetryAfterApprovalCopy(unbound, "allow");
 assert(!unboundCopy.includes("within 15 minutes"), "unbound approval copy drops the retry window");
-assert(unboundCopy.includes("will still be blocked"), "unbound approval copy says the agent stays blocked");
+assert(unboundCopy.includes("run the command again"), "unbound approval copy sends the agent's retry to a fresh request");
 assert(!unboundCopy.includes("Extensions"), "approval copy without a verified allow hint never promises Extensions");
-assert(unboundCopy.includes("run it yourself"), "approval copy without a hint says to run the command yourself");
+assert(!/run it yourself/i.test(unboundCopy), "approval copy never tells the user to run the command themselves");
 assert(
   buildRetryAfterApprovalCopy(bound, "allow").includes("retry within 5 minutes"),
   "bound native approval copy uses the native 5-minute retry window",
@@ -105,7 +105,8 @@ assert(
 );
 const noHint = retryCannotReuseApprovalHint(unbound, "Oh My Pi");
 assert(!noHint.includes("Extensions"), "pre-approval hint without a verified allow hint never promises Extensions");
-assert(noHint.includes("Copy the command and run it yourself"), "pre-approval hint falls back to running it yourself");
+assert(noHint.includes("offers Allow once and Always allow"), "pre-approval hint points to the fresh request");
+assert(!/run it yourself/i.test(noHint), "pre-approval hint never tells the user to run the command themselves");
 
 // #3942: only a daemon-verified recommendation names the Extensions permission to allow.
 function recommendation(status: string, labels: string[]) {
@@ -317,5 +318,15 @@ const [pythonGroup] = groupDuplicates([unbound]);
 assert(bulkApprovalRiskTier(pythonGroup) === "elevated", "uncategorized shell command is elevated, not low");
 const [line] = summarizeBulkApproveSelection([pythonGroup]);
 assert(line.command === pythonChain, "bulk approval line carries the command text");
+
+// docs/guard/approval-invariant.md: no review hides Approve behind a "run it yourself" dead end.
+const envPrefixed = nativeBashRequest("66666666666666666666666666666666", "FOO=1 ./scripts/release.sh production", [
+  "retry_cannot_reuse_approval",
+]);
+for (const item of [envPrefixed, { ...envPrefixed, exact_action_persistence_eligible: true }]) {
+  for (const copy of [retryCannotReuseApprovalHint(item, "Oh My Pi"), retryBlockedApprovalCopy(item, "Oh My Pi")]) {
+    assert(!/run (it|this|the command) yourself|change nothing/i.test(copy), `no dead-end copy: ${copy}`);
+  }
+}
 
 console.log("approval-retry-ux tests passed");

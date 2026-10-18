@@ -1,7 +1,8 @@
 """Typed client for the native MCP tool-evidence owner; no Python evaluator.
 
-Rust owns the portal firewall evidence for ``mcp_server`` and ``tool_call``
-artifacts. Python ships the artifact DTO, binds the answer to the request by
+Rust owns the portal firewall evidence for ``mcp_server``, ``tool_call``
+and ``skill`` artifacts. Python ships the DTO -- for a skill, the document
+text it read, since the resident does no IO -- binds the answer by
 ``request_id`` and canonical ``request_sha256``, and renders it. Any
 transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
 (never another exception type); nothing here ever recomputes a fingerprint
@@ -46,6 +47,21 @@ _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _TIMEOUT_SECONDS = 5.0
 _INVALID_RESULT = "native_mcp_tool_evidence_result_invalid"
 _FIREWALL_ARTIFACT_TYPES = frozenset({"mcp_server", "tool_call"})
+_EMPTY_FIREWALL_INPUT: dict[str, object] = {
+    "command": None,
+    "transport": None,
+    "has_url": False,
+    "args": [],
+    "server_name": None,
+    "env": [],
+    "mcp_server_identity": None,
+    "mcp_tool_identity": None,
+    "tool_schema": None,
+    "tool_description": None,
+    "tool_names": None,
+    "tool_names_camel": None,
+    "skill_content": None,
+}
 
 
 class NativeMcpToolEvidenceError(ValueError):
@@ -111,6 +127,30 @@ def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
         "tool_description": json_safe_copy(metadata.get("tool_description")),
         "tool_names": json_safe_copy(metadata.get("tool_names")),
         "tool_names_camel": json_safe_copy(metadata.get("toolNames")),
+        "skill_content": None,
+    }
+
+
+def skill_firewall_input(
+    *,
+    name: str,
+    config_path: str,
+    publisher: str | None,
+    skill_content: str | None,
+) -> dict[str, object]:
+    """Transport-only DTO for a ``skill`` document's firewall projection.
+
+    The resident derives the identity from ``skill_content``; Python reads the
+    document because the op does no IO. ``None`` content means the document
+    could not be read and projects to no firewall.
+    """
+    return {
+        **_EMPTY_FIREWALL_INPUT,
+        "artifact_type": "skill",
+        "name": name,
+        "config_path": config_path,
+        "publisher": publisher,
+        "skill_content": skill_content,
     }
 
 
@@ -235,3 +275,20 @@ def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object]
     if artifact.artifact_type not in _FIREWALL_ARTIFACT_TYPES:
         raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unsupported_artifact_type")
     return native_mcp_tool_evidence_request("firewall", firewall_input(artifact), validate=_validated_firewall_payload)
+
+
+def native_skill_firewall_metadata_patch(
+    *,
+    name: str,
+    config_path: str,
+    publisher: str | None = None,
+    skill_content: str | None,
+    guard_home: Path | None = None,
+) -> dict[str, object] | None:
+    """Native metadata patch for a skill document, or ``None`` for no firewall."""
+    return native_mcp_tool_evidence_request(
+        "firewall",
+        skill_firewall_input(name=name, config_path=config_path, publisher=publisher, skill_content=skill_content),
+        guard_home,
+        validate=_validated_firewall_payload,
+    )

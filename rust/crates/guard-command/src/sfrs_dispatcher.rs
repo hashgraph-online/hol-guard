@@ -23,7 +23,7 @@ use crate::sfrs_dispatcher_request::{
     DispatchError, NativeEvaluationView, ToolActionRequestMatch,
 };
 use crate::sfrs_environment_secret::environment_secret_dump_request;
-use crate::sfrs_git_fetch::command_is_origin_shaped_git_fetch;
+use crate::sfrs_git_fetch::{command_is_origin_shaped_git_fetch, git_fetch_operands};
 use crate::sfrs_git_index::owned_git_index_inspection_action_class;
 use crate::sfrs_kubernetes_commands::kubernetes_secret_read_source;
 use crate::sfrs_requests::normalize_tool_name;
@@ -400,7 +400,7 @@ fn unverified_git_fetch_request(
         .iter()
         .map(|segment| segment.tokens.clone())
         .collect();
-    let action_class = if command_is_origin_shaped_git_fetch(&tokens) {
+    let action_class = if command_refreshes_a_named_origin(&tokens) {
         "git origin refresh"
     } else {
         "unverified Git remote refresh"
@@ -412,6 +412,26 @@ fn unverified_git_fetch_request(
         action_class,
         "Git fetch needs a repository-bound origin Guard can verify. Run it from that repository, or use git -C with a path under your home directory, a named origin, and no force/prune/URL remotes.",
     ))
+}
+
+#[cfg(test)]
+#[path = "sfrs_dispatcher_fetch_tests.rs"]
+mod fetch_tests;
+
+/// Every executable segment refreshes a named origin. The frozen port mirror
+/// reads the shape the retired Python read, and the live shape also admits
+/// the dry run that reports the same refresh, so a fetch no proof settles
+/// still names the action it would perform and carries its network risk.
+fn command_refreshes_a_named_origin(segments: &[Vec<String>]) -> bool {
+    if command_is_origin_shaped_git_fetch(segments) {
+        return true;
+    }
+    !segments.is_empty()
+        && segments.iter().all(|tokens| {
+            git_fetch_operands(tokens).is_some_and(|operands| {
+                crate::command_compatibility::git_fetch_origin_shaped(&operands)
+            })
+        })
 }
 
 /// `_segment_invokes_git_fetch`.

@@ -46,6 +46,9 @@ _RESULT_SCHEMA = "guard-mcp-tool-policy-decide-result.v1"
 _OPERATION = "mcp_tool_policy_decide"
 _UNAVAILABLE = "native_mcp_tool_policy_unavailable"
 _RESIDENT_CODE = re.compile(r"^native_mcp_tool_policy_decide_[a-z_]{1,64}$")
+_CONNECTOR_SETUP_KEYS = frozenset({"reason_code", "identity_hash", "surface", "name", "queue_group_id"})
+_NON_RECOGNITION_SOURCES = frozenset({"policy", "heuristic"})
+_IDENTITY_HASH = re.compile(r"^[0-9a-f]{64}$")
 _MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _MAX_ROUNDS = 64
 _TIMEOUT_SECONDS = 5.0
@@ -230,9 +233,39 @@ def _is_action(value: object) -> bool:
     return isinstance(value, str) and value in _ACTIONS
 
 
+def _is_connector_setup(value: object) -> bool:
+    """The server a non-recognition review names for one-time setup."""
+
+    if not isinstance(value, dict) or set(value) != _CONNECTOR_SETUP_KEYS:
+        return False
+    identity = value["identity_hash"]
+    return (
+        value["reason_code"] == "connector_setup_required"
+        and isinstance(identity, str)
+        and _IDENTITY_HASH.fullmatch(identity) is not None
+        and value["surface"] == "mcp"
+        and (value["name"] is None or isinstance(value["name"], str))
+        and value["queue_group_id"] == f"connector:{identity}"
+    )
+
+
+def _is_non_recognition(payload: dict[str, Any]) -> bool:
+    """Only a review that nothing but non-recognition caused may name a connector."""
+    quiet = not (payload["signals"] or payload["risk_categories"] or payload["pending_approval_reuse_decision"])
+    return (
+        (payload["action"], payload["policy_action"]) == ("review", "review")
+        and quiet
+        and payload["source"] in _NON_RECOGNITION_SOURCES
+        and payload["approval_reuse_claim_disposition"] is None
+        and not payload["post_claim_revalidated"]
+    )
+
+
 def _validated_decision(payload: object, *, proxy_requested: bool = False) -> dict[str, Any]:
     invalid = NativeMcpToolPolicyError("payload_invalid")
-    if not isinstance(payload, dict) or set(payload) - {"proxy"} != _PAYLOAD_KEYS:
+    if not isinstance(payload, dict) or set(payload) - {"proxy", "connector_setup"} != _PAYLOAD_KEYS:
+        raise invalid
+    if "connector_setup" in payload and not _is_connector_setup(payload["connector_setup"]):
         raise invalid
     proxy = payload.get("proxy")
     if ("proxy" in payload) is not proxy_requested or (
@@ -262,6 +295,7 @@ def _validated_decision(payload: object, *, proxy_requested: bool = False) -> di
         or not isinstance(payload["post_claim_revalidated"], bool)
         or payload["post_claim_authority"] not in (None, "fresh")
         or (payload["post_claim_authority"] == "fresh") is not payload["post_claim_revalidated"]
+        or ("connector_setup" in payload and not _is_non_recognition(payload))
     ):
         raise invalid
     return payload

@@ -2949,6 +2949,16 @@
     }
   }
 
+  .bg-blue-50\/70 {
+    background-color: #eff6ffb3;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .bg-blue-50\/70 {
+      background-color: color-mix(in oklab, var(--color-blue-50) 70%, transparent);
+    }
+  }
+
   .bg-blue-50\/80 {
     background-color: #eff6ffcc;
   }

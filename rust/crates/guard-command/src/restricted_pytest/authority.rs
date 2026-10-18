@@ -105,6 +105,13 @@ fn evaluate_inner(operation: &str, input: &Input) -> Result<Value, RestrictedPyt
                 .is_some_and(super::user_site::grantable)
         )?),
         "user_site_link_target" => json!(super::user_site::link_target(&input.source)),
+        "private_links" => json!(super::toolchains::private_links(
+            &input.private_tmp,
+            &input.roots
+        )
+        .into_iter()
+        .map(|(link, target)| json!({"link": link, "target": target}))
+        .collect::<Vec<_>>()),
         "runtime_roots" => json!(runtime_roots(
             &input.allowed_executables,
             &input.workspace,

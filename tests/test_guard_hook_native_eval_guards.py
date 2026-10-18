@@ -13,32 +13,44 @@ from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
     _runtime_external_archive_has_digest_binding_sink,
 )
 from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _observed_action_detail
+from codex_plugin_scanner.guard.native_shell_helpers import NativeShellHelpersError
 
 
-@pytest.mark.parametrize(
-    "raw_command",
-    [
-        None,
-        "`id`",
-        "$(id)",
-        "cat file\nwhoami",
-        "cat file\rwhoami",
-        "'unbalanced",
-    ],
-)
-def test_archive_command_matcher_rejects_unsafe_or_malformed_commands(raw_command: str | None) -> None:
-    assert _runtime_external_archive_command_matches_executable(raw_command, "cat") is False
+def test_archive_command_matcher_asks_the_resident_and_forwards_the_executable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The parse itself is covered in `package_shim_invocation_tests.rs`."""
 
+    asked: list[tuple[str, str, str]] = []
 
-def test_archive_command_matcher_rejects_wrong_executable_and_metachar_tokens() -> None:
-    assert _runtime_external_archive_command_matches_executable("ls -la", "cat") is False
-    assert _runtime_external_archive_command_matches_executable("cat ;", "cat") is False
-    assert _runtime_external_archive_command_matches_executable("cat file > out", "cat") is False
+    def record(action: str, command: str, **fields: object) -> bool:
+        asked.append((action, command, str(fields["executable"])))
+        return True
 
-
-def test_archive_command_matcher_accepts_plain_matching_command() -> None:
+    monkeypatch.setattr(eval_module, "call", record)
     assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is True
-    assert _runtime_external_archive_command_matches_executable("unzip -l bundle.zip", "unzip") is True
+    assert asked == [("invokes_executable", "cat ./archive.tar", "cat")]
+
+
+def test_archive_command_matcher_never_asks_without_a_command() -> None:
+    def refuse(action: str, command: str, **fields: object) -> bool:
+        raise AssertionError("asked about an absent command")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(eval_module, "call", refuse)
+        assert _runtime_external_archive_command_matches_executable(None, "cat") is False
+
+
+def test_archive_command_matcher_treats_an_unreachable_resident_as_no_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No binding sink leaves the approval with the user, not with the shim."""
+
+    def unavailable(action: str, command: str, **fields: object) -> bool:
+        raise NativeShellHelpersError("native_shell_helpers_unavailable")
+
+    monkeypatch.setattr(eval_module, "call", unavailable)
+    assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is False
 
 
 def test_native_edge_facts_forward_the_edge_verdict_without_deciding() -> None:
@@ -110,6 +122,8 @@ def test_digest_binding_sink_matches_resolved_shim_path(tmp_path, monkeypatch) -
         }
 
     monkeypatch.setattr(eval_module, "package_shim_status", fake_status)
+    # The launch test itself is the resident's; this exercises the shim match.
+    monkeypatch.setattr(eval_module, "call", lambda *args, **fields: True)
     artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": str(real_executable)})
     assert (
         _runtime_external_archive_has_digest_binding_sink(

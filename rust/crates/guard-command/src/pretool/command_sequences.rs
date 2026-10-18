@@ -223,7 +223,7 @@ fn cd_then_read_sequence(
 }
 
 /// The trailing `rm` of a write probe that the native proof accepts: it
-/// removes only the file the same command creates, and that file does not
+/// removes only the file or directory the same command creates, and that path does not
 /// exist yet. The compatibility layer does not treat it as a destructive
 /// delete.
 pub(crate) fn proven_created_file_removal(
@@ -247,8 +247,7 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
     let Some(separators) = separators(model) else {
         return false;
     };
-    if first.executable.as_deref() != Some("touch")
-        || last.executable.as_deref() != Some("rm")
+    if last.executable.as_deref() != Some("rm")
         || !model
             .segments
             .iter()
@@ -259,18 +258,20 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
     {
         return false;
     }
-    let created = match first.arguments.as_slice() {
-        [target] => target,
-        [separator, target] if separator == "--" => target,
-        _ => return false,
+    let Some((created, directory)) = created_target(first) else {
+        return false;
     };
-    let removed = match last.arguments.as_slice() {
-        [target] => target,
-        [flag, target] if matches!(flag.as_str(), "-f" | "--") => target,
-        [force, separator, target] if force == "-f" && separator == "--" => target,
-        _ => return false,
+    let Some(removed) = removed_target(&last.arguments, directory) else {
+        return false;
     };
-    if removed != created || sensitive_command(&last.text) || !absent_target(created, context) {
+    // The absence proof expands `~` to home; a quoted `~` stays a relative path
+    // that may name something that already exists.
+    if removed != created
+        || sensitive_command(&last.text)
+        || !crate::pretool::directory_targets::home_targets_unquoted(first)
+        || !crate::pretool::directory_targets::home_targets_unquoted(last)
+        || !absent_target(created, context)
+    {
         return false;
     }
     let mut creation = model.clone();
@@ -284,6 +285,55 @@ fn created_file_probe(model: &CanonicalCommandV1, context: PathContext<'_>) -> b
                     Some("echo" | "printf" | "true")
                 ) && exact_safe_segment_with_context(model, segment, false, context)
             })
+}
+
+/// The path a `touch` or `mkdir` segment creates, and whether it is a
+/// directory. A directory path must name only new components: `mkdir -p`
+/// creates every missing parent, so `new/../kept` would make `kept` look absent.
+fn created_target(segment: &CommandSegmentV1) -> Option<(&String, bool)> {
+    let arguments = segment.arguments.as_slice();
+    match segment.executable.as_deref() {
+        Some("touch") => match arguments {
+            [target] => Some((target, false)),
+            [separator, target] if separator == "--" => Some((target, false)),
+            _ => None,
+        },
+        Some("mkdir") => {
+            let target = match arguments {
+                [target] => target,
+                [flag, target] if matches!(flag.as_str(), "-p" | "--") => target,
+                [parents, separator, target] if parents == "-p" && separator == "--" => target,
+                _ => return None,
+            };
+            plain_directory_path(target).then_some((target, true))
+        }
+        _ => None,
+    }
+}
+
+/// The path an `rm` segment removes: a file without `-r`, a directory only with it.
+fn removed_target(arguments: &[String], directory: bool) -> Option<&String> {
+    let recursive = |flag: &str| matches!(flag, "-r" | "-R" | "-rf" | "-fr" | "-Rf" | "-fR");
+    match (arguments, directory) {
+        ([target], false) => Some(target),
+        ([flag, target], false) if matches!(flag.as_str(), "-f" | "--") => Some(target),
+        ([force, separator, target], false) if force == "-f" && separator == "--" => Some(target),
+        ([flag, target], true) if recursive(flag) => Some(target),
+        ([flag, separator, target], true) if recursive(flag) && separator == "--" => Some(target),
+        _ => None,
+    }
+}
+
+fn plain_directory_path(value: &str) -> bool {
+    !value.is_empty()
+        && !value.starts_with('-')
+        && !value.contains(['*', '?', '[', ']', '{', '}', '$', '`', '\\', '\n'])
+        && std::path::Path::new(value).components().all(|component| {
+            matches!(
+                component,
+                std::path::Component::Normal(_) | std::path::Component::RootDir
+            )
+        })
 }
 
 fn absent_target(value: &str, context: PathContext<'_>) -> bool {

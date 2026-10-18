@@ -96,7 +96,12 @@ pub struct PolicyArtifactFactsV1 {
     /// `str(confidence or "")` of the artifact risk confidence.
     pub confidence_text: String,
     pub confidence_strong: bool,
+    /// A caller that already knows the artifact installs a boot or login
+    /// item says so here; the resident reads `action_class` for the rest.
     pub writes_launch_agent: bool,
+    /// `action_class` metadata; absent or non-string arrives as `null`.
+    #[serde(default)]
+    pub action_class: Option<String>,
     pub skill_is_known_bad: bool,
 }
 

@@ -14,7 +14,7 @@ pub(crate) use cache::{open_read_only_cached, CachedConnection};
 
 pub(crate) const STORE_FILE_NAME: &str = "guard.db";
 /// Highest `local_cli_schema_migration` version this build reads.
-pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 12;
+pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 14;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StoreReadError {

@@ -114,6 +114,27 @@ pub(super) fn bounded_structured_file_read_target(
     bounded_read_target_with_brackets(value, home_dir, cwd, false, true, false)
 }
 
+/// A shell word whose bracket class matches nothing reaches the program
+/// exactly as it was typed, so `app/blog/[slug]/page.tsx` names that Next.js
+/// route rather than a pattern. The caller proves the class cannot match
+/// before asking for this screen; every other glob metacharacter, and any
+/// bracketed path that does not resolve, stays rejected.
+pub(super) fn bounded_literal_bracket_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    allow_directory: bool,
+) -> bool {
+    // The screen below resolves the trimmed word, while the shell hands the
+    // program the word as it was typed: `app/blog/[slug]/page.tsx ` and
+    // `app/blog/[slug]/page.tsx` are two different names, and the first may
+    // be a link somewhere this crate would not read. A word that is not
+    // already its own trimmed form keeps its review rather than borrowing
+    // a neighbour's proof.
+    value == value.trim()
+        && bounded_read_target_with_brackets(value, home_dir, cwd, allow_directory, true, true)
+}
+
 fn bounded_read_target_with_brackets(
     value: &str,
     home_dir: Option<&str>,
@@ -258,7 +279,8 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || git_ref_document(canonical, home_dir, cwd)
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)
-                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)))
+                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                    || virtualenv_activation_script(canonical)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
@@ -286,6 +308,46 @@ pub(super) fn resolved_read_target_allowed(
         || (!guard_secure_fs::contains_symlink_component(candidate)
             && resolved_location_allowed(canonical, home_dir, cwd, false)
             && resolved_home_hidden_content_read(canonical, home_dir))
+}
+
+/// A Python virtual environment's activation script, proven by the
+/// environment's own marker file rather than by the directory's name.
+///
+/// `source .venv/bin/activate` is the first thing work in a Python project
+/// does, and the floor that decides what such a command may run has to read
+/// the script to learn it. `.venv` is a hidden component, so the hidden-path
+/// screen refused the read and the command kept no owners at all. PEP 405
+/// puts `pyvenv.cfg` directly above `bin/`, and only `venv`, `virtualenv` and
+/// `uv` write it, so that marker is what admits the read: a hidden directory
+/// called `.venv` with no marker beside it stays refused, and a marked
+/// environment under any other name reads. The path is already canonical, so
+/// no link can dress another file as an activation script.
+fn virtualenv_activation_script(canonical: &std::path::Path) -> bool {
+    const ACTIVATION_SCRIPTS: [&str; 5] = [
+        "activate",
+        "activate.csh",
+        "activate.fish",
+        "activate.nu",
+        "activate.ps1",
+    ];
+    let lowered = |path: &std::path::Path| {
+        path.file_name()
+            .map(|name| name.to_string_lossy().to_ascii_lowercase())
+    };
+    if !lowered(canonical).is_some_and(|name| ACTIVATION_SCRIPTS.contains(&name.as_str())) {
+        return false;
+    }
+    let Some(binaries) = canonical.parent() else {
+        return false;
+    };
+    // POSIX environments keep their programs in `bin`, Windows ones in
+    // `Scripts`; the marker sits directly above either.
+    if !lowered(binaries).is_some_and(|name| name == "bin" || name == "scripts") {
+        return false;
+    }
+    binaries
+        .parent()
+        .is_some_and(|root| root.join("pyvenv.cfg").is_file())
 }
 
 /// A project's own dotfile in a checkout, read as the document it is.

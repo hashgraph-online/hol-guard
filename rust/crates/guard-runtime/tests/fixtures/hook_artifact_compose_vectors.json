@@ -25,6 +25,7 @@
     "name": "stack_defaults",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -71,6 +72,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -114,6 +116,7 @@
     "name": "stack_cli_block_wins",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -160,6 +163,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -212,6 +216,7 @@
     "name": "stack_cli_unknown_requires_reapproval",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -258,6 +263,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -301,6 +307,7 @@
     "name": "stack_cli_ask_aliases_review",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -347,6 +354,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -390,6 +398,7 @@
     "name": "stack_payload_cannot_lower",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -436,6 +445,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -488,6 +498,7 @@
     "name": "stack_payload_unknown",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -534,6 +545,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -577,6 +589,7 @@
     "name": "stack_cli_wins_requested_over_payload",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -623,6 +636,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -666,6 +680,7 @@
     "name": "stack_unknown_config_reviews",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -712,6 +727,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -755,6 +771,7 @@
     "name": "stack_native_floor_and_edge",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -808,6 +825,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -851,6 +869,7 @@
     "name": "stack_override_blocks_local_grants",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -897,6 +916,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -940,6 +960,7 @@
     "name": "stack_package_block",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -988,6 +1009,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1031,6 +1053,7 @@
     "name": "stack_package_review_controls_summary",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1079,6 +1102,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1122,6 +1146,7 @@
     "name": "stack_package_weaker_than_floor",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1170,6 +1195,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1215,6 +1241,7 @@
     "name": "stack_compound_package_unrecognised_data_flow_controls",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1269,6 +1296,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1313,6 +1341,7 @@
     "name": "stack_compound_package_weaker",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1361,6 +1390,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1405,6 +1435,7 @@
     "name": "stack_data_flow_configured",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1458,6 +1489,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1502,6 +1534,7 @@
     "name": "stack_data_flow_unrecognised_action_uses_current",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1554,6 +1587,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1599,6 +1633,7 @@
     "name": "stack_scanner_raises_to_block",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1645,6 +1680,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1692,6 +1728,7 @@
     "name": "stack_scanner_raises_compound",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1738,6 +1775,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1784,6 +1822,7 @@
     "name": "stack_scanner_already_blocked",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1830,6 +1869,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1876,6 +1916,7 @@
     "name": "stack_scanner_warn_keeps_summary",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -1922,6 +1963,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -3852,6 +3894,7 @@
     "name": "stack_data_flow_strong_stops_under_protected",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -3905,6 +3948,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -3953,6 +3997,7 @@
     "name": "stack_posture_auto_stop_event",
     "query": {
       "approval_context": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": false,
         "confidence_text": "",
@@ -3999,6 +4044,7 @@
         "security_level": "balanced"
       },
       "runtime": {
+        "action_class": null,
         "command_action_floor": null,
         "confidence_strong": true,
         "confidence_text": "strong",

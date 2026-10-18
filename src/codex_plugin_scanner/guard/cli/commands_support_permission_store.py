@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from .commands_support_hook_state import (
         _append_cursor_pending_shell_key,
         _claude_pending_permission_state_key,
-        _cursor_after_shell_observed,
         _cursor_conversation_id,
         _cursor_pending_shell_state_key,
         _cursor_shell_command_from_payload,
@@ -33,6 +32,10 @@ from ..native_hook_authority_state import (
     flag_field,
     hook_authority_state,
     object_field,
+)
+from ..native_hook_render import (
+    native_cursor_after_shell_observed,
+    native_cursor_observer_event,
 )
 from ..runtime.approval_context import parse_approval_context_token
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
@@ -71,7 +74,6 @@ def _record_cursor_pending_shell_permission(
 ) -> None:
     from ..adapters.cursor_native_approval import (
         compute_cursor_after_observer_proof,
-        cursor_observer_event_for_payload,
         ensure_cursor_approval_binding,
         ensure_cursor_hook_attestation_secret,
         remove_cursor_shell_binding_file,
@@ -83,7 +85,12 @@ def _record_cursor_pending_shell_permission(
     if conversation_id is None or command is None:
         return
     approval_binding = ensure_cursor_approval_binding(payload)
-    observer_event = cursor_observer_event_for_payload(payload)
+    # The issuing and checking sides have to attest under the same event, so
+    # both take it from the resident. Without an answer no proof is issued,
+    # which leaves the approval unable to become an allowance later.
+    observer_event = native_cursor_observer_event(payload, guard_home=guard_home)
+    if observer_event is None:
+        return
     saved_at = _now()
     try:
         secret = ensure_cursor_hook_attestation_secret(guard_home)
@@ -318,7 +325,11 @@ def _persist_cursor_native_permission_after_shell(
     # cannot become an allowance.
     if not _cursor_pending_saved_at_is_fresh(store, pending, now):
         return False
-    if not _cursor_after_shell_observed(prepared):
+    # Whether the harness is reporting a finished command is what separates a
+    # pending approval from a durable allowance, and the resident reads that
+    # payload itself. A resident that cannot answer leaves the approval pending
+    # rather than minting an allowance on a guess.
+    if not native_cursor_after_shell_observed(harness, prepared, guard_home=guard_home):
         return False
     if not cursor_after_observer_trusted(
         guard_home=guard_home,

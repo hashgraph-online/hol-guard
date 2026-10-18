@@ -12,7 +12,8 @@
 //! conventional dev-server port ([`super::loopback_ports`]) that neither
 //! Guard's daemon nor a local service answering a plain GET with
 //! credentials, cluster state or a debugger ([`LOCAL_ADMIN_PORTS`]) may
-//! listen on. Private, link-local
+//! listen on, or on a port the agent chose for a server it started itself,
+//! screened against the whole local-service list. Private, link-local
 //! and metadata addresses, other loopback spellings, rebinding names and
 //! names under reserved test suffixes stay reviewed: those resolve to local
 //! services rather than public content. The response body and headers reach
@@ -306,10 +307,24 @@ pub(in crate::pretool) fn loopback_url(raw: &str, home_dir: Option<&str>) -> boo
         && matches!(url.scheme(), "http" | "https")
         && url.username().is_empty()
         && url.password().is_none()
-        && url.port_or_known_default().is_some_and(|port| {
-            super::loopback_ports::dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
-        })
+        && url
+            .port_or_known_default()
+            .is_some_and(|port| reachable_loopback_port(port, home_dir))
         && !url_secrets::carries_secret(&url)
+}
+
+/// A loopback port this request may reach: a conventional dev-server port, or
+/// one the agent chose for the server it started itself while Guard's daemon
+/// state records another port. A chosen port is screened against the local
+/// services whose plain answer carries credentials, stored data or control of
+/// another process, the same list the workspace sandbox grants against, so
+/// only a port nothing well known claims is reachable by number alone.
+fn reachable_loopback_port(port: u16, home_dir: Option<&str>) -> bool {
+    use super::loopback_ports::{
+        chosen_server_port, dev_server_port, local_service_port, LOCAL_SERVICE_PORTS,
+    };
+    dev_server_port(port, &LOCAL_ADMIN_PORTS, home_dir)
+        || (!local_service_port(port) && chosen_server_port(port, LOCAL_SERVICE_PORTS, home_dir))
 }
 
 fn public_url(raw: &str) -> bool {

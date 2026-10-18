@@ -27,6 +27,7 @@ guard-contracts = { path = "../guard-contracts" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
 regex = "1.11.2"
 fancy-regex = "0.19"
+fs2 = "0.4.3"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = { version = "1.0.143", features = ["raw_value"] }
 sha2 = "0.10.9"
@@ -45,6 +46,10 @@ caseless = "0.2.2"
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
 url = "=2.5.8"
 unicode-normalization = "0.1.25"
+tree-sitter = "=0.25.10"
+tree-sitter-bash = "=0.25.1"
+# Match guard-command and preserve the workspace MSRV.
+tree-sitter-language = "=0.1.5"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.3", features = ["process", "signal", "user"] }

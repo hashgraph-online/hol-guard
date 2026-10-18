@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import ast
 import json
 import subprocess
 import sys
@@ -35,21 +34,35 @@ def _contains_all(source: str, values: tuple[str, ...], label: str) -> None:
         raise RuntimeError(f"{label} is missing: {', '.join(missing)}")
 
 
+def _braced_body(source: str, start: int, label: str) -> str:
+    """The braced block that follows `start`, matched by depth.
+
+    The writer's bodies hold no brace inside a string or character literal, so
+    counting braces recovers the same block a parser would.
+    """
+    opened = source.find("{", start)
+    if opened < 0:
+        raise RuntimeError(f"{label} has no body")
+    depth = 0
+    for index in range(opened, len(source)):
+        if source[index] == "{":
+            depth += 1
+        elif source[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return source[opened : index + 1]
+    raise RuntimeError(f"{label} body is unterminated")
+
+
 def _submit_method_has_no_decision_io(source: str) -> None:
-    tree = ast.parse(source, filename="runtime_hook_evidence_writer.py")
-    method = next(
-        (
-            node
-            for node in ast.walk(tree)
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == "submit_native_decision_receipt"
-        ),
-        None,
-    )
-    if method is None:
+    """The handoff queues a receipt; the worker behind it does the writing."""
+    start = source.find("pub fn submit_native_decision_receipt")
+    if start < 0:
         raise RuntimeError("receipt handoff submit method is missing")
-    body = ast.get_source_segment(source, method) or ""
-    if any(marker in body for marker in ("sqlite", "_connect(", "persist_native_decision_receipt")):
+    body = _braced_body(source, start, "receipt handoff submit method")
+    if any(
+        marker in body for marker in ("sqlite", "record_native_decision_receipt", "persist_native_decision_receipt")
+    ):
         raise RuntimeError("receipt handoff submit method performs decision-time I/O")
 
 
@@ -88,7 +101,7 @@ def _validate_rust_sources(root: Path) -> None:
         raise RuntimeError("Rust receipt exposes a forbidden field")
 
 
-def _validate_python_sources(root: Path) -> None:
+def _validate_receipt_decoder_and_handoff(root: Path) -> None:
     receipt = _read(root, "src/codex_plugin_scanner/guard/native_decision_receipt.py")
     _contains_all(
         receipt,
@@ -100,20 +113,20 @@ def _validate_python_sources(root: Path) -> None:
     required_fields = receipt[required_start:required_end] if required_start >= 0 and required_end >= 0 else ""
     if any(f'"{field}"' in required_fields for field in FORBIDDEN_RECEIPT_FIELDS):
         raise RuntimeError("Python receipt validator exposes a forbidden receipt field")
-    writer = _read(root, "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py")
-    journal = _read(root, "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_journal.py")
+    writer = _read(root, "rust/crates/guard-command/src/hook_evidence_writer.rs")
     _contains_all(
         writer,
         (
             "submit_native_decision_receipt",
             "max_records",
             "max_bytes",
-            "_receipt_deduped",
-            "persist_native_decision_receipt",
+            "receipt_deduped",
+            "RECEIPT_SCHEMA",
         ),
         "bounded receipt handoff",
     )
-    _contains_all(journal, ("NATIVE_HOOK_DECISION_RECEIPT_SCHEMA",), "receipt journal schema")
+    journal = _read(root, "rust/crates/guard-command/src/hook_evidence_journal_fs.rs")
+    _contains_all(journal, ("rewrite_journal", "recover_journal_records"), "receipt journal durability")
     _submit_method_has_no_decision_io(writer)
 
 
@@ -121,7 +134,11 @@ def _validate_hook_routes(root: Path) -> None:
     native_worker = _read(root, "src/codex_plugin_scanner/guard/daemon/hook_worker_native.py")
     _contains_all(native_worker, ("_record_native_decision_receipt", 'edge.get("receipt")'), "HookWorker receipt route")
     cli = _read(root, "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py")
-    _contains_all(cli, ("RuntimeHookEvidenceWriter", "activity_writer=evidence_writer"), "CLI receipt route")
+    _contains_all(
+        cli,
+        ("NativeHookEvidenceWriter", "activity_writer=NativeHookEvidenceWriter(store=store)"),
+        "CLI receipt route",
+    )
     probe = _read(root, "ci/native_runtime/probe_native_default_auto.py")
     _contains_all(
         probe,
@@ -136,11 +153,27 @@ def _validate_tests_and_provenance(root: Path) -> None:
         tests,
         (
             "test_receipt_is_strictly_redacted_and_identity_bound",
-            "test_receipt_queue_full_degrades_without_changing_decision",
-            "test_receipt_sqlite_failure_is_recoverable_and_bounded",
             "test_store_receipt_insert_is_idempotent",
         ),
-        "receipt fault/privacy tests",
+        "receipt privacy and persistence tests",
+    )
+    writer_tests = _read(root, "rust/crates/guard-command/src/hook_evidence_writer_tests.rs")
+    _contains_all(
+        writer_tests,
+        (
+            "a_receipt_handoff_returns_before_the_store_has_written_it",
+            "a_repeated_receipt_is_deduplicated_rather_than_queued_twice",
+            "a_full_receipt_queue_drops_the_overflow_instead_of_blocking",
+            "a_receipt_left_in_the_journal_is_recovered_by_the_next_writer",
+            "a_store_that_keeps_failing_drops_a_receipt_after_bounded_retries",
+        ),
+        "receipt fault tests",
+    )
+    journal_tests = _read(root, "rust/crates/guard-command/src/hook_evidence_journal_fs_tests.rs")
+    _contains_all(
+        journal_tests,
+        ("a_rewrite_drops_one_record_and_the_preview_behind_it",),
+        "receipt journal rewrite test",
     )
     provenance = _read(root, "docs/guard/contracts/native-hook-decision-receipt-persistence.v1.md")
     _contains_all(
@@ -153,7 +186,7 @@ def _validate_tests_and_provenance(root: Path) -> None:
 def run(root: Path, *, json_path: Path | None) -> int:
     _validate_contract(root)
     _validate_rust_sources(root)
-    _validate_python_sources(root)
+    _validate_receipt_decoder_and_handoff(root)
     _validate_hook_routes(root)
     _validate_tests_and_provenance(root)
 

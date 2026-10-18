@@ -216,6 +216,7 @@ fn a_plain_origin_fetch_is_a_definite_review_until_its_permission_is_allowed() {
         "git fetch origin",
         "git fetch origin main",
         "git fetch -q origin",
+        "git fetch --dry-run origin",
     ] {
         let result = evaluate(&binding, command);
         assert_eq!(result.minimum_action, "review", "{command}");

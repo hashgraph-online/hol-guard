@@ -33,11 +33,12 @@ def _catalog_data() -> dict:
     return json.loads(APPROVAL_RETRY_CATALOG.read_text(encoding="utf-8"))
 
 
-def test_lane_catalog_carries_an_identical_a_reworded_and_an_unbindable_retry_case():
+def test_lane_catalog_carries_identical_env_prefixed_reworded_and_unbindable_retry_cases():
     scenarios = load_catalog(APPROVAL_RETRY_CATALOG)
     by_id = {scenario.id: scenario for scenario in scenarios}
     assert set(by_id) == {
         "approved-retry-identical-command",
+        "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
         "approved-retry-unbindable-command",
     }
@@ -53,6 +54,7 @@ def test_lane_catalog_carries_an_identical_a_reworded_and_an_unbindable_retry_ca
     # for it would defeat the lane.
     assert by_id["approved-retry-identical-command"].commands == ("ls -la",)
     assert by_id["approved-retry-unbindable-command"].commands == ("git status --short",)
+    assert by_id["approved-retry-env-prefixed-command"].commands == ("LC_ALL=C ls -la",)
     assert by_id["approved-retry-reworded-command"].commands == ()
 
 
@@ -281,7 +283,7 @@ def _lane_case() -> dict:
 
 
 def _lane_scenario() -> Scenario:
-    return load_catalog(APPROVAL_RETRY_CATALOG)[0]
+    return next(s for s in load_catalog(APPROVAL_RETRY_CATALOG) if s.commands == ("git status --short",))
 
 
 @pytest.mark.parametrize(

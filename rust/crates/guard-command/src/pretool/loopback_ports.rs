@@ -1,5 +1,7 @@
 //! Loopback ports a command may reach on its own machine: the conventional
-//! ports of local development servers, never a port Guard's own daemon may
+//! ports of local development servers, and ports an agent chose for a server
+//! it started itself; never a port one of the local services in
+//! [`LOCAL_SERVICE_PORTS`] holds, and never a port Guard's own daemon may
 //! answer on.
 //!
 //! The daemon serves pending approvals on loopback, so a request to it from
@@ -38,6 +40,36 @@ const DEV_SERVER_PORTS: [(u16, u16); 17] = [
     (8765, 8765),
     (8787, 8787),
 ];
+
+/// Loopback ports a request must never reach: container and cluster control
+/// planes, service meshes, debuggers, Guard's own approval center, message
+/// brokers, data stores that accept local clients without credentials, local
+/// proxies that would carry traffic off this host, browser and device
+/// automation drivers, remote desktops, and local model and notebook servers.
+///
+/// A port here answers a plain local request with credentials, stored data or
+/// control of another process, so naming one is never the dev server an agent
+/// just started.
+pub(in crate::pretool) const LOCAL_SERVICE_PORTS: &[u16] = &[
+    1080, 1086, 1087, 1433, 1521, 2019, 2049, 2181, 2375, 2376, 2379, 2380, 3128, 3306, 3389, 4001,
+    4243, 4444, 4646, 4723, 4781, 5037, 5432, 5433, 5555, 5672, 5984, 6379, 6380, 6443, 6463, 7474,
+    7687, 7890, 7891, 7897, 8001, 8086, 8118, 8123, 8200, 8384, 8500, 8888, 8889, 9000, 9001, 9042,
+    9050, 9090, 9092, 9150, 9200, 9222, 9229, 9300, 9515, 10000, 10808, 10809, 11211, 11434, 15000,
+    15672, 26257, 33060,
+];
+
+/// Services whose components bind a whole block of loopback ports: VNC and
+/// X11 displays, the kubelet, and MongoDB.
+const LOCAL_SERVICE_RANGES: &[std::ops::RangeInclusive<u16>] =
+    &[5900..=5910, 6000..=6063, 10248..=10256, 27017..=27019];
+
+/// Whether `port` belongs to one of those services.
+pub(in crate::pretool) fn local_service_port(port: u16) -> bool {
+    LOCAL_SERVICE_PORTS.contains(&port)
+        || LOCAL_SERVICE_RANGES
+            .iter()
+            .any(|range| range.contains(&port))
+}
 
 /// The approval center's default port and the range it falls back through.
 const GUARD_DAEMON_PORTS: std::ops::RangeInclusive<u16> = 4781..=5780;

@@ -1,5 +1,6 @@
 //! Seatbelt composition for `workspace-contained-v1`, kept apart from
 //! `compose_macos_profile` so the existing profile bytes stay fixed.
+use super::super::workspace_grant::GrantRules;
 use super::*;
 use crate::harness_config_names::{
     GITHUB_AGENT_DIRECTORIES, HARNESS_CONFIG_FILES, HARNESS_DIRECTORIES, HARNESS_INSTRUCTION_FILES,
@@ -293,6 +294,17 @@ pub(super) fn compose(
     system_roots: &[PathBuf],
     files: &[PathBuf],
 ) -> Result<String, RestrictedPytestError> {
+    compose_with(input, system_roots, files, &GrantRules::default())
+}
+
+/// `compose` plus a local CLI grant's checked rules, which never follow the
+/// credential denials.
+pub(super) fn compose_with(
+    input: &Input,
+    system_roots: &[PathBuf],
+    files: &[PathBuf],
+    grant: &GrantRules,
+) -> Result<String, RestrictedPytestError> {
     let workspace = &input.workspace;
     if !workspace.is_absolute() || !input.private_root.is_absolute() {
         return Err(invalid());
@@ -304,7 +316,11 @@ pub(super) fn compose(
         .transpose()?;
     // The only read grants a workspace run takes beyond the system and its
     // toolchain are scripts the command launches, each one regular file.
-    if input.read_only_roots.iter().any(|root| {
+    let mut scripts = input
+        .read_only_roots
+        .iter()
+        .filter(|r| !grant.reads.contains(*r));
+    if scripts.any(|root| {
         !root.is_absolute()
             || root.starts_with(workspace)
             || !std::fs::symlink_metadata(root).is_ok_and(|meta| meta.file_type().is_file())
@@ -323,6 +339,8 @@ pub(super) fn compose(
     ]);
     extra_reads.extend(input.exec_roots.iter().cloned());
     extra_reads.extend(input.read_only_roots.iter().cloned());
+    let mut writable = vec![workspace.clone(), input.private_root.clone()];
+    writable.extend(grant.writes.iter().cloned());
     let mut roots = vec![workspace.clone(), input.private_root.clone()];
     roots.extend(linked.map(|linked| linked.checkout().to_path_buf()));
     roots.extend_from_slice(system_roots);
@@ -344,7 +362,13 @@ pub(super) fn compose(
     metadata.extend(existing(ROOT_LINKS));
     let mut files = files.to_vec();
     files.extend(existing(TOOLCHAIN_FILES));
-    let mut executable = vec![workspace.clone()];
+    // A toolchain that links a binary and then runs it — `go test`, a cgo
+    // build, a compiled test runner — writes it into the private directory
+    // the plan gives the run for temporary files. That directory is the run's
+    // own and already writable, as the workspace is, and the workspace is
+    // executable too, so running what this command itself just built reaches
+    // nothing the command could not already run.
+    let mut executable = vec![workspace.clone(), input.private_root.clone()];
     executable.extend(linked.map(|linked| linked.checkout().to_path_buf()));
     executable.extend(existing(&["/bin", "/usr/bin"]));
     executable.extend(input.exec_roots.iter().cloned());
@@ -383,7 +407,7 @@ pub(super) fn compose(
         ),
         format!(
             "(allow file-write* {} (literal \"/dev/null\"))",
-            filter(&[workspace.clone(), input.private_root.clone()], "subpath")
+            filter(&writable, "subpath")
         ),
         // Moving the workspace itself would put it beyond every rule below.
         format!(
@@ -461,6 +485,7 @@ pub(super) fn compose(
         input.cwd.to_str(),
         home.as_deref(),
     )));
+    lines.extend(grant.network.iter().cloned());
     // Last, so no earlier allow can reopen a credential for reading or writing.
     for pattern in patterns() {
         lines.push(regex_rule("file-read* file-write*", &pattern));

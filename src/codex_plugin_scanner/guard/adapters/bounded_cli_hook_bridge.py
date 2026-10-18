@@ -138,7 +138,7 @@ def _isolated_bounded_hook_command(
     return (interpreter, "-I", str(script_path.resolve(strict=False)))
 
 
-def bounded_cli_hook_command(
+def bounded_cli_hook_command(  # NOSONAR(S8495) an argv whose length depends on the launcher
     *,
     python_executable: str,
     package_root: Path,

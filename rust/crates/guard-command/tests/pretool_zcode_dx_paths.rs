@@ -33,6 +33,7 @@ fn decide(tool: &str, input: serde_json::Value, home: &Path, cwd: &Path) -> Stri
                 cdpath_unset: false,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
                 ripgrep_config_absent: false,
                 psql_environment: Default::default(),
@@ -161,6 +162,81 @@ fn tool_bin_directories_list_metadata_only() {
         "ls -la ~/.local/bin/../share/data",
         "cat ~/.bun/bin/bun",
     ] {
+        assert_ne!(shell(denied, &home, &cwd), "allow", "{denied}");
+    }
+}
+
+/// Before running a CLI an agent asks which bin directory holds it, naming
+/// every candidate in one `ls`. Most of those names do not exist, and the
+/// system prefixes sit outside the workspace, so the probe used to pause.
+#[test]
+fn a_cli_presence_probe_lists_every_candidate_bin_directory() {
+    let root = fixture("bin-probe");
+    let home = root.join("home");
+    let cwd = home.join("work");
+    std::fs::create_dir_all(&cwd).unwrap();
+    for directory in [
+        ".bun/bin",
+        ".cargo/bin",
+        ".local/bin",
+        ".npm-global/bin",
+        "go/bin",
+    ] {
+        std::fs::create_dir_all(home.join(directory)).unwrap();
+    }
+    write(home.join(".local/bin/alohajet"), "binary");
+    write(home.join(".ssh/id_rsa"), "key");
+    for allowed in [
+        "ls /usr/bin/alohajet ~/.local/bin/alohajet ~/.npm-global/bin/alohajet ~/go/bin/alohajet",
+        "ls -la ~/.bun/bin/alohajet ~/.cargo/bin/alohajet",
+        "ls /usr/bin/env",
+        "ls /usr/bin",
+        "ls ~/.npm-global/bin ~/go/bin",
+        // A deeper name is not a bin listing, but naming what is not there
+        // under a directory a listing may already name prints only an error.
+        "ls /usr/bin/x/y",
+    ] {
+        assert_eq!(shell(allowed, &home, &cwd), "allow", "{allowed}");
+    }
+    for denied in [
+        // A probe reaches no further than the bin directory it names.
+        "ls /usr/bin/../../etc/passwd",
+        "ls /usr/bin/../etc",
+        // The screens on the named child hold whether or not it exists.
+        "ls ~/.local/bin/id_rsa",
+        "ls ~/.npm-global/.npmrc",
+        "cat ~/.local/bin/alohajet",
+    ] {
+        assert_ne!(shell(denied, &home, &cwd), "allow", "{denied}");
+    }
+}
+
+/// The prefixes a probe names are the ones a tool could be installed into,
+/// not the ones this machine has, and a bin directory reached through a link
+/// is still the directory it resolves to.
+#[test]
+fn a_probe_takes_the_prefixes_this_machine_does_not_have() {
+    let root = fixture("bin-probe-absent");
+    let home = root.join("home");
+    let cwd = home.join("work");
+    std::fs::create_dir_all(&cwd).unwrap();
+    std::fs::create_dir_all(home.join(".local/bin")).unwrap();
+    write(home.join(".local/bin/alohajet"), "binary");
+    // A tool root this home does not hold, named beside one it does.
+    for allowed in [
+        "ls ~/.local/bin/alohajet ~/.npm-global/bin/alohajet ~/go/bin/alohajet",
+        "ls ~/.cargo/bin",
+        "ls ~/.deno/bin/deno",
+        // A merged-`/usr` system reaches `/usr/bin` through `/bin`, which is
+        // the same system bin directory under either spelling.
+        "ls /bin/alohajet",
+    ] {
+        assert_eq!(shell(allowed, &home, &cwd), "allow", "{allowed}");
+    }
+    // A link at a tool root that redirects the listing into a key directory.
+    write(home.join(".ssh/bin/alohajet"), "binary");
+    std::os::unix::fs::symlink(home.join(".ssh"), home.join(".deno")).unwrap();
+    for denied in ["ls ~/.deno/bin", "ls ~/.deno/bin/alohajet"] {
         assert_ne!(shell(denied, &home, &cwd), "allow", "{denied}");
     }
 }

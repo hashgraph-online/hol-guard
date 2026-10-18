@@ -126,7 +126,14 @@ def test_an_ordinary_review_keeps_its_text(tmp_path: Path, monkeypatch: pytest.M
 
 
 @pytest.mark.parametrize(
-    "reason_code", ["native_network_review", "native_package_review", "native_file_read_review", None]
+    "reason_code",
+    [
+        "native_network_review",
+        "native_package_review",
+        "native_file_read_review",
+        "native_workspace_containment_required",
+        None,
+    ],
 )
 def test_a_review_with_a_risk_signal_is_never_setup(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason_code: str | None
@@ -146,6 +153,50 @@ def test_a_review_with_a_risk_signal_is_never_setup(
         )
         is None
     )
+
+
+@pytest.mark.parametrize(
+    "reason_code", ["native_command_review_required", "native_workspace_containment_executable_outside_roots"]
+)
+def test_an_unrecognised_command_asks_for_its_connector(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason_code: str
+) -> None:
+    monkeypatch.setattr(
+        "codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", lambda **_kwargs: _CONNECTOR
+    )
+
+    assert (
+        native_review_connector.native_review_setup_connector(
+            object(),
+            payload={"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)},
+            native_result={**_native_review(), "reason_code": reason_code},
+            workspace=tmp_path,
+            home_dir=None,
+        )
+        == _CONNECTOR
+    )
+
+
+def test_the_lookup_uses_the_path_the_agent_runs_with(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: list[object] = []
+
+    def lookup(**kwargs: object) -> SetupConnector:
+        seen.append(kwargs["path"])
+        return _CONNECTOR
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.local_cli_hook.local_cli_setup_connector", lookup)
+    payload = {"tool_name": "Bash", "tool_input": {"command": "lanectl status"}, "cwd": str(tmp_path)}
+
+    for stamped in ({"path": "/home/dev/.local/bin:/usr/bin"}, {"path": "bad\0path"}, None):
+        native_review_connector.native_review_setup_connector(
+            object(),
+            payload={**payload, "guard_execution_environment": stamped},
+            native_result=_native_review(),
+            workspace=tmp_path,
+            home_dir=None,
+        )
+
+    assert seen == ["/home/dev/.local/bin:/usr/bin", None, None]
 
 
 def test_a_failed_lookup_leaves_an_ordinary_review(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

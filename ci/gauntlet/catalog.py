@@ -14,6 +14,10 @@ from .remote_code import REMOTE_CODE_CASES
 from .supply_chain import PACKAGE_BLOCK_REASONS
 
 CATALOG = Path(__file__).with_name("scenarios.json")
+# Connector setup cases: an additive catalog, like the approve-then-retry lane's, so the omp
+# runner and the installed lane never meet an oracle they cannot judge.
+CONNECTOR_CATALOG = Path(__file__).with_name("connector_setup.json")
+CONNECTOR_SETUP_ORACLES = frozenset({"connector-setup", "connector-setup-ask"})
 WATCH_COMMAND = "python -I -S -c 'print(\"ordinary-watch-fixture\")'"
 WATCH_OUTPUT = "ordinary-watch-fixture"
 _WINDOWS_DRIVE_PATH = re.compile(r"[A-Za-z]:\\.+")
@@ -109,7 +113,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
         )
         if scenario.id in ids or re.fullmatch(r"[a-z][a-z0-9-]{0,79}", scenario.id) is None:
             raise ValueError("duplicate or invalid Gauntlet scenario id")
-        if scenario.expectation not in {"allow", "block"}:
+        if scenario.expectation not in {"allow", "block", "setup"}:
             raise ValueError("invalid scenario expectation")
         if scenario.oracle not in {
             "settings-task",
@@ -126,6 +130,9 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "native-tools",
             "full-task",
             "approved-retry",
+            "connector-setup",
+            "connector-setup-ask",
+            "connector-tool",
         }:
             raise ValueError(f"unknown oracle: {scenario.oracle}")
         if (
@@ -145,6 +152,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             scenario.expectation != "allow" or scenario.required_tools != ("bash",) or "core" in scenario.profiles
         ):
             raise ValueError("approve-then-retry cases are allow-only shell cases and never join the core profile")
+        _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])
         if (scenario.oracle == "blocked-package") != (scenario.id in PACKAGE_BLOCK_REASONS):
@@ -170,6 +178,23 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
     if not scenarios:
         raise ValueError("empty Gauntlet catalog")
     return tuple(scenarios)
+
+
+def _validate_connector(scenario: Scenario) -> None:
+    """A connector case names exactly one connector: one command or one ``mcp__`` tool."""
+    mcp = [tool for tool in scenario.required_tools if tool.startswith("mcp__")]
+    if (scenario.oracle in CONNECTOR_SETUP_ORACLES) != (scenario.expectation == "setup"):
+        raise ValueError("setup expectation and connector-setup oracle go together")
+    if scenario.oracle in CONNECTOR_SETUP_ORACLES and len(scenario.commands) + len(mcp) != 1:
+        raise ValueError("connector-setup cases name one command or one MCP tool")
+    if scenario.oracle == "connector-tool" and (
+        scenario.expectation != "allow" or scenario.commands or len(mcp) != 1 or len(scenario.required_tools) != 1
+    ):
+        raise ValueError("connector-tool cases are allow-only and name one MCP tool")
+    if (scenario.oracle in CONNECTOR_SETUP_ORACLES or scenario.oracle == "connector-tool") and (
+        "core" in scenario.profiles
+    ):
+        raise ValueError("connector cases run in their own profile, never the core one")
 
 
 def catalog_digest(path: Path = CATALOG) -> str:

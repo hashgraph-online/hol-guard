@@ -88,6 +88,13 @@ pub(crate) fn evaluate_mcp_tool_policy_decide_request(
     match decide(request) {
         Ok(decision) => {
             let mut payload = decision.to_value();
+            let connector =
+                crate::mcp_tool_policy_connector::connector_setup(&request.subject, &decision);
+            if let (Some(connector), Some(object)) = (connector, payload.as_object_mut()) {
+                // Present only for a non-recognition review; every other
+                // payload is byte-for-byte what it was.
+                object.insert("connector_setup".to_owned(), connector);
+            }
             if let (Some(input), Some(object)) = (&request.proxy, payload.as_object_mut()) {
                 object.insert(
                     "proxy".to_owned(),
