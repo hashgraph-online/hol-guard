@@ -24,6 +24,17 @@ fn runners_of_installed_project_tools_run_in_the_workspace_sandbox() {
         // fetches nothing.
         "npx --yes vite build",
         "npx -y vite build",
+        // Offline and cache-first runs fetch less than the prompt options
+        // above, and printing less changes nothing the sandbox weighs.
+        "npx --offline vite build",
+        "npx --prefer-offline vitest run",
+        "npx --prefer-online vite build",
+        "npx --quiet vite build",
+        "npx -q vite build",
+        "npx --silent vitest run",
+        "npx -s vite build",
+        "npx -- vite build",
+        "npx --offline -- vite build",
         "cd app && npx tsc --noEmit",
     ] {
         let got = reason("omp", command, &ws, true);
@@ -46,11 +57,22 @@ fn runners_that_could_fetch_a_package_keep_their_review() {
         "npx --yes vite@5.0.0 build",
         "bunx -y vite build",
         "npx --package=left-pad vite build",
+        // An option that reaches past the project's own install, or that
+        // hands the runner a program of its own, is not one of these.
+        "npx --offline cowsay hi",
+        "npx --ignore-existing vite build",
+        "npx -c \"vite build\"",
+        "npx -- cowsay hi",
         "npx ./node_modules/.bin/vite build",
         "bun x vite build && npx cowsay hi",
         "cd app && npx vite build",
         "bun add left-pad",
         "bun install left-pad",
+        // A manager's own local verb beside a runner proves nothing about
+        // the package the runner fetches.
+        "npm test && npx cowsay hi",
+        "npm run build && bunx serve .",
+        "pnpm test && npx --yes left-pad",
     ] {
         let got = reason("omp", command, &ws, true);
         assert_ne!(got, CONTAINED, "{command}");

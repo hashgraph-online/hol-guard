@@ -98,20 +98,90 @@ def _tool_entry(name: str, cwd: Path, workspace: Path) -> tuple[Path, str]:
     return nearest_project_root(cwd, workspace, "node_modules/" + first) / "node_modules", first
 
 
+# Subcommands pnpm and Yarn classic run themselves. Both only fall back to a
+# manifest script when the bare word is not one of their own, so a project that
+# defines a `check` or `exec` script does not change what `yarn check` or
+# `pnpm exec` runs. `test` and `start` are left out: those two are the script.
+_MANAGER_SUBCOMMANDS = frozenset(
+    {
+        "add",
+        "audit",
+        "autoclean",
+        "bin",
+        "cache",
+        "check",
+        "config",
+        "create",
+        "dedupe",
+        "deploy",
+        "dlx",
+        "doctor",
+        "env",
+        "exec",
+        "fetch",
+        "generate-lock-entry",
+        "global",
+        "help",
+        "i",
+        "import",
+        "info",
+        "init",
+        "install",
+        "licenses",
+        "link",
+        "list",
+        "login",
+        "logout",
+        "ls",
+        "node",
+        "outdated",
+        "owner",
+        "pack",
+        "patch",
+        "pkg",
+        "policies",
+        "prune",
+        "publish",
+        "rebuild",
+        "remove",
+        "rm",
+        "root",
+        "run",
+        "server",
+        "setup",
+        "store",
+        "tag",
+        "team",
+        "unlink",
+        "unplug",
+        "up",
+        "update",
+        "upgrade",
+        "upgrade-interactive",
+        "version",
+        "versions",
+        "why",
+        "whoami",
+        "workspace",
+        "workspaces",
+    }
+)
+
+
 def _script_task(manager: str, args: Sequence[str]) -> str | None:
-    """The lint/typecheck/build script a package-manager command names.
+    """The script a package-manager command names.
 
     npm and Bun need the explicit `run`. pnpm and Yarn also run a script named
     directly, and a project that documents `pnpm lint` or `yarn build` means
-    the same script, so both spellings resolve the same way here.
+    the same script, so both spellings resolve the same way here. The name the
+    project chose decides nothing: the body behind it still has to be one of
+    the tools below, in a mode that only reports.
     """
     if len(args) == 2 and args[0] == "run":
-        task = args[1]
-    elif len(args) == 1 and manager in {"pnpm", "yarn"}:
-        task = args[0]
-    else:
-        return None
-    return task if task in {"lint", "typecheck", "build"} else None
+        return args[1]
+    if len(args) == 1 and manager in {"pnpm", "yarn"} and args[0] not in _MANAGER_SUBCOMMANDS:
+        return args[0]
+    return None
 
 
 def _package_directory(directory: Path, workspace: Path) -> bool:
@@ -310,9 +380,7 @@ def prepare_restricted_node_tool(
     elif name in {"bun", "npm", "pnpm", "yarn"}:
         task = _script_task(name, args)
         if task is None:
-            raise RestrictedPytestError(
-                "node_tool_invalid_command", "Only direct lint/typecheck scripts are supported."
-            )
+            raise RestrictedPytestError("node_tool_invalid_command", "Only a single named package script is supported.")
         if sys.platform == "win32":
             raise RestrictedPytestError(
                 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Package scripts do not run contained on Windows yet."

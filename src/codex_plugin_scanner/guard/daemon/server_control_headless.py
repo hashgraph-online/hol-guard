@@ -434,7 +434,20 @@ class _HeadlessRoutes:
         if not include or api is None:
             return with_approval_extension_recommendation(approval, registry=None, snapshot=None, include=False)
         registry, snapshot = api.recommendation_inputs()
-        hint = self._daemon_server().store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
-        return with_approval_extension_recommendation(
+        store = self._daemon_server().store
+        hint = store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        payload = with_approval_extension_recommendation(
             {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
         )
+        from ..approval_gate import public_config
+        from .approval_connector_recommendation import safe_connector_recommendation
+
+        connector = safe_connector_recommendation(
+            {**approval, "extension_allow_hint": hint},
+            store=store,
+            snapshot=snapshot,
+            approval_gate_configured=lambda: (gate := public_config(store.guard_home)).configured and gate.enabled,
+        )
+        if connector is not None:
+            payload["connector_recommendation"] = connector
+        return payload

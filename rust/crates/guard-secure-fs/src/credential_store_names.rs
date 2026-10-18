@@ -302,18 +302,59 @@ fn documentation_name(name: &str) -> bool {
         .any(|suffix| name.ends_with(suffix))
 }
 
-/// Whether the file sits in a directory a tool keeps its programs in.
+/// Whether the file sits in a directory a tool keeps its programs in, holding
+/// something other than the tool's own readable source.
 ///
 /// `~/.bun/bin/bun` is an executable, not content a task reads: its bytes are
 /// a program, and a listing already answers the question an agent actually
-/// asks there, which is whether the tool is installed. The install roots this
-/// screen would otherwise open (`~/.cargo/bin`, `~/.local/bin`) are also where
-/// a link can point somewhere else entirely, so the directory keeps its review
-/// and the metadata screen keeps the benign half. A subdirectory of one holds
-/// the same thing a level down (`~/.local/bin/helpers/run`), so every parent
-/// is read rather than only the one the file sits in.
-fn program_directory(parents: &[String]) -> bool {
-    parents.iter().any(|name| name == "bin" || name == "sbin")
+/// asks there, which is whether the tool is installed. A name carrying no
+/// source extension is that case, so the directory keeps its review and the
+/// metadata screen keeps the benign half. A subdirectory of one holds the
+/// same thing a level down (`~/.local/bin/helpers/run`), so every parent is
+/// read rather than only the one the file sits in.
+///
+/// A tool ships readable programs there too. `~/.alohajet/bin/cdp-shim.js` is
+/// a wrapper script the tool installed, the same text as the file one
+/// directory over in `~/.alohajet/lib`, which this screen already reads; the
+/// name that holds it is not what makes it content. In a shared drawer the
+/// directory is nobody's install: `~/.local/bin` is where the user keeps
+/// their own commands, so a script written there keeps its review.
+fn program_directory(parents: &[String], name: &str) -> bool {
+    parents.iter().any(|part| part == "bin" || part == "sbin")
+        && (shared_command_drawer(parents) || !crate::source_path::source_extension(name))
+}
+
+/// Roots shared by every tool, per [`tool_root_depth`]. Nothing below them
+/// belongs to the tool that reads it: `~/.local/bin` is where the user keeps
+/// their own commands, so a `bin` at any depth under one of these is a drawer
+/// rather than an install the tool owns.
+const SHARED_COMMAND_ROOTS: [&str; 2] = [".local", ".config"];
+
+/// Hidden directories a package manager installs other people's programs
+/// into. `cargo install`, `bun add -g` and `deno install` each write a third
+/// party's command into the `bin` directly below the root, so a script there
+/// is no more the manager's own source than one the user dropped in
+/// `~/.local/bin`.
+///
+/// Only that one directory. Deeper down is the package content the manager
+/// unpacked, where `bin` names the package's own entry point:
+/// `~/.cargo/registry/src/index.crates.io/serde-1.0.0/src/bin/cli.rs` is a
+/// crate's source and `~/.bun/install/global/node_modules/pkg/bin/cli.js` is
+/// an installed package's file, both of which this screen reads already one
+/// directory over.
+const PACKAGE_COMMAND_ROOTS: [&str; 4] = [".bun", ".cargo", ".deno", ".npm-global"];
+
+/// Whether a program directory sits below a drawer shared by every tool
+/// rather than inside the directory of the tool that installed it.
+fn shared_command_drawer(parents: &[String]) -> bool {
+    let Some(first) = parents.first().map(String::as_str) else {
+        return false;
+    };
+    SHARED_COMMAND_ROOTS.contains(&first)
+        || PACKAGE_COMMAND_ROOTS.contains(&first)
+            && parents
+                .get(1)
+                .is_some_and(|directory| directory == "bin" || directory == "sbin")
 }
 
 /// How deep the directory a tool owns sits below the home directory.
@@ -369,7 +410,7 @@ pub fn hidden_content_read_allowed(lowered: &[String]) -> bool {
         && !name.starts_with('.')
         && !curated_tree_owns(parents)
         && !tool_configuration_slot(parents, name)
-        && !program_directory(parents)
+        && !program_directory(parents, name)
         && !names_hold_credential_store(lowered)
         && !secret_bearing_file_name(name)
 }

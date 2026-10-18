@@ -11,6 +11,7 @@ import {
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  readJson,
   preferredPackageScriptExtension,
   seenSuggestionMeta,
   suggestedCustomExtensions,
@@ -404,4 +405,12 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
   }
   assert.match(requested, /\/v1\/local-clis\/forget$/);
   await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}
+
+{
+  const failure = (status: number, body: unknown) => readJson(new Response(JSON.stringify(body), { status }));
+  await assert.rejects(failure(401, { error: "unauthorized" }), /could not confirm this dashboard session\. Reload this page/);
+  await assert.rejects(failure(401, { error: "unauthorized", message: " " }), /could not confirm this dashboard session/);
+  await assert.rejects(failure(409, { error: "revision_conflict", message: "Reload first." }), /Reload first\./);
+  await assert.rejects(failure(500, { error: "internal" }), /could not update this custom extension/);
 }

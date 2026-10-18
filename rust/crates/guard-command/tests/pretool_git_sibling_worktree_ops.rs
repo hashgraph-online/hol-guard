@@ -181,6 +181,8 @@ fn fetch_inside_a_linked_sibling_worktree_is_quiet() {
         ),
         format!("cd {linked} && git fetch origin main"),
         format!("git -C {primary} fetch origin main 2>&1 | tail -2"),
+        // A dry run reports the same refresh and updates no ref.
+        format!("cd {linked} && git fetch --dry-run origin main"),
     ] {
         assert_allow_at(&session, &session.org, &command, REFRESH);
     }

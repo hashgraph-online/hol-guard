@@ -53,7 +53,7 @@ pub(super) fn write_hooks(
         (&"branch", rest) => branch_rename(rest).then_some(BRANCH_HOOKS),
         (&"merge", rest) => merge::merge(rest).then_some(merge::HOOKS),
         (&"cherry-pick", rest) => merge::cherry_pick(rest).then_some(merge::HOOKS),
-        (&"rebase", rest) => rebase::resume(rest).then_some(rebase::HOOKS),
+        (&"rebase", rest) => (rebase::resume(rest) || rebase::start(rest)).then_some(rebase::HOOKS),
         (&"stash", [action, rest @ ..]) if *action == "list" => {
             stash_list(rest).then_some(LIST_HOOKS)
         }

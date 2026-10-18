@@ -9,8 +9,7 @@
 //! that fails, fails closed with the reason that command printed, and nothing
 //! runs outside the sandbox except the `git init` a plan bootstraps.
 //!
-//! Rust owns every verdict here: the receipt comes from the resident, the
-//! plan and the sandbox profile from the restricted-execution operations.
+//! Rust owns every verdict: the resident's receipt, the operations' plan.
 
 use std::collections::BTreeMap;
 use std::io::Write;
@@ -21,6 +20,8 @@ use serde_json::{json, Map, Value};
 
 #[path = "contained_workspace_sink_denial.rs"]
 mod denial;
+#[path = "contained_workspace_sink_grant.rs"]
+mod grant;
 #[path = "contained_workspace_sink_plan.rs"]
 mod plan_check;
 #[path = "contained_workspace_sink_process.rs"]
@@ -45,8 +46,11 @@ pub(crate) const WORKSPACE_PROFILE: &str = "workspace-contained-v1";
 /// shape stays with `guard execute-contained-test`.
 pub(crate) const PUBLISH_REASON: &str = concat!(
     "HOL Guard runs the checks in this command in a protected workspace sandbox ",
-    "(no network, no home access), then runs the Git steps that follow once it ",
-    "proves them again."
+    "(no network, no home access, no PTY or Docker socket), then runs the Git ",
+    "steps that follow directly, outside the sandbox, once it proves them again. ",
+    "Every program the checks start, including children of an interpreter, runs ",
+    "contained and can write only the workspace, $TMPDIR and a private ",
+    "scratch $HOME.",
 );
 const AUTHORIZATION_FAILED: &str = "contained_run_authorization_failed";
 const AUTHORIZATION_MESSAGE: &str = "Guard could not authorize this contained run.";
@@ -55,7 +59,7 @@ const SANDBOX_UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const RECEIPT_ONLY_FIELD: &str = "guard_containment_receipt_only";
 const PLAN_MISMATCH: &str = "The workspace sandbox plan does not match the authorized command.";
 const INVALID_PLAN: &str = "Invalid workspace sandbox plan.";
-const PLAN_FIELDS: [&str; 18] = [
+const PLAN_FIELDS: [&str; 20] = [
     "profile_version",
     "backend",
     "backend_executable",
@@ -74,6 +78,8 @@ const PLAN_FIELDS: [&str; 18] = [
     "prefix_command",
     "native_suffix",
     "denied_capabilities",
+    "grant_identity_hash",
+    "capabilities",
 ];
 /// The reasons a restricted-execution operation may fail with by name.
 const NATIVE_REASONS: [&str; 10] = [
@@ -292,19 +298,31 @@ fn run_workspace_contained(
         .filter(|(name, _)| name.starts_with("GIT_CONFIG") || name == "XDG_CONFIG_HOME")
         .map(|(name, value)| (name, Value::String(value)))
         .collect();
-    let plan = native(
-        "prepare_workspace_contained",
-        json!({
-            "text": command,
-            "workspace": authority.workspace,
-            "cwd": authority.workspace,
-            "platform": HOST_PLATFORM,
-            "home": home,
-            "git_environment": git_environment,
-            "publish_suffix": false,
-        }),
+    let store = grant::request(
+        &authority.arguments.guard_home,
+        &home,
+        &authority.workspace,
+        command,
     )?;
-    let plan = validated_plan(plan, command, &authority.workspace)?;
+    let decided = grant::decided(&store)?;
+    let mut input = json!({
+        "text": command,
+        "workspace": authority.workspace,
+        "cwd": authority.workspace,
+        "platform": HOST_PLATFORM,
+        "home": home,
+        "git_environment": git_environment,
+        "publish_suffix": false,
+    });
+    let expected = match &decided {
+        Some(decided) => {
+            input["grant"] = grant::prepare_input(decided);
+            Some(grant::expected(decided, &home)?)
+        }
+        None => None,
+    };
+    let plan = native("prepare_workspace_contained", input)?;
+    let plan = validated_plan(plan, command, &authority.workspace, expected.as_ref())?;
     // A second receipt taken after planning must still bind the same evidence.
     let second = authority
         .authorize(payload)
@@ -319,6 +337,7 @@ fn run_workspace_contained(
             "The command evidence changed before launch.",
         ));
     }
+    grant::unchanged(&decided, grant::decided(&store))?;
     let exec_roots = plan_paths(&plan.exec_roots)?;
     let write_denials = plan_paths(&plan.write_denials)?;
     let private = PrivateRoot::create().ok_or_else(|| {
@@ -328,14 +347,17 @@ fn run_workspace_contained(
         )
     })?;
     signals.clean_up(private.path.clone());
+    grant::link_state(&private.path, expected.as_ref(), &plan.capabilities)?;
     let launch = Launch {
         plan: &plan,
         workspace,
         workspace_text: &authority.workspace,
+        home: &home,
         private: &private,
         exec_roots: &exec_roots,
         write_denials: &write_denials,
         signals,
+        loopback: grant::LoopbackNote::new(&store, decided.as_ref()),
     };
     if let Some(prefix) = &plan.prefix {
         // `prefix && git init && rest`: a failed prefix ends the command.

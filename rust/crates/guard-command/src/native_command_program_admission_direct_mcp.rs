@@ -69,7 +69,7 @@ fn reserved_direct_mcp_command(value: &str) -> bool {
 }
 
 /// Canonical, portable basename; catalog selection never authenticates a binary.
-pub(super) fn valid_direct_mcp_command(value: &str) -> bool {
+pub(in crate::native_command_program) fn valid_direct_mcp_command(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 128
         && ![".exe", ".cmd", ".bat"]

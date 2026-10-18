@@ -668,8 +668,10 @@ dependencies = [
  "caseless",
  "fancy-regex 0.19.2",
  "flate2",
+ "fs2",
  "getrandom 0.3.4",
  "guard-command-build",
+ "guard-contained-process",
  "guard-contracts",
  "guard-runtime-windows-process",
  "guard-scanner",
@@ -692,8 +694,12 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "tempfile",
  "time",
  "toml 0.8.23",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-language",
  "unicode-normalization",
  "ureq",
  "url",
@@ -708,6 +714,7 @@ dependencies = [
  "base64ct",
  "caseless",
  "fancy-regex 0.19.2",
+ "fs2",
  "getrandom 0.3.4",
  "guard-contracts",
  "guard-runtime-windows-process",
@@ -729,6 +736,9 @@ dependencies = [
  "serde_json",
  "sha2",
  "toml 0.9.12+spec-1.1.0",
+ "tree-sitter",
+ "tree-sitter-bash",
+ "tree-sitter-language",
  "unicode-normalization",
  "ureq",
  "url",
@@ -791,6 +801,14 @@ dependencies = [
  "hex",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "guard-pack-compiler"
+version = "0.1.0"
+dependencies = [
+ "guard-command-build",
+ "serde_json",
 ]
 
 [[package]]
@@ -2033,6 +2051,7 @@ version = "1.0.151"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -2170,6 +2189,12 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
 
 [[package]]
 name = "subtle"
@@ -2402,6 +2427,36 @@ name = "toml_writer"
 version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7d56353a2a665ad0f41a421187180aab746c8c325620617ad883a99a1cbe66d2"
+
+[[package]]
+name = "tree-sitter"
+version = "0.25.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+dependencies = [
+ "cc",
+ "regex",
+ "regex-syntax",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-bash"
+version = "0.25.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e5ec769279cc91b561d3df0d8a5deb26b0ad40d183127f409494d6d8fc53062"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4013970217383f67b18aef68f6fb2e8d409bc5755227092d32efb0422ba24b8"
 
 [[package]]
 name = "typenum"

@@ -18,6 +18,7 @@ from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario
 from .cleanup import cleanup_case_resources
+from .connector_fixtures import CONNECTOR_PROFILE, connector_checks, stage_connector_case, state_digest
 from .evidence import sha256_bytes
 from .extension_adapters import configure_extension_permission_denial, extension_adapter
 from .fixtures import (
@@ -134,6 +135,7 @@ def run_harness_case(
         "transcript": {"calls": [], "terminal": False},
     }
     daemon = None
+    connector = None
     seed: CredentialSeed | None = None
     started = time.monotonic()
     replacements = _fixture_replacements(fixture)
@@ -168,6 +170,9 @@ def run_harness_case(
                 # Reviewing ordinary commands is this lane's point: the approve-then-retry
                 # path has no other way in, because a hard block never queues an approval.
                 case["review_policy"] = write_review_config(guard_home)
+            if CONNECTOR_PROFILE in scenario.profiles:
+                connector = stage_connector_case(scenario.oracle, fixture.root, fixture.home, guard_home, harness)
+                connector_state = state_digest(connector.state_dir)
             daemon = probe._start_installed_daemon(
                 guard_home=guard_home,
                 home=fixture.home,
@@ -213,6 +218,8 @@ def run_harness_case(
             )
             if scenario.oracle == "blocked-extension" or scenario.id in BUSINESS_CLI_CASES | GITHUB_STUB_CASES:
                 environment["PATH"] = str(fixture.root / "bin") + os.pathsep + environment["PATH"]
+            if connector is not None:
+                environment["PATH"] = connector.path_prefix + environment["PATH"]
             keep_login_shell_path(fixture.home, environment["PATH"])
             spec.prepare_context(fixture.workspace, context)
             command = spec.command(
@@ -222,6 +229,7 @@ def run_harness_case(
                 context=context,
                 workspace=fixture.workspace,
                 model=model,
+                mcp_config=connector.mcp_configs[0] if connector is not None else None,
             )
             # The approve-then-retry lane needs a second phase: an operator granting the
             # review row while the agent is still running, so the agent issues its own retry.
@@ -265,6 +273,8 @@ def run_harness_case(
             case["credential_write_back_error"] = type(exc).__name__
         finally:
             case["filesystem"] = filesystem_checks(fixture, scenario.oracle, scenario.id)
+            if connector is not None:
+                case["filesystem"].update(connector_checks(connector, connector_state))
             remove_scratch_checkout(fixture.root)
             if daemon is not None:
                 case.update(cleanup_case_resources(daemon, identity, guard_home, private))

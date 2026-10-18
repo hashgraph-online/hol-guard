@@ -10,10 +10,13 @@ pure function of its query.
 from __future__ import annotations
 
 import json
+import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
+from ..blocked_request_mode import connector_setup_reason
 from ..models import GuardArtifact
 from ..native_context import _MCP_RISK_CATEGORIES
 from ..native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_mcp_proxy_decide
@@ -21,6 +24,20 @@ from ..native_mcp_tool_evidence import risk_input
 
 _UNAVAILABLE = "native_mcp_arguments_projection_unavailable"
 _MEMO_SIZE = 8
+_SAFE_NAME = re.compile(r"[A-Za-z0-9@][A-Za-z0-9._@+/-]{0,63}")
+
+
+def connector_agent_text(connector_setup: Mapping[str, object], *, ask: bool) -> str:
+    """Agent text for a call held only because its MCP server was never set up.
+
+    The default mode carries no link and no request to ask the user; ``ask``
+    mode says the setup waits in the inbox and the caller adds the link.
+    """
+
+    name = connector_setup.get("name")
+    plain = name.strip() if isinstance(name, str) else ""
+    shown = plain if _SAFE_NAME.fullmatch(plain) else "this MCP server"
+    return connector_setup_reason(shown, "mcp", ask=ask)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,12 +99,15 @@ def review_artifact_payload(
     *,
     policy_action: str,
     scanner_evidence: tuple[dict[str, object], ...] = (),
+    connector_setup: Mapping[str, object] | None = None,
 ) -> dict[str, Any]:
     """The evaluation item a queued ``tools/call`` is written to the inbox with.
 
     Includes browser intent metadata when the MCP tool call is a browser
     automation call (HGBM063-HGBM065). ``projection`` is the call projected
-    with its artifact.
+    with its artifact. A ``connector_setup`` call joins its server's
+    ``connector:`` group; the queue adds the row's own action digest, so only
+    identical calls merge and every row is still written.
     """
 
     changed_fields: list[str] = ["runtime_tool_call"]
@@ -110,6 +130,8 @@ def review_artifact_payload(
         payload["browser_intent"] = projection.browser_intent
     if scanner_evidence:
         payload["scanner_evidence"] = list(scanner_evidence)
+    if connector_setup is not None:
+        payload["queue_group_id"] = connector_setup["queue_group_id"]
     return payload
 
 

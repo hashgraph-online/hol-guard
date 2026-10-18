@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -109,6 +110,20 @@ def _child_python_environment() -> dict[str, str]:
     return environment
 
 
+def _corpus_failure_detail(stderr: str) -> str:
+    # The coordinator wraps a worker's exception and stack. Preserve the last
+    # numeric progress record for each known phase after clipping that stack.
+    progress: dict[str, str] = {}
+    pattern = (
+        r"corpus_phase (?:native-batch|resident-projection) batch=[0-9]+ "
+        r"(?:started|elapsed=[0-9]+(?:\.[0-9]+)?)(?: total=[0-9]+(?:\.[0-9]+)?)?"
+    )
+    for match in re.finditer(pattern, stderr):
+        record = match.group(0)[:160]
+        progress[record.split()[1]] = record
+    return "\n".join([stderr[-1200:], *progress.values()])
+
+
 def _run_corpus(repo_root: Path) -> dict[str, object]:
     bindings = _validate_corpus_bindings(repo_root)
     native_root = Path(str(distribution("hol-guard").locate_file("codex_plugin_scanner/_native")))
@@ -136,7 +151,7 @@ def _run_corpus(repo_root: Path) -> dict[str, object]:
         raise InstalledCanaryError("Installed native corpus exceeded its time limit") from exc
     if completed.returncode != 0:
         raise InstalledCanaryError(
-            f"Installed native corpus failed (exit {completed.returncode}): {completed.stderr[-1200:]}"
+            f"Installed native corpus failed (exit {completed.returncode}): {_corpus_failure_detail(completed.stderr)}"
         )
     try:
         decoded = json.loads(completed.stdout)

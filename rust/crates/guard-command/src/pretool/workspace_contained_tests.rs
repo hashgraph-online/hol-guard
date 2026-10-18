@@ -389,6 +389,27 @@ pub(super) fn host() -> bool {
     crate::pretool::workspace_contained::sandbox_available()
 }
 
+/// The host `PATH`, led by a Node the sandbox may run. Hosted runners keep
+/// Node where the sandbox will not execute from, so a version manager's
+/// directory under `home` stands in for it.
+#[cfg(unix)]
+fn path_with_node(home: &Path) -> String {
+    use std::os::unix::fs::PermissionsExt;
+    let bin = home.join(".nvm/versions/node/v25.2.1/bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    for name in ["node", "npm"] {
+        let tool = bin.join(name);
+        std::fs::write(&tool, "#!/bin/sh\nexit 0\n").unwrap();
+        std::fs::set_permissions(&tool, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    format!("{}:{}", bin.display(), std::env::var("PATH").unwrap())
+}
+
+#[cfg(not(unix))]
+fn path_with_node(_home: &Path) -> String {
+    std::env::var("PATH").unwrap()
+}
+
 #[test]
 fn a_linked_worktree_contains_everything_but_git() {
     let root = std::env::temp_dir().join(format!("guard-ws-{}-linked", std::process::id()));
@@ -520,7 +541,7 @@ fn recursive_removal_runs_in_the_sandbox_only_for_ignored_or_missing_targets() {
     std::fs::write(repo.join("src/a.ts"), "1").unwrap();
     let (home, repo) = (home.canonicalize().unwrap(), repo.canonicalize().unwrap());
     let environment = guard_contracts::GuardExecutionEnvironmentV1 {
-        path: std::env::var("PATH").unwrap(),
+        path: path_with_node(&home),
         environment_names: vec!["GIT_CONFIG_NOSYSTEM".into()],
         environment_digest: "0".repeat(64),
         home: home.to_str().map(str::to_owned),

@@ -221,31 +221,32 @@ fn snapshot_budget_fails_closed() {
 }
 
 #[test]
-fn hardlinked_files_fail_closed() {
+fn hardlinked_files_are_left_out_of_the_snapshot() {
     let (_directory, workspace) = workspace();
     let outside = tempfile::tempdir().unwrap();
     let secret = outside.path().join("credentials");
     fs::write(&secret, "linked-sentinel").unwrap();
     fs::hard_link(&secret, workspace.join("notes.txt")).unwrap();
-    let cancel = AtomicBool::new(false);
+    let snapshot = tempfile::tempdir().unwrap();
     let withhold = |_: &Path| false;
-    let result = run_readonly_snapshot(ReadonlySnapshotRun {
-        workspace: &workspace,
-        cwd: &workspace,
-        executable: Path::new(r"C:\Windows\System32\cmd.exe"),
-        arguments: &[],
-        environment: &[],
+    let limits = Limits {
         withhold: &withhold,
+        skip_linked: true,
         max_entries: 100,
         max_bytes: 1024 * 1024,
-        output_cap: 1024,
-        deadline: Instant::now() + Duration::from_secs(60),
-        cancel: &cancel,
-        job_limits: Default::default(),
-        build: None,
-        stage_executable: false,
-    });
-    assert!(result.is_err());
+    };
+    let source = Directory::open(&workspace).unwrap();
+    copy_tree(
+        &source,
+        Path::new("."),
+        snapshot.path(),
+        &limits,
+        &mut Budget::default(),
+    )
+    .unwrap();
+    assert!(snapshot.path().join("visible.txt").is_file());
+    assert!(snapshot.path().join("nested").join("inner.txt").is_file());
+    assert!(!snapshot.path().join("notes.txt").exists());
 }
 
 fn node_on_path() -> Option<PathBuf> {

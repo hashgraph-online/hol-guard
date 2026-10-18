@@ -16,14 +16,13 @@ from ..daemon.diagnostics import DaemonDiagnostics
 from ..daemon.hook_availability_policy import availability_harness_response
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.hook_worker import HookWorker
-from ..daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from ..native_hook_adapter import hook_adapter_memo
+from ..native_hook_evidence_writer import NativeHookEvidenceWriter
 from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
 from ..store import GuardStore
 from .commands_hook_native_availability import _native_unavailable_exit_code
 from .commands_support_interaction import _emit
 
-_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS = 0.25
 _DIAGNOSTIC_DRAIN_TIMEOUT_SECONDS = 0.25
 
 
@@ -66,16 +65,13 @@ def try_native_hook_authority(
     events still return ``None`` for their compatibility handlers.
     """
     worker: HookWorker | None = None
-    evidence_writer: RuntimeHookEvidenceWriter | None = None
     try:
         # Short-lived CLI hooks publish and await the resident-ACKed policy
         # snapshot themselves; with no Python fallback, a missing snapshot must
-        # not silently downgrade a hook to a fail-safe allow. Teardown drains
-        # the writer independently of the native decision result.
-        evidence_writer = RuntimeHookEvidenceWriter(store=store)
+        # not silently downgrade a hook to a fail-safe allow.
         worker = HookWorker(
             store=store,
-            activity_writer=evidence_writer,
+            activity_writer=NativeHookEvidenceWriter(store=store),
         )
         if pipeline is not None:
             return pipeline(worker)
@@ -110,11 +106,10 @@ def try_native_hook_authority(
             close = getattr(worker, "close", None)
             if callable(close):
                 close()
-        if evidence_writer is not None:
-            # A one-shot hook must not hold the harness response open for
-            # control-plane persistence. Persistence is best effort; the
-            # security result is already returned and never depends on it.
-            _ = evidence_writer.stop(timeout_seconds=_NATIVE_RECEIPT_DRAIN_TIMEOUT_SECONDS)
+        # The writer belongs to the resident, not to this process, so a
+        # one-shot hook never stops it: the records it handed over are
+        # persisted after this process exits, and stopping the writer here
+        # would drain and drop one the next hook would have to rebuild.
 
 
 def _log_worker_exception(error: BaseException, *, harness: str) -> None:

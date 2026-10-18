@@ -132,6 +132,7 @@ pub(crate) fn build_artifact(
         tool_description: stripped.map(|text| json!(text)),
         tool_names: None,
         tool_names_camel: None,
+        skill_content: None,
     };
     let evidence = evaluate_firewall_evidence(&firewall)?;
     match evidence.get("metadata_patch") {

@@ -13,6 +13,7 @@ members = [
     "crates/guard-secure-fs",
     "crates/guard-hook-core",
     "crates/guard-policy-snapshot",
+    "crates/guard-pack-compiler",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
     "crates/guard-runtime-windows-process",

@@ -13,6 +13,13 @@ from codex_plugin_scanner.guard.daemon import hook_native_review_approval as rev
 from codex_plugin_scanner.guard.local_cli_hook import SetupConnector
 
 
+@pytest.fixture(autouse=True)
+def _no_connector_context(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These fakes have no store file; the context write has its own tests."""
+
+    monkeypatch.setattr(review, "record_native_review_connector_context", lambda *_a, **_k: None)
+
+
 class _Store:
     guard_home = Path("/nonexistent-guard-home")
 
@@ -109,7 +116,7 @@ def _queue(
         "native_review_policy_binding": lambda **_k: None,
         "native_review_binding": lambda *_a, **_k: "binding",
         "native_exact_action": lambda **_k: (None, None),
-        "native_review_extension_allow_hint": lambda *_a, **_k: None,
+        "native_review_hint": lambda *_a, **_k: None,
         "_native_review_action_envelope": lambda **_k: {},
     }.items():
         monkeypatch.setattr(review, name, value)

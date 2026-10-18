@@ -21,6 +21,14 @@ use std::path::{Path, PathBuf};
 #[path = "glob_expand.rs"]
 mod glob_expand;
 
+#[path = "literal_bracket.rs"]
+mod literal_bracket;
+
+use literal_bracket::inert_bracket_class;
+pub(in crate::pretool) use literal_bracket::{
+    safe_literal_bracket_read_target, safe_literal_bracket_search_target, safe_literal_bracket_tree,
+};
+
 const MAX_WALK_ENTRIES: usize = 10_000;
 const MAX_WALK_DEPTH: usize = 64;
 const MAX_GLOB_MATCHES: usize = 256;
@@ -145,19 +153,6 @@ fn safe_walk_target(
     )
 }
 
-/// A recursive `ls` operand that the shell passes through literally. Only
-/// bracket characters may differ from an ordinary bounded target.
-pub(in crate::pretool) fn safe_literal_bracket_tree(
-    value: &str,
-    context: ReadContext<'_>,
-    recursive: bool,
-) -> bool {
-    let Some(root) = checked_directory(value, context) else {
-        return false;
-    };
-    !recursive || walk(root, &[], &[], false, false)
-}
-
 /// A glob operand that is expanded here, component by component. Every
 /// match must be a non-hidden directory entry that clears the same screens as
 /// a literal operand, and recursive listings walk each matched directory.
@@ -188,8 +183,9 @@ pub(in crate::pretool) fn safe_glob_operand(
 /// through literally, so `ls app/[slug]` lists the Next.js route directory
 /// named `[slug]`; zsh's `nomatch` fails the command instead. The literal
 /// directory must clear the quoted-literal screens. A class that could match
-/// a leading dot under `dotglob`, including through a range, does not qualify,
-/// nor does syntax this matcher would close at the wrong `]`.
+/// a leading dot under `dotglob` does not qualify, nor does one holding a
+/// range, whose ends the shell compares in the locale's collating sequence,
+/// nor syntax this matcher would close at the wrong `]`.
 ///
 /// A `*` or `?` operand qualifies when the strict expansion proves that it
 /// matches nothing under any shell option: the program then receives either
@@ -213,10 +209,7 @@ pub(in crate::pretool) fn safe_unmatched_glob_operand(
             && glob_expand::expand_glob_matches_strict(value, context)
                 .is_some_and(|matches| matches.is_empty());
     }
-    !value.contains(['*', '?', '!'])
-        && !super::glob_class::bracket_fallback_unsafe(value)
-        && expand_glob_matches(value, context).is_some_and(|matches| matches.is_empty())
-        && safe_literal_bracket_tree(value, context, recursive)
+    inert_bracket_class(value, context) && safe_literal_bracket_tree(value, context, recursive)
 }
 
 /// Content-search glob operand: every match is walked, and matches inside an

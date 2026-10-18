@@ -5,7 +5,8 @@ name: Extension artifact regen
 # published here after merges so contribution PRs never conflict on them.
 #
 # Compatibility copies remain tracked while existing PRs and readers migrate.
-# This workflow never commits generated files or opens regeneration PRs.
+# Generated catalog projections never enter contribution branches or PRs.
+# A separate delivery branch contains only the advisory root pointer.
 
 permissions:
   contents: read
@@ -20,6 +21,7 @@ on:
       - rust/**
       - contracts/extensions/**
       - contracts/mcp-servers/**
+      - contracts/catalog-delivery/**
       - src/codex_plugin_scanner/guard/**
       - scripts/refresh_extension_artifacts.py
       - scripts/build_native_command_program.py
@@ -28,6 +30,16 @@ on:
       - scripts/render_command_extension_directory.py
       - scripts/extension_artifact_bundle.py
       - scripts/publish_extension_snapshot.py
+      - scripts/build_native_command_packs.py
+      - scripts/command_compiler_receipt.py
+      - scripts/command_pack_*.py
+      - scripts/build_extension_delivery.py
+      - scripts/extension_delivery_*.py
+      - scripts/extension_pack_*.py
+      - scripts/publish_extension_delivery.py
+      - scripts/reconcile_extension_delivery_claims.py
+      - pyproject.toml
+      - uv.lock
       - scripts/extension_claim_provenance.py
       - scripts/extension_claim_authority.py
       - scripts/extension_claim_github_history.py
@@ -37,6 +49,9 @@ on:
       - docs/guard/extensions/contributing.md
       - .github/workflows/extension-artifact-regen.yml
   workflow_dispatch:
+  schedule:
+    # Renew authenticated metadata without requiring a contribution or code edit.
+    - cron: "23 6 * * *"
 
 # Serialize publication without cancelling an active upload. Every retained
 # run publishes the exact commit that triggered it.
@@ -75,34 +90,66 @@ jobs:
         run: uv sync --frozen --extra dev
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal
-      - name: Generate and verify current artifacts
-        run: uv run --no-sync python scripts/refresh_extension_artifacts.py
-      - name: Build the immutable snapshot
+      - name: Cache the data-free native compiler
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          shared-key: extension-pack-compiler
+      - name: Cache integrity-checked public metadata
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .extension-delivery-cache/metadata
+          key: extension-delivery-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: extension-delivery-metadata-
+      - name: Build immutable public directory and policy packs
         env:
           SOURCE_SHA: ${{ github.sha }}
+          PUBLICATION_ID: ${{ github.run_id }}.${{ github.run_attempt }}
           GH_TOKEN: ${{ github.token }}
-        run: uv run --no-sync python scripts/extension_artifact_bundle.py --source-sha "$SOURCE_SHA" --output extension-snapshot --resolve-claimants
-      - name: Attest the immutable snapshot
+        run: uv run --no-sync python scripts/build_extension_delivery.py --source-sha "$SOURCE_SHA" --publication-id "$PUBLICATION_ID" --output extension-distribution --resolve-claimants --reuse-current --metadata-cache .extension-delivery-cache/metadata
+      - name: Select bounded attestation subjects
+        id: subjects
+        run: |
+          {
+            echo 'paths<<SUBJECTS'
+            echo extension-distribution/extension-distribution.v2.json
+            if [ -f extension-distribution/legacy/extension-artifacts.v1.json ]; then
+              echo extension-distribution/legacy/extension-artifacts.v1.json
+              echo extension-distribution/legacy/extension-artifacts.zip
+            elif [ -f extension-distribution/legacy/extension-artifacts.unavailable.v1.json ]; then
+              echo extension-distribution/legacy/extension-artifacts.unavailable.v1.json
+            fi
+            echo SUBJECTS
+          } >> "$GITHUB_OUTPUT"
+      - name: Attest the immutable distribution
         id: provenance
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
         with:
-          subject-path: extension-snapshot/*
+          subject-path: ${{ steps.subjects.outputs.paths }}
       - name: Retain release provenance
         env:
           PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
-        run: cp "$PROVENANCE_BUNDLE" extension-snapshot/extension-artifacts.intoto.jsonl
+        run: |
+          cp "$PROVENANCE_BUNDLE" extension-distribution/extension-distribution.intoto.jsonl
+          if [ -d extension-distribution/legacy ]; then
+            cp "$PROVENANCE_BUNDLE" extension-distribution/legacy/extension-artifacts.intoto.jsonl
+          fi
       - name: Retain verified snapshot evidence
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: extension-artifacts-${{ github.sha }}
-          path: extension-snapshot/
+          path: |
+            extension-distribution/extension-distribution.v2.json
+            extension-distribution/extension-distribution.intoto.jsonl
+            extension-distribution/compilation-report.json
           if-no-files-found: error
           retention-days: 14
-      - name: Publish immutable public snapshot
+      - name: Publish complete immutable distribution and compatibility snapshot
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.sha }}
-        run: uv run --no-sync python scripts/publish_extension_snapshot.py --source-sha "$SOURCE_SHA" --directory extension-snapshot
+          PUBLICATION_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+        run: uv run --no-sync python scripts/publish_extension_delivery.py --source-sha "$SOURCE_SHA" --publication-id "$PUBLICATION_ID" --directory extension-distribution
 
   claim-notice-plan:
     needs: regen
@@ -120,6 +167,16 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked provenance verifier
+        run: uv sync --frozen --extra dev
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: extension-artifacts-${{ github.sha }}
@@ -130,7 +187,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ github.sha }}
         run: |
-          pending=$(python3 scripts/reconcile_extension_claim_notices.py --directory extension-snapshot --source-sha "$SOURCE_SHA" --plan)
+          pending=$(uv run --no-sync python scripts/reconcile_extension_delivery_claims.py --directory extension-snapshot --source-sha "$SOURCE_SHA")
           echo "pull_requests=$pending" >> "$GITHUB_OUTPUT"
 
   claim-notices:

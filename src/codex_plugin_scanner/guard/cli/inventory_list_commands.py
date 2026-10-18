@@ -2,7 +2,10 @@
 
 ``extensions list`` reads the inventory table fleet posture reports from, so what it
 prints is what Guard can send to Guard Cloud. ``mcp list`` reads the connector store
-the Protect page reads, so the two always agree. Nothing is written and nothing is sent.
+the Protect page reads, so the two always agree. Before it reads, ``mcp list`` records
+which harness configs declare each server (and a remote server's endpoint), as
+``hol-guard apps`` does; a server first seen through its tool calls would otherwise
+show no endpoint. No grant changes and nothing is sent.
 """
 
 from __future__ import annotations
@@ -15,6 +18,7 @@ from ..runtime.connector_setup_items import connector_setup_href, connector_setu
 from ..runtime.fleet_posture_inventory import reportable_inventory_rows
 
 if TYPE_CHECKING:
+    from ..adapters.base import HarnessContext
     from ..store import GuardStore
 
 # Guard command name -> (parser attribute naming the subcommand, inventory kind, kinds listed).
@@ -116,6 +120,7 @@ def run_inventory_list_command(
     args: argparse.Namespace,
     *,
     store: GuardStore,
+    context: HarnessContext | None = None,
     output_stream: TextIO | None = None,
 ) -> int:
     from .render import emit_guard_payload
@@ -124,6 +129,12 @@ def run_inventory_list_command(
     generated_at = datetime.now(timezone.utc).isoformat()
     if command == "mcp":
         from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+
+        if context is not None:
+            from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+            # Listing changes no grant: record remote declarations only.
+            observe_configured_mcp_servers(store, context=context, seen_at=generated_at, stdio=False)
 
         payload = mcp_list_payload(
             store,

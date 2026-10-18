@@ -26,9 +26,7 @@ _UNQUOTED_EXPANSION = frozenset("$`*?[{")
 _DOUBLE_QUOTED_ESCAPES = frozenset('$`"\\')
 _ARGUMENT_REJECT = frozenset("<>|&;")
 # A final `; echo "<label>$?"`; a label with spaces must be double-quoted.
-_STATUS_ECHO = re.compile(
-    r'[ \t]*;[ \t]*echo[ \t]+(?:"([A-Za-z0-9_=: -]{0,32})\$\?"|([A-Za-z0-9_=:-]{0,32})\$\?)[ \t]*\Z'
-)
+_STATUS_ECHO = re.compile(r';[ \t]*echo[ \t]+(?:"([A-Za-z0-9_=: -]{0,32})\$\?"|([A-Za-z0-9_=:-]{0,32})\$\?)[ \t]*\Z')
 
 
 @dataclass(frozen=True)
@@ -376,7 +374,7 @@ def peel_contained_wrapper(
     """
     status = _STATUS_ECHO.search(command)
     if status is not None:
-        command = command[: status.start()]
+        command = command[: status.start()].rstrip(" \t")
     if (quiet := _QUIET_CD.match(command)) is not None:
         command = quiet.group(1) + command[quiet.end() :]
     home_cd = home is not None and _HOME_CD.match(command) is not None

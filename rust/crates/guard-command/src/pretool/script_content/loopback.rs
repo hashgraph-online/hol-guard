@@ -23,44 +23,29 @@ use super::{
     code_lines, python_network, Entry, Language, PathContext, CREDENTIAL_STORE, NODE_NETWORK,
 };
 
-/// Loopback services this grant must never reach: container and cluster
-/// control planes, service meshes, debuggers, Guard's own approval center,
-/// message brokers, data stores that accept local clients without
-/// credentials, local proxies that would carry traffic off this host,
-/// browser and device automation drivers, remote desktops, and local model
-/// and notebook servers.
-///
-/// The sandbox opens a granted port to the whole process tree as raw outbound
-/// TCP, not as HTTP, so the question each port answers is "could something
-/// under this command speak that service's protocol", not "could an HTTP
-/// request drive it". A smoke test fetching a page it just built reaches none
-/// of them.
-const ADMIN_PORTS: &[u16] = &[
-    1080, 1086, 1087, 1433, 1521, 2019, 2049, 2181, 2375, 2376, 2379, 2380, 3128, 3306, 3389, 4001,
-    4243, 4444, 4646, 4723, 4781, 5037, 5432, 5433, 5555, 5672, 5984, 6379, 6380, 6443, 6463, 7474,
-    7687, 7890, 7891, 7897, 8001, 8086, 8118, 8123, 8200, 8384, 8500, 8888, 8889, 9000, 9001, 9042,
-    9050, 9090, 9092, 9150, 9200, 9222, 9229, 9300, 9515, 10000, 10808, 10809, 11211, 11434, 15000,
-    15672, 26257, 33060,
-];
-/// Services whose components bind a whole block of loopback ports: VNC and
-/// X11 displays, the kubelet, and MongoDB.
-const ADMIN_PORT_RANGES: &[std::ops::RangeInclusive<u16>] =
-    &[5900..=5910, 6000..=6063, 10248..=10256, 27017..=27019];
-
 /// Whether the workspace sandbox may open `port` to the contained tree: a
 /// conventional dev-server port ([`crate::pretool::loopback_ports`]), or one
 /// the agent chose for its own server while Guard's daemon state records
-/// another, that none of these services and no Guard daemon under
-/// `home_dir` may answer on.
+/// another, that no local service ([`crate::pretool::loopback_ports`]) and no
+/// Guard daemon under `home_dir` may answer on.
 ///
 /// Ports below 1024 are refused as a class: every one of them belongs to a
 /// registered service, and a dev server an agent starts to smoke-test its own
 /// page binds none of them without privilege it does not have here.
+///
+/// The sandbox opens a granted port to the whole process tree as raw outbound
+/// TCP, not as HTTP, so the question each service port answers is "could
+/// something under this command speak that protocol", not "could an HTTP
+/// request drive it". A smoke test fetching a page it just built reaches none
+/// of them.
 fn grantable(port: u16, home_dir: Option<&str>) -> bool {
+    use crate::pretool::loopback_ports::{
+        chosen_server_port, dev_server_port, local_service_port, LOCAL_SERVICE_PORTS,
+    };
     port >= 1024
-        && !ADMIN_PORT_RANGES.iter().any(|range| range.contains(&port))
-        && (crate::pretool::loopback_ports::dev_server_port(port, ADMIN_PORTS, home_dir)
-            || crate::pretool::loopback_ports::chosen_server_port(port, ADMIN_PORTS, home_dir))
+        && !local_service_port(port)
+        && (dev_server_port(port, LOCAL_SERVICE_PORTS, home_dir)
+            || chosen_server_port(port, LOCAL_SERVICE_PORTS, home_dir))
 }
 
 /// HTTP module members that open no connection of their own.

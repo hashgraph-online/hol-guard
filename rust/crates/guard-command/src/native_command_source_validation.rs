@@ -48,7 +48,7 @@ fn known_subset(values: &[String], owners: &[String]) -> bool {
     unique(values) && values.iter().all(|value| owners.contains(value))
 }
 
-fn validate(document: &SourceDocument, mcp: bool) -> Result<(), &'static str> {
+pub(super) fn validate(document: &SourceDocument, mcp: bool) -> Result<(), &'static str> {
     if document.schema != SOURCE_SCHEMA {
         return Err("command_source_version_unsupported");
     }
@@ -276,6 +276,18 @@ pub(super) fn validate_relationships(
     mcp_ids: &BTreeSet<&str>,
 ) -> Result<(), &'static str> {
     if documents.is_empty() || documents.len() > 512 {
+        return Err("command_source_catalog_bounds_invalid");
+    }
+    validate_pack_relationships(documents, mcp_ids)
+}
+
+// The legacy complete-program count is not a limit on the release directory.
+// Each pack still passes the existing bounded compiler and native admission.
+pub(super) fn validate_pack_relationships(
+    documents: &[SourceDocument],
+    mcp_ids: &BTreeSet<&str>,
+) -> Result<(), &'static str> {
+    if documents.is_empty() {
         return Err("command_source_catalog_bounds_invalid");
     }
     let mut extensions = BTreeMap::new();

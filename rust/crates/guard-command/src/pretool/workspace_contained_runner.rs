@@ -11,10 +11,22 @@ use std::path::Path;
 
 /// Runner options that neither name a package nor allow a fetch.
 const RUNNER_OPTIONS: &[&str] = &["--no-install", "--bun"];
-/// `npx` options that only answer its install prompt in advance. They allow a
-/// fetch of a tool that is missing, never of one installed where it runs, and
-/// only an installed tool is admitted here. Bun's runners are not given them.
-const NPX_PROMPT_OPTIONS: &[&str] = &["--yes", "-y"];
+/// `npx` options that only decide how a tool that is missing would be
+/// fetched: they answer its install prompt in advance, or choose between the
+/// cache and the registry. None of them names a package, and only a tool
+/// already installed where it runs is admitted here, so none of them changes
+/// the program that runs. Bun's runners are not given them.
+const NPX_FETCH_OPTIONS: &[&str] = &[
+    "--yes",
+    "-y",
+    "--no",
+    "--offline",
+    "--prefer-offline",
+    "--prefer-online",
+];
+
+/// `npx` options that change only what the runner prints.
+const NPX_REPORTING_OPTIONS: &[&str] = &["--quiet", "-q", "--silent", "-s"];
 
 /// The arguments after the runner itself, when `segment` is one.
 pub(super) fn runner_arguments(segment: &CommandSegmentV1) -> Option<&[String]> {
@@ -55,10 +67,23 @@ pub(super) fn installed_tools(model: &CanonicalCommandV1, workspace: &Path) -> O
             return None;
         }
         let npx = segment.executable.as_deref() == Some("npx");
-        let tool = arguments.iter().find(|argument| {
-            !(RUNNER_OPTIONS.contains(&argument.as_str())
-                || npx && NPX_PROMPT_OPTIONS.contains(&argument.as_str()))
-        })?;
+        let mut words = arguments.iter();
+        // `--` ends the runner's own options, so the word after it is the
+        // tool however it is spelled.
+        let tool = loop {
+            let argument = words.next()?;
+            if argument == "--" {
+                break words.next()?;
+            }
+            if RUNNER_OPTIONS.contains(&argument.as_str())
+                || npx
+                    && (NPX_FETCH_OPTIONS.contains(&argument.as_str())
+                        || NPX_REPORTING_OPTIONS.contains(&argument.as_str()))
+            {
+                continue;
+            }
+            break argument;
+        };
         let bare = !tool.starts_with(['.', '-'])
             && tool
                 .chars()
@@ -111,7 +136,7 @@ pub(in crate::pretool) fn runners_admitted(
     if tools.is_none() && model.segments.iter().any(|s| runner_arguments(s).is_some()) {
         return false;
     }
-    super::package::local_package_work(&model, tools.is_some())
+    super::package::local_package_work(&model, tools.is_some(), workspace)
         && crate::package_intent_parser::parse_package_intent(
             command,
             Some(workspace),

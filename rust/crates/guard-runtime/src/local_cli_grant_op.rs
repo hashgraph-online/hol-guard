@@ -22,6 +22,14 @@ const ROOT_COMMAND_ID: &str = "root";
 const OTHER_COMMAND_ID: &str = "other";
 const PACKAGE_SCRIPT_SURFACE: &str = "package-scripts";
 const MAX_COMMAND_ID_BYTES: usize = 256;
+const CLI_SURFACE: &str = "cli";
+/// Grant capabilities a local CLI connector can hold; a missing row is off.
+const CAPABILITIES: [&str; 3] = ["loopback-network", "state-dir-read", "state-dir-write"];
+
+/// Whether `name` is a grant capability this build knows.
+pub(crate) fn is_capability(name: &str) -> bool {
+    CAPABILITIES.contains(&name)
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum GrantState {
@@ -91,18 +99,25 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
     let Some(identity) = crate::context_digest_local_cli::local_cli_identity(&request.source)
         .map_err(|_| "native_local_cli_grant_identity_invalid")?
     else {
-        return Ok(outcome(GrantState::None, None, None));
+        return Ok(outcome(GrantState::None, None, None, Vec::new()));
     };
-    let reply = |state| outcome(state, Some(&identity.cli_id), Some(&identity.identity_hash));
+    let reply = |state, capabilities| {
+        outcome(
+            state,
+            Some(&identity.cli_id),
+            Some(&identity.identity_hash),
+            capabilities,
+        )
+    };
     if !matches!(
         request.current_action.as_str(),
         "allow" | "review" | "require-reapproval" | "warn"
     ) {
-        return Ok(reply(GrantState::None));
+        return Ok(reply(GrantState::None, Vec::new()));
     }
     let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
     else {
-        return Ok(reply(GrantState::None));
+        return Ok(reply(GrantState::None, Vec::new()));
     };
     let registry_package = matches!(
         request.source,
@@ -115,7 +130,12 @@ fn decide(request: &LocalCliGrantRequestV1) -> Result<Value, &'static str> {
         registry_package,
         request.command_id.as_deref().unwrap_or(OTHER_COMMAND_ID),
     )?;
-    Ok(reply(state))
+    let capabilities = if state == GrantState::Allowed {
+        enabled_capabilities(&connection, &identity.cli_id)?
+    } else {
+        Vec::new()
+    };
+    Ok(reply(state, capabilities))
 }
 
 /// The grant answer the daemon reads for an allowed `PreToolUse` that
@@ -125,12 +145,24 @@ pub(crate) fn decide_allowed_launch(
     source: &LocalCliIdentitySourceV1,
     command_id: Option<&str>,
 ) -> Result<Value, &'static str> {
+    decide_launch(guard_home, "allow", source, command_id)
+}
+
+/// `decide_allowed_launch` for the action the daemon holds the request at:
+/// the review lanes read the same grant, and every action outside
+/// `GRANT_REFINABLE_ACTIONS` answers with no grant.
+pub(crate) fn decide_launch(
+    guard_home: &str,
+    current_action: &str,
+    source: &LocalCliIdentitySourceV1,
+    command_id: Option<&str>,
+) -> Result<Value, &'static str> {
     decide(&LocalCliGrantRequestV1 {
         schema: LOCAL_CLI_GRANT_REQUEST_SCHEMA.to_owned(),
         request_id: String::new(),
         store_path: store_text(guard_home),
         guard_home: guard_home.to_owned(),
-        current_action: "allow".to_owned(),
+        current_action: current_action.to_owned(),
         source: source.clone(),
         command_id: command_id.map(str::to_owned),
     })
@@ -179,12 +211,12 @@ fn store_text(guard_home: &str) -> String {
 pub(crate) fn command_catalog(
     guard_home: &str,
     cli_id: &str,
-) -> Result<(BTreeSet<String>, bool), &'static str> {
+) -> Result<BTreeSet<String>, &'static str> {
     let store_path = local_store_read::require_store_path(&store_text(guard_home), guard_home)
         .map_err(store_error)?;
     let Some(connection) = local_store_read::open_read_only(&store_path).map_err(store_error)?
     else {
-        return Ok((BTreeSet::new(), false));
+        return Ok(BTreeSet::new());
     };
     let mut catalog = BTreeSet::new();
     if table_exists(&connection, "local_cli_command")? {
@@ -203,24 +235,52 @@ pub(crate) fn command_catalog(
             catalog.insert(row.map_err(|_| STORE_UNAVAILABLE)?);
         }
     }
-    let blocked = table_exists(&connection, "local_cli_command_grant")?
-        && connection
-            .query_row(
-                "select exists(select 1 from local_cli_command_grant \
-                 where cli_id = ?1 and state = 'block')",
-                params![cli_id],
-                |row| row.get::<_, bool>(0),
-            )
-            .map_err(|_| STORE_UNAVAILABLE)?;
-    Ok((catalog, blocked))
+    Ok(catalog)
 }
 
-fn outcome(state: GrantState, cli_id: Option<&str>, identity_hash: Option<&str>) -> Value {
+fn outcome(
+    state: GrantState,
+    cli_id: Option<&str>,
+    identity_hash: Option<&str>,
+    capabilities: Vec<String>,
+) -> Value {
     json!({
         "state": state.as_str(),
         "cli_id": cli_id,
         "identity_hash": identity_hash,
+        "capabilities": capabilities,
     })
+}
+
+/// The sorted capabilities switched on for an allowed CLI connector. Other
+/// surfaces, unknown names and non-text cells never count.
+fn enabled_capabilities(
+    connection: &Connection,
+    cli_id: &str,
+) -> Result<Vec<String>, &'static str> {
+    if !table_exists(connection, "local_cli_grant_capability")?
+        || !observed_as_cli(connection, cli_id)?
+    {
+        return Ok(Vec::new());
+    }
+    let mut statement = connection
+        .prepare(
+            "select capability from local_cli_grant_capability \
+             where cli_id = ?1 and typeof(capability) = 'text' \
+             and typeof(state) = 'text' and state = 'on'",
+        )
+        .map_err(|_| STORE_UNAVAILABLE)?;
+    let rows = statement
+        .query_map(params![cli_id], |row| row.get::<_, String>(0))
+        .map_err(|_| STORE_UNAVAILABLE)?;
+    let mut enabled = BTreeSet::new();
+    for row in rows {
+        let name = row.map_err(|_| STORE_UNAVAILABLE)?;
+        if is_capability(&name) {
+            enabled.insert(name);
+        }
+    }
+    Ok(enabled.into_iter().collect())
 }
 
 fn store_error(error: StoreReadError) -> &'static str {
@@ -345,6 +405,30 @@ fn command_state(
         // `review` and anything unknown are not CLI command states.
         _ => CommandState::Inherit,
     })
+}
+
+/// Whether an observation row says `cli_id` is a CLI connector. Unlike
+/// `observation_surface`, a missing row or table is not a CLI: a capability
+/// was written for an observed `cli` surface, so one left without that
+/// observation (a partial salvage) must not widen anything. A store from
+/// before the surface column reads its rows as `cli`.
+fn observed_as_cli(connection: &Connection, cli_id: &str) -> Result<bool, &'static str> {
+    if !table_exists(connection, "local_cli_observation")? {
+        return Ok(false);
+    }
+    let has_surface =
+        local_store_read::column_exists(connection, "local_cli_observation", "surface")
+            .map_err(store_error)?;
+    let query = if has_surface {
+        "select surface from local_cli_observation where cli_id = ?1"
+    } else {
+        "select 'cli' from local_cli_observation where cli_id = ?1"
+    };
+    let surface: Option<String> = connection
+        .query_row(query, params![cli_id], |row| row.get(0))
+        .optional()
+        .map_err(|_| STORE_UNAVAILABLE)?;
+    Ok(surface.as_deref() == Some(CLI_SURFACE))
 }
 
 fn observation_surface(connection: &Connection, cli_id: &str) -> Result<String, &'static str> {

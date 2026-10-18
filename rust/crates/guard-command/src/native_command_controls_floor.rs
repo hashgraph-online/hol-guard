@@ -44,15 +44,7 @@ pub(super) fn rule_floor(rule: &ProgramRule, required: bool) -> &'static str {
 /// Whether the packaged catalog lets `permission_id` proceed while the user
 /// has not set it: enabled by default with an `allow` baseline floor.
 pub(super) fn baseline_allows(program: &NativeCommandProgram, permission_id: &str) -> bool {
-    program
-        .extensions
-        .iter()
-        .flat_map(|extension| &extension.permissions)
-        .any(|permission| {
-            permission.permission_id == permission_id
-                && permission.default_enabled
-                && permission.baseline_floor == "allow"
-        })
+    program.permission_baseline_allows(permission_id)
 }
 
 pub(super) fn rank(action: &str) -> u8 {

@@ -2,9 +2,7 @@ use super::{
     allowed_payload, allowing_lane, deferred, drain, lane, post_tool_payload, prompt_payload,
     run_as, Lane, HOME,
 };
-use crate::hook_direct::pi::{
-    source_ref_external_allowed, structured_mediation, structured_output_unrequired,
-};
+use crate::hook_direct::pi::{resolution, source_ref_external_allowed, structured_mediation};
 use serde_json::{json, Value};
 
 const VECTORS: &str = include_str!("../testdata/hook_direct_pi/pi_vectors.json");
@@ -118,31 +116,36 @@ fn structured_output_view(policy: &str) -> Value {
 }
 
 #[test]
-fn the_resident_answers_only_where_the_daemon_returns_the_edge_unchanged() {
+fn the_resident_resolves_the_bound_view_as_the_daemon_resolves_the_config() {
     let vectors = vectors("structured_output");
     assert!(vectors.iter().any(|vector| vector["view"].is_null()));
     for vector in vectors {
         let harness = vector["harness"].as_str().unwrap();
         let view = &vector["view"];
-        // An unbound view always defers; a bound one answers exactly where
-        // the daemon resolved nothing to mediate.
-        let expected = !view.is_null() && vector["unchanged"].as_bool().unwrap();
+        let policy = &vector["policy"];
+        let Some(resolved) = resolution(harness, (!view.is_null()).then_some(view)) else {
+            // An unbound view resolves to nothing, and the hook defers.
+            assert!(view.is_null(), "{policy} {harness}");
+            continue;
+        };
+        // `unchanged` records that the daemon returned the edge response as
+        // it was, which is exactly where it required no mediation.
         assert_eq!(
-            structured_output_unrequired(harness, (!view.is_null()).then_some(view)),
-            expected,
-            "{} {harness}",
-            vector["policy"]
+            resolved["required"].as_bool() == Some(false),
+            vector["unchanged"].as_bool().unwrap(),
+            "{policy} {harness}"
         );
     }
     // A view that is not `_config_wire`'s shape is not resolved.
     let mut view = structured_output_view("absent");
     view["extra"] = json!(true);
-    assert!(!structured_output_unrequired("pi", Some(&view)));
+    assert!(resolution("pi", Some(&view)).is_none());
     let mut view = structured_output_view("absent");
     view.as_object_mut().unwrap().remove("managed_policy");
-    assert!(!structured_output_unrequired("pi", Some(&view)));
-    assert!(!structured_output_unrequired("pi", Some(&Value::Null)));
-    assert!(!structured_output_unrequired("pi", Some(&json!([]))));
+    assert!(resolution("pi", Some(&view)).is_none());
+    assert!(resolution("pi", Some(&Value::Null)).is_none());
+    assert!(resolution("pi", Some(&json!([]))).is_none());
+    assert!(resolution("pi", None).is_none());
 }
 
 #[test]
@@ -153,6 +156,12 @@ fn a_pi_post_tool_use_is_answered_when_no_mediation_is_required() {
         let result = run_as(&lane, harness, Some(HOME), post_tool_payload(&lane));
         assert_eq!(result["outcome"], "answer", "{harness}: {result}");
         assert_eq!(result["edge"]["event_name"], "PostToolUse", "{harness}");
+        // Nothing is required, so the response carries no mediation at all.
+        assert_eq!(
+            result["edge"]["harness_response"]["structured_content_mediation"],
+            Value::Null,
+            "{harness}"
+        );
         let page = drain(&lane, None);
         let records = page["records"].as_array().unwrap();
         assert_eq!(records.len(), 1, "{harness}");
@@ -237,29 +246,11 @@ fn a_pi_post_tool_use_source_reference_is_reviewed_by_the_resident() {
 }
 
 #[test]
-fn a_pi_post_tool_use_takes_the_daemon_path_when_mediation_may_apply() {
-    for (label, harness, config) in [
-        ("pi-post-unbound", "pi", json!({})),
-        (
-            "pi-post-required",
-            "omp",
-            json!({ "structured_output_config": structured_output_view("active_locked_omp") }),
-        ),
-        (
-            "pi-post-tampered",
-            "pi",
-            json!({ "structured_output_config": structured_output_view("tampered") }),
-        ),
-    ] {
-        let lane = lane(label, config);
-        let result = run_as(&lane, harness, Some(HOME), post_tool_payload(&lane));
-        assert_eq!(
-            deferred(&result),
-            "direct_hook_structured_mediation",
-            "{label}"
-        );
-        assert_eq!(drain(&lane, None)["records"], json!([]), "{label}");
-    }
+fn a_pi_post_tool_use_takes_the_daemon_path_without_a_bound_view() {
+    let unbound = lane("pi-post-unbound", json!({}));
+    let result = run_as(&unbound, "pi", Some(HOME), post_tool_payload(&unbound));
+    assert_eq!(deferred(&result), "direct_hook_structured_mediation");
+    assert_eq!(drain(&unbound, None)["records"], json!([]));
     // Another harness's `PostToolUse` never resolves the view.
     let codex = lane(
         "pi-post-codex",
@@ -267,4 +258,44 @@ fn a_pi_post_tool_use_takes_the_daemon_path_when_mediation_may_apply() {
     );
     let result = run_as(&codex, "codex", Some(HOME), post_tool_payload(&codex));
     assert_eq!(result["outcome"], "answer", "{result}");
+    assert_eq!(
+        result["edge"]["harness_response"]["structured_content_mediation"],
+        Value::Null
+    );
+}
+
+#[test]
+fn a_pi_post_tool_use_the_managed_policy_covers_is_mediated_by_the_resident() {
+    // A `pwd` carries no structured output the resident can prove clean, so
+    // every covered policy withholds it rather than forwarding.
+    for (label, harness, policy) in [
+        ("pi-post-required", "omp", "active_locked_omp"),
+        ("pi-post-tampered", "pi", "tampered"),
+    ] {
+        let config = json!({ "structured_output_config": structured_output_view(policy) });
+        let lane = lane(label, config);
+        let result = run_as(&lane, harness, Some(HOME), post_tool_payload(&lane));
+        assert_eq!(result["outcome"], "answer", "{label}: {result}");
+        let mediation = &result["edge"]["harness_response"]["structured_content_mediation"];
+        assert_eq!(
+            mediation["schema"], "guard-structured-content-mediation.v1",
+            "{label}: {result}"
+        );
+        assert_eq!(mediation["action"], "withhold", "{label}: {result}");
+        assert!(
+            mediation["reason_code"]
+                .as_str()
+                .is_some_and(|reason| reason.starts_with("structured_")),
+            "{label}: {result}"
+        );
+        assert_eq!(mediation["content_sha256"], Value::Null, "{label}");
+        // The evidence the daemon drains carries the mediated response.
+        let page = drain(&lane, None);
+        let records = page["records"].as_array().unwrap();
+        assert_eq!(records.len(), 1, "{label}");
+        assert_eq!(
+            records[0]["harness_response"], result["edge"]["harness_response"],
+            "{label}"
+        );
+    }
 }

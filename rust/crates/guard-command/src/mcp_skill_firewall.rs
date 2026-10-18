@@ -1,26 +1,31 @@
-//! Portal-aligned MCP firewall projection for `mcp_server` and `tool_call`
-//! artifacts.
+//! Portal-aligned firewall projection for `mcp_server`, `tool_call` and
+//! `skill` artifacts.
 //!
 //! Port of `runtime/mcp_skill_firewall.py` (`_firewall_for_mcp_server`,
-//! `_firewall_for_tool_call`, the legacy/portal identity conversions and
-//! `attach_mcp_skill_firewall_metadata`). Identity and descriptor material
-//! comes from `mcp_decision`; this module only composes it. The result is a
-//! metadata patch the caller merges verbatim.
+//! `_firewall_for_tool_call`, `_firewall_for_skill`, the legacy/portal
+//! identity conversions and `attach_mcp_skill_firewall_metadata`). MCP
+//! identity and descriptor material comes from `mcp_decision` and skill
+//! identity from `skill_identity`; this module only composes them. The result
+//! is a metadata patch the caller merges verbatim.
 
 use guard_contracts::{
-    McpFirewallInputV1, McpServerDescriptorRequestV1, McpServerIdentityV1,
+    write_canonical_json, McpFirewallInputV1, McpServerDescriptorRequestV1, McpServerIdentityV1,
     McpToolDescriptorRequestV1, McpToolIdentityV1,
 };
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
+use crate::hook_adapter_pytext::{py_lower, py_prefix_chars};
 use crate::mcp_decision::{
     build_configured_environment_hash, build_mcp_server_identity, build_mcp_tool_identity,
     portal_mcp_server_descriptor, portal_mcp_tool_descriptor, python_strip, McpServerIdentity,
     McpToolIdentity,
 };
+use crate::skill_identity::{build_skill_identity, SkillIdentity};
 use crate::target_identities::{py_str, py_truthy};
 
 const ERR_TYPE: &str = "native_mcp_tool_evidence_unsupported_artifact_type";
+const ERR_DIGEST: &str = "native_mcp_descriptor_digest_unavailable";
 
 type Record = Map<String, Value>;
 
@@ -335,6 +340,75 @@ fn firewall_for_tool_call(input: &McpFirewallInputV1) -> Option<Record> {
     Some(fingerprints(server, vec![tool]))
 }
 
+/// `_descriptor_digest`: the canonical-JSON SHA-256 the context-digest op
+/// returns. Python raises when its resident is unreachable; in-process the
+/// only failure left is material that cannot be canonicalized.
+fn descriptor_digest(material: &Value) -> Result<String, &'static str> {
+    let mut canonical = Vec::with_capacity(256);
+    write_canonical_json(material, &mut canonical).map_err(|_| ERR_DIGEST)?;
+    Ok(hex::encode(Sha256::digest(&canonical)))
+}
+
+/// `_publisher_stable_id`: `None` for a blank publisher.
+fn publisher_stable_id(publisher: Option<&str>) -> Result<Option<String>, &'static str> {
+    let normalized = py_lower(python_strip(publisher.unwrap_or("")));
+    if normalized.is_empty() {
+        return Ok(None);
+    }
+    let digest = descriptor_digest(&Value::String(normalized))?;
+    Ok(Some(format!("publisher:{digest}")))
+}
+
+/// `portal_skill_identity(skill_identity_metadata(identity))`.
+fn portal_skill(identity: &SkillIdentity, publisher: Option<&str>) -> Result<Record, &'static str> {
+    let descriptor_hash = descriptor_digest(&json!({
+        "reference_hashes": identity.reference_hashes,
+        "script_hashes": identity.script_hashes,
+        "template_hashes": identity.template_hashes,
+    }))?;
+    let identity_hash = identity.identity_hash();
+    let stable_id = format!("skill:{}", py_prefix_chars(&identity_hash, 24));
+    let mut out = Record::new();
+    out.insert("dependencyHashes".to_owned(), json!([]));
+    out.insert("descriptorHash".to_owned(), json!(descriptor_hash));
+    out.insert("identityHash".to_owned(), json!(identity_hash));
+    out.insert(
+        "publisherStableId".to_owned(),
+        match publisher_stable_id(publisher)? {
+            Some(value) => Value::String(value),
+            None => Value::Null,
+        },
+    );
+    out.insert("skillHash".to_owned(), json!(identity.skill_hash));
+    out.insert("stableId".to_owned(), json!(stable_id));
+    Ok(out)
+}
+
+/// `_firewall_for_skill`: `None` when Python could not read the document.
+fn firewall_for_skill(input: &McpFirewallInputV1) -> Result<Option<Record>, &'static str> {
+    let Some(content) = input.skill_content.as_deref() else {
+        return Ok(None);
+    };
+    let skill = portal_skill(&build_skill_identity(content), input.publisher.as_deref())?;
+    let mut payload = Record::new();
+    payload.insert("mcpTools".to_owned(), json!([]));
+    payload.insert("skill".to_owned(), Value::Object(skill));
+    Ok(Some(payload))
+}
+
+fn legacy_skill_identity(skill: &Record) -> Value {
+    let get = |key: &str| skill.get(key).cloned().unwrap_or(Value::Null);
+    let dependency_hashes = get("dependencyHashes");
+    json!({
+        "dependency_hashes": if py_truthy(&dependency_hashes) { dependency_hashes } else { json!([]) },
+        "descriptor_hash": get("descriptorHash"),
+        "identity_hash": get("identityHash"),
+        "publisher_stable_id": get("publisherStableId"),
+        "skill_hash": get("skillHash"),
+        "stable_id": get("stableId"),
+    })
+}
+
 fn legacy_server_identity(server: &Record) -> Record {
     let env_keys = string_items(server.get("envKeys"));
     let get = |key: &str| server.get(key).cloned().unwrap_or(Value::Null);
@@ -394,6 +468,12 @@ fn metadata_patch(firewall: Record) -> Record {
             );
         }
     }
+    if let Some(Value::Object(skill)) = firewall.get("skill") {
+        patch.insert(
+            "mcp_skill_identity".to_owned(),
+            legacy_skill_identity(skill),
+        );
+    }
     patch.insert("mcpSkillFirewall".to_owned(), Value::Object(firewall));
     patch
 }
@@ -403,6 +483,7 @@ pub fn evaluate_firewall_evidence(input: &McpFirewallInputV1) -> Result<Value, &
     let firewall = match input.artifact_type.as_str() {
         "mcp_server" => firewall_for_mcp_server(input),
         "tool_call" => firewall_for_tool_call(input),
+        "skill" => firewall_for_skill(input)?,
         _ => return Err(ERR_TYPE),
     };
     Ok(json!({ "metadata_patch": firewall.map(metadata_patch) }))

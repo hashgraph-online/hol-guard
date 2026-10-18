@@ -34,6 +34,17 @@ pub(crate) fn evaluate(
     if request.consume_one_shot || request.local_once_only {
         return Err(ERR_INVALID.to_owned());
     }
+    if let Some(grant) = &groups.local_tool_grant {
+        if !groups.groups.is_empty()
+            || groups.reuse.is_some()
+            || groups.runtime.is_some()
+            || groups.portable_workspace.is_some()
+            || groups.memory.is_some()
+        {
+            return Err(ERR_INVALID.to_owned());
+        }
+        return crate::policy_lookup_local_tool_grant::evaluate(request, grant);
+    }
     if let Some(runtime) = &groups.runtime {
         if !groups.groups.is_empty()
             || groups.reuse.is_some()
@@ -161,7 +172,7 @@ where
         let mut lookups = Vec::with_capacity(ids.len());
         for id in ids {
             let mut probe_at = |at: Option<&str>| probe(id, hash, at);
-            let lookup = candidate(portable, workspace, &mut probe_at)?;
+            let lookup = compose_portable(portable, workspace, &mut probe_at)?;
             let disabled = lookups.is_empty() && remembered_rules_disabled(&lookup);
             lookups.push(lookup);
             if disabled {
@@ -183,8 +194,10 @@ pub(crate) fn remembered_rules_disabled(lookup: &Value) -> bool {
             == Some(&json!("disabled_degraded"))
 }
 
-/// One candidate, with the portable Git-workspace authority composed in.
-fn candidate(
+/// One candidate, with the portable Git-workspace authority composed in. The
+/// consuming lookup (`policy_lookup_portable`) composes its previews the same
+/// way, so the two paths share one reading of the composition.
+pub(crate) fn compose_portable(
     portable: Option<&str>,
     workspace: Option<&str>,
     probe: &mut dyn FnMut(Option<&str>) -> Result<Value, String>,

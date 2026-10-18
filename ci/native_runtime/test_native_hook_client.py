@@ -295,3 +295,38 @@ def test_native_hook_client_restart_budget_opens_circuit(
     )
     assert blocked.returncode != 0
     assert b"native_resident_restart_circuit_open" in blocked.stderr
+
+
+@pytest.mark.skipif(os.name == "nt", reason="flock-based owner lock probe is POSIX only")
+def test_foreign_resident_owner_never_spends_the_restart_budget(
+    native_runtime: tuple[Path, Path],
+) -> None:
+    import fcntl
+
+    runtime, state_dir = native_runtime
+    request = _request(runtime, state_dir.parent)
+    assert _result(_invoke(runtime, state_dir, request))["minimum_action"] == "allow"
+    _terminate_state_process(_state_files(state_dir)[-1])
+    # Another Guard install's resident holds the home-wide owner lock.
+    with (state_dir / "managed-resident-owner.v1.lock").open("r+b") as owner:
+        deadline = time.monotonic() + 5
+        while True:
+            try:
+                fcntl.flock(owner.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                assert time.monotonic() < deadline, "terminated resident kept the owner lock"
+                time.sleep(0.05)
+        for _attempt in range(4):
+            blocked = subprocess.run(
+                (str(runtime), "hook-client", "--stdin", str(state_dir)),
+                input=request,
+                check=False,
+                capture_output=True,
+                timeout=10,
+            )
+            assert blocked.returncode != 0
+            assert b"native_resident_owner_busy" in blocked.stderr
+            assert b"native_resident_restart_circuit_open" not in blocked.stderr
+    recovered = _invoke(runtime, state_dir, request)
+    assert _result(recovered)["minimum_action"] == "allow"

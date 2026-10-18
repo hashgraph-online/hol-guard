@@ -4,95 +4,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
 from typing import cast
 
-from .runtime.composio_discovery import ComposioActionSchema
 from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
-from .runtime.observed_mcp_tools import ObservedMcpTool
 
 _MAX_ACTIONS = 10_000
 _MAX_BYTES = 2_000_000
-
-
-def write_composio_metadata(
-    connection: sqlite3.Connection,
-    source: ObservedMcpTool,
-    actions: tuple[ComposioActionSchema, ...],
-    *,
-    cli_id: str,
-    seen_at: str,
-    before_authority_change: Callable[[], None] = lambda: None,
-) -> bool:
-    identity_hash = source.server_identity.identity_hash
-    observation = connection.execute(
-        "select identity_hash, server_command from local_cli_observation where cli_id = ? and surface = 'mcp'",
-        (cli_id,),
-    ).fetchone()
-    if observation is None or observation[0] != identity_hash or observation[1] != source.server_identity.command:
-        raise ValueError("provider metadata connection changed")
-    authority_changed = False
-    for action in actions:
-        raw = json.dumps(action.input_schema, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-        authority_hash = sha256(
-            json.dumps(
-                {"toolkit": action.toolkit, "tool_slug": action.tool_slug, "input_schema": action.input_schema},
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=True,
-                allow_nan=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        previous = connection.execute(
-            "select revision, authority_hash, full_schema from local_mcp_provider_action "
-            "where cli_id = ? and identity_hash = ? and provider = 'composio' and tool_slug = ?",
-            (cli_id, identity_hash, action.tool_slug),
-        ).fetchone()
-        revision = (
-            1
-            if previous is None
-            else previous[0] + int(previous[1] != authority_hash or previous[2] != int(action.full_schema))
-        )
-        if previous is None or revision != previous[0]:
-            authority_changed = True
-        connection.execute(
-            """insert into local_mcp_provider_action
-            (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json,
-             authority_hash, full_schema, source_tool, revision, updated_at)
-            values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict(cli_id, identity_hash, provider, tool_slug) do update set
-            toolkit = excluded.toolkit, description = excluded.description,
-            input_schema_json = excluded.input_schema_json, authority_hash = excluded.authority_hash,
-            full_schema = excluded.full_schema, source_tool = excluded.source_tool,
-            revision = excluded.revision, updated_at = excluded.updated_at""",
-            (
-                cli_id,
-                identity_hash,
-                action.tool_slug,
-                action.toolkit,
-                action.description,
-                raw,
-                authority_hash,
-                int(action.full_schema),
-                source.qualified_name,
-                revision,
-                seen_at,
-            ),
-        )
-    count, size = connection.execute(
-        "select count(*), coalesce(sum(length(cast(input_schema_json as blob)) "
-        "+ length(cast(description as blob))), 0) "
-        "from local_mcp_provider_action where cli_id = ? and identity_hash = ?",
-        (cli_id, identity_hash),
-    ).fetchone()
-    if count > _MAX_ACTIONS or size > _MAX_BYTES:
-        raise ValueError("provider metadata catalog capacity exceeded")
-    if authority_changed:
-        before_authority_change()
-        rebuild_provider_authority(connection, cli_id, identity_hash)
-    return authority_changed
 
 
 def rebuild_provider_authority(connection: sqlite3.Connection, cli_id: str, identity_hash: str) -> None:

@@ -10,6 +10,7 @@ file stays about one thing.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -141,3 +142,26 @@ def _bun_lockfile(project: Path, packages: dict[str, str]) -> None:
     locked = {name: [f"{name}@{version}", "", {}, "sha512-fixture"] for name, version in packages.items()}
     lockfile = {"lockfileVersion": 1, "workspaces": {"": manifest}, "packages": locked}
     _write(project / "bun.lock", json.dumps(lockfile, indent=2) + "\n")
+
+
+def host_tool_path(home: Path, search_path: str) -> str:
+    """``search_path`` with the host tools the gates need but a hosted runner cannot offer.
+
+    The native ``bun -e`` proof resolves ``bun`` from PATH, and hosted runners ship no Bun, so a
+    stand-in sits where Bun's installer puts it; a real Bun earlier on PATH still wins. Hosted
+    runners keep Node in a world-writable ``/usr/local/bin``, which the workspace sandbox refuses
+    to execute from, so a package script would stay at review for the host instead of running
+    contained. Stand-ins in a version-manager directory the sandbox accepts go first, as a
+    developer's own Node does, and the sandbox finds the same file by the same name. The synthetic
+    connector CLIs install into ``~/.local/bin``, which a real login shell has on PATH; it goes first
+    so the fixture CLI, not a host program, is the one a grant was recorded for.
+    """
+    stand_in = "#!/bin/sh\nexit 0\n"
+    bun = home / ".bun" / "bin"
+    node = home / ".nvm" / "versions" / "node" / "v25.2.1" / "bin"
+    for directory, names in ((bun, ("bun",)), (node, ("node", "npm", "npx"))):
+        for name in names:
+            _write(directory / name, stand_in)
+            (directory / name).chmod(0o755)
+    local_bin = home / ".local" / "bin"
+    return os.pathsep.join([str(local_bin), str(node), search_path, str(bun)])

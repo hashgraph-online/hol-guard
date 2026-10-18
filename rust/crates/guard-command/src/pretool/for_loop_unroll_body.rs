@@ -182,12 +182,146 @@ pub(super) fn body_items<'a>(
 }
 
 /// Whether a body item can change the loop variable or `IFS`, so a later
-/// `$NAME` would not expand to the word written in the header. References
-/// are already placeholders here, so any remaining bare `NAME` or `IFS` is a
-/// target for `read`, `printf -v`, `declare`, `unset`, an assignment and so
-/// on. A `-NAME` flag such as `[ -f ... ]` is not a target; an attached
-/// `-vNAME` is.
+/// `$NAME` would not expand to the word written in the header. References are
+/// already placeholders here, so a remaining bare `NAME` or `IFS` is read as
+/// the name `read`, `printf -v`, `declare`, `unset` or an assignment binds. A
+/// `-NAME` flag such as `[ -f ... ]` is not a target; an attached `-vNAME` is.
 pub(super) fn rebinds(item: &str, name: &str) -> bool {
+    // Quoting is how a rebinding hides: the shell builds one word out of
+    // `o''pt=secret`, while the written text holds no run that spells the
+    // name. Scanning both forms covers a name split across quotes and one
+    // that quoting would instead join to its neighbour.
+    may_rebind(item, name) || may_rebind(&unquoted(item), name)
+}
+
+/// A bare `NAME` only binds where something in the same item can bind a name:
+/// the word is an assignment, a builtin that takes a name is there, or the
+/// item opens an arithmetic command, which assigns without an `=` sign. A
+/// name the item merely talks about, as in `echo "pkg: $pkg"`, binds nothing.
+fn may_rebind(text: &str, name: &str) -> bool {
+    names_a_target(text, name)
+        && (assigns(text, name) || holds_a_binding_word(text) || text.contains("(("))
+}
+
+/// `NAME=`, `NAME+=` and `NAME[index]=` at the start of a word.
+fn assigns(text: &str, name: &str) -> bool {
+    words(text).any(|word| {
+        word.strip_prefix(name).is_some_and(|rest| {
+            rest.starts_with('=') || rest.starts_with("+=") || rest.starts_with('[')
+        })
+    })
+}
+
+/// The builtins and keywords that bind the name written beside them.
+/// `command` and `builtin` are here because they run the builtins that do,
+/// and `set` because ksh spells an array assignment `set -A name`. The list
+/// is a shell's, not one shell's: zsh stores output in a name with
+/// `print -v`, reads a line with `getln`, and parses options with
+/// `zparseopts`, `zstyle -s` and `zformat -a`, and bash 5.3 fills an array
+/// with `compgen -V`.
+const BINDING_WORDS: &[&str] = &[
+    ".",
+    "builtin",
+    "command",
+    "compgen",
+    "coproc",
+    "declare",
+    "eval",
+    "exec",
+    "export",
+    "float",
+    "for",
+    "getln",
+    "getopts",
+    "integer",
+    "let",
+    "local",
+    "mapfile",
+    "nameref",
+    "print",
+    "printf",
+    "read",
+    "readarray",
+    "readonly",
+    "select",
+    "set",
+    "source",
+    "typeset",
+    "unset",
+    "vared",
+    "wait",
+    "zformat",
+    "zparseopts",
+    "zstyle",
+];
+
+fn holds_a_binding_word(text: &str) -> bool {
+    words(text).any(|word| {
+        let bare: String = word
+            .chars()
+            .filter(|c| !matches!(c, '\'' | '"' | '\\'))
+            .collect();
+        BINDING_WORDS.contains(&bare.as_str())
+    })
+}
+
+/// The item's words, split where the shell starts a new one.
+fn words(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | ')' | '<' | '>'))
+        .filter(|word| !word.is_empty())
+}
+
+/// The word the shell builds once it removes the quoting, which is the text
+/// `rebinds` has to read as well as the text as written.
+fn unquoted(item: &str) -> String {
+    let mut built = String::new();
+    let mut characters = item.chars();
+    while let Some(character) = characters.next() {
+        match character {
+            '\'' => {
+                for quoted in characters.by_ref() {
+                    if quoted == '\'' {
+                        break;
+                    }
+                    built.push(quoted);
+                }
+            }
+            '"' => {
+                let mut escaped = false;
+                for quoted in characters.by_ref() {
+                    if escaped {
+                        // Inside double quotes a backslash escapes only these
+                        // characters, and a backslash-newline pair is a line
+                        // continuation that leaves nothing behind. Before any
+                        // other character the shell keeps the backslash as an
+                        // ordinary character of the word.
+                        if quoted != '\n' {
+                            if !matches!(quoted, '$' | '`' | '"' | '\\') {
+                                built.push('\\');
+                            }
+                            built.push(quoted);
+                        }
+                        escaped = false;
+                    } else if quoted == '"' {
+                        break;
+                    } else if quoted == '\\' {
+                        escaped = true;
+                    } else {
+                        built.push(quoted);
+                    }
+                }
+                if escaped {
+                    built.push('\\');
+                }
+            }
+            '\\' => built.extend(characters.next()),
+            other => built.push(other),
+        }
+    }
+    built
+}
+
+fn names_a_target(item: &str, name: &str) -> bool {
     let mut previous = ' ';
     let mut token = String::new();
     let mut flagged = false;

@@ -301,7 +301,12 @@ fn item_request(
         "decision_v2_json": canonical["decision_v2_json"],
         "fallback_cli_command": null,
         "action_identity": null,
-        "queue_group_id": null,
+        // Only a bare connector marker crosses; the queue identity completes
+        // it per action. Any other value keeps the default group.
+        "queue_group_id": item
+            .get("queue_group_id")
+            .and_then(Value::as_str)
+            .filter(|group| crate::connector_setup::is_connector_marker(group)),
         "dedupe_count": 1,
         "last_seen_at": null,
         "scanner_evidence": evidence,

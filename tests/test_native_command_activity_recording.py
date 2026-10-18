@@ -7,9 +7,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
 from codex_plugin_scanner.guard.native_decision_receipt import canonical_receipt_bytes
+from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.store import GuardStore
+
+
+def _writer(store: GuardStore) -> NativeHookEvidenceWriter:
+    """The writer these tests record through, held by the resident.
+
+    Every test that builds one takes ``native_hook_force`` first, so the
+    caller-pinned runtime is the authority behind the handoff.
+    """
+
+    return NativeHookEvidenceWriter(store=store)
 
 
 def _valid_native_receipt() -> dict[str, object]:
@@ -69,13 +79,14 @@ def test_native_receipt_link_requires_validated_receipt(writer_accepted: bool) -
     ],
 )
 def test_native_pre_and_post_keep_authoritative_decision(
+    native_hook_force: Path,
     tmp_path: Path,
     harness: str,
     id_field: str,
     input_field: str,
 ) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = _writer(store)
     payload = {id_field: "call_test_0123456789abcdef", input_field: {"command": "echo example"}}
     try:
         assert writer.submit_command_activity(
@@ -117,9 +128,9 @@ def test_native_pre_and_post_keep_authoritative_decision(
     assert writer.stats()["failures"] == 0
 
 
-def test_approved_retry_preserves_prevented_attempt(tmp_path: Path) -> None:
+def test_approved_retry_preserves_prevented_attempt(native_hook_force: Path, tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = _writer(store)
     payload = {"toolUseId": "call_test_0123456789abcdef", "toolInput": {"command": "echo example"}}
     try:
         for action in ("review", "review", "allow"):
@@ -148,9 +159,9 @@ def test_approved_retry_preserves_prevented_attempt(tmp_path: Path) -> None:
     assert writer.stats()["failures"] == 0
 
 
-def test_pre_without_decision_never_becomes_execution(tmp_path: Path) -> None:
+def test_pre_without_decision_never_becomes_execution(native_hook_force: Path, tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = _writer(store)
     try:
         assert not writer.submit_command_activity(
             harness="grok",
@@ -163,9 +174,9 @@ def test_pre_without_decision_never_becomes_execution(tmp_path: Path) -> None:
     assert store.count_command_activities() == 0
 
 
-def test_incompatible_approval_metadata_is_not_queued(tmp_path: Path) -> None:
+def test_incompatible_approval_metadata_is_not_queued(native_hook_force: Path, tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = _writer(store)
     try:
         assert not writer.submit_command_activity(
             harness="grok",
@@ -183,9 +194,11 @@ def test_incompatible_approval_metadata_is_not_queued(tmp_path: Path) -> None:
 
 
 @pytest.mark.parametrize("action", ["review", "block", "warn", "allow"])
-def test_native_restrictive_decisions_keep_receipt_and_prompt(tmp_path: Path, action: str) -> None:
+def test_native_restrictive_decisions_keep_receipt_and_prompt(
+    native_hook_force: Path, tmp_path: Path, action: str
+) -> None:
     store = GuardStore(tmp_path / "guard", prime_policy_integrity=False)
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = _writer(store)
     try:
         assert writer.submit_command_activity(
             harness="grok",

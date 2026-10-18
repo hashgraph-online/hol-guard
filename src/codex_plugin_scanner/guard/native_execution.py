@@ -164,7 +164,9 @@ def _resident_request(
             "policy_decision_lookup",
             "local_cli_grant_decide",
             "local_cli_hook",
+            "connector_setup_context",
             "guard_store",
+            "hook_evidence_writer",
             "local_mcp_grant_decide",
             "contributed_mcp_decide",
             "approval_proof_decide",
@@ -187,6 +189,9 @@ def _resident_request(
             "mcp_tool_call_identity",
             "package_context_build",
             "policy_document_decide",
+            "command_policy_decide",
+            "command_expression_validate",
+            "reviewed_invocation_bindings_validate",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

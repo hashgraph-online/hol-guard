@@ -3,7 +3,7 @@
 //! listing is proven when no option widens that scope or runs a command per
 //! match, and every search root clears the same screens as an `rg` root.
 use super::options::unsafe_search_value;
-use super::{tree, ReadContext, SearchValueRole};
+use super::{sibling, tree, ReadContext, SearchValueRole};
 
 /// Options that take no value and only change matching or output format.
 const FLAGS: &[&str] = &[
@@ -47,11 +47,28 @@ fn short_value_role(option: char) -> Option<SearchValueRole> {
 fn unsafe_root(value: &str, context: ReadContext<'_>) -> bool {
     // fd does not expand globs or variables in a root; the shell might, and
     // the proof would then describe a different directory, so refuse them.
-    value.contains(['*', '?', '[', ']', '{', '}', '$', '`'])
-        || (unsafe_search_value(SearchValueRole::Path, value, context)
-            && !tree::rg_root_inside_cwd(value, context)
-            && !tree::listing_root_below_home(value, context)
-            && !tree::safe_recursive_search_target(value, context))
+    if value.contains(['*', '?', '{', '}', '$', '`']) {
+        return true;
+    }
+    // A framework route is spelled with brackets. `fd -e tsx . app/[locale]`
+    // searches one directory of a Next.js application, and a class that
+    // matches nothing is handed to fd as the word that was typed, so the
+    // directory it names is screened as the same path without brackets would
+    // be. A class the shell could expand names a different directory than the
+    // proof describes, so it keeps its review.
+    if value.contains(['[', ']']) {
+        return !tree::safe_literal_bracket_search_target(value, context);
+    }
+    unsafe_search_value(SearchValueRole::Path, value, context)
+        && !tree::rg_root_inside_cwd(value, context)
+        && !tree::listing_root_below_home(value, context)
+        && !tree::safe_recursive_search_target(value, context)
+        // An agent in one repository names a neighbour to find a file by
+        // name. `fd` skips the same hidden and ignored entries `rg` skips,
+        // and prints names rather than contents, so the walk that proves an
+        // `rg` root proves this listing too, once it reads the ignore files
+        // `fd` reads rather than the ones `rg` reads.
+        && !sibling::fd_sibling_repository_root(value, context)
 }
 
 fn unsafe_value(role: SearchValueRole, value: &str, context: ReadContext<'_>) -> bool {
@@ -179,10 +196,15 @@ pub(super) fn safe_fd_arguments(arguments: &[String], context: ReadContext<'_>) 
             if matches!(role, SearchValueRole::Path) {
                 root_seen = true;
             }
-            // The shell does not expand `~` after `--search-path=`.
+            // The shell does not expand `~` after `--search-path=`, and it
+            // globs the whole word rather than the part after `=`: a
+            // repository holding `--search-path=app/s` turns
+            // `--search-path=app/[slug]` into a root the bracket proof never
+            // walked. Only the separate word is the word that was proven.
             if attached.is_empty() {
                 pending = Some(role);
-            } else if (matches!(role, SearchValueRole::Path) && attached.starts_with('~'))
+            } else if (matches!(role, SearchValueRole::Path)
+                && (attached.starts_with('~') || attached.contains(['[', ']'])))
                 || unsafe_value(role, attached, context)
             {
                 return false;

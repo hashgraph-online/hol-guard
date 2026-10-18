@@ -9,7 +9,7 @@ const GIT_RULES: [&str; 3] = ["command.git.diff", "command.git.log", "command.gi
 /// Bun inline evaluation reports package protection because Bun is a package
 /// manager image; pretool admits that only for an exact, screened `bun -e/-p`
 /// argv, under its own reason. `node -e` never carries the permission.
-const NODE_PERMISSION_CODES: [&str; 6] = [
+const PACKAGE_PERMISSION_CODES: [&str; 6] = [
     "native_workspace_containment_required",
     "native_bun_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
@@ -79,13 +79,23 @@ fn git_observation(item: &Value) -> bool {
         && item.get("effective_segment_indexes") == Some(&json!([0]))
 }
 
-fn node_permission(item: &Value) -> bool {
+/// A package firewall's own permission. It records which ecosystem's manager
+/// ran, not a risk the run carries, and the classifier admitted the verb
+/// below it; every ecosystem the firewall watches reads the same.
+fn package_permission(item: &Value) -> bool {
     let Value::Object(item) = item else {
         return false;
     };
-    item.get("extension_id").and_then(Value::as_str) == Some("command.package.node")
-        && item.get("permission_id").and_then(Value::as_str)
-            == Some("command.package.node.permission.package-protection")
+    let (Some(extension), Some(permission)) = (
+        item.get("extension_id").and_then(Value::as_str),
+        item.get("permission_id").and_then(Value::as_str),
+    ) else {
+        return false;
+    };
+    crate::pretool::PACKAGE_EXTENSIONS.contains(&extension)
+        && permission
+            .strip_prefix(extension)
+            .is_some_and(|rest| rest == ".permission.package-protection")
         && is_empty_list(item.get("uncertainty_reasons"))
 }
 
@@ -111,8 +121,8 @@ fn permissions_ok(reason_code: &str, permissions: Option<&Value>) -> bool {
     if is_empty_list(permissions) {
         return true;
     }
-    NODE_PERMISSION_CODES.contains(&reason_code)
-        && matches!(permissions, Some(Value::Array(items)) if items.iter().all(node_permission))
+    PACKAGE_PERMISSION_CODES.contains(&reason_code)
+        && matches!(permissions, Some(Value::Array(items)) if items.iter().all(package_permission))
 }
 
 /// Containment receipt for `response`, or `None` when the verdict is not a

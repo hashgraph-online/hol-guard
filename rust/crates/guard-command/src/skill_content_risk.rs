@@ -1,5 +1,6 @@
 //! Rust port of `detect_skill_content_risk` / `has_skill_structure` from
-//! `runtime/skill_protection.py` (skill identity helpers are not ported).
+//! `runtime/skill_protection.py`; the identity half lives in
+//! [`crate::skill_identity`].
 //!
 //! Python `re` semantics come from [`crate::persistence_rules::py_regex`].
 //! Known, documented divergence: the `skill.unicode-controls` technical

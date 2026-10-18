@@ -24,6 +24,16 @@ fn container_and_image_listings_are_admitted() {
         vec!["images", "node:20-alpine"],
         vec!["images", "--format", "{{.Repository}}:{{.Tag}}"],
         vec!["image", "ls", "-q"],
+        vec!["version"],
+        vec!["compose", "version"],
+        vec!["compose", "version", "--short"],
+        vec!["buildx", "version"],
+        vec!["buildx", "ls"],
+        vec!["buildx", "ls", "--no-trunc"],
+        vec!["compose", "ls"],
+        vec!["compose", "list"],
+        vec!["compose", "ls", "-a", "-q"],
+        vec!["compose", "ls", "--filter=name=portal", "--format", "json"],
     ] {
         assert!(safe_docker_arguments(&arguments(&words)), "{words:?}");
     }
@@ -68,6 +78,31 @@ fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
         vec!["image", "inspect", "alpine"],
         vec!["image", "history", "alpine"],
         vec!["container", "top", "web"],
+        // Only the banner itself; a format string or a project file is not it.
+        vec!["version", "--format", "{{json .}}"],
+        vec!["compose", "version", "--format", "json"],
+        vec!["compose", "-f", "compose.yaml", "version"],
+        vec!["-H", "ssh://ops@example.com", "version"],
+        // A builder listing prints names; starting, changing or removing one
+        // does not, and neither does a project the listing has to resolve.
+        vec!["buildx", "inspect"],
+        vec!["buildx", "inspect", "--bootstrap", "default"],
+        // `--format json` prints each builder's nodes, proxy configuration
+        // included, and `-f` on a project listing names a compose file.
+        vec!["buildx", "ls", "--format", "json"],
+        vec!["buildx", "ls", "--format", "{{.Name}}"],
+        vec!["compose", "ls", "-f", "name=portal"],
+        vec!["compose", "ls", "-f", "/srv/other=1/compose.yaml"],
+        vec!["buildx", "ls", "default"],
+        vec!["buildx", "ls", "--builder", "remote"],
+        vec!["buildx", "create", "--use"],
+        vec!["buildx", "rm", "old-builder"],
+        vec!["buildx", "prune", "-af"],
+        vec!["buildx", "build", "."],
+        vec!["compose", "ls", "--project-directory", "/srv/app"],
+        vec!["compose", "-f", "compose.yaml", "ls"],
+        vec!["compose", "ls", "portal"],
+        vec!["-H", "ssh://ops@example.com", "buildx", "ls"],
     ] {
         assert!(!safe_docker_arguments(&arguments(&words)), "{words:?}");
     }

@@ -14,12 +14,17 @@
 //! must be visible, or a hidden project-metadata directory such as `.github`,
 //! and not plainly ignored, and any `.ignore` or `.rgignore` file sends the
 //! search to review. A negated pattern in a `.gitignore` or the repository's
-//! `info/exclude` is admitted only when it re-includes a literal path, such
-//! as `!.gitkeep` or `!.env.example`, that this walk does not prune; hidden
-//! entries with that name are then screened like any other descendant, where
-//! the walk meets them. A rule at the repository root therefore holds only
-//! the searches that can reach the file it names.
+//! `info/exclude` is kept with the scope git gives it, whether it spells a
+//! literal path such as `!.gitkeep` or a glob such as `!src/icons/**/*.js`;
+//! hidden entries it re-includes are then screened like any other
+//! descendant, where the walk meets them. A negation that can name an entry
+//! this walk prunes keeps the search at review, because `rg` would read a
+//! subtree the walk never screened. A rule at the repository root therefore
+//! holds only the searches that can reach the file it names.
+mod negations;
+
 use super::{tree, ReadContext};
+use negations::Whitelist;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
@@ -27,6 +32,10 @@ const MAX_ENTRIES: usize = 10_000;
 const MAX_DEPTH: usize = 64;
 const MAX_IGNORE_BYTES: u64 = 64 * 1024;
 const WHITELISTING_FILES: [&str; 2] = [".ignore", ".rgignore"];
+/// `fd` reads `.ignore` like `rg` does, `.fdignore` in place of `.rgignore`,
+/// and a global ignore file of its own.
+const FD_WHITELISTING_FILES: [&str; 3] = [".ignore", ".rgignore", ".fdignore"];
+const FD_GLOBAL_IGNORE: &str = ".config/fd/ignore";
 
 /// True when `value` names a directory of a git working tree strictly below
 /// home and every file `rg` would search there clears the descendant screen.
@@ -34,10 +43,28 @@ pub(in crate::pretool) fn rg_sibling_repository_root(
     value: &str,
     context: ReadContext<'_>,
 ) -> bool {
+    sibling_repository_root(value, context, &WHITELISTING_FILES)
+}
+
+/// [`rg_sibling_repository_root`] for `fd`, which reads its own ignore files.
+/// A negation in a `.fdignore` re-includes an entry the walk pruned, and the
+/// global ignore file can do the same for every search, so both send the
+/// listing to review.
+pub(in crate::pretool) fn fd_sibling_repository_root(
+    value: &str,
+    context: ReadContext<'_>,
+) -> bool {
+    context.home_dir.is_some_and(|home| {
+        std::fs::symlink_metadata(Path::new(home).join(FD_GLOBAL_IGNORE)).is_err()
+    }) && sibling_repository_root(value, context, &FD_WHITELISTING_FILES)
+}
+
+fn sibling_repository_root(value: &str, context: ReadContext<'_>, whitelisting: &[&str]) -> bool {
     if value.is_empty()
         || value.len() > 4096
         || value.contains(tree::HAZARDS)
-        || value.contains(['*', '?', '[', ']', '{', '}'])
+        || value.contains(['*', '?', '{', '}'])
+        || !literal_brackets(value, context)
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
@@ -56,11 +83,11 @@ pub(in crate::pretool) fn rg_sibling_repository_root(
     };
     operand.is_dir()
         && super::super::git_routes::repository_below_home(root, context)
-        && no_whitelisting_ancestor(&operand, context)
+        && no_whitelisting_ancestor(&operand, context, whitelisting)
         && match ignored_names(root) {
             Some(mut ignored) => {
                 reachable_by_default(root, &operand, &mut ignored)
-                    && walk(root, &operand, &mut ignored)
+                    && walk(root, &operand, &mut ignored, whitelisting)
             }
             None => false,
         }
@@ -98,8 +125,22 @@ fn reachable_by_default(root: &Path, operand: &Path, ignored: &mut Ignored) -> b
     true
 }
 
+/// A sibling repository holds framework routes too, and an agent spells one
+/// as `~/badges/app/[slug]`. A word with no bracket is the ordinary case; one
+/// with a bracket qualifies only where it carries the same proof a search of
+/// the working tree's own route carries: the class matches nothing, so the
+/// shell hands the program the path as it was typed, and the tree that path
+/// names holds nothing these screens refuse to read.
+fn literal_brackets(value: &str, context: ReadContext<'_>) -> bool {
+    !value.contains(['[', ']']) || tree::safe_literal_bracket_search_target(value, context)
+}
+
 /// `rg` also reads `.ignore` and `.rgignore` files in parent directories.
-fn no_whitelisting_ancestor(operand: &Path, context: ReadContext<'_>) -> bool {
+fn no_whitelisting_ancestor(
+    operand: &Path,
+    context: ReadContext<'_>,
+    whitelisting: &[&str],
+) -> bool {
     let Some(home) = context
         .home_dir
         .and_then(|home| std::fs::canonicalize(home).ok())
@@ -111,7 +152,7 @@ fn no_whitelisting_ancestor(operand: &Path, context: ReadContext<'_>) -> bool {
         .skip(1)
         .take_while(|path| path.starts_with(&home))
         .all(|path| {
-            WHITELISTING_FILES
+            whitelisting
                 .iter()
                 .all(|name| std::fs::symlink_metadata(path.join(name)).is_err())
         })
@@ -129,21 +170,6 @@ struct Ignored {
     whitelisted: Vec<Whitelist>,
 }
 
-/// One negated pattern, kept with the scope git gives it.
-///
-/// A pattern anchored to its ignore file's directory, by a leading slash or
-/// by a slash anywhere inside it, re-includes that one path and nothing
-/// else: `!/.env.example` in the root says nothing about `src/.env.example`.
-/// A bare name re-includes every entry of that name below the directory.
-struct Whitelist {
-    /// The directory the ignore file applies to.
-    base: PathBuf,
-    /// The re-included path, relative to `base`, lowercased.
-    relative: PathBuf,
-    /// Whether the name is re-included at any depth below `base`.
-    anywhere: bool,
-}
-
 impl Ignored {
     fn prunes(&self, name: &str, directly_below_root: bool) -> bool {
         self.anywhere.iter().any(|ignored| ignored == name)
@@ -153,17 +179,7 @@ impl Ignored {
     /// Whether a negation re-includes `path`, which the walk reached below
     /// the directory its ignore file applies to.
     fn whitelists(&self, path: &Path) -> bool {
-        let lowered =
-            |value: &std::ffi::OsStr| PathBuf::from(value.to_string_lossy().to_lowercase());
-        self.whitelisted.iter().any(|whitelisted| {
-            if whitelisted.anywhere {
-                path.file_name()
-                    .is_some_and(|name| lowered(name) == whitelisted.relative)
-            } else {
-                path.strip_prefix(&whitelisted.base)
-                    .is_ok_and(|relative| lowered(relative.as_os_str()) == whitelisted.relative)
-            }
-        })
+        negations::whitelists(&self.whitelisted, path)
     }
 
     /// Reads the `.gitignore` in `directory`, if any, and admits its
@@ -178,53 +194,18 @@ impl Ignored {
     }
 
     /// Records the negated patterns among `lines`, read from an ignore file
-    /// that applies to the tree being walked. A negation may only re-include a literal
-    /// path whose components this walk never prunes, so a plainly ignored
-    /// directory stays out of `rg`'s reach. Whether the name it re-includes
-    /// is one the descendant screen refuses is decided where the walk meets
-    /// the file, so a root rule naming a template beside the searched
-    /// directory does not answer for a search that never reaches it.
+    /// that applies to the tree being walked. Whether the name a negation
+    /// re-includes is one the descendant screen refuses is decided where the
+    /// walk meets the file, so a root rule naming a template beside the
+    /// searched directory does not answer for a search that never reaches it.
     fn admit_negations(&mut self, lines: &[String], base: &Path) -> bool {
-        for line in lines {
-            let Some(pattern) = line.strip_prefix('!') else {
-                continue;
-            };
-            let pattern = pattern.strip_suffix('/').unwrap_or(pattern);
-            // A leading `**/` stands for any run of directories, which is
-            // what a bare name already means: `!**/notes.md` re-includes
-            // that name wherever it sits. A `**` anywhere else spans
-            // directories this walk would have to match depth by depth, and
-            // falls to the literal screen below.
-            let (pattern, any_depth) = match pattern.strip_prefix("**/") {
-                Some(rest) => (rest, true),
-                None => (pattern, false),
-            };
-            // Git anchors a pattern to its ignore file's directory as soon as
-            // it carries a slash anywhere but the end, so only a bare name
-            // re-includes entries deeper down.
-            let anchored = !any_depth && (pattern.starts_with('/') || pattern.contains('/'));
-            let pattern = pattern.strip_prefix('/').unwrap_or(pattern);
-            let components: Vec<&str> = pattern.split('/').collect();
-            let literal = components.iter().all(|component| plain_name(component));
-            let pruned = components.iter().any(|component| {
-                self.anywhere
-                    .iter()
-                    .chain(&self.at_root)
-                    .any(|ignored| ignored.eq_ignore_ascii_case(component))
-            });
-            if !literal || pruned || (!anchored && components.len() != 1) {
-                return false;
-            }
-            self.whitelisted.push(Whitelist {
-                base: base.to_path_buf(),
-                relative: components
-                    .iter()
-                    .map(|component| component.to_lowercase())
-                    .collect(),
-                anywhere: !anchored,
-            });
-        }
-        true
+        negations::admit(
+            &mut self.whitelisted,
+            lines,
+            base,
+            &self.anywhere,
+            &self.at_root,
+        )
     }
 }
 
@@ -321,7 +302,7 @@ fn ignore_lines(path: &Path) -> Option<Vec<String>> {
     Some(lines)
 }
 
-fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
+fn walk(root: &Path, operand: &Path, ignored: &mut Ignored, whitelisting: &[&str]) -> bool {
     let mut pending: Vec<(PathBuf, usize)> = vec![(operand.to_path_buf(), 0)];
     let mut inspected = 0_usize;
     while let Some((directory, depth)) = pending.pop() {
@@ -346,7 +327,7 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
             let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
                 return false;
             };
-            if WHITELISTING_FILES.contains(&name) {
+            if whitelisting.contains(&name) {
                 return false;
             }
             // `rg` skips hidden entries unless a negated pattern re-includes
@@ -386,6 +367,15 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored) -> bool {
 /// same path does, and agents spell one whenever they guess at a file name.
 /// It is admitted under the same component screen, so anything that turns up
 /// there before the command runs is a file this rule would have read anyway.
+///
+/// A parent step is read the same way. `cat ../service-api/package.json` from
+/// the checkout beside it names the file the absolute spelling already names,
+/// and nothing here is decided on the spelling: the existing part of the path
+/// is resolved by the kernel, which is what the command itself would cross,
+/// and every screen below reads that resolved location. A relative step that
+/// climbs out of the sibling set lands somewhere with no repository root
+/// below home above it, where the rule declines as it does for the same place
+/// spelled in full.
 pub(in crate::pretool) fn named_path(
     value: &str,
     context: ReadContext<'_>,
@@ -394,12 +384,9 @@ pub(in crate::pretool) fn named_path(
     if value.is_empty()
         || value.len() > 4096
         || value.contains(tree::HAZARDS)
-        || value.contains(['*', '?', '[', ']', '{', '}'])
+        || value.contains(['*', '?', '{', '}'])
+        || !literal_brackets(value, context)
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
-        // A parent step resolves somewhere this screen cannot read off the
-        // spelling, and the directory rule already covers the roots agents
-        // reach that way.
-        || value.split(['/', '\\']).any(|part| part == "..")
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {
         return false;
@@ -524,7 +511,8 @@ pub(in crate::pretool) fn grep_walk_root(
     if value.is_empty()
         || value.len() > 4096
         || value.contains(tree::HAZARDS)
-        || value.contains(['*', '?', '[', ']', '{', '}'])
+        || value.contains(['*', '?', '{', '}'])
+        || !literal_brackets(value, context)
         || (value.starts_with('~') && value != "~" && !value.starts_with("~/"))
         || !super::super::safe_reads::verified_path_context(context.home_dir, context.cwd)
     {

@@ -24,6 +24,7 @@ pub fn evaluate_with_deadline(
         "trace" => &["command", "state", "index"],
         "top_level" => &["command", "state"],
         "interpreter_payload" => &["command", "parts", "command_index"],
+        "invokes_executable" => &["command", "executable"],
         _ => &["command"],
     };
     let object = input.as_object().ok_or("shell_helpers_invalid")?;
@@ -72,6 +73,24 @@ pub fn evaluate_with_deadline(
             .map(|p| json!({"left":p.left,"right":p.right}))
             .collect::<Vec<_>>())),
         "heredocs" => Ok(json!(shell_structure::extract_heredocs(command))),
+        // Callers that only need to know whether a command carries an inline
+        // script body would otherwise read the paged `heredocs` rows and throw
+        // the bodies away, so the hot path pays to ship a whole script across
+        // the boundary to compute a yes or no. The owner answers it directly.
+        "has_embedded_script" => Ok(json!(!shell_structure::extract_heredocs(command).is_empty())),
+        // The package path asks this before it will let a verified shim own
+        // an external-archive approval, so the shell parse that decides it
+        // stays with the other structure questions rather than beside the
+        // caller in a second tokenizer.
+        "invokes_executable" => {
+            let executable = input
+                .get("executable")
+                .and_then(Value::as_str)
+                .ok_or("shell_helpers_invalid")?;
+            Ok(json!(
+                crate::package_shim_invocation::command_invokes_executable(command, executable)
+            ))
+        }
         "embedded_script_evidence" => Ok(json!(
             crate::embedded_script_evidence::embedded_script_evidence_entries(command)
         )),

@@ -791,6 +791,67 @@ fn daemon_pid_matches_command(pid: i64, guard_home: &Path) -> bool {
     }
 }
 
+/// `_APPROVAL_CENTER_LOCATOR_FILE` (manager.py:97).
+const APPROVAL_CENTER_LOCATOR_FILE: &str = "approval-center-locator.json";
+/// The locator records six short fields; anything larger is not one.
+const APPROVAL_CENTER_LOCATOR_MAX_BYTES: u64 = 64 * 1024;
+
+/// `read_approval_center_locator(guard_home).daemon_url`
+/// (manager.py:1739-:1772), which Python writes without private
+/// permissions, so this read does not require them either.
+///
+/// The shape gates are `locator_shape`: a live, positive `pid` and the five
+/// string fields. A process whose command does not prove this guard home is
+/// accepted only when the authenticated daemon state vouches for it, which
+/// is `locator_binding`.
+pub(crate) fn approval_center_daemon_url(guard_home: &Path) -> Option<String> {
+    let path = guard_home.join(APPROVAL_CENTER_LOCATOR_FILE);
+    let metadata = fs::metadata(&path).ok()?;
+    if !metadata.is_file() || metadata.len() > APPROVAL_CENTER_LOCATOR_MAX_BYTES {
+        return None;
+    }
+    let payload: Value = serde_json::from_str(&fs::read_to_string(&path).ok()?).ok()?;
+    let payload = payload.as_object()?;
+    let pid = payload
+        .get("pid")
+        .and_then(Value::as_i64)
+        .filter(|pid| *pid > 0)?;
+    if !daemon_pid_is_running(pid) {
+        return None;
+    }
+    let text = |key: &str| payload.get(key).and_then(Value::as_str);
+    let daemon_url = text("daemon_url")?;
+    for key in [
+        "approval_url_base",
+        "started_at",
+        "state_path",
+        "guard_home",
+    ] {
+        text(key)?;
+    }
+    if !daemon_pid_matches_command(pid, guard_home)
+        && !locator_state_binds(guard_home, pid, daemon_url)
+    {
+        return None;
+    }
+    Some(daemon_url.to_owned())
+}
+
+/// `locator_binding`: the authenticated state names the same process and the
+/// loopback port the locator URL carries.
+fn locator_state_binds(guard_home: &Path, pid: i64, daemon_url: &str) -> bool {
+    let Some(state) = load_authenticated_daemon_state(guard_home) else {
+        return false;
+    };
+    if state.get("pid").and_then(Value::as_i64) != Some(pid) {
+        return false;
+    }
+    state
+        .get("port")
+        .and_then(Value::as_i64)
+        .is_some_and(|port| daemon_url == format!("http://127.0.0.1:{port}"))
+}
+
 /// `ps -p <pid> -o command=` (manager.py:3305-:3320).
 #[cfg(unix)]
 fn daemon_command_for_pid(pid: i64) -> Option<String> {

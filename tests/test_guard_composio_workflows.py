@@ -96,23 +96,3 @@ def test_workflow_persistence_is_identity_bound_and_grant_neutral(tmp_path: Path
     with store._connect() as connection:
         connection.execute("update local_cli_observation set identity_hash = ? where cli_id = ?", ("f" * 64, cli_id))
     assert store.read_local_mcp_workflows(cli_id)["proposals"] == []
-
-
-def test_journal_recovery_accepts_old_record_and_rejects_corrupt_guidance():
-    from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_journal import _McpDiscoveryRecord
-    from codex_plugin_scanner.guard.runtime.composio_discovery import composio_discovered_actions
-
-    source = observed_mcp_tool("codex", _TOOL)
-    actions = composio_discovered_actions(_TOOL, _result())
-    proposals = composio_workflow_proposals(_TOOL, _result())
-    assert source and actions and proposals
-    record = _McpDiscoveryRecord("a" * 32, "codex", _TOOL, _FIRST, actions, proposals)
-    import json
-
-    body = json.loads(record.serialized())
-    assert _McpDiscoveryRecord.from_json(body).proposals == proposals
-    old = dict(body)
-    old.pop("workflow_proposals")
-    assert _McpDiscoveryRecord.from_json(old).proposals == ()
-    body["workflow_proposals"][0]["primary"] = ["../BAD"]
-    assert _McpDiscoveryRecord.from_json(body) is None

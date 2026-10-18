@@ -29,7 +29,7 @@ pub(super) fn start_point(arguments: &[String]) -> Option<&str> {
 
 /// A ref name or remote-tracking ref, never an option or a revision
 /// expression.
-fn reference(value: &str) -> bool {
+pub(super) fn reference(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 200
         && !value.starts_with(['-', '/', '.'])

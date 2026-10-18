@@ -8,10 +8,10 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from codex_plugin_scanner.guard import runtime_transition_legacy_receipt as lookup
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_writer import RuntimeHookEvidenceWriter
+from codex_plugin_scanner.guard.native_hook_evidence_writer import NativeHookEvidenceWriter
 from codex_plugin_scanner.guard.runtime.command_activity_correlation import (
     derive_proven_request_correlation,
-    load_existing_installation_correlation_key,
+    load_or_create_installation_correlation_key,
 )
 from codex_plugin_scanner.guard.runtime_transition import TransitionError
 from codex_plugin_scanner.guard.store import GuardStore
@@ -39,13 +39,15 @@ def persist(store, writer, payload, action, *, variant="a"):
 
 
 @pytest.fixture
-def legacy(tmp_path):
+def legacy(native_hook_force, tmp_path):
     store = GuardStore(tmp_path / "guard")
-    writer = RuntimeHookEvidenceWriter(store=store)
+    writer = NativeHookEvidenceWriter(store=store)
     since = datetime.now(timezone.utc)
     payload = {"tool_call_id": uuid.uuid4().hex, "tool_name": "exec_command", "tool_input": {"cmd": "pwd"}}
-    key = load_existing_installation_correlation_key(store.guard_home)
-    assert key is not None
+    # The resident creates the installation key on its first write; this
+    # fixture derives a correlation before any write, so it creates the same
+    # file the resident would.
+    key = load_or_create_installation_correlation_key(store.guard_home)
     handle = derive_proven_request_correlation(harness="codex", event="PreToolUse", payload=payload, key=key)
     assert handle is not None
     try:

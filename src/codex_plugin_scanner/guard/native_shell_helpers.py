@@ -249,7 +249,15 @@ def _valid(action: str, value: Any) -> bool:
         return type(value) is str
     if action == "kubernetes_secret_read_source":
         return value is None or (type(value) is str and bool(value))
-    if action in {"trusted_path", "top_level", "matches_subcommands", "flags_all", "long_flag"}:
+    if action in {
+        "trusted_path",
+        "top_level",
+        "matches_subcommands",
+        "flags_all",
+        "long_flag",
+        "has_embedded_script",
+        "invokes_executable",
+    }:
         return type(value) is bool
     if action == "embedded_script_evidence":
         return type(value) is list and all(_valid_evidence_entry(v) for v in value)

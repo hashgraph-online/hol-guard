@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet.approval_rows import REDACTED_GROUP, _opaque_group
 from ci.gauntlet.catalog import Scenario, load_catalog, retain_trusted_cases
 from ci.gauntlet.interruptions import (
     case_interruptions,
@@ -14,11 +15,14 @@ from ci.gauntlet.interruptions import (
     summarize_interruptions,
 )
 from ci.gauntlet.qualify import retryable, summarize_attempt
+from codex_plugin_scanner.guard.blocked_request_mode import SAFE_ALTERNATIVE_GUIDANCE, connector_setup_reason
 from tests.gauntlet_replay import ReplayCase, expand, judge
 
 
-def _case(expect: str, harness: str = "claude-code") -> ReplayCase:
-    return ReplayCase(f"x@{harness}", "x", harness, "shell", {"command": "ls"}, "worktree", expect)
+def _case(expect: str, harness: str = "claude-code", contained_ok: bool = False) -> ReplayCase:
+    return ReplayCase(
+        f"x@{harness}", "x", harness, "shell", {"command": "ls"}, "worktree", expect, contained_ok=contained_ok
+    )
 
 
 _QUIET = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}}
@@ -65,6 +69,60 @@ def test_attack_must_not_be_allowed() -> None:
     denied = {"hookSpecificOutput": {"permissionDecision": "deny"}}
     assert judge(_case("block"), _QUIET, []) is not None
     assert judge(_case("block"), denied, []) is None
+
+
+_ROUTED = {**_QUIET, "reason_code": "native_contained_execution_routed"}
+
+
+def test_containment_protects_only_the_case_that_says_so() -> None:
+    # The workspace sandbox still writes inside the workspace, so a contained run is not protection
+    # against an attack on the worktree itself. Only a case whose harm is network, home or
+    # credential reach counts it.
+    assert judge(_case("block"), _ROUTED, []) is not None
+    assert judge(_case("block", contained_ok=True), _ROUTED, []) is None
+
+
+def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("tests.gauntlet_replay.sys.platform", "darwin")
+    workspace = {
+        "decision": "deny",
+        "policy_action": "sandbox-required",
+        "reason_code": "native_workspace_containment_required",
+        "required_execution_profile": "workspace-contained-v1",
+    }
+    assert judge(_case("block", "omp"), workspace, []) is not None
+    assert judge(_case("block", "omp", contained_ok=True), workspace, []) is None
+
+
+def test_only_the_marked_cases_may_pass_on_containment() -> None:
+    marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
+    assert marked == {"neg-cargo-check-locked-host-toolchain"}
+
+
+_SETUP_RESULT = {
+    "policy_action": "block",
+    "decision": "deny",
+    "reason": f"{connector_setup_reason('lanectl', 'cli', ask=False)} {SAFE_ALTERNATIVE_GUIDANCE}",
+}
+_SETUP_ROW = {
+    "reason_code": "native_command_review_required",
+    "queue_group_id": f"connector:{'a' * 64}:{'b' * 16}",
+}
+
+
+def test_setup_needs_the_connector_outcome_not_a_generic_review() -> None:
+    assert judge(_case("setup"), _SETUP_RESULT, [_SETUP_ROW]) is None
+    generic = {"policy_action": "block", "decision": "deny", "reason": "Guard requires review of this command."}
+    assert judge(_case("setup"), generic, [_SETUP_ROW]) is not None
+    assert judge(_case("setup"), _SETUP_RESULT, [{**_SETUP_ROW, "queue_group_id": ""}]) is not None
+    assert judge(_case("setup"), _SETUP_RESULT, [_SETUP_ROW, _SETUP_ROW]) is not None
+    assert judge(_case("setup"), _SETUP_RESULT, [{**_SETUP_ROW, "reason_code": "native_policy_block"}]) is not None
+    assert judge(_case("setup"), _QUIET, []) is not None
+
+
+def test_a_setup_case_is_replayed_as_setup() -> None:
+    expected = {c.expect for c in expand() if c.base_id == "lanectl-status"}
+    assert expected == {"setup"}
 
 
 def test_expansion_covers_pi_and_every_harness() -> None:
@@ -214,3 +272,12 @@ def test_a_routed_run_satisfies_an_always_case() -> None:
     for harness in ("zcode", "claude-code", "codex"):
         assert judge(_case("always", harness), routed, []) is None
     assert judge(_case("always", "codex"), _QUIET, []) is not None
+
+
+def test_approval_rows_keep_only_opaque_connector_groups() -> None:
+    group = f"connector:{'a' * 64}:{'b' * 16}"
+    assert _opaque_group(group) == group
+    assert _opaque_group("") == ""
+    assert _opaque_group(None) == ""
+    assert _opaque_group("connector:/home/dev/project") == REDACTED_GROUP
+    assert _opaque_group(f"{group}/extra") == REDACTED_GROUP

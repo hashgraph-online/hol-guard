@@ -1018,10 +1018,20 @@ impl Timestamp {
         let s = (day_secs % 60) as u32;
         (y, m, d, h, mi, s, micros)
     }
-    /// `datetime.isoformat()` — `+00:00` suffix, seconds precision.
+    /// `datetime.isoformat()` — `+00:00` suffix, `timespec="auto"`: six
+    /// fractional digits, left out only when the instant lands exactly on a
+    /// second. The fraction is not decoration. Rows stamped by this helper are
+    /// compared as text by SQLite, and `+` (0x2B) sorts below `.` (0x2E), so a
+    /// second-precision stamp reads as older than every microsecond-precision
+    /// stamp within the same second — which silently drops rows from
+    /// `occurred_at >= ?` windows Python opens with its own clock.
     pub fn isoformat(&self) -> String {
-        let (y, m, d, h, mi, s, _) = self.utc_parts();
-        format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}+00:00")
+        let (y, m, d, h, mi, s, micros) = self.utc_parts();
+        let date = format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}");
+        if micros == 0 {
+            return format!("{date}+00:00");
+        }
+        format!("{date}.{micros:06}+00:00")
     }
 }
 
@@ -1156,7 +1166,8 @@ fn isoformat_utc(t: Timestamp) -> String {
     t.isoformat()
 }
 
-/// `datetime.now(tz=timezone.utc).isoformat()` — seconds precision, `+00:00`.
+/// `datetime.now(tz=timezone.utc).isoformat()` — microsecond precision,
+/// `+00:00`.
 pub fn utc_now_iso() -> String {
     Timestamp::now_utc().isoformat()
 }

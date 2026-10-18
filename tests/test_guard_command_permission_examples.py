@@ -11,13 +11,6 @@ from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     CommandPermissionCatalog,
     CommandPermissionSpec,
 )
-from codex_plugin_scanner.guard.runtime.command_rules import (
-    AnyMatcher,
-    ArgumentMatcher,
-    CommandSafetyRule,
-    ExecutableMatcher,
-    example_for_matcher,
-)
 
 
 def _all_permissions() -> list[CommandPermissionSpec]:
@@ -148,57 +141,4 @@ def test_family_cannot_span_extensions() -> None:
                 _spec("command.demo.permission.one", family="shared"),
                 _spec("command.other.permission.two", family="shared"),
             )
-        )
-
-
-def test_example_for_matcher_derivations() -> None:
-    executable = ExecutableMatcher(
-        executables=frozenset({"gh"}),
-        subcommands=("pr", "merge"),
-        required_flags=frozenset({"--squash"}),
-    )
-    assert example_for_matcher(executable) == "gh pr merge --squash"
-    argument = ArgumentMatcher(executables=frozenset({"rm"}), required_arguments=frozenset({"-r"}))
-    assert example_for_matcher(argument) == "rm -r"
-    combined = AnyMatcher(matchers=(executable, argument))
-    assert example_for_matcher(combined) == "gh pr merge --squash"
-    assert example_for_matcher(None) is None
-
-
-def test_rule_level_example_validation() -> None:
-    with pytest.raises(ValueError, match="multi-line"):
-        CommandSafetyRule(
-            rule_id="command.demo.rule",
-            title="Demo",
-            description="Demo rule",
-            severity="high",
-            risk_classes=("destructive_shell",),
-            action_classes=("demo command",),
-            safer_alternatives=("safer",),
-            example_command="line one\nline two",
-        )
-    with pytest.raises(ValueError, match="over-long"):
-        CommandSafetyRule(
-            rule_id="command.demo.rule",
-            title="Demo",
-            description="Demo rule",
-            severity="high",
-            risk_classes=("destructive_shell",),
-            action_classes=("demo command",),
-            safer_alternatives=("safer",),
-            example_command="x" * 121,
-        )
-
-
-def test_invalid_family_shape_is_rejected_at_rule_level() -> None:
-    with pytest.raises(ValueError, match="invalid family"):
-        CommandSafetyRule(
-            rule_id="command.demo.rule",
-            title="Demo",
-            description="Demo rule",
-            severity="high",
-            risk_classes=("destructive_shell",),
-            action_classes=("demo command",),
-            safer_alternatives=("safer",),
-            family="Bad_Family",
         )

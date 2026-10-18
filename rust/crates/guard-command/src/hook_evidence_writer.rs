@@ -5,8 +5,8 @@
 //!
 //! TODO(deps): the surrounding evidence seams are still Python-owned. Store
 //! writes (`record_command_activity`, `record_composio_discovery`,
-//! `record_native_decision_receipt`, `persist_deferred_post_hook_command_activity`,
-//! `get_command_activity_by_request_correlation`), the journal filesystem
+//! `record_native_decision_receipt`, `transition_command_activity`,
+//! `is_exact_command_activity_pre_replay`), the journal filesystem
 //! helpers (`runtime_hook_evidence_journal`), correlation derivation and
 //! receipt building (`command_activity_privacy`, `command_activity_lifecycle`,
 //! `command_activity_display`, `native_decision_receipt`), observed-MCP /
@@ -30,7 +30,9 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
 
+use crate::hook_evidence_deferred_post::persist_deferred_post_hook_command_activity;
 use crate::local_supply_chain::utc_now_iso;
 use guard_contracts::{is_guard_action, write_canonical_json_with_limit};
 
@@ -39,6 +41,11 @@ const JOURNAL_FILE_MODE: u32 = 0o600;
 /// Journal records are bounded to `_max_bytes`; serialized payload size is
 /// capped at this parity bound before canonicalization can reject it.
 const MAX_SERIALIZED_RECORD_BYTES: usize = 16 * 1024 * 1024;
+/// A drain deadline bounds the records a stop waits for the worker to persist.
+/// Leaving the loop afterwards costs one wakeup, and this is the slack that
+/// wakeup gets, so a stop asking for no drain at all still collects a worker
+/// that had nothing to do.
+const WORKER_EXIT_GRACE: Duration = Duration::from_millis(250);
 
 // ---------------------------------------------------------------------------
 // Dependency seams — traits replacing unported modules (see TODO(deps)).
@@ -48,22 +55,19 @@ const MAX_SERIALIZED_RECORD_BYTES: usize = 16 * 1024 * 1024;
 pub trait EvidenceStoreApi {
     /// `store.guard_home`.
     fn guard_home(&self) -> PathBuf;
-    /// `store.record_command_activity(...)` — `Err` = persistence failure.
-    #[allow(clippy::too_many_arguments)]
+    /// `store.is_exact_command_activity_pre_replay(evidence)` — `Err` =
+    /// lookup failure.
+    fn is_exact_command_activity_pre_replay(
+        &self,
+        evidence: &Map<String, Value>,
+    ) -> Result<bool, io::Error>;
+    /// `store.record_command_activity(evidence, invocation_preview=)` —
+    /// `Ok(false)` = exact replay; `Err` = persistence failure.
     fn record_command_activity(
         &self,
-        correlation: Option<&CorrelationHandle>,
-        harness: &str,
-        event: &str,
-        has_command: bool,
-        succeeded: bool,
-        occurred_at: Option<&str>,
+        evidence: &Map<String, Value>,
         invocation_preview: Option<&str>,
-        policy_action: Option<&str>,
-        receipt_id: Option<&str>,
-        interaction_observed: bool,
-        approval_reuse_status: &str,
-    ) -> Result<(), io::Error>;
+    ) -> Result<bool, io::Error>;
     /// `store.record_composio_discovery(source, actions, *, seen_at=,
     /// proposals=)` — `Err` = persistence failure.
     fn record_composio_discovery(
@@ -73,30 +77,25 @@ pub trait EvidenceStoreApi {
         seen_at: &str,
         proposals: &[ComposioWorkflowProposal],
     ) -> Result<(), io::Error>;
-    /// `store.get_command_activity_by_request_correlation(correlation)` —
-    /// `Err` = lookup failure; `Ok(None)` = no prior record.
-    fn command_activity_by_request_correlation(
-        &self,
-        correlation: &CorrelationHandle,
-    ) -> Result<Option<Map<String, Value>>, io::Error>;
-    /// `store.record_command_activity_observation_conflict(occurred_at=)`.
-    fn record_command_activity_observation_conflict(
-        &self,
-        occurred_at: &str,
-    ) -> Result<(), io::Error>;
     /// `store.record_native_decision_receipt(receipt)` — `Ok(false)` =
     /// deduped/rejected result; `Err` = persistence failure.
     fn record_native_decision_receipt(
         &self,
         receipt: &Map<String, Value>,
     ) -> Result<bool, io::Error>;
-    /// `persist_deferred_post_hook_command_activity(store, *, ...)`.
-    fn persist_deferred_post_hook_command_activity(
+    /// `store.get_command_activity_by_request_correlation(correlation)` —
+    /// `Ok(None)` = no pre-hook row under that handle.
+    fn command_activity_by_request_correlation(
+        &self,
+        correlation: &CorrelationHandle,
+    ) -> Result<Option<Map<String, Value>>, io::Error>;
+    /// `store.transition_command_activity(current)` — `Ok(false)` = the stored
+    /// row already carried this proof.
+    fn transition_command_activity(&self, current: &Map<String, Value>) -> Result<bool, io::Error>;
+    /// `store.record_command_activity_observation_conflict(occurred_at=)`.
+    fn record_command_activity_observation_conflict(
         &self,
         occurred_at: &str,
-        correlation: Option<&CorrelationHandle>,
-        has_command: bool,
-        invocation_preview: Option<&str>,
     ) -> Result<(), io::Error>;
 }
 
@@ -138,6 +137,23 @@ pub trait CorrelationApi {
         prompted: bool,
         approval_reuse_status: &str,
     ) -> Result<Map<String, Value>, io::Error>;
+    /// `build_unpaired_post_evidence(*, activity_id, occurred_at, harness,
+    /// succeeded)` — post-hook evidence claiming no pre-hook decision.
+    fn build_unpaired_post_evidence(
+        &self,
+        activity_id: &str,
+        occurred_at: &str,
+        harness: &str,
+        succeeded: bool,
+    ) -> Result<Map<String, Value>, io::Error>;
+    /// `build_correlated_post_activity(previous, *, request_correlation,
+    /// succeeded)` — `Err` covers the Python `ValueError` guards.
+    fn build_correlated_post_activity(
+        &self,
+        previous: &Map<String, Value>,
+        request_correlation: &CorrelationHandle,
+        succeeded: bool,
+    ) -> Result<Map<String, Value>, io::Error>;
 }
 
 /// `native_decision_receipt` / journal validation seam.
@@ -170,8 +186,11 @@ pub trait ComposioApi {
 /// Journal filesystem seam (`runtime_hook_evidence_journal` helpers +
 /// `datetime.now(timezone.utc)` inside `append_journal`).
 pub trait EvidenceJournalApi {
-    /// `append_journal(path, record)` — lock + O_APPEND + fsync + best-effort
-    /// sidecar; `Err` = `OSError`.
+    /// `append_journal(path, record)` — lock, `O_APPEND`, fsync, then the
+    /// preview sidecar. The sidecar write shares the record's fate, as it does
+    /// in Python: a failure there truncates the appended record back off the
+    /// journal rather than leaving a record whose preview was never stored.
+    /// `Err` = `OSError`.
     fn append_journal(&self, path: &Path, record: &EvidenceRecord) -> Result<(), io::Error>;
     /// `rewrite_journal(path, *, remove_record_id=, max_bytes=)` — returns
     /// the count of dropped invalid records; `Err` = `OSError`.
@@ -202,8 +221,9 @@ pub trait SqliteTimeoutApi {
 /// Bundled dependency seams for [`RuntimeHookEvidenceWriter`].
 pub struct EvidenceWriterDeps {
     pub correlation: Box<dyn CorrelationApi + Send + Sync>,
-    pub receipts: Box<dyn ReceiptValidationApi + Send + Sync>,
-    pub composio: Box<dyn ComposioApi + Send + Sync>,
+    /// Shared with the journal, which decides what a rewrite keeps.
+    pub receipts: Arc<dyn ReceiptValidationApi + Send + Sync>,
+    pub composio: Arc<dyn ComposioApi + Send + Sync>,
     pub journal: Box<dyn EvidenceJournalApi + Send + Sync>,
     pub sqlite_timeout: Box<dyn SqliteTimeoutApi + Send + Sync>,
 }
@@ -262,9 +282,26 @@ pub struct ObservedMcpTool {
     /// Fully qualified `mcp__<server>__<tool>` name.
     pub qualified_name: String,
     /// `source.identity` passed to `ensure_local_mcp_observation`.
-    pub identity: String,
+    pub identity: ObservedCliIdentity,
     /// Server descriptor consumed by `record_composio_discovery`.
     pub server: ObservedMcpServerIdentity,
+}
+
+/// `ObservedMcpTool.identity` — the `UnlistedCliIdentity` the connector
+/// boundary stands in for, as `ensure_local_mcp_observation` records it. The
+/// observed form never carries a source path, runner or path class, so only
+/// the fields that call site reads are kept.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObservedCliIdentity {
+    pub cli_id: String,
+    /// The MCP server segment of the tool name.
+    pub name: String,
+    /// Always `executable` for an observed connector.
+    pub kind: String,
+    pub identity_hash: String,
+    /// The `mcp__<server>__` namespace.
+    pub example_label: String,
+    pub interpreter_name: Option<String>,
 }
 
 /// Server identity carried inside [`ObservedMcpTool`].
@@ -591,12 +628,14 @@ impl McpDiscoveryRecord {
                 "data": {"tool_schemas": value.get("tool_schemas")},
             }),
         )?;
-        let raw_proposals = value.get("workflow_proposals");
-        let raw_proposals = match raw_proposals {
-            None => return None, // reached only when has_proposals is false → skip below
-            Some(v) => v.clone(),
-        };
-        if has_proposals {
+        // Python reads this with `.get("workflow_proposals", [])`, so the
+        // six-key form the key check above accepts has to survive here too:
+        // a record written without proposals is still valid evidence.
+        let raw_proposals = value
+            .get("workflow_proposals")
+            .cloned()
+            .unwrap_or_else(|| json!([]));
+        {
             let raw = raw_proposals.as_array()?;
             if raw.len() > 50
                 || !raw.iter().all(|item| {
@@ -836,8 +875,15 @@ fn _command_activity_record_from_json(value: &Map<String, Value>) -> Option<Comm
         invocation_preview: None,
     };
     let payload_bytes = record.serialized().len();
+    // `_attach_invocation_previews`: a recovered record carries the preview
+    // its sidecar kept. The journal never writes the key inline, so the
+    // serialized bytes this count measures are unaffected.
+    let invocation_preview = journal_fs::validated_sidecar_preview(
+        value.get("invocation_preview").and_then(Value::as_str),
+    );
     Some(CommandActivityRecord {
         payload_bytes,
+        invocation_preview,
         ..record
     })
 }
@@ -889,6 +935,9 @@ struct EvidenceState {
     degraded: bool,
     /// `_drain_deadline` (monotonic).
     drain_deadline: Option<Instant>,
+    /// Set once the worker has left its loop, so a stop can wait for the
+    /// thread to finish without joining it past its own drain deadline.
+    exited: bool,
     accepted: u64,
     processed: u64,
     dropped: u64,
@@ -1005,7 +1054,7 @@ impl RuntimeHookEvidenceWriter {
             .build_invocation_preview_from_payload(&snapshot)
             .ok()
             .flatten();
-        let record = EvidenceRecord::CommandActivity(CommandActivityRecord {
+        let activity = CommandActivityRecord {
             record_id: uuid4_hex(),
             harness: harness.to_string(),
             event: event.to_string(),
@@ -1020,9 +1069,25 @@ impl RuntimeHookEvidenceWriter {
             prompted,
             approval_reuse_status: approval_reuse_status.to_string(),
             invocation_preview,
-        });
+        };
+        // `_CommandActivityRecord.from_json(json.loads(record.serialized()))
+        // is None: return False` (:179-180). The writer admits a record only
+        // when its own serialized form parses back, so metadata the journal
+        // would refuse on recovery -- an approval reuse that claims both a
+        // prompt and an accepted reuse, a malformed receipt id, a policy
+        // action on a post event -- is refused here, while the caller is
+        // still there to see the submission did not take.
+        let round_trip = serde_json::from_slice::<Value>(&activity.serialized());
+        let Ok(Value::Object(parsed)) = round_trip else {
+            return false;
+        };
+        if _command_activity_record_from_json(&parsed).is_none() {
+            return false;
+        }
+        let record = EvidenceRecord::CommandActivity(activity);
         let mut state = self.lock_state();
-        if state.records.len() >= self.max_records
+        if state.stopping
+            || state.records.len() >= self.max_records
             || state.queued_bytes + record.payload_bytes() > self.max_bytes
         {
             state.dropped += 1;
@@ -1043,7 +1108,7 @@ impl RuntimeHookEvidenceWriter {
         tool_name: &str,
         payload: &Map<String, Value>,
     ) -> bool {
-        let Some(_source) = self.deps.composio.observed_mcp_tool(harness, tool_name) else {
+        let Some(source) = self.deps.composio.observed_mcp_tool(harness, tool_name) else {
             return false;
         };
         let tool_response = payload.get("tool_response").cloned().unwrap_or(Value::Null);
@@ -1061,8 +1126,11 @@ impl RuntimeHookEvidenceWriter {
             .unwrap_or_default();
         let record = EvidenceRecord::McpDiscovery(McpDiscoveryRecord {
             record_id: uuid4_hex(),
-            harness: harness.to_string(),
-            tool_name: tool_name.to_string(),
+            // The record carries the canonical names the lookup resolved, not
+            // the caller's spelling: replay re-runs that same lookup and drops
+            // a record whose stored harness does not match what it returns.
+            harness: source.harness.clone(),
+            tool_name: source.qualified_name.clone(),
             occurred_at: utc_now_iso(),
             actions,
             proposals,
@@ -1079,7 +1147,8 @@ impl RuntimeHookEvidenceWriter {
             _ => unreachable!(),
         };
         let mut state = self.lock_state();
-        if state.records.len() >= self.max_records
+        if state.stopping
+            || state.records.len() >= self.max_records
             || state.queued_bytes + record.payload_bytes() > self.max_bytes
         {
             state.dropped += 1;
@@ -1096,6 +1165,12 @@ impl RuntimeHookEvidenceWriter {
     /// `submit_native_decision_receipt` (:237-270).
     pub fn submit_native_decision_receipt(&self, receipt: &Map<String, Value>) -> bool {
         let Some(validated) = self.deps.receipts.validate_native_decision_receipt(receipt) else {
+            // A receipt that does not validate is a dropped receipt, not a
+            // silent no-op: the counters are how a degraded writer is seen.
+            let mut state = self.lock_state();
+            state.receipt_dropped += 1;
+            state.dropped += 1;
+            state.degraded = true;
             return false;
         };
         let record = EvidenceRecord::NativeDecisionReceipt(NativeDecisionReceiptRecord {
@@ -1119,7 +1194,8 @@ impl RuntimeHookEvidenceWriter {
             state.receipt_deduped += 1;
             return true;
         }
-        if state.records.len() >= self.max_records
+        if state.stopping
+            || state.records.len() >= self.max_records
             || state.queued_bytes + record.payload_bytes() > self.max_bytes
         {
             state.receipt_dropped += 1;
@@ -1226,181 +1302,65 @@ impl RuntimeHookEvidenceWriter {
 
     /// `stop` (:313-322) — bounded drain deadline then thread join.
     pub fn stop(&self, timeout_seconds: f64) -> bool {
+        let deadline = Instant::now() + Duration::from_secs_f64(timeout_seconds.max(0.0));
         {
             let mut state = self.lock_state();
             state.stopping = true;
-            state.drain_deadline =
-                Some(Instant::now() + Duration::from_secs_f64(timeout_seconds.max(0.0)));
+            state.drain_deadline = Some(deadline);
             self.condition.1.notify_all();
         }
-        let thread = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take();
-        let joined = match thread {
-            Some(handle) => {
+        let exited = self.wait_for_exit(deadline + WORKER_EXIT_GRACE);
+        if exited {
+            let thread = self.thread.lock().unwrap_or_else(|e| e.into_inner()).take();
+            if let Some(handle) = thread {
                 let _ = handle.join();
-                true
             }
-            None => true,
-        };
+        }
         let mut state = self.lock_state();
         if !state.durable.is_empty() {
             state.degraded = true;
         }
-        joined
+        exited
     }
 
-    /// `_run` (:324-453) — worker loop: journal-append → store persist →
-    /// journal-rewrite per record, with bounded retries and dedupe.
-    fn _run(self: &Arc<Self>) {
-        loop {
-            let batch = self._next_batch();
-            if batch.is_empty() {
-                return;
-            }
-            for record in batch {
-                {
-                    let mut state = self.lock_state();
-                    state.in_flight = true;
-                }
-                let already_durable = {
-                    let state = self.lock_state();
-                    state.durable.contains_key(&record.record_id())
-                };
-                if !already_durable {
-                    if self._append_journal(&record).is_err() {
-                        let mut state = self.lock_state();
-                        state.dropped += 1;
-                        state.failures += 1;
-                        if record.is_receipt() {
-                            state.receipt_dropped += 1;
-                            state.receipt_failures += 1;
-                        }
-                        state.degraded = true;
-                        state.in_flight = false;
-                        continue;
-                    }
-                    let mut state = self.lock_state();
-                    state.durable.insert(record.record_id(), record.clone());
-                }
-                // Bounded shutdown may expire mid-append: keep the record
-                // journal-durable and pending rather than discarding it.
-                {
-                    let mut state = self.lock_state();
-                    if self._drain_expired(&state) {
-                        state.degraded = true;
-                        state.in_flight = false;
-                        continue;
-                    }
-                }
-                let persisted = match &record {
-                    EvidenceRecord::CommandActivity(command_record) => {
-                        self._persist_command_activity(command_record)
-                    }
-                    EvidenceRecord::McpDiscovery(discovery_record) => {
-                        self._persist_mcp_discovery(discovery_record)
-                    }
-                    EvidenceRecord::NativeDecisionReceipt(receipt_record) => {
-                        self._persist_native_decision_receipt(receipt_record)
-                    }
-                };
-                let mut state = self.lock_state();
-                match persisted {
-                    PersistOutcome::Done => {
-                        let _ = state.durable.remove(&record.record_id());
-                        state.retry_attempts.remove(&record.record_id());
-                        if record.is_receipt() {
-                            state.receipt_processed += 1;
-                        }
-                        state.processed += 1;
-                        if self._rewrite_journal(&record.record_id()).is_err() {
-                            state.failures += 1;
-                            state.degraded = true;
-                        }
-                    }
-                    PersistOutcome::Deduped => {
-                        let _ = state.durable.remove(&record.record_id());
-                        state.retry_attempts.remove(&record.record_id());
-                        if record.is_receipt() {
-                            state.receipt_deduped += 1;
-                        }
-                        if self._rewrite_journal(&record.record_id()).is_err() {
-                            state.failures += 1;
-                            state.degraded = true;
-                        }
-                    }
-                    PersistOutcome::Retry => {
-                        let attempt = state
-                            .retry_attempts
-                            .get(&record.record_id())
-                            .copied()
-                            .unwrap_or(0)
-                            + 1;
-                        state.retry_attempts.insert(record.record_id(), attempt);
-                        if attempt >= 3 {
-                            let _ = state.durable.remove(&record.record_id());
-                            state.retry_attempts.remove(&record.record_id());
-                            state.dropped += 1;
-                            state.failures += 1;
-                            if record.is_receipt() {
-                                state.receipt_dropped += 1;
-                                state.receipt_failures += 1;
-                            }
-                            state.degraded = true;
-                            if self._rewrite_journal(&record.record_id()).is_err() {
-                                state.failures += 1;
-                            }
-                        } else {
-                            state.records.push_front(record.clone());
-                            state.queued_bytes += record.payload_bytes();
-                        }
-                    }
-                }
-                state.in_flight = false;
-            }
-        }
+    /// Whether the worker has left its loop. A writer whose worker is gone
+    /// queues records nothing will drain, so a caller holding one after an
+    /// unfinished stop asks this before using it again.
+    pub fn has_exited(&self) -> bool {
+        self.lock_state().exited
     }
 
-    /// `_next_batch` (:454-463).
-    fn _next_batch(&self) -> Vec<EvidenceRecord> {
+    /// Whether a stop has been asked of this writer and its worker has not
+    /// left the loop yet.
+    ///
+    /// A worker in this state still owns the journal it is draining, so a
+    /// second writer must not be built for the same home until it leaves.
+    pub fn is_stopping(&self) -> bool {
+        let state = self.lock_state();
+        state.stopping && !state.exited
+    }
+
+    /// Wait for the worker to leave its loop, and no longer than `deadline`.
+    /// The worker honours its drain deadline between records; one blocked in
+    /// journal or store I/O cannot, and joining it there would hold the stop
+    /// and everything serialised behind it for as long as that write takes.
+    fn wait_for_exit(&self, deadline: Instant) -> bool {
         let mut state = self.lock_state();
         loop {
-            if !state.records.is_empty() || state.stopping {
-                break;
+            if state.exited {
+                return true;
             }
-            state = self
-                .condition
-                .1
-                .wait(state)
-                .unwrap_or_else(|e| e.into_inner());
-        }
-        if state.records.is_empty() {
-            return Vec::new();
-        }
-        if !state.stopping && self.batch_wait_seconds > 0.0 {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return false;
+            }
             let (guard, _) = self
                 .condition
                 .1
-                .wait_timeout(state, Duration::from_secs_f64(self.batch_wait_seconds))
+                .wait_timeout(state, remaining)
                 .unwrap_or_else(|e| e.into_inner());
             state = guard;
         }
-        let mut batch = Vec::new();
-        while let Some(record) = state.records.pop_front() {
-            if batch.len() >= self.max_batch {
-                state.records.push_front(record);
-                break;
-            }
-            state.queued_bytes = state.queued_bytes.saturating_sub(record.payload_bytes());
-            batch.push(record);
-        }
-        batch
-    }
-
-    /// `_drain_expired` (:465-467).
-    fn _drain_expired(&self, state: &EvidenceState) -> bool {
-        state.stopping
-            && state
-                .drain_deadline
-                .is_some_and(|deadline| Instant::now() >= deadline)
     }
 
     /// `_recover_journal` (:468-490) — replay durable records after restart.
@@ -1457,26 +1417,6 @@ impl RuntimeHookEvidenceWriter {
         }
     }
 
-    /// `_append_journal` (:492-494).
-    fn _append_journal(&self, record: &EvidenceRecord) -> Result<(), io::Error> {
-        self.deps.journal.append_journal(&self.journal_path, record)
-    }
-
-    /// `_rewrite_journal` (:496-502).
-    fn _rewrite_journal(&self, remove_record_id: &str) -> Result<(), io::Error> {
-        let invalid_records = self.deps.journal.rewrite_journal(
-            &self.journal_path,
-            remove_record_id,
-            self.max_bytes,
-        )?;
-        if invalid_records > 0 {
-            let mut state = self.lock_state();
-            state.degraded = true;
-            state.failures += invalid_records;
-        }
-        Ok(())
-    }
-
     /// Spawn `hol-guard-hook-evidence` daemon thread running `_run`.
     fn _spawn_thread(&self) {
         // Arc<Self> is unavailable inside `new`; capture the weak pieces.
@@ -1514,127 +1454,20 @@ impl RuntimeHookEvidenceWriter {
             .name("hol-guard-hook-evidence".to_string())
             .spawn(move || worker.run())
             .ok();
+        if handle.is_none() {
+            // Only the worker's exit marks the state, and this one never
+            // started. Left alone, the writer would look live for the rest of
+            // the process: submissions would queue onto a deque nothing
+            // drains, and the slot would never replace it. It is marked
+            // stopping so submissions are refused rather than lost, and
+            // exited so the next request builds a writer that runs.
+            let mut state = self.lock_state();
+            state.stopping = true;
+            state.exited = true;
+            state.degraded = true;
+            self.condition.1.notify_all();
+        }
         *self.thread.lock().unwrap_or_else(|e| e.into_inner()) = handle;
-    }
-
-    /// `_persist_command_activity` — the `_run` CommandActivity branch
-    /// (:370-406): sqlite-timeout-guarded store write with deferred
-    /// PostToolUse fallback.
-    fn _persist_command_activity(&self, record: &CommandActivityRecord) -> PersistOutcome {
-        let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
-            NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
-                .unwrap_or(NonZeroU32::MIN),
-        );
-        let occurred_at = self.deps.journal.now_utc_iso();
-        if record.event == "PostToolUse" {
-            return match self.store.persist_deferred_post_hook_command_activity(
-                &occurred_at,
-                record.correlation.as_ref(),
-                record.has_command,
-                record.invocation_preview.as_deref(),
-            ) {
-                Ok(()) => PersistOutcome::Done,
-                Err(_) => PersistOutcome::Retry,
-            };
-        }
-        let result = if let Some(correlation) = &record.correlation {
-            match self
-                .store
-                .command_activity_by_request_correlation(correlation)
-            {
-                Ok(Some(previous)) => {
-                    let previous_event = previous.get("event").and_then(Value::as_str);
-                    let previous_succeeded = previous
-                        .get("execution_confirmed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                    if previous_event == Some(record.event.as_str())
-                        && previous_succeeded == record.succeeded
-                        && record.event == "PreToolUse"
-                    {
-                        Ok(PersistOutcome::Deduped)
-                    } else {
-                        match self
-                            .store
-                            .record_command_activity_observation_conflict(&occurred_at)
-                        {
-                            Ok(()) => Ok(PersistOutcome::Done),
-                            Err(err) => Err(err),
-                        }
-                    }
-                }
-                Ok(None) => self.store_record_command_activity(record),
-                Err(err) => Err(err),
-            }
-        } else {
-            self.store_record_command_activity(record)
-        };
-        match result {
-            Ok(outcome) => outcome,
-            Err(_) => PersistOutcome::Retry,
-        }
-    }
-
-    /// `store.record_command_activity(...)` positional/kwarg parity.
-    fn store_record_command_activity(
-        &self,
-        record: &CommandActivityRecord,
-    ) -> Result<PersistOutcome, io::Error> {
-        self.store.record_command_activity(
-            record.correlation.as_ref(),
-            &record.harness,
-            &record.event,
-            record.has_command,
-            record.succeeded,
-            record.occurred_at.as_deref(),
-            record.invocation_preview.as_deref(),
-            record.policy_action.as_deref(),
-            record.receipt_id.as_deref(),
-            record.prompted,
-            &record.approval_reuse_status,
-        )?;
-        Ok(PersistOutcome::Done)
-    }
-
-    /// `_run` McpDiscovery branch (:366-369 + :407-413): re-validate the
-    /// observed tool then persist under the sqlite timeout.
-    fn _persist_mcp_discovery(&self, record: &McpDiscoveryRecord) -> PersistOutcome {
-        let Some(source) = self
-            .deps
-            .composio
-            .observed_mcp_tool(&record.harness, &record.tool_name)
-        else {
-            return PersistOutcome::Done;
-        };
-        let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
-            NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
-                .unwrap_or(NonZeroU32::MIN),
-        );
-        match self.store.record_composio_discovery(
-            &source,
-            &record.actions,
-            &record.occurred_at,
-            &record.proposals,
-        ) {
-            Ok(()) => PersistOutcome::Done,
-            Err(_) => PersistOutcome::Retry,
-        }
-    }
-
-    /// `_run` receipt branch (:414-428): `Ok(false)` = deduped.
-    fn _persist_native_decision_receipt(
-        &self,
-        record: &NativeDecisionReceiptRecord,
-    ) -> PersistOutcome {
-        let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
-            NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
-                .unwrap_or(NonZeroU32::MIN),
-        );
-        match self.store.record_native_decision_receipt(&record.receipt) {
-            Ok(true) => PersistOutcome::Done,
-            Ok(false) => PersistOutcome::Deduped,
-            Err(_) => PersistOutcome::Retry,
-        }
     }
 
     /// Lock the shared condition state, recovering from poisoning.
@@ -1644,10 +1477,37 @@ impl RuntimeHookEvidenceWriter {
 }
 
 /// Per-record persist result inside `_run`.
-enum PersistOutcome {
+pub(crate) enum PersistOutcome {
     Done,
     Deduped,
     Retry,
+}
+
+/// `hashlib.sha256(json.dumps([...]).encode("utf-8")).hexdigest()` over the
+/// prevented-attempt tuple.
+///
+/// `json.dumps` writes `", "` between elements, so the parts are joined that
+/// way rather than with `serde_json`'s compact separator; the digest is a join
+/// key and both runtimes have to land on the same bytes.
+fn prevented_attempt_digest(
+    correlation: &CorrelationHandle,
+    record: &CommandActivityRecord,
+    policy_action: &str,
+) -> String {
+    let parts = [
+        Value::from("native-prevented-attempt-v1"),
+        Value::from(correlation.digest.as_str()),
+        Value::from(policy_action),
+        record
+            .receipt_id
+            .as_deref()
+            .map_or(Value::Null, Value::from),
+        Value::from(record.prompted),
+        Value::from(record.approval_reuse_status.as_str()),
+    ];
+    let rendered: Vec<String> = parts.iter().map(Value::to_string).collect();
+    let encoded = format!("[{}]", rendered.join(", "));
+    hex::encode(Sha256::digest(encoded.as_bytes()))
 }
 
 /// Worker half of [`RuntimeHookEvidenceWriter`] — owns `_run` on its thread
@@ -1668,9 +1528,25 @@ struct EvidenceWorker {
     correlation_key: Mutex<Option<InstallationCorrelationKey>>,
 }
 
+/// Reports the worker's exit to a stop waiting on it, however the loop ends.
+struct WorkerExit {
+    condition: Arc<(Mutex<EvidenceState>, Condvar)>,
+}
+
+impl Drop for WorkerExit {
+    fn drop(&mut self) {
+        let mut state = self.condition.0.lock().unwrap_or_else(|e| e.into_inner());
+        state.exited = true;
+        self.condition.1.notify_all();
+    }
+}
+
 impl EvidenceWorker {
     /// `_run` (:324-453).
     fn run(&self) {
+        let _exit = WorkerExit {
+            condition: Arc::clone(&self.condition),
+        };
         loop {
             let batch = self.next_batch();
             if batch.is_empty() {
@@ -1733,9 +1609,17 @@ impl EvidenceWorker {
                             state.receipt_processed += 1;
                         }
                         state.processed += 1;
-                        if self.rewrite_journal(&record.record_id()).is_err() {
-                            state.failures += 1;
-                            state.degraded = true;
+                        match self.rewrite_journal(&record.record_id()) {
+                            Ok(invalid_records) => {
+                                if invalid_records > 0 {
+                                    state.failures += invalid_records;
+                                    state.degraded = true;
+                                }
+                            }
+                            Err(_) => {
+                                state.failures += 1;
+                                state.degraded = true;
+                            }
                         }
                     }
                     PersistOutcome::Deduped => {
@@ -1744,9 +1628,17 @@ impl EvidenceWorker {
                         if record.is_receipt() {
                             state.receipt_deduped += 1;
                         }
-                        if self.rewrite_journal(&record.record_id()).is_err() {
-                            state.failures += 1;
-                            state.degraded = true;
+                        match self.rewrite_journal(&record.record_id()) {
+                            Ok(invalid_records) => {
+                                if invalid_records > 0 {
+                                    state.failures += invalid_records;
+                                    state.degraded = true;
+                                }
+                            }
+                            Err(_) => {
+                                state.failures += 1;
+                                state.degraded = true;
+                            }
                         }
                     }
                     PersistOutcome::Retry => {
@@ -1767,8 +1659,9 @@ impl EvidenceWorker {
                                 state.receipt_failures += 1;
                             }
                             state.degraded = true;
-                            if self.rewrite_journal(&record.record_id()).is_err() {
-                                state.failures += 1;
+                            match self.rewrite_journal(&record.record_id()) {
+                                Ok(invalid_records) => state.failures += invalid_records,
+                                Err(_) => state.failures += 1,
                             }
                         } else {
                             state.queued_bytes += record.payload_bytes();
@@ -1817,67 +1710,67 @@ impl EvidenceWorker {
         batch
     }
 
-    /// `_persist_command_activity` (:370-406) under `sqlite_timeout_override`.
+    /// `_persist_command_activity` (:410-455) under `sqlite_timeout_override`.
+    ///
+    /// A Pre event carries the whole verdict already: Rust built the evidence,
+    /// so the store writes it and never recomputes it. Every other event is a
+    /// post observation and goes through the deferred pairing helper.
     fn persist_command_activity(&self, record: &CommandActivityRecord) -> PersistOutcome {
         let _timeout_guard = self.deps.sqlite_timeout.sqlite_timeout_override(
             NonZeroU32::new((self.sqlite_timeout_seconds * 1000.0).ceil().max(1.0) as u32)
                 .unwrap_or(NonZeroU32::MIN),
         );
-        let occurred_at = self.deps.journal.now_utc_iso();
-        if record.event == "PostToolUse" {
-            return match self.store.persist_deferred_post_hook_command_activity(
-                &occurred_at,
-                record.correlation.as_ref(),
-                record.has_command,
-                record.invocation_preview.as_deref(),
-            ) {
-                Ok(()) => PersistOutcome::Done,
-                Err(_) => PersistOutcome::Retry,
-            };
+        if record.event != "PreToolUse" {
+            return persist_deferred_post_hook_command_activity(
+                self.store.as_ref(),
+                self.deps.as_ref(),
+                record,
+            );
         }
-        if let Some(correlation) = &record.correlation {
-            match self
-                .store
-                .command_activity_by_request_correlation(correlation)
-            {
-                Ok(Some(previous)) => {
-                    let previous_event = previous.get("event").and_then(Value::as_str);
-                    let previous_succeeded = previous
-                        .get("execution_confirmed")
-                        .and_then(Value::as_bool)
-                        .unwrap_or(false);
-                    if previous_event == Some(record.event.as_str())
-                        && previous_succeeded == record.succeeded
-                        && record.event == "PreToolUse"
-                    {
-                        return PersistOutcome::Deduped;
-                    }
-                    return match self
-                        .store
-                        .record_command_activity_observation_conflict(&occurred_at)
-                    {
-                        Ok(()) => PersistOutcome::Done,
-                        Err(_) => PersistOutcome::Retry,
-                    };
-                }
-                Ok(None) => {}
-                Err(_) => return PersistOutcome::Retry,
-            }
-        }
-        match self.store.record_command_activity(
-            record.correlation.as_ref(),
-            &record.harness,
-            &record.event,
-            record.has_command,
-            record.succeeded,
-            record.occurred_at.as_deref(),
-            record.invocation_preview.as_deref(),
+        let (Some(policy_action), Some(occurred_at)) = (
             record.policy_action.as_deref(),
+            record.occurred_at.as_deref(),
+        ) else {
+            return PersistOutcome::Done;
+        };
+        if !record.has_command {
+            return PersistOutcome::Done;
+        }
+        // A prevented attempt cannot produce a post event. Keep its evidence
+        // separate from a later approved retry of the same call.
+        let correlation = record.correlation.as_ref().map(|correlation| {
+            if matches!(policy_action, "allow" | "warn") {
+                correlation.clone()
+            } else {
+                CorrelationHandle {
+                    digest: prevented_attempt_digest(correlation, record, policy_action),
+                    ..correlation.clone()
+                }
+            }
+        });
+        let evidence = match self.deps.correlation.build_policy_only_pre_hook_evidence(
+            record.record_id(),
+            occurred_at,
+            &record.harness,
+            policy_action,
+            correlation.as_ref(),
             record.receipt_id.as_deref(),
             record.prompted,
             &record.approval_reuse_status,
         ) {
-            Ok(()) => PersistOutcome::Done,
+            Ok(evidence) => evidence,
+            Err(_) => return PersistOutcome::Retry,
+        };
+        match self.store.is_exact_command_activity_pre_replay(&evidence) {
+            Ok(true) => return PersistOutcome::Done,
+            Ok(false) => {}
+            Err(_) => return PersistOutcome::Retry,
+        }
+        match self
+            .store
+            .record_command_activity(&evidence, record.invocation_preview.as_deref())
+        {
+            Ok(_) => PersistOutcome::Done,
             Err(_) => PersistOutcome::Retry,
         }
     }
@@ -1923,18 +1816,18 @@ impl EvidenceWorker {
     }
 
     /// `_rewrite_journal` (:496-502).
-    fn rewrite_journal(&self, remove_record_id: &str) -> Result<(), io::Error> {
-        let invalid_records = self.deps.journal.rewrite_journal(
-            &self.journal_path,
-            remove_record_id,
-            self.max_bytes,
-        )?;
-        if invalid_records > 0 {
-            let mut state = self.lock_state();
-            state.degraded = true;
-            state.failures += invalid_records;
-        }
-        Ok(())
+    /// Rewrite the journal without the record, and report how many invalid
+    /// lines the rewrite dropped.
+    ///
+    /// The count is returned rather than recorded here. Every caller runs
+    /// inside the worker loop holding the shared state, and this lock is not
+    /// reentrant: taking it again on the same thread would wedge the worker
+    /// while it holds the lock a stop needs, and every request behind that
+    /// stop with it.
+    fn rewrite_journal(&self, remove_record_id: &str) -> Result<u64, io::Error> {
+        self.deps
+            .journal
+            .rewrite_journal(&self.journal_path, remove_record_id, self.max_bytes)
     }
 
     fn lock_state(&self) -> MutexGuard<'_, EvidenceState> {
@@ -1982,3 +1875,24 @@ pub type EvidenceJournalFileMode = u32;
 pub const fn journal_file_mode() -> u32 {
     JOURNAL_FILE_MODE
 }
+
+#[path = "hook_evidence_journal_fs.rs"]
+mod journal_fs;
+
+pub use journal_fs::NativeEvidenceJournal;
+
+#[path = "hook_evidence_receipt.rs"]
+mod receipt;
+
+pub use receipt::{
+    canonical_receipt_bytes, valid_prompt_risk_classes, validate_native_decision_receipt,
+    NativeReceiptValidation,
+};
+
+#[path = "hook_evidence_preview.rs"]
+mod preview;
+
+pub use preview::{
+    build_invocation_preview, build_invocation_preview_from_payload, checked_command_from_payload,
+    INVOCATION_PREVIEW_MAX_CHARS,
+};

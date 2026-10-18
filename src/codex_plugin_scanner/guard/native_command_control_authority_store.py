@@ -14,6 +14,7 @@ from .native_command_control_authority import (
     AUTHORITY_MAX_BYTES,
     AUTHORITY_SCHEMA,
     MAX_REVISION,
+    PACK_AUTHORITY_SCHEMA,
     RECOVERY_SCHEMA,
     ZERO_DIGEST,
     authority_binding,
@@ -150,11 +151,15 @@ def _next(value: object) -> int:
 
 
 def _initial(store: GuardStore, verifier_key: bytes) -> dict[str, object]:
+    from .catalog_delivery.projection import program_authority
+
+    program = program_authority(store, verifier_key)
     floor = read_native_control_floor(store, verifier_key)
     prior = _floor_authority(floor)
     # Recreating a missing marker never lowers an authenticated native floor.
     return {
-        "schema": AUTHORITY_SCHEMA,
+        "schema": AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA,
+        **({"pack_program_digest": program} if program is not None else {}),
         "epoch": prior.get("epoch", 1),
         "mutation_revision": _next(prior.get("mutation_revision", 0)),
         "authority_key_id": prior.get("authority_key_id", authority_key_id(store._authority_key(required=False))),
@@ -230,6 +235,9 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
 
     require_command_control_mutation_lease(store.guard_home)
     verifier_key = _key(store)
+    from .catalog_delivery.projection import program_authority
+
+    program = program_authority(store, verifier_key, binding)
     current = read_command_control_authority(store, verifier_key)
     if current is None:
         current = _initial(store, verifier_key)
@@ -241,13 +249,19 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
     # recovery evidence never authorizes another key change in that epoch.
     if key_id != current["authority_key_id"] and current["authority_key_id"] != ZERO_DIGEST:
         raise NativePolicySnapshotError("native_command_control_authority_key_changed")
+    if program is None and current["schema"] == PACK_AUTHORITY_SCHEMA:
+        raise NativePolicySnapshotError("native_command_pack_activation_missing")
     candidate = {
         **current,
+        "schema": AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA,
+        **({"pack_program_digest": program} if program is not None else {}),
         "authority_key_id": key_id,
         "phase": "committed",
         "effective_digest": binding["effective_digest"],
     }
-    if current["phase"] == "committed" and current["effective_digest"] != candidate["effective_digest"]:
+    if current["phase"] == "committed" and (
+        current["effective_digest"] != candidate["effective_digest"] or current.get("pack_program_digest") != program
+    ):
         # A health/catalog change discovered by verification is still a new
         # fence; never reuse a committed fence for different effective bytes.
         candidate["mutation_revision"] = _next(current["mutation_revision"])
@@ -260,12 +274,18 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
 def read_committed_projection_authority(store: GuardStore, binding: Mapping[str, object]) -> dict[str, object]:
     """Read an unchanged committed marker without excluding native readers."""
 
-    current = read_command_control_authority(store, _key(store))
+    from .catalog_delivery.projection import program_authority
+
+    verifier_key = _key(store)
+    program = program_authority(store, verifier_key, binding)
+    current = read_command_control_authority(store, verifier_key)
     if (  # NOSONAR(S2583) A present authenticated marker can satisfy all retained checks.
         current is None  # NOSONAR(S2583) Missing markers require mutation; verified present markers return a dict.
         or current["phase"] != "committed"
         or current["effective_digest"] != binding["effective_digest"]
         or current["authority_key_id"] != authority_key_id(store._authority_key(required=False))
+        or current.get("pack_program_digest") != program
+        or current["schema"] != (AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA)
     ):
         raise NativeCommandControlMutationRequiredError()
     return authority_binding(current)

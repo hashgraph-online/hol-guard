@@ -20,6 +20,16 @@ pub(super) fn requires_review(
     )
 }
 
+/// Whether the segment is the patch check. The check is not a read this floor
+/// owns: it prints its report whatever the configuration says, and the helper
+/// proof answers for the index it refreshes. An unprovable configuration
+/// therefore leaves the check its own review floor rather than this one's.
+fn patch_check(arguments: &[String], context: super::PathContext<'_>) -> bool {
+    crate::command_compatibility::git_inspection_arguments(arguments, context)
+        .and_then(|remaining| remaining.first())
+        .is_some_and(|operation| operation.as_str() == "apply")
+}
+
 /// The earlier steps that alone keep the command's Git reads under the
 /// floor: every Git read was proven helper-free, but a step before it could
 /// not be proven to leave Git's configuration unchanged. Run alone, each read
@@ -153,6 +163,7 @@ fn verdict(
                 .executable
                 .as_deref()
                 .filter(|executable| super::executable_basename(executable) == "git")
+                .filter(|_| !patch_check(&arguments[index], read_context))
                 .and_then(|executable| {
                     super::git_config::execution_free(
                         executable,

@@ -128,7 +128,7 @@ _CONNECTOR = {
 }
 
 
-def _setup(tmp_path: Path) -> object:
+def _setup(tmp_path: Path, path: str | None = None) -> object:
     store = SimpleNamespace(
         path=tmp_path / "guard.db",
         guard_home=tmp_path,
@@ -136,7 +136,9 @@ def _setup(tmp_path: Path) -> object:
         _repair_store_permissions=lambda: None,
         _recover_fatal_sqlite_store=lambda _error: None,
     )
-    return client.local_cli_setup_connector(store=store, command="lanectl status", cwd=tmp_path, home_dir=None)
+    return client.local_cli_setup_connector(
+        store=store, command="lanectl status", cwd=tmp_path, home_dir=None, path=path
+    )
 
 
 def test_a_review_names_the_connector_to_set_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -151,6 +153,19 @@ def test_a_review_names_the_connector_to_set_up(monkeypatch: pytest.MonkeyPatch,
     assert request["grant_allowed"] is True
     # The plain action call ignores the connector and keeps its answer.
     assert _ask(tmp_path) == "review"
+
+
+def test_the_cli_resolves_on_the_agents_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    # The daemon runs with the OS's short PATH; the agent finds its CLI in ~/.local/bin.
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    calls = _reply(monkeypatch, payload={"action": "review", "connector": _CONNECTOR})
+
+    _setup(tmp_path, path="/home/dev/.local/bin:/usr/bin:/bin")
+    _setup(tmp_path)
+
+    envs = [call["request"]["env"] for call in calls]  # type: ignore[index]
+    assert envs[0]["PATH"] == "/home/dev/.local/bin:/usr/bin:/bin"
+    assert envs[1]["PATH"] == "/usr/bin:/bin"
 
 
 @pytest.mark.parametrize(

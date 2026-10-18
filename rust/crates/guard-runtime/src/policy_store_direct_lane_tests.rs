@@ -272,6 +272,51 @@ fn an_ack_behind_the_bound_snapshot_is_awaited_briefly() {
 }
 
 #[test]
+fn a_bounded_hook_admission_never_settles_past_its_deadline() {
+    let fixture = fixture("ack-settle-bounded");
+    push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();
+    let digest = fixture.snapshot.policy_digest.clone();
+    write_ack(&fixture.root, 0, &digest, now_ms().unwrap() + 30_000, 0o600);
+    // The store would wait ten seconds for the ACK to catch up, and the ACK
+    // never does. A caller whose own budget is spent gets the stale read back
+    // at once, and leaves the generation's wait for a hook that can afford it.
+    widen_settle_budget(&fixture);
+    let started = std::time::Instant::now();
+    let defer = fixture
+        .store
+        .admit_direct_hook_or_subdirectory_by("/work/repo", started)
+        .err();
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(defer, Some(DirectLaneDefer::AckMismatch));
+    assert_eq!(
+        fixture
+            .store
+            .direct_lane_ack_wait
+            .claimed
+            .load(Ordering::Acquire),
+        0
+    );
+    // A caller that still has a little budget waits on the generation, and
+    // waits no longer than the budget it arrived with.
+    let started = std::time::Instant::now();
+    let deadline = started + std::time::Duration::from_millis(50);
+    let defer = fixture
+        .store
+        .admit_direct_hook_or_subdirectory_by("/work/repo", deadline)
+        .err();
+    assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    assert_eq!(defer, Some(DirectLaneDefer::AckMismatch));
+    assert_eq!(
+        fixture
+            .store
+            .direct_lane_ack_wait
+            .claimed
+            .load(Ordering::Acquire),
+        1
+    );
+}
+
+#[test]
 fn an_ack_that_expires_during_the_wait_is_expired() {
     let fixture = fixture("ack-settle-expired");
     push(&fixture, Some(binding(&fixture, "/work/repo"))).unwrap();

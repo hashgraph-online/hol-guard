@@ -328,6 +328,7 @@ fn rg_arguments_pass(
                 && !sibling::rg_sibling_repository_root(argument, context)
                 && !sibling::named_path(argument, context, allow_absent)
                 && !tree::safe_recursive_search_target(argument, context)
+                && !tree::safe_literal_bracket_search_target(argument, context)
                 && (!argument.contains(['*', '?', '['])
                     || !tree::safe_glob_search_operand(argument, context))
             {

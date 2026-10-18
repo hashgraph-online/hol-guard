@@ -127,6 +127,7 @@ fn query(
         tool_name: tool.to_owned(),
         command: command.map(str::to_owned),
         tool_input,
+        raw_tool_input: None,
         payload_cwd: Some(cwd.to_owned()),
         workspace: Some(tree.ws()),
         home_dir: Some(tree.path("home")),

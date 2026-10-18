@@ -1,5 +1,6 @@
-// Guidance for native reviews whose one-time approval never lets the agent's next call through.
-// The daemon marks them with the `retry_cannot_reuse_approval` scope restriction.
+// Guidance for native reviews queued before every review carried a retry binding.
+// The daemon marks them with the `retry_cannot_reuse_approval` scope restriction. Every review
+// queued now offers Allow once and Always allow (docs/guard/approval-invariant.md).
 import type { GuardApprovalRequest } from "./guard-types";
 import type { QueueGroup } from "./queue-state";
 
@@ -22,28 +23,24 @@ function allowPermissionLabels(item: GuardApprovalRequest): string | null {
   return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
 
-/** Explain, before approval, what actually lets the agent run a command whose one-time approval cannot. */
-export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
-  const base = `Guard cannot bind ${harness}'s one-time retry to the reviewed action. Run once is unavailable.`;
+/** What lets the agent run a command whose request predates retry bindings. Never "run it yourself". */
+function legacyRequestNextStep(item: GuardApprovalRequest, harness: string): string {
   if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
+    return `Choose "Always allow exact action" to let ${harness} run this exact command.`;
   }
   const labels = allowPermissionLabels(item);
-  return labels === null
-    ? `${base} Copy the command and run it yourself.`
-    : `${base} To let ${harness} run commands like this, set ${labels} to Allow in Extensions, or copy the command and run it yourself.`;
+  const retry = `Ask ${harness} to run the command again; the new request offers Allow once and Always allow.`;
+  return labels === null ? retry : `${retry} To let ${harness} run commands like this, set ${labels} to Allow in Extensions.`;
 }
 
-/** Post-approval copy for a one-time approval that leaves the agent blocked. */
+/** Explain, before approval, what lets the agent run a command whose request predates retry bindings. */
+export function retryCannotReuseApprovalHint(item: GuardApprovalRequest, harness: string): string {
+  return `An older version of Guard recorded this request, so Run once cannot reach ${harness}'s retry. ${legacyRequestNextStep(item, harness)}`;
+}
+
+/** Post-approval copy for a one-time approval on a request that predates retry bindings. */
 export function retryBlockedApprovalCopy(item: GuardApprovalRequest, harness: string): string {
-  const base = `Decision recorded. ${harness} will still be blocked on this command.`;
-  if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`;
-  }
-  const labels = allowPermissionLabels(item);
-  return labels === null
-    ? `${base} Copy the command and run it yourself.`
-    : `${base} To let it run commands like this, set ${labels} to Allow in Extensions, or run the command yourself.`;
+  return `Decision recorded. ${legacyRequestNextStep(item, harness)}`;
 }
 
 /**

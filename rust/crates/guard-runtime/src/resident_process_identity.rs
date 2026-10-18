@@ -3,7 +3,7 @@
 use std::fs;
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
+use sysinfo::{Pid, ProcessRefreshKind, ProcessesToUpdate, System};
 
 const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 pub(crate) fn executable_missing(path: &Path) -> bool {
@@ -71,7 +71,7 @@ pub(crate) fn process_start_marker(process_id: u32) -> Result<String, String> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
-        ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always),
     );
     let process = system
         .process(pid)
@@ -261,7 +261,7 @@ fn process_executable_path(process_id: u32) -> Result<PathBuf, String> {
     system.refresh_processes_specifics(
         ProcessesToUpdate::Some(&[pid]),
         true,
-        ProcessRefreshKind::nothing().with_exe(UpdateKind::Always),
+        ProcessRefreshKind::nothing().with_exe(sysinfo::UpdateKind::Always),
     );
     let executable = system
         .process(pid)

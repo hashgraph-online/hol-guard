@@ -36,6 +36,48 @@ fn trusted_python() -> Option<PathBuf> {
     base
 }
 
+/// A trusted `bin` a venv can name as its home, with the prefix holding it.
+/// The grant names the launcher directory and the standard library beside it,
+/// so the directory has to be one an install really starts Python from: a
+/// trusted path that happens to hold no interpreter is not a runtime, and a
+/// host where none of these does is skipped.
+fn trusted_prefix() -> Option<(PathBuf, PathBuf)> {
+    ["/usr/local/bin", "/opt/homebrew/bin", "/usr/bin"]
+        .iter()
+        .filter_map(|bin| Path::new(bin).canonicalize().ok())
+        .filter(|bin| path_is_within_any(bin, &TRUSTED_EXECUTABLE_ROOTS) && interpreter_home(bin))
+        .find_map(|bin| {
+            let prefix = bin.parent()?.to_path_buf();
+            (!managed_prefix(&prefix)).then_some((prefix, bin))
+        })
+}
+
+/// An install of one runtime's own below a trusted root, such as a
+/// tool-cache or Homebrew formula directory, with the `bin` it installs.
+fn managed_prefix_install() -> Option<(PathBuf, PathBuf)> {
+    let parents = [
+        "/opt/hostedtoolcache/Python",
+        "/opt/homebrew/opt",
+        "/usr/local/opt",
+    ];
+    parents
+        .iter()
+        .filter_map(|parent| fs::read_dir(parent).ok())
+        .flat_map(|entries| entries.flatten().take(64).collect::<Vec<_>>())
+        .filter_map(|entry| {
+            let prefix = entry.path().canonicalize().ok()?;
+            let bin = prefix.join("bin").canonicalize().ok()?;
+            let library = prefix.join("lib").is_dir();
+            let interpreter = interpreter_home(&bin);
+            (library
+                && interpreter
+                && bin.parent() == Some(prefix.as_path())
+                && managed_prefix(&prefix))
+            .then_some((prefix, bin))
+        })
+        .next()
+}
+
 fn executable(path: &Path) {
     fs::write(path, b"#!/bin/sh\n").unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o755)).unwrap();
@@ -214,4 +256,120 @@ fn venv_admission_keeps_interpreter_environment_filtering() {
         filter(&source).unwrap_err().reason_code,
         PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE
     );
+}
+
+#[test]
+fn a_workspace_venv_grants_the_install_its_launchers_run() {
+    let Some(base) = trusted_python() else { return };
+    let Some((prefix, bin)) = trusted_prefix() else {
+        eprintln!("skipping workspace venv test: no trusted prefix");
+        return;
+    };
+    let fixture = fixture();
+    let (workspace, outside) = layout(&fixture.0, &base, &bin.to_string_lossy());
+    let venv = workspace.join(".venv");
+    fs::rename(&outside, &venv).unwrap();
+    let venv_bin = venv.join("bin");
+    let home = |home: &Path| {
+        fs::write(
+            venv.join("pyvenv.cfg"),
+            format!("home = {}\n", home.display()),
+        )
+        .unwrap();
+    };
+    // A trusted root names every program and configuration file installed
+    // below it, so a `pyvenv.cfg` naming its `bin` grants the interpreter's
+    // own directory and the standard library beside it, never the root.
+    let granted = workspace_base_roots(&venv_bin, &workspace);
+    assert_eq!(granted.first(), Some(&bin), "{granted:?}");
+    assert!(!granted.contains(&prefix), "{granted:?}");
+    assert!(
+        granted.iter().skip(1).all(|library| {
+            library.parent() == Some(prefix.join("lib").as_path())
+                && library.to_string_lossy().contains("python")
+        }),
+        "{granted:?}"
+    );
+    // A managed install is one runtime's own, so it is granted whole.
+    if let Some((managed, managed_bin)) = managed_prefix_install() {
+        home(&managed_bin);
+        assert_eq!(
+            workspace_base_roots(&venv_bin, &workspace),
+            vec![managed],
+            "{managed_bin:?}"
+        );
+        home(&bin);
+    }
+    // Only a venv's `bin`, and only a venv the workspace holds.
+    assert!(workspace_base_roots(&venv, &workspace).is_empty());
+    assert!(workspace_base_roots(&venv_bin, &fixture.0.join("elsewhere")).is_empty());
+    // A directory below a trusted root that no install starts Python from is
+    // not a runtime, however the workspace's own `pyvenv.cfg` names it.
+    for sibling in ["lib", "etc", "share"] {
+        let candidate = prefix.join(sibling);
+        if candidate.is_dir() {
+            home(&candidate);
+            assert!(
+                workspace_base_roots(&venv_bin, &workspace).is_empty(),
+                "{candidate:?}"
+            );
+        }
+    }
+    home(&bin);
+    // A home that is not an approved runtime grants nothing.
+    let plain = fixture.0.join("base/bin");
+    fs::create_dir_all(&plain).unwrap();
+    home(&plain);
+    assert!(workspace_base_roots(&venv_bin, &workspace).is_empty());
+    // A system interpreter grants `/usr/bin` and its standard library, not
+    // `/usr`, which holds the whole system's libraries and configuration.
+    home(Path::new("/usr/bin"));
+    let system = workspace_base_roots(&venv_bin, &workspace);
+    assert_eq!(
+        system.first().map(PathBuf::as_path),
+        Some(Path::new("/usr/bin"))
+    );
+    assert!(!system.contains(&PathBuf::from("/usr")), "{system:?}");
+    // Nor does a venv that is no longer shaped like one.
+    home(&bin);
+    fs::write(venv.join("notes.txt"), "").unwrap();
+    assert!(workspace_base_roots(&venv_bin, &workspace).is_empty());
+}
+
+#[test]
+fn a_version_selector_reaches_the_run_only_as_a_version_name() {
+    let Some(base) = trusted_python() else { return };
+    let fixture = fixture();
+    let home = base.parent().unwrap().to_string_lossy().into_owned();
+    let (workspace, venv) = layout(&fixture.0, &base, &home);
+    let allowed = admit("python3", &workspace, &venv).unwrap();
+    let private = fixture.0.join("private");
+    let filter = |source: &BTreeMap<String, String>| {
+        environment::filter(
+            source, &workspace, &workspace, &private, &private, &allowed, false,
+        )
+        .unwrap()
+    };
+    let kept = BTreeMap::from([
+        ("PYENV_VERSION".to_owned(), "3.12.1:3.11".to_owned()),
+        ("ASDF_NODEJS_VERSION".to_owned(), "20.11.0".to_owned()),
+        ("RBENV_VERSION".to_owned(), "system".to_owned()),
+    ]);
+    let env = filter(&kept);
+    for (key, value) in &kept {
+        assert_eq!(env.get(key), Some(value), "{key}");
+    }
+    // A value that names anything but a version, and a setting that moves the
+    // manager's root instead of choosing inside it, are both dropped.
+    let dropped = BTreeMap::from([
+        ("PYENV_VERSION".to_owned(), "../../etc".to_owned()),
+        ("NODENV_VERSION".to_owned(), "-rf".to_owned()),
+        ("GOENV_VERSION".to_owned(), String::new()),
+        ("PYENV_ROOT".to_owned(), home.clone()),
+        ("ASDF_DATA_DIR".to_owned(), home),
+    ]);
+    let env = filter(&dropped);
+    for key in dropped.keys() {
+        assert!(!env.contains_key(key), "{key}");
+    }
 }

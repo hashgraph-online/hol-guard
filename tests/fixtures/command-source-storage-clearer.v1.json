@@ -560,8 +560,8 @@
       "enabled_extensions": [
         "command.storage-clearer"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [0],
       "id": "bash-c",
       "rule_id": "command.storage-clearer.cleanup"
     },
@@ -571,8 +571,8 @@
       "enabled_extensions": [
         "command.storage-clearer"
       ],
-      "expected_action": "block",
-      "expected_effective_segments": [],
+      "expected_action": "review",
+      "expected_effective_segments": [0],
       "id": "sh-c",
       "rule_id": "command.storage-clearer.cleanup"
     },

@@ -23,8 +23,19 @@ from .restricted_pytest_model import (
     PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE,
     RestrictedPytestError,
 )
-from .restricted_pytest_sandbox import _restricted_environment, _run_backend_process
-from .restricted_workspace_grants import read_grants_valid
+from .restricted_pytest_sandbox import (
+    _restricted_environment,
+    _run_backend_process,
+    link_private_caches,
+)
+from .restricted_workspace_grant_lookup import (
+    decided_grant,
+    expected_grant,
+    granted_denial_note,
+    link_state_dir,
+    require_unchanged,
+)
+from .restricted_workspace_grants import PLAN_FIELDS, ExpectedGrant, grant_script_roots, read_grants_valid
 
 WORKSPACE_REASON = "native_workspace_containment_required"
 WORKSPACE_PROFILE = "workspace-contained-v1"
@@ -32,30 +43,11 @@ WORKSPACE_PROFILE = "workspace-contained-v1"
 # Git steps run after them, once proven again. It must match Rust exactly.
 WORKSPACE_PUBLISH_REASON = (
     "HOL Guard runs the checks in this command in a protected workspace sandbox "
-    "(no network, no home access), then runs the Git steps that follow once it "
-    "proves them again."
-)
-_PLAN_FIELDS = frozenset(
-    {
-        "profile_version",
-        "backend",
-        "backend_executable",
-        "workspace",
-        "cwd",
-        "executable",
-        "command",
-        "command_sha256",
-        "allowed_executables",
-        "read_only_roots",
-        "exec_roots",
-        "write_denials",
-        "linked_git",
-        "sandbox_path",
-        "bootstrap_git",
-        "prefix_command",
-        "native_suffix",
-        "denied_capabilities",
-    }
+    "(no network, no home access, no PTY or Docker socket), then runs the Git "
+    "steps that follow directly, outside the sandbox, once it proves them again. "
+    "Every program the checks start, including children of an interpreter, runs "
+    "contained and can write only the workspace, $TMPDIR and a private "
+    "scratch $HOME."
 )
 _IDENTITY_KEYS = {"user.name": "NAME", "user.email": "EMAIL"}
 _BACKENDS = {"darwin": "macos-seatbelt", "linux": "linux-bubblewrap"}
@@ -96,8 +88,14 @@ def _checks(command: str, suffix: object) -> str | None:
     return head[:-2].rstrip() or None
 
 
-def _validated_plan(plan: object, command: str, workspace: Path, *, publish: bool = False) -> dict[str, object]:
-    if not isinstance(plan, dict) or set(plan) != _PLAN_FIELDS or plan["profile_version"] != WORKSPACE_PROFILE:
+def _validated_plan(
+    plan: object, command: str, workspace: Path, *, publish: bool = False, grant: ExpectedGrant | None = None
+) -> dict[str, object]:
+    # A base plan without a decided grant; with one, a plan widened by exactly it.
+    if not isinstance(plan, dict) or set(plan) != PLAN_FIELDS:
+        raise _reject("Invalid workspace sandbox plan.")
+    scripts = grant_script_roots(plan, grant)
+    if scripts is None:
         raise _reject("Invalid workspace sandbox plan.")
     argv = plan["command"]
     prefix = plan["prefix_command"]
@@ -127,7 +125,7 @@ def _validated_plan(plan: object, command: str, workspace: Path, *, publish: boo
         )
         or Path(str(plan["workspace"])) != workspace.resolve(strict=True)
         or plan["allowed_executables"] != []
-        or not read_grants_valid(plan["read_only_roots"], command)
+        or not read_grants_valid(scripts, command)
         or not (plan["linked_git"] is None or _linked_git(plan["linked_git"]))
     ):
         raise _reject("The workspace sandbox plan does not match the authorized command.")
@@ -227,28 +225,31 @@ def run_workspace_contained(
     publish = first_receipt.get("reason") == WORKSPACE_PUBLISH_REASON
     if cwd.resolve(strict=True) != workspace.resolve(strict=True):
         raise _reject("The workspace sandbox runs only from the workspace root.")
+    home = home_dir or Path.home()
+    grant = None if publish else decided_grant(command, workspace=workspace, home=home)
+    prepare: dict[str, object] = {
+        "text": command,
+        "workspace": workspace,
+        "cwd": cwd,
+        "platform": sys.platform,
+        "home": home,
+        # The resident's own environment is not what a later host Git sees.
+        "git_environment": {
+            name: value
+            for name, value in os.environ.items()
+            if name.startswith("GIT_CONFIG") or name == "XDG_CONFIG_HOME"
+        },
+        "publish_suffix": publish,
+    }
+    if grant is not None:
+        prepare["grant"] = grant.prepare_input()
+    expected = None if grant is None else expected_grant(grant, home)
     plan = _validated_plan(
-        restricted_native(
-            "prepare_workspace_contained",
-            {
-                "text": command,
-                "workspace": workspace,
-                "cwd": cwd,
-                "platform": sys.platform,
-                "home": home_dir or Path.home(),
-                # The resident's own environment is not what a later host Git sees.
-                "git_environment": {
-                    name: value
-                    for name, value in os.environ.items()
-                    if name.startswith("GIT_CONFIG") or name == "XDG_CONFIG_HOME"
-                },
-                "publish_suffix": publish,
-            },
-            dict,
-        ),
+        restricted_native("prepare_workspace_contained", prepare, dict),
         command,
         workspace,
         publish=publish,
+        grant=expected,
     )
     # A second receipt taken after planning must still bind the same evidence.
     second = settled_authority(authorize, payload)
@@ -258,6 +259,8 @@ def run_workspace_contained(
         (second.get("reason") == WORKSPACE_PUBLISH_REASON) != publish
     ):
         raise _reject("The command evidence changed before launch.")
+    if not publish:
+        require_unchanged(grant, command, workspace=workspace, home=home)
     sandbox_command = plan["command"]
     prefix = plan["prefix_command"]
     if not isinstance(sandbox_command, list):
@@ -272,6 +275,8 @@ def run_workspace_contained(
         private_tmp = private_root / "tmp"
         private_home.mkdir(mode=0o700)
         private_tmp.mkdir(mode=0o700)
+        link_state_dir(private_home, plan, expected)
+        link_private_caches(private_tmp, exec_roots)
 
         def contained(argv_to_run: list[str]) -> int:
             launch_env = _restricted_environment(
@@ -307,7 +312,9 @@ def run_workspace_contained(
             profile = restricted_native(
                 "macos_profile",
                 {
-                    "profile_version": WORKSPACE_PROFILE,
+                    "profile_version": plan["profile_version"],
+                    "capabilities": plan["capabilities"],
+                    "home": home,
                     "workspace": workspace,
                     "cwd": cwd,
                     "private_root": private_root,
@@ -329,7 +336,7 @@ def run_workspace_contained(
                 timeout_seconds=timeout_seconds,
                 cwd=cwd,
                 merge_stderr=merge_stderr,
-                write_denial_note=denial_note,
+                write_denial_note=granted_denial_note(grant),
             )
 
         if isinstance(prefix, str):

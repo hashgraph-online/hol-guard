@@ -297,6 +297,7 @@ pub(crate) fn record_observation(connection: &Connection, args: &Args) -> StoreR
         }
         return Ok(Value::Null);
     }
+    clear_cause_of_other_identity(connection, cli_id, identity_hash)?;
     let mut params = vec![Value::from(identity_hash)];
     params.extend(shared);
     params.push(Value::from(seen_at));
@@ -323,6 +324,31 @@ pub(crate) fn record_observation(connection: &Connection, args: &Args) -> StoreR
         true,
     )?;
     Ok(Value::Null)
+}
+
+/// A blocked cause belongs to the identity whose run hit it, so a changed
+/// identity starts without one. Stores that predate the column keep none.
+fn clear_cause_of_other_identity(
+    connection: &Connection,
+    cli_id: &str,
+    identity_hash: &str,
+) -> StoreResult<()> {
+    let has_cause = query_one(
+        connection,
+        "select 1 from pragma_table_info('local_cli_observation') \
+         where name = 'first_blocked_cause'",
+        &[],
+    )?
+    .is_some();
+    if has_cause {
+        exec(
+            connection,
+            "update local_cli_observation set first_blocked_cause = null \
+             where cli_id = ? and identity_hash <> ?",
+            &[Value::from(cli_id), Value::from(identity_hash)],
+        )?;
+    }
+    Ok(())
 }
 
 /// Delete one un-enrolled record and its inventory rows, refusing with the

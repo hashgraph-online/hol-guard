@@ -34,6 +34,9 @@ pub(super) fn safe_find_listing_arguments(
         return false;
     }
     verified_path_context(context.home_dir, context.cwd)
+        && arguments
+            .iter()
+            .all(|argument| super::brace_words::stays_one_word(argument))
         && roots.iter().all(|root| {
             !super::search::skill_link_resolves_over_home(root, context)
                 && (bounded_read_target(root, context.home_dir, context.cwd, true)

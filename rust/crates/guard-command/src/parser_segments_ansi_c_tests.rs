@@ -65,3 +65,42 @@ fn a_shell_that_keeps_a_backslash_literal_reads_no_ansi_c_word() {
         assert!(shell_tokens(command, true).is_err(), "{command}");
     }
 }
+
+/// `$$` is the shell's own process id, so in `$$'x'` the word beside it is a
+/// plain single-quoted word and not an ANSI-C one. Each `$` pairs off with the
+/// next, so an even run of them still leaves the word open.
+#[test]
+fn a_process_id_beside_the_word_leaves_it_plainly_quoted() {
+    for (command, expected) in [
+        ("echo $$'x'", vec!["echo", "$$x"]),
+        ("echo $$'line\\tsep'", vec!["echo", "$$line\\tsep"]),
+        ("echo $$$'line\\tsep'", vec!["echo", "$$line\tsep"]),
+        ("echo $$$$'x'", vec!["echo", "$$$$x"]),
+        ("echo \\$$'line\\tsep'", vec!["echo", "$line\tsep"]),
+    ] {
+        assert_eq!(shell_tokens(command, false).unwrap(), expected, "{command}");
+    }
+}
+
+/// Reading `$$'…'` as an ANSI-C word spells the text a second way, because the
+/// escapes the word decodes are literal inside a plain single-quoted string.
+/// `$$'a\'` is the process id and the word `a\`, which ends there and leaves
+/// `docker ps` a command of its own; read as an ANSI-C word the quote `\'`
+/// writes is escaped instead, and everything behind it is swallowed into one
+/// quiet operand. `$$'a\'b'` closes no quote at all, the error bash reports.
+#[test]
+fn an_escaped_quote_after_a_process_id_ends_the_word_where_the_shell_ends_it() {
+    let command = "echo $$'a\\' ; docker ps";
+    let segments = split_execution_segments(command, false).unwrap();
+    assert_eq!(segments.len(), 2, "{command}");
+    let chars: Vec<char> = command.chars().collect();
+    let hidden: String = chars[segments[1].start..segments[1].end].iter().collect();
+    assert_eq!(hidden.trim(), "docker ps");
+    assert_eq!(
+        shell_tokens("echo $$'a\\'", false).unwrap(),
+        vec!["echo", "$$a\\"],
+    );
+
+    assert!(split_execution_segments("echo $$'a\\'b'", false).is_err());
+    assert!(shell_tokens("echo $$'a\\'b'", false).is_err());
+}

@@ -63,22 +63,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
     return None
 
 
-def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
-    source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    tool_name = payload.get("tool_name")
-    if isinstance(tool_name, str) and tool_name.strip():
-        normalized_tool = tool_name.strip()
-        if _canonical_harness_name(harness) == "claude-code":
-            from ..adapters.claude_code import claude_hook_fallback_artifact_id
-
-            return claude_hook_fallback_artifact_id(source_scope, normalized_tool)
-        return f"{harness}:{source_scope}:{normalized_tool}"
-    event_name = _hook_event_name(payload)
-    if isinstance(event_name, str) and event_name.strip():
-        return f"{harness}:{source_scope}:{event_name.strip().lower()}"
-    return f"{harness}:{source_scope}:hook"
-
-
 def _string_list(value: object | None) -> list[str]:
     if not isinstance(value, list):
         return []
@@ -694,7 +678,6 @@ __all__ = [
     "_CODEX_TOOL_RESPONSE_MAX_DEPTH",
     "_CODEX_TOOL_RESPONSE_TEXT_LIMIT",
     "_HOOK_EVENT_NAME_MAP",
-    "_artifact_id_from_event",
     "_codex_post_tool_output_artifact",
     "_hook_event_name",
     "_hook_runtime_artifact",

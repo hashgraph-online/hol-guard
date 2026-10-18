@@ -210,6 +210,36 @@ pub(crate) fn sourced_program_sources(
     sourcing.then_some(sources)
 }
 
+/// The text of every file the command sources, when sourcing is the only
+/// nesting the command does.
+///
+/// [`sourced_program_sources`] answers for the files a command sources and
+/// says nothing about the rest of it, which is what a floor wants once the
+/// shape is already known to be reviewable. Deciding that shape needs the
+/// stricter question: `eval evil && source ok.sh` sources a file this scan
+/// reads, and reading it bounds nothing, because `eval` runs words that are
+/// not in the text at all. Any other nested executor in the command is
+/// refused here, so only sourcing is read through.
+pub(crate) fn sole_sourcing_sources(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<Vec<String>> {
+    let (_, segments) = structure(model, context)?;
+    let nested = segments.iter().any(|segment| {
+        !sources_a_file(segment)
+            && segment.executable.as_deref().is_some_and(|executable| {
+                crate::parser_executables::is_nested_command_executor(
+                    executable,
+                    &segment.arguments,
+                )
+            })
+    });
+    if nested {
+        return None;
+    }
+    sourced_program_sources(model, context)
+}
+
 /// Whether the segment runs the shell's `source` builtin, whatever file it
 /// names. A path-qualified `./source` is an ordinary external program whose
 /// behaviour this scan does not know, not the builtin.

@@ -116,7 +116,7 @@ def render_generic_hook(
     action_envelope: object,
     approval_context: object,
     canonical_harness: str,
-    content_flagged: bool,
+    command_text: str | None,
     directive: Mapping[str, object],
     envelope: dict[str, object],
     event_name: str,
@@ -170,7 +170,7 @@ def render_generic_hook(
             envelope=envelope,
             generic_path=True,
             native_protocol_payload="hook_event_name" in payload or "event" not in payload,
-            content_flagged=content_flagged,
+            command_text=command_text,
             command_surface=getattr(action_envelope, "action_type", None) == "shell_command",
             verified_benign=verified_benign(),
         )

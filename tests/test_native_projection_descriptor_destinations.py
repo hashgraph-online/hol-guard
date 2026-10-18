@@ -6,6 +6,8 @@ import importlib.util
 import json
 import subprocess
 import sys
+from contextlib import contextmanager
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -42,15 +44,15 @@ def projection_builder(tmp_path, monkeypatch):
     monkeypatch.setattr(
         module, "CATALOG_ARTIFACT", tmp_path / "contracts/extensions/command-catalog.v1.json", raising=False
     )
-    monkeypatch.setattr(
-        module,
-        "build_request",
-        lambda: {
-            "trust": trust,
-            "sources": [{"extension": {"extension_id": "command.example"}}],
-            "mcp_sources": [],
-        },
-    )
+
+    @contextmanager
+    def source_stream():
+        yield BytesIO(), trust, []
+
+    monkeypatch.setattr(module, "source_stream", source_stream)
+    limits = tmp_path / "limits.json"
+    limits.write_bytes(module.DELIVERY_LIMITS.read_bytes())
+    monkeypatch.setattr(module, "DELIVERY_LIMITS", limits)
     monkeypatch.setattr(module, "implementation_digest", lambda: "d" * 64)
     public_blobs = {}
 
@@ -59,7 +61,12 @@ def projection_builder(tmp_path, monkeypatch):
             content = public_blobs.get(command[-1])
             return subprocess.CompletedProcess(command, int(content is None), content or b"", b"")
         response = {
-            "compile": compiled,
+            "compiler-info": {
+                "schema": "guard.source-compiler-capabilities.v1",
+                "implementation_digest": "d" * 64,
+                "embedded_catalog": True,
+            },
+            "compile-stream": compiled,
             "export-built": compiled,
             "export-trust": trust,
             "evaluate-batch": program,

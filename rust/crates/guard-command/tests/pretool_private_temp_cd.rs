@@ -12,7 +12,7 @@
 
 use crate::git_helper_fixture as fixture;
 
-use fixture::{evaluate_pre_tool_envelope_with_context, git_github_controls, FixtureCleanup};
+use fixture::{evaluate_with_node_and_python, git_github_controls, FixtureCleanup};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -55,13 +55,12 @@ fn fixture(name: &str) -> (PathBuf, PathBuf, FixtureCleanup) {
 }
 
 fn evaluate(home: &Path, project: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
-    evaluate_pre_tool_envelope_with_context(
+    evaluate_with_node_and_python(
         "claude-code",
         "PreToolUse",
         &serde_json::json!({"tool_name": "Bash", "tool_input": {"command": command}}),
         Some(&git_github_controls("default", "default")),
-        None,
-        home.to_str(),
+        home,
         project.to_str(),
     )
 }

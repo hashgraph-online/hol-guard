@@ -25,6 +25,10 @@ fn linux_workspace_sandbox_available() -> bool {
 }
 
 pub(crate) const REASON: &str = "native_workspace_containment_required";
+/// A generic review left in place because the sandbox could not run the
+/// program; the local CLI it launches can be set up on this device instead.
+pub(crate) const OUTSIDE_ROOTS_REASON: &str =
+    "native_workspace_containment_executable_outside_roots";
 #[cfg(unix)]
 pub(crate) const PROFILE: &str = "workspace-contained-v1";
 
@@ -40,10 +44,12 @@ pub(super) mod home_cd;
 mod keeps_work;
 #[path = "workspace_contained_kill.rs"]
 mod kill;
+#[path = "workspace_contained_launch.rs"]
+mod launch;
 #[path = "workspace_contained_links.rs"]
 mod links;
 #[path = "workspace_contained_package.rs"]
-mod package;
+pub(super) mod package;
 #[path = "workspace_contained_reach.rs"]
 mod reach;
 #[path = "workspace_contained_removal.rs"]
@@ -347,12 +353,12 @@ fn extensions_contain(
     };
     extensions.binding.uncertainty_count == removal::accepted_uncertainty(extensions, model)
         && extensions.evaluation_error.is_none()
-        // The Node package-firewall permission marks package-manager use (or a
-        // Bun image evaluating code), not a proven risk; a disabled one blocked.
+        // A package-firewall permission marks package-manager use (or a Bun
+        // image evaluating code), not a proven risk; a disabled one blocked.
         && extensions.permission_observations.iter().all(|observation| {
             (package || super::restricted_tests::bun_inline_eval(model))
                 && observation.mcp_tool.is_none()
-                && observation.extension_id == package::NODE_PACKAGE_EXTENSION
+                && package::PACKAGE_EXTENSIONS.contains(&observation.extension_id.as_str())
                 && observation.uncertainty_reasons.is_empty()
         })
         && extensions.observations.iter().all(|observation| {
@@ -486,8 +492,15 @@ pub(super) fn convert(
     // held to every package check below whichever way it arrived.
     let runners = runner::installed_tools(shaped, &workspace);
     let package = package || runners.is_some();
-    if !extensions_contain(result, controls, issued, package)
-        || (package && !package::local_package_work(model, runners.is_some()))
+    // A package-firewall permission records which manager ran. It is evidence
+    // the command is a manager's, not that the work it does leaves the
+    // workspace, so a manager running a local verb answers for the
+    // observation too. A command with no manager in it proves nothing about
+    // the permission, so it keeps the admission it has.
+    let local_work = package::local_package_work(model, runners.is_some(), &workspace);
+    let manager_work = local_work && package::names_a_manager(model);
+    if !extensions_contain(result, controls, issued, package || manager_work)
+        || (package && !local_work)
     {
         return;
     }
@@ -530,6 +543,19 @@ pub(super) fn convert(
     if super::script_content::keeps_network_review(result, issued, sent_text, launch_context) {
         return;
     }
+    if launch::outside(shaped, &workspace, context, execution_environment) {
+        // Nothing marks a generic review as unrecognised any more plainly, so
+        // only that one is renamed; any other reason already says more.
+        if result.reason_code == floor_reason && !package {
+            result.reason_code = OUTSIDE_ROOTS_REASON.into();
+            result.reason = concat!(
+                "HOL Guard's workspace sandbox cannot run this program, ",
+                "so it was not started there.",
+            )
+            .into();
+        }
+        return;
+    }
     mark_contained(result);
 }
 
@@ -541,7 +567,11 @@ pub(crate) fn mark_contained(result: &mut PreToolResultV1) {
     result.reason_code = REASON.into();
     result.reason = concat!(
         "HOL Guard runs this command in a protected workspace sandbox ",
-        "(no network, no home access).",
+        "(no network, no home access, no PTY or Docker socket). Every program it ",
+        "starts, including children of an interpreter, runs contained and can write ",
+        "only the workspace, $TMPDIR and a private scratch $HOME; only commands ",
+        "Guard proves safe run ",
+        "directly, outside the sandbox.",
     )
     .into();
 }
