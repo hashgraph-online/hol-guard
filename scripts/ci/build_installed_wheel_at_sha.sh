@@ -37,9 +37,19 @@ if "$compiler" export-trust > native-build/trust-class-map.json 2> /dev/null; th
   trust=native-build/trust-class-map.json
   cp "$trust" contracts/extensions/build-trust-class-map.v1.json
 fi
+# Revisions that reject packaged-base authoring without a global validation
+# context need this checkout's packaged catalog, with no installed packs;
+# earlier ones reject the field outright, so only send it when it is required.
+validation_arguments=()
+validation_filter='{}'
+if grep -q 'command_source_global_validation_required' rust/crates/guard-command/src/native_command_source.rs; then
+  validation_arguments=(--slurpfile catalog contracts/extensions/command-catalog.v1.json)
+  validation_filter='{validation_base:{catalog:$catalog[0].catalog,programs:[]}}'
+fi
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust "$trust" \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
+  ${validation_arguments[@]+"${validation_arguments[@]}"} \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"} + '"$validation_filter" \
   > source-build.json
 # Revisions whose wheel builder still embeds a standalone compiler predate the
 # runtime-hosted compiler; their runtime cannot answer `compile`.
