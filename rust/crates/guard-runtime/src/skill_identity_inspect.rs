@@ -158,8 +158,25 @@ fn run(
         return Err(Failure::PrimarySymlinkUnsupported);
     }
 
-    let order = std::iter::once(primary_index)
-        .chain((0..entries.len()).filter(|index| *index != primary_index));
+    // An incomplete identity includes the bytes hashed before an error. Walk
+    // regular entries before symlinks so directory iteration order cannot
+    // change that state when a symlink is unsupported or broken.
+    let mut remaining: Vec<_> = (0..entries.len())
+        .filter(|index| *index != primary_index)
+        .collect();
+    remaining.sort_by(|left, right| {
+        let left = &entries[*left];
+        let right = &entries[*right];
+        (
+            left.entry_type == EntryType::Symlink,
+            left.relative_path.as_bytes(),
+        )
+            .cmp(&(
+                right.entry_type == EntryType::Symlink,
+                right.relative_path.as_bytes(),
+            ))
+    });
+    let order = std::iter::once(primary_index).chain(remaining);
     let mut records: Vec<(String, Value)> = Vec::with_capacity(entries.len());
     for index in order {
         let entry = &entries[index];

@@ -18,6 +18,10 @@ rust/target
 
 # Virtual environments
 .venv/
+.gauntlet-ops/
+.gauntlet-build-tools/
+gauntlet-artifact/
+gauntlet-pure/
 venv/
 env/
 

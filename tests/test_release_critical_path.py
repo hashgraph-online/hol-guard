@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -206,7 +207,9 @@ def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_
     source_version = subprocess.check_output(
         [sys.executable, "scripts/sync_repo_version.py", "--check"], cwd=tmp_path, text=True
     ).strip()
-    major, minor, patch = source_version.split(".")
+    source_parts = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:(?:a|b|rc)\d+)?", source_version)
+    assert source_parts is not None
+    major, minor, patch = source_parts.groups()
     requested = f"{major}.{minor}.{int(patch) + 1}"
     job = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     identity = next(step for step in job["steps"] if step.get("name") == "Bind exact source and version")

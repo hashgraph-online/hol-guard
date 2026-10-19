@@ -1,0 +1,107 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "tenant": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "accounts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "data_projection": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "destinations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "allowed_operations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "terminal_effects": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "write_budget": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "approval_policy": {
+      "enum": [
+        "preauthorized",
+        "required",
+        "draft-only"
+      ]
+    },
+    "policy_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "actor",
+    "tenant",
+    "accounts",
+    "resources",
+    "data_projection",
+    "destinations",
+    "allowed_operations",
+    "terminal_effects",
+    "write_budget",
+    "approval_policy",
+    "policy_version"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/authorization.v1.json"
+}

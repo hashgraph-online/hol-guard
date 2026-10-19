@@ -417,6 +417,16 @@ def _configure_guard_cloud_parsers(
     stop_p = daemon_subparsers.add_parser("stop", help="Stop a running Guard daemon")
     _add_guard_common_args(stop_p)
     stop_p.add_argument("--json", action="store_true")
+    omp_proxy_parser = guard_subparsers.add_parser("omp-mcp-proxy", help=argparse.SUPPRESS)
+    _add_guard_common_args(omp_proxy_parser)
+    omp_proxy_parser.add_argument("--server-name", required=True)
+    omp_proxy_parser.add_argument("--server-id")
+    omp_proxy_parser.add_argument("--source-scope", default="project")
+    omp_proxy_parser.add_argument("--config-path", required=True)
+    omp_proxy_parser.add_argument("--transport", choices=("stdio", "local"), default="stdio")
+    omp_proxy_parser.add_argument("--command", dest="server_command", required=True)
+    omp_proxy_parser.add_argument("--arg", dest="server_args", action="append", default=[])
+    omp_proxy_parser.add_argument("--server-env-key", dest="server_env_keys", action="append", default=[])
     codex_proxy_parser = guard_subparsers.add_parser("codex-mcp-proxy", help=argparse.SUPPRESS)
     _add_guard_common_args(codex_proxy_parser)
     codex_proxy_parser.add_argument("--server-name", required=True)
@@ -491,6 +501,7 @@ def _configure_guard_cloud_parsers(
         "hook",
         "daemon",
         "codex-mcp-proxy",
+        "omp-mcp-proxy",
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",

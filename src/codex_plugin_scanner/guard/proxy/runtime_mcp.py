@@ -65,6 +65,11 @@ from ..native_mcp_proxy_decision import (
     tool_facts,
 )
 from ..native_mcp_relay_server_report import report_mcp_relay_server
+from ..native_mcp_write_budget import (
+    NativeMcpWriteBudgetError,
+    claim_mcp_write_budget,
+    shallow_tool_argument_problem,
+)
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
@@ -1134,6 +1139,45 @@ class RuntimeMcpGuardProxy:
                 approval_callback=approval_callback,
             ),
         )
+        schema_problem = shallow_tool_argument_problem(
+            self._tool_catalog.get(tool_name, {}) if self._tool_catalog_state == "complete" else {},
+            arguments,
+        )
+        if schema_problem is not None:
+            return self._deny_inline_tool_call(
+                decision_source="mcp-tool-schema-preflight",
+                event_decision="blocked",
+                reason=f"HOL Guard blocked this tool call: {schema_problem}.",
+                message=message,
+                tool_name=tool_name,
+                event=event,
+                artifact=authority.artifact,
+                artifact_hash=authority.artifact_hash,
+                decision=authority.decision,
+                scanner_evidence=_tool_decision_scanner_evidence(authority.decision),
+            )
+        try:
+            budget_decision, budget_reason, missing_sources = claim_mcp_write_budget(
+                guard_home=self.context.guard_home,
+                tool_name=tool_name,
+                arguments=arguments,
+            )
+        except NativeMcpWriteBudgetError:
+            budget_decision, budget_reason, missing_sources = "block", "native_budget_unavailable", ()
+        if budget_decision == "block":
+            missing_detail = f": {', '.join(missing_sources)}" if missing_sources else ""
+            return self._deny_inline_tool_call(
+                decision_source="native-task-write-budget",
+                event_decision="blocked",
+                reason=f"HOL Guard blocked this tool call: {budget_reason.replace('_', ' ')}{missing_detail}.",
+                message=message,
+                tool_name=tool_name,
+                event=event,
+                artifact=authority.artifact,
+                artifact_hash=authority.artifact_hash,
+                decision=authority.decision,
+                scanner_evidence=_tool_decision_scanner_evidence(authority.decision),
+            )
         artifact = authority.artifact
         tool_artifact_hash = authority.artifact_hash
         held: dict[str, Any] = {}

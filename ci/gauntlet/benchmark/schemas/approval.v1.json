@@ -1,0 +1,81 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "actor": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "operation": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 8192
+      },
+      "maxItems": 256,
+      "uniqueItems": true
+    },
+    "payload_digest": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "state_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "policy_version": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    },
+    "expires_at": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1000000000
+    },
+    "max_uses": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 100
+    },
+    "decision": {
+      "enum": [
+        "granted",
+        "denied",
+        "expired",
+        "no-response"
+      ]
+    },
+    "controller_id": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "actor",
+    "operation",
+    "targets",
+    "payload_digest",
+    "state_version",
+    "policy_version",
+    "expires_at",
+    "max_uses",
+    "decision",
+    "controller_id"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hol-guard.example/benchmark/approval.v1.json"
+}

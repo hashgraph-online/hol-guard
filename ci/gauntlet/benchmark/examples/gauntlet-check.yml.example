@@ -1,0 +1,62 @@
+# INACTIVE EXAMPLE. Not discovered by GitHub Actions in this location.
+# Provision the reviewed Root-owned controller, pinned candidate and output parent first.
+name: HOL Guard Gauntlet (proposed)
+on:
+  workflow_dispatch:
+    inputs:
+      guard_commit:
+        description: Full source SHA of the artifact built for this test
+        required: true
+        type: string
+      config_digest:
+        description: Externally retained canonical runner configuration SHA256
+        required: true
+        type: string
+      profile:
+        description: Deterministic blocking or live advisory evaluation
+        type: choice
+        default: deterministic
+        options: [deterministic, beta-e2e]
+permissions:
+  contents: read
+concurrency:
+  group: hol-gauntlet-owned-worker
+  cancel-in-progress: false
+jobs:
+  check:
+    runs-on: [self-hosted, linux, hol-gauntlet]
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+        working-directory: /opt/hol-gauntlet/controller
+    env:
+      GUARD_COMMIT: ${{ inputs.guard_commit }}
+      CONFIG_DIGEST: ${{ inputs.config_digest }}
+      PROFILE: ${{ inputs.profile }}
+      CHECK_OUTPUT: /var/lib/hol-gauntlet/outputs/${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      # The controller is preinstalled and trusted; do not run a PR checkout as Root.
+      - name: Run one Gauntlet command
+        run: |
+          state_root="$(/usr/bin/python3 -c 'import secrets; print("/home/hg-" + secrets.token_hex(4))')"
+          sudo -n -- /opt/hol-gauntlet/venv/bin/python -B -m ci.gauntlet.benchmark ci check \
+            --profile "$PROFILE" \
+            --config /opt/hol-gauntlet/public/config.json \
+            --expected-config-digest "$CONFIG_DIGEST" \
+            --expected-guard-source-sha "$GUARD_COMMIT" \
+            --asset-root /opt/hol-gauntlet/public \
+            --state-root "$state_root" --output-dir "$CHECK_OUTPUT"
+      - name: Collect public reports on success or failure
+        if: always()
+        run: |
+          sudo -n -- test -d "$CHECK_OUTPUT/report"
+          sudo -n -- tar -C "$CHECK_OUTPUT" -czf - . > "$RUNNER_TEMP/gauntlet-reports.tar.gz"
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gauntlet-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/gauntlet-reports.tar.gz
+          if-no-files-found: error
+          retention-days: 14

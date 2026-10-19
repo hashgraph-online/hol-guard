@@ -87,9 +87,15 @@ class TestAppUpdateOperations:
             "status": "updated",
             "changed": True,
         }
-        with patch(
-            "codex_plugin_scanner.guard.runtime.command_executors.run_guard_update",
-            return_value=(expected_update, 0),
+        with (
+            patch(
+                "codex_plugin_scanner.guard.runtime.command_executors.build_guard_update_status_payload",
+                return_value={"release_channel": "stable"},
+            ),
+            patch(
+                "codex_plugin_scanner.guard.runtime.command_executors.run_guard_update",
+                return_value=(expected_update, 0),
+            ),
         ):
             result = execute_guard_command_job(job, context=context, store=store, now=lambda: "2026-07-04T00:00:00Z")
         assert result["data"]["succeeded"] is True
@@ -107,9 +113,15 @@ class TestAppUpdateOperations:
             "changed": False,
             "error": "pip install failed",
         }
-        with patch(
-            "codex_plugin_scanner.guard.runtime.command_executors.run_guard_update",
-            return_value=(expected_update, 1),
+        with (
+            patch(
+                "codex_plugin_scanner.guard.runtime.command_executors.build_guard_update_status_payload",
+                return_value={"release_channel": "stable"},
+            ),
+            patch(
+                "codex_plugin_scanner.guard.runtime.command_executors.run_guard_update",
+                return_value=(expected_update, 1),
+            ),
         ):
             result = execute_guard_command_job(job, context=context, store=store, now=lambda: "2026-07-04T00:00:00Z")
         assert result["data"]["succeeded"] is False
@@ -158,6 +170,10 @@ def test_cloud_audit_executes_relative_dot_in_active_workspace(tmp_path: Path, m
     monkeypatch.chdir(unrelated_cwd)
 
     with (
+        patch(
+            "codex_plugin_scanner.guard.runtime.command_executors.managed_install_audit_workspace_dirs",
+            return_value=[],
+        ),
         patch(
             "codex_plugin_scanner.guard.runtime.command_executors.build_workspace_audit_payload",
             return_value=({"workspace": str(context.workspace_dir)}, 0),

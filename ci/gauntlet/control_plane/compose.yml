@@ -1,0 +1,23 @@
+services:
+  dashboard:
+    build:
+      context: .
+    image: hol-gauntlet-dashboard:local
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${GAUNTLET_PORT:-8791}:8787"
+    volumes:
+      - "${GAUNTLET_PUBLIC_STATE:?Set absolute public snapshot directory}:/state:ro"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 64
+    mem_limit: 128m
+    cpus: 0.25
+    tmpfs:
+      - /tmp:size=8m,noexec,nosuid,nodev
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"

@@ -329,6 +329,13 @@ def run_authorized_contained_test(
         if not _contained_receipt(receipt):
             raise _reject(receipt)
         core, directory, output = peeled
+        if directory == workspace.resolve(strict=True):
+            # A workspace receipt authorizes the original wrapped command.
+            # Keep that exact input for both live checks and completion proof;
+            # peeling output redirection first would change its binding.
+            exit_code = run_workspace(receipt)
+            if exit_code is not None:
+                return exit_code
         if not _path_is_within(directory, workspace.resolve(strict=True)):
             sibling = sibling_project_root(directory, home=home_dir)
             if sibling is None:

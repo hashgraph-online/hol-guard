@@ -10,6 +10,7 @@ not covered, however close it is to a listed one.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,9 @@ SUPPORTED_PLATFORMS = frozenset(
 )
 EVIDENCE_REFERENCE_PREFIX = "https://github.com/hashgraph-online/hol-guard/"
 REMEDIATION_HOSTS = frozenset({"github.com", "www.npmjs.com", "omp.sh"})
+_GUARD_PRERELEASE = re.compile(
+    r"(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})\.(?:0|[1-9]\d{0,5})(?:a|b|rc)(?:0|[1-9]\d{0,5})"
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -172,8 +176,13 @@ def _record(harness: str, value: object, field: str) -> CoverageRecord:
     version = parse_version(entry["harness_version"])
     if version is None:
         raise ManifestError(f"{field}.harness_version must be one exact version, not a range or wildcard")
-    guard_version = parse_version(entry["guard_version"])
-    if guard_version is None:
+    guard_value = entry["guard_version"]
+    guard_version = parse_version(guard_value)
+    if guard_version is not None:
+        guard_release = guard_version.canonical
+    elif isinstance(guard_value, str) and _GUARD_PRERELEASE.fullmatch(guard_value):
+        guard_release = guard_value
+    else:
         raise ManifestError(f"{field}.guard_version must be one exact Guard release version")
     platforms = _text_list(entry["platforms"], f"{field}.platforms", limit=len(SUPPORTED_PLATFORMS))
     if not platforms or not set(platforms) <= SUPPORTED_PLATFORMS:
@@ -208,7 +217,7 @@ def _record(harness: str, value: object, field: str) -> CoverageRecord:
         raise ManifestError(f"{field}.observed_at must include a timezone")
     return CoverageRecord(
         harness_version=version,
-        guard_version=guard_version.canonical,
+        guard_version=guard_release,
         platforms=platforms,
         transport=transport,
         events=events,

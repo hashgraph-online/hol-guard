@@ -326,7 +326,7 @@ def test_ten_reviewed_pairs_preserve_semantic_deltas_and_characterize_native_flo
         variant = real_native_command_evaluation(variant_command, cwd=variant_cwd, home_dir=tmp_path)
         assert (baseline.payload["minimum_action"], variant.payload["minimum_action"]) == _NATIVE_PAIR_MINIMUM_ACTIONS[
             pair_id
-        ]
+        ], pair_id
         for reviewed in (baseline, variant):
             assert _floor_rank(reviewed.evaluation.decision_plane.action) >= _floor_rank(
                 reviewed.payload["minimum_action"]

@@ -352,6 +352,7 @@ def _resolve_legacy_args(
         "supply-chain",
         "service",
         "codex-mcp-proxy",
+        "omp-mcp-proxy",
         "opencode-mcp-proxy",
         "copilot-mcp-proxy",
         "cursor-mcp-proxy",

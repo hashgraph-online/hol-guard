@@ -331,6 +331,15 @@
    "target": "unreachable from ordinary production hook semantics"
   },
   {
+   "id": "contained_completion_custody",
+   "class": "python_semantic",
+   "paths": [
+    "src/codex_plugin_scanner/guard/runtime/contained_completion.py"
+   ],
+   "current": "The contained CLI records a one-use execution completion proof and PostToolUse verifies its exact request and output binding; this proof cannot authorize PreToolUse.",
+   "target": "native custody for contained completion proof and output binding"
+  },
+  {
    "id": "native_edge_launcher",
    "class": "python_transport",
    "paths": [
@@ -389,6 +398,7 @@
     "src/codex_plugin_scanner/guard/native_sensitive_request.py",
     "src/codex_plugin_scanner/guard/native_policy_bundle.py",
     "src/codex_plugin_scanner/guard/native_mcp_proxy_decision.py",
+    "src/codex_plugin_scanner/guard/native_mcp_write_budget.py",
     "src/codex_plugin_scanner/guard/native_mcp_classification.py",
     "src/codex_plugin_scanner/guard/native_mcp_relay_server_report.py",
     "src/codex_plugin_scanner/guard/native_daemon_lifecycle.py",
@@ -665,6 +675,7 @@
   "src/codex_plugin_scanner/guard/native_*.py",
   "src/codex_plugin_scanner/guard/native_response_decoder.py",
   "src/codex_plugin_scanner/guard/runtime/hook_*.py",
+  "src/codex_plugin_scanner/guard/runtime/contained_completion.py",
   "src/codex_plugin_scanner/guard/runtime/source_paths.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_*.py",

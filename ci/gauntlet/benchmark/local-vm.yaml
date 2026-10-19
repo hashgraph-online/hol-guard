@@ -1,0 +1,20 @@
+# Local-only disposable validation VM. No host workspace or credential mounts.
+minimumLimaVersion: 2.0.0
+vmType: vz
+arch: aarch64
+cpus: 8
+memory: 24GiB
+disk: 32GiB
+images:
+  - location: https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:7df0201546f75b8bcc1044594c806c35749421ad3c9bc1be2a3ab806cfae39cc
+mounts: []
+containerd:
+  system: false
+  user: false
+ssh:
+  forwardAgent: false
+portForwards:
+  - guestPortRange: [1, 65535]
+    ignore: true

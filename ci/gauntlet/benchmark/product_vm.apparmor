@@ -1,0 +1,28 @@
+# Proposed private product-VM control profile, not a production installation.
+# Root constructs the namespace before dropping all capabilities. Candidate
+# execution inherits this enforcing profile; no change_profile rule is granted.
+# Independent readonly mounts, UID custody, seccomp and VM boundaries still apply.
+abi <abi/4.0>,
+profile HOL_PRODUCT_VM_PROFILE flags=(attach_disconnected,mediate_deleted) {
+  file,
+  capability,
+  network,
+  unix,
+  mount,
+  umount,
+  pivot_root,
+  ptrace,
+  signal,
+  userns,
+
+  # Preserve denial of interfaces masked by the existing container profile.
+  # This fresh VM proc view uses path mediation rather than container overmounts.
+  deny /proc/{kcore,keys,latency_stats,timer_list,timer_stats,sched_debug} rwklm,
+  deny /proc/{acpi,scsi}{,/,/**} rwklm,
+  deny /proc/{asound,bus,fs,irq,sys}{,/,/**} wklm,
+  deny /proc/sysrq-trigger wklm,
+
+  # No sysfs/cgroup filesystem is exposed in this backend. Prevent fresh
+  # instances at alternate paths, including in descendant user namespaces.
+  deny mount fstype=(sysfs,cgroup,cgroup2),
+}

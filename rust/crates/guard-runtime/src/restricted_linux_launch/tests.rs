@@ -258,10 +258,20 @@ fn original_python_kernel_plan_and_mount_contracts() {
             }
             _ => panic!("Unknown original contract operation"),
         };
-        let actual = match result {
+        let mut actual = match result {
             Ok(v) => json!({"value":v}),
             Err(e) => json!({"error":e}),
         };
+        if case["operation"] == "read_grants" {
+            // Discovery grants are a set. Directory enumeration order differs
+            // between filesystems, while path and identity must still match.
+            for outcome in [&mut actual, &mut expected] {
+                if let Some(grants) = outcome.get_mut("value").and_then(Value::as_array_mut) {
+                    grants
+                        .sort_by(|left, right| left["path"].as_str().cmp(&right["path"].as_str()));
+                }
+            }
+        }
         assert_eq!(actual, expected, "{}", case["operation"]);
     }
 }

@@ -181,9 +181,21 @@ class TestKimiInstallUninstall:
         text = config_path.read_text(encoding="utf-8")
         assert "# BEGIN HOL GUARD MANAGED HOOKS" in text
         assert "# END HOL GUARD MANAGED HOOKS" in text
-        assert 'event = "PreToolUse"' in text
-        assert 'event = "UserPromptSubmit"' in text
-        assert "hol-guard" in text or "codex_plugin_scanner.cli" in text
+        hooks = tomllib.loads(text)["hooks"]
+        assert {hook["event"] for hook in hooks} == {
+            "PreToolUse",
+            "UserPromptSubmit",
+            "PostToolUse",
+            "SessionStart",
+            "Stop",
+        }
+        assert all(hook["timeout"] == 30 for hook in hooks)
+        commands = {hook["command"] for hook in hooks}
+        assert len(commands) == 1
+        command = commands.pop()
+        assert "bounded_cli_hook_bridge" in command or "__guard-bounded-hook" in command
+        assert str(ctx.guard_home) in command
+        assert "kimi" in command
 
     def test_uninstall_removes_managed_hooks(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path)
