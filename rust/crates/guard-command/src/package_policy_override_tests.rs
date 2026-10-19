@@ -382,11 +382,8 @@ fn policy_override_min_oracle() {
 /// Regression for #4809: when a package arrives in the evaluation map as
 /// `{name: "node", namespace: "@types", requestedVersion: "1.60.0"}`, the
 /// current-policy action message must include the scope, not just the bare
-/// `name@version`. Today `package_label` reads only `name`, so this fails —
-/// the message says `node@1.60.0` instead of `@types/node@1.60.0`.
-///
-/// Test 1 of 2 for the one-PR/two-commit plan: the failing test pins the
-/// current bug; the fix follows in a later commit.
+/// `name@version`. Before the fix `package_label` read only `name`, so the
+/// message said `node@1.60.0` instead of `@types/node@1.60.0`.
 #[test]
 fn current_policy_message_preserves_namespace_for_scoped_package() {
     let eval = NoopEval;
