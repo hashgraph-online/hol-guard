@@ -38,13 +38,15 @@ if "$compiler" export-trust > native-build/trust-class-map.json 2> /dev/null; th
   cp "$trust" contracts/extensions/build-trust-class-map.v1.json
 fi
 # Revisions that reject packaged-base authoring without a global validation
-# context need this checkout's packaged catalog, with no installed packs;
-# earlier ones reject the field outright, so only send it when it is required.
+# context need the catalog this binary embeds, with no installed packs; earlier
+# ones reject the field outright, so only send it when the revision requires it
+# and its compiler can export the embedded build.
 validation_arguments=()
 validation_filter='{}'
-if grep -q 'command_source_global_validation_required' rust/crates/guard-command/src/native_command_source.rs; then
-  validation_arguments=(--slurpfile catalog contracts/extensions/command-catalog.v1.json)
-  validation_filter='{validation_base:{catalog:$catalog[0].catalog,programs:[]}}'
+if grep -q 'command_source_global_validation_required' rust/crates/guard-command/src/native_command_source.rs \
+  && "$compiler" export-built > native-build/exported-build.json 2> /dev/null; then
+  validation_arguments=(--slurpfile built native-build/exported-build.json)
+  validation_filter='{validation_base:{catalog:$built[0].catalog,programs:[]}}'
 fi
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
   --slurpfile trust "$trust" \

@@ -31,11 +31,13 @@ python scripts/ci/verify_native_command_program.py "${verification_arguments[@]}
 uv build --wheel --out-dir pure-dist
 RULE_DIGEST=$("$runtime" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
 # Authoring against the packaged base carries the global validation context the
-# compiler checks the addition against: the packaged catalog this build just
-# generated, with no installed packs.
+# compiler checks the addition against: the catalog this binary embeds, with no
+# installed packs. Read it from the binary rather than from the generated
+# contracts file, which the program build writes later.
+"$runtime" export-built > source-built.json
 jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-  --slurpfile catalog contracts/extensions/command-catalog.v1.json \
-  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$catalog[0].catalog,programs:[]}}' > source-build.json
+  --slurpfile built source-built.json \
+  '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' > source-build.json
 "$runtime" compile < source-build.json > source-compiled.json
 python scripts/build_native_hol_guard_wheel.py \
   --wheel "pure-dist/hol_guard-${VERSION}-py3-none-any.whl" \
