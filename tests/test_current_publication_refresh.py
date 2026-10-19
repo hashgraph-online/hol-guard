@@ -133,7 +133,7 @@ def test_periodic_publisher_advances_complete_readiness_and_enable_without_packa
     assert current.authority != initial.authority, getattr(state, "last_error", None)
     assert any("/compare/" in url for url in state.calls)
     assert read(state)["total_count"] == state.initial_count + 1
-    result = read(state, "q=Agentic&limit=1")
+    result = read(state, "q=AgenticJobs&limit=1")
     assert result["total_count"] == 1 and result["items"][0]["extension_id"] == ADDED
     assert result["items"][0]["catalog_defaults"]["enabled"] is False
     # Cloud consumers use this same fixed complete-view accessor; no separate
