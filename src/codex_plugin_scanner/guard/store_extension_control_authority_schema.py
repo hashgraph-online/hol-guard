@@ -10,11 +10,13 @@ from .runtime.extension_control_authority import ExtensionControlAuthorityError
 
 EXTENSION_CONTROL_SCHEMA_VERSION: Final = 4
 PACK_ACTIVATION_SCHEMA_VERSION: Final = 5
+PACK_ACTIVATION_V2_SCHEMA_VERSION: Final = 6
 _SCHEMA_CHECKSUM_V1: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v1").hexdigest()
 _SCHEMA_CHECKSUM_V2: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v2").hexdigest()
 _SCHEMA_CHECKSUM_V3: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v3").hexdigest()
 _SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v4").hexdigest()
 _PACK_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v5").hexdigest()
+_PACK_V2_SCHEMA_CHECKSUM: Final = hashlib.sha256(b"hol-guard.extension-control-authority.schema.v6").hexdigest()
 
 
 def extension_control_schema_marker_is_compatible(
@@ -29,6 +31,7 @@ def extension_control_schema_marker_is_compatible(
         (3, _SCHEMA_CHECKSUM_V3),
         (EXTENSION_CONTROL_SCHEMA_VERSION, _SCHEMA_CHECKSUM),
         (PACK_ACTIVATION_SCHEMA_VERSION, _PACK_SCHEMA_CHECKSUM),
+        (PACK_ACTIVATION_V2_SCHEMA_VERSION, _PACK_V2_SCHEMA_CHECKSUM),
     }
 
 
@@ -37,9 +40,13 @@ def ensure_extension_control_authority_schema(
     *,
     require_compatible: bool = True,
     activate_packs: bool = False,
+    activation_format_v2: bool = False,
 ) -> bool:
+    activate_packs |= activation_format_v2
     wanted_version = PACK_ACTIVATION_SCHEMA_VERSION if activate_packs else EXTENSION_CONTROL_SCHEMA_VERSION
     wanted_checksum = _PACK_SCHEMA_CHECKSUM if activate_packs else _SCHEMA_CHECKSUM
+    if activation_format_v2:
+        wanted_version, wanted_checksum = PACK_ACTIVATION_V2_SCHEMA_VERSION, _PACK_V2_SCHEMA_CHECKSUM
     pack_schema_active = activate_packs
     _ = connection.execute(
         """
@@ -78,7 +85,7 @@ def ensure_extension_control_authority_schema(
             if require_compatible:
                 raise ExtensionControlAuthorityError("unsupported or invalid extension control schema")
             return False
-        pack_schema_active |= version_raw == PACK_ACTIVATION_SCHEMA_VERSION
+        pack_schema_active |= version_raw in {PACK_ACTIVATION_SCHEMA_VERSION, PACK_ACTIVATION_V2_SCHEMA_VERSION}
         if type(version_raw) is int and version_raw < wanted_version:
             _ = connection.execute(
                 "update extension_control_schema_migration set version = ?, checksum = ? where singleton = 1",

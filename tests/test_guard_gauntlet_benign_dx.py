@@ -296,7 +296,10 @@ def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case:
     assert (scenarios[FAST_FORWARD_CASE].expectation, scenarios[FAST_FORWARD_CASE].oracle) == ("allow", "native-tools")
     assert scenarios[FAST_FORWARD_HOOK_CASE].oracle == "blocked-command"
     assert scenarios[FAST_FORWARD_HOOK_CASE].commands == ("git merge --ff-only origin/main",)
-    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=case)
+    # The runner builds the realistic shapes only for the `native-tools` oracle,
+    # so the hook case must get its shape from the plain fixture it really runs in.
+    realistic = scenarios[case].oracle == "native-tools"
+    fixture = create_fixture(tmp_path / "fx", realistic=realistic, scenario_id=case)
     assert _git(fixture.workspace, fixture.home, "remote", "get-url", "origin").strip() == ORIGIN_URL
     assert _git(fixture.workspace, fixture.home, "rev-parse", "origin/main~1").strip() == (
         _git(fixture.workspace, fixture.home, "rev-parse", "HEAD").strip()
@@ -309,6 +312,9 @@ def test_fast_forward_fixture_puts_origin_one_commit_ahead(tmp_path: Path, case:
     after = fast_forward_checks(fixture.workspace, case)
     # The allow case passes once the merge lands; the hook case fails if it ever does.
     assert all(after.values()) if case == FAST_FORWARD_CASE else not any(after.values())
-    other = create_fixture(tmp_path / "other", realistic=True, scenario_id="omp-native-git-compound-reads")
-    assert not _git(other.workspace, other.home, "remote").strip()
-    assert not (other.home / ".config/git/hooks/post-merge").exists()
+    for realism in (True, False):
+        other = create_fixture(
+            tmp_path / f"other-{realism}", realistic=realism, scenario_id="omp-native-git-compound-reads"
+        )
+        assert not _git(other.workspace, other.home, "remote").strip()
+        assert not (other.home / ".config/git/hooks/post-merge").exists()

@@ -14,6 +14,7 @@ pub(super) fn control_snapshot(
 ) -> PolicySnapshotV3 {
     let program = guard_command::native_command_program::packaged_command_program().unwrap();
     let mut binding = NativeCommandControlBindingV1 {
+        active_security_digest: None,
         schema: NATIVE_COMMAND_CONTROL_BINDING_SCHEMA.into(),
         authority: Some(guard_contracts::NativeCommandControlAuthorityV1 {
             epoch: 1,
@@ -35,7 +36,9 @@ pub(super) fn control_snapshot(
             global_lockdown: false,
             controls: vec![NativeExtensionControlV1 {
                 target_kind: "extension".into(),
-                target_id: "command.ollama".into(),
+                // Authority-floor fixtures use an entry resident in the core.
+                // Optional pack preparation has its own admission fixtures.
+                target_id: "command.git".into(),
                 state: state.into(),
             }],
         }],

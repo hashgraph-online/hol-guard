@@ -1,10 +1,11 @@
 //! Descriptor-rooted discovery without file reads, symlinks or hardlink aliases.
 use super::BoundaryResult as Result;
-use nix::dir::{Dir, OwningIter};
+use nix::dir::Dir;
 use nix::fcntl::{open, openat, AtFlags, OFlag};
 use nix::sys::stat::{fstatat, Mode};
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::CString;
 use std::fs::File;
 use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::MetadataExt;
@@ -14,6 +15,8 @@ use std::time::Instant;
 const MAX_ENTRIES: usize = 240_000;
 const PROTECTED: &[&str] = &[".ssh", ".aws", ".docker", ".kube", ".gnupg", ".hol-guard"];
 const MESSAGE: &str = "Linux workspace could not be indexed safely.";
+const ENTRY_BUDGET: &str = "Linux workspace discovery exceeds its entry budget.";
+const TIME_BUDGET: &str = "Linux workspace discovery exceeds its time budget.";
 pub(super) type Candidates = BTreeMap<String, BTreeSet<PathBuf>>;
 /// An admitted regular file and the device/inode identity it was indexed with.
 pub(super) type Grant = (PathBuf, u64, u64);
@@ -21,16 +24,42 @@ pub(super) type Grant = (PathBuf, u64, u64);
 struct Frame {
     path: PathBuf,
     file: File,
-    entries: OwningIter,
+    names: std::vec::IntoIter<CString>,
 }
 impl Frame {
-    fn new(path: PathBuf, file: File) -> Result<Self> {
+    /// Buffers the directory's child names in descending raw-byte order, so
+    /// grants come out in the same order whatever the filesystem's readdir
+    /// order is. `remaining` is the entry budget left after every name already
+    /// visited or still buffered by an ancestor frame, so the whole stack never
+    /// holds more than the budget; a directory that would push past it fails
+    /// before the walk visits any of its children, since every buffered name
+    /// is visited (and counted) unless the walk fails first.
+    fn new(path: PathBuf, file: File, remaining: usize, deadline: Instant) -> Result<Self> {
         let duplicate = file.try_clone().map_err(|_| MESSAGE)?;
         let directory = Dir::from_fd(duplicate.into()).map_err(|_| MESSAGE)?;
+        let mut names = Vec::new();
+        for entry in directory {
+            if Instant::now() >= deadline {
+                return Err(TIME_BUDGET);
+            }
+            let entry = entry.map_err(|_| MESSAGE)?;
+            let name = entry.file_name();
+            if name.to_bytes() == b"." || name.to_bytes() == b".." {
+                continue;
+            }
+            if names.len() >= remaining {
+                return Err(ENTRY_BUDGET);
+            }
+            names.push(name.to_owned());
+        }
+        names.sort_unstable_by(|left, right| right.as_bytes().cmp(left.as_bytes()));
+        if Instant::now() >= deadline {
+            return Err(TIME_BUDGET);
+        }
         Ok(Self {
             path,
             file,
-            entries: directory.into_iter(),
+            names: names.into_iter(),
         })
     }
 }
@@ -95,26 +124,30 @@ pub(super) fn collect_with_candidates(
         Mode::empty(),
     )
     .map_err(|_| MESSAGE)?;
-    let mut stack = vec![Frame::new(root.to_path_buf(), File::from(descriptor))?];
+    let mut stack = vec![Frame::new(
+        root.to_path_buf(),
+        File::from(descriptor),
+        limit,
+        deadline,
+    )?];
+    // Names read into a frame but not yet visited, across the whole stack.
+    let mut buffered = stack[0].names.len();
     let mut visited = 0;
     let mut grants = Vec::new();
     let mut candidates = Candidates::new();
     while let Some(frame) = stack.last_mut() {
         if Instant::now() >= deadline {
-            return Err("Linux workspace discovery exceeds its time budget.");
+            return Err(TIME_BUDGET);
         }
-        let Some(entry) = frame.entries.next() else {
+        let Some(owned) = frame.names.next() else {
             stack.pop();
             continue;
         };
-        let entry = entry.map_err(|_| MESSAGE)?;
-        let name = entry.file_name();
-        if name.to_bytes() == b"." || name.to_bytes() == b".." {
-            continue;
-        }
+        let name = owned.as_c_str();
+        buffered -= 1;
         visited += 1;
         if visited > limit {
-            return Err("Linux workspace discovery exceeds its entry budget.");
+            return Err(ENTRY_BUDGET);
         }
         let path = frame
             .path
@@ -147,7 +180,9 @@ pub(super) fn collect_with_candidates(
                 metadata.st_dev as u64,
                 metadata.st_ino as u64,
             )?;
-            stack.push(Frame::new(path, file)?);
+            let frame = Frame::new(path, file, limit - visited - buffered, deadline)?;
+            buffered += frame.names.len();
+            stack.push(frame);
         } else if kind == libc::S_IFREG && metadata.st_nlink == 1 {
             grants.push((path, metadata.st_dev as u64, metadata.st_ino as u64));
         }

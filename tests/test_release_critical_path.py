@@ -344,6 +344,7 @@ def test_compilation_and_signing_run_beside_packaging_and_registry_verification(
 
 
 def test_early_asset_publication_rejects_a_different_tag_before_upload(tmp_path, monkeypatch):
+    monkeypatch.setattr(publish_core_inputs, "validate_distributions", lambda *a, **k: None)
     for key, value in {
         "VERSION": "3.34.1",
         "SOURCE_SHA": "a" * 40,
@@ -363,6 +364,7 @@ def test_early_asset_publication_rejects_a_different_tag_before_upload(tmp_path,
 
 
 def test_early_asset_publication_never_overwrites_an_existing_wheel(tmp_path, monkeypatch):
+    monkeypatch.setattr(publish_core_inputs, "validate_distributions", lambda *a, **k: None)
     for key, value in {
         "VERSION": "3.34.1",
         "SOURCE_SHA": "a" * 40,
@@ -371,7 +373,7 @@ def test_early_asset_publication_never_overwrites_an_existing_wheel(tmp_path, mo
         monkeypatch.setenv(key, value)
     wheel = tmp_path / "hol_guard-3.34.1-py3-none-any.whl"
     wheel.write_bytes(b"expected")
-    release = {"draft": False, "prerelease": False, "assets": [{"name": wheel.name}]}
+    release = {"isDraft": False, "isPrerelease": False, "assets": [{"name": wheel.name}]}
     monkeypatch.setattr(
         publish_core_inputs.subprocess,
         "run",
@@ -437,7 +439,8 @@ def test_signed_core_reads_the_publish_job_from_the_first_attempt(monkeypatch):
     assert job_paths == ["repos/hashgraph-online/hol-guard/actions/runs/123/attempts/1/jobs?per_page=100"]
 
 
-def test_no_public_release_is_created_before_manual_registry_success(tmp_path, monkeypatch):
+def test_missing_release_creation_failure_blocks_registry_readiness(tmp_path, monkeypatch):
+    monkeypatch.setattr(publish_core_inputs, "validate_distributions", lambda *a, **k: None)
     for key, value in {
         "VERSION": "3.34.1",
         "SOURCE_SHA": "a" * 40,
@@ -450,6 +453,8 @@ def test_no_public_release_is_created_before_manual_registry_success(tmp_path, m
 
     def run(*args):
         commands.append(args)
+        if args[:3] == ("gh", "release", "create"):
+            raise subprocess.CalledProcessError(1, args)
         return "a" * 40 if args[:2] == ("git", "rev-parse") else ""
 
     monkeypatch.setattr(publish_core_inputs, "run", run)
@@ -458,6 +463,7 @@ def test_no_public_release_is_created_before_manual_registry_success(tmp_path, m
         "run",
         lambda *a, **k: subprocess.CompletedProcess(args=[], returncode=1, stdout="", stderr="HTTP 404: Not Found"),
     )
-    publish_core_inputs.publish(tmp_path)
-    assert (tmp_path / "output").read_text() == "core_ready=false\n"
-    assert all(command[0] == "git" for command in commands)
+    with pytest.raises(subprocess.CalledProcessError):
+        publish_core_inputs.publish(tmp_path)
+    assert not (tmp_path / "output").exists()
+    assert any(command[:3] == ("gh", "release", "create") for command in commands)

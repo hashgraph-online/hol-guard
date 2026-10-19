@@ -279,6 +279,10 @@ pub(crate) enum ResidentOperationV1 {
     #[allow(dead_code)]
     PromptAnalyze(PromptAnalyzeRequestV1),
     CatalogRead(guard_command::catalog_read_model::CatalogReadRequestV1),
+    CatalogReadV2(guard_command::catalog_read_model::discovery::CatalogReadRequestV2),
+    CatalogPrepareV1(guard_command::catalog_prepare::Request),
+    CatalogReadPreparedV1(guard_command::catalog_prepare::ReadRequest),
+    CloudCatalog(Value),
     DiscoveryPlacementProject(crate::discovery_placement_op::DiscoveryPlacementProjectRequest),
     DataFlowAnalyze(DataFlowAnalyzeRequestV1),
     Health(Value),

@@ -22,6 +22,7 @@ from .test_guard_temporary_mcp_approvals import _artifact as _browser_click_arti
 from .test_guard_temporary_mcp_approvals import _evaluate
 
 _ACTIONS = ("allow", "warn", "review", "require-reapproval", "block")
+_LOCKDOWN_REASON = "This MCP tool is blocked by its authenticated extension authority."
 
 
 def _package_cases() -> list[tuple[str, str, str, str, str]]:
@@ -55,15 +56,18 @@ def test_recorded_expectations_cover_every_state_lockdown_and_action() -> None:
 @pytest.mark.parametrize("lockdown", [False, True])
 def test_resident_matches_the_recorded_expectations_for_every_bundled_package(lockdown: bool) -> None:
     mismatches: list[str] = []
-    shared_home = _AuthorityStore()  # one resident for the whole matrix
     for mcp_id, command, package, tool, state in _package_cases():
         catalog_id = "command." + mcp_id.replace(".", "-")
         layer = _layer(ControlLayerKind.LOCAL_ADMIN, catalog_id, ControlState.ENABLED, lockdown=lockdown)
         store = _AuthorityStore((layer,))
-        store.guard_home, store.path = shared_home.guard_home, shared_home.path
         artifact = _artifact(_identity(command, package), tool)
         for action in _ACTIONS:
-            expected = expected_decision(state, lockdown, action)
+            if lockdown:
+                # The resident enforces the authenticated global lockdown before any
+                # per-tool state: every call is blocked unless the request already is.
+                expected = None if action == "block" else ("block", recorded()["source"], _LOCKDOWN_REASON)
+            else:
+                expected = expected_decision(state, lockdown, action)
             actual = extension_driver.apply_contributed_mcp_decision(store, artifact, action)
             if expected != actual:
                 mismatches.append(f"{mcp_id} {tool} {action}: {expected} != {actual}")

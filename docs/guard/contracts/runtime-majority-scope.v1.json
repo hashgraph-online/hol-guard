@@ -520,6 +520,13 @@
     ],
     "reviewed_runtime": [
       {
+        "path": [
+          "src/codex_plugin_scanner/guard/runtime/extension_catalog_completion.py",
+          "src/codex_plugin_scanner/guard/runtime/extension_catalog_pages.py"
+        ],
+        "reason": "Retained conservatively in runtime scope: managed_controls_policy_bundle lazily reaches cloud policy synchronization and its catalog page/provider transport. Count these complete Python adapters, including transport and native dispatch, rather than excluding shared modules reached through policy authority. Native catalog validation remains counted in Rust."
+      },
+      {
         "path": "src/codex_plugin_scanner/guard/catalog_delivery/*.py",
         "reason": "Retained conservatively in runtime scope: generated_command_catalog and native_command_control_binding reach authenticated pack metadata, activation projection and recovery through lazy imports. Count the complete shared delivery modules, including preparation and transport helpers, rather than exclude code reachable through those authority boundaries. Pack admission and hook evaluation remain native."
       },

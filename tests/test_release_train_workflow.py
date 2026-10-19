@@ -118,6 +118,7 @@ def test_release_branch_pushes_publish_alpha_while_stable_publish_is_manual() ->
         "build",
         "assemble-native-guard-distributions",
         "reserve-main-tag",
+        "publish-main-assets",
     ]
     assert "needs.reserve-main-tag.result == 'success'" in jobs["publish-main-pypi"]["if"]
     assert "needs.publish-main-testpypi.result == 'success'" not in jobs["publish-main-pypi"]["if"]

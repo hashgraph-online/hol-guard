@@ -416,7 +416,7 @@ def test_package_and_publication_records_stay_on_the_workflow_token() -> None:
     release_main = _steps(PUBLISH_WORKFLOW, "release-main")
     record = "Record completed stable publication for future repairs and backfills"
     core_inputs = _step(
-        _steps(PUBLISH_WORKFLOW, "publish-main-assets"), "Publish immutable package inputs for Desktop signing"
+        _steps(PUBLISH_WORKFLOW, "publish-main-assets"), "Publish and remotely verify immutable package inputs"
     )
 
     assert _step(delete_steps, "Delete the alpha container image tag")["env"]["GH_TOKEN"] == WORKFLOW_TOKEN

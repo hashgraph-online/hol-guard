@@ -12,6 +12,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -163,9 +164,32 @@ def _run(command: list[str], *, input_bytes: bytes | None = None) -> bytes:
     return completed.stdout
 
 
+def _development_release(compiler: Path, directory: Path) -> dict:
+    """Prepare native command packs for this checkout's maintainer checks."""
+    import hashlib
+
+    import build_native_command_packs as packs
+
+    packs.stage(compiler, directory, source_root=ROOT)
+    manifest = (directory / "release.json").read_bytes()
+    return {"root": json.loads(manifest), "source_context": hashlib.sha256(manifest).hexdigest()}
+
+
 def _validate_fixture(compiler: Path, path: Path) -> str:
     fixture = _load_object(path)
-    result = _run([str(compiler), "test"], input_bytes=path.read_bytes())
+    sys.path.insert(0, str(ROOT / "src"))
+    from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+
+    with tempfile.TemporaryDirectory(prefix="hol-guard-prepare-context-") as scratch:
+        request = authoring_request(
+            "test",
+            fixture,
+            compiler,
+            installed=False,
+            cache_directory=Path(scratch).resolve(strict=True),
+            development=_development_release,
+        )
+        result = _run([str(compiler), "test"], input_bytes=json.dumps(request).encode())
     try:
         payload = json.loads(result)
     except json.JSONDecodeError as error:
@@ -267,7 +291,7 @@ def main(argv: list[str] | None = None) -> int:
         else:
             for extension_id in sorted(public_ids):
                 projection.extend(["--publish-descriptor", extension_id])
-        directory = [sys.executable, str(ROOT / "scripts/export_extension_directory.py")]
+        directory = [sys.executable, str(ROOT / "scripts/prepare_extension_directory.py"), "--compiler", str(compiler)]
         if args.check:
             projection.append("--check")
             directory.append("--check")

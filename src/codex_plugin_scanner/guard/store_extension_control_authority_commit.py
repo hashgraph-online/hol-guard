@@ -20,6 +20,7 @@ from .runtime.extension_control_authority import (
     layers_to_json,
 )
 from .runtime.extension_control_contract import (
+    ControlLayerKind,
     ExtensionControlLayer,
 )
 from .runtime.extension_control_proof import (
@@ -41,6 +42,26 @@ from .store_extension_control_authority_support import (
 
 
 class ExtensionControlAuthorityCommitMixin:
+    def migrate_installed_command_pack_authority(self):
+        """Authenticate legacy controls before admitting the installed release.
+
+        Called at daemon installation/startup, never by preview or recovery.
+        Neither controls, managed state nor saved command decisions are mutated.
+        """
+        from .catalog_delivery import lifecycle_store
+        from .catalog_delivery.preparation_authority import load_installed_bundle
+
+        installed = load_installed_bundle()
+        if installed is None:
+            return
+        with self._extension_control_authority_lock(shared=True):
+            if lifecycle_store.migration_retained(self):
+                return
+        with self._extension_control_authority_lock():
+            with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
+            lifecycle_store.migrate_installed(self, installed)
+
     def enroll_extension_control_authority(
         self,
         *,
@@ -60,6 +81,12 @@ class ExtensionControlAuthorityCommitMixin:
             if current.health is not AuthorityHealth.UNENROLLED:
                 raise ExtensionControlAuthorityError("extension control authority already enrolled")
             consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
+            from .catalog_delivery import lifecycle_store
+            from .catalog_delivery.preparation_authority import load_installed_bundle
+
+            installed = load_installed_bundle()
+            if installed is not None:
+                lifecycle_store.enroll_installed(self, installed)
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
 
     def commit_extension_control_layers(
@@ -74,6 +101,9 @@ class ExtensionControlAuthorityCommitMixin:
         proof: ExtensionControlProof,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
         pack_activation=None,
+        expected_managed_revision: int | None = None,
+        expected_managed_layers: tuple[ExtensionControlLayer, ...] | None = None,
+        managed_registry: CommandSafetyExtensionRegistry | None = None,
     ) -> ExtensionControlAuthorityView:
         if pack_activation is not None:
             if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
@@ -98,7 +128,34 @@ class ExtensionControlAuthorityCommitMixin:
         validate_extension_control_proof(proof, mutation)
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
+        managed_manifest = None
+        if expected_managed_revision is not None:
+            if managed_registry is None or expected_managed_layers is None:
+                raise ExtensionControlAuthorityError("managed policy binding missing")
+            managed_manifest = self._catalog_target_manifest(managed_registry)
         with self._extension_control_authority_lock():
+            if pack_activation is not None:
+                from .catalog_delivery import lifecycle_store
+
+                lifecycle_store.check(self, pack_activation.lifecycle_before, pack_activation.lifecycle_after)
+                from .catalog_delivery.active_security import check_scope
+
+                check_scope(self, pack_activation.security_digest)
+            if expected_managed_revision is not None:
+                assert managed_registry is not None
+                managed_view = self._read_extension_control_authority_locked(
+                    managed_registry.catalog_digest,
+                    migration_registry=managed_registry,
+                    allow_migration=False,
+                )
+                managed_view = self._with_managed_controls_activation(managed_view, current_manifest=managed_manifest)
+                if (
+                    managed_view.health is not AuthorityHealth.PROTECTED
+                    or managed_view.managed_revision != expected_managed_revision
+                    or tuple(layer for layer in managed_view.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+                    != expected_managed_layers
+                ):
+                    raise ExtensionControlAuthorityError("managed policy changed before commit")
             self._invalidate_native_extension_control_policy()
             # Do not roll back an abandoned transition yet: a retry of the same
             # request must still find and resume its prepared row below.

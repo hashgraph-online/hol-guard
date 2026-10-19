@@ -249,10 +249,10 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::context_digest::evaluate_context_digest_request(&request)
             }
             ResidentOperationV1::CommandEffectDecide(request) => {
-                crate::command_effect::evaluate_command_effect_request(&request)
+                crate::command_effect::evaluate_with_store(&request, policy_store)
             }
             ResidentOperationV1::CommandEffectDecideBatch(request) => {
-                crate::command_effect::evaluate_command_effect_batch_request(&request)
+                crate::command_effect::evaluate_batch_with_store(&request, policy_store)
             }
             ResidentOperationV1::ApprovalReuseDecide(request) => {
                 crate::approval_reuse::evaluate_approval_reuse_request(&request)
@@ -455,12 +455,13 @@ pub(crate) fn evaluate_resident_bytes(
                 crate::binding_capture_op::evaluate_codex_binding_capture_request(&request)
             }
             ResidentOperationV1::ContributedMcpDecide(request) => {
-                crate::contributed_mcp_decision_op::evaluate_contributed_mcp_decision_request(
+                crate::contributed_mcp_decision_op::evaluate_with_store(
                     &request,
+                    policy_store,
                 )
             }
             ResidentOperationV1::McpToolPolicyDecide(request) => {
-                crate::mcp_tool_policy_decide_op::evaluate_mcp_tool_policy_decide_request(&request)
+                crate::mcp_tool_policy_decide_op::evaluate_with_store(&request, policy_store)
             }
             ResidentOperationV1::McpToolCallIdentity(request) => {
                 crate::mcp_tool_call_identity_op::evaluate_mcp_tool_call_identity_request(&request)
@@ -553,6 +554,18 @@ pub(crate) fn evaluate_resident_bytes(
             ResidentOperationV1::CatalogRead(request) => encode_response(
                 &guard_command::catalog_read_model::evaluate_catalog_read(&request),
             ),
+            ResidentOperationV1::CatalogReadV2(request) => encode_response(
+                &guard_command::catalog_read_model::discovery::evaluate(&request),
+            ),
+            ResidentOperationV1::CatalogPrepareV1(request) => {
+                encode_response(&guard_command::catalog_prepare::evaluate(request))
+            }
+            ResidentOperationV1::CatalogReadPreparedV1(request) => {
+                encode_response(&guard_command::catalog_prepare::read(&request))
+            }
+            ResidentOperationV1::CloudCatalog(request) => encode_response(
+                &guard_command::cloud_catalog::evaluate(&request),
+            ),
             // Untrusted Cloud discovery bytes are validated and projected
             // here; the daemon adapter only moves bytes (no Python fallback).
             ResidentOperationV1::DiscoveryPlacementProject(request) => {
@@ -594,6 +607,16 @@ pub(crate) fn evaluate_resident_bytes(
 /// The Guard home an operation acts on, for operations that open per-home state.
 fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
     match operation {
+        ResidentOperationV1::CloudCatalog(request) => {
+            if request["action"] == "begin" {
+                request["observation"]["guard_home"].as_str()
+            } else {
+                request["guard_home"].as_str()
+            }
+        }
+        ResidentOperationV1::CatalogReadV2(request) => request.guard_home.to_str(),
+        ResidentOperationV1::CatalogPrepareV1(request) => request.guard_home.to_str(),
+        ResidentOperationV1::CatalogReadPreparedV1(request) => request.guard_home.to_str(),
         ResidentOperationV1::ArchiveAcquisition(request) => Some(&request.guard_home),
         ResidentOperationV1::DirectoryTrust(request) => Some(&request.guard_home),
         ResidentOperationV1::HookDirect(request) => Some(&request.guard_home),

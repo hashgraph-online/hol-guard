@@ -544,3 +544,6 @@ fn omp_glob_walks_a_virtualenv_interpreter_link() {
     std::os::unix::fs::symlink(home.join("toolchains"), venv.join("python")).unwrap();
     assert!(!proven());
 }
+
+#[path = "search_scope_feature_tests.rs"]
+mod feature_directories;
