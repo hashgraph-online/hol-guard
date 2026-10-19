@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 #![recursion_limit = "512"]
 
+mod active_pack_security;
 mod adapter_inventory;
 #[cfg(all(test, unix))]
 mod adapter_vectors_tests;
@@ -191,6 +192,8 @@ mod continuation_grants;
 mod continuation_lineage;
 mod continuation_metadata;
 mod continuation_store;
+#[cfg(test)]
+mod contributed_mcp_catalog_test_support;
 mod contributed_mcp_decision_op;
 mod copilot_detect;
 #[cfg(all(test, unix))]
@@ -427,6 +430,8 @@ mod hook_direct_evidence;
 mod hook_env_stamp;
 #[cfg(all(test, unix))]
 mod mcp_config_discovery_tests;
+mod pack_lifecycle;
+mod pack_preparation;
 // The seams the evidence writer runs on. Each is reached through
 // hook_evidence_writer_op; the readers also have their own tests.
 #[allow(dead_code)]

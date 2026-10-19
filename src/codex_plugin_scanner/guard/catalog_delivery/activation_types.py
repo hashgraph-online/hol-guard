@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any, TypedDict
 
+from typing_extensions import NotRequired
+
 
 class ActivationHeader(TypedDict):
     authority_schema_version: int
@@ -20,8 +22,9 @@ class ActivationHeader(TypedDict):
     root_digest: str
     authority_epoch: int
     revocation_epoch: int
-    issued_at: int
-    expires_at: int
+    issued_at: int | None
+    expires_at: int | None
+    authority_profile: NotRequired[str]
     selection: dict[str, Any]
     selected_count: int
     registry: dict[str, Any]

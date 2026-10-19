@@ -1,6 +1,64 @@
 use super::*;
 use std::sync::Arc;
 
+#[test]
+fn warm_native_security_quarantine_is_terminal_and_survives_restart() {
+    let root = test_root("command-pack-security");
+    let key = install_test_key(&root, 96);
+    let store = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    let before = command_floor_tests::control_snapshot(1, 5, 9, "enabled", &key, &root);
+    command_authority_tests::publish_marker(&store, &before, "committed");
+    store
+        .push(&serde_json::json!({"schema":POLICY_SNAPSHOT_PUSH_SCHEMA,"snapshot":before}))
+        .unwrap();
+    let warm = store.current_admitted_snapshot().unwrap();
+    let mut after = before.clone();
+    after.generation = 2;
+    let binding = after.command_extensions.as_mut().unwrap();
+    let (record, digest) =
+        crate::active_pack_security::fixture_record(&binding.program_digest, &key, false);
+    fixture_file(
+        &root.join(crate::active_pack_security::FILE),
+        record.as_bytes(),
+    );
+    #[cfg(unix)]
+    fs::set_permissions(
+        root.join(crate::active_pack_security::FILE),
+        fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    binding.active_security_digest = Some(digest);
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    binding.authority.as_mut().unwrap().mutation_revision += 1;
+    command_floor_tests::resign(&mut after, &key);
+    command_authority_tests::publish_marker(&store, &after, "committed");
+    assert!(store.command_authority_lease(&warm).is_err());
+    store
+        .push(&serde_json::json!({"schema":POLICY_SNAPSHOT_PUSH_SCHEMA,"snapshot":after}))
+        .unwrap();
+    let check = |store: &PolicySnapshotStore| {
+        let snapshot = store.current_admitted_snapshot().unwrap();
+        let _lease = store.command_authority_lease(&snapshot).unwrap();
+        let result = guard_command::pretool::evaluate_pre_tool_envelope_with_execution_context(
+            "claude",
+            "PreToolUse",
+            &serde_json::json!({"tool_name":"Bash","tool_input":{"command":"git status"}}),
+            snapshot.command_extensions.as_ref(),
+            None,
+            guard_command::pretool::PathContext::default(),
+            None,
+        );
+        assert_eq!(result.minimum_action, "block");
+        assert_eq!(result.policy_action, "block");
+        assert_eq!(result.reason_code, "native_active_pack_quarantine");
+    };
+    check(&store);
+    drop(store);
+    let restarted = PolicySnapshotStore::new(&root, &"a".repeat(64)).unwrap();
+    check(&restarted);
+    remove_pack_test_root(&root);
+}
+
 fn remove_pack_test_root(root: &Path) {
     assert!(root
         .file_name()

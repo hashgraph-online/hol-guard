@@ -200,6 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
+    qualify.add_argument("--native-route", help="Explicit pinned native OMP backend (default: Luna)")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
     qualify.add_argument(
         "--run-root",

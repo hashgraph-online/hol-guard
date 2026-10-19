@@ -29,7 +29,7 @@ PUBLISH_PR_PATHS = [
     "tests/native_command_test_support.py",
     "tests/native_guard_home_key.py",
     "tests/native_github_offline.py",
-    "tests/fixtures/guard-command-corpus/**",
+    "tests/fixtures/**",
     "tests/dockerlabs/**",
 ]
 

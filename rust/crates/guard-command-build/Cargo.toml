@@ -19,6 +19,8 @@ doctest = false
 bench = false
 
 [dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+tempfile = "3.10"
 base64 = "=0.22.1"
 mailparse = "=0.17.0"
 guard-scanner = { path = "../guard-scanner" }

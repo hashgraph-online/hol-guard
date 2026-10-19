@@ -107,9 +107,11 @@ def test_aws_and_git_stay_on_without_opt_in(tmp_path: Path) -> None:
 
 
 def test_cloud_catalog_wire_omits_local_trust_fields() -> None:
-    from codex_plugin_scanner.guard.runtime.extension_catalog_sync import build_builtin_extension_catalog_wire
+    from codex_plugin_scanner.guard.runtime.extension_catalog_sync import build_extension_catalog_wire
 
-    wire = build_builtin_extension_catalog_wire(guard_version="3.0.51", generated_at="2026-09-04T00:00:00Z")
+    wire = build_extension_catalog_wire(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY, guard_version="3.0.51", generated_at="2026-09-04T00:00:00Z"
+    )
     extension = next(item for item in wire["extensions"] if item["id"] == "command.noodle")
     assert "trustClass" not in extension
     assert "trust_class" not in extension

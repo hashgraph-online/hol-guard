@@ -56,6 +56,10 @@ def test_catalog_payload_limit_uses_exact_daemon_wire_encoding(
 ) -> None:
     service = _service(tmp_path)
     payload = service.catalog()
+    # The response advertises this budget. Normalize its decimal width before
+    # measuring the exact boundary; changing it can shrink the response itself.
+    monkeypatch.setattr(api_module, "MAX_DAEMON_CATALOG_RESPONSE_BYTES", len(_wire_bytes(payload)))
+    payload = service.catalog()
     wire_size = len(_wire_bytes(payload))
     unescaped_size = len(json.dumps(payload).encode("utf-8"))
     compact_size = len(json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"))

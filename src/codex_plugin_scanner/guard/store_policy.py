@@ -28,6 +28,7 @@ from .policy_bundle_activation import (
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
     published_managed_authority,
+    revalidate_cloud_policy,
 )
 from .runtime.extension_control_authority import (
     AuthorityHealth,
@@ -45,6 +46,7 @@ from .store_policy_activation_preflight import (
 
 if TYPE_CHECKING:
     from .managed_controls_policy_fields import ParsedManagedControlsPolicy
+    from .store import GuardStore
 
 # ruff: noqa: F403,F405
 from .action_lattice import guard_action_severity
@@ -508,13 +510,21 @@ class StorePolicyMixin:
         )
         if payload_rejection is not None:
             return reject(payload_rejection)
-        from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+        from .catalog_delivery.projection import capture, require_current
+        from .native_command_control_authority_store import _key
+
+        _, registry, activation_digest = capture(self)
+        current_manifest = self._catalog_target_manifest(registry)
+        # Resolve any activation migration before opening the policy write
+        # transaction. The protected header is rechecked under its lease below.
+        self.read_extension_control_authority_for_registry(registry)
 
         with self._extension_control_authority_lock(), self._connect() as connection:
+            require_current(self, _key(cast("GuardStore", self)), activation_digest)
             self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+                registry.catalog_digest,
             )
             continuity_rejection = continuity_activation_rejection(
                 custom_extension_continuity,
@@ -537,6 +547,8 @@ class StorePolicyMixin:
             managed_authority_key: bytes | None = None
             managed_revision = 0
             if managed_controls_policy is not None:
+                if managed_controls_policy.cloud_projection_digest is not None and managed_controls_delivery is None:
+                    return reject("missing_policy_bundle_delivery", connection)
                 if managed_base_authority.health is not AuthorityHealth.PROTECTED:
                     return reject("managed_controls_authority_unprotected", connection)
                 if managed_base_snapshot is None:
@@ -583,9 +595,17 @@ class StorePolicyMixin:
                     previous_active = json.loads(str(active_row["payload_json"]))
                     active_managed_layers, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
-                        catalog_digest=managed_base_authority.catalog_digest,
+                        catalog_digest=previous_active.get("catalogDigest"),
                         authority_key=managed_authority_key,
                     )
+                    if previous_active.get("catalogDigest") != managed_base_authority.catalog_digest:
+                        composed = self._with_managed_controls_activation(
+                            managed_base_authority,
+                            current_manifest=current_manifest,
+                        )
+                        active_managed_layers = tuple(
+                            layer for layer in composed.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
+                        )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
                     return reject("managed_controls_activation_state_invalid", connection)
                 if revision_row is not None and active_revision != previous_revision:
@@ -595,6 +615,21 @@ class StorePolicyMixin:
             if managed_controls_delivery is not None:
                 if managed_controls_policy is None or managed_base_authority is None:
                     return reject("managed_controls_delivery_policy_missing", connection)
+                try:
+                    cloud_valid = revalidate_cloud_policy(
+                        connection,
+                        policy=managed_controls_policy,
+                        policy_bundle=policy_bundle,
+                        guard_home=self.guard_home,
+                        registry=registry,
+                        capabilities=managed_controls_negotiated_capabilities,
+                        verdicts=verdicts,
+                    )
+                except ResidentVerdictRequiredError:
+                    connection.rollback()
+                    raise
+                if not cloud_valid:
+                    return reject("policy_local_view_invalid", connection)
                 current_authority = composed_managed_authority(
                     managed_base_authority,
                     managed_layers=active_managed_layers,

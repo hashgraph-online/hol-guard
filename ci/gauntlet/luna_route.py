@@ -35,7 +35,11 @@ EFFORTS = ("medium", "high", "low")
 DEFAULT_EFFORT = "medium"
 # Each native backend the adapter may load, with the efforts its pinned catalog entry accepts.
 # Devin SWE-2 runs through the same Oh My Pi login store; it has no low effort.
-BACKENDS: dict[tuple[str, str], tuple[str, ...]] = {BACKEND: EFFORTS, ("devin", "swe-2"): ("medium", "high")}
+BACKENDS: dict[tuple[str, str], tuple[str, ...]] = {
+    BACKEND: EFFORTS,
+    ("openai-codex", "gpt-6.1-sol"): EFFORTS,
+    ("devin", "swe-2"): ("medium", "high"),
+}
 
 
 def parse_backend(value: str) -> tuple[str, str]:
@@ -74,7 +78,7 @@ _WINDOWS_ENVIRONMENT_KEYS = (
 
 def identity(effort: str, backend: tuple[str, str] = BACKEND) -> str:
     """Provider identity recorded in evidence, naming the backend, its effort and the adapter."""
-    wire = "Responses" if backend == BACKEND else "native " + backend[0]
+    wire = "Responses" if backend[0] == "openai-codex" else "native " + backend[0]
     return f"{backend[0]}/{backend[1]}/{effort} via {ADAPTER_ID} (loopback Chat Completions to {wire})"
 
 

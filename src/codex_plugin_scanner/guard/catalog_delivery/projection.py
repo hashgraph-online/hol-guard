@@ -23,7 +23,9 @@ def capture(store):
     from ..native_command_control_binding import load_native_command_program_metadata
     from ..runtime.generated_command_catalog import GeneratedCommandCatalog
     from .activation_store import read
+    from .active_security import reconcile
 
+    reconcile(store)
     committed = read(store)
     if committed is None:
         from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY

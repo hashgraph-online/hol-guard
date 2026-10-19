@@ -13,6 +13,10 @@ use guard_contracts::{
 use serde::Deserialize;
 use serde_json::Value;
 
+#[cfg(test)]
+#[path = "authored_test_support.rs"]
+pub(crate) mod authored_test_support;
+
 use crate::command_ascii_comparison::lowercase_for_ascii_comparison;
 use crate::command_common_cli_matchers::CommonCliMatcher;
 use crate::command_database_matchers::DatabaseMatcher;

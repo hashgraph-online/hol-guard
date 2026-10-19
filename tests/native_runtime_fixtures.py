@@ -7,6 +7,13 @@ from pathlib import Path
 
 import pytest
 
+from .mcp_policy_catalog_fixture import (  # noqa: F401
+    mcp_policy_delivery,
+    mcp_policy_inventory,
+    native_mcp_catalog_admission,
+)
+from .mcp_policy_native_fixture import native_mcp_policy_admission  # noqa: F401
+
 
 def _resolve_native_hook_runtime() -> Path:
     """Resolve the caller-pinned runtime path used by native hook tests.
@@ -68,6 +75,9 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
     # The managed resident refuses to serve until the policy verifier key the
     # publisher would normally provision exists; seed a test key once.
     provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    from .mcp_policy_native_fixture import _FIXTURE_KEYS
+
+    _FIXTURE_KEYS[guard_home] = b"\x07" * 32
     # Pre-warm the capabilities cache and the persistent resident client pool
     # at session scope.  Tests that patch subprocess.Popen globally would
     # otherwise intercept the first probe/pool spawn mid-test and break the

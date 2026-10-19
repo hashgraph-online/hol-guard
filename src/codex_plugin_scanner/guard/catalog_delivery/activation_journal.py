@@ -13,8 +13,8 @@ from ..runtime.extension_control_authority import (
     authenticated_record,
     verify_authenticated_record,
 )
-from . import activation_baseline
-from .activation_record import verify_header
+from . import activation_baseline, lifecycle_store
+from .activation_record import SCHEMA_V2, admission_is_current, verify_header
 from .activation_store import _row, directory_for_store, write_in_transaction
 from .activation_transition import ActivationDraft
 
@@ -40,11 +40,15 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
     if type(draft) is not ActivationDraft or draft.directory != directory_for_store(store):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid")
     key = _key(store)
+    lifecycle_store.check(store, draft.lifecycle_before, draft.lifecycle_after)
+    from .active_security import check_scope
+
+    check_scope(store, draft.security_digest)
     header = verify_header(draft.data, draft.digest, draft.mac, key=key)
     admitted_at = int(time.time()) if now is None else now
     if (
         type(admitted_at) is not int
-        or not header["issued_at"] <= admitted_at < header["expires_at"]
+        or not admission_is_current(header, admitted_at)
         or header["catalog_digest"] != catalog_digest
     ):
         raise NativePolicySnapshotError("native_command_pack_draft_invalid")
@@ -54,10 +58,11 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
         activation_baseline.reserve_legacy_baseline(
             store, connection, draft.baseline_metadata, key=key, recorded_at=recorded_at
         )
-    else:
-        from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
+    from ..store_extension_control_authority_schema import ensure_extension_control_authority_schema
 
-        ensure_extension_control_authority_schema(connection, activate_packs=True)
+    ensure_extension_control_authority_schema(
+        connection, activate_packs=True, activation_format_v2=header["schema"] == SCHEMA_V2
+    )
     current = _row(connection)
     if current is None:
         raise NativePolicySnapshotError("native_command_pack_activation_missing")
@@ -84,6 +89,9 @@ def reserve(store, connection, draft, *, control_revision, snapshot_digest, cata
             "catalog_digest": catalog_digest,
             "pack_record_digest": draft.digest,
             "admitted_at": admitted_at,
+            "lifecycle_before": draft.lifecycle_before,
+            "lifecycle_after": draft.lifecycle_after,
+            **({"security_digest": draft.security_digest} if draft.security_digest is not None else {}),
         },
         key=key,
         purpose=PURPOSE,
@@ -132,6 +140,17 @@ def finish(store, connection, transition):
         raise NativePolicySnapshotError("native_command_pack_transition_unanchored")
     key = _key(store)
     header, link = _verified_pending(row, transition, key)
+    if "lifecycle_before" not in link:
+        from . import lifecycle
+
+        link.update(
+            lifecycle.invoke(
+                "legacy-pending",
+                key=key.hex(),
+                floor=lifecycle_store.read(store),
+                **lifecycle_store.legacy_evidence(store, connection),
+            )
+        )
     draft = object.__new__(ActivationDraft)
     for name, value in {
         "directory": directory_for_store(store),
@@ -140,6 +159,9 @@ def finish(store, connection, transition):
         "mac": row["record_mac"],
         "previous_digest": header["previous_digest"],
         "baseline_metadata": None,
+        "lifecycle_before": link["lifecycle_before"],
+        "lifecycle_after": link["lifecycle_after"],
+        "security_digest": link.get("security_digest"),
     }.items():
         object.__setattr__(draft, name, value)
     write_in_transaction(
@@ -167,9 +189,15 @@ def _verify_pending(row, transition, key):
         "catalog_digest": transition["catalog_digest"],
         "pack_record_digest": row["record_digest"],
     }
-    if set(link) != {"authority_schema_version", "purpose", "admitted_at", *expected} or any(
-        link[name] != value for name, value in expected.items()
-    ):
+    lifecycle_fields = {"lifecycle_before", "lifecycle_after"} if "lifecycle_before" in link else set()
+    if set(link) != {
+        "authority_schema_version",
+        "purpose",
+        "admitted_at",
+        *lifecycle_fields,
+        *({"security_digest"} if "security_digest" in link else set()),
+        *expected,
+    } or any(link[name] != value for name, value in expected.items()):
         raise UnverifiablePackTransitionError("native_command_pack_transition_mismatch")
     header = verify_header(row["record_json"], row["record_digest"], row["record_mac"], key=key)
     if header["catalog_digest"] != transition["catalog_digest"]:

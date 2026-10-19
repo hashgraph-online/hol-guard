@@ -193,9 +193,11 @@ def test_private_marker_handles_short_writes_and_rejects_links(tmp_path: Path, m
 def test_mutation_requirement_accepts_exclusive_lease_and_rejects_shared_lease(tmp_path: Path) -> None:
     with hold_command_control_authority_lock(tmp_path):
         require_command_control_mutation_lease(tmp_path)
-    with hold_command_control_authority_lock(tmp_path, shared=True):
-        with pytest.raises(NativeCommandControlMutationRequiredError):
-            require_command_control_mutation_lease(tmp_path)
+    with (
+        hold_command_control_authority_lock(tmp_path, shared=True),
+        pytest.raises(NativeCommandControlMutationRequiredError),
+    ):
+        require_command_control_mutation_lease(tmp_path)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX retained-inode identity replacement fault")
@@ -389,10 +391,11 @@ def test_lease_timeout_reports_unavailability_rather_than_a_verdict(tmp_path: Pa
 
 def _startup_view_with_store(store: object) -> object:
     from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHTTPServer
+    from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 
     server = object.__new__(_GuardDaemonHTTPServer)
     server.store = store  # type: ignore[attr-defined]
-    return _GuardDaemonHTTPServer._startup_extension_control_view(server)
+    return _GuardDaemonHTTPServer._startup_extension_control_view(server, BUILT_IN_COMMAND_EXTENSION_REGISTRY)
 
 
 def test_daemon_startup_falls_back_to_a_shared_read_when_the_lease_is_busy() -> None:

@@ -35,6 +35,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 
 from .local_cli_native_fixture import native_local_cli_grant_resident, native_test_guard_home  # noqa: F401
 from .mcp_extension_driver import apply_contributed_mcp_decision, apply_local_mcp_extension_decision
+from .mcp_policy_catalog_fixture import admit_mcp_layers
 
 
 def _identity():
@@ -88,6 +89,7 @@ class _AuthorityStore:
         self.layers = layers
         self.guard_home = native_test_guard_home()
         self.path = self.guard_home / "guard.db"
+        admit_mcp_layers(self, layers)
 
     def has_local_cli_grant_rules(self) -> bool:
         """No device grant rows exist, so an unavailable resident cannot hide one."""
@@ -138,6 +140,19 @@ def test_signed_cloud_enable_does_not_activate_mcp_contribution() -> None:
     assert apply_contributed_mcp_decision(cloud, artifact, "review") is None
 
 
+def test_request_layers_cannot_activate_an_unadmitted_optional_pack() -> None:
+    store = _AuthorityStore()
+    store.layers = (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),)
+    assert apply_contributed_mcp_decision(store, _artifact(_identity(), "write_file"), "allow") is None
+
+
+def test_admitted_catalog_decision_does_not_depend_on_request_layers() -> None:
+    store = _AuthorityStore((_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),))
+    store.layers = ()
+    decision = apply_contributed_mcp_decision(store, _artifact(_identity(), "write_file"), "allow")
+    assert decision is not None and decision[:2] == ("block", "catalog-mcp-extension")
+
+
 def test_global_lockdown_suppresses_allow() -> None:
     identity = build_mcp_server_identity(config_path="", command="uvx", args=("enola-cli",), transport="stdio")
     artifact = _artifact(identity, "query_facts")
@@ -146,7 +161,13 @@ def test_global_lockdown_suppresses_allow() -> None:
     assert allowed is not None
     assert allowed[0] == "allow"
     locked = _layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-enola", ControlState.ENABLED, lockdown=True)
-    assert apply_contributed_mcp_decision(_AuthorityStore((locked,)), artifact, "review") is None
+    decision = apply_contributed_mcp_decision(_AuthorityStore((locked,)), artifact, "review")
+    assert decision is not None
+    assert decision == (
+        "block",
+        "catalog-mcp-extension",
+        "This MCP tool is blocked by its authenticated extension authority.",
+    )
 
 
 def test_missing_tool_identity_does_not_apply_other_defaults() -> None:
@@ -239,21 +260,24 @@ def test_custom_mcp_block_overrides_base_allow(tmp_path: Path) -> None:
 
 def test_evaluate_write_file_blocks_after_local_enable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     identity = _identity()
-    store = GuardStore(tmp_path / "guard-home")
+    layers = (_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),)
+    authority = _AuthorityStore(layers)
+    store = GuardStore(authority.guard_home)
+    config = replace(_config(tmp_path), guard_home=authority.guard_home)
     view = ExtensionControlAuthorityView(
         health=AuthorityHealth.PROTECTED,
         revision=1,
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
-        layers=(_layer(ControlLayerKind.LOCAL_ADMIN, "command.mcp-filesystem", ControlState.ENABLED),),
+        layers=layers,
     )
     monkeypatch.setattr(store, "read_extension_control_authority_for_registry", lambda _registry, **_kwargs: view)
     artifact = _artifact(identity, "write_file")
     arguments = {"path": "notes.txt", "contents": "hi"}
     decision = evaluate_tool_call(
         store=store,
-        config=_config(tmp_path),
+        config=config,
         artifact=artifact,
-        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=_config(tmp_path)),
+        artifact_hash=build_tool_call_hash(artifact, arguments, workspace=tmp_path, config=config),
         arguments=arguments,
         claim_saved_approval=False,
     )

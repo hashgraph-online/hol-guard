@@ -2,6 +2,13 @@
 
 use super::*;
 
+#[path = "native_command_source_admission.rs"]
+mod admission;
+#[path = "native_command_source_authoring.rs"]
+mod authoring;
+pub(crate) use authoring::Exchange as MetadataExchange;
+#[path = "native_command_source_baseline.rs"]
+mod baseline;
 #[path = "native_command_source_capabilities.rs"]
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
@@ -22,6 +29,8 @@ mod json;
 mod matcher;
 #[path = "native_command_source_mcp.rs"]
 mod mcp;
+#[path = "native_command_source_metadata_index.rs"]
+mod metadata_index;
 #[path = "native_command_source_packs.rs"]
 mod packs;
 #[path = "native_command_source_parity.rs"]
@@ -30,6 +39,8 @@ mod parity;
 mod stream;
 #[path = "native_command_source_validation.rs"]
 mod validation;
+pub use admission::authoring_admission;
+pub use authoring::{authoring_context, authoring_index};
 pub use catalog::{
     compile_addition, compile_addition_with_mcp, compile_catalog, compile_catalog_with_mcp,
     CompiledSourceCatalog,
@@ -60,6 +71,7 @@ struct BuildRequest {
     mcp_sources: Vec<Value>,
     trust: Value,
     base: Option<BaseProgram>,
+    validation_base: Option<baseline::ValidationBase>,
 }
 
 #[derive(Deserialize)]
@@ -102,11 +114,24 @@ fn compile_owned_request(
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| "command_source_encoding_failed")?;
     let mcp_borrowed = mcp_sources.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let baseline = if matches!(request.base, Some(BaseProgram::Packaged)) {
+        Some(
+            request
+                .validation_base
+                .as_ref()
+                .ok_or("command_source_global_validation_required")?
+                .prepare(&borrowed, &mcp_borrowed, fixture)?,
+        )
+    } else {
+        None
+    };
     match request.base {
         Some(BaseProgram::Packaged) if fixture => {
-            fixture_catalog::compile_fixture_addition(&borrowed, &mcp_borrowed, &trust)
+            fixture_catalog::compile_fixture_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
         }
-        Some(BaseProgram::Packaged) => compile_addition_with_mcp(&borrowed, &mcp_borrowed, &trust),
+        Some(BaseProgram::Packaged) => {
+            catalog::addition::compile_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
+        }
         None => compile_catalog_with_mcp(&borrowed, &mcp_borrowed, &trust),
     }
 }

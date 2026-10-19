@@ -46,7 +46,7 @@ def projection_builder(tmp_path, monkeypatch):
     )
 
     @contextmanager
-    def source_stream():
+    def source_stream(**kwargs):
         yield BytesIO(), trust, []
 
     monkeypatch.setattr(module, "source_stream", source_stream)
@@ -54,6 +54,7 @@ def projection_builder(tmp_path, monkeypatch):
     limits.write_bytes(module.DELIVERY_LIMITS.read_bytes())
     monkeypatch.setattr(module, "DELIVERY_LIMITS", limits)
     monkeypatch.setattr(module, "implementation_digest", lambda: "d" * 64)
+    monkeypatch.setattr(module, "_pack_descriptors", lambda compiler: [descriptor])
     public_blobs = {}
 
     def run(command, **kwargs):

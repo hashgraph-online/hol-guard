@@ -63,7 +63,7 @@ def build(source, output, compiler, *, previous=None, compile_sources=True):
     plan = AssetPlan(output / "assets", "f" * 40, existing=previous, publication_id=publication)
     store = LocatedStore(output / "metadata", publisher=plan)
     try:
-        root = delivery.build_from_packs(source, policy, native, plan, store, "f" * 40)
+        root = delivery.build_from_packs(source, policy, native, plan, store, "f" * 40, compiler=compiler)
     finally:
         plan.finish()
     output.mkdir(parents=True, exist_ok=True)

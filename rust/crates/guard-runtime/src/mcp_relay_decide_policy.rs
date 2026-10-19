@@ -27,14 +27,16 @@ pub(super) fn run_policy(
     subject: &guard_contracts::McpToolPolicySubjectV1,
     saved: Option<&store::Saved<'_>>,
     connection: Option<&Connection>,
+    catalog: &crate::contributed_mcp_decision_op::Catalog<'_>,
 ) -> Result<Decision, &'static str> {
     let mut observations: Vec<McpToolPolicyObservationV1> = Vec::new();
-    let memo = PassMemo::new(subject);
+    let memo = PassMemo::with_catalog(subject, catalog);
     for _ in 0..MAX_POLICY_ROUNDS {
         let ctx = Ctx {
             observations: &observations,
             lookup: None,
             memo: Some(&memo),
+            catalog: Some(catalog),
         };
         match evaluate_pass(&ctx, subject, Phase::Initial, false) {
             Ok(Pass::Final(decision)) => return Ok(*decision),
@@ -65,5 +67,58 @@ pub(super) fn empty_store_answer(need: &Value) -> Result<Value, &'static str> {
             "reuse_diagnostic": {"reason": null},
         })),
         _ => Err(POLICY_NEED),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn relay_policy_uses_the_captured_active_mcp_collection() {
+        use crate::contributed_mcp_decision_op::Catalog;
+        use guard_contracts::{
+            LocalMcpServerMaterialV1, McpExtensionInputV1, McpToolPolicySubjectV1,
+        };
+        use serde_json::{json, Value};
+        let home =
+            std::env::temp_dir().join(format!("hol-guard-mcp-relay-active-{}", std::process::id()));
+        std::fs::create_dir_all(&home).unwrap();
+        let home = home.canonicalize().unwrap();
+        let controls = crate::contributed_mcp_catalog_test_support::controls(&home, false);
+        let document: Value = serde_json::from_str(include_str!(
+            "../../../../tests/fixtures/mcp_tool_policy/parity_vectors.json"
+        ))
+        .unwrap();
+        let mut subject: McpToolPolicySubjectV1 =
+            serde_json::from_value(document["subjects"]["r0"].clone()).unwrap();
+        subject.extension = Some(McpExtensionInputV1 {
+            store_path:home.join("guard.db").to_string_lossy().into_owned(),guard_home:home.to_string_lossy().into_owned(),
+            harness:"codex".into(),tool_name:"write_file".into(),server:LocalMcpServerMaterialV1::default(),
+            connection_identity_hash:None,tool_authority_hash:None,launcher_path:None,launcher_home:None,local_unavailable:false,
+            server_identity:json!({"package_name":"@modelcontextprotocol/server-filesystem","command":"npx","transport":"stdio",
+                "package_source":"default","package_version":null,"env_keys":[]}).as_object().cloned(),
+            artifact_transport:None,server_name:None,contributed_tool_name:Some(json!("write_file")),
+            layers:vec![],layers_unavailable:true,
+        });
+        let active = Catalog {
+            guard_home: home.to_str().unwrap(),
+            controls: Some(&controls),
+        };
+        let inactive = Catalog {
+            guard_home: home.to_str().unwrap(),
+            controls: None,
+        };
+        assert_eq!(
+            super::run_policy(&subject, None, None, &active)
+                .unwrap()
+                .to_value()["action"],
+            "block"
+        );
+        assert_ne!(
+            super::run_policy(&subject, None, None, &inactive)
+                .unwrap()
+                .to_value()["action"],
+            "block"
+        );
     }
 }

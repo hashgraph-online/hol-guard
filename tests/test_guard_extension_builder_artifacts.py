@@ -86,10 +86,14 @@ def test_snapshot_replay_is_identical_across_python_hash_seeds(tmp_path: Path) -
         for name in list(environment):
             if name.startswith(("COV_CORE_", "COVERAGE_")):
                 environment.pop(name)
+        # The fresh interpreter does not inherit conftest's checkout staging, which
+        # compiles every command pack for each native authoring call.
+        environment["PYTHONPATH"] = os.pathsep.join([str(REPOSITORY), *filter(None, [environment.get("PYTHONPATH")])])
         command = [
             sys.executable,
             "-c",
-            "import sys; from codex_plugin_scanner.cli import main; sys.exit(main(sys.argv[1:]))",
+            "import sys; from tests.development_authoring_staging import register_checkout_staging; "
+            "from codex_plugin_scanner.cli import main; register_checkout_staging(); sys.exit(main(sys.argv[1:]))",
             "guard",
             "extensions",
             "generate",
@@ -103,7 +107,7 @@ def test_snapshot_replay_is_identical_across_python_hash_seeds(tmp_path: Path) -
             str(output),
             "--json",
         ]
-        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=30, check=False)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True, timeout=180, check=False)
         assert result.returncode == 0, result.stdout + result.stderr
         assert json.loads(result.stdout)["generated"] is True
         assert (output / "manifest.json").read_bytes() == manifest
