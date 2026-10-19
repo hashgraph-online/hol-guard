@@ -1,7 +1,9 @@
 use super::super::PreToolDecisionV1;
 use super::extract::GenericSignals;
 use super::result::{generic_action, generic_result, review_reason};
-use super::tools::{infer_action_type, is_package_tool, package_command, tool_matches};
+use super::tools::{
+    infer_action_type, is_package_tool, package_command, tool_matches, tool_name_is_typed,
+};
 use guard_contracts::{PreToolActionTypeV1, PreToolOperationV1, PreToolResultV1};
 
 #[path = "generic_build_review.rs"]
@@ -73,15 +75,30 @@ pub(super) fn evaluate_signals(
             "HOL Guard blocked a PreToolUse action that combines sensitive data with network transfer.",
         );
     }
-    if signals.guard_bypass_intent && action_type == PreToolActionTypeV1::Prompt {
+    // These five gates read the prompt text itself. They cover exactly what a
+    // prompt-typed action used to carry: an inline prompt, and a tool whose
+    // name Guard does not recognize, which no longer types as a prompt just
+    // because it has a `query`. A tool matched by name keeps the proofs its
+    // own type carries, so it reaches these gates no more often than before.
+    let prompt_text = signals.prompt_present
+        && (action_type == PreToolActionTypeV1::Prompt
+            || !tool_name_is_typed(signals.tool_name.as_deref().unwrap_or_default()));
+    // A prompt is never queued for approval, so its reason says so. The same
+    // sentence on a tool call would contradict the row that call raises.
+    let as_prompt = action_type == PreToolActionTypeV1::Prompt;
+    let reason = |prompt: &'static str, tool: &'static str| if as_prompt { prompt } else { tool };
+    if signals.guard_bypass_intent && prompt_text {
         return generic_result(
             action,
             "block",
             "native_guard_bypass_prompt",
-            "HOL Guard blocked this prompt because it asks to disable Guard protection.",
+            reason(
+                "HOL Guard blocked this prompt because it asks to disable Guard protection.",
+                "HOL Guard blocked this tool call because its text asks to disable Guard protection.",
+            ),
         );
     }
-    if signals.exfil_intent && action_type == PreToolActionTypeV1::Prompt {
+    if signals.exfil_intent && prompt_text {
         let (floor, code) = if action.sensitive_target {
             ("block", "native_prompt_exfiltration_block")
         } else {
@@ -91,10 +108,13 @@ pub(super) fn evaluate_signals(
             action,
             floor,
             code,
-            "HOL Guard did not send this prompt because it asks to send data to an external place. Nothing is waiting for approval; rephrase that part of the request.",
+            reason(
+                "HOL Guard did not send this prompt because it asks to send data to an external place. Nothing is waiting for approval; rephrase that part of the request.",
+                "HOL Guard held this tool call because its text asks to send data to an external place.",
+            ),
         );
     }
-    if signals.destructive_intent && action_type == PreToolActionTypeV1::Prompt {
+    if signals.destructive_intent && prompt_text {
         let (floor, code) = if action.sensitive_target {
             ("block", "native_prompt_destructive_block")
         } else {
@@ -104,7 +124,10 @@ pub(super) fn evaluate_signals(
             action,
             floor,
             code,
-            "HOL Guard did not send this prompt because it asks to delete or overwrite local files. Nothing is waiting for approval; rephrase that part, or run the change yourself.",
+            reason(
+                "HOL Guard did not send this prompt because it asks to delete or overwrite local files. Nothing is waiting for approval; rephrase that part, or run the change yourself.",
+                "HOL Guard held this tool call because its text asks to delete or overwrite local files.",
+            ),
         );
     }
     if action.sensitive_target && action_type == PreToolActionTypeV1::Prompt {
@@ -118,20 +141,26 @@ pub(super) fn evaluate_signals(
             "HOL Guard did not send this prompt because it asks to read credentials or other sensitive local data. Nothing is waiting for approval; rephrase that part of the request.",
         );
     }
-    if signals.prompt_injection_intent && action_type == PreToolActionTypeV1::Prompt {
+    if signals.prompt_injection_intent && prompt_text {
         return generic_result(
             action,
             "require-reapproval",
             "native_prompt_injection_review",
-            "HOL Guard did not send this prompt because it asks to override trusted instructions. Nothing is waiting for approval; rephrase that part of the request.",
+            reason(
+                "HOL Guard did not send this prompt because it asks to override trusted instructions. Nothing is waiting for approval; rephrase that part of the request.",
+                "HOL Guard held this tool call because its text asks to override trusted instructions.",
+            ),
         );
     }
-    if signals.subprocess_intent && action_type == PreToolActionTypeV1::Prompt {
+    if signals.subprocess_intent && prompt_text {
         return generic_result(
             action,
             "review",
             "native_prompt_subprocess_review",
-            "HOL Guard did not send this prompt because it asks to run a subprocess. Nothing is waiting for approval; rephrase that part of the request.",
+            reason(
+                "HOL Guard did not send this prompt because it asks to run a subprocess. Nothing is waiting for approval; rephrase that part of the request.",
+                "HOL Guard held this tool call because its text asks to run a subprocess.",
+            ),
         );
     }
     if benign_prompt {
