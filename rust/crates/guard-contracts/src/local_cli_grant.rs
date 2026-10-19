@@ -53,8 +53,11 @@ pub struct LocalCliGrantResultV1 {
     pub status: String,
     /// `ok`, or a `native_local_cli_grant_*` failure code.
     pub code: String,
-    /// `{state, cli_id, identity_hash}` on success. `state` is `allowed`,
-    /// `blocked`, or `none`.
+    /// `{state, cli_id, identity_hash, capabilities}` on success. `state` is
+    /// `allowed`, `blocked`, or `none`. `capabilities` is the sorted list of
+    /// grant capabilities switched on for an allowed `surface='cli'`
+    /// connector (`loopback-network`, `state-dir-read`, `state-dir-write`);
+    /// it is empty for every other answer, and an absent row is off.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,
 }
@@ -93,6 +96,11 @@ pub struct LocalCliHookRequestV1 {
     pub env: BTreeMap<String, String>,
     /// Action the grant would refine.
     pub current_action: String,
+    /// The reason code of `current_action`, when the caller has one. Only
+    /// `native_workspace_containment_executable_outside_roots` changes how a
+    /// review is refined; it is omitted from the digest material when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_reason_code: Option<String>,
     /// Whether grants may refine the action; observation runs either way.
     pub grant_allowed: bool,
 }

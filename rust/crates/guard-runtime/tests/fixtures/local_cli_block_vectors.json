@@ -721,6 +721,99 @@
         "label": "extra-key"
       },
       {
+        "answer": {
+          "capabilities": [
+            "loopback-network",
+            "state-dir-read"
+          ],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "allowed",
+        "label": "allowed-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": [],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "allowed",
+        "label": "allowed-no-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": [],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "blocked",
+        "label": "blocked-no-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": [
+            "loopback-network"
+          ],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "blocked"
+        },
+        "expected": "unverified",
+        "label": "blocked-with-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": [
+            "raw-network"
+          ],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "unverified",
+        "label": "unknown-capability"
+      },
+      {
+        "answer": {
+          "capabilities": [
+            "state-dir-read",
+            "loopback-network"
+          ],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "unverified",
+        "label": "unsorted-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": [
+            "state-dir-read",
+            "state-dir-read"
+          ],
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "unverified",
+        "label": "duplicate-capabilities"
+      },
+      {
+        "answer": {
+          "capabilities": "loopback-network",
+          "cli_id": "local-cli.demo-tool",
+          "identity_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "state": "allowed"
+        },
+        "expected": "unverified",
+        "label": "capabilities-not-list"
+      },
+      {
         "answer": null,
         "expected": "unverified",
         "label": "failure"

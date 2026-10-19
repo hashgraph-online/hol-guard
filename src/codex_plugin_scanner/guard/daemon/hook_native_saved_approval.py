@@ -96,7 +96,7 @@ def native_saved_decision_response(
         )
     if action != "allow" or decision.get("source") != "approval-gate" or decision.get("expires_at"):
         return None
-    if not _native_review_is_overridable(native_result):
+    if not _native_review_is_approvable(native_result):
         return None
     allowed = dict(native_result)
     allowed.update(decision="allow", minimum_action="allow", policy_action="allow")
@@ -175,10 +175,21 @@ def _saved_block_response(
     return response
 
 
+def _native_review_is_approvable(native_result: Mapping[str, object]) -> bool:
+    """A review the user answers; their exact-action allow holds whatever its action type.
+
+    See ``docs/guard/approval-invariant.md``.
+    """
+
+    return native_result.get("policy_action") in {"review", "require-reapproval"} and native_result.get(
+        "minimum_action"
+    ) in {"review", "require-reapproval"}
+
+
 def _native_review_is_overridable(native_result: Mapping[str, object]) -> bool:
-    if native_result.get("policy_action") not in {"review", "require-reapproval"}:
-        return False
-    if native_result.get("minimum_action") not in {"review", "require-reapproval"}:
+    """A review a broad local-CLI grant may lift: never Guard control or a package action."""
+
+    if not _native_review_is_approvable(native_result):
         return False
     action = native_result.get("action")
     action_type = action.get("action_type") if isinstance(action, Mapping) else None

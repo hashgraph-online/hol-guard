@@ -290,7 +290,9 @@ def _dispatch_guard_command(
         config = overlay_synced_guard_policy(config, _synced_policy_payload(store))
 
     if inventory_list:
-        return _invoke_guard_handler(run_inventory_list_command, args, store=store, output_stream=output_stream)
+        return _invoke_guard_handler(
+            run_inventory_list_command, args, store=store, context=context, output_stream=output_stream
+        )
     handler = _resolve_guard_handler(_COMMON_HANDLERS, args.guard_command)
     if callable(handler):
         return _invoke_guard_handler(

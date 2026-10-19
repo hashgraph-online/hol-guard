@@ -24,6 +24,7 @@ pytest_plugins = [
     "tests.approval_reuse_fixtures",
     "tests.native_runtime_fixtures",
     "tests.native_resident_teardown",
+    "tests.optional_command_catalog_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -34,6 +35,13 @@ if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
+
+
+# The runtime refuses to compile an uninstalled bundle unless a caller that owns
+# a checkout stages it. The suite runs against this checkout, so it registers one.
+from tests.development_authoring_staging import register_checkout_staging  # noqa: E402
+
+register_checkout_staging()
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]

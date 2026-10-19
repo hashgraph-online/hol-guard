@@ -15,6 +15,7 @@ from codex_plugin_scanner.guard.daemon import hook_native_package_review as pack
 from codex_plugin_scanner.guard.local_supply_chain import evaluate_package_request_artifact
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_tier2_phase13_support import artifact_from_command_fixture
+from tests.package_review_settings import review_package_signals
 
 SAFE_FLAGS = "--ignore-scripts --allow-git=none"
 ZOD_METADATA = {
@@ -378,6 +379,7 @@ class TestEvaluatorRule:
         assert [package.get("scriptFreeRegistryInstall") for package in evaluation.packages] == [True]
 
     def test_missing_flags_get_rerun_guidance(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        review_package_signals(tmp_path / "home")
         # A git dependency keeps the tree proof out of reach, so only --allow-git=none settles it.
         self._project(tmp_path, {"dependencies": {"left": "github:someone/left"}})
         evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod --ignore-scripts", "11.9.0")
@@ -389,6 +391,7 @@ class TestEvaluatorRule:
     def test_npm_without_allow_git_keeps_review_without_guidance(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, npm_version: str | None
     ) -> None:
+        review_package_signals(tmp_path / "home")
         evaluation = self._evaluate(tmp_path, monkeypatch, f"npm install zod {SAFE_FLAGS}", npm_version)
 
         assert evaluation.decision == "ask"
@@ -415,6 +418,7 @@ class TestEvaluatorRule:
     def test_ignore_scripts_keeps_review_when_the_tree_can_hold_a_git_dependency(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, dependency: str, npm_version: str
     ) -> None:
+        review_package_signals(tmp_path / "home")
         self._project(tmp_path, {"dependencies": {"left": dependency}})
         evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod --ignore-scripts", npm_version)
 
@@ -424,6 +428,7 @@ class TestEvaluatorRule:
     def test_older_npm_guidance_asks_only_for_ignore_scripts(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        review_package_signals(tmp_path / "home")
         self._project(tmp_path, {})
         evaluation = self._evaluate(tmp_path, monkeypatch, "npm install zod", "10.9.9")
 

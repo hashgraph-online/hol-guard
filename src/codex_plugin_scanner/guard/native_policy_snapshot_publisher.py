@@ -30,6 +30,7 @@ from .native_policy_snapshot_publisher_transport import (
 from .native_policy_snapshot_publisher_transport import (
     _publish_snapshot_v3 as _publish_snapshot_v3,
 )
+from .native_policy_snapshot_resident_recovery import NativePolicySnapshotResidentRecoveryMixin
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
 from .native_policy_snapshot_workspace_readiness import NativePolicySnapshotWorkspaceReadinessMixin
 
@@ -113,6 +114,7 @@ class NativePolicySnapshotPublisher(
     NativePolicySnapshotPublicationMixin,
     NativePolicySnapshotMcpRelayMixin,
     NativePolicySnapshotSavedStateMixin,
+    NativePolicySnapshotResidentRecoveryMixin,
     NativePolicySnapshotPublisherInputs,
 ):
     """Asynchronously publish an authenticated snapshot and expose its barrier."""
@@ -155,6 +157,7 @@ class NativePolicySnapshotPublisher(
         self._renewal_after_generation: int | None = None
         self._retry_not_before_monotonic: float | None = None
         self._failure_count = 0
+        self._init_resident_recovery()
         self._workspace_paths: set[Path] = set()
         self._pending_workspace_paths: set[Path] = set()
         # Pending workspaces the current ACK already covers. They compile with

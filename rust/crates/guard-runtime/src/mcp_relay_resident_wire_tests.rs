@@ -1,6 +1,6 @@
 //! The child frame and the decide request come from one Python rewrite.
 
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use super::tests::{facts, no_prompt};
 use super::*;
@@ -43,4 +43,21 @@ fn a_frame_the_proxy_would_not_relay_unchanged_is_not_sent() {
             "{host}"
         );
     }
+}
+
+#[test]
+fn a_relay_without_an_evaluation_sends_the_same_call_back_saying_so() {
+    let request = json!({
+        "guard_home": "/guard",
+        "build": {"server_name": "files"},
+        "params": {"name": "bash"},
+    });
+    let payload = request::unsettled_payload(&request).unwrap();
+    let sent: Value = serde_json::from_slice(&payload).unwrap();
+    assert_eq!(sent["operation"], "mcp_relay_decide");
+    // The call is the one the resident already asked about, and the only thing
+    // added says there is no evaluation coming for it.
+    assert_eq!(sent["request"]["build"]["server_name"], "files");
+    assert_eq!(sent["request"]["package_evaluation_unsettled"], true);
+    assert!(sent["request"].get("package_evaluation").is_none());
 }

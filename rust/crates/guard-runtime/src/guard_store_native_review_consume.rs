@@ -26,7 +26,7 @@ use crate::guard_store_db::{exec, query_all, StoreResult};
 const WINDOW_MICROS: i64 = 5 * 60 * 1_000_000;
 const EVENT_NAME: &str = "native-review.once-consumed";
 
-fn binding_pattern() -> &'static Regex {
+pub(crate) fn binding_pattern() -> &'static Regex {
     static PATTERN: OnceLock<Regex> = OnceLock::new();
     PATTERN.get_or_init(|| {
         // Extension-bound reviews append a lowercase SHA256 policy-domain digest.

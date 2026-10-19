@@ -94,6 +94,14 @@ def grant_cases() -> list[tuple[str, object]]:
         ("blocked-without-cli", answer("blocked", None)),
         ("upper-hash", answer("blocked", CLI_ID, HASH.upper())),
         ("extra-key", {**answer("blocked"), "extra": 1}),
+        ("allowed-capabilities", {**answer("allowed"), "capabilities": ["loopback-network", "state-dir-read"]}),
+        ("allowed-no-capabilities", {**answer("allowed"), "capabilities": []}),
+        ("blocked-no-capabilities", {**answer("blocked"), "capabilities": []}),
+        ("blocked-with-capabilities", {**answer("blocked"), "capabilities": ["loopback-network"]}),
+        ("unknown-capability", {**answer("allowed"), "capabilities": ["raw-network"]}),
+        ("unsorted-capabilities", {**answer("allowed"), "capabilities": ["state-dir-read", "loopback-network"]}),
+        ("duplicate-capabilities", {**answer("allowed"), "capabilities": ["state-dir-read", "state-dir-read"]}),
+        ("capabilities-not-list", {**answer("allowed"), "capabilities": "loopback-network"}),
         ("failure", None),
     ]
 

@@ -4,9 +4,10 @@
 //! The child receives file names nobody can see in advance, so admission rests
 //! on the producer and on the child's own read-only proof:
 //!
-//! - every root is relative, resolves inside the verified workspace, is not
-//!   the home directory or one of its ancestors, and passes the same bounded
-//!   read-target proof as `cat src/a.js`;
+//! - every root resolves inside the verified workspace (relative, or the
+//!   workspace's own absolute spelling), is not the home directory or one of
+//!   its ancestors, and passes the same bounded read-target proof as
+//!   `cat src/a.js`;
 //! - the expression is flat and has `-type f`. Under find's default `-P` a
 //!   symlink has type `l`, so a workspace symlink to a secret is never listed,
 //!   and `-L`, `-H` and `-follow` are not part of the shape;
@@ -64,9 +65,12 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     if home_root.starts_with(&workspace) {
         return false;
     }
+    // A root spelled with the workspace's own absolute path names the same
+    // directory as the relative spelling. Where it resolves, links and `..`
+    // included, is what decides, so an absolute root has to land inside the
+    // workspace as well.
     shape.roots.iter().all(|root| {
-        !root.starts_with(['/', '\\', '~'])
-            && !std::path::Path::new(root).is_absolute()
+        !root.starts_with(['\\', '~'])
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(std::path::Path::new(cwd).join(root))
                 .is_ok_and(|resolved| resolved.starts_with(&workspace))
@@ -142,6 +146,20 @@ fn plain(segment: &CommandSegmentV1) -> bool {
         && !segment.path_overridden
 }
 
+/// Whether the shell hands the segment the words this proof reads.
+///
+/// The shape and the child are read as the words they are written as, but
+/// brace expansion runs first: `find . -type f -name {x,-delete} -exec cat {}
+/// +` is read here as one pattern and a `cat` child, while `find` receives a
+/// `-delete` action of its own. A segment whose words the shell would split,
+/// or whose expansion this reader does not follow, keeps review.
+fn words_as_written(segment: &CommandSegmentV1) -> bool {
+    segment
+        .arguments
+        .iter()
+        .all(|argument| super::brace_words::stays_one_word(argument))
+}
+
 /// `find ... -exec CHILD {} +` with a proven producer scope and child.
 pub(super) fn safe_find_exec(
     model: &CanonicalCommandV1,
@@ -149,6 +167,7 @@ pub(super) fn safe_find_exec(
     context: PathContext<'_>,
 ) -> bool {
     plain(segment)
+        && words_as_written(segment)
         && fanout::find_exec(&segment.arguments).is_some_and(|exec| {
             producer_allowed(&exec.shape, exec.child, context)
                 && child_proven(model, segment, exec.child, context)
@@ -180,7 +199,7 @@ pub(super) fn safe_xargs(
     context: PathContext<'_>,
 ) -> bool {
     let (true, Some(previous), Some(xargs)) = (
-        plain(segment),
+        plain(segment) && words_as_written(segment),
         previous_find(model, segment),
         fanout::xargs(&segment.arguments),
     ) else {
@@ -189,6 +208,9 @@ pub(super) fn safe_xargs(
     let Some(shape) = fanout::find_shape(&previous.arguments) else {
         return false;
     };
+    if !words_as_written(previous) {
+        return false;
+    }
     xargs.null_separated
         && (xargs.no_run_if_empty || fanout::bounded_without_operands(xargs.child))
         && shape.print0
@@ -218,6 +240,7 @@ pub(super) fn safe_git_xargs(
         .is_some_and(|index| follows_object_names(model, index));
     follows
         && plain(segment)
+        && words_as_written(segment)
         && child_proven_with(
             model,
             segment,

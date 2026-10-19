@@ -4,6 +4,7 @@ use guard_secure_fs::sensitive_path_family;
 use serde_json::{Map, Value};
 use std::path::Path;
 
+mod policy_enforcement_facts_schema;
 mod policy_enforcement_facts_tools;
 
 pub(super) use policy_enforcement_facts_tools::{
@@ -478,18 +479,22 @@ pub(super) fn payload_facts(
     let mut maps = Vec::new();
     let mut nodes = 0usize;
     collect_fact_maps(payload, 0, &mut nodes, &mut maps)?;
-    let publisher = optional_identity(&maps, PUBLISHER_KEYS)?;
-    let artifact = optional_identity(&maps, ARTIFACT_KEYS)?;
-    // An object is not a selector, but it is still publisher metadata. A
-    // proven constant eval may skip the floor only when no identity was sent.
-    let unusable_identity = identity_metadata_supplied(&maps, PUBLISHER_KEYS)
-        || identity_metadata_supplied(&maps, ARTIFACT_KEYS);
+    // Result-schema property names are labels, not authority selectors. Do
+    // not parse a publisher_id or artifact_id label as an identity before
+    // the schema-name filter is applied.
+    let scanned = policy_enforcement_facts_schema::without_schema_names(&maps, payload, harness);
+    let publisher = optional_identity(&scanned, PUBLISHER_KEYS)?;
+    let artifact = optional_identity(&scanned, ARTIFACT_KEYS)?;
+    // An object outside the schema is still publisher metadata.
+    let unusable_identity = identity_metadata_supplied(&scanned, PUBLISHER_KEYS)
+        || identity_metadata_supplied(&scanned, ARTIFACT_KEYS);
     let budget_input = codex_command_budget_input(payload, harness, action_type);
     // Only an exact root-level, syntactically bounded process start identity
     // is timing metadata. Nested copies, extra keys, credentials and command
     // floors retain ordinary enforcement. This grants no process authority.
     let wait_process = codex_browser_process_metadata(payload, harness);
-    let sensitive_target = payload_sensitive_target(&maps, budget_input, wait_process)?
+    // The field names of a `task` result schema are labels, not credentials.
+    let sensitive_target = payload_sensitive_target(&scanned, budget_input, wait_process)?
         || reason_code.contains("secret")
         || reason_code.contains("credential")
         || reason_code.contains("exfiltration");

@@ -80,35 +80,6 @@ mod policy_enforcement_business;
 #[cfg(test)]
 #[path = "policy_enforcement_tests.rs"]
 mod tests;
-const VALID_ACTIONS: &[&str] = &[
-    "allow",
-    "warn",
-    "review",
-    "require-reapproval",
-    "sandbox-required",
-    "block",
-];
-
-const VALID_RISK_KEYS: &[&str] = &[
-    "local_secret_read",
-    "credential_exfiltration",
-    "data_flow_exfiltration",
-    "destructive_shell",
-    "encoded_execution",
-    "network_egress",
-    "prompt_injection",
-    "mcp_dangerous_tool",
-    "malicious_skill",
-    "package_script",
-    "persistence",
-    "guard_bypass",
-    "cloud_advisory",
-    "encoded_exfiltration",
-    "execution",
-    "supply_chain",
-    "policy_bypass",
-];
-
 const MAX_SELECTOR_VALUE_BYTES: usize = 4 * 1024;
 const MAX_FACT_DEPTH: usize = 32;
 const MAX_FACT_NODES: usize = 2_048;

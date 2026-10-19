@@ -4,14 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
+from functools import lru_cache
 from pathlib import Path
 
 from codex_plugin_scanner.guard.extension_builder.listing import CATEGORY_LABELS, category_for_extension
-from codex_plugin_scanner.guard.runtime.command_extensions import (
-    BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-    CommandSafetyExtension,
+from codex_plugin_scanner.guard.runtime.generated_command_catalog import (
+    GeneratedCommandExtension as CommandSafetyExtension,
 )
-from codex_plugin_scanner.guard.runtime.extension_trust import trust_class_for
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DIRECTORY_PATH = REPO_ROOT / "docs" / "guard" / "extensions" / "README.md"
@@ -45,6 +45,18 @@ CORE_EXTENSION_IDS = frozenset(
 )
 
 
+@lru_cache(maxsize=1)
+def native_extensions():
+    spec = importlib.util.spec_from_file_location(
+        "directory_render_native_inventory", Path(__file__).with_name("native_directory_inventory.py")
+    )
+    if spec is None or spec.loader is None:
+        raise ValueError("Canonical native directory producer is unavailable")
+    inventory = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(inventory)
+    return inventory.native_extensions()
+
+
 def _category(extension_id: str) -> str:
     return CATEGORY_LABELS[category_for_extension(extension_id)]
 
@@ -60,16 +72,16 @@ def _protection_model(extension: CommandSafetyExtension) -> str:
         return "Required core"
     if extension.delegated_protection == "package-firewall":
         return "Package Firewall"
-    if trust_class_for(extension.extension_id) == "external":
+    if extension.trust_class == "external":
         return "External opt-in"
     return "Built in"
 
 
-def render_catalog() -> str:
-    """Return the deterministic Markdown catalog for all built-in extensions."""
+def render_catalog(*, extensions=None) -> str:
+    """Return the deterministic Markdown catalog for the native authoring inventory."""
 
     grouped: dict[str, list[CommandSafetyExtension]] = {category: [] for category in CATEGORY_ORDER}
-    for extension in BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions:
+    for extension in native_extensions() if extensions is None else extensions:
         grouped[_category(extension.extension_id)].append(extension)
 
     sections: list[str] = []
@@ -90,14 +102,14 @@ def render_catalog() -> str:
     return "\n\n".join(sections)
 
 
-def render_document(current: str) -> str:
+def render_document(current: str, *, extensions=None) -> str:
     """Replace the generated catalog while preserving hand-authored guidance."""
 
     if current.count(START_MARKER) != 1 or current.count(END_MARKER) != 1:
         raise ValueError("Extension directory must contain exactly one generated marker pair")
     prefix, remainder = current.split(START_MARKER, 1)
     _generated, suffix = remainder.split(END_MARKER, 1)
-    return f"{prefix}{START_MARKER}\n\n{render_catalog()}\n\n{END_MARKER}{suffix}"
+    return f"{prefix}{START_MARKER}\n\n{render_catalog(extensions=extensions)}\n\n{END_MARKER}{suffix}"
 
 
 def main(argv: list[str] | None = None) -> int:

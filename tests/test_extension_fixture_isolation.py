@@ -89,10 +89,12 @@ def test_catalog_publication_does_not_rewrite_tests_or_rebuild_runtime(tmp_path,
             "--check",
         ],
     ]
-    assert [command for command in calls if "scripts/export_extension_directory.py" in command] == [
-        [refresh.sys.executable, "scripts/export_extension_directory.py"],
-        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
-        [refresh.sys.executable, "scripts/export_extension_directory.py", "--check"],
+    directory = [refresh.sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(refresh.COMPILER)]
+    assert [command for command in calls if "scripts/prepare_extension_directory.py" in command] == [
+        directory,
+        [*directory, "--check"],
+        directory,
+        [*directory, "--check"],
     ]
     assert {path: path.read_bytes() for path in preserved} == preserved
 

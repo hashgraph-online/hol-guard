@@ -92,9 +92,23 @@ fn top_level_alternatives(body: &str) -> Vec<&str> {
     alternatives
 }
 
+/// Whether the shell hands the command this argument as the one word it is
+/// written as.
+///
+/// Brace expansion runs before the program ever sees its operands, so one
+/// written word can arrive as several: `find . -name {x,-delete}` is read as
+/// a single pattern, while the shell hands `find` a `-delete` action. An
+/// argument the shell would split, or one whose expansion this reader does
+/// not follow, is not the argument a screen read, so it keeps review. A brace
+/// the shell leaves alone — one with no comma at its own level, such as the
+/// `{}` of an `-exec` body — is still the word it is written as.
+pub(super) fn stays_one_word(argument: &str) -> bool {
+    shell_brace_words(argument).is_some_and(|words| words.len() == 1)
+}
+
 #[cfg(test)]
 mod tests {
-    use super::shell_brace_words;
+    use super::{shell_brace_words, stays_one_word};
 
     fn words(text: &str) -> Option<Vec<String>> {
         shell_brace_words(text).map(|mut words| {
@@ -116,5 +130,19 @@ mod tests {
         assert_eq!(words(".e{n..n}{v..v}"), None);
         assert_eq!(words("{1..3..1}"), None);
         assert_eq!(words("{a,b}{c,d}{e,f}{g,h}{i,j}"), None);
+    }
+
+    #[test]
+    fn a_word_the_shell_would_split_is_not_the_word_it_is_written_as() {
+        // The `{}` of a `find -exec` body and a comma-free brace are handed
+        // to the program as written.
+        assert!(stays_one_word("{}"));
+        assert!(stays_one_word("*.ts"));
+        assert!(stays_one_word("q={viewer{...F}}"));
+        // A comma brace arrives as several operands, and a sequence brace is
+        // not followed, so neither is the word this screen read.
+        assert!(!stays_one_word("{x,-delete}"));
+        assert!(!stays_one_word("a{1,2}.md"));
+        assert!(!stays_one_word("a{1..3}.md"));
     }
 }

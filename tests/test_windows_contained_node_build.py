@@ -1,6 +1,13 @@
-"""Windows contains a direct Vite build of a flat install, staged in an AppContainer."""
+"""Windows contains a direct local Node tool run of a flat install, staged in an AppContainer.
+
+A Vite build publishes its output directory back; ESLint, no-emit TypeScript
+and Prettier in a checking mode publish nothing, so their staged copy is
+discarded whole.
+"""
 
 import sys
+from collections.abc import Sequence
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -14,6 +21,14 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
 NODE = r"C:\Users\tester\tools\node\node.exe"
 RUNTIME = r"C:\Program Files\HOL Guard\hol-guard-runtime.exe"
 PROFILE = "node-build-output-v1"
+TOOL_PROFILE = "node-tool-readonly-v1"
+# What the resident resolves for each tool the route admits.
+ENTRIES = {
+    "eslint": "node_modules/eslint/bin/eslint.js",
+    "tsc": "node_modules/typescript/bin/tsc",
+    "vite": "node_modules/vite/bin/vite.js",
+    "prettier": "node_modules/prettier/bin/prettier.cjs",
+}
 
 
 def _project(tmp_path: Path) -> Path:
@@ -23,18 +38,26 @@ def _project(tmp_path: Path) -> Path:
     return app
 
 
-def _plan(workspace: Path, cwd: Path, *, profile: str = PROFILE) -> dict[str, object]:
-    entry = (cwd / "node_modules/vite/bin/vite.js").as_posix()
+def _plan(
+    workspace: Path,
+    cwd: Path,
+    *,
+    tool: str = "vite",
+    arguments: Sequence[str] = ("build",),
+    profile: str | None = None,
+) -> dict[str, object]:
+    build = tool == "vite"
+    entry = (cwd / ENTRIES[tool]).as_posix()
     return {
-        "profile_version": profile,
+        "profile_version": profile or (PROFILE if build else TOOL_PROFILE),
         "backend": "windows-appcontainer",
         "backend_executable": RUNTIME,
         "workspace": str(workspace),
         "cwd": str(cwd),
-        "command": [NODE, entry, "build"],
+        "command": [NODE, entry, *arguments],
         "executable": NODE,
         "allowed_executables": [NODE],
-        "denied_capabilities": ["network", "workspace-source-write"],
+        "denied_capabilities": ["network", "workspace-source-write" if build else "workspace-write"],
     }
 
 
@@ -46,22 +69,28 @@ def windows(monkeypatch):
 
     def native(operation, fields, _expected):
         calls.append((operation, dict(fields)))
-        return _plan(Path(fields["workspace"]), Path(fields["cwd"]))
+        return _plan(
+            Path(fields["workspace"]),
+            Path(fields["cwd"]),
+            tool=str(fields["tool"]),
+            arguments=list(fields["arguments"]),
+        )
 
     monkeypatch.setattr(restricted_node_tool, "restricted_native", native)
     return calls
 
 
-def test_node_build_plan_decodes_only_on_windows(monkeypatch, tmp_path):
+@pytest.mark.parametrize("profile", [PROFILE, TOOL_PROFILE])
+def test_a_staged_node_plan_decodes_only_on_windows(monkeypatch, tmp_path, profile):
+    tool = "vite" if profile == PROFILE else "eslint"
+    native = _plan(tmp_path, tmp_path, tool=tool, arguments=["src"])
     monkeypatch.setattr(sys, "platform", "win32")
-    plan = transport.decode_native_plan(_plan(tmp_path, tmp_path), (PROFILE,))
-    assert plan.backend == "windows-appcontainer"
+    assert transport.decode_native_plan(native, (profile,)).backend == "windows-appcontainer"
     with pytest.raises(RestrictedPytestError):
-        tool = "node-tool-readonly-v1"
-        transport.decode_native_plan(_plan(tmp_path, tmp_path, profile=tool), (tool,))
+        transport.decode_native_plan(_plan(tmp_path, tmp_path, tool=tool, profile="vitest-readonly-v1"), (profile,))
     monkeypatch.setattr(sys, "platform", "darwin")
     with pytest.raises(RestrictedPytestError):
-        transport.decode_native_plan(_plan(tmp_path, tmp_path), (PROFILE,))
+        transport.decode_native_plan(native, (profile,))
 
 
 @pytest.mark.parametrize(
@@ -131,21 +160,96 @@ def test_a_resolved_package_manager_image_is_still_a_package_script(windows, tmp
     assert windows == []
 
 
-@pytest.mark.parametrize(
-    "command",
-    [
-        ["npm", "run", "build"],
-        ["npx", "eslint", "src"],
-        ["npx", "tsc", "--noEmit"],
-    ],
-)
-def test_windows_refuses_other_node_tools_before_planning(windows, tmp_path, command):
+@pytest.mark.parametrize("command", [["npm", "run", "build"], ["pnpm", "run", "lint"]])
+def test_windows_refuses_package_scripts_before_planning(windows, tmp_path, command):
+    """The package-script route is a separate gate and stays shut here."""
     app = _project(tmp_path)
-    (app / "package.json").write_text('{"scripts":{"build":"vite build"}}', encoding="utf-8")
+    (app / "package.json").write_text('{"scripts":{"build":"vite build","lint":"eslint src"}}', encoding="utf-8")
     with pytest.raises(RestrictedPytestError) as caught:
         restricted_node_tool.prepare_restricted_node_tool(command, workspace=tmp_path, cwd=app)
     assert caught.value.reason_code == "pytest_restricted_sandbox_unavailable"
     assert windows == []
+
+
+@pytest.mark.parametrize(
+    ("command", "tool", "expected_entry"),
+    [
+        (["npx", "eslint", "src"], "eslint", None),
+        (["./node_modules/.bin/eslint", ".", "--max-warnings", "0"], "eslint", None),
+        (["npx", "tsc", "--noEmit"], "tsc", None),
+        (["pnpm", "exec", "tsc", "--noEmit", "-p", "tsconfig.json"], "tsc", None),
+        (["npx", "prettier", "--check", "src"], "prettier", None),
+        (["bunx", "prettier", "-l", "."], "prettier", None),
+        (
+            ["node", "node_modules/eslint/bin/eslint.js", "src"],
+            "eslint",
+            "node_modules/eslint/bin/eslint.js",
+        ),
+    ],
+)
+def test_windows_plans_reporting_node_tools_contained(windows, tmp_path, command, tool, expected_entry):
+    """Lint, typecheck and format checks reach the same resident the build does."""
+    app = _project(tmp_path)
+    plan = restricted_node_tool.prepare_restricted_node_tool(command, workspace=tmp_path, cwd=app)
+    assert [operation for operation, _ in windows] == ["prepare_node_build"]
+    fields = windows[0][1]
+    assert fields["tool"] == tool
+    assert fields["expected_entry"] == expected_entry
+    assert plan.profile_version == TOOL_PROFILE
+    # Nothing is published back, so the staged copy is discarded whole.
+    assert plan.output_roots == ()
+    assert "workspace-write" in plan.denied_capabilities
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        ["npx", "eslint", "src", "--fix"],
+        ["npx", "eslint", "src", "--output-file=report.json"],
+        ["npx", "tsc"],
+        ["npx", "tsc", "--noEmit", "--emitDeclarationOnly"],
+        ["npx", "prettier", "src"],
+        ["npx", "prettier", "--write", "src"],
+    ],
+)
+def test_windows_refuses_node_tool_runs_that_rewrite_their_input(windows, tmp_path, command):
+    app = _project(tmp_path)
+    with pytest.raises(RestrictedPytestError) as caught:
+        restricted_node_tool.prepare_restricted_node_tool(command, workspace=tmp_path, cwd=app)
+    assert caught.value.reason_code == "node_tool_invalid_command"
+    assert windows == []
+
+
+def test_windows_reporting_tools_run_without_publishing_an_output(windows, monkeypatch, tmp_path):
+    app = _project(tmp_path)
+    plan = restricted_node_tool.prepare_restricted_node_tool(["npx", "eslint", "src"], workspace=tmp_path, cwd=app)
+    calls: list[list[str]] = []
+    monkeypatch.setattr(restricted_node_tool, "_run_backend_process", lambda argv, **_: calls.append(list(argv)) or 0)
+    assert restricted_node_tool.run_restricted_node_tool(plan, timeout_seconds=30) == 0
+    assert calls[0] == [
+        RUNTIME,
+        "contained-readonly-windows",
+        "--profile",
+        TOOL_PROFILE,
+        "--workspace",
+        str(tmp_path),
+        "--cwd",
+        str(app),
+        "--timeout-seconds",
+        "30",
+        "--",
+        *plan.command,
+    ]
+
+
+def test_a_reporting_plan_that_names_an_output_is_refused(windows, tmp_path):
+    """Only a build publishes. A reporting plan carrying an output root would
+    write into the live workspace, so the run side refuses it outright."""
+    app = _project(tmp_path)
+    plan = restricted_node_tool.prepare_restricted_node_tool(["npx", "eslint", "src"], workspace=tmp_path, cwd=app)
+    with pytest.raises(RestrictedPytestError) as caught:
+        restricted_node_tool.run_restricted_node_tool(replace(plan, output_roots=(app / "dist",)), timeout_seconds=30)
+    assert caught.value.reason_code == "node_tool_invalid_command"
 
 
 def test_windows_build_output_must_be_conventional(windows, tmp_path):
@@ -191,10 +295,11 @@ def test_windows_build_runs_through_the_native_runner(windows, monkeypatch, tmp_
     assert not (app / "node_modules/.vite-temp").exists()
 
 
-def test_windows_contains_node_builds(monkeypatch):
+def test_windows_contains_every_staged_node_profile(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     assert platform_contains({"required_execution_profile": PROFILE})
-    assert not platform_contains({"required_execution_profile": "node-tool-readonly-v1"})
+    assert platform_contains({"required_execution_profile": TOOL_PROFILE})
+    assert not platform_contains({"required_execution_profile": "package-test-readonly-v1"})
 
 
 def test_windows_peels_a_relative_cd_into_the_workspace(monkeypatch, tmp_path):

@@ -63,6 +63,9 @@ def _run_apps_command(
 ) -> int:
     apps_command = getattr(args, "apps_command", None)
     if apps_command is None:
+        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
         _emit(
             "apps",
             {

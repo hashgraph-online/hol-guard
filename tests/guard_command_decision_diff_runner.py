@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import multiprocessing
 import os
 import sys
@@ -125,9 +126,11 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
     from tests.native_command_test_support import _native_binaries
     from tests.native_github_offline import install_offline_github_classifier
 
+    _memory_diagnostic(worker_index, "before_native_setup")
     install_offline_github_classifier(_native_binaries()[0])
     _pin_neutral_attribution()
     configure_native_contract_shard(worker_index, EVALUATION_SHARD_COUNT)
+    _memory_diagnostic(worker_index, "after_native_setup")
     transition_ids: defaultdict[str, list[str]] = defaultdict(list)
     native_floor_ids: defaultdict[str, list[str]] = defaultdict(list)
     reconciliation_ids: defaultdict[str, list[str]] = defaultdict(list)
@@ -172,6 +175,7 @@ def _evaluate_shard(worker_index: int) -> DecisionDiffShard:
             )
             actual_gap_ids["|".join((oracle.owner, kind, oracle.minimum_floor, current.action))].append(case.case_id)
 
+    _memory_diagnostic(worker_index, "completed")
     return DecisionDiffShard(
         transition_ids=dict(transition_ids),
         native_floor_ids=dict(native_floor_ids),
@@ -192,13 +196,38 @@ def _case_evaluations(
     worker_index: int,
 ) -> Iterator[tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]]:
     pairs = _case_oracle_pairs(worker_index)
+    first_batch = True
     while batch := tuple(islice(pairs, NATIVE_CORPUS_BATCH_SIZE)):
         evaluations = evaluate_native_corpus_batch(
             [case for case, _oracle in batch], cwd=SYNTHETIC_CWD, home_dir=SYNTHETIC_HOME
         )
+        if first_batch:
+            _memory_diagnostic(worker_index, "after_first_batch")
+            first_batch = False
         for (case, oracle), reviewed in zip(batch, evaluations, strict=True):
             yield case, oracle, reviewed
         del evaluations
+
+
+def _memory_diagnostic(worker_index: int, phase: str) -> None:
+    """Opt-in resource numbers only; never include case or command material."""
+    if os.environ.get("HOL_GUARD_CORPUS_MEMORY_DIAGNOSTICS") != "1":
+        return
+    own = peak_rss_mib()
+    print(
+        "corpus_memory "
+        + json.dumps(
+            {
+                "worker": worker_index,
+                "phase": phase,
+                "self_peak_mib": own,
+                "self_plus_child_peak_mib": peak_rss_mib(include_children=True),
+            },
+            sort_keys=True,
+        ),
+        file=sys.stderr,
+        flush=True,
+    )
 
 
 def _case_oracle_pairs(worker_index: int) -> Iterator[tuple[CommandCorpusCase, OracleRecord]]:

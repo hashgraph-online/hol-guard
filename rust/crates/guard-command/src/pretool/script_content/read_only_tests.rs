@@ -144,7 +144,7 @@ fn windows_route_takes_only_read_only_workspace_scripts() {
             extraction_provenance: "pre-tool-generic".into(),
         })
         .unwrap();
-        crate::pretool::restricted_tests::windows_script_reason(
+        crate::pretool::restricted_test_commands::windows_script_reason(
             &model,
             crate::pretool::PathContext {
                 cwd: Some(&workspace),

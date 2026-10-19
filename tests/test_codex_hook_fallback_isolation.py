@@ -191,13 +191,13 @@ def test_tampered_bridge_launch_contract_fails_closed_without_executing_project_
         check=False,
     )
 
+    # The bridge authenticates the registration against its manifest before it
+    # launches anything, so a rewritten argv denies without running. The
+    # separate stderr evidence document the Python review path wrote is
+    # retired; the denial itself is the record.
     response = json.loads(result.stdout)
     assert result.returncode == 0
     assert response["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "hol-guard install codex" in result.stdout
-    evidence = json.loads(result.stderr)
-    assert evidence["schema"] == "hol-guard.codex-bridge-failure.v1"
-    assert any(cause["stage"] == "launcher_validation" for cause in evidence["causes"])
     assert str(marker) not in result.stderr
     assert not marker.exists()
 

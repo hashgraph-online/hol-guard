@@ -23,9 +23,15 @@ fn incoming_main_node_and_tsx_script_vectors() {
     .unwrap();
     assert_eq!(vectors["cases"].as_array().unwrap().len(), 44);
     for case in vectors["cases"].as_array().unwrap() {
+        // Windows also runs a plain workspace script in the read-only
+        // AppContainer, so a case can name the answer it gets there.
+        let expected = match case.get("windows_expected") {
+            Some(expected) if cfg!(windows) => expected,
+            _ => &case["expected"],
+        };
         assert_eq!(
             evaluate(case["operation"].as_str().unwrap(), &case["input"]).unwrap(),
-            case["expected"],
+            *expected,
             "{case}"
         );
     }

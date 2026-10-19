@@ -57,18 +57,31 @@ pub(super) fn request_payload_identity(
     ] {
         identity.remove(key);
     }
-    // Pi retries create a new transport call ID for the unchanged action.
-    // Keep nested tool arguments and session identity in the commitment.
-    if matches!(harness, "pi" | "omp")
-        && event == "PreToolUse"
+    // A retry of an unchanged action mints a new transport call ID: Pi's
+    // `tool_call_id`, and the `tool_use_id` Claude Code and Codex stamp on each
+    // tool-use block the model emits. Dropping it lets an Allow once approval
+    // reach the agent's own retry. Nested tool arguments and session identity
+    // stay in the commitment, and a request without a session keeps the ID.
+    if event == "PreToolUse"
         && identity
             .get("session_id")
             .and_then(Value::as_str)
             .is_some_and(|s| !s.is_empty())
     {
-        identity.remove("tool_call_id");
+        for key in transport_call_id_keys(harness) {
+            identity.remove(*key);
+        }
     }
     Ok(Value::Object(identity))
+}
+
+/// The root payload keys a harness's retry replaces for the same action.
+fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
+    match harness {
+        "pi" | "omp" => &["tool_call_id"],
+        "claude-code" | "codex" => &["tool_use_id"],
+        _ => &[],
+    }
 }
 
 /// True when the snapshot's own `generation` agrees with the claimed one.

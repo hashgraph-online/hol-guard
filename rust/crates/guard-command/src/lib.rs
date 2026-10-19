@@ -2,18 +2,22 @@
 pub mod action_lattice;
 pub mod approval_reuse;
 pub mod artifact_risk;
+pub mod bash_approval;
 pub mod benign_request_api;
 pub mod browser_mcp_intent;
+mod bundle_metadata;
 pub mod business_gmail_plain;
 pub mod business_gmail_wire;
 pub mod business_gws_command;
 pub mod business_input;
 pub mod canonical_command;
+pub mod catalog_prepare;
 pub mod catalog_read_model;
 #[cfg(test)]
 mod catalog_read_model_tests;
 mod catalog_read_projection;
 mod catalog_read_query;
+pub mod cloud_catalog;
 pub mod cloud_scrub;
 mod cloud_scrub_shell;
 mod cloud_scrub_source_search;
@@ -25,6 +29,7 @@ pub mod command_action_risk_classes;
 mod command_ascii_comparison;
 mod command_candidate_common;
 mod command_common_cli_matchers;
+pub mod command_expression_match;
 mod compound_artifact;
 mod credential_store_names {
     //! The credential screen is shared with PostToolUse source review, so it
@@ -54,6 +59,8 @@ mod codex_output_shlex;
 mod codex_output_source_paths;
 mod codex_output_splitters;
 mod codex_output_wrappers;
+mod codex_prompt_attachment;
+pub mod codex_prompt_credential_file;
 pub mod command_compatibility;
 mod command_contained_routine_candidates;
 mod command_critical_floors;
@@ -109,10 +116,14 @@ mod github_command_capabilities_tests;
 pub mod github_workflow_approval_record;
 pub mod github_workflow_authorization;
 pub mod github_workflow_descriptor;
+pub mod github_workflow_lineage;
+#[cfg(test)]
+mod github_workflow_lineage_tests;
 pub mod github_workflow_operations;
 mod harness_config_names;
 mod home_path_text;
 pub mod homebrew_intent;
+mod inline_shell_quoting;
 pub mod jsonc;
 #[cfg(unix)]
 pub mod launch_identity;
@@ -152,6 +163,7 @@ pub mod package_manager_command;
 pub mod package_manifest_diff;
 #[cfg(not(guard_source_bootstrap))]
 mod packaged_blob;
+mod parser_brace_command;
 mod parser_executables;
 mod parser_segments;
 mod parser_wrappers;
@@ -162,6 +174,7 @@ mod powershell_parser;
 mod powershell_reads;
 pub mod protect_request;
 mod read_only_fanout;
+pub mod reviewed_invocation_bindings;
 pub mod rich_command_model_api;
 use parser_executables::*;
 use parser_segments::*;
@@ -439,6 +452,9 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
     if request.dialect == "powershell" && request.transport == "shell_string" && !raw.is_empty() {
         return Ok(parse_explicit_powershell(request, raw));
     }
+    if let Some(model) = parse_inline_shell_script(request, raw) {
+        return Ok(model);
+    }
     let posix = parse_posix_command(request)?;
     if request.dialect != "posix" || !powershell_reads::windows_powershell_host() {
         return Ok(posix);
@@ -459,6 +475,60 @@ fn parse_command_unbound(request: &CommandModelRequestV1) -> Result<CanonicalCom
         }
     }
     Ok(posix)
+}
+
+/// A shell whose whole script is in this same text, modelled from that script.
+///
+/// `sh -c 'npm run build'` runs the programs those words name, yet every `-c`
+/// form reached `transparent_wrapper_not_yet_supported` and blocked outright,
+/// with no approval left to give it, while the same words without the shell in
+/// front modelled exactly. The script is parsed as the command text it is, so
+/// it reaches the rules, proofs and floors its own words reach, and nothing
+/// else: a wrapped `rm -rf /` still blocks and a wrapped `gh pr merge --auto`
+/// still needs fresh approval.
+///
+/// Only the spellings that read no startup file are modelled this way: `sh -c`,
+/// `bash -c`, `dash -c` and `ash -c`. A login shell (`-lc`) sources the profile
+/// files first and `zsh` reads `~/.zshenv` whatever option it is given, so
+/// those run code this text does not hold and keep the wrapper's own
+/// uncertainty. The bounded shape is what keeps the rest true: three words, a
+/// known shell, the `-c` option, and no expansion the parser would have to
+/// guess at. Anything else — an extra operand, `-s`, a prefix, a shell this
+/// text only names — keeps that uncertainty too, as does a script this parser
+/// cannot model exactly.
+///
+/// A Windows agent runs PowerShell, which reads quotes differently from the
+/// shell this text names: `''` closes and reopens a POSIX single-quoted word
+/// while PowerShell hands the shell a literal `'`. Where the two readings could
+/// disagree about where the script ends, that host keeps the existing
+/// PowerShell path instead of an exact model of a command the shell would
+/// never run. A plain quoted script reads the same under both, so it is
+/// modelled there too (`inline_shell_quoting`).
+///
+/// The raw text is no longer the command, so `exact_raw_text` is false and a
+/// matcher that reads the literal raw spelling keeps failing closed.
+fn parse_inline_shell_script(
+    request: &CommandModelRequestV1,
+    raw: &str,
+) -> Option<CanonicalCommandV1> {
+    if request.dialect != "posix"
+        || request.transport != "shell_string"
+        || (powershell_reads::windows_powershell_host()
+            && !inline_shell_quoting::powershell_reads_the_same_words(raw))
+    {
+        return None;
+    }
+    let script = parser_wrappers::inline_shell_script(raw)?;
+    let mut model = parse_posix_command(&CommandModelRequestV1 {
+        command: script,
+        ..request.clone()
+    })
+    .ok()?;
+    if model.confidence != "exact" || model.segments.is_empty() {
+        return None;
+    }
+    model.exact_raw_text = false;
+    Some(model)
 }
 
 fn parse_explicit_powershell(request: &CommandModelRequestV1, raw: &str) -> CanonicalCommandV1 {
@@ -696,9 +766,14 @@ pub mod local_supply_chain;
 mod local_supply_chain_saved_claim_tests;
 #[cfg(test)]
 mod local_supply_chain_stale_policy_tests;
+#[cfg(test)]
+mod local_supply_chain_timestamp_tests;
 pub mod package_approval;
 pub mod package_policy_override;
 pub mod package_protect_projection;
+mod package_shim_invocation;
+#[cfg(test)]
+mod package_shim_invocation_tests;
 pub mod prompt_analysis;
 pub mod redacted_command_tokens;
 pub mod supply_chain_package_eval;
@@ -747,7 +822,10 @@ mod hook_adapter_secret_path;
 pub mod hook_adapter_value;
 #[cfg(all(test, unix))]
 mod hook_adapter_vector_tests;
+mod hook_evidence_deferred_post;
 pub mod hook_evidence_writer;
+#[cfg(test)]
+mod hook_evidence_writer_tests;
 pub mod hook_responses;
 pub mod inventory_contract;
 pub mod js_semver;
@@ -782,6 +860,9 @@ pub(crate) mod semantic_workspace;
 pub mod shims;
 pub mod signals;
 pub mod skill_content_risk;
+pub mod skill_dependency_manifest;
+pub mod skill_identity;
+pub mod strict_json;
 pub mod supply_chain_bundle;
 pub mod supply_chain_package_identity;
 pub mod supply_chain_risk;

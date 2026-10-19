@@ -7,7 +7,7 @@ import {
   type ExtensionDetailUrlState,
 } from "../extension-control-center-model";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref, type ProtectionRoute } from "../local-cli-links";
-import { addCustomExtensionPrefillHref } from "./custom-extension-profile";
+import { addCustomExtensionPrefillHref, connectorSetupLinkFromSearch } from "./custom-extension-profile";
 import { AddCustomExtensionWorkspace, LocalCliDetail, useLocalCliCatalog } from "./local-clis-panel";
 import {
   acknowledgeDegradedExtensionControlAuthority,
@@ -338,6 +338,11 @@ export function ProtectionCenterWorkspace(props: {
     ? localClis.data?.items.find((item) => item.cli_id === localCliRoute.cliId) ?? null
     : null;
   const showLocalCli = localCliRoute !== null;
+  // Read per route change: the link applies only while this connector's page is the one opened.
+  const setupLink = useMemo(
+    () => (localCliRoute ? connectorSetupLinkFromSearch(window.location.search) : null),
+    [localCliRoute],
+  );
   const showDetail = routeState.route.kind === "detail" && selectedExtension !== null;
   const showNotFound = routeState.route.kind === "invalid"
     || (routeState.route.kind === "detail" && selectedExtension === null && state.kind === "ready")
@@ -429,6 +434,7 @@ export function ProtectionCenterWorkspace(props: {
           revision={localClis.data.revision}
           continuity={localClis.data.cloud}
           nativePublication={localClis.data.native_publication}
+          setupLink={setupLink}
           onBack={closeExtension}
           onRefresh={localClis.load}
         />

@@ -1018,10 +1018,20 @@ impl Timestamp {
         let s = (day_secs % 60) as u32;
         (y, m, d, h, mi, s, micros)
     }
-    /// `datetime.isoformat()` — `+00:00` suffix, seconds precision.
+    /// `datetime.isoformat()` — `+00:00` suffix, `timespec="auto"`: six
+    /// fractional digits, left out only when the instant lands exactly on a
+    /// second. The fraction is not decoration. Rows stamped by this helper are
+    /// compared as text by SQLite, and `+` (0x2B) sorts below `.` (0x2E), so a
+    /// second-precision stamp reads as older than every microsecond-precision
+    /// stamp within the same second — which silently drops rows from
+    /// `occurred_at >= ?` windows Python opens with its own clock.
     pub fn isoformat(&self) -> String {
-        let (y, m, d, h, mi, s, _) = self.utc_parts();
-        format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}+00:00")
+        let (y, m, d, h, mi, s, micros) = self.utc_parts();
+        let date = format!("{y:04}-{m:02}-{d:02}T{h:02}:{mi:02}:{s:02}");
+        if micros == 0 {
+            return format!("{date}+00:00");
+        }
+        format!("{date}.{micros:06}+00:00")
     }
 }
 
@@ -1067,6 +1077,12 @@ pub const VALID_RISK_ACTION_KEYS: &[&str] = &[
     "guard_bypass",
     "cloud_advisory",
     "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
 ];
 
 /// `DEFAULT_SECURITY_LEVEL` (config.py).
@@ -1156,7 +1172,8 @@ fn isoformat_utc(t: Timestamp) -> String {
     t.isoformat()
 }
 
-/// `datetime.now(tz=timezone.utc).isoformat()` — seconds precision, `+00:00`.
+/// `datetime.now(tz=timezone.utc).isoformat()` — microsecond precision,
+/// `+00:00`.
 pub fn utc_now_iso() -> String {
     Timestamp::now_utc().isoformat()
 }
@@ -1697,6 +1714,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1716,6 +1739,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "warn"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "warn"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "warn"),
             ],
         ),
         (
@@ -1735,6 +1764,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1754,6 +1789,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1773,6 +1814,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "block"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "block"),
+                ("package_lockfile_drift", "block"),
+                ("package_direct_source", "block"),
+                ("package_custom_registry", "block"),
+                ("package_install", "block"),
+                ("low_trust_artifact", "block"),
             ],
         ),
         (
@@ -1792,6 +1839,12 @@ fn security_level_risk_rows(level: &str) -> &'static [(&'static str, &'static st
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "warn"),
                 ("encoded_exfiltration", "require-reapproval"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -1838,6 +1891,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "allow"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "allow"),
+                ("package_lockfile_drift", "allow"),
+                ("package_direct_source", "allow"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
         (
@@ -1857,6 +1916,12 @@ fn posture_risk_rows(posture: &str) -> Option<&'static [(&'static str, &'static 
                 ("guard_bypass", "block"),
                 ("cloud_advisory", "require-reapproval"),
                 ("encoded_exfiltration", "block"),
+                ("package_unknown", "require-reapproval"),
+                ("package_lockfile_drift", "require-reapproval"),
+                ("package_direct_source", "require-reapproval"),
+                ("package_custom_registry", "allow"),
+                ("package_install", "allow"),
+                ("low_trust_artifact", "require-reapproval"),
             ],
         ),
     ];
@@ -3557,6 +3622,7 @@ fn workspace_scan_intent(
         execution_context_hashes: Vec::new(),
         execution_context_cwds: Vec::new(),
         execution_context_reason_codes: Vec::new(),
+        routine_local_runner: false,
     })
 }
 

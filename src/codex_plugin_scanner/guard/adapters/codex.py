@@ -72,6 +72,7 @@ from ..codex_hook_registration import (
     remove_manifest_bound_hook_events as _remove_manifest_bound_hook_events,
 )
 from ..codex_hook_rollback import require_unchanged_config_for_rollback, rollback_file_identity
+from ..codex_hook_self_binding import self_bound_hook_bindings
 from ..codex_hook_sources import parse_json_object, parse_toml_object
 from ..codex_hook_sources import (
     require_hook_inventory_sources_unchanged as _require_hook_inventory_sources_unchanged,
@@ -450,6 +451,49 @@ def _current_install_legacy_bindings(context: HarnessContext, hooks: dict[str, o
     )
 
 
+def _recorded_handler_commands(bindings: Sequence[Mapping[str, object]]) -> list[str]:
+    """The handler commands the authenticated manifest says Guard wrote here."""
+
+    commands: list[str] = []
+    for binding in bindings:
+        handler = binding.get("handler")
+        if not isinstance(handler, Mapping):
+            continue
+        command = handler.get("command")
+        if isinstance(command, str):
+            commands.append(command)
+    return commands
+
+
+def _current_install_self_bindings(
+    context: HarnessContext,
+    hooks: Mapping[str, object],
+    *,
+    authenticated_bindings: Sequence[Mapping[str, object]] = (),
+) -> list[dict[str, object]]:
+    """Select the handlers an earlier generation of this same install left behind.
+
+    A Guard handler counts as ours only when it names this Guard home and runs
+    a program inside a root this install controls - the native bridge under
+    the Guard home, or the bridge script inside this install's package. A
+    reinstall replaces those rather than refusing to touch an owner it cannot
+    identify. A Guard-shaped handler launched from anywhere else keeps its
+    conflict, because its spelling proves nothing about who wrote it.
+
+    The one handler containment does not get to decide is one still running a
+    command the authenticated manifest records, which therefore differs from
+    its recorded entry somewhere other than the command. That is an edit made
+    to Guard's own registration from outside Guard, and it is reported rather
+    than silently rewritten.
+    """
+
+    return self_bound_hook_bindings(
+        hooks,
+        guard_home=_runtime_guard_home(context),
+        recorded_commands=_recorded_handler_commands(authenticated_bindings),
+    )
+
+
 def _wire_bindings(bindings: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
     """Ownership bindings the native request can carry.
 
@@ -561,6 +605,10 @@ def _migrate_hooks_json_into_config(
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(json_hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_json_hooks)
     cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, legacy_bindings)
+    # The manifest authenticates the config entries, not hooks.json, so no
+    # recorded command holds a JSON handler back, matching its inventory.
+    self_bindings = _current_install_self_bindings(context, cleaned_json_hooks)
+    cleaned_json_hooks, _ = _remove_manifest_bound_hook_events(cleaned_json_hooks, self_bindings)
     source_hooks_enabled = _payload_has_hooks_feature_enabled(config_payload)
     changed = False
     for event_name, groups in cleaned_json_hooks.items():
@@ -660,6 +708,8 @@ def _unmanaged_migration_payload(
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
     legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
     cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+    self_bindings = _current_install_self_bindings(context, cleaned_hooks)
+    cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
     return {"hooks": cleaned_hooks} if cleaned_hooks else {}
 
 
@@ -936,8 +986,9 @@ def _codex_hook_inventory(
     context: HarnessContext,
     authenticated_bindings: Sequence[Mapping[str, object]] = (),
 ) -> CodexHookInventory:
-    hooks = payload.get("hooks")
-    legacy_bindings = _current_install_legacy_bindings(context, hooks if isinstance(hooks, dict) else {})
+    raw_hooks = payload.get("hooks")
+    hooks: dict[str, object] = raw_hooks if isinstance(raw_hooks, dict) else {}
+    legacy_bindings = _current_install_legacy_bindings(context, hooks)
     return enumerate_codex_hooks(
         payload,
         source_path=source_path,
@@ -946,6 +997,7 @@ def _codex_hook_inventory(
         source_hooks_enabled=source_hooks_enabled,
         authenticated_bindings=authenticated_bindings,
         legacy_bindings=legacy_bindings,
+        self_bindings=_current_install_self_bindings(context, hooks, authenticated_bindings=authenticated_bindings),
     )
 
 
@@ -1944,10 +1996,12 @@ class CodexHarnessAdapter(HarnessAdapter):
         cleaned_hooks, _ = _remove_manifest_bound_hook_events(hooks, owned_bindings)
         legacy_bindings = _current_install_legacy_bindings(context, cleaned_hooks)
         cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, legacy_bindings)
+        self_bindings = _current_install_self_bindings(context, cleaned_hooks, authenticated_bindings=owned_bindings)
+        cleaned_hooks, _ = _remove_manifest_bound_hook_events(cleaned_hooks, self_bindings)
         install_managed_codex_hook_groups(
             cleaned_hooks,
             _managed_hook_groups(context),
-            current_guard_home=context.guard_home,
+            current_guard_home=_runtime_guard_home(context),
         )
         # Hook state is keyed by position, so the groups just rewritten moved
         # the keys of the hooks Guard leaves alone. Each one follows its

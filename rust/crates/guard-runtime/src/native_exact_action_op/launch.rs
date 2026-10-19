@@ -95,7 +95,7 @@ pub(super) fn launch_identity(command: &str, cwd: &str, ctx: &Ctx) -> Proof<Valu
 }
 
 /// A single top-level invocation without wrappers, environment prefixes or redirects.
-fn is_safe_single_invocation(model: &CanonicalCommand) -> bool {
+pub(super) fn is_safe_single_invocation(model: &CanonicalCommand) -> bool {
     let simple_model = model.confidence == "exact"
         && model.redirects.is_empty()
         && model.embedded_commands.is_empty()

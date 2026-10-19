@@ -37,6 +37,7 @@ from ..local_supply_chain import (
     package_external_archive_override,
 )
 from ..mcp_tool_calls import (
+    RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
@@ -72,7 +73,7 @@ from ..runtime.approval_context import (
     resolved_runtime_launch_executable,
     runtime_launch_identity_matches,
 )
-from ..runtime.composio_contract import composio_requires_action_review
+from ..runtime.composio_contract import composio_names_a_wrapper
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent_common import build_package_request_artifact
@@ -83,7 +84,7 @@ from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
 from ._env import _build_scrubbed_env
 from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _NativeMcpChildIo
-from .runtime_mcp_projection import McpCallProjector, review_artifact_payload
+from .runtime_mcp_projection import McpCallProjector, connector_agent_text, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
     _approval_surface_policy_for_browser,
@@ -123,10 +124,13 @@ def _bound_external_archive_mcp_request(
     return {**message, "params": bound_params}, bound_params
 
 
-def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:
+def _tool_decision_after_runtime_allow(
+    decision: ToolCallDecision, *, source: str, policy_action: GuardAction
+) -> ToolCallDecision:
     return replace(
         decision,
         action="allow",
+        policy_action=policy_action,
         source=source,
         pending_approval_reuse_decision=None,
         approval_reuse_claim_disposition=None,
@@ -718,6 +722,7 @@ class RuntimeMcpGuardProxy:
         return replace(
             decision,
             action=gate["action"],
+            policy_action=gate["policy_action"],
             source=gate["source"],
             summary=gate["summary"],
             approval_reuse_status=gate["approval_reuse_status"],
@@ -777,7 +782,7 @@ class RuntimeMcpGuardProxy:
             server_identity=self._session_server_identity(),
             tool_definition=public_tool_definition,
             provider_catalog_hash=(
-                self.store.read_mcp_provider_authority_hash() if composio_requires_action_review(tool_name) else None
+                self.store.read_mcp_provider_authority_hash() if composio_names_a_wrapper(tool_name) else None
             ),
         )
         artifact, artifact_hash = identity.artifact, identity.artifact_hash
@@ -1028,6 +1033,7 @@ class RuntimeMcpGuardProxy:
         return replace(
             decision,
             action=override["action"],
+            policy_action=override["policy_action"],
             source=override["source"],
             pending_approval_reuse_decision=None,
             approval_reuse_claim_disposition=None,
@@ -1160,6 +1166,7 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 scanner_evidence=decision_scanner_evidence,
                 policy_action=tool_policy_action,
+                connector_setup=decision.connector_setup if tool_policy_action == "review" else None,
             )
 
         if kind == "stored_block":
@@ -1246,7 +1253,11 @@ class RuntimeMcpGuardProxy:
                 tool_decision=(
                     decision
                     if tool_source is None
-                    else _tool_decision_after_runtime_allow(decision, source=tool_source)
+                    else _tool_decision_after_runtime_allow(
+                        decision,
+                        source=tool_source,
+                        policy_action=route["decision_policy_action"],
+                    )
                 ),
                 tool_scanner_evidence=decision_scanner_evidence,
                 package_resolution=held["package_resolution"],
@@ -3208,6 +3219,7 @@ class RuntimeMcpGuardProxy:
         *,
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
+        connector_setup: Mapping[str, object] | None = None,
     ) -> dict[str, Any]:
         """Build the artifact payload for approval center queueing."""
         projection = self._call_projector.project(tool_name, params, artifact)
@@ -3218,6 +3230,7 @@ class RuntimeMcpGuardProxy:
             signals,
             policy_action=policy_action,
             scanner_evidence=scanner_evidence,
+            connector_setup=connector_setup,
         )
 
     def _queue_approval_center_response(
@@ -3231,7 +3244,11 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
+        connector_setup: Mapping[str, object] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        connector_code = (
+            {} if connector_setup is None else {"guardReasonCode": RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED}
+        )
         if not asks_for_approval(self.config):
             block_tool_call(
                 store=self.store,
@@ -3265,6 +3282,7 @@ class RuntimeMcpGuardProxy:
                             signals,
                             policy_action=policy_action,
                             scanner_evidence=scanner_evidence,
+                            connector_setup=connector_setup,
                         )
                     ]
                 },
@@ -3276,8 +3294,15 @@ class RuntimeMcpGuardProxy:
                 tool_name,
                 safe_alternative_reason(
                     f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
-                ),
-                {"approvalRequests": [], "guardPolicyAction": "block", "transportOutcome": "not-forwarded"},
+                )
+                if connector_setup is None
+                else connector_agent_text(connector_setup, ask=False),
+                {
+                    "approvalRequests": [],
+                    "guardPolicyAction": "block",
+                    "transportOutcome": "not-forwarded",
+                    **connector_code,
+                },
             ), {
                 "method": "tools/call",
                 "tool_name": tool_name,
@@ -3307,6 +3332,7 @@ class RuntimeMcpGuardProxy:
                         signals,
                         policy_action=policy_action,
                         scanner_evidence=scanner_evidence,
+                        connector_setup=connector_setup,
                     ),
                 ]
             },
@@ -3338,6 +3364,7 @@ class RuntimeMcpGuardProxy:
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
             "reviewUrl": review_url,
+            **connector_code,
         }
         response = _blocked_tool_response(
             message_id,
@@ -3345,7 +3372,9 @@ class RuntimeMcpGuardProxy:
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
                 f"Approve request {request_id} at {review_url}, then retry the same action."
-            ),
+            )
+            if connector_setup is None
+            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {review_url}.",
             response_data,
         )
         queued_event: dict[str, Any] = {

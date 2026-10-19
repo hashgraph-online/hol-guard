@@ -76,22 +76,34 @@ def test_native_preparation_is_one_call_with_no_python_verdict(monkeypatch, tmp_
         }
 
     monkeypatch.setattr(transport, "_call", call)
-    plan = prepare_restricted_pytest(["python3", "-m", "pytest"], workspace=tmp_path, read_only_workspace=True)
+    home = tmp_path / "home"
+    plan = prepare_restricted_pytest(
+        ["python3", "-m", "pytest"],
+        workspace=tmp_path,
+        home_dir=home,
+        read_only_workspace=True,
+    )
     assert plan.command == ("/usr/bin/python3", "-m", "pytest")
     assert len(calls) == 1
     assert calls[0]["body"]["operation"] == "prepare"
+    assert calls[0]["body"]["input"]["home"] == str(home)
     assert "allow" not in calls[0]["body"]["input"]
 
 
 @pytest.mark.skipif(os.name != "posix", reason="restricted execution uses Unix OS sandbox backends")
 def test_real_native_preparation_preserves_validated_plan(native_context_digest, tmp_path):
-    import sys
-
-    workspace = Path.cwd()
+    home = tmp_path / "home"
+    workspace = home / "project"
+    workspace.mkdir(parents=True)
+    (workspace / "pyproject.toml").write_text("", encoding="utf-8")
+    python = workspace / "python3"
+    python.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    python.chmod(0o755)
     plan = prepare_restricted_pytest(
-        [sys.executable, "-m", "pytest", "-q"],
+        [str(python), "-m", "pytest", "-q"],
         workspace=workspace,
         cwd=workspace,
+        home_dir=home,
         platform="darwin",
         backend_executable=Path("/usr/bin/true"),
     )

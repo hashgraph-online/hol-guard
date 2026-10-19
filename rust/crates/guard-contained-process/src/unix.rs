@@ -24,6 +24,7 @@ mod launch;
 mod owner;
 #[path = "unix/io.rs"]
 mod process_io;
+mod source_input;
 use launch::{cstring, ChildSetup, LaunchDeadline, RequestWindow};
 use owner::{require_wait_custody, ChildOwner};
 #[cfg(target_os = "macos")]
@@ -40,6 +41,7 @@ pub(crate) fn capture(
     deadline: Instant,
     cancel: &AtomicBool,
     isolation: Isolation,
+    source_gate: Option<&mut dyn crate::SourceLaunchGate>,
 ) -> io::Result<CapturedOutput> {
     let window = RequestWindow { deadline, cancel };
     window.require_launch()?;
@@ -81,14 +83,11 @@ pub(crate) fn capture(
     }
     // Duplicate above the reserved child descriptors before dup2: inherited
     // descriptors can otherwise collide with the exec/status descriptors.
-    #[cfg(target_os = "linux")]
     let reserved = i32::try_from(isolation.inherited_files.len())
         .map_err(|_| crate::bound_fs::changed())?
         .checked_add(6)
         .ok_or_else(crate::bound_fs::changed)?
         .max(10);
-    #[cfg(not(target_os = "linux"))]
-    let reserved = 10;
     let exe_fd = unsafe {
         libc::fcntl(
             command.executable.as_raw_fd(),
@@ -111,7 +110,6 @@ pub(crate) fn capture(
         return Err(io::Error::last_os_error());
     }
     let launch_fd = unsafe { OwnedFd::from_raw_fd(launch_fd) };
-    #[cfg(target_os = "linux")]
     let inherited = isolation
         .inherited_files
         .iter()
@@ -126,7 +124,11 @@ pub(crate) fn capture(
         .collect::<io::Result<Vec<_>>>()?;
     let parent = unsafe { libc::getpid() };
     #[cfg(target_os = "macos")]
-    let mut descriptors = supervisor::DescriptorTable::prepare()?;
+    let mut descriptors = supervisor::DescriptorTable::prepare(inherited.len())?;
+    #[cfg(target_os = "macos")]
+    let keep_descriptors = (0..6 + inherited.len() as i32)
+        .chain(std::iter::once(launch_fd.as_raw_fd()))
+        .collect::<Vec<_>>();
     let launch_deadline = LaunchDeadline::prepare(deadline)?;
     #[cfg(test)]
     process_regressions::before_fork();
@@ -156,8 +158,9 @@ pub(crate) fn capture(
             argv: &argv_ptr,
             env: &env_ptr,
             deadline: &launch_deadline,
-            #[cfg(target_os = "linux")]
             inherited: &inherited,
+            #[cfg(target_os = "macos")]
+            keep_descriptors: &keep_descriptors,
             #[cfg(target_os = "macos")]
             descriptors: &mut descriptors,
             #[cfg(target_os = "macos")]
@@ -197,7 +200,7 @@ pub(crate) fn capture(
     let mut foreign_report = [0u8; 4];
     #[cfg(target_os = "macos")]
     let mut foreign_report_size = 0usize;
-    let mut offset = 0usize;
+    let mut transfer = source_input::Input::new(input, source_gate);
     let mut timed_out = false;
     let mut cancelled = false;
     let mut output_limited = false;
@@ -339,21 +342,7 @@ pub(crate) fn capture(
         if window.stopped() {
             continue;
         }
-        if offset == input.len() {
-            stdin.take();
-        }
-        if let Some(fd) = &stdin {
-            match write_without_sigpipe(fd.as_raw_fd(), &input[offset..]) {
-                Ok(length) => offset += length,
-                Err(error) if error.raw_os_error() == Some(libc::EPIPE) => {
-                    stdin.take();
-                }
-                Err(error)
-                    if error.kind() == io::ErrorKind::WouldBlock
-                        || error.kind() == io::ErrorKind::Interrupted => {}
-                Err(error) => return Err(error),
-            }
-        }
+        transfer.write_body(&mut stdin)?;
         drain(
             &mut stdout_fd,
             &mut stdout,
@@ -418,6 +407,11 @@ pub(crate) fn capture(
             ));
         }
         if error_bytes == [0, 0, 0, 0] && !output_limited && status.is_none() {
+            transfer.release(
+                &mut stdin,
+                error_fd.is_none() && launch_write.is_none(),
+                &window,
+            )?;
             if let Some(fd) = &launch_write {
                 #[cfg(test)]
                 process_regressions::initialized();

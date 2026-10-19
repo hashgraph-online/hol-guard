@@ -35,6 +35,7 @@ fn decide(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),
@@ -85,6 +86,11 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         (&plain, "npm view zod@latest dist-tags.latest"),
         (&plain, "npm ls"),
         (&plain, "npm ls zod --depth=0"),
+        // The same offline tree read, at npm's own prefix.
+        (&plain, "npm ls -g --depth=0"),
+        (&plain, "npm list --global"),
+        (&plain, "npm ls --location=global --json"),
+        (&plain, "npm ls -g --depth=0 2>/dev/null | grep -i zod"),
         (&plain, "npm cache ls"),
         (&plain, "npm cache ls zod"),
         (&plain, "npm cache ls zod 2>&1 | head -10"),
@@ -108,7 +114,8 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         (&plain, "npm view user/repo"),
         (&plain, "npm view zod@npm:other"),
         (&plain, "npm view"),
-        (&plain, "npm ls -g"),
+        (&plain, "npm ls --prefix /tmp/x"),
+        (&plain, "npm ls --location=user --registry=https://x"),
         (&plain, "npm install zod"),
         (&plain, "npm config get cache"),
         (&plain, "npm cache add zod"),
@@ -171,4 +178,123 @@ fn registry_and_tree_reads_continue_unless_configuration_moves_npm() {
         decide(&[], Some(&home), "npm view zod version", &home, &plain),
         "allow"
     );
+}
+
+/// npm reads a global configuration file from the prefix it was installed
+/// into, which a project or user `.npmrc` never names. A `prefix` or
+/// `onload-script` line there moves npm the same way one in `~/.npmrc` does,
+/// so a tree read that would run under it keeps its review.
+#[test]
+fn a_global_configuration_file_is_read_wherever_node_was_installed() {
+    let root = std::env::temp_dir().join(format!("guard-npm-global-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let project = root.join("project");
+    for directory in [&home, &project] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(project.join("package.json"), "{}\n").unwrap();
+    let commands = ["npm ls -g --depth=0", "npm ls", "npm view zod version"];
+    for command in commands {
+        assert_eq!(
+            decide(&[], Some(&home), command, &home, &project),
+            "allow",
+            "{command}"
+        );
+    }
+    // A user-installed prefix, the shape `npm config set prefix` writes.
+    let global = home.join(".npm-global/etc");
+    std::fs::create_dir_all(&global).unwrap();
+    std::fs::write(global.join("npmrc"), "save-exact=true\n").unwrap();
+    for command in commands {
+        assert_eq!(
+            decide(&[], Some(&home), command, &home, &project),
+            "allow",
+            "{command}"
+        );
+    }
+    std::fs::write(global.join("npmrc"), "onload-script=/tmp/hook.js\n").unwrap();
+    for command in commands {
+        assert_ne!(
+            decide(&[], Some(&home), command, &home, &project),
+            "allow",
+            "{command}"
+        );
+    }
+    std::fs::remove_file(global.join("npmrc")).unwrap();
+    // One prefix per installed version, as a version manager keeps them.
+    // Managers that follow the XDG layout, and fnm on macOS, keep that
+    // directory somewhere else, and the file moves with it.
+    for prefix in [
+        ".nvm/versions/node/v24.4.1",
+        ".local/share/fnm/node-versions/v24.4.1/installation",
+        "Library/Application Support/fnm/node-versions/v24.4.1/installation",
+        ".local/share/mise/installs/node/24.4.1",
+        ".nodenv/versions/24.4.1",
+        ".proto/tools/node/24.4.1",
+    ] {
+        let version = home.join(prefix).join("etc");
+        std::fs::create_dir_all(&version).unwrap();
+        std::fs::write(
+            version.join("npmrc"),
+            "registry=https://registry.example.test/\n",
+        )
+        .unwrap();
+        for command in commands {
+            assert_ne!(
+                decide(&[], Some(&home), command, &home, &project),
+                "allow",
+                "{prefix} {command}"
+            );
+        }
+        std::fs::remove_file(version.join("npmrc")).unwrap();
+        for command in commands {
+            assert_eq!(
+                decide(&[], Some(&home), command, &home, &project),
+                "allow",
+                "{prefix} {command}"
+            );
+        }
+    }
+}
+
+// Finder leaves a `.DS_Store` file beside the version directories a Node
+// version manager keeps. The configuration path built from that entry lands
+// below a regular file, which reports `ENOTDIR` rather than "no such file";
+// reading that as an unproven config file held every npm read for review on
+// any machine where Finder had opened the directory.
+#[test]
+fn a_stray_file_in_a_version_root_leaves_reads_alone() {
+    let root = std::env::temp_dir().join(format!("guard-npm-stray-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    let root = std::fs::canonicalize(root).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    let home = root.join("home");
+    let project = root.join("project");
+    for directory in [&home, &project] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(project.join("package.json"), "{}\n").unwrap();
+    let versions = home.join(".nvm/versions/node");
+    std::fs::create_dir_all(versions.join("v24.3.0/etc")).unwrap();
+    std::fs::write(versions.join("v24.3.0/etc/npmrc"), "save-exact=true\n").unwrap();
+    std::fs::write(versions.join(".DS_Store"), [0u8, 1, 2, 3]).unwrap();
+
+    for command in ["npm ls", "npm view zod version", "npm cache ls"] {
+        assert_eq!(
+            decide(&[], Some(&home), command, &home, &project),
+            "allow",
+            "{command}"
+        );
+    }
+
+    // A configuration file that really is there still decides the read.
+    std::fs::write(
+        versions.join("v24.3.0/etc/npmrc"),
+        "registry=https://registry.example.test/\n",
+    )
+    .unwrap();
+    assert_ne!(decide(&[], Some(&home), "npm ls", &home, &project), "allow");
 }

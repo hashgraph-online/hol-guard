@@ -28,6 +28,7 @@ from .policy_bundle_activation import (
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
     published_managed_authority,
+    revalidate_cloud_policy,
 )
 from .runtime.extension_control_authority import (
     AuthorityHealth,
@@ -45,6 +46,7 @@ from .store_policy_activation_preflight import (
 
 if TYPE_CHECKING:
     from .managed_controls_policy_fields import ParsedManagedControlsPolicy
+    from .store import GuardStore
 
 # ruff: noqa: F403,F405
 from .action_lattice import guard_action_severity
@@ -77,6 +79,15 @@ RUNTIME_SAVED_REUSE_FEATURE = "runtime-saved-reuse-v1"
 # the unexpanded group with it, and the probe-groups contract denies unknown
 # fields, so a runtime that does not advertise this must not be sent one.
 POLICY_LOOKUP_MEMORY_FEATURE = "policy-decision-lookup-memory-v1"
+# The resident derives the trusted-local-tool grant selectors itself and probes
+# them. Same contract rule as above: never send ``probe_groups.local_tool_grant``
+# to a runtime that does not advertise this.
+LOCAL_TOOL_GRANT_LOOKUP_FEATURE = "policy-decision-lookup-local-tool-grant-v1"
+# The resident composes the portable-project lookup with the local one itself,
+# strips portable permission elevation, and claims the effective allow in the
+# same connection. Same contract rule as above: never send
+# ``portable_workspace`` or ``evidence_binding`` to a runtime without it.
+PORTABLE_COMPOSITION_LOOKUP_FEATURE = "policy-decision-lookup-portable-composition-v1"
 _RESIDENT_VERDICT_ATTEMPTS = 6
 _DEGRADED_AUTHORITY_REVISION = -1
 
@@ -92,6 +103,9 @@ class PolicyLookupEvidence:
     local_once_integrity_key_b64: str | None = None
     local_once_integrity_key_id: str | None = None
     policy_bundle_decision_identities: list[list[Any]] | None = None
+    # The store-resident sources this evidence was gathered against, named
+    # before it was derived. Only a lookup that may claim ships one.
+    evidence_binding: dict[str, Any] | None = None
     # Set when the home can serve no authority: every lookup is an empty
     # degraded result carrying this trust status.
     degraded_trust_status: dict[str, Any] | None = None
@@ -496,13 +510,21 @@ class StorePolicyMixin:
         )
         if payload_rejection is not None:
             return reject(payload_rejection)
-        from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+        from .catalog_delivery.projection import capture, require_current
+        from .native_command_control_authority_store import _key
+
+        _, registry, activation_digest = capture(self)
+        current_manifest = self._catalog_target_manifest(registry)
+        # Resolve any activation migration before opening the policy write
+        # transaction. The protected header is rechecked under its lease below.
+        self.read_extension_control_authority_for_registry(registry)
 
         with self._extension_control_authority_lock(), self._connect() as connection:
+            require_current(self, _key(cast("GuardStore", self)), activation_digest)
             self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+                registry.catalog_digest,
             )
             continuity_rejection = continuity_activation_rejection(
                 custom_extension_continuity,
@@ -525,6 +547,8 @@ class StorePolicyMixin:
             managed_authority_key: bytes | None = None
             managed_revision = 0
             if managed_controls_policy is not None:
+                if managed_controls_policy.cloud_projection_digest is not None and managed_controls_delivery is None:
+                    return reject("missing_policy_bundle_delivery", connection)
                 if managed_base_authority.health is not AuthorityHealth.PROTECTED:
                     return reject("managed_controls_authority_unprotected", connection)
                 if managed_base_snapshot is None:
@@ -571,9 +595,17 @@ class StorePolicyMixin:
                     previous_active = json.loads(str(active_row["payload_json"]))
                     active_managed_layers, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
-                        catalog_digest=managed_base_authority.catalog_digest,
+                        catalog_digest=previous_active.get("catalogDigest"),
                         authority_key=managed_authority_key,
                     )
+                    if previous_active.get("catalogDigest") != managed_base_authority.catalog_digest:
+                        composed = self._with_managed_controls_activation(
+                            managed_base_authority,
+                            current_manifest=current_manifest,
+                        )
+                        active_managed_layers = tuple(
+                            layer for layer in composed.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
+                        )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
                     return reject("managed_controls_activation_state_invalid", connection)
                 if revision_row is not None and active_revision != previous_revision:
@@ -583,6 +615,21 @@ class StorePolicyMixin:
             if managed_controls_delivery is not None:
                 if managed_controls_policy is None or managed_base_authority is None:
                     return reject("managed_controls_delivery_policy_missing", connection)
+                try:
+                    cloud_valid = revalidate_cloud_policy(
+                        connection,
+                        policy=managed_controls_policy,
+                        policy_bundle=policy_bundle,
+                        guard_home=self.guard_home,
+                        registry=registry,
+                        capabilities=managed_controls_negotiated_capabilities,
+                        verdicts=verdicts,
+                    )
+                except ResidentVerdictRequiredError:
+                    connection.rollback()
+                    raise
+                if not cloud_valid:
+                    return reject("policy_local_view_invalid", connection)
                 current_authority = composed_managed_authority(
                     managed_base_authority,
                     managed_layers=active_managed_layers,
@@ -1101,6 +1148,48 @@ class StorePolicyMixin:
             request["local_once_only"] = True
         return cast("PolicyDecisionLookupResult", self.send_policy_decision_lookup(request))
 
+    def resolve_local_tool_grant(
+        self,
+        harness: str,
+        *,
+        tool_identity_hash: str,
+        capability: str,
+        current_action: str,
+    ) -> dict[str, object] | None:
+        """Resolve the trusted-local-tool grant a reviewable command may reuse.
+
+        The resident derives the grant selector of each target from the shipped
+        eligibility and probes them non-consuming in order, so the capability
+        digest the match turns on is computed where it is compared. Only an
+        ``allow`` row the grant source wrote answers. A degraded store serves no
+        grant, and neither does an action the hook did not recompute as
+        reviewable. Native failure is terminal, as for every other lookup.
+        """
+        evidence = self.policy_lookup_evidence()
+        if evidence.degraded_trust_status is not None:
+            return None
+        request = self.policy_decision_lookup_request(
+            evidence,
+            harness=harness,
+            artifact_id=None,
+            artifact_hash=None,
+            workspace=None,
+            publisher=None,
+            runtime_exact_match_context=None,
+            consume_one_shot=False,
+        )
+        request["probe_groups"] = {
+            "groups": [],
+            "local_tool_grant": {
+                "tool_identity_hash": tool_identity_hash,
+                "capability": capability,
+                "current_action": current_action,
+            },
+        }
+        payload = self.send_policy_decision_lookup(request, required_feature=LOCAL_TOOL_GRANT_LOOKUP_FEATURE)
+        decision = payload.get("decision")
+        return dict(decision) if isinstance(decision, Mapping) else None
+
     def policy_decision_lookup_request(
         self,
         evidence: PolicyLookupEvidence,
@@ -1112,6 +1201,7 @@ class StorePolicyMixin:
         publisher: str | None,
         runtime_exact_match_context: str | None,
         consume_one_shot: bool,
+        portable_workspace: str | None = None,
     ) -> dict[str, object]:
         """Build the resident request for one lookup against shipped evidence."""
         request: dict[str, object] = {
@@ -1135,6 +1225,12 @@ class StorePolicyMixin:
         }
         if evidence.policy_bundle_decision_identities:
             request["policy_bundle_decision_identities"] = evidence.policy_bundle_decision_identities
+        if portable_workspace is not None:
+            request["portable_workspace"] = portable_workspace
+            # Unset options are omitted, never sent as null: the resident
+            # re-serializes the request and the reply digest must match.
+            if evidence.evidence_binding is not None:
+                request["evidence_binding"] = evidence.evidence_binding
         return request
 
     def send_policy_decision_lookup(
@@ -1167,11 +1263,16 @@ class StorePolicyMixin:
         *,
         now: str | None = None,
         local_once_only: bool = False,
+        claim_binding: bool = False,
     ) -> PolicyLookupEvidence:
         """Procure the keyring-facing integrity evidence a lookup ships to Rust.
 
         Python keeps this because the OS keyring and the integrity-state refresh
         stay here; the evidence is the same for every candidate of one call.
+
+        ``claim_binding`` additionally names the store-resident sources that
+        evidence is gathered against, for a lookup whose resident may claim the
+        allow it selects.
         """
         current_time = _canonical_utc_timestamp(now or _now())
 
@@ -1212,6 +1313,23 @@ class StorePolicyMixin:
                 if has_local_policy
                 else {}
             )
+            # The claim a composing lookup may take re-reads these sources under
+            # its write lock. Name them here, before the bundle identities below
+            # are derived, so a source that moves afterwards makes the resident
+            # refuse the claim instead of honouring stale evidence.
+            evidence_binding: dict[str, Any] | None = None
+            if claim_binding:
+                needs_bundle = (
+                    connection.execute(
+                        "select 1 from policy_decisions where source = 'policy-bundle' limit 1"
+                    ).fetchone()
+                    is not None
+                )
+                evidence_binding = claim_evidence_binding(
+                    connection,
+                    bundle=needs_bundle,
+                    cloud_workspace_id=(self._cloud_workspace_id_from_connection(connection) if needs_bundle else None),
+                )
 
         # The resident refuses to serve until the owner-private verifier key
         # exists under this guard home (consume_for_spawn gate). Publishers
@@ -1299,6 +1417,7 @@ class StorePolicyMixin:
             ),
             local_once_integrity_key_id=local_once_key_id,
             policy_bundle_decision_identities=self._lookup_bundle_identities(current_time),
+            evidence_binding=evidence_binding,
             has_saved_rows=has_saved_rows,
         )
 

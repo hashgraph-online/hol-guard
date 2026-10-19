@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,40 @@ from tests.test_guard_restricted_workspace import payload, plan, receipt
 @pytest.fixture(autouse=True)
 def macos_host(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(workspace_sink, "_host_backend", lambda: "macos-seatbelt")
+
+
+_RUST_ROOT = Path(__file__).resolve().parents[1] / "rust/crates"
+
+
+def _rust_concat(relative: str, name: str) -> str:
+    """The text of the `concat!` literal Rust keeps in `const <name>`."""
+    source = (_RUST_ROOT / relative).read_text(encoding="utf-8")
+    body = source.split(f"const {name}: &str = concat!(", 1)[1].split("\n);", 1)[0]
+    return "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', body))
+
+
+@pytest.mark.parametrize(
+    ("relative", "name"),
+    [
+        ("guard-command/src/pretool/contained_publish.rs", "REASON_TEXT"),
+        ("guard-runtime/src/contained_workspace_sink.rs", "PUBLISH_REASON"),
+    ],
+)
+def test_the_publish_reason_matches_rust_exactly(relative: str, name: str) -> None:
+    assert _rust_concat(relative, name) == workspace_sink.WORKSPACE_PUBLISH_REASON
+
+
+def test_both_contained_reasons_say_what_runs_contained_and_what_runs_directly() -> None:
+    source = (_RUST_ROOT / "guard-command/src/pretool/workspace_contained.rs").read_text(encoding="utf-8")
+    body = source.split("result.reason = concat!(", 1)[1].split("\n    )\n    .into();", 1)[0]
+    plain = "".join(re.findall(r'"((?:[^"\\]|\\.)*)"', body))
+    for text in (plain, workspace_sink.WORKSPACE_PUBLISH_REASON):
+        assert "no PTY or Docker socket" in text
+        assert "children of an interpreter" in text
+        assert "only the workspace, $TMPDIR and a private scratch $HOME" in text
+        assert "directly, outside the sandbox" in text
+        assert "http" not in text
+        assert "approv" not in text.lower()
 
 
 PUBLISH_COMMAND = "npm test && git init -q && git status --short"

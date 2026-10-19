@@ -319,6 +319,7 @@ def _allow_mcp_tool_calls(monkeypatch: pytest.MonkeyPatch) -> None:
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="allow",
+            policy_action="allow",
             source="heuristic",
             signals=(),
             summary="tool call allowed",
@@ -708,6 +709,7 @@ def test_phase14_runtime_mcp_proxy_rejects_stored_allow_without_workspace_when_c
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="allow",
+            policy_action="allow",
             source="policy",
             signals=("tool review",),
             summary="provisionally accepted saved tool approval",
@@ -878,6 +880,7 @@ def test_phase14_runtime_mcp_proxy_preserves_tool_policy_for_package_calls(
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="block",
+            policy_action="block",
             source="policy",
             signals=("command_execution",),
             summary="blocked by explicit tool policy",
@@ -936,6 +939,7 @@ def test_phase14_runtime_mcp_proxy_enforces_tool_policy_review_before_package_ro
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="policy",
             signals=("command_execution",),
             summary="review before execution",
@@ -990,6 +994,7 @@ def test_phase14_runtime_mcp_proxy_enforces_non_policy_review_before_package_rou
         "evaluate_tool_call",
         lambda **_kwargs: ToolCallDecision(
             action="review",
+            policy_action="review",
             source="risk-policy",
             signals=("command_execution",),
             summary="review before execution",

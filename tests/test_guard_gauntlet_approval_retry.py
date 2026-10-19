@@ -33,13 +33,15 @@ def _catalog_data() -> dict:
     return json.loads(APPROVAL_RETRY_CATALOG.read_text(encoding="utf-8"))
 
 
-def test_lane_catalog_carries_an_identical_a_reworded_and_an_unbindable_retry_case():
+def test_lane_catalog_carries_the_pinned_reworded_unbindable_and_environment_dump_cases():
     scenarios = load_catalog(APPROVAL_RETRY_CATALOG)
     by_id = {scenario.id: scenario for scenario in scenarios}
     assert set(by_id) == {
         "approved-retry-identical-command",
+        "approved-retry-env-prefixed-command",
         "approved-retry-reworded-command",
         "approved-retry-unbindable-command",
+        "approved-retry-environment-dump",
     }
     for scenario in scenarios:
         assert scenario.oracle == "approved-retry"
@@ -53,7 +55,18 @@ def test_lane_catalog_carries_an_identical_a_reworded_and_an_unbindable_retry_ca
     # for it would defeat the lane.
     assert by_id["approved-retry-identical-command"].commands == ("ls -la",)
     assert by_id["approved-retry-unbindable-command"].commands == ("git status --short",)
+    assert by_id["approved-retry-env-prefixed-command"].commands == ("LC_ALL=C ls -la",)
     assert by_id["approved-retry-reworded-command"].commands == ()
+    # A bare `env` prints the environment and runs nothing, and Guard refused it
+    # outright rather than queueing a row, so the operator had nothing to approve
+    # and the agent had no way forward. This lane is the only one that tells an
+    # unapprovable refusal apart from a review: a case that is merely stopped
+    # passes every single-shot lane.
+    # `env -i` clears the environment rather than printing it: the harness CLI
+    # is handed its own provider login and its tool children inherit it, and
+    # this lane's transcripts are packed into the public evidence bundle, so
+    # the case must not ask a model to print the environment it runs in.
+    assert by_id["approved-retry-environment-dump"].commands == ("env -i",)
 
 
 def test_core_catalog_never_carries_the_lane_oracle():
@@ -281,7 +294,7 @@ def _lane_case() -> dict:
 
 
 def _lane_scenario() -> Scenario:
-    return load_catalog(APPROVAL_RETRY_CATALOG)[0]
+    return next(s for s in load_catalog(APPROVAL_RETRY_CATALOG) if s.commands == ("git status --short",))
 
 
 @pytest.mark.parametrize(

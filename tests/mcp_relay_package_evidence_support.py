@@ -33,6 +33,7 @@ PATH = "/usr/bin:/bin"
 def _decision(action: str = "allow", **fields: object) -> dict[str, object]:
     return {
         "action": action,
+        "policy_action": action,
         "source": "policy",
         "signals": ["tool signal"],
         "summary": "summary",

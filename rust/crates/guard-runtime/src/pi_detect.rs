@@ -15,6 +15,7 @@ use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 
 use super::aibom_paths::{exists, is_dir, is_file, resolve};
+use super::claude_code_config::mcp_server_artifacts;
 use super::context_digest::python_strip;
 use super::pi_glob::{expand_user, glob, has_magic, rglob, ERR_NAME};
 use super::pyjson::{parse_marking_lone_surrogates, JsonFailure, PyVal, LONE_SURROGATE_MARK};
@@ -30,6 +31,11 @@ const ERR_PATH: &str = "native_runner_authority_pi_path_unresolvable";
 const EXTENSION_SUFFIXES: [&str; 6] = [".ts", ".js", ".mts", ".cts", ".mjs", ".cjs"];
 const THEME_SUFFIXES: [&str; 5] = [".json", ".js", ".ts", ".yaml", ".yml"];
 const REMOTE_PREFIXES: [&str; 5] = ["npm:", "git:", "http://", "https://", "ssh://"];
+/// The files Oh My Pi loads MCP servers from in its agent and project
+/// directories. A name in `mcp.json` shadows the same name in `.mcp.json`.
+/// A file that cannot be read whole lists no servers rather than failing the
+/// detection, so it never hides the extensions and skills found beside it.
+const OMP_MCP_FILES: [&str; 2] = ["mcp.json", ".mcp.json"];
 
 /// The four resource kinds, with their default directory and the file test
 /// for a configured file or a walked entry.
@@ -403,6 +409,44 @@ impl Detection<'_> {
         }
         Ok(())
     }
+
+    /// Oh My Pi's `mcpServers`, from the files in `OMP_MCP_FILES`.
+    fn omp_mcp_servers(
+        &mut self,
+        root: &Path,
+        scope: &str,
+        id_scope: &str,
+    ) -> Result<(), &'static str> {
+        let harness = self.harness;
+        for name in OMP_MCP_FILES {
+            let path = root.join(name);
+            let fs_path = self.fs(&path)?;
+            if !is_file(&fs_path) {
+                continue;
+            }
+            // `mcp` is the artifact family policy scopes recognize for a
+            // server, as in Claude Code's ids.
+            let artifacts = settings_payload(&fs_path).and_then(|payload| {
+                mcp_server_artifacts(&Scope { harness, scope }, &path, &payload, |server| {
+                    format!("{harness}:{id_scope}:mcp:{server}")
+                })
+            });
+            let Ok(artifacts) = artifacts else {
+                continue;
+            };
+            if artifacts.is_empty() {
+                continue;
+            }
+            self.found(&path)?;
+            for artifact in artifacts {
+                let id = artifact["artifact_id"].as_str().unwrap_or_default();
+                if self.seen.insert(id.to_owned()) {
+                    self.artifacts.push(artifact);
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(crate) fn detect(args: &Value) -> KindResult {
@@ -437,6 +481,9 @@ pub(crate) fn detect(args: &Value) -> KindResult {
             field("id_scope")?,
         );
         detection.settings(&path, scope, id_scope)?;
+        if harness == "omp" {
+            detection.omp_mcp_servers(&path, scope, id_scope)?;
+        }
         for resource in Resource::ALL {
             let directory = path.join(resource.key());
             detection.resource_tree(resource, &directory, scope, id_scope, &directory)?;

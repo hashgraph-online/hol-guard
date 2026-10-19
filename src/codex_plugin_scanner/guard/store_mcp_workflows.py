@@ -4,44 +4,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from hashlib import sha256
-
-from .runtime.composio_workflows import ComposioWorkflowProposal
-
-
-def write_workflow_proposals(
-    connection: sqlite3.Connection,
-    cli_id: str,
-    identity_hash: str,
-    proposals: tuple[ComposioWorkflowProposal, ...],
-    *,
-    seen_at: str,
-) -> None:
-    if len(proposals) > 50:
-        raise ValueError("provider_workflow_capacity")
-    for proposal in proposals:
-        raw = json.dumps(
-            {
-                "primary": proposal.primary,
-                "supporting": proposal.supporting,
-                "guidance_present": proposal.guidance_present,
-            },
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        digest = sha256((identity_hash + "\n" + raw).encode()).hexdigest()
-        connection.execute(
-            """insert into local_mcp_workflow_proposal values (?, ?, ?, ?, ?)
-               on conflict(cli_id, identity_hash, proposal_id) do update set seen_at = excluded.seen_at""",
-            (cli_id, identity_hash, digest, raw, seen_at),
-        )
-    # Retention only discards advisory history, never grants or action/schema evidence.
-    connection.execute(
-        """delete from local_mcp_workflow_proposal where cli_id = ? and proposal_id not in (
-           select proposal_id from local_mcp_workflow_proposal where cli_id = ? and identity_hash = ?
-           order by seen_at desc, proposal_id limit 50)""",
-        (cli_id, cli_id, identity_hash),
-    )
 
 
 def read_workflow_proposals(connection: sqlite3.Connection, cli_id: str, *, offset: int = 0) -> dict[str, object]:

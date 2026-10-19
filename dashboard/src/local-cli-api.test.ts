@@ -11,6 +11,7 @@ import {
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  readJson,
   preferredPackageScriptExtension,
   seenSuggestionMeta,
   suggestedCustomExtensions,
@@ -22,6 +23,7 @@ import {
   suggestedSeenExtensions,
   waitForMcpDiscoveryJob,
 } from "./local-cli-api";
+import { packageScriptQueryFrom } from "./protection-center/add-custom-extension-project";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
 import { fetchLocalCliApi } from "./guard-api";
 
@@ -304,6 +306,11 @@ assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "guard:audit").map((entry) => entry.name),
   ["guard:reddit-targeting:audit"],
 );
+assert.equal(packageScriptQueryFrom("guard:reddit", packageScripts.commands), "guard:reddit");
+assert.equal(packageScriptQueryFrom("no-such-script", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("guard:audit", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("npm run", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("  ", packageScripts.commands), "");
 assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "npm run").map((entry) => entry.name),
   ["guard:reddit-targeting:audit", "build"],
@@ -398,4 +405,12 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
   }
   assert.match(requested, /\/v1\/local-clis\/forget$/);
   await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}
+
+{
+  const failure = (status: number, body: unknown) => readJson(new Response(JSON.stringify(body), { status }));
+  await assert.rejects(failure(401, { error: "unauthorized" }), /could not confirm this dashboard session\. Reload this page/);
+  await assert.rejects(failure(401, { error: "unauthorized", message: " " }), /could not confirm this dashboard session/);
+  await assert.rejects(failure(409, { error: "revision_conflict", message: "Reload first." }), /Reload first\./);
+  await assert.rejects(failure(500, { error: "internal" }), /could not update this custom extension/);
 }

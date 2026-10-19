@@ -84,7 +84,7 @@ def test_cli_rejects_empty_distribution_directory(tmp_path):
     assert "contains no wheels" in result.stderr
 
 
-@pytest.mark.parametrize("megabytes,expected", [(1, 0), (42, 1)])
+@pytest.mark.parametrize("megabytes,expected", [(1, 0), (43, 1)])
 def test_cli_native_gate_reuses_binaries_without_building(tmp_path, megabytes, expected):
     (tmp_path / "hol-guard-runtime.exe").write_bytes(b"x" * megabytes * 1024 * 1024)
     script = Path(__file__).resolve().parents[2] / "scripts/ci/check_wheel_size.py"

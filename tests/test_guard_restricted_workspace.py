@@ -51,6 +51,8 @@ def plan(workspace: Path, text: str = COMMAND, **changes: object) -> dict[str, o
         "prefix_command": None,
         "native_suffix": None,
         "denied_capabilities": [],
+        "grant_identity_hash": None,
+        "capabilities": [],
     }
     return value | changes
 
@@ -134,7 +136,7 @@ def test_a_workspace_receipt_runs_shapes_the_wrapper_cannot_peel(
                 timeout_seconds=20,
                 authorize=lambda original, denied=denied: denied,
             )
-        assert error.value.reason_code == "contained_test_authorization_failed"
+        assert error.value.reason_code == "contained_run_authorization_failed"
     assert len(ran) == 1
 
 

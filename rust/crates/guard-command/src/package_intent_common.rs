@@ -283,6 +283,11 @@ pub struct PackageIntent {
     pub execution_context_hashes: Vec<String>,
     pub execution_context_cwds: Vec<String>,
     pub execution_context_reason_codes: Vec<String>,
+    /// Whether this is a routine local JS runner already bound to local
+    /// project state: declared, installed and locked at one version. Computed
+    /// by the parser beside the file reads it depends on; it is not a parsed
+    /// input.
+    pub routine_local_runner: bool,
 }
 
 impl PackageIntent {
@@ -325,6 +330,10 @@ impl PackageIntent {
         payload.insert(
             "execution_context_reason_codes".to_owned(),
             json!(self.execution_context_reason_codes),
+        );
+        payload.insert(
+            "routine_local_runner".to_owned(),
+            json!(self.routine_local_runner),
         );
         Value::Object(payload)
     }
@@ -2608,6 +2617,7 @@ mod tests {
             execution_context_hashes: Vec::new(),
             execution_context_cwds: Vec::new(),
             execution_context_reason_codes: Vec::new(),
+            routine_local_runner: false,
         };
         let artifact =
             build_package_request_artifact("claude", &intent, "settings.json", "workspace");

@@ -15,6 +15,10 @@ pub struct PathContext<'a> {
     /// No inherited npm or Node variable can move npm's registry, config
     /// files or loaded code. Literal contexts leave this false.
     pub npm_config_inert: bool,
+    /// No inherited `PIP_*` variable and no redirected user configuration
+    /// directory can add an index query, a log file or another option to a
+    /// pip command that names none. Literal contexts leave this false.
+    pub pip_config_inert: bool,
     /// The shell expands `~` to `home_dir`: its HOME names the same
     /// directory. Literal contexts leave this false.
     pub shell_home_matches: bool,
@@ -30,13 +34,19 @@ pub struct PathContext<'a> {
 
 mod contained_wrapper;
 pub(crate) mod curl_reads;
+pub(crate) mod dd_reads;
+mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
 pub(crate) mod port_probes;
 mod workspace_contained;
+/// The package firewall's extensions, whose permission marks which
+/// ecosystem's manager ran rather than a risk the run carries.
+pub(crate) use workspace_contained::package::PACKAGE_EXTENSIONS;
 #[cfg(unix)]
 pub(crate) use workspace_contained::Shape;
 #[cfg(unix)]
@@ -52,14 +62,18 @@ mod brace_words;
 mod brew_reads;
 mod bun_eval;
 mod chain_temporary;
+mod clone_siblings;
 mod compound_reason;
 mod fanout_reads;
 mod find_reads;
 mod for_loop_unroll;
+pub(crate) mod git_apply_check;
 pub(crate) mod git_branch_listing;
+pub(crate) mod git_clean_preview;
 pub(crate) mod git_clone_local;
 mod git_config;
 pub(crate) mod git_config_reads;
+mod git_config_trust;
 pub(crate) mod git_grep;
 pub(crate) mod git_hash_object;
 mod git_init_chain;
@@ -70,10 +84,15 @@ mod git_reads;
 mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
+pub(crate) mod git_stash_reads;
+pub(crate) mod git_tag_listing;
 mod repo_create_reason;
 mod root_removal;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
+mod git_history_reads;
+mod git_hook_files;
+pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
 mod git_push;
@@ -89,6 +108,8 @@ mod lookup_reads;
 mod metadata_reads;
 mod npm_environment;
 mod npm_reads;
+mod npmrc_keys;
+mod pip_reads;
 mod postgres_reads;
 mod process_stops;
 mod pytest_contained;
@@ -106,7 +127,7 @@ mod read_paths;
 mod source_reads;
 use source_reads::{plain_source_code_path, sensitive_command_input, source_file_read_segment};
 mod recursive_copy;
-mod restricted_tests;
+mod restricted_test_commands;
 mod rust_toolchain;
 mod rustfmt_writes;
 mod safe_links;
@@ -114,7 +135,9 @@ pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
 mod script_content;
+pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
+mod search_pattern_clearance;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
@@ -146,6 +169,7 @@ pub mod generic;
 mod package_scripts_disabled;
 pub use package_scripts_disabled::{held_command_installs, no_script_install_command};
 
+pub use generic::bindable_setting;
 pub use generic::evaluate_pre_tool_envelope_with_context;
 pub use generic::evaluate_pre_tool_envelope_with_execution_context;
 pub use generic::evaluate_pre_tool_envelope_with_extensions;
@@ -156,7 +180,9 @@ pub use git_push::{
 pub use safe_scalar::PsqlEnvironment;
 #[cfg_attr(not(unix), allow(unused_imports))]
 pub(crate) use script_content::launch_loopback_ports;
-pub(crate) use script_content::{sole_program_sources, sourced_program_sources};
+pub(crate) use script_content::{
+    activation_script_text, sole_program_sources, sole_sourcing_sources, sourced_program_sources,
+};
 pub(crate) use segment_proof::{benign_command_segments, without_stderr_merge};
 pub(crate) use worktree_add::new_checkout_route;
 pub(crate) use worktree_add::verified_leading_cd;
@@ -617,6 +643,40 @@ pub fn evaluate_pre_tool(request: &CommandModelRequestV1) -> Result<PreToolDecis
     evaluate_pre_tool_with_context(request, None, None)
 }
 
+/// The same evaluation, told where the command runs.
+///
+/// Every rule that reads a path needs the working directory and the home
+/// directory to resolve `../sibling` and `~/Code`, and refuses the command
+/// when it has neither. A caller that knows them — the hook that received
+/// them from the harness, `guard inspect`, the dashboard's console — passes
+/// them here, and gets the decision the enforced hook lane gives the same
+/// command rather than the one a context-free screen is left with.
+pub fn evaluate_pre_tool_in(
+    request: &CommandModelRequestV1,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+) -> Result<PreToolDecisionV1, String> {
+    // Several proofs answer for what the command inherits: whether a
+    // `RIPGREP_CONFIG_PATH` can prepend options to `rg`, whether an npm or
+    // rustup variable can move what a tool loads, which HOME a `~` expands
+    // from. A caller that answers for another process's shell — a resident
+    // runtime started with its own sanitized environment, a one-shot
+    // evaluation of a request — knows none of that from its own variables,
+    // so an unstamped request is told so rather than being answered from
+    // this process. An environment with no valid shape is how the contract
+    // spells that, and every rule that needs one of those proofs keeps its
+    // review.
+    let unknown = guard_contracts::GuardExecutionEnvironmentV1::unavailable();
+    evaluate_pre_tool_with_execution_context(
+        request,
+        home_dir,
+        cwd,
+        None,
+        Some(execution_environment.unwrap_or(&unknown)),
+    )
+}
+
 pub(super) fn evaluate_pre_tool_with_context(
     request: &CommandModelRequestV1,
     home_dir: Option<&str>,
@@ -972,6 +1032,7 @@ fn evaluate_single_command(
         .or_else(|| repo_create_reason::created_remote_push_reason(&model))
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
+        .or_else(|| search::grep::sensitive_reach_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the

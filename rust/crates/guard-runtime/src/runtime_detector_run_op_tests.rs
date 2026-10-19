@@ -135,6 +135,26 @@ fn unknown_and_missing_fields_are_rejected() {
     assert!(serde_json::from_value::<RuntimeDetectorRunRequestV1>(wire).is_err());
 }
 
+const PARITY_ATTEMPTS: u32 = 5;
+
+/// Whether every difference is `safe-decode.content` reporting no signals
+/// where the recorded run found some, with the rest of its result unchanged:
+/// the result of a run that ran out of decode time.
+fn only_decode_budget_stalls(actual: &[Value], expected: &[Value]) -> bool {
+    actual.len() == expected.len()
+        && actual != expected
+        && actual.iter().zip(expected).all(|(got, want)| {
+            if got == want {
+                return true;
+            }
+            let mut refilled = got.clone();
+            refilled["signals"] = want["signals"].clone();
+            want["detector_id"] == "safe-decode.content"
+                && got["signals"].as_array().is_some_and(Vec::is_empty)
+                && refilled == *want
+        })
+}
+
 #[test]
 fn parity_vectors_match_the_recorded_python_outputs() {
     let fixture = crate::store_vectors_support_tests::gunzip_json(include_bytes!(
@@ -156,17 +176,31 @@ fn parity_vectors_match_the_recorded_python_outputs() {
                 .unwrap(),
             enabled_categories: serde_json::from_value(wire["enabled_categories"].clone()).unwrap(),
         };
-        let result = evaluate(&request);
-        let actual: Option<Vec<Value>> = result.payload.map(|payload| {
-            payload["detectors"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .cloned()
-                .map(without_elapsed)
-                .collect()
-        });
         let expected = vector["expected"].as_array().unwrap();
+        // `safe-decode.content` keeps Python's 50 ms decode budget, and a run
+        // that overshoots it decodes nothing and reports no signals. A loaded
+        // runner can stall one run past it, so that one shape, and only that
+        // one, is tried again. Any other difference fails on the first run.
+        let mut attempts = 0;
+        let (code, actual) = loop {
+            attempts += 1;
+            let result = evaluate(&request);
+            let actual: Option<Vec<Value>> = result.payload.map(|payload| {
+                payload["detectors"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .cloned()
+                    .map(without_elapsed)
+                    .collect()
+            });
+            let stalled = actual
+                .as_ref()
+                .is_some_and(|actual| only_decode_budget_stalls(actual, expected));
+            if !stalled || attempts == PARITY_ATTEMPTS {
+                break (result.code, actual);
+            }
+        };
         match &actual {
             Some(actual) if actual == expected => {}
             Some(actual) if actual.len() == expected.len() => {
@@ -182,7 +216,7 @@ fn parity_vectors_match_the_recorded_python_outputs() {
             _ => mismatches.push(format!(
                 "{}: code {} expected {} got {:?}",
                 vector["name"],
-                result.code,
+                code,
                 Value::Array(expected.clone()),
                 actual.map(Value::Array)
             )),

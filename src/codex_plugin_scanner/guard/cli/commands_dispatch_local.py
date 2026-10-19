@@ -118,9 +118,11 @@ def _run_guard_execute_contained_test_command(
     store: GuardStore | None = None,
     **_kwargs: object,
 ) -> int:
+    from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
     from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
     from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
     from ..runtime.restricted_pytest import RestrictedPytestError
+    from ..runtime.restricted_workspace_grant_lookup import grant_store
     from .commands_hook_native_authority import try_native_hook_authority
 
     if guard_home is None or workspace is None or context is None or store is None:
@@ -142,24 +144,32 @@ def _run_guard_execute_contained_test_command(
             Path(args.request_file), str(args.request_sha256), workspace=workspace,
         )
         request_validated = True
-        return run_authorized_contained_test(
-            payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
-            home_dir=context.home_dir,
-            authorize=lambda original: try_native_hook_authority(
-                # The adapter snapshots the hook payload before stamping it, so
-                # declare the environment this process will launch the command
-                # from rather than letting Rust fall back to the resident's.
-                payload={
-                    **original,
-                    "guard_containment_receipt_only": True,
-                    HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
-                },
-                harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
-                guard_home=guard_home,
-                workspace=execution_workspace(original),
-                store=store,
-            ),
-        )
+        # A CLI that Desktop has replaced cannot reach the resident that
+        # follows the new Core. Say so now instead of after every
+        # acknowledgement window has run out.
+        superseded = superseded_desktop_core()
+        if superseded is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
+        # The workspace sandbox asks this store for the grant it is widened by.
+        with grant_store(store):
+            return run_authorized_contained_test(
+                payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
+                home_dir=context.home_dir,
+                authorize=lambda original: try_native_hook_authority(
+                    # The adapter snapshots the hook payload before stamping it, so
+                    # declare the environment this process will launch the command
+                    # from rather than letting Rust fall back to the resident's.
+                    payload={
+                        **original,
+                        "guard_containment_receipt_only": True,
+                        HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
+                    },
+                    harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
+                    guard_home=guard_home,
+                    workspace=execution_workspace(original),
+                    store=store,
+                ),
+            )
     except RestrictedPytestError as error:
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
@@ -709,6 +719,10 @@ def _run_guard_install_command(
         return 2
     if native_repair is not None:
         payload["native_runtime_repair"] = native_repair
+    if not bool(getattr(args, "dry_run", False)):
+        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
     _emit("install", payload, getattr(args, "json", False))
     return 0
 

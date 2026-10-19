@@ -191,3 +191,19 @@ def test_build_review_leaves_out_the_install_hint() -> None:
         approval_queued=True,
     )
     assert "--ignore-scripts" in install
+
+
+def test_direct_read_review_leaves_out_the_search_advice() -> None:
+    read = (
+        "HOL Guard requires review before this file read can execute. `src/lib/auth` "
+        "is named like a credential store, so Guard holds a read of it."
+    )
+    text = safe_alternative_reason(read, reason_code="native_file_read_review", approval_queued=True)
+    assert text.startswith(read)
+    assert "A search is checked" not in text
+    search = safe_alternative_reason(
+        "HOL Guard requires review before this file action can execute.",
+        reason_code="native_file_read_review",
+        approval_queued=True,
+    )
+    assert "A search is checked" in search

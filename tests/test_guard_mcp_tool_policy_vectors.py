@@ -146,6 +146,7 @@ def _build(recipe: dict[str, object], guard_home: Path):
 def _expected_view(decision: ToolCallDecision) -> dict[str, object]:
     return {
         "action": decision.action,
+        "policy_action": decision.policy_action,
         "source": decision.source,
         "signals": list(decision.signals),
         "summary": decision.summary,

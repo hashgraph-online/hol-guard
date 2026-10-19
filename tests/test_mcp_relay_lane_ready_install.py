@@ -118,7 +118,9 @@ class _Install:
             f"[mcp_servers.canary]\ncommand = {json.dumps(sys.executable)}\nargs = [{json.dumps(str(server))}]\n",
             encoding="utf-8",
         )
-        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH"}
+        # A source checkout names its source compiler; the daemon asks it
+        # whether this installation carries a release bundle.
+        keep = {"PATH", "LANG", "LC_ALL", "TMPDIR", "PYTHONPATH", "HOL_GUARD_NATIVE_SOURCE_COMPILER"}
         if os.name == "nt":
             keep |= {"PATHEXT", "SYSTEMROOT", "COMSPEC", "TEMP", "TMP"}
         self.env = {key: value for key, value in os.environ.items() if key in keep}

@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import os
-import shlex
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
@@ -43,6 +42,7 @@ from ..local_supply_chain import (
 )
 from ..models import GuardAction
 from ..native_hook_artifact_compose import NativeHookComposeError, _answer_valid, native_hook_compose
+from ..native_shim_admin import NativeShimAdminError
 from ..package_execution_context import PackageExecutionContext, build_package_execution_context
 from ..protection_posture import is_high_confidence
 from ..runtime.approval_context import approval_context_tokens_validation_reason
@@ -57,7 +57,7 @@ from ..runtime.approval_reuse import (
 )
 from ..runtime.github_workflow_runtime import resolved_github_workflow_capability_preflight
 from ..runtime.signals import GuardRiskSignalV3
-from ..shims import package_shim_status
+from ..shims import package_shim_digest_binding_sink
 from ..trusted_local_tools import (
     LocalToolApprovalEligibility,
     local_tool_approval_eligibility,
@@ -119,28 +119,6 @@ def _compose_reuse(
         return None, approval_reuse_authority_unavailable(current_action)
 
 
-def _runtime_external_archive_command_matches_executable(raw_command: str | None, executable: str) -> bool:
-    if (
-        raw_command is None
-        or os.name == "nt"
-        or "`" in raw_command
-        or "$(" in raw_command
-        or "\n" in raw_command
-        or "\r" in raw_command
-    ):
-        return False
-    lexer = shlex.shlex(raw_command, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    lexer.commenters = ""
-    try:
-        tokens = list(lexer)
-    except ValueError:
-        return False
-    if not tokens or tokens[0] != executable:
-        return False
-    return not any(token and all(character in "();<>|&" for character in token) for token in tokens)
-
-
 def _runtime_external_archive_has_digest_binding_sink(
     *,
     artifact: GuardArtifact,
@@ -148,44 +126,32 @@ def _runtime_external_archive_has_digest_binding_sink(
     raw_command: str | None,
     runtime_workspace: Path | None,
 ) -> bool:
+    """Does a verified shim own this external-archive download's approval?
+
+    The shim binds the approval to the digest of the bytes it fetches itself,
+    so it owns the approval only when the command is a bare launch of that
+    shim. The resident parses the command and resolves both paths; this side
+    only names the manager and executable the artifact carries. An unreachable
+    resident answers no, which leaves the approval with the user rather than
+    with an unverified shim.
+    """
+
     metadata = artifact.metadata if isinstance(artifact.metadata, dict) else {}
     manager = _optional_string(metadata.get("package_manager"))
     executable = _optional_string(metadata.get("package_executable"))
     if manager is None or executable is None:
         return False
-    if not any(separator in executable for separator in ("/", "\\")):
-        return False
-    if not _runtime_external_archive_command_matches_executable(raw_command, executable):
-        return False
     try:
-        status = package_shim_status(context, path_env=os.environ.get("PATH", ""))
-    except (OSError, RuntimeError, ValueError):
+        return package_shim_digest_binding_sink(
+            context,
+            manager=manager,
+            executable=executable,
+            command=raw_command,
+            workspace_dir=runtime_workspace,
+            path_env=os.environ.get("PATH", ""),
+        )
+    except NativeShimAdminError:
         return False
-    details = status.get("manager_details")
-    if not isinstance(details, list):
-        return False
-    detail = next(
-        (
-            item
-            for item in details
-            if isinstance(item, Mapping) and item.get("manager") == manager and item.get("integrity") == "ok"
-        ),
-        None,
-    )
-    if detail is None:
-        return False
-    shim_path_value = detail.get("shim_path")
-    if not isinstance(shim_path_value, str):
-        return False
-    try:
-        shim_path = Path(shim_path_value).resolve(strict=True)
-        candidate = Path(executable).expanduser()
-        if not candidate.is_absolute():
-            candidate = (runtime_workspace or Path.cwd()) / candidate
-        resolved_executable = candidate.resolve(strict=True)
-    except (OSError, RuntimeError):
-        return False
-    return resolved_executable == shim_path
 
 
 def _stamp_runtime_posture_metadata(artifact: object, signals: object) -> None:
@@ -202,11 +168,6 @@ def _stamp_runtime_posture_metadata(artifact: object, signals: object) -> None:
         ]
         if any(getattr(signal, "confidence", None) == "strong" for signal in signals):
             metadata["risk_confidence"] = "strong"
-    action_class = metadata.get("action_class")
-    if isinstance(action_class, str):
-        lowered = action_class.lower()
-        if any(token in lowered for token in ("launch agent", "login item", "launchctl", "cron", "systemd", "launchd")):
-            metadata["persistence_writes_launch_agent"] = True
 
 
 def _embedded_script_evidence(command_text: str) -> list[dict[str, object]]:

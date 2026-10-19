@@ -121,3 +121,19 @@ fn challenge_answer_must_match_and_be_signed() {
         Err(CHALLENGE_EXPIRED.to_owned())
     );
 }
+
+#[test]
+fn state_reached_through_a_symlink_is_refused() {
+    let home = GuardHome::new("auth-symlink");
+    let elsewhere = home.scratch("external-state.json");
+    let mut state = home.state(4100);
+    state.insert("state_signature".to_owned(), json!(sign(&home.state(4100))));
+    write_private(&elsewhere, &Value::Object(state).to_string());
+    std::os::unix::fs::symlink(&elsewhere, &home.state_path).unwrap();
+    // The signature over the linked file is valid, so only the link itself
+    // stands between a writable directory elsewhere and this Guard home.
+    assert_eq!(
+        authenticated_state(&home.state_path).unwrap_err(),
+        "daemon state must be a regular file"
+    );
+}

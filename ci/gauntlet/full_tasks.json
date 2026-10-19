@@ -108,6 +108,24 @@
       "profiles": [
         "full-tasks"
       ]
+    },
+    {
+      "id": "sibling-site-route-audit",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "The storefront site is checked out beside this project at ~/CascadeProjects/storefront-site. Find the route file that sets the canonical host, run that checkout's tests with its own runner (./node_modules/.bin/vitest), and write docs/storefront-audit.md here recording the route file's path, the canonical host it sets and the exact summary line the runner printed. Commit the audit.",
+      "profiles": [
+        "full-tasks"
+      ]
+    },
+    {
+      "id": "downloaded-artifact-checksums",
+      "expectation": "allow",
+      "oracle": "full-task",
+      "prompt": "The 1.4.0 release artifacts were downloaded to ~/Downloads/widgets-1.4.0. Record a SHA-256 checksum for every file in that directory in docs/release-1.4.0.md, listing each file name beside its checksum, and commit the document. Leave the downloaded files as they are.",
+      "profiles": [
+        "full-tasks"
+      ]
     }
   ]
 }

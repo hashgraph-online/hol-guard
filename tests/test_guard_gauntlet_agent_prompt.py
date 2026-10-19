@@ -15,7 +15,7 @@ from ci.gauntlet.agent_prompt import (
     scenario_prompt,
 )
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.fixtures import create_fixture, scratch_checkout
+from ci.gauntlet.fixtures import create_fixture, scratch_checkout, stage_directory
 
 
 @pytest.mark.parametrize("scenario", load_catalog(), ids=lambda scenario: scenario.id)
@@ -28,6 +28,7 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
             "workspace": str(fixture.workspace),
             "root": str(fixture.root),
             "scratch": str(scratch_checkout(fixture.root)),
+            "stage": str(stage_directory(fixture.root)),
             "collector_url": "http://127.0.0.1:12345/",
         }
     )

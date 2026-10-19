@@ -17,7 +17,10 @@ from typing import Any, TextIO, cast
 
 from ..approval_gate import ApprovalGateError
 from ..business_policy_document_import import has_business_rules
+from ..native_command_policy_decision import TOO_LARGE as COMMAND_TOO_LARGE
+from ..native_command_policy_decision import CommandPolicyDecisionUnavailableError
 from ..native_policy_document import NativePolicyDocumentError
+from ..native_policy_document_decision import TOO_LARGE, PolicyDocumentDecisionUnavailableError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..policy_authority import PolicyAuthorityError
 from ..policy_decision_engine import PolicyEventError, compile_local_rows, decide_command, decide_rows, parse_event
@@ -35,7 +38,6 @@ from ..policy_tests_runner import (
     run_policy_tests,
     stored_tests,
 )
-from ..runtime.command_expression import CommandExpressionError
 from ..store import GuardStore
 
 FILE_COMMANDS = frozenset({"init", "validate", "test", "check"})
@@ -190,6 +192,26 @@ def _render_test_run(file: str, run: PolicyTestRun) -> str:
     return "\n".join(lines)
 
 
+def _undecided(
+    error: PolicyDocumentDecisionUnavailableError | CommandPolicyDecisionUnavailableError,
+) -> dict[str, object]:
+    """Say which side could not decide: an absent runtime, or a refused document.
+
+    A document the runtime declines to rank names what it declined, and telling
+    its author to fix an unavailable runtime instead sends them after the wrong
+    thing entirely.
+    """
+
+    subject = "command" if isinstance(error, CommandPolicyDecisionUnavailableError) else "document"
+    if error.code in {TOO_LARGE, COMMAND_TOO_LARGE}:
+        message = "This document carries more rules than one decision can ask about."
+    elif error.refused:
+        message = f"The native runtime refused to decide this {subject} ({error.code})."
+    else:
+        message = "The native runtime is unavailable, so this cannot be decided here."
+    return {"error": error.code, "message": message}
+
+
 def _test_once(args: Any, file: str, output_stream: TextIO | None) -> int:
     as_json = wants_json(args)
     document = _load_valid_document(file, output_stream, as_json=as_json)
@@ -197,6 +219,10 @@ def _test_once(args: Any, file: str, output_stream: TextIO | None) -> int:
         return 4
     try:
         run = run_policy_tests(document, now=_now())
+    except PolicyDocumentDecisionUnavailableError as error:
+        # The runtime ranks the rules; without it there is no second opinion to fall back on.
+        _emit(output_stream, _undecided(error), as_json=as_json)
+        return 4
     except PolicyTestsInvalidError as error:
         payload: dict[str, object] = {
             "error": error.code,
@@ -298,13 +324,13 @@ def _run_check(args: Any, output_stream: TextIO | None, input_text: str | None) 
             except ValueError as error:
                 raise PolicyEventError("event_invalid_json", "The event is not valid JSON.") from error
             decision = decide_rows(compile_local_rows(document), parse_event(value), now=_now())
+    except (PolicyDocumentDecisionUnavailableError, CommandPolicyDecisionUnavailableError) as error:
+        # The runtime matches the patterns and ranks the rules; without it there is no second
+        # opinion to fall back on.
+        _emit(output_stream, _undecided(error), as_json=as_json)
+        return 4
     except PolicyEventError as error:
         _emit(output_stream, {"error": error.code, "message": str(error)}, as_json=as_json)
-        return 4
-    except CommandExpressionError as error:
-        _emit(
-            output_stream, {"error": str(error), "message": f"The command cannot be checked: {error}."}, as_json=as_json
-        )
         return 4
     decision["document"] = {"id": document.metadata.id, "digest": policy_document_digest(document)}
     _emit(output_stream, decision, as_json=as_json, text=_render_decision(decision))

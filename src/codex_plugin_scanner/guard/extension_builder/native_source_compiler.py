@@ -17,7 +17,7 @@ import stat
 import subprocess
 import tempfile
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager, suppress
 from importlib import metadata
 from pathlib import Path
@@ -212,6 +212,15 @@ def find_packaged_source_compiler() -> Path:
     return _NATIVE_PACKAGE / _COMPILER_NAME
 
 
+def installed_compiler_identity() -> tuple[str, str]:
+    """Return release-bound source and implementation floors for data activation."""
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    return (
+        _hex(manifest["source_sha"], length=_SHA40, field="source SHA"),
+        _hex(manifest["implementation_digest"], length=_SHA64, field="implementation digest"),
+    )
+
+
 def _canonical_request(request: Mapping[str, object]) -> bytes:
     if not isinstance(request, Mapping):
         raise NativeSourceCompilerError("compiler request must be an object")
@@ -359,9 +368,12 @@ def run_source_compiler(
     digest: str | None = None,
     compiler: Path | None = None,
     timeout: float = _DEFAULT_TIMEOUT_SECONDS,
+    fetch: Callable[[dict[str, object]], bytes] | None = None,
 ) -> dict[str, object]:
     """Run one native source-compiler operation using bounded JSON stdin."""
-    if subcommand not in {"compile", "validate", "check", "test", "compare", "schema", "descriptor-schema"}:
+    operations = {"compile", "validate", "check", "test", "compare"}
+    operations.update({"schema", "descriptor-schema", "authoring-admission", "bundle-metadata", "bundle-compatibility"})
+    if subcommand not in operations:
         raise NativeSourceCompilerError("unsupported source compiler subcommand")
     if subcommand == "check":
         _hex(digest, length=_SHA64, field="program digest")
@@ -370,8 +382,7 @@ def run_source_compiler(
     if compiler is None and (
         configured_compiler := os.environ.get(_DEVELOPMENT_COMPILER_ENV) or os.environ.get(_TEST_COMPILER_ENV)
     ):
-        # Installed authoring must not bypass its packaged identity checks through
-        # either development or test environment configuration.
+        # Installed authoring cannot bypass packaged identity checks.
         if (_NATIVE_PACKAGE / _MANIFEST_NAME).is_file():
             raise NativeSourceCompilerError("compiler override is not permitted alongside a packaged compiler")
         compiler = Path(configured_compiler)
@@ -389,11 +400,35 @@ def run_source_compiler(
                 "compiler_sha256": hashlib.sha256(compiler_bytes).hexdigest(),
             },
         )
-    if subcommand in {"schema", "descriptor-schema"} and request is None:
-        payload = b""
-    else:
-        payload = _canonical_request(request or {})
-    with _verified_executable(compiler_bytes) as executable:
+    payload = b""
+    with (
+        _verified_executable(compiler_bytes) as executable,
+        tempfile.TemporaryDirectory(prefix="hol-guard-authoring-") as authoring_directory,
+    ):
+        from .bundle_baseline import admission_request, authoring_request
+
+        if subcommand == "bundle-compatibility":
+            from .metadata_index import exchange
+
+            return exchange(executable, subcommand, [request], Path(authoring_directory), fetch=fetch)
+
+        if subcommand == "authoring-admission":
+            return admission_request(
+                request,
+                executable,
+                installed=manifest is not None,
+                directory=Path(authoring_directory).resolve(),
+            )
+
+        request = authoring_request(
+            subcommand,
+            request,
+            executable,
+            installed=manifest is not None,
+            cache_directory=Path(authoring_directory).resolve(strict=True),
+        )
+        if request is not None or subcommand not in {"schema", "descriptor-schema"}:
+            payload = _canonical_request(request or {})
         arguments = [str(executable), subcommand]
         if subcommand == "check" and digest is not None:
             arguments.append(digest)
@@ -407,9 +442,7 @@ def run_source_compiler(
             and isinstance(build_request, Mapping)
             and build_request.get("base") == "packaged"
         ):
-            # Compact validation/fixture responses omit the base digest. Obtain that
-            # binding from the same verified executable and exact input, and
-            # require both native operations to identify the same program.
+            # Bind compact responses through compilation of the identical input.
             returncode, stdout, stderr = _run_bounded(
                 [str(executable), "compile"], _canonical_request(build_request), timeout=timeout
             )
@@ -419,11 +452,12 @@ def run_source_compiler(
             _hex(result_digest, length=_SHA64, field="program digest")
             if not isinstance(program, dict) or program.get("program_digest") != result_digest:
                 raise NativeSourceCompilerError("source compiler validation and compilation identities differ")
-    if manifest is not None and subcommand in {"compile", "validate", "check", "compare"}:
-        if any(
-            output.get("implementation_digest") != manifest.get("implementation_digest")
-            for output in (result, binding_result)
-        ):
+    if manifest is not None and (
+        subcommand in {"compile", "validate", "check", "compare"}
+        or (subcommand == "test" and binding_result is not result)
+    ):
+        outputs = (binding_result,) if subcommand == "test" else (result, binding_result)
+        if any(output.get("implementation_digest") != manifest.get("implementation_digest") for output in outputs):
             raise NativeSourceCompilerError("source compiler implementation identity does not match its manifest")
         if (
             isinstance(build_request, Mapping)
@@ -431,11 +465,30 @@ def run_source_compiler(
             and binding_result.get("base_program_digest") != manifest.get("base_program_digest")
         ):
             raise NativeSourceCompilerError("source compiler base program identity does not match its manifest")
-    if manifest is not None and subcommand == "test" and binding_result is not result:
-        if binding_result.get("implementation_digest") != manifest.get("implementation_digest"):
-            raise NativeSourceCompilerError("source compiler implementation identity does not match its manifest")
-        if binding_result.get("base_program_digest") != manifest.get("base_program_digest"):
-            raise NativeSourceCompilerError("source compiler base program identity does not match its manifest")
+    return result
+
+
+def check_pack_cache(directory: Path, expected_program: str, *, timeout: float = 60.0) -> dict[str, object]:
+    """Check prepared IR using the manifest-bound installed native executable.
+
+    This returns identities only. It neither signs a snapshot nor activates it.
+    """
+    _hex(expected_program, length=_SHA64, field="program digest")
+    manifest = _verify_manifest(_NATIVE_PACKAGE / _MANIFEST_NAME)
+    raw = _verify_compiler(_NATIVE_PACKAGE / _COMPILER_NAME, manifest)
+    with _verified_executable(raw) as executable:
+        returncode, stdout, stderr = _run_bounded(
+            [str(executable), "check-pack-cache", str(directory), expected_program], b"", timeout=timeout
+        )
+    result = _decode_output(stdout, returncode=returncode, stderr=stderr)
+    if (
+        result.get("schema") != "guard.command-pack-cache-check.v1"
+        or result.get("engine") != manifest["implementation_digest"]
+        or result.get("program_digest") != expected_program
+    ):
+        raise NativeSourceCompilerError("pack cache does not match the packaged native implementation")
+    for field in ("program_digest", "catalog_digest", "trust_digest"):
+        _hex(result.get(field), length=_SHA64, field=field)
     return result
 
 

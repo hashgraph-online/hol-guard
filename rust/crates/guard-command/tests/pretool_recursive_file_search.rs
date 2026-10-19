@@ -119,8 +119,8 @@ fn recursive_search_checks_every_reachable_path() {
     )
     .unwrap();
     std::fs::create_dir_all(root.join("unsafe-tests")).unwrap();
-    std::fs::write(root.join("unsafe-tests/.env"), "synthetic secret").unwrap();
-    std::fs::write(root.join(".env"), "synthetic secret").unwrap();
+    std::fs::write(root.join("unsafe-tests/.env"), "ordinary synthetic secret").unwrap();
+    std::fs::write(root.join(".env"), "ordinary synthetic secret").unwrap();
     std::os::unix::fs::symlink(root.join(".env"), root.join("src/alias.ts")).unwrap();
     std::os::unix::fs::symlink(root.join("__tests__"), root.join("test-alias")).unwrap();
     for harness in ["omp", "zcode"] {
@@ -280,7 +280,7 @@ fn recursive_search_source_globs_are_not_mistaken_for_env_files() {
         ("tests/deploy.test.ts", "ordinary"),
         ("tests/helpers.ts", "ordinary"),
         ("configured/app.test.ts", "ordinary"),
-        ("configured/.env", "TOKEN=synthetic"),
+        ("configured/.env", "TOKEN=ordinary"),
     ] {
         let file = root.join(path);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();

@@ -1,10 +1,11 @@
-//! Sibling repositories whose `.gitignore` re-includes a literal path, such
-//! as `.vscode/*` with `!.vscode/settings.json` or `*.log` with `!keep.log`.
-//! A negation that names an ordinary file cannot widen the search to a
-//! secret, so the search stays quiet; one that names a plainly ignored
-//! directory or a glob, or that re-includes a hidden entry holding a secret
-//! the search reaches, keeps its review. A rule naming a file that is not
-//! there, or one beside the directory being searched, decides nothing.
+//! Sibling repositories whose `.gitignore` re-includes a path, literal as in
+//! `.vscode/*` with `!.vscode/settings.json`, or globbed as in a JavaScript
+//! repository's `!src/icons/**/*.js`. A negation that names ordinary files
+//! cannot widen the search to a secret, so the search stays quiet; one that
+//! can name a plainly ignored directory, or that re-includes a hidden entry
+//! holding a secret the search reaches, keeps its review. A rule naming a
+//! file that is not there, or one beside the directory being searched,
+//! decides nothing.
 #![cfg(unix)]
 
 use crate::pretool_home_layout_reads::{assert_decision, layout, write};
@@ -77,8 +78,40 @@ fn a_double_star_negation_naming_an_ordinary_file_is_allowed() {
 }
 
 #[test]
+fn a_globbed_negation_naming_ordinary_files_is_allowed() {
+    // The shape a JavaScript repository writes: a vendored directory is
+    // ignored and one bundle of generated sources inside it is re-included.
+    // The pattern names `.js` files, so no hidden entry and no pruned
+    // directory is back in reach, and every search in the repository stays
+    // proven rather than the whole tree going to review over one rule.
+    let layout = layout("rg-sibling-negation-globbed-sources");
+    let sibling = layout.org.join("service-api");
+    write(
+        sibling.join(".gitignore"),
+        "node_modules\n*.log\n!src/components/icons/react-icons/**/*.js\n",
+    );
+    write(
+        sibling.join("src/components/icons/react-icons/fa/index.js"),
+        "// fixture\n",
+    );
+    write(sibling.join("src/app/page.tsx"), "// fixture\n");
+    write(sibling.join("__tests__/page.test.ts"), "// fixture\n");
+    write(sibling.join("node_modules/pkg/index.js"), "// fixture\n");
+    write(sibling.join(".DS_Store"), "fixture\n");
+    let cwd = layout.org.join("app-portal");
+    for command in [
+        "rg -n fixture ../service-api",
+        "rg -n fixture ../service-api/src",
+        "rg -ln fixture ../service-api/__tests__",
+        "rg -n fixture ~/Code/org/service-api/src/components",
+    ] {
+        assert_decision(&cwd, &layout.home, command, true);
+    }
+}
+
+#[test]
 fn sibling_search_whose_negations_could_reach_a_secret_is_reviewed() {
-    let cases: [(&str, &[(&str, &str)]); 10] = [
+    let cases: [(&str, &[(&str, &str)]); 14] = [
         (
             "env-example",
             &[
@@ -86,7 +119,49 @@ fn sibling_search_whose_negations_could_reach_a_secret_is_reviewed() {
                 (".env.example", "TOKEN=fixture\n"),
             ],
         ),
-        ("glob", &[(".gitignore", "*.pem\n!server*.pem\n")]),
+        // The glob re-includes a hidden key the search would then read.
+        (
+            "glob",
+            &[
+                (".gitignore", "*.pem\n!.server*.pem\n"),
+                (".server-prod.pem", "-----BEGIN FIXTURE-----\n"),
+            ],
+        ),
+        // The glob can name the pruned directory itself, so `rg` reads a
+        // subtree this walk never screened.
+        (
+            "glob-reaches-pruned",
+            &[
+                (".gitignore", "dist/\n!di*\n"),
+                ("dist/.env", "TOKEN=fixture\n"),
+            ],
+        ),
+        // A negated character class re-includes what the case-folded matcher
+        // would read as excluded, so the negation is not read at all.
+        (
+            "glob-negated-class",
+            &[
+                (".gitignore", ".*\n!.[!A-Z]*\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
+        // A POSIX class the matcher reads as a flat class is refused the same
+        // way.
+        (
+            "glob-posix-class",
+            &[
+                (".gitignore", ".*\n!.[[:alpha:]]*\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
+        // A hidden environment file a glob re-includes is still a secret.
+        (
+            "glob-hidden-env",
+            &[
+                (".gitignore", ".env*\n!.env.*\n"),
+                (".env.local", "TOKEN=fixture\n"),
+            ],
+        ),
         (
             "double-star",
             &[

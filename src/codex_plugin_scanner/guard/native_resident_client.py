@@ -42,13 +42,33 @@ run_isolated_hook_process = _legacy_run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _RESIDENT_REQUEST_LOG = "HOL_GUARD_RESIDENT_REQUEST_LOG"
+_BACKGROUND_REQUEST_LABEL: ContextVar[str | None] = ContextVar("_background_request_label", default=None)
+
+
+@contextlib.contextmanager
+def background_resident_requests(label: str):
+    """Name this thread's resident calls for the request log that counts them.
+
+    A daemon thread that drains its own queue spends round trips on its own
+    schedule, so no hook request waits on them. The budget test reads the log
+    to tell those apart from the calls a hook makes inline; without a name of
+    their own they would look like per-request growth. Production leaves the
+    log unset and nothing here runs.
+    """
+
+    token = _BACKGROUND_REQUEST_LABEL.set(label)
+    try:
+        yield
+    finally:
+        _BACKGROUND_REQUEST_LABEL.reset(token)
 
 
 def _record_resident_request(payload: bytes = b"") -> None:
     """Append one line when a test asks every process to count resident calls.
 
     The line is the operation name when the payload is a resident envelope, so
-    a test can assert which ops a workload used; otherwise it is ``1``.
+    a test can assert which ops a workload used; otherwise it is ``1``. A
+    thread inside ``background_resident_requests`` writes that name instead.
 
     Hook workers are spawned processes, so an in-process monkeypatch cannot see
     their round trips. The variable is unset in production and the write then
@@ -58,6 +78,10 @@ def _record_resident_request(payload: bytes = b"") -> None:
     path = os.environ.get(_RESIDENT_REQUEST_LOG)
     if not path:
         return
+    background = _BACKGROUND_REQUEST_LABEL.get()
+    if background is not None:
+        _append_resident_request(path, background.encode("ascii", "replace"))
+        return
     label = b"1"
     try:
         operation = json.loads(payload).get("operation")
@@ -65,6 +89,10 @@ def _record_resident_request(payload: bytes = b"") -> None:
             label = operation.encode("ascii", "replace")
     except (ValueError, AttributeError, UnicodeDecodeError):
         pass
+    _append_resident_request(path, label)
+
+
+def _append_resident_request(path: str, label: bytes) -> None:
     descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
     try:
         os.write(descriptor, label + b"\n")

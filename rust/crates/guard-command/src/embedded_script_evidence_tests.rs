@@ -1,4 +1,9 @@
 //! Replays embedded-script evidence recorded from the retired Python owner.
+//!
+//! A vector may be hand-corrected where the owner disagreed with bash:
+//! `heredoc_comment` recorded a declaration for `<<EOF` written inside a `#`
+//! comment, which bash never reads as one. `record_vectors.py` documents each
+//! such case.
 use crate::embedded_script_evidence::embedded_script_evidence_entries;
 use crate::shell_helpers;
 use serde_json::{json, Value};
@@ -60,6 +65,52 @@ fn shell_helpers_action_rejects_unknown_fields() {
     let input = json!({"command": "bash <<EOF\necho\nEOF", "cwd": "/"});
     assert_eq!(
         shell_helpers::evaluate("embedded_script_evidence", &input),
+        Err("shell_helpers_invalid")
+    );
+}
+
+/// The boolean arm exists so a caller that only needs a yes or no does not
+/// page every script body across the boundary to compute it. It has to agree
+/// with the entries over the same commands, or the cheap question and the
+/// expensive one would answer differently.
+#[test]
+fn has_embedded_script_agrees_with_the_recorded_entries() {
+    for vector in vectors() {
+        let command = vector["command"].as_str().expect("vector command");
+        let carries = !embedded_script_evidence_entries(command).is_empty();
+        assert_eq!(
+            shell_helpers::evaluate("has_embedded_script", &json!({"command": command}))
+                .expect("action evaluates"),
+            json!(carries),
+            "{}",
+            vector["name"]
+        );
+    }
+}
+
+#[test]
+fn has_embedded_script_is_false_without_an_inline_body() {
+    for command in ["", "   ", "ls -la", "cat file.txt | grep EOF"] {
+        assert_eq!(
+            shell_helpers::evaluate("has_embedded_script", &json!({"command": command})),
+            Ok(json!(false)),
+            "{command:?}"
+        );
+    }
+    assert_eq!(
+        shell_helpers::evaluate(
+            "has_embedded_script",
+            &json!({"command": "bash <<EOF\necho\nEOF"})
+        ),
+        Ok(json!(true))
+    );
+}
+
+#[test]
+fn has_embedded_script_rejects_unknown_fields() {
+    let input = json!({"command": "bash <<EOF\necho\nEOF", "cwd": "/"});
+    assert_eq!(
+        shell_helpers::evaluate("has_embedded_script", &input),
         Err("shell_helpers_invalid")
     );
 }

@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .commands_support_prompts import _prompt_request_classes
 
 
+from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..models import GuardAction
 from ..native_data_flow import detect_data_flow_exfiltration
 from ..native_hook_approval_context import native_hook_approval_context_token, runtime_hook_approval_context_inputs
@@ -84,12 +85,6 @@ def _claude_notification_tool_name(payload: dict[str, object]) -> str | None:
             return match.group(1)
     return None
 
-def _claude_notification_tool_display_name(payload: dict[str, object]) -> str | None:
-    tool_name = _claude_notification_tool_name(payload)
-    if tool_name and tool_name.strip():
-        return tool_name.strip()
-    return None
-
 def _approval_delivery_payload(
     harness: str,
     *,
@@ -104,7 +99,7 @@ def _native_hook_reason(*values: object | None) -> str:
 
 def _native_hook_reason_for_harness(harness: str, *values: object | None) -> str:
     reason = _native_hook_reason(*values)
-    if harness != "codex":
+    if harness != "codex" or is_unlinked_connector_setup_reason(reason):
         return reason
     if "open hol guard to approve or keep this blocked:" in reason.lower():
         return reason
@@ -514,13 +509,22 @@ def _artifact_skill_is_known_bad(artifact: GuardArtifact) -> bool:
 
 
 def _artifact_writes_launch_agent(artifact: GuardArtifact) -> bool:
-    if artifact.metadata.get("persistence_writes_launch_agent") is True:
-        return True
+    """Whether a producer already asserted the artifact installs a boot item.
+
+    Reading the mechanism out of ``action_class`` is the resident's, which is
+    why that label travels beside this flag rather than being folded into it
+    here: a second copy of the mechanism table could withhold a stop the
+    protected posture asked for.
+    """
+
+    return artifact.metadata.get("persistence_writes_launch_agent") is True
+
+
+def _artifact_action_class(artifact: GuardArtifact) -> str | None:
+    """The artifact's ``action_class`` label, or ``None`` when it has none."""
+
     action_class = artifact.metadata.get("action_class")
-    if not isinstance(action_class, str):
-        return False
-    lowered = action_class.lower()
-    return any(token in lowered for token in ("launch agent", "login item", "launchctl", "cron", "systemd", "launchd"))
+    return action_class if isinstance(action_class, str) else None
 
 
 def _runtime_action_data_flow_signals(
@@ -716,7 +720,7 @@ def _runtime_detector_perf_payload(config: GuardConfig) -> list[dict[str, object
 
 __all__ = [
     "_approval_center_routed_message", "_approval_delivery_payload",
-    "_claude_notification_tool_display_name", "_claude_notification_tool_name", "_ensure_terminal_punctuation",
+    "_claude_notification_tool_name", "_ensure_terminal_punctuation",
     "_guard_cli_settings_payload", "_guard_settings_doctor_payload", "_guard_settings_explain_payload",
     "_guard_settings_payload", "_is_cloud_inbox_url", "_localize_decision_v2_review_copy",
     "_localize_pending_approval_copy", "_native_approval_center_context", "_native_hook_reason",

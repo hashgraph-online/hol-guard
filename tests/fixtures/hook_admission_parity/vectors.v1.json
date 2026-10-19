@@ -855,52 +855,6 @@
       "transport": 11.0
     }
   ],
-  "directory_authority": [
-    {
-      "candidate": "",
-      "rejected": "relative_path"
-    },
-    {
-      "candidate": "relative/dir",
-      "rejected": "relative_path"
-    },
-    {
-      "candidate": "~no-such-user-for-parity",
-      "rejected": "relative_path"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}/"
-    },
-    {
-      "accepted": "a",
-      "candidate": "{root}/a"
-    },
-    {
-      "accepted": "a/b",
-      "candidate": "{root}/a/./b"
-    },
-    {
-      "accepted": "b",
-      "candidate": "{root}/a/../b"
-    },
-    {
-      "candidate": "{root}/../escape",
-      "rejected": "unexpected_root"
-    },
-    {
-      "candidate": "{root}-sibling",
-      "rejected": "unexpected_root"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}/a/.."
-    }
-  ],
   "exec_command_workdir": [
     {
       "payload": {},
@@ -958,7 +912,7 @@
         "tool_name": " exec_command "
       },
       "provided": true,
-      "workdir": "/w/x"
+      "workdir": "/w/./x/"
     },
     {
       "payload": {
@@ -978,7 +932,7 @@
         "tool_name": "exec_command"
       },
       "provided": true,
-      "workdir": null
+      "workdir": ""
     },
     {
       "payload": {
@@ -988,7 +942,7 @@
         "tool_name": "exec_command"
       },
       "provided": true,
-      "workdir": null
+      "workdir": "none"
     },
     {
       "payload": {
@@ -998,7 +952,7 @@
         "tool_name": "exec_command"
       },
       "provided": true,
-      "workdir": null
+      "workdir": " NULL "
     }
   ],
   "lane": [
@@ -1263,59 +1217,59 @@
   "schema": "hook-admission-parity.v1",
   "workspace_string": [
     {
-      "normalized": null,
+      "spelling": null,
       "value": null
     },
     {
-      "normalized": null,
+      "spelling": null,
       "value": 7
     },
     {
-      "normalized": null,
+      "spelling": "",
       "value": ""
     },
     {
-      "normalized": null,
+      "spelling": "   ",
       "value": "   "
     },
     {
-      "normalized": null,
+      "spelling": "None",
       "value": "None"
     },
     {
-      "normalized": null,
+      "spelling": "null",
       "value": "null"
     },
     {
-      "normalized": null,
+      "spelling": "NULL",
       "value": "NULL"
     },
     {
-      "normalized": "/work/space",
+      "spelling": "/work/space",
       "value": "/work/space"
     },
     {
-      "normalized": "/work/space",
+      "spelling": "/work/space/",
       "value": "/work/space/"
     },
     {
-      "normalized": "/work/space",
+      "spelling": "/work/./space/../space",
       "value": "/work/./space/../space"
     },
     {
-      "normalized": "/work",
+      "spelling": "/work/None",
       "value": "/work/None"
     },
     {
-      "normalized": "/",
+      "spelling": "/None",
       "value": "/None"
     },
     {
-      "normalized": "/work/space",
+      "spelling": " /work/space ",
       "value": " /work/space "
     },
     {
-      "normalized": "/work/space",
+      "spelling": "/work//space",
       "value": "/work//space"
     }
   ]

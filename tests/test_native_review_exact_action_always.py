@@ -130,11 +130,7 @@ def test_camel_case_harness_payload_offers_the_same_token(
     assert camel == expected
 
 
-def test_token_changes_when_native_rules_change(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
-) -> None:
-    workspace = _wrangler_workspace(tmp_path, monkeypatch)
-    result, receipt = _verdict()
+def _changed_rules(result: dict[str, Any], receipt: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     changed_result = copy.deepcopy(result)
     changed_receipt = copy.deepcopy(receipt)
     for value in (changed_result["command_extensions"]["binding"], changed_receipt["command_extensions"]):
@@ -150,6 +146,30 @@ def test_token_changes_when_native_rules_change(
     changed_receipt["decision_id"] = hashlib.sha256(
         json.dumps(identity, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
     ).hexdigest()
+    return changed_result, changed_receipt
+
+
+def _proven(command: str, workspace: Path) -> bool:
+    """Whether Guard proved what ``command`` runs, rather than hashing the command.
+
+    Every review gets a token. A proven token also binds the rules that judged
+    the command; the command-hash fallback binds only the command, so a rule
+    change leaves it as it was (docs/guard/approval-invariant.md).
+    """
+
+    result, receipt = _verdict()
+    first = _token(command, workspace, result=result, receipt=receipt)
+    assert first is not None, f"every review offers Always allow: {command}"
+    changed_result, changed_receipt = _changed_rules(result, receipt)
+    return first != _token(command, workspace, result=changed_result, receipt=changed_receipt)
+
+
+def test_token_changes_when_native_rules_change(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    result, receipt = _verdict()
+    changed_result, changed_receipt = _changed_rules(result, receipt)
     original = _token("cat package.json", workspace, result=result, receipt=receipt)
     assert original is not None
     assert _token("cat package.json", workspace, result=changed_result, receipt=changed_receipt) not in {None, original}
@@ -182,13 +202,14 @@ def test_node_script_token_binds_the_code_it_imports(
     imported.write_text("export const total = () => 0;\n")
     assert _token("node scripts/report.mjs", workspace) not in {None, first}
 
+    # Code Guard cannot follow is approved by its command alone.
     imported.write_text("import { execSync } from 'node:child_process';\nexport const total = () => execSync('id');\n")
-    assert _token("node scripts/report.mjs", workspace) is None
+    assert not _proven("node scripts/report.mjs", workspace)
     imported.write_text("export const total = () => 0;\n")
-    assert _token("node -e 1", workspace) is None
-    assert _token("cd scripts && node report.mjs", workspace) is None
+    assert not _proven("node -e 1", workspace)
+    assert not _proven("cd scripts && node report.mjs", workspace)
     monkeypatch.setenv("NODE_OPTIONS", "--require ./preload.js")
-    assert _token("node scripts/report.mjs", workspace) is None
+    assert not _proven("node scripts/report.mjs", workspace)
 
 
 @pytest.mark.parametrize(
@@ -208,11 +229,16 @@ def test_node_script_token_binds_the_code_it_imports(
         "ansible-playbook play.yml",
     ],
 )
-def test_unbound_code_stays_once_only(
+def test_unbound_code_falls_back_to_the_command_hash(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, command: str
 ) -> None:
+    # Guard cannot prove what these run, yet every review offers Always allow:
+    # the approval binds to the command itself (docs/guard/approval-invariant.md).
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
-    assert _token(command, workspace) is None
+    assert not _proven(command, workspace)
+    token = _token(command, workspace)
+    assert token == _token(command, workspace, payload_extra={"session_id": "b", "tool_use_id": "2"})
+    assert token != _token(command + " --verbose", workspace)
 
 
 @pytest.mark.parametrize(
@@ -221,8 +247,6 @@ def test_unbound_code_stays_once_only(
         {"policy_action": "block"},
         {"minimum_action": "block"},
         {"minimum_action": "sandbox-required"},
-        {"action": {"action_type": "guard_control"}},
-        {"action": {"action_type": "package"}},
     ],
 )
 def test_non_overridable_verdicts_never_offer_always(
@@ -233,13 +257,24 @@ def test_non_overridable_verdicts_never_offer_always(
     assert _token("npx wrangler --version", workspace, result=result, receipt=receipt) is None
 
 
-def test_receipt_without_policy_binding_stays_once_only(
+@pytest.mark.parametrize("action_type", ["guard_control", "guard-control-operation", "package"])
+def test_guard_control_and_package_reviews_offer_always(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, action_type: str
+) -> None:
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    result, receipt = _verdict(action={"action_type": action_type})
+    assert _token("npx wrangler --version", workspace, result=result, receipt=receipt) is not None
+
+
+def test_receipt_without_policy_binding_still_offers_always(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     result, _ = _verdict()
     result.pop("command_extensions")
-    assert _token("cat package.json", workspace, result=result, receipt=_receipt(None)) is None
+    token = _token("cat package.json", workspace, result=result, receipt=_receipt(None))
+    assert token is not None
+    assert token != _token("cat package.json -n", workspace, result=result, receipt=_receipt(None))
 
 
 def _save(store: GuardStore, token: str, action: str, **fields: object) -> None:
@@ -257,7 +292,7 @@ def _save(store: GuardStore, token: str, action: str, **fields: object) -> None:
     )
 
 
-def test_saved_allow_reuses_only_overridable_reviews(
+def test_saved_allow_reuses_every_review(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
 ) -> None:
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
@@ -274,6 +309,10 @@ def test_saved_allow_reuses_only_overridable_reviews(
     assert allowed["policy_action"] == "allow"
     blocked_verdict, _ = _verdict(policy_action="block", minimum_action="block")
     assert native_saved_decision_response(store, token=token, native_result=blocked_verdict, **kwargs) is None
+    for action_type in ("guard_control", "package"):
+        control_verdict, _ = _verdict(action={"action_type": action_type})
+        reused = native_saved_decision_response(store, token=token, native_result=control_verdict, **kwargs)
+        assert reused is not None and reused["approval_reuse_status"] == "accepted"
     assert native_saved_decision_response(store, token=token + "x", native_result=result, **kwargs) is None
 
 
@@ -511,13 +550,13 @@ def _local_bin(workspace: Path, package: str, name: str) -> None:
         "xargs ./payload",
     ],
 )
-def test_selectors_interpreters_and_code_loaders_stay_once_only(
+def test_selectors_interpreters_and_code_loaders_bind_only_the_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, command: str
 ) -> None:
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     _local_bin(workspace, "tsx", "tsx")
     (workspace / "script.ts").write_text("console.log(1)\n")
-    assert _token(command, workspace) is None
+    assert not _proven(command, workspace)
 
 
 def test_token_binds_file_operand_contents(

@@ -112,12 +112,17 @@ def test_local_identity_honors_allow_grant(tmp_path: Path) -> None:
     assert match == (identity, "allowed")
 
 
-def _native_review(*, minimum_action: str = "review", action_type: str = "shell") -> dict[str, object]:
+def _native_review(
+    *,
+    minimum_action: str = "review",
+    action_type: str = "shell",
+    reason_code: str = "native_command_review_required",
+) -> dict[str, object]:
     return {
         "decision": "ask",
         "policy_action": "review",
         "minimum_action": minimum_action,
-        "reason_code": "native_review",
+        "reason_code": reason_code,
         "reason": "Review",
         "action": {"action_type": action_type},
     }
@@ -131,6 +136,10 @@ def _native_review(*, minimum_action: str = "review", action_type: str = "shell"
         ("allowed", _native_review(), "allow"),
         ("allowed", _native_review(action_type="package"), None),
         ("allowed", _native_review(minimum_action="block"), None),
+        # A review with a risk signal of its own outlives an allow, not a block.
+        ("allowed", _native_review(reason_code="native_network_review"), None),
+        ("allowed", _native_review(reason_code="shell_local_secret_read"), None),
+        ("blocked", _native_review(reason_code="native_network_review"), "deny"),
     ],
 )
 def test_native_review_applies_custom_extension_grants(

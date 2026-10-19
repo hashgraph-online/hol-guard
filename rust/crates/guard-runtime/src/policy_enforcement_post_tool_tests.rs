@@ -283,6 +283,133 @@ fn omp_learn_with_its_optional_context_is_released_too() {
 }
 
 #[test]
+fn omp_learn_that_also_writes_a_skill_is_released_too() {
+    // Oh My Pi 18.11's `learn` can create or update a managed skill in the
+    // same call. Its review ran before the write; the acknowledgement that
+    // comes back afterwards has nothing left to approve.
+    let input = json!({
+        "hook_event_name": "PostToolUse",
+        "tool_call_id": "call-learn-3",
+        "tool_name": "learn",
+        "tool_input": {
+            "memory": "Run the test suite with python3 -m pytest from the repository root.",
+            "context": "Code review turn",
+            "skill": {
+                "action": "create",
+                "name": "repo-tests",
+                "description": "How to run this repository's tests.",
+                "body": "# Repo tests\n\nRun the suite from the repository root before pushing."
+            }
+        },
+        "tool_response": {"content": [{"type": "text", "text": "Lesson stored. Created managed skill \"repo-tests\"."}]},
+        "is_error": false
+    });
+    assert!(guard_command::pretool::bounded_task_metadata_output(
+        &input, "omp"
+    ));
+    let mut request = post_request(input.clone());
+    request.harness = "omp".into();
+    let mut effective = policy("allow");
+    effective
+        .risk_actions
+        .insert("execution".into(), "review".into());
+    let output = apply_post_tool_policy(
+        &snapshot(effective.clone()),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::allow("output_scan_allow"),
+    )
+    .unwrap();
+    assert_eq!(output.decision, "allow");
+    // The returned content still meets its own scan.
+    let denied = apply_post_tool_policy(
+        &snapshot(effective),
+        &request,
+        GuardHookPayloadKindV2::Inline,
+        HookReviewResponseV1::deny("source_secret_match", "sensitive output"),
+    )
+    .unwrap();
+    assert_eq!(denied.decision, "deny");
+    let skill = &input["tool_input"]["skill"];
+    let with = |key: &str, value: Value| {
+        let mut changed = skill.clone();
+        changed[key] = value;
+        changed
+    };
+    let mut extra = skill.clone();
+    extra["path"] = json!("../other-skill");
+    let mut missing = skill.clone();
+    missing.as_object_mut().unwrap().remove("body");
+    for (case, tool_input) in [
+        (
+            "update",
+            json!({"memory": "note", "skill": with("action", json!("update"))}),
+        ),
+        (
+            "no context",
+            json!({"memory": "note", "skill": skill.clone()}),
+        ),
+    ] {
+        let mut changed = input.clone();
+        changed["tool_input"] = tool_input;
+        assert!(
+            guard_command::pretool::bounded_task_metadata_output(&changed, "omp"),
+            "{case}"
+        );
+    }
+    for (case, tool_input) in [
+        (
+            "delete",
+            json!({"memory": "note", "skill": with("action", json!("delete"))}),
+        ),
+        (
+            "path name",
+            json!({"memory": "note", "skill": with("name", json!("../repo-tests"))}),
+        ),
+        (
+            "upper case",
+            json!({"memory": "note", "skill": with("name", json!("Repo-Tests"))}),
+        ),
+        (
+            "double hyphen",
+            json!({"memory": "note", "skill": with("name", json!("repo--tests"))}),
+        ),
+        (
+            "long name",
+            json!({"memory": "note", "skill": with("name", json!("a".repeat(65)))}),
+        ),
+        (
+            "body not text",
+            json!({"memory": "note", "skill": with("body", json!(["text"]))}),
+        ),
+        (
+            "extra key",
+            json!({"memory": "note", "skill": extra.clone()}),
+        ),
+        (
+            "missing body",
+            json!({"memory": "note", "skill": missing.clone()}),
+        ),
+        (
+            "not an object",
+            json!({"memory": "note", "skill": "repo-tests"}),
+        ),
+        (
+            "global",
+            json!({"memory": "note", "scope": "global", "skill": skill.clone()}),
+        ),
+        ("skill alone", json!({"skill": skill.clone()})),
+    ] {
+        let mut changed = input.clone();
+        changed["tool_input"] = tool_input;
+        assert!(
+            !guard_command::pretool::bounded_task_metadata_output(&changed, "omp"),
+            "{case}"
+        );
+    }
+}
+
+#[test]
 fn policy_allow_cannot_lower_intrinsic_review_or_block() {
     let snapshot = snapshot(policy("allow"));
     for action in ["review", "block"] {

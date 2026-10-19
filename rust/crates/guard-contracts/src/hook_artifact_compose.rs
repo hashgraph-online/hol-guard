@@ -38,6 +38,8 @@ pub enum HookArtifactComposeQueryV1 {
     ToolGrantApply,
     /// Settle a local CLI grant result and the native floor.
     GrantSettle(GrantSettleQueryV1),
+    /// What observe mode records as the action that would have executed.
+    ObserveExecutableAction(Box<ObserveExecutableActionQueryV1>),
     /// Non-package saved-approval reuse composition.
     SavedReuse(Box<SavedReuseQueryV1>),
     /// A saved block selected for a package request.
@@ -96,7 +98,12 @@ pub struct PolicyArtifactFactsV1 {
     /// `str(confidence or "")` of the artifact risk confidence.
     pub confidence_text: String,
     pub confidence_strong: bool,
+    /// A caller that already knows the artifact installs a boot or login
+    /// item says so here; the resident reads `action_class` for the rest.
     pub writes_launch_agent: bool,
+    /// `action_class` metadata; absent or non-string arrives as `null`.
+    #[serde(default)]
+    pub action_class: Option<String>,
     pub skill_is_known_bad: bool,
 }
 
@@ -159,6 +166,29 @@ pub struct GrantSettleQueryV1 {
     pub approval_context_action: Value,
     pub granted_action: Value,
     pub native_floor: Value,
+}
+
+/// The composed sources observe mode re-reads to name the action that would
+/// have run.
+///
+/// Each field carries one source's action, or null when that source said
+/// nothing. They arrive as raw values rather than as `GuardAction` because an
+/// unrecognized source name must be ignored here, not normalized into a
+/// verdict: observe mode reports what the harness would have done, so a source
+/// this build cannot read contributes nothing instead of a guess.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ObserveExecutableActionQueryV1 {
+    pub current_config_action: Value,
+    pub current_action_override: Value,
+    pub trusted_cli_override: Value,
+    pub untrusted_hook_payload_hint: Value,
+    pub package_action: Value,
+    pub data_flow_action: Value,
+    pub scanner_action: Value,
+    /// The package evaluation's own action, which the composition trace does
+    /// not always carry.
+    pub package_evaluation_action: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -10,7 +10,7 @@ use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::path::Path;
 
 /// A literal directory at or below the workspace, with no parent step.
-fn below(target: &str, workspace: &Path) -> bool {
+pub(super) fn below(target: &str, workspace: &Path) -> bool {
     let path = Path::new(target);
     !target.is_empty()
         && !target.starts_with(['~', '-'])

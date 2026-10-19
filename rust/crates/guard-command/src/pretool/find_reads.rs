@@ -10,7 +10,10 @@
 //! `~/.agent` root may be one when its tree clears the walk `ls -R` needs.
 //! Another home dot-directory may be one when `-maxdepth 1` keeps the walk to
 //! its own entries, or when the expression prints only the paths an ordinary
-//! name pattern selects.
+//! name pattern selects. A project-metadata directory such as `.github` in a
+//! repository may be one when every entry below it clears the recursive
+//! listing screen, and a root that does not exist prints only an error, as
+//! the same probe does for `ls`.
 
 use super::safe_reads::{bounded_read_target, verified_path_context};
 
@@ -34,11 +37,16 @@ pub(super) fn safe_find_listing_arguments(
         return false;
     }
     verified_path_context(context.home_dir, context.cwd)
+        && arguments
+            .iter()
+            .all(|argument| super::brace_words::stays_one_word(argument))
         && roots.iter().all(|root| {
             !super::search::skill_link_resolves_over_home(root, context)
                 && (bounded_read_target(root, context.home_dir, context.cwd, true)
                     || super::search::skill_listing_root(root, context)
                     || super::search::agent_root_listing(root, context, true)
+                    || super::search::metadata_directory_walk(root, context)
+                    || super::listing_reads::absent_listing_operand(root, context)
                     || (entries_only(expression)
                         && super::read_paths::home_hidden_directory(
                             root,

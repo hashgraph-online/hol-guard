@@ -97,7 +97,8 @@ pub(super) fn bounded_delegation_metadata(payload: &Value) -> bool {
         && signals.path_values.is_empty()
 }
 
-/// `learn` stores one memory note and returns the store's acknowledgement.
+/// `learn` stores one memory note, optionally with one managed skill, and
+/// returns the store's acknowledgement.
 /// Its PreToolUse stays an unknown-tool review, so under enforce the call has
 /// run only after a person approved it, and the result it returns has nothing
 /// left to approve. Withholding it would leave Oh My Pi without the
@@ -533,7 +534,7 @@ fn project_skill_listing(target: &str, context: &OmpContext<'_>) -> bool {
 /// segment, such as `src/*.ts`. Oh My Pi matches that segment against the
 /// directory's own entries only: its glob tool passes `recursive: false` and
 /// its input schema has no field that turns recursion on (checked in Oh My Pi
-/// 18.4.12 and 18.8.3). `listing` rejects any key outside that schema, and a
+/// 18.4.12, 18.8.3 and 18.11.3). `listing` rejects any key outside that schema, and a
 /// `pattern` key keeps the walk. A selector with no literal directory gains
 /// a `**/` prefix there, and `**` crosses directories, so neither is
 /// single-level.
@@ -740,7 +741,7 @@ fn walk_inside_session(target: &str, context: &OmpContext<'_>) -> bool {
 
 /// Oh My Pi's `lsp` tool asks the session's language servers about code.
 /// The actions its read-only sessions keep (`LSP_READONLY_ACTIONS`, checked
-/// in Oh My Pi 18.4.12 and 18.8.3) only report on files. Every other action
+/// in Oh My Pi 18.4.12, 18.8.3 and 18.11.3) only report on files. Every other action
 /// can change the workspace or reach the server unchecked: `rename` and
 /// `code_actions` apply edits across files, `rename_file` moves a file to any
 /// destination, and `request` sends a raw server request. Those go to review
@@ -886,9 +887,17 @@ fn grep_scope(
         && !input.contains_key("glob")
         && !input.contains_key("type");
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    // A plain pattern that no reachable sensitive file contains cannot print
+    // a line from one, so those files need not hold the search.
+    let clearance = super::super::search_pattern_clearance::PatternClearance::new(pattern);
     let proven = |target: &str| {
-        super::super::search_scope::omp_grep_scope_proven(target, home, cwd, gitignore)
-            || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
+        super::super::search_scope::omp_grep_scope_proven(
+            target,
+            home,
+            cwd,
+            gitignore,
+            clearance.as_ref(),
+        ) || (list && super::super::read_paths::existing_regular_read_target(target, home, cwd))
             || super::super::read_paths::bounded_omp_file_selector_target(target, home, cwd)
     };
     if targets.iter().all(|target| proven(target)) {
@@ -991,8 +1000,18 @@ pub(super) fn grep_review_note(
         return Some(GLOB_PATH_NOTE.to_owned());
     }
     let (home, cwd) = (context.path.home_dir, context.path.cwd);
+    // A file the pattern cannot match is not what holds the search.
+    let clearance = strict_tool_input(payload)?
+        .get("pattern")
+        .and_then(Value::as_str)
+        .and_then(super::super::search_pattern_clearance::PatternClearance::new);
     targets.iter().find_map(|target| {
-        let blocker = super::super::search_scope::content_search_blocker(target, home, cwd)?;
+        let blocker = super::super::search_scope::content_search_blocker(
+            target,
+            home,
+            cwd,
+            clearance.as_ref(),
+        )?;
         let blocker = blocker.to_str()?;
         let shown = match target.trim_end_matches('/') {
             "" | "." => blocker.to_owned(),
@@ -1032,6 +1051,8 @@ pub(super) fn host_reference_reason(value: &str) -> Option<&'static str> {
         Some("native_omp_artifact_read")
     } else if skill_reference(value) {
         Some("native_omp_skill_read")
+    } else if proc_reference(value) {
+        Some("native_omp_proc_read")
     } else {
         None
     }
@@ -1049,8 +1070,40 @@ fn artifact_reference(value: &str) -> bool {
     let number = |part: &str| {
         !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
     };
+    number(id) && selector_chunks_ok(chunks)
+}
+
+/// `proc://` lists the session's own background jobs and `proc://<id>` shows
+/// one job's status and output, with an optional line window. The host serves
+/// both from its job table, never from a path. `proc://<id>/kill` and
+/// `/mode` are write targets that fail on a read, so they stay out: the id is
+/// one bounded token with no `/`.
+fn proc_reference(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("proc://") else {
+        return false;
+    };
+    if rest.is_empty() {
+        return true;
+    }
+    let mut chunks = rest.split(':');
+    let id = chunks.next().unwrap_or_default();
+    let token = !id.is_empty()
+        && id.len() <= 128
+        && !id.starts_with('.')
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.'));
+    token && selector_chunks_ok(chunks)
+}
+
+/// The `:`-separated tail the host peels from a reference: at most one `N-M`
+/// line range and one `raw`, in either order.
+fn selector_chunks_ok<'a>(mut chunks: impl Iterator<Item = &'a str>) -> bool {
+    let number = |part: &str| {
+        !part.is_empty() && part.len() <= 9 && part.bytes().all(|byte| byte.is_ascii_digit())
+    };
     let (mut raw, mut range) = (false, false);
-    let selectors_ok = chunks.all(|chunk| {
+    chunks.all(|chunk| {
         if chunk.eq_ignore_ascii_case("raw") && !raw {
             raw = true;
             return true;
@@ -1061,8 +1114,7 @@ fn artifact_reference(value: &str) -> bool {
         let fresh = is_range && !range;
         range |= is_range;
         fresh
-    });
-    number(id) && selectors_ok
+    })
 }
 
 #[cfg(test)]

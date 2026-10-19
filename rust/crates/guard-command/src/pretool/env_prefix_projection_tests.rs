@@ -1,4 +1,4 @@
-use super::{code_loading_setting, project, project_reviewed};
+use super::{bindable_setting, code_loading_setting, project, project_reviewed};
 
 #[test]
 fn inert_prefixes_are_removed_in_place() {
@@ -371,4 +371,40 @@ fn prefixes_before_guard_launchers_are_never_projected() {
     ] {
         assert_eq!(project(command), None, "{command}");
     }
+}
+
+#[test]
+fn a_one_time_approval_binds_only_plain_reviewable_settings() {
+    for (name, value) in [
+        ("DEPLOY_ALLOW_BACKGROUND", "1"),
+        ("REPORT_WINDOW", "7d"),
+        ("RELEASE_CHANNEL", "beta.2"),
+        ("EMPTY_FLAG", ""),
+    ] {
+        assert!(bindable_setting(name, value), "{name}={value}");
+    }
+    for (name, value) in [
+        // Names that swap the program, the loader, the shell or credentials.
+        ("PATH", "/tmp/bin"),
+        ("HOME", "/tmp/home"),
+        ("BASH_ENV", "x"),
+        ("LD_PRELOAD", "x"),
+        ("GIT_SSH_COMMAND", "x"),
+        ("HOL_GUARD_HOME", "x"),
+        ("NODE_OPTIONS", "--max-old-space-size=4096"),
+        ("NODE_PATH", "/work/node_modules"),
+        ("DEPLOY_TOKEN", "x"),
+        ("HTTPS_PROXY", "x"),
+        // Values a program could read as a path, a list or text to parse.
+        ("DEPLOY_TARGET", "/etc/hosts"),
+        ("DEPLOY_TARGET", "$(id)"),
+        ("DEPLOY_TARGET", "a b"),
+        ("DEPLOY_TARGET", "-rf"),
+        ("DEPLOY_TARGET", "~/x"),
+        ("1BAD", "1"),
+        ("BAD-NAME", "1"),
+    ] {
+        assert!(!bindable_setting(name, value), "{name}={value}");
+    }
+    assert!(!bindable_setting("DEPLOY_TARGET", &"x".repeat(129)));
 }

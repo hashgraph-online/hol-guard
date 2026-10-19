@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-_CHUNKS = Path(__file__).parents[1] / "src/codex_plugin_scanner/guard/daemon/static/assets/chunks"
-_ASSET = _CHUNKS / "fleet-workspace.js"
+from tests.dashboard_bundle_support import CHUNKS_DIR, dashboard_chunk
+
+_CHUNKS = CHUNKS_DIR
+_ASSET = dashboard_chunk("fleet-workspace")
 _AUTHORITATIVE_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-workspace.tsx"
 _DETECTION_SOURCE = Path(__file__).parents[1] / "dashboard/src/harness-detection.ts"
 _RECOVERY_SOURCE = Path(__file__).parents[1] / "dashboard/src/fleet-protection-recovery.tsx"

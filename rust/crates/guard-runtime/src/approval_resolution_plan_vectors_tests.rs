@@ -22,6 +22,39 @@ fn plans_match_the_retired_python() {
             serde_json::from_value(wire).unwrap_or_else(|error| panic!("case {index}: {error}"));
         let expected = &case["expected"];
         let actual = evaluate(&request);
+        let unbound_native_once = request.action == "allow"
+            && request
+                .approval
+                .artifact_id
+                .as_deref()
+                .is_some_and(|id| id.contains(":native-pretool:"))
+            && !request
+                .approval
+                .artifact_hash
+                .as_deref()
+                .is_some_and(|hash| {
+                    crate::guard_store_native_review_consume::binding_pattern().is_match(hash)
+                })
+            && !(request.scope == "artifact"
+                && request.persist_policy == Some(true)
+                && [&request.approval.artifact_hash, &request.native_exact_token]
+                    .iter()
+                    .any(|token| {
+                        token.as_ref().is_some_and(|token| {
+                            crate::context_digest::parse_context_token(&Value::String(
+                                token.clone(),
+                            ))
+                            .is_some()
+                        })
+                    }));
+        if unbound_native_once {
+            assert_eq!(
+                actual,
+                Err("execution_binding_unavailable".to_owned()),
+                "case {index}"
+            );
+            continue;
+        }
         if expected["status"] == "error" {
             assert!(
                 actual.is_err(),
@@ -38,6 +71,39 @@ fn plans_match_the_retired_python() {
             case["wire"]
         );
     }
+}
+
+#[test]
+fn older_clients_cannot_save_unavailable_once_consent() {
+    let vectors = gunzip_json(VECTORS);
+    let case = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["expected"]["status"] != "error")
+        .unwrap();
+    let mut wire = case["wire"].clone();
+    wire["schema"] = Value::String(APPROVAL_RESOLUTION_PLAN_REQUEST_SCHEMA.to_owned());
+    let mut request: ApprovalResolutionPlanRequestV1 = serde_json::from_value(wire).unwrap();
+    request.action = "allow".to_owned();
+    request.scope = "artifact".to_owned();
+    request.persist_policy = Some(false);
+    request.approval.harness = Some("omp".to_owned());
+    request.approval.artifact_id = Some("omp:native-pretool:bash".to_owned());
+    request.approval.artifact_hash = Some("unbound-request".to_owned());
+    request.native_exact_token = None;
+    assert_eq!(
+        evaluate(&request),
+        Err("execution_binding_unavailable".to_owned())
+    );
+    request.approval.artifact_hash = Some(format!(
+        "native-review-v4:{}:deny:review:review:test",
+        "a".repeat(64)
+    ));
+    assert!(evaluate(&request).is_ok());
+    request.action = "block".to_owned();
+    request.approval.artifact_hash = Some("unbound-request".to_owned());
+    assert!(evaluate(&request).is_ok());
 }
 
 #[test]

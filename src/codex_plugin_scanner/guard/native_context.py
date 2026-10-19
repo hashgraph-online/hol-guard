@@ -653,18 +653,13 @@ def context_sha256_digest(
     prefix: str | None = None,
     guard_home: Path | None = None,
     unbound_label: str = "canonical-sha256",
-    strict: bool = True,
 ) -> str:
     """Canonical-JSON SHA-256 via the resident op.
 
-    ``strict=True`` (default, for enforcement digests that gate equality):
-    degrade to a ``guard-context-unbound:`` digest that fails every
-    equality/validation check against a worker-issued value.
-
-    ``strict=False`` (for identity/dedup digests that always produced a hex
-    digest before this migration): degrade to the byte-identical local
-    canonical hash so callers keep working when the resident is absent.  The
-    value is byte-for-byte the same output the worker returns.
+    The resident owns the digest.  Without one, this returns a
+    ``guard-context-unbound:`` value that fails every equality and validation
+    check against a worker-issued digest, so an absent resident can never pass
+    for a bound one.
     """
 
     home = _resolve_digest_home(guard_home)
@@ -676,10 +671,7 @@ def context_sha256_digest(
     digest = result.get("digest") if isinstance(result, dict) else None
     if isinstance(digest, str) and digest:
         return digest
-    if strict:
-        return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
-    local = hashlib.sha256(_canonical_material_bytes(material)).hexdigest()
-    return f"{prefix or ''}{local}"
+    return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
 
 
 def context_mcp_launch_environment(

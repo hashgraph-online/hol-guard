@@ -71,8 +71,9 @@ pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
 };
 pub use process_lifecycle::{
-    process_liveness, process_start_marker, running_process_start_marker, terminate_process,
-    terminate_process_verified, wait_for_process_exit,
+    process_liveness, process_start_marker, running_process_image_path,
+    running_process_start_marker, terminate_process, terminate_process_verified,
+    wait_for_process_exit,
 };
 
 // SAFETY: This module is the sole Win32 FFI boundary; borrowed handles remain valid

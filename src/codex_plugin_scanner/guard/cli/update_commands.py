@@ -2198,7 +2198,9 @@ def _same_version(left: str, right: str) -> bool:
         return left == right
 
 
-def _wheel_install_flags(wheel_version: str | None, current_version: str, *, native_repair: bool) -> tuple[str, ...]:
+def _wheel_install_flags(  # NOSONAR(S8495) installer flags vary by case
+    wheel_version: str | None, current_version: str, *, native_repair: bool
+) -> tuple[str, ...]:
     if wheel_version is None or not _same_version(wheel_version, current_version):
         # A version change only touches the dependencies it needs.
         return ()

@@ -31,7 +31,7 @@ path data.
 
 ## Persistence
 
-`RuntimeHookEvidenceWriter.submit_native_decision_receipt()` performs only
+The Rust writer's `submit_native_decision_receipt()` performs only
 bounded validation, canonical encoding, deduplication, and queue admission.
 It does not open SQLite, read configuration, perform network I/O, or wait for a
 writer; persistence is outside the decision-critical path. A bounded background

@@ -514,6 +514,42 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
     assert response.get("approval_reuse_status") != "accepted"
 
 
+def _accept_then_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, command: str) -> None:
+    """A harness Accept lets the same command through and nothing else."""
+    worker, store = _worker(tmp_path, monkeypatch, _edge("cursor"))
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    def review(text: str) -> dict[str, object]:
+        return worker.review_http_payload(
+            payload={"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": text}},
+            params={},
+            default_harness="cursor",
+            home_dir=tmp_path / "home",
+            guard_home=tmp_path / "guard-home",
+            workspace=workspace,
+        )
+
+    first = review(command)
+    assert first["prompted"] is True
+    request_id = first.get("approval_request_id")
+    assert isinstance(request_id, str)
+    assert store.resolve_harness_native_approval_request(
+        request_id,
+        reason="verified harness Accept",
+        resolved_at=datetime.now(timezone.utc).isoformat(),
+        expected_harness="cursor",
+    )
+    changed = review(f"{command} --changed")
+    assert changed["policy_action"] == "review"
+    assert changed.get("approval_reuse_status") != "accepted"
+    second = review(command)
+    hook_output = second["hookSpecificOutput"]
+    assert isinstance(hook_output, dict)
+    assert hook_output["permissionDecision"] == "allow"
+    assert second["policy_action"] == "allow"
+
+
 @pytest.mark.parametrize(
     "command",
     (
@@ -528,41 +564,12 @@ def test_native_review_retry_is_bound_expiring_and_one_use(
         "bunx vitest run __tests__/guard-extension-public-promotions.test.ts --reporter=dot",
     ),
 )
-def test_mutable_code_launches_never_reuse_python_side_approval(
+def test_mutable_code_launches_can_be_approved(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     command: str,
 ) -> None:
-    edge = _edge("cursor")
-    worker, store = _worker(tmp_path, monkeypatch, edge)
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    payload = {
-        "hook_event_name": "PreToolUse",
-        "tool_name": "Bash",
-        "tool_input": {"command": command},
-    }
-    kwargs = {
-        "payload": payload,
-        "params": {},
-        "default_harness": "cursor",
-        "home_dir": tmp_path / "home",
-        "guard_home": tmp_path / "guard-home",
-        "workspace": workspace,
-    }
-    first = worker.review_http_payload(**kwargs)
-    assert first["prompted"] is False
-    assert "approval_request_id" not in first
-    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
-    assert store.resolve_harness_native_approval_request(
-        request_id,
-        reason="verified harness Accept",
-        resolved_at=datetime.now(timezone.utc).isoformat(),
-        expected_harness="cursor",
-    )
-    second = worker.review_http_payload(**kwargs)
-    assert second["policy_action"] == "block"
-    assert second.get("approval_reuse_status") != "accepted"
+    _accept_then_retry(tmp_path, monkeypatch, command)
 
 
 @pytest.mark.parametrize(
@@ -574,34 +581,9 @@ def test_mutable_code_launches_never_reuse_python_side_approval(
         "cat .env\r\nbash check.sh",
     ),
 )
-def test_environment_and_command_lists_never_reuse_python_side_approval(
+def test_environment_and_command_lists_can_be_approved(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     command: str,
 ) -> None:
-    edge = _edge("cursor")
-    worker, store = _worker(tmp_path, monkeypatch, edge)
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    payload = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": command}}
-    kwargs = {
-        "payload": payload,
-        "params": {},
-        "default_harness": "cursor",
-        "home_dir": tmp_path / "home",
-        "guard_home": tmp_path / "guard-home",
-        "workspace": workspace,
-    }
-    first = worker.review_http_payload(**kwargs)
-    assert first["prompted"] is False
-    assert "approval_request_id" not in first
-    request_id = store.list_approval_requests(status="pending")[0]["request_id"]
-    assert store.resolve_harness_native_approval_request(
-        request_id,
-        reason="verified harness Accept",
-        resolved_at=datetime.now(timezone.utc).isoformat(),
-        expected_harness="cursor",
-    )
-    second = worker.review_http_payload(**kwargs)
-    assert second["policy_action"] == "block"
-    assert second.get("approval_reuse_status") != "accepted"
+    _accept_then_retry(tmp_path, monkeypatch, command)

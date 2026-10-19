@@ -18,10 +18,7 @@ from ..native_sensitive_request import (
 from ..runtime.command_decision_adapter import effect_decision_to_dict
 from ..runtime.direct_vitest import direct_local_typescript_execution_context
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
-from ..runtime.jsonc import loads_jsonc
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
-from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
-from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import _codex_post_tool_command_texts
@@ -61,22 +58,6 @@ def _hook_event_name(payload: dict[str, object]) -> str | None:
             normalized = value.strip()
             return _HOOK_EVENT_NAME_MAP.get(normalized.lower(), normalized)
     return None
-
-
-def _artifact_id_from_event(harness: str, payload: dict[str, object]) -> str:
-    source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    tool_name = payload.get("tool_name")
-    if isinstance(tool_name, str) and tool_name.strip():
-        normalized_tool = tool_name.strip()
-        if _canonical_harness_name(harness) == "claude-code":
-            from ..adapters.claude_code import claude_hook_fallback_artifact_id
-
-            return claude_hook_fallback_artifact_id(source_scope, normalized_tool)
-        return f"{harness}:{source_scope}:{normalized_tool}"
-    event_name = _hook_event_name(payload)
-    if isinstance(event_name, str) and event_name.strip():
-        return f"{harness}:{source_scope}:{event_name.strip().lower()}"
-    return f"{harness}:{source_scope}:hook"
 
 
 def _string_list(value: object | None) -> list[str]:
@@ -161,102 +142,6 @@ def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]
             "runtime_request_summary": request_summary,
         },
     )
-
-
-def _routine_local_runner_has_complete_evidence(intent: PackageIntent) -> bool:
-    """Return whether a routine JS runner is already bound to local project state."""
-
-    if intent.package_manager not in {"bunx", "npx"} or len(intent.local_executions) != 1:
-        return False
-    execution = intent.local_executions[0]
-    if execution.package_name not in {"eslint", "jest", "tsc", "vitest"}:
-        return False
-    if len(intent.targets) != 1:
-        return False
-    target = intent.targets[0]
-    if target.raw_spec != execution.package_name or target.requested_specifier is not None:
-        return False
-    if target.source_kind is not None or target.source_url is not None:
-        return False
-    if "--package" in intent.command_tokens or any(token.startswith("--package=") for token in intent.command_tokens):
-        return False
-    if execution.package_name != execution.executable_name or execution.declared_version is None:
-        return False
-    if execution.declared_version.lower().startswith(("file:", "git+", "git://", "github:", "http:", "https:")):
-        return False
-    evidence_files = (execution.manager, execution.local_executable, *execution.manifests, *execution.lockfiles)
-    if not execution.manifests or not execution.lockfiles:
-        return False
-    if any(
-        evidence is None
-        or evidence.status != "available"
-        or evidence.resolved_path is None
-        or evidence.file_identity is None
-        or evidence.content_hash is None
-        for evidence in evidence_files
-    ):
-        return False
-    executable = execution.local_executable
-    if executable is None or executable.resolved_path is None:
-        return False
-    try:
-        workspace = Path(execution.effective_cwd).resolve(strict=True)
-        node_modules = (workspace / "node_modules").resolve(strict=True)
-        package_root = (node_modules / execution.package_name).resolve(strict=True)
-        package_root.relative_to(node_modules)
-        Path(executable.resolved_path).resolve(strict=True).relative_to(package_root)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return not intent.execution_context_reason_codes and _routine_local_runner_versions_match(
-        workspace,
-        execution.package_name,
-        execution.declared_version,
-        execution.lockfiles,
-    )
-
-
-def _routine_local_runner_versions_match(
-    workspace: Path,
-    package_name: str,
-    declared_version: str,
-    lockfiles: tuple[PackageExecutionFileEvidence, ...],
-) -> bool:
-    try:
-        manifest = json.loads((workspace / "package.json").read_text(encoding="utf-8"))
-        installed = json.loads((workspace / "node_modules" / package_name / "package.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(manifest, dict) or not isinstance(installed, dict):
-        return False
-    dependency_groups = (manifest.get("dependencies"), manifest.get("devDependencies"))
-    if not any(isinstance(group, dict) and group.get(package_name) == declared_version for group in dependency_groups):
-        return False
-    installed_version = installed.get("version")
-    if installed.get("name") != package_name or not isinstance(installed_version, str):
-        return False
-    locked_versions: set[str] = set()
-    for evidence in lockfiles:
-        if evidence.resolved_path is None:
-            continue
-        try:
-            lock_text = Path(evidence.resolved_path).read_text(encoding="utf-8")
-            lock = loads_jsonc(lock_text) if Path(evidence.resolved_path).name == "bun.lock" else json.loads(lock_text)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return False
-        if not isinstance(lock, dict):
-            return False
-        packages = lock.get("packages")
-        if not isinstance(packages, dict):
-            return False
-        package_lock_entry = packages.get(f"node_modules/{package_name}")
-        if isinstance(package_lock_entry, dict) and isinstance(package_lock_entry.get("version"), str):
-            locked_versions.add(package_lock_entry["version"])
-        bun_entry = packages.get(package_name)
-        if isinstance(bun_entry, list) and bun_entry and isinstance(bun_entry[0], str):
-            prefix = f"{package_name}@"
-            if bun_entry[0].startswith(prefix):
-                locked_versions.add(bun_entry[0][len(prefix) :])
-    return locked_versions == {installed_version} and _routine_semver_spec_matches(declared_version, installed_version)
 
 
 def _unmodeled_shell_runtime_artifact(
@@ -398,7 +283,6 @@ def _hook_runtime_artifact_with_native(
                     prompt_text=prompt_text,
                     home_dir=home_dir,
                     config_path=config_path,
-                    guard_home=guard_home,
                 )
                 if attachment_artifact is not None:
                     return attachment_artifact
@@ -478,7 +362,7 @@ def _hook_runtime_artifact_with_native(
         # Test and lint runners execute repository-controlled code. Local
         # identity is evidence, not authority to omit their package review.
         and not (
-            _routine_local_runner_has_complete_evidence(package_intent)
+            package_intent.routine_local_runner
             and all(item.package_name == "tsc" for item in package_intent.local_executions)
         )
     ):
@@ -694,7 +578,6 @@ __all__ = [
     "_CODEX_TOOL_RESPONSE_MAX_DEPTH",
     "_CODEX_TOOL_RESPONSE_TEXT_LIMIT",
     "_HOOK_EVENT_NAME_MAP",
-    "_artifact_id_from_event",
     "_codex_post_tool_output_artifact",
     "_hook_event_name",
     "_hook_runtime_artifact",

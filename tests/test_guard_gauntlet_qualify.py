@@ -119,10 +119,12 @@ def test_gnu_sed_detection_prefers_path_then_gnubin(tmp_path: Path, monkeypatch:
         qualify_setup.gnu_sed_dir(probe=bsd)
 
 
-def test_attempt_command_and_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize("native_route", [None, "openai-codex/gpt-6.1-sol"])
+def test_attempt_command_and_environment(tmp_path: Path, native_route: str | None) -> None:
     argv = qualify.attempt_argv(
         python=tmp_path / "candidate" / ".venv" / "bin" / "python",
         effort="medium",
+        native_route=native_route,
         sdk_root=tmp_path / "sdk",
         jobs=4,
         host_slots=8,
@@ -136,7 +138,13 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         max_rounds=32,
     )
     assert argv[1:3] == ["-m", "ci.gauntlet"]
-    for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
+    if native_route:
+        assert argv[argv.index("--native-route") + 1] == native_route
+        assert "--native-luna-route" not in argv
+    else:
+        assert "--native-luna-route" in argv
+        assert "--native-route" not in argv
+    for flag in ("--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
     assert argv[argv.index("--max-load-wait") + 1] == "600.0"
@@ -165,7 +173,7 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
 
 
 def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.4.12"}}).encode()
+    package = json.dumps({"dependencies": {"@oh-my-pi/pi-coding-agent": "18.11.3"}}).encode()
     lock = b'{"lockfileVersion": 3}'
     monkeypatch.setattr(
         qualify_setup, "git_show", lambda _r, _s, path: package if path.endswith("package.json") else lock
@@ -177,13 +185,13 @@ def test_sdk_cache_installs_once_per_lock_digest(tmp_path: Path, monkeypatch: py
         assert argv[0] == "npm" and log.name == "setup.log"
         package_dir = cwd / "node_modules" / "@oh-my-pi" / "pi-coding-agent"
         package_dir.mkdir(parents=True)
-        (package_dir / "package.json").write_text('{"version": "18.4.12"}')
+        (package_dir / "package.json").write_text('{"version": "18.11.3"}')
 
     monkeypatch.setattr(qualify_setup, "run_logged", fake_logged)
     setup_log = tmp_path / "run" / "logs" / "setup.log"
     first = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
     assert first["lock_sha256"] == hashlib.sha256(lock).hexdigest()
-    assert first["omp_version"] == "18.4.12"
+    assert first["omp_version"] == "18.11.3"
     assert len(calls) == 1
     # A second driver reuses the completed prefix without another npm install.
     second = qualify_setup.ensure_sdk(tmp_path / "cache", tmp_path / "repo", SHA, setup_log)
@@ -219,7 +227,7 @@ def _fake_setup(monkeypatch: pytest.MonkeyPatch, tmp_path: Path, summaries: list
     """Stub caches, the candidate worktree and the runner; return the verify calls."""
     sdk = tmp_path / "sdk"
     (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent").mkdir(parents=True)
-    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.4.12"}')
+    (sdk / "node_modules" / "@oh-my-pi" / "pi-coding-agent" / "package.json").write_text('{"version": "18.11.3"}')
     monkeypatch.setattr(
         qualify_setup,
         "preflight",

@@ -108,7 +108,9 @@ def test_copilot_native_denial_records_no_prompt(tmp_path, monkeypatch, capsys, 
     monkeypatch.setattr(
         copilot,
         "evaluate_tool_call",
-        lambda **kwargs: ToolCallDecision(action="review", source="policy", signals=(), summary="Review required."),
+        lambda **kwargs: ToolCallDecision(
+            action="review", policy_action="review", source="policy", signals=(), summary="Review required."
+        ),
     )
     request = (artifact, "a" * 64, {})
     options = {

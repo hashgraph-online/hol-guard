@@ -1091,7 +1091,7 @@ clearer UX and an implementation plan with technical references.
             },
             "stdout": (
                 "guard/server.py:42:def handle_post(self):\n"
-                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:43:    daemon_auth_token = 'dev-token-123'\n"
             ),
             "source_scope": "project",
         }
@@ -1115,6 +1115,49 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "require-reapproval"
+
+    def test_pi_post_tool_use_does_not_review_native_grep_of_token_handling_code(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "codex_plugin_scanner_full"
+        external_source_dir.mkdir(parents=True)
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "grep",
+            "tool_input": {"pattern": "handle_post|token", "path": str(external_source_dir)},
+            "stdout": (
+                "guard/server.py:42:def handle_post(self):\n"
+                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:44:    signed_token = await sign_token(user.id)\n"
+            ),
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+        assert output.get("approval_reuse", {}).get("action") != "require-reapproval"
 
     def test_pi_post_tool_use_blocks_private_key_from_external_source_tree(
         self,
@@ -1144,6 +1187,110 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "grep",
             "tool_input": {"pattern": "PRIVATE KEY", "path": str(external_source_dir)},
             "stdout": private_key_pem,
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert "tool output contains credential-looking material" in output["risk_signals"]
+
+    def test_pi_post_tool_use_passes_native_read_of_token_handling_source(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "app-portal"
+        (external_source_dir / "src").mkdir(parents=True)
+        source = (
+            "export function connectAs(session, cfg) {\n"
+            "  const client = connect({ token: session.token, user: session.user });\n"
+            "  const database = {\n"
+            "    host: cfg.host,\n"
+            "    password: cfg.password, // database\n"
+            "  };\n"
+            "  return { client, database };\n"
+            "}\n"
+        )
+        source_file = external_source_dir / "src" / "session.ts"
+        source_file.write_text(source, encoding="utf-8")
+        _build_guard_fixture(home_dir, workspace_dir)
+        # The harness's own read tool sends no command line, so the only proof
+        # that nothing left the host is the target it names.
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": f"{source_file}:1-8"},
+            "tool_response": {"content": source},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+
+    def test_pi_post_tool_use_blocks_native_read_of_private_key(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        private_key_pem = (
+            ec.generate_private_key(ec.SECP256R1())
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode("ascii")
+        )
+        key_file = home_dir / ".ssh" / "id_rsa"
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(private_key_pem, encoding="utf-8")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": str(key_file)},
+            "tool_response": {"content": private_key_pem},
             "source_scope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))

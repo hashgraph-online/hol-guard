@@ -17,7 +17,7 @@ import shlex
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
-from .input_evidence import input_digest, input_matches, redact_value
+from .input_evidence import Redaction, input_digest, input_matches, redact_value
 
 PROOF_SCHEMA = "guard-contained-test-request-proof.v1"
 PROOF_KEYS = frozenset({"schema", "tool_call_id", "workspace", "payload_sha256", "request_sha256"})
@@ -179,7 +179,7 @@ def _payload(call_id: str, tool_input: object) -> dict[str, Any]:
     return {"hook_event_name": "PreToolUse", "tool_call_id": call_id, "tool_name": "bash", "tool_input": tool_input}
 
 
-def request_proofs(host_log: Path, workspace: Path, replacements: dict[str, str]) -> list[dict[str, Any]]:
+def request_proofs(host_log: Path, workspace: Path, replacements: dict[Redaction, str]) -> list[dict[str, Any]]:
     """Bounded public proofs of the adapter request bytes the trusted host observer captured.
 
     The adapter deletes its request once the wrapper runs, so the observer reads the exact file the

@@ -2,7 +2,6 @@
 
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
@@ -97,18 +96,8 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
     }
     let mut file =
         File::open(executable).map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(hex_bytes(&hasher.finalize()))
+    crate::resident_state_encoding::sha256_hex_from_reader(&mut file)
+        .map_err(|_| "native_resident_runtime_read_failed".to_owned())
 }
 
 pub(crate) fn runtime_digest() -> Result<String, String> {
@@ -167,6 +156,8 @@ pub(crate) fn private_root_for_scope(scope: &Path) -> Result<PathBuf, String> {
 
 #[cfg(unix)]
 fn socket_directory_path(scope: &Path, digest: &str) -> PathBuf {
+    use sha2::{Digest, Sha256};
+
     let mut hasher = Sha256::new();
     hasher.update(scope.as_os_str().as_encoded_bytes());
     let scope_digest = hex_bytes(&hasher.finalize());
@@ -407,6 +398,7 @@ pub(crate) fn publish_state(
         state_mac: String::new(),
     };
     state.state_mac = state_mac(&state, token);
+    validate_state(scope, &state, digest)?;
     let path = scope.join(format!(
         "{STATE_FILE_PREFIX}{generation:020}{STATE_FILE_SUFFIX}"
     ));
@@ -431,6 +423,18 @@ pub(crate) fn publish_state(
         .take(RETAINED_STATE_FILES)
         .map(|candidate| candidate.generation)
         .collect::<std::collections::HashSet<_>>();
+    prune_superseded_states(scope, generation, &retained_generations, &private_root)?;
+    Ok(state)
+}
+
+fn prune_superseded_states(
+    scope: &Path,
+    published_generation: u64,
+    retained_generations: &std::collections::HashSet<u64>,
+    private_root: &Path,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     let superseded = resident_state_discovery::state_paths(scope)?;
     for candidate in superseded {
         let generation = candidate
@@ -439,7 +443,12 @@ pub(crate) fn publish_state(
             .and_then(|name| name.strip_prefix(STATE_FILE_PREFIX))
             .and_then(|name| name.strip_suffix(STATE_FILE_SUFFIX))
             .and_then(|name| name.parse::<u64>().ok());
-        if generation.is_some_and(|value| retained_generations.contains(&value)) {
+        // This generation was constructed, authenticated and durably written
+        // above. A transient read/identity failure during rediscovery must not
+        // unpublish our own live endpoint while its listener keeps serving.
+        if generation.is_some_and(|value| {
+            value == published_generation || retained_generations.contains(&value)
+        }) {
             continue;
         }
         #[cfg(windows)]
@@ -460,7 +469,7 @@ pub(crate) fn publish_state(
             }
         }
     }
-    Ok(state)
+    Ok(())
 }
 
 #[cfg(test)]

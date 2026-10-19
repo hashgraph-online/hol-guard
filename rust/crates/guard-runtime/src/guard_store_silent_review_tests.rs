@@ -70,6 +70,20 @@ fn expected(recorded: &Value, label: &str) -> Value {
     let mut out = recorded.clone();
     let events = out["guard_review_outbox_events"].take();
     out["guard_review_outbox_events"] = without_event_ids(events, label);
+    // This recorded native-pretool request has no reusable execution binding.
+    // Keep its stored snapshot, but emit no unavailable allow recommendation.
+    if label == "fresh_native_tool_call" {
+        for event in out["guard_events"].as_array_mut().unwrap() {
+            let recorded = event["payload_json"].as_str().unwrap();
+            let payload: Value = serde_json::from_str(recorded).unwrap();
+            assert_eq!(payload["artifact_id"], "codex:native-pretool:Bash");
+            assert_eq!(payload["recommended_scope"], "artifact");
+            event["payload_json"] = Value::String(recorded.replace(
+                "\"recommended_scope\": \"artifact\"",
+                "\"recommended_scope\": null",
+            ));
+        }
+    }
     out
 }
 
@@ -97,7 +111,12 @@ fn seed(path: &std::path::Path, vectors: &Value, scenario: &Value) {
 fn check_queued(connection: &Connection, scenario: &Value, name: &str) {
     let request_id = scenario["result"].as_str().unwrap();
     let queued = queued_request(connection, request_id).unwrap();
-    assert_eq!(Value::Object(queued), scenario["queued"], "{name}: queued");
+    let mut expected = scenario["queued"].clone();
+    if name == "fresh_native_tool_call" {
+        assert_eq!(expected["recommended_scope"], "artifact");
+        expected["recommended_scope"] = Value::Null;
+    }
+    assert_eq!(Value::Object(queued), expected, "{name}: queued");
 }
 
 #[test]

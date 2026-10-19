@@ -1,4 +1,4 @@
-"""A total evaluator outage must not trust names or lexical workspace paths."""
+"""A total runtime outage must not trust names or lexical workspace paths."""
 
 from __future__ import annotations
 
@@ -13,20 +13,27 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import codex as codex_adapter
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as flow
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.codex_hook_runtime_trust import TrustedCodexHookLaunch
+from codex_plugin_scanner.guard.codex_hook_bridge_runtime import decode_bridge_config_argument
+from codex_plugin_scanner.guard.codex_hook_command_line import encode_hook_config_argument
 
 
 @pytest.mark.parametrize("case", ["repair_path", "inspection_path", "explicit_inspection", "symlink_read"])
-@pytest.mark.parametrize("launcher_trust", ["valid", "invalid"])
+@pytest.mark.parametrize("event_name", ["PreToolUse", "PermissionRequest"])
 def test_total_outage_rejects_unverified_recovery_action(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
     case: str,
-    launcher_trust: str,
+    event_name: str,
 ) -> None:
+    # Exercise the Windows wire encoding on every platform. Authentication
+    # must retain the registered argument, not its decoded JSON spelling.
+    monkeypatch.setattr(
+        codex_adapter,
+        "encode_hook_config_argument",
+        lambda value: encode_hook_config_argument(value, windows=True),
+    )
     context = HarnessContext(
         home_dir=tmp_path / "home",
         workspace_dir=None,
@@ -34,13 +41,13 @@ def test_total_outage_rejects_unverified_recovery_action(
         home_override_explicit=True,
     )
     codex_adapter.CodexHarnessAdapter().install(context)
-    config_json = codex_adapter._hook_command_parts(context)[3]
-    managed_config = json.loads(config_json)
+    config_argument = codex_adapter._hook_command_parts(context)[-1]
+    managed_config = json.loads(decode_bridge_config_argument(config_argument))
     config = {
         key: managed_config[key]
         for key in ("state_path", "fallback_command", "start_command", "query", "hook_timeouts", "manifest_path")
     }
-    config["config_json"] = config_json
+    config["config_json"] = config_argument
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -90,7 +97,7 @@ def test_total_outage_rejects_unverified_recovery_action(
         io.StringIO(
             json.dumps(
                 {
-                    "hook_event_name": "PreToolUse",
+                    "hook_event_name": event_name,
                     "tool_name": tool_name,
                     "tool_input": tool_input,
                     "cwd": str(workspace),
@@ -98,41 +105,28 @@ def test_total_outage_rejects_unverified_recovery_action(
             )
         ),
     )
-    attempts: list[str] = []
-    validate = flow.trusted_hook_launch
-
-    def unavailable(**_kwargs):
-        raise ConnectionRefusedError("private-daemon-endpoint")
-
-    def real_launcher(**kwargs):
-        attempts.append("validate")
-        if launcher_trust == "invalid":
-            raise ValueError("private-launcher-detail")
-        return validate(**kwargs)
-
-    def failed_start(_self, *_args, **_kwargs):
-        attempts.append("start")
-        return False
-
-    def failed_fallback(_self, *_args, **_kwargs):
-        attempts.append("fallback")
-        return None
 
     def unexpected_child(*_args, **_kwargs):
         pytest.fail("The outage must not execute an unauthenticated child")
 
-    monkeypatch.setattr(flow, "_daemon_response", unavailable)
-    monkeypatch.setattr(flow, "trusted_hook_launch", real_launcher)
-    monkeypatch.setattr(flow, "_run_daemon_start", unexpected_child)
-    monkeypatch.setattr(flow, "_run_local_fallback", unexpected_child)
-    monkeypatch.setattr(TrustedCodexHookLaunch, "run_start", failed_start)
-    monkeypatch.setattr(TrustedCodexHookLaunch, "run_fallback", failed_fallback)
+    # A total outage is a Guard home with no runtime beside it. A development
+    # checkout may still have a built runtime somewhere the resolver finds, so
+    # the outage is imposed here rather than assumed from the install. The
+    # bridge must answer the hook itself rather than reach for a name on PATH
+    # or a path the workspace can spell.
+    def no_runtime(_guard_home: Path) -> None:
+        return None
+
+    monkeypatch.setattr(bridge, "_native_bridge_executable", no_runtime)
+    monkeypatch.setattr(bridge.subprocess, "run", unexpected_child)
 
     assert bridge.main(**config) == 0
-    assert attempts == (["validate", "start", "fallback"] if launcher_trust == "valid" else ["validate"])
     captured = capsys.readouterr()
     output = json.loads(captured.out)
-    assert output["hookSpecificOutput"].get("permissionDecision") == "deny"
-    assert "private-daemon-endpoint" not in captured.out + captured.err
-    assert "private-launcher-detail" not in captured.out + captured.err
+    hook_output = output["hookSpecificOutput"]
+    if event_name == "PermissionRequest":
+        assert hook_output["decision"]["behavior"] == "deny"
+    else:
+        assert hook_output["permissionDecision"] == "deny"
     assert str(attack_bin) not in captured.out + captured.err
+    assert str(outside) not in captured.out + captured.err

@@ -187,6 +187,14 @@ fn case_dir(name: &str) -> PathBuf {
     ));
     std::fs::create_dir_all(root.join("home")).expect("home");
     std::fs::create_dir_all(root.join("ws")).expect("ws");
+    // The vectors predate package review settings, when a package Guard could
+    // not vouch for always paused. Pinning that action keeps them a replay of
+    // the evaluator; the settings have their own tests.
+    std::fs::write(
+        root.join("home").join("config.toml"),
+        "[risk_actions]\npackage_unknown = \"require-reapproval\"\n",
+    )
+    .expect("config");
     root
 }
 

@@ -5,10 +5,13 @@ use std::path::Path;
 
 use sha2::{Digest, Sha256};
 
+/// Shared with the runtime's approval token, which hashes a shell's command
+/// text alone.
+pub use crate::hook_adapter_envelope_text::is_shell_tool;
 use crate::hook_adapter_envelope_text::{
     action_type, command_text_from_tool_payload, cursor_tool_input_urls, hook_event_name, hosts_in,
-    is_shell_tool, mcp_details, network_hosts, payload_with_default_event, prompt_value,
-    raw_target_paths, tool_call_from_payload, tool_input_from_payload, tool_name_from_payload,
+    mcp_details, network_hosts, payload_with_default_event, prompt_value, raw_target_paths,
+    tool_call_from_payload, tool_input_from_payload, tool_name_from_payload,
     CURSOR_NETWORK_TOOL_NAMES,
 };
 use crate::hook_adapter_paths::{

@@ -30,7 +30,7 @@ fn git(directory: &Path, arguments: &[&str]) {
     assert!(status.success(), "git {arguments:?}");
 }
 
-fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
+pub(crate) fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
     fixture::evaluate_pre_tool_envelope_with_context(
         "codex",
         "PreToolUse",

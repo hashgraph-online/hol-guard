@@ -248,6 +248,28 @@ fn pre_tool_input_carries_the_bridge_process() {
     assert_eq!(data["tool_name"], json!("Bash"));
 }
 
+/// A Codex install may configure a hook timeout longer than a person will
+/// wait at a browser prompt. The inline wait the daemon reads is clamped, so
+/// a pending approval cannot hold the hook open past the consumer limit.
+#[test]
+fn inline_browser_wait_stays_within_the_consumer_limit() {
+    let pairs = timeouts(&[("PreToolUse", 900)]);
+    let prepared = prepare(
+        r#"{"hook_event_name":"PreToolUse","tool_name":"Bash"}"#,
+        &pairs,
+    )
+    .expect("prepared");
+    let data: Value = serde_json::from_str(&prepared.data).unwrap();
+    assert_eq!(
+        data[BROWSER_WAIT_TIMEOUT_KEY],
+        json!(MAX_APPROVAL_WAIT_SECONDS)
+    );
+    assert_eq!(
+        data[BROWSER_WAIT_PROCESS_KEY]["pid"],
+        json!(std::process::id())
+    );
+}
+
 #[test]
 fn other_events_forward_their_own_input() {
     let pairs = timeouts(&[("Stop", 5), ("PreToolUse", 30)]);

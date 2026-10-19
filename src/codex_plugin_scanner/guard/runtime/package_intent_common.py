@@ -112,6 +112,10 @@ class PackageIntent:
     execution_context_hashes: tuple[str, ...] = ()
     execution_context_cwds: tuple[str, ...] = ()
     execution_context_reason_codes: tuple[str, ...] = ()
+    #: Whether the native parser judged this a routine local JS runner already
+    #: bound to local project state. The runtime computes it beside the
+    #: manifest, lockfile and executable reads it depends on; Python reads it.
+    routine_local_runner: bool = False
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -165,6 +169,7 @@ class PackageIntent:
             execution_context_hashes=_str_tuple(payload.get("execution_context_hashes")),
             execution_context_cwds=_str_tuple(payload.get("execution_context_cwds")),
             execution_context_reason_codes=_str_tuple(payload.get("execution_context_reason_codes")),
+            routine_local_runner=payload.get("routine_local_runner") is True,
         )
 
 

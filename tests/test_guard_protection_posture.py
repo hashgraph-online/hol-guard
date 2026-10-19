@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.config import (
     update_guard_settings,
 )
 from codex_plugin_scanner.guard.protection_posture import (
-    apply_posture_confidence,
     derive_protection_posture,
     dual_write_from_posture,
 )
@@ -222,41 +221,6 @@ def test_derive_and_dual_write_tables() -> None:
     assert dual_write_from_posture("protected") == ("enforce", "balanced")
     assert dual_write_from_posture("extra_careful") == ("enforce", "strict")
     assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
-
-
-def test_confidence_stop_blocks_strong_exfiltration_even_when_implicit() -> None:
-    asked = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence=None,
-    )
-    stopped = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    implicit = apply_posture_confidence(
-        posture="protected",
-        explicit=False,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    always = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="guard_bypass",
-        action="require-reapproval",
-        confidence=None,
-    )
-    assert asked == "require-reapproval"
-    assert stopped == "block"
-    assert implicit == "block"
-    assert always == "block"
 
 
 def test_managed_security_level_lock_keeps_level_maps(tmp_path: Path) -> None:

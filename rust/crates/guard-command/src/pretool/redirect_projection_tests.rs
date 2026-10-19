@@ -19,6 +19,7 @@ fn context() -> crate::pretool::PathContext<'static> {
         cdpath_unset: false,
         rustup_override_absent: false,
         npm_config_inert: false,
+        pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),
@@ -64,6 +65,9 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
             true,
         ),
         ("ls > /dev/null && git status", "ls   && git status", false),
+        // The shell carries its whole script, so the projection leaves the
+        // command the script names and that command keeps its own floors.
+        ("sh -c 'rm -rf ~' > /tmp/out.log", "sh -c 'rm -rf ~'", true),
     ] {
         let projection = project(command, context()).unwrap_or_else(|| panic!("{command}"));
         // The test workspace does not exist, so no write is bounded.
@@ -78,6 +82,12 @@ fn projects_literal_output_redirects_and_quoted_cat_heredocs() {
             "{command}"
         );
     }
+}
+
+#[test]
+fn a_projected_home_removal_still_blocks() {
+    let result = evaluate("sh -c 'rm -rf ~' > /tmp/out.log");
+    assert_eq!(result.minimum_action, "block");
 }
 
 #[test]
@@ -99,7 +109,6 @@ fn keeps_redirects_that_can_execute_hide_input_or_reach_sensitive_paths_unprojec
         "echo hi >&2",
         "echo hi 3> notes.txt",
         "echo $(id) > notes.txt",
-        "sh -c 'rm -rf ~' > /tmp/out.log",
         "fd -X rm {} > /tmp/out.log",
         "echo 'a > b'",
         "ls > /tmp/listing.txt && git status",
@@ -132,6 +141,7 @@ fn file_writes_never_follow_an_existing_symlink() {
         cdpath_unset: false,
         rustup_override_absent: false,
         npm_config_inert: false,
+        pip_config_inert: false,
         shell_home_matches: false,
         ripgrep_config_absent: false,
         psql_environment: Default::default(),

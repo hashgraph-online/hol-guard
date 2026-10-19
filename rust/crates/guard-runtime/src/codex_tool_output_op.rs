@@ -151,6 +151,19 @@ impl InspectionHost for ResidentInspectionHost<'_> {
         self.svc_trusted_path_command(command, cwd, home_dir)
     }
 
+    /// The evidence builder reads the package, lock and executable through the
+    /// crate's `O_NOFOLLOW` integrity helpers, which are POSIX-only, so
+    /// `contained_runner` itself is `cfg(unix)`. Off Unix the resident keeps the
+    /// trait's fail-closed answer and the chain stays unrecognized, exactly as
+    /// it did before this hook was answered anywhere.
+    #[cfg(unix)]
+    fn bun_script_evidence_complete(&self, script_args: &[String], workspace: &str) -> bool {
+        guard_command::contained_runner::bun_script_evidence_complete(
+            script_args,
+            std::path::Path::new(workspace),
+        )
+    }
+
     fn trusted_git_binary(&self, cwd: &str) -> Option<String> {
         self.svc_trusted_git(cwd)
     }
@@ -174,12 +187,157 @@ impl InspectionHost for ResidentInspectionHost<'_> {
     fn git_object_existence_query(&self, command: &str, cwd: &str) -> bool {
         self.svc_object_existence(command, cwd)
     }
+
+    fn real_path(&self, path: &str) -> Option<String> {
+        path.starts_with('/')
+            .then(|| crate::oci_path::resolve_lenient(path))
+    }
+
+    fn is_directory(&self, path: &str) -> bool {
+        std::path::Path::new(path).is_dir()
+    }
+
+    fn is_regular_file(&self, path: &str) -> bool {
+        std::path::Path::new(path).is_file()
+    }
+
+    fn file_text_prefix(&self, path: &str, max_bytes: usize) -> Option<String> {
+        use std::io::Read;
+
+        let file = std::fs::File::open(path).ok()?;
+        if !file.metadata().ok()?.is_file() {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        file.take(max_bytes as u64).read_to_end(&mut bytes).ok()?;
+        Some(guard_command::codex_prompt_credential_file::decode_ignoring_errors(&bytes))
+    }
+
+    fn path_contains_symlink(&self, path: &str, base_dir: &str) -> bool {
+        let base = std::path::Path::new(base_dir);
+        let Ok(relative) = std::path::Path::new(path).strip_prefix(base) else {
+            // Not under the root it was measured against: refuse rather than
+            // walk a path that could leave it.
+            return true;
+        };
+        let mut candidate = base.to_path_buf();
+        for part in relative.components() {
+            let std::path::Component::Normal(name) = part else {
+                continue;
+            };
+            candidate.push(name);
+            match std::fs::symlink_metadata(&candidate) {
+                Ok(metadata) => {
+                    if metadata.file_type().is_symlink() {
+                        return true;
+                    }
+                }
+                Err(_) => return true,
+            }
+        }
+        false
+    }
+
+    #[cfg(unix)]
+    fn attachment_reader(
+        &self,
+        attachment_root: &str,
+        relative: &[String],
+        max_bytes: u64,
+    ) -> Option<Box<dyn std::io::Read + '_>> {
+        use std::os::unix::fs::MetadataExt;
+
+        use nix::fcntl::{open, openat, OFlag};
+        use nix::sys::stat::Mode;
+
+        let (last, parents) = relative.split_last()?;
+        if relative
+            .iter()
+            .any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return None;
+        }
+        let directory_flags =
+            OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC;
+        let resolved_root = std::fs::canonicalize(attachment_root).ok()?;
+        let root = std::fs::File::from(open(attachment_root, directory_flags, Mode::empty()).ok()?);
+        // The descriptor the walk starts from has to be the resolved root
+        // itself; an intermediate component of the spelling may have been
+        // retargeted while it was opened.
+        let opened = root.metadata().ok()?;
+        let expected = std::fs::symlink_metadata(&resolved_root).ok()?;
+        if opened.dev() != expected.dev() || opened.ino() != expected.ino() {
+            return None;
+        }
+        let mut directory = std::os::fd::OwnedFd::from(root);
+        for part in parents {
+            directory = openat(&directory, part.as_str(), directory_flags, Mode::empty()).ok()?;
+        }
+        let file = std::fs::File::from(
+            openat(
+                &directory,
+                last.as_str(),
+                OFlag::O_RDONLY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                Mode::empty(),
+            )
+            .ok()?,
+        );
+        // Python read the descriptor's `fstat` before the first chunk, so an
+        // attachment past the limit never cost a scan.
+        let metadata = file.metadata().ok()?;
+        if !metadata.is_file() || metadata.len() > max_bytes {
+            return None;
+        }
+        Some(Box::new(file))
+    }
+
+    /// Without `openat` the walk cannot be descriptor-relative, so the opened
+    /// path is resolved once and required to stay under the resolved root,
+    /// which is the branch CPython takes on the same platforms.
+    #[cfg(not(unix))]
+    fn attachment_reader(
+        &self,
+        attachment_root: &str,
+        relative: &[String],
+        max_bytes: u64,
+    ) -> Option<Box<dyn std::io::Read + '_>> {
+        if relative.is_empty()
+            || relative
+                .iter()
+                .any(|part| part.is_empty() || part == "." || part == "..")
+        {
+            return None;
+        }
+        let resolved_root = std::fs::canonicalize(attachment_root).ok()?;
+        let mut candidate = std::path::PathBuf::from(attachment_root);
+        for part in relative {
+            candidate.push(part);
+        }
+        let resolved = std::fs::canonicalize(&candidate).ok()?;
+        if !resolved.starts_with(&resolved_root) {
+            return None;
+        }
+        let file = std::fs::File::open(&resolved).ok()?;
+        // Python read the descriptor's `fstat` before the first chunk, so an
+        // attachment past the limit never cost a scan.
+        let metadata = file.metadata().ok()?;
+        if !metadata.is_file() || metadata.len() > max_bytes {
+            return None;
+        }
+        Some(Box::new(file))
+    }
 }
 
 fn request_digest(request: &CodexToolOutputRequestV1) -> Result<String, &'static str> {
     let material = serde_json::to_value(request).map_err(|_| INVALID)?;
+    // A harness accepts up to a megabyte of hook input, so a prompt review
+    // carries whatever the user pasted. Holding it to the ordinary request
+    // limit turned a long prompt into an invalid request, and a prompt review
+    // that cannot answer is a review the user did not need.
     let limit = match request.action {
-        CodexToolOutputActionV1::PostToolOutput(_) => CODEX_POST_TOOL_OUTPUT_MAX_BYTES,
+        CodexToolOutputActionV1::PostToolOutput(_)
+        | CodexToolOutputActionV1::PromptCredentialFile(_)
+        | CodexToolOutputActionV1::PromptAttachment(_) => CODEX_POST_TOOL_OUTPUT_MAX_BYTES,
         _ => CODEX_TOOL_OUTPUT_MAX_BYTES,
     };
     let mut bytes = Vec::new();
@@ -231,6 +389,16 @@ fn action_is_bounded(action: &CodexToolOutputActionV1) -> bool {
         }
         // The canonical digest already bounds the whole body.
         Action::PostToolOutput(_) => true,
+        // A prompt is prose, not a command line: the canonical digest limit
+        // bounds it, as it does for every other prompt review.
+        Action::PromptCredentialFile(scope) => {
+            option_path_is_bounded(&scope.cwd) && path_is_bounded(&scope.config_path)
+        }
+        // Prose again, bounded by the canonical digest like the credential-file
+        // scan beside it.
+        Action::PromptAttachment(scope) => {
+            path_is_bounded(&scope.home_dir) && path_is_bounded(&scope.config_path)
+        }
     }
 }
 

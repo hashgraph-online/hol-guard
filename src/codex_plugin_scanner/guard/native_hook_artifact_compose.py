@@ -61,6 +61,18 @@ _FIELDS: dict[str, frozenset[str]] = {
     "grant_settle": frozenset(
         {"current_action", "policy_action", "approval_context_action", "granted_action", "native_floor"}
     ),
+    "observe_executable_action": frozenset(
+        {
+            "current_config_action",
+            "current_action_override",
+            "trusted_cli_override",
+            "untrusted_hook_payload_hint",
+            "package_action",
+            "data_flow_action",
+            "scanner_action",
+            "package_evaluation_action",
+        }
+    ),
     "saved_reuse": frozenset(
         {
             "current_action",
@@ -152,6 +164,7 @@ _ANSWERS: dict[str, dict[str, str]] = {
     "config_action": {"action": "a", "auto_stop_events": "l"},
     "tool_grant_apply": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
     "grant_settle": {"approval_context_policy_action": "a", "current_policy_action": "a", "policy_action": "a"},
+    "observe_executable_action": {"executable_action": "a"},
     "saved_reuse": {"approval_reuse": "d", "approval_reuse_source": "S", "policy_action": "a"},
     "saved_block_reuse": {"approval_reuse": "d", "policy_action": "a"},
     "trusted_override": {"claim_required": "b", "evidence": "D", "reason_code": "S"},

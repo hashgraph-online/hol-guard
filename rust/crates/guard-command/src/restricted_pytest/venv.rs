@@ -1,10 +1,12 @@
-//! External Python virtual environments whose interpreter is an approved runtime.
+//! Python virtual environments whose interpreter is an approved runtime.
 //!
 //! A venv launcher is a symlink in `<venv>/bin`; the image it runs is the base
-//! interpreter its symlink chain ends in. The venv itself is granted read-only,
-//! so it must look like a venv and nothing broader: a fixed set of top-level
-//! entries, a single `pyvenv.cfg` whose `home` is a trusted or approved
-//! runtime, and no ancestor relation to HOME or the workspace.
+//! interpreter its symlink chain ends in. An external venv is granted
+//! read-only, so it must look like a venv and nothing broader: a fixed set of
+//! top-level entries, a single `pyvenv.cfg` whose `home` is a trusted or
+//! approved runtime, and no ancestor relation to HOME or the workspace. A venv
+//! inside the workspace needs no grant of its own; what it needs is the
+//! interpreter install its launchers point out of the workspace to.
 use super::*;
 
 const VENV_ENTRIES: &[&str] = &[
@@ -143,6 +145,108 @@ pub(super) fn external_root(launch: &Path, executable: &Path, workspace: &Path) 
         return None;
     }
     Some(root)
+}
+
+/// The `lib/pythonX.Y` standard libraries an install prefix holds.
+fn standard_libraries(prefix: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = fs::read_dir(prefix.join("lib")) else {
+        return Vec::new();
+    };
+    let mut libraries: Vec<PathBuf> = Vec::new();
+    for entry in entries.flatten().take(64) {
+        let name = entry.file_name();
+        let Some(version) = name.to_str().and_then(|name| name.strip_prefix("python")) else {
+            continue;
+        };
+        if version.is_empty() || !version.chars().all(|c| c.is_ascii_digit() || c == '.') {
+            continue;
+        }
+        let Ok(canonical) = entry.path().canonicalize() else {
+            continue;
+        };
+        if !canonical.is_dir() || !path_is_within(&canonical, prefix) {
+            continue;
+        }
+        if !libraries.contains(&canonical) {
+            libraries.push(canonical);
+        }
+        if libraries.len() == 4 {
+            break;
+        }
+    }
+    libraries
+}
+
+/// A prefix that holds one runtime's install of its own, so granting it whole
+/// stays inside that runtime. A trusted root named exactly, such as
+/// `/usr/local` or `/opt/homebrew`, is not one: it holds every program and
+/// configuration file installed below it, and a `pyvenv.cfg` in the workspace
+/// chooses the `home` this prefix comes from.
+/// Whether the configured `home` is an install's launcher directory: a `bin`
+/// that holds a runnable interpreter.
+///
+/// `pyvenv.cfg` sits in the workspace, so its `home` is the repository's
+/// choice. Without this, any directory below a trusted root could name itself
+/// the runtime and have its whole prefix granted; with it, the directory has
+/// to be one an install actually starts Python from.
+fn interpreter_home(home: &Path) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    if home.file_name() != Some(OsStr::new("bin")) {
+        return false;
+    }
+    let Ok(entries) = fs::read_dir(home) else {
+        return false;
+    };
+    entries.flatten().take(256).any(|entry| {
+        python_named(&entry.path())
+            && entry.path().metadata().is_ok_and(|metadata| {
+                metadata.is_file() && metadata.permissions().mode() & 0o111 != 0
+            })
+    })
+}
+
+fn managed_prefix(prefix: &Path) -> bool {
+    approved_user_python_runtime(prefix)
+        || TRUSTED_EXECUTABLE_ROOTS
+            .iter()
+            .any(|root| prefix != root.as_path() && path_is_within(prefix, root))
+}
+
+/// The install a workspace venv's launchers run, as the directory that holds
+/// both the interpreter and its standard library.
+///
+/// The sandbox reads and runs the workspace, so a project's `.venv` is already
+/// there, but `bin/python` is a symlink to an interpreter installed elsewhere.
+/// Unless that install is an executable root the sandbox cannot start it, and
+/// ordinary Python work in a project venv would be contained and then fail.
+/// The venv must have a venv's shape and name a trusted or managed runtime.
+/// A managed install is granted whole; anywhere else only the interpreter's
+/// own directory and the standard library beside it are.
+pub(super) fn workspace_base_roots(bin: &Path, workspace: &Path) -> Vec<PathBuf> {
+    if bin.file_name() != Some(OsStr::new("bin")) {
+        return Vec::new();
+    }
+    let Some(root) = bin.parent() else {
+        return Vec::new();
+    };
+    if !path_is_within(root, workspace) || !venv_shape(root) {
+        return Vec::new();
+    }
+    let Some(home) = configured_home(root) else {
+        return Vec::new();
+    };
+    let Some(prefix) = home.parent().map(Path::to_path_buf) else {
+        return Vec::new();
+    };
+    if !approved_runtime(&home) || !interpreter_home(&home) || path_is_within(&prefix, workspace) {
+        return Vec::new();
+    }
+    if managed_prefix(&prefix) {
+        return vec![prefix];
+    }
+    let mut roots = vec![home];
+    roots.extend(standard_libraries(&prefix));
+    roots
 }
 
 #[cfg(test)]

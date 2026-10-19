@@ -12,6 +12,7 @@ struct Input {
     roots: Vec<PathBuf>,
     workspace: PathBuf,
     cwd: PathBuf,
+    home: Option<PathBuf>,
     executable: PathBuf,
     launch_executable: PathBuf,
     allowed_executables: Vec<PathBuf>,
@@ -52,7 +53,10 @@ fn evaluate_inner(operation: &str, input: &Input) -> Result<Value, RestrictedPyt
     let value = match operation {
         "normalized_command" => json!(normalized_command(&input.command)?),
         "python_args_target_pytest" => json!(python_args_target_pytest(&input.command)),
-        "resolve_workspace" => json!(resolve_workspace(&input.path)?),
+        "resolve_workspace" => json!(resolve_workspace_with_home(
+            &input.path,
+            input.home.as_deref()
+        )?),
         "resolve_cwd" => json!(resolve_cwd(&input.path, &input.workspace)?),
         "resolve_executable" => json!(resolve_executable(
             &input.value,
@@ -105,6 +109,13 @@ fn evaluate_inner(operation: &str, input: &Input) -> Result<Value, RestrictedPyt
                 .is_some_and(super::user_site::grantable)
         )?),
         "user_site_link_target" => json!(super::user_site::link_target(&input.source)),
+        "private_links" => json!(super::toolchains::private_links(
+            &input.private_tmp,
+            &input.roots
+        )
+        .into_iter()
+        .map(|(link, target)| json!({"link": link, "target": target}))
+        .collect::<Vec<_>>()),
         "runtime_roots" => json!(runtime_roots(
             &input.allowed_executables,
             &input.workspace,
@@ -131,7 +142,7 @@ fn prepare(input: &Input) -> Result<Value, RestrictedPytestError> {
         input.backend_executable.as_deref(),
         &input.search_path,
     )?;
-    let workspace = resolve_workspace(&input.workspace)?;
+    let workspace = resolve_workspace_with_home(&input.workspace, input.home.as_deref())?;
     let cwd = resolve_cwd(&input.cwd, &workspace)?;
     let (launch, executable) =
         resolve_pytest_executable(&command, &cwd, &workspace, &input.search_path)?;

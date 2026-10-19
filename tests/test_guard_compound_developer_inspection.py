@@ -8,10 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import (
-    _hook_runtime_artifact,
-    _routine_semver_spec_matches,
-)
+from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.shell_command_wrappers import is_trusted_absolute_command_path
 from tests.developer_inspection_test_support import assert_leading_cd_inspection_allowed
@@ -351,22 +348,6 @@ def test_local_runner_override_requests_still_require_review(tmp_path: Path, run
     )
 
     assert artifact is not None
-
-
-@pytest.mark.parametrize(
-    ("specifier", "version", "expected"),
-    (
-        ("4.1.8", "4.1.8", True),
-        ("^4.1.8", "4.9.0", True),
-        ("^4.1.8", "5.0.0", False),
-        ("^0.2.3", "0.2.9", True),
-        ("^0.2.3", "0.3.0", False),
-        ("~4.1.8", "4.1.9", True),
-        ("~4.1.8", "4.2.0", False),
-    ),
-)
-def test_routine_runner_semver_matching(specifier: str, version: str, expected: bool) -> None:
-    assert _routine_semver_spec_matches(specifier, version) is expected
 
 
 def test_compound_git_and_filesystem_inspection_requires_host_binary_proof(tmp_path: Path) -> None:

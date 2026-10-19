@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
+from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
@@ -38,7 +38,7 @@ from codex_plugin_scanner.guard.native_resident_client import (
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, layers_to_json
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -47,10 +47,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_proof import (
-    ExtensionControlMutation,
-    issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
@@ -137,10 +133,11 @@ def provision(store: GuardStore) -> None:
         require(after.health is AuthorityHealth.PROTECTED and after.revision == 0 and not after.layers, "bootstrap")
 
 
-def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionControl, ...]) -> int:
-    catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    before = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(before.health is AuthorityHealth.PROTECTED, "mutation_not_protected")
+def commit_controls(service, password: str, controls: tuple[ExtensionControl, ...]) -> int:
+    # Preview prepares optional native packs before the authenticated commit.
+    # A direct store mutation cannot exercise the normal installed enable path.
+    catalog = service.catalog_digest
+    before = service._runtime.current().revision
     layers = (
         ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,
@@ -151,29 +148,19 @@ def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionC
         ),
     )
     nonce = secrets.token_hex(16)
-    mutation = ExtensionControlMutation(
-        previous_revision=before.revision,
+    payload = dict(
+        previous_revision=before,
         catalog_digest=catalog,
-        layers=layers,
+        layers=json.loads(layers_to_json(layers)),
         actor_id="isolated-installed-probe",
         idempotency_key=nonce,
         nonce=nonce,
     )
-    proof = issue_extension_control_proof(
-        store.guard_home, mutation, approval_gate_input=ApprovalGateInput(password=password), session_nonce=nonce
-    )
-    store.commit_extension_control_layers(
-        layers,
-        catalog_digest=catalog,
-        actor_id=mutation.actor_id,
-        expected_revision=before.revision,
-        idempotency_key=nonce,
-        nonce=nonce,
-        proof=proof,
-    )
-    after = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(after.health is AuthorityHealth.PROTECTED and after.revision == before.revision + 1, "mutation_commit")
-    return after.revision
+    approved = service.preview({**payload, "session_nonce": nonce, "approval_password": password})
+    service.apply({**payload, "proof_id": approved["proof_id"]})
+    after = service._runtime.current().revision
+    require(after == before + 1, "mutation_commit")
+    return after
 
 
 def control(kind: ControlTargetKind, target: str, state: ControlState) -> ExtensionControl:
@@ -253,6 +240,9 @@ def exercise(root: Path) -> dict[str, object]:
     all_receipts: list[str] = []
     previous_publisher: object | None = None
 
+    def commit(controls):
+        return commit_controls(daemon._server.extension_control_api, password, controls)
+
     def case(
         label: str,
         command: str,
@@ -290,7 +280,9 @@ def exercise(root: Path) -> dict[str, object]:
             policy_request_phase_diagnostic=policy_request_phase_diagnostic,
             require_native_http_admission=require_native_http_admission,
             require=require,
-            permission_for_rule_id=BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id,
+            permission_for_rule_id=lambda rule: daemon._server.extension_control_api._registry.permission_for_rule_id(
+                rule
+            ),
             minimum=minimum,
             minimum_at_least=minimum_at_least,
             tool_payload=tool_payload,
@@ -303,7 +295,7 @@ def exercise(root: Path) -> dict[str, object]:
         daemon.start()
         case("external-off", "ollama rm example-model", 0, matched=None)
         enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-enabled", "ollama rm example-model", revision, matched="command.ollama.rm")
         safe = case("owned-help", "ollama rm --help", revision, matched="command.ollama.rm")
         owned = next(row for row in safe["observations"] if row["rule_id"] == "command.ollama.rm")
@@ -315,24 +307,17 @@ def exercise(root: Path) -> dict[str, object]:
             matched="command.ollama.rm",
             minimum="block",
         )
-        permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.ollama.rm")
+        permission = daemon._server.extension_control_api._registry.permission_for_rule_id("command.ollama.rm")
         require(permission is not None, "permission_missing")
-        revision = commit_controls(
-            store,
-            password,
+        revision = commit(
             (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
         )
         case("permission-disabled", "ollama rm example-model", revision, matched="command.ollama.rm", minimum="block")
         worktree_permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.git.worktree")
         require(worktree_permission is not None, "worktree_permission_missing")
         worktree_target = workspace / "native-worktree-target"
-        revision = commit_controls(
-            store,
-            password,
-            (
-                control(ControlTargetKind.EXTENSION, "command.git", ControlState.ENABLED),
-                control(ControlTargetKind.PERMISSION, worktree_permission.permission_id, ControlState.DISABLED),
-            ),
+        revision = commit(
+            (control(ControlTargetKind.PERMISSION, worktree_permission.permission_id, ControlState.DISABLED),),
         )
         worktree_command = (
             f"sleep 0.01; cd {workspace} && git worktree add {worktree_target} "
@@ -352,11 +337,9 @@ def exercise(root: Path) -> dict[str, object]:
         # permission, reason, and persisted-receipt evidence prove denial;
         # these checks only prove the synthetic fixture did not materialize.
         require(not worktree_target.exists(), "worktree_target_executed")
-        revision = commit_controls(
-            store, password, (control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),)
-        )
+        revision = commit((control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),))
         case("external-disabled", "ollama rm example-model", revision, matched=None)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-reenabled", "ollama push example-model", revision, matched="command.ollama.push")
         previous_publisher = daemon._server.hook_worker.policy_snapshot_publisher
         daemon.stop()
@@ -377,7 +360,7 @@ def exercise(root: Path) -> dict[str, object]:
             )
             for extension in delegated
         )
-        revision = commit_controls(store, password, (enabled, *delegated_controls))
+        revision = commit((enabled, *delegated_controls))
         for extension in delegated:
             permission_id = extension.permissions[0].permission_id
             case(
@@ -389,7 +372,7 @@ def exercise(root: Path) -> dict[str, object]:
                 permission_id=permission_id,
             )
         mcp_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-filesystem", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, mcp_enabled))
+        revision = commit((enabled, mcp_enabled))
         mcp_permission = "command.mcp-filesystem.permission.mcp-filesystem-tool"
         case(
             "mcp-write-blocked",
@@ -412,7 +395,7 @@ def exercise(root: Path) -> dict[str, object]:
             tool_payload={"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}},
         )
         instapods_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-instapods", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, instapods_enabled))
+        revision = commit((enabled, instapods_enabled))
         instapods_permission = "command.mcp-instapods.permission.mcp-instapods-tool"
         case(
             "mcp-instapods-delete-review",
@@ -440,7 +423,7 @@ def exercise(root: Path) -> dict[str, object]:
             permission_id=instapods_permission,
             tool_payload={"tool_name": "mcp__instapods__manage_pod", "tool_input": {"operation": "status"}},
         )
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case(
             "mcp-off",
             "",
@@ -510,7 +493,7 @@ def main() -> int:
     )
     authoring = prove_installed_data_only_authoring(package)
     with tempfile.TemporaryDirectory(prefix="hge-", dir=Path.home() if os.name == "nt" else "/tmp") as temporary:
-        report = exercise(Path(temporary))
+        report = exercise(Path(temporary).resolve())
     report["data_only_authoring"] = authoring
     report["data_only_authoring_receipts_authenticated"] = False
     report["source_sha"] = status.capabilities.build_sha

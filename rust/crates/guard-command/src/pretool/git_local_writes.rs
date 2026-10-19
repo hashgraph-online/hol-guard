@@ -2,8 +2,8 @@
 //! `git rm`, `git commit -m`, a new branch at `HEAD` or at a start point that
 //! replaces no untracked file, a non-forced branch rename, a plain stash push,
 //! `git stash apply` or `pop` of one entry, `git stash list`, a `git merge`
-//! or `git cherry-pick` (`git_local_writes_merge`) and `git rebase
-//! --continue` (`git_local_writes_rebase`), with Git reads the configuration
+//! or `git cherry-pick` (`git_local_writes_merge`) and a `git rebase` onto a
+//! local ref or `--continue` (`git_local_writes_rebase`), with Git reads the configuration
 //! probe proves helper-free around them.
 //! The workspace sandbox runs them in a main checkout, but a linked worktree
 //! keeps its index, refs and objects in the shared Git directory the sandbox
@@ -36,6 +36,8 @@ use guard_contracts::{
 };
 use std::time::Instant;
 
+#[path = "git_local_writes_config.rs"]
+mod config;
 #[path = "git_local_writes_forms.rs"]
 mod forms;
 #[path = "git_local_writes_hooks.rs"]
@@ -335,7 +337,12 @@ fn proven(
             .keys()
             .any(|key| key.to_ascii_lowercase().starts_with("includeif.onbranch"));
     let merging = writes.iter().any(|(_, hooks)| *hooks == merge::HOOKS);
-    let rebasing = writes.iter().any(|(_, hooks)| *hooks == rebase::HOOKS);
+    let rebases: Vec<usize> = writes
+        .iter()
+        .filter(|(_, hooks)| *hooks == rebase::HOOKS)
+        .map(|(index, _)| *index)
+        .collect();
+    let rebasing = !rebases.is_empty();
     // `commit.gpgsign` signs every commit Git creates, so a commit then runs
     // the signing program as if it had asked with `-S`. Merges and rebases
     // already refuse it through `merge::inert`.
@@ -344,11 +351,13 @@ fn proven(
         || writes
             .iter()
             .any(|(index, _)| forms::signs(&model.segments[*index]));
-    let (external_off, textconv_off) = diff_drivers_disarmed(model, &writes, &stashed);
+    let (external_off, textconv_off) = config::diff_drivers_disarmed(model, &writes, &stashed);
     if branch_scoped
-        || !inert_with(&effective, &repository, external_off, textconv_off)
+        || !config::inert_with(&effective, &repository, external_off, textconv_off)
         || ((merging || rebasing) && !merge::inert(&effective, &repository))
-        || (rebasing && !rebase::resumable(&probe))
+        || !rebases
+            .iter()
+            .all(|index| rebase::proven(&probe, &model.segments[*index], &effective))
         || (signs
             && !signing::trusted(
                 &effective,
@@ -461,54 +470,5 @@ pub(in crate::pretool) fn signs_by_default(effective: &GitConfig) -> bool {
 /// Commit signing is left to the caller: only a write that creates a commit
 /// runs the signing program, and [`signs_by_default`] reports it.
 pub(in crate::pretool) fn inert(effective: &GitConfig, repository: &GitConfig) -> bool {
-    inert_with(effective, repository, false, false)
-}
-
-/// `external_off` and `textconv_off` are set only when every write in the
-/// command is a `stash show` that keeps that driver from running.
-fn inert_with(
-    effective: &GitConfig,
-    repository: &GitConfig,
-    external_off: bool,
-    textconv_off: bool,
-) -> bool {
-    !super::git_remote_ops::pull::repository_lfs_program(repository)
-        && !effective.iter().any(|(key, values)| {
-            let enabled = values
-                .iter()
-                .any(|value| !super::git_remote_ops::pull::disabled(value));
-            (key.starts_with("filter.")
-                && (!super::git_remote_ops::pull::standard_lfs(key, values)
-                    || repository.contains_key(key)))
-                || key.starts_with("hook.")
-                || key == "core.worktree"
-                || key == "core.virtualfilesystem"
-                || (key == "diff.external" && !external_off)
-                || key == "extensions.partialclone"
-                || (key.starts_with("diff.") && key.ends_with(".command") && !external_off)
-                || (key.starts_with("diff.") && key.ends_with(".textconv") && !textconv_off)
-                || (key.starts_with("trailer.")
-                    && (key.ends_with(".command") || key.ends_with(".cmd")))
-                || (key.starts_with("remote.") && key.ends_with(".promisor") && enabled)
-                || (matches!(key.as_str(), "core.fsmonitor" | "submodule.recurse") && enabled)
-        })
-}
-
-/// Whether every local write is a `stash show` whose flags keep the named
-/// diff driver from running.
-fn diff_drivers_disarmed(
-    model: &CanonicalCommandV1,
-    writes: &[(usize, &'static [&'static str])],
-    stashed: &[usize],
-) -> (bool, bool) {
-    if stashed.is_empty() || writes.iter().any(|(index, _)| !stashed.contains(index)) {
-        return (false, false);
-    }
-    stashed
-        .iter()
-        .try_fold((true, true), |acc, index| {
-            forms::show_diff_drivers_disarmed(&model.segments[*index])
-                .map(|(external, textconv)| (acc.0 && external, acc.1 && textconv))
-        })
-        .unwrap_or((false, false))
+    config::inert_with(effective, repository, false, false)
 }

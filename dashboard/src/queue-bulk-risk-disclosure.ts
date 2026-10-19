@@ -157,11 +157,12 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     };
   }
 
-  // Restricted commands stay blocked for the agent, so never claim they run.
+  // An unavailable once approval must be removed from the batch first.
   const retryBlocked = stats.retryBlockedActionCount ?? 0;
-  const onceVerb = retryBlocked > 0 ? "is approved once" : "runs once";
   const bullets: string[] = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each ${onceVerb}; the decision is not remembered.`,
+    retryBlocked > 0
+      ? `Reviewing ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. This selection includes actions that cannot run on once consent.`
+      : `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
   ];
 
   if (stats.highActionCount > 0) {
@@ -180,11 +181,7 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
 
   if (retryBlocked > 0) {
     bullets.push(
-      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${
-        retryBlocked === 1 ? "is a command the agent" : "are commands the agent"
-      } will still be blocked on after approval. Approving records your decision only. To let the agent run ${
-        retryBlocked === 1 ? "it" : "them"
-      }, open ${retryBlocked === 1 ? "it" : "each one"} and use "Always allow exact action" where Guard offers it, set a matching Extensions pattern to Allow, or run ${retryBlocked === 1 ? "it" : "them"} yourself.`,
+      `Run once is unavailable for ${retryBlocked} of the selected ${pluralActions(stats.actionCount)}. Open those requests individually to inspect supported approval or recovery choices.`,
     );
   }
 
@@ -200,6 +197,14 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     bullets.push(
       `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "action stays" : "actions stay"} in the queue and will NOT be approved here.${sampleText}`,
     );
+  }
+
+  if (retryBlocked > 0) {
+    return {
+      tier, tone: "attention", headline: "This selection cannot be approved once",
+      body: "Open the unavailable actions individually to inspect supported approval or recovery choices, then remove them from this selection.",
+      bullets, requiresTypedConfirm: false, confirmPhrase: phrase,
+    };
   }
 
   if (tier === "high") {
@@ -224,8 +229,8 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
       headline: `Approving ${mix}`,
       body:
         stats.elevatedActionCount > 0
-          ? `This batch includes elevated-risk actions (shell, edits, network). Each ${onceVerb} and the decision is not remembered. Skim the list before confirming.`
-          : `Each selected action ${onceVerb} and the decision is not remembered. Skim the list before confirming.`,
+          ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming."
+          : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase,
@@ -236,7 +241,7 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     tier,
     tone: "green",
     headline: `Approving ${mix}`,
-    body: `Each selected action ${onceVerb}. The decision is not remembered, so these will ask again next time.`,
+    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase,

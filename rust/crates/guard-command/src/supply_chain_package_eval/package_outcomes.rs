@@ -140,7 +140,14 @@ pub(super) fn unknown_package_result(
         );
         reasons.push(extra);
     }
-    package_target_result(target, &decision, reasons, None)
+    let mut result = package_target_result(target, &decision, reasons, None);
+    if requires_review && own_package.is_some() {
+        result.insert(
+            super::review_triggers::OWN_PACKAGE_RELEASE_FIELD.to_string(),
+            Value::Bool(true),
+        );
+    }
+    result
 }
 
 /// `_system_package_monitor_result` (:2893-2902).

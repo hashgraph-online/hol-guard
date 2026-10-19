@@ -253,6 +253,7 @@ fn open_pending(approval_url: Option<&str>, state_path: &Path) {
                 crate::daemon_policy_authority::load_guard_daemon_auth_token(home)
                     .filter(|token| !token.is_empty())
             },
+            crate::native_review_link::APPROVAL_CENTER_SURFACE,
             now,
         )
     });

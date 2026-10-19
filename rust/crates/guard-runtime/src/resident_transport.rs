@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 use crate::resident_diagnostics::{self, observe, Phase, Status};
 use sha2::{Digest, Sha256};
+#[path = "resident_control_dispatch.rs"]
+mod control;
 #[path = "resident_worker_pool.rs"]
 mod worker_pool;
 #[cfg(unix)]
@@ -349,6 +351,7 @@ fn spawn_codex_resume_retry(
 fn handle_pending_request(
     mut pending: PendingRequest,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
+    control_dispatch: Option<&SyncSender<PendingRequest>>,
 ) {
     let expired = crate::hardening::request_expired(pending.accepted_at);
     resident_diagnostics::finish_since(
@@ -365,9 +368,9 @@ fn handle_pending_request(
     let _ = pending
         .stream
         .set_resident_read_timeout(Some(crate::PAYLOAD_TIMEOUT));
-    let prefix_length = pending.payload_prefix.len();
-    let mut request = vec![0u8; pending.length];
-    request[..prefix_length].copy_from_slice(&pending.payload_prefix);
+    let mut request = std::mem::take(&mut pending.payload_prefix);
+    let prefix_length = request.len();
+    request.resize(pending.length, 0);
     let response = if observe(Phase::ResidentPayloadRead, || {
         pending.stream.read_exact(&mut request[prefix_length..])
     })
@@ -378,6 +381,12 @@ fn handle_pending_request(
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
+        } else if let Some(sender) = control_dispatch.filter(|_| control::is_request(&request)) {
+            // A fragmented request is routed only after its complete frame is
+            // authenticated. Move its buffer rather than retaining a copy.
+            pending.payload_prefix = request;
+            control::enqueue(sender, pending);
+            return;
         } else if is_codex_resume_retry(&request) {
             if reserve_continuation_slot() {
                 spawn_codex_resume_retry(pending, request, policy_store.clone());
@@ -458,16 +467,22 @@ pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) -> ResidentAdmission {
+    let (control_sender, mut workers) = control::start(policy_store.clone());
     let (evaluation_sender, evaluation_receiver) =
-        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
+        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity() - control::capacity());
     let evaluation_policy_store = policy_store.clone();
-    let mut workers = spawn_workers(
-        crate::evaluation_workers(),
+    let evaluation_control_sender = control_sender.clone();
+    workers.extend(spawn_workers(
+        crate::evaluation_workers() - control::WORKERS,
         evaluation_receiver,
         move |pending| {
-            handle_pending_request(pending, evaluation_policy_store.clone());
+            handle_pending_request(
+                pending,
+                evaluation_policy_store.clone(),
+                Some(&evaluation_control_sender),
+            );
         },
-    );
+    ));
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
@@ -498,7 +513,11 @@ pub(crate) fn start_resident_workers(
             };
             pending.payload_prefix.truncate(available);
             if available == pending.length {
-                handle_pending_request(pending, policy_store.clone());
+                if control::is_request(&pending.payload_prefix) {
+                    control::enqueue(&control_sender, pending);
+                } else {
+                    handle_pending_request(pending, policy_store.clone(), Some(&control_sender));
+                }
                 return;
             }
             match evaluation_sender.try_send(pending) {

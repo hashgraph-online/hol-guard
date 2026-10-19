@@ -33,30 +33,38 @@ def hook_classifiers(
     """Classifier verdicts keyed by the fact name the resident requests."""
 
     def prompt_clean(_event: str | None) -> bool:
+        from ..native_context import bound_context_digest_home
         from ..native_prompt import extract_prompt_requests
+        from ..native_sensitive_request import NativeSensitiveRequestError
         from .commands_support_codex_paths import _codex_prompt_credential_file_artifact
         from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 
         prompt_text = payload.get("prompt")
         if not isinstance(prompt_text, str) or extract_prompt_requests(prompt_text, guard_home=guard_home):
             return False
-        credential = _codex_prompt_credential_file_artifact(
-            prompt_text=prompt_text,
-            cwd=runtime_workspace,
-            config_path="<runtime>",
-        )
-        if credential is not None:
+        # The scans run in the caller's own resident, and a resident that
+        # cannot answer leaves the prompt unclassified rather than ending the
+        # hook: an unanswered prompt is not a clean one.
+        try:
+            with bound_context_digest_home(guard_home):
+                credential = _codex_prompt_credential_file_artifact(
+                    prompt_text=prompt_text,
+                    cwd=runtime_workspace,
+                    config_path="<runtime>",
+                )
+                if credential is not None:
+                    return False
+                return (
+                    home_dir is None
+                    or _codex_prompt_attachment_artifact(
+                        prompt_text=prompt_text,
+                        home_dir=home_dir,
+                        config_path="<runtime>",
+                    )
+                    is None
+                )
+        except NativeSensitiveRequestError:
             return False
-        return (
-            home_dir is None
-            or _codex_prompt_attachment_artifact(
-                prompt_text=prompt_text,
-                home_dir=home_dir,
-                guard_home=guard_home,
-                config_path="<runtime>",
-            )
-            is None
-        )
 
     def post_tool_read_only_inspection(_event: str | None) -> bool:
         from .commands_support_codex_commands import _codex_post_tool_command_is_read_only_source_inspection

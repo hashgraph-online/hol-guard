@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from .command_extensions import CommandPermissionSpec, CommandSafetyExtension, CommandSafetyRule
+from .generated_command_catalog import GeneratedCommandExtension as CommandSafetyExtension
+from .generated_command_catalog import GeneratedCommandPermission as CommandPermissionSpec
+from .generated_command_catalog import GeneratedCommandRule as CommandSafetyRule
 
 _MAX_OPERATIONS = 256
 _MAX_TITLE = 128

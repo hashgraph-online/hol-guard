@@ -121,3 +121,81 @@ fn sandbox_required_is_never_downgraded_and_unknown_actions_floor_at_review() {
         GuardAction::Review
     );
 }
+
+/// Every payload that rewrites a tool decision also names the action the
+/// rewritten decision enforces; the caller copies it instead of keeping the
+/// pre-rewrite one.
+#[test]
+fn a_rewritten_decision_carries_the_action_it_enforces() {
+    let facts = |action: &str, current: Value| {
+        json!({
+            "action": action,
+            "source": "policy",
+            "current_action": current,
+            "saved_action": null,
+            "approval_reuse_status": null,
+            "approval_reuse_reason_code": null,
+            "has_pending": true,
+        })
+    };
+    let gate = |decision: Value| {
+        reply(&request(
+            MCP_PROXY_DECISION_REQUEST_SCHEMA,
+            json!({
+                "check": "saved_allow_gate",
+                "catalog_state": "unobserved",
+                "decision": decision,
+            }),
+        ))["payload"]
+            .clone()
+    };
+
+    // The gate rejects the saved authority, so a review becomes a fresh
+    // approval boundary while an executable action stays itself.
+    let stale = gate(facts("review", Value::Null));
+    assert_eq!(stale["action"], "review");
+    assert_eq!(stale["policy_action"], "require-reapproval");
+    let warn = gate(facts("warn", Value::Null));
+    assert_eq!(warn["action"], "warn");
+    assert_eq!(warn["policy_action"], "warn");
+
+    let mut rejected = facts("allow", json!("review"));
+    rejected["approval_reuse_status"] = json!("rejected");
+    rejected["approval_reuse_reason_code"] = json!("approval_reuse_tool_catalog_incomplete");
+    let observed = reply(&request(
+        MCP_PROXY_DECISION_REQUEST_SCHEMA,
+        json!({
+            "check": "route_tool_call",
+            "mode": "observe",
+            "package_present": false,
+            "asks_for_approval": false,
+            "inline_available": false,
+            "tool_name": "demo",
+            "decision": rejected,
+        }),
+    ))["payload"]
+        .clone();
+    assert_eq!(observed["decision_override"]["action"], "review");
+    assert_eq!(
+        observed["decision_override"]["policy_action"],
+        "require-reapproval"
+    );
+
+    let packaged = reply(&request(
+        MCP_PROXY_DECISION_REQUEST_SCHEMA,
+        json!({
+            "check": "route_tool_call",
+            "mode": "enforce",
+            "package_present": true,
+            "asks_for_approval": true,
+            "inline_available": false,
+            "tool_name": "demo",
+            "decision": facts("review", Value::Null),
+            "package_saved_policy_blocks": false,
+            "native_prompt_allows": true,
+        }),
+    ))["payload"]
+        .clone();
+    assert_eq!(packaged["route"]["tool_source"], "native-approved");
+    assert_eq!(packaged["route"]["decision_policy_action"], "allow");
+}

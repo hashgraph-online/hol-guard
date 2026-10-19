@@ -15,6 +15,7 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::guard_store_cmd_vectors_tests::temp_home;
+use crate::local_cli_hook_contained::has_block_rules;
 
 const HOOK_VECTORS: &str = include_str!("../testdata/local_cli_hook/vectors.json");
 const STORE_VECTORS: &str = include_str!("../testdata/guard_store/local_cli_vectors.json");
@@ -38,14 +39,14 @@ create table local_cli_schema_migration (
 );
 ";
 
-struct Fixture {
+pub(crate) struct Fixture {
     home: String,
     workspace: String,
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 
 impl Fixture {
-    fn new(tag: &str) -> Self {
+    pub(crate) fn new(tag: &str) -> Self {
         let home = temp_home(&format!("local-cli-hook-{tag}"));
         let workspace = home.join("work");
         fs::create_dir(&workspace).unwrap();
@@ -84,7 +85,12 @@ impl Fixture {
             .into_owned()
     }
 
-    fn request(&self, command: &str, action: &str, grant_allowed: bool) -> LocalCliHookRequestV1 {
+    pub(crate) fn request(
+        &self,
+        command: &str,
+        action: &str,
+        grant_allowed: bool,
+    ) -> LocalCliHookRequestV1 {
         LocalCliHookRequestV1 {
             schema: LOCAL_CLI_HOOK_REQUEST_SCHEMA.to_owned(),
             request_id: "hook-test".to_owned(),
@@ -98,11 +104,12 @@ impl Fixture {
             user_home: self.workspace.clone(),
             env: BTreeMap::new(),
             current_action: action.to_owned(),
+            current_reason_code: Some("native_command_review_required".to_owned()),
             grant_allowed,
         }
     }
 
-    fn identity(&self) -> LocalCliIdentityV1 {
+    pub(crate) fn identity(&self) -> LocalCliIdentityV1 {
         package_json_scripts("npm run build", &self.workspace, &self.workspace)
             .unwrap()
             .unwrap()
@@ -110,7 +117,7 @@ impl Fixture {
             .unwrap()
     }
 
-    fn grant(&self, cli_id: &str, hash: &str, state: &str) {
+    pub(crate) fn grant(&self, cli_id: &str, hash: &str, state: &str) {
         self.connection
             .execute(
                 "insert into local_cli_grant values (?1, ?2, ?3, 1, '2026-01-01T00:00:00Z')",
@@ -267,6 +274,50 @@ fn token_split_follows_runner_script_and_plain_launches() {
         strings(&["deploy"])
     );
     assert!(command_tokens(&strings(&["--weird", "wrangler"]), &runner).is_empty());
+}
+
+#[test]
+fn an_invocation_splits_the_same_tokens_as_its_arguments() {
+    let cwd = std::env::temp_dir();
+    let cwd = cwd.to_str().unwrap();
+    assert_eq!(
+        invocation_command_tokens(
+            "./bin/tool deploy prod",
+            cwd,
+            None,
+            "tool",
+            "executable",
+            None
+        ),
+        strings(&["deploy", "prod"])
+    );
+    assert_eq!(
+        invocation_command_tokens(
+            "python3 ./bin/tool.py db migrate",
+            cwd,
+            None,
+            "tool.py",
+            "script",
+            None
+        ),
+        strings(&["db", "migrate"])
+    );
+    assert_eq!(
+        invocation_command_tokens(
+            "npx -y wrangler deploy",
+            cwd,
+            None,
+            "wrangler",
+            "executable",
+            Some("npx")
+        ),
+        strings(&["deploy"])
+    );
+    assert!(
+        invocation_command_tokens("./bin/tool --force", cwd, None, "tool", "executable", None)
+            .is_empty()
+    );
+    assert!(invocation_command_tokens("", cwd, None, "tool", "executable", None).is_empty());
 }
 
 #[test]
@@ -468,3 +519,50 @@ fn the_reply_binds_the_request_and_rejects_another_schema() {
     other.schema = "other".to_owned();
     assert!(evaluate_local_cli_hook_request(&other).is_err());
 }
+
+#[test]
+fn an_unset_review_names_the_connector_to_set_up() {
+    let fixture = Fixture::new("connector");
+    let identity = fixture.identity();
+    let request = fixture.request("npm run build", "review", true);
+    let (action, connector) = run_with_connector(&request).unwrap();
+    assert_eq!(action, "review");
+    let connector = connector.expect("an unset script names its connector");
+    assert_eq!(connector["cli_id"], identity.cli_id.as_str());
+    assert_eq!(connector["identity_hash"], identity.identity_hash.as_str());
+    assert_eq!(connector["surface"], "package-scripts");
+    assert_eq!(
+        connector["queue_group_id"],
+        crate::connector_setup::queue_group_id(
+            &identity.identity_hash,
+            &request.cwd,
+            "npm run build"
+        )
+    );
+    let reply: Value =
+        serde_json::from_slice(&evaluate_local_cli_hook_request(&request).unwrap()).unwrap();
+    assert_eq!(reply["payload"]["connector"], connector);
+    // Only a review the grant could refine waits on setup.
+    for (action, grant_allowed) in [("allow", true), ("block", true), ("review", false)] {
+        let (_, connector) =
+            run_with_connector(&fixture.request("npm run build", action, grant_allowed)).unwrap();
+        assert_eq!(connector, None, "{action} {grant_allowed}");
+    }
+    // A grant recorded for an older identity is not a decision for this one.
+    fixture.grant(&identity.cli_id, &"0".repeat(64), "allowed");
+    assert!(run_with_connector(&request).unwrap().1.is_some());
+}
+
+#[test]
+fn a_decided_connector_is_never_sent_back_to_setup() {
+    let fixture = Fixture::new("connector-decided");
+    let identity = fixture.identity();
+    fixture.grant(&identity.cli_id, &identity.identity_hash, "allowed");
+    fixture.command_grant(&identity.cli_id, "build", "review");
+    let (_, connector) =
+        run_with_connector(&fixture.request("npm run build", "review", true)).unwrap();
+    assert_eq!(connector, None);
+}
+
+#[path = "local_cli_hook_op_grant_lift_tests.rs"]
+mod grant_lift;

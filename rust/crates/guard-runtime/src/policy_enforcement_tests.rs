@@ -465,10 +465,14 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
     );
 }
 
+#[path = "policy_enforcement_github_tests.rs"]
+mod github_tests;
 #[path = "policy_enforcement_omp_eval_output_tests.rs"]
 mod omp_eval_output_tests;
 #[path = "policy_enforcement_post_tool_tests.rs"]
 mod post_tool_tests;
+#[path = "policy_enforcement_task_schema_tests.rs"]
+mod task_schema_tests;
 
 #[test]
 fn observe_keeps_only_a_warn_floor_over_a_proven_allow_silent() {

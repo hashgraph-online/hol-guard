@@ -2,7 +2,7 @@ use super::{
     allowed_payload, allowing_lane, deferred, drain, lane, package_script_payload, run, run_as,
     Lane, HOME,
 };
-use crate::hook_direct::{cursor, REPAIRABLE_BLOCK_REASON};
+use crate::hook_direct::cursor;
 use serde_json::{json, Value};
 use std::fs;
 
@@ -223,24 +223,26 @@ fn a_cursor_verdict_is_answered_only_as_the_daemon_returns_it() {
         )
         .is_ok()
     };
-    let repairable = json!(REPAIRABLE_BLOCK_REASON);
-    for (decision, minimum_action, rendered) in [
-        ("allow", "allow", "allow"),
-        ("allow", "warn", "warn"),
-        ("deny", "block", "block"),
-        ("block", "block", "block"),
-        ("deny", "sandbox-required", "block"),
-        ("deny", "sandbox-required", "sandbox-required"),
+    // The resident composes the command-control repair link itself, so an
+    // authority block is answered like any other terminal block.
+    let repairable = json!("native_command_control_authority_block");
+    for (decision, minimum_action, code, rendered) in [
+        ("allow", "allow", json!(null), "allow"),
+        ("allow", "warn", json!(null), "warn"),
+        ("deny", "block", json!(null), "block"),
+        ("block", "block", json!(null), "block"),
+        ("deny", "block", repairable.clone(), "block"),
+        ("deny", "sandbox-required", json!(null), "block"),
+        ("deny", "sandbox-required", json!(null), "sandbox-required"),
     ] {
         assert!(
-            answered(decision, minimum_action, json!(null), rendered, false),
+            answered(decision, minimum_action, code, rendered, false),
             "{decision} {minimum_action} {rendered}"
         );
     }
-    // The daemon repairs an authority block and pauses a review, and the
-    // client renders only what the edge rendered.
+    // The daemon pauses a review, and the client renders only what the edge
+    // rendered.
     for (decision, minimum_action, code, rendered) in [
-        ("deny", "block", repairable.clone(), "block"),
         ("deny", "review", json!(null), "block"),
         ("deny", "require-reapproval", json!(null), "block"),
         ("allow", "block", json!(null), "block"),

@@ -45,6 +45,7 @@ from .fixtures import (
     remove_scratch_checkout,
     scenario_fixture_name,
     scratch_checkout,
+    stage_directory,
 )
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
@@ -54,12 +55,13 @@ from .input_evidence import (
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
 from .native_routes import await_native_routes
-from .native_tools import cleanup_private_temp
+from .native_tools import TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
 from .script_cases import stage_script_cases
+from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
@@ -90,6 +92,8 @@ def run_case(
     )
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
+    session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -126,6 +130,7 @@ def run_case(
                     "workspace": str(fixture.workspace),
                     "root": str(fixture.root),
                     "scratch": str(scratch_checkout(fixture.root)),
+                    "stage": str(stage_directory(fixture.root)),
                     "collector_url": collector.url,
                 }
             )
@@ -139,7 +144,7 @@ def run_case(
             write_agent_configuration(
                 agent_dir,
                 relay,
-                wait_for_tasks=scenario.id == "omp-native-task-readonly-lookup",
+                wait_for_tasks=scenario.id in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE},
                 memory_bank="learn" in scenario.required_tools,
             )
             if scenario.oracle == "watch-command":
@@ -234,7 +239,7 @@ def run_case(
                 "--model",
                 "gauntlet-live/agent",
                 "--cwd",
-                str(fixture.workspace),
+                str(session),
                 "--no-extensions",
                 "--extension",
                 str(HERE / "observer.ts"),
@@ -262,7 +267,7 @@ def run_case(
                 case["watch_binding_before"] = ready_watch_binding(worker)
             case["returncode"], case["timed_out"] = run_process(
                 command,
-                cwd=fixture.workspace,
+                cwd=session,
                 env=environment,
                 output=raw_log,
                 error_output=error_log,

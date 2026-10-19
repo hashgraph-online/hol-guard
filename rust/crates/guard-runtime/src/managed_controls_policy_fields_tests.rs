@@ -8,6 +8,24 @@ use super::*;
 const VECTORS: &str = include_str!("../tests/fixtures/managed_controls_policy_fields_vectors.json");
 const CAPS: [&str; 3] = [LAYER_CAP, TARGETS_CAP, ATOMIC_CAP];
 
+#[test]
+fn catalog_is_requested_only_after_native_extension_presence_validation() {
+    let plain = json!({"document":{"spec":{"rules":[{"id":"plain"}]}},"capabilities":CAPS});
+    let answer = evaluate(&plain).unwrap();
+    assert_eq!(answer["ok"]["signed_cloud_layer"], Value::Null);
+    assert_eq!(answer["ok"]["managed_controls"], json!([]));
+    assert_eq!(
+        evaluate(&json!({"document":controls("managed-restrictive", vec![]),"capabilities":CAPS}))
+            .unwrap(),
+        json!({"catalog_required":true})
+    );
+    assert_eq!(
+        evaluate(&json!({"document":{"spec":{"rules":[null]}},"capabilities":CAPS})).unwrap()
+            ["error"]["code"],
+        "invalid_policy_document"
+    );
+}
+
 fn fixture() -> Value {
     serde_json::from_str(VECTORS).expect("vectors")
 }
@@ -180,7 +198,7 @@ fn malformed_requests_are_errors_not_refusals() {
     let catalog = fixture()["catalog"].clone();
     for request in [
         json!({}),
-        json!({ "document": {}, "capabilities": [] }),
+        json!({ "document": {}, "capabilities": [], "catalog": null }),
         json!({ "document": {}, "capabilities": "x", "catalog": catalog }),
         json!({ "document": {}, "capabilities": [1], "catalog": catalog }),
         json!({ "capabilities": [], "catalog": catalog }),

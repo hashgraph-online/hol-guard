@@ -54,6 +54,7 @@ _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv
 _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
     {
         "native_policy_not_ready",
+        "native_policy_update_in_progress",
         "native_hook_event_unavailable",
         "native_pre_tool_unavailable",
         "native_post_tool_unavailable",

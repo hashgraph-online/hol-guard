@@ -194,6 +194,23 @@ test.describe("extensions spotlight", () => {
     });
   });
 
+  test("a long catalog repeats the in-feed ask every ten rows and never ends on it", async ({ page }) => {
+    const ids = [...STARTER_IDS, ...Array.from({ length: 30 - STARTER_IDS.length }, (_, index) => `command.extra-${index}`)];
+    await mount(page, { catalog: { ...catalog(), extensions: ids.map((id) => extension(id, "")) }, effective: withStartersOff() });
+    await routeDiscovery(page, projection({ listingSlots: { open: 2, total: 6 } }));
+    await routeAnalytics(page, []);
+    await initialize(page);
+
+    const inFeed = page.getByTestId("catalog-slot-row");
+    // 30 rows: before rows 7, 17 and 27.
+    await expect(inFeed).toHaveCount(3);
+    for (const row of await inFeed.all()) {
+      await expect(row.getByRole("link", { name: /Get this spot · from \$49\/mo/ })).toBeVisible();
+    }
+    await expect(page.locator("section[aria-labelledby='all-tools-heading'] > div.mt-4:last-child > :last-child"))
+      .not.toHaveAttribute("data-testid", "catalog-slot-row");
+  });
+
   test("a fresh device falls back to the starter set without inventing metrics", async ({ page }) => {
     await mount(page, { catalog: wideCatalog(), effective: withStartersOff() });
     await routeDiscovery(page, projection({ shelf: "unknown", listing: "unknown" }));

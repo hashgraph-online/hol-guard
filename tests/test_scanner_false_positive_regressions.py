@@ -10,7 +10,7 @@ def test_openai_secret_prefix_does_not_match_inside_hyphenated_identifier():
     with tempfile.TemporaryDirectory() as tmpdir:
         root = Path(tmpdir)
         (root / "state.ts").write_text(
-            "const marker = 'task-base-untracked-guard';\n",
+            "const marker = 'disk-full-from-agent-tmp-dirs-gc-pattern';\n",
             encoding="utf-8",
         )
 

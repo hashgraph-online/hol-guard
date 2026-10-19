@@ -318,16 +318,37 @@ fn dlls_the_search_path_reaches_are_bound() {
     assert!(before.is_ok());
     assert_ne!(before, through(&tree));
     let installed = shell(&tree, INSTALLED);
-    put(&tree, "home\\bin\\version.dll", "MZ planted");
+    put(&tree, "home\\bin\\libplanted.dll", "MZ planted");
     assert_ne!(installed, shell(&tree, INSTALLED));
     assert!(shell(&tree, INSTALLED).is_ok());
-    // More DLLs than the binding caps cover stay once-only.
-    for index in 0..17 {
+    // More DLLs than the `PATH` budget covers stay once-only.
+    for index in 0..129 {
         put(&tree, &format!("tools\\extra{index}.dll"), "MZ planted");
     }
     for reason in tokens(&tree) {
         assert_eq!(reason, Err("unproven_launch"));
     }
+}
+
+#[test]
+fn a_long_developer_path_stays_reusable() {
+    let tree = Tree::new();
+    image(&tree, "ws\\bin\\probe.exe");
+    // More DLLs than the application and working directories may bind, as a
+    // Perl, Ruby or Java `bin` directory holds, listed twice.
+    for index in 0..100 {
+        put(&tree, &format!("tools\\lib{index}.dll"), "MZ planted");
+    }
+    let tools = tree.path("tools");
+    let twice = format!("{tools};{tools}\\");
+    let path = |tree: &Tree| launch(tree, PROBE, &|_, _, env| prepend_path(env, &twice));
+    let clean = path(&tree).expect("a long PATH stays reusable");
+    // The loader finds a system DLL in the system directory before it reaches
+    // `PATH`, so a copy there is never loaded and does not change the token.
+    put(&tree, "tools\\version.dll", "MZ planted");
+    assert_eq!(path(&tree), Ok(clean.clone()));
+    put(&tree, "tools\\lib0.dll", "MZ changed");
+    assert_ne!(path(&tree), Ok(clean));
 }
 
 #[test]

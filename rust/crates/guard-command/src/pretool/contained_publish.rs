@@ -16,8 +16,11 @@ use serde_json::Value;
 /// plan the same split, so it must stay an exact constant.
 pub(crate) const REASON_TEXT: &str = concat!(
     "HOL Guard runs the checks in this command in a protected workspace sandbox ",
-    "(no network, no home access), then runs the Git steps that follow once it ",
-    "proves them again.",
+    "(no network, no home access, no PTY or Docker socket), then runs the Git ",
+    "steps that follow directly, outside the sandbox, once it proves them again. ",
+    "Every program the checks start, including children of an interpreter, runs ",
+    "contained and can write only the workspace, $TMPDIR and a private ",
+    "scratch $HOME.",
 );
 
 const PUBLISHERS: &[&str] = &["git", "gh"];

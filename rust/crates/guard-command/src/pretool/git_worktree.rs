@@ -3,12 +3,20 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Instant;
 
+#[path = "git_worktree_hooks.rs"]
+mod hooks;
 #[path = "git_worktree_config.rs"]
 mod sources;
 
+use hooks::{hooks_are_inert, repository_hooks_inert};
 use sources::{expand_config_path, safe_worktree_config, ConfigFacts};
 
-const CONFIG_LIMIT: u64 = 65_536;
+/// The whole configuration listing, every entry of which the screen below
+/// judges. Long-lived repositories collect a `branch.<name>` section for each
+/// branch a worktree was ever created on, so a busy checkout's listing runs to
+/// hundreds of kilobytes; a smaller cap turned every later `worktree add` in
+/// such a repository into a review. This matches the session probe's bound.
+const CONFIG_LIMIT: u64 = 8 * 1024 * 1024;
 const WORKTREE_PROBE_LIMIT: u64 = 8 * 1024;
 
 #[allow(clippy::too_many_arguments)]
@@ -72,13 +80,15 @@ pub(super) fn worktree_add_execution_free(
         &cwd,
         deadline,
     )?;
-    if !hooks_are_inert(&git_dir.join("hooks")) || !hooks_are_inert(&common_dir.join("hooks")) {
+    if !hooks_are_inert(&git_dir.join("hooks"), &|_| false)
+        || !hooks_are_inert(&common_dir.join("hooks"), &|_| false)
+    {
         return Some(false);
     }
     if !facts
         .hook_dirs
         .iter()
-        .all(|directory| hooks_are_inert(directory))
+        .all(|directory| hooks_are_inert(directory, &|_| false))
     {
         return Some(false);
     }
@@ -136,6 +146,17 @@ pub(super) fn worktree_add_execution_free(
     if !status.success() || output.is_empty() {
         return Some(false);
     }
+    // A hook manager's repository-relative hooks directory also runs from the
+    // new tree, which the commit being checked out decides.
+    if let Some(hooks_path) = facts.repository_hooks_path.as_deref() {
+        // A fetch earlier in the same command can move the reference.
+        if reference_may_move {
+            return Some(false);
+        }
+        if !repository_hooks_inert(&base, leading, hooks_path, commit_id(&output)?, deadline)? {
+            return Some(false);
+        }
+    }
     if !facts.filters {
         return Some(true);
     }
@@ -146,13 +167,7 @@ pub(super) fn worktree_add_execution_free(
     if reference_may_move {
         return Some(facts.only_standard_lfs);
     }
-    let commit = std::str::from_utf8(&output).ok()?.trim();
-    if commit.len() < 40
-        || commit.len() > 64
-        || !commit.bytes().all(|byte| byte.is_ascii_hexdigit())
-    {
-        return None;
-    }
+    let commit = commit_id(&output)?;
     let attribute_sources_free = no_filter_attributes(
         &base,
         leading,
@@ -416,56 +431,10 @@ fn git_paths<const N: usize>(
     paths.try_into().ok()
 }
 
-fn hooks_are_inert(path: &Path) -> bool {
-    const EXECUTABLE_HOOKS: &[&str] = &[
-        "post-checkout",
-        "post-index-change",
-        "reference-transaction",
-    ];
-    let metadata = match fs::symlink_metadata(path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return true,
-        Err(_) => return false,
-    };
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return false;
-    }
-    let entries = match fs::read_dir(path) {
-        Ok(entries) => entries,
-        Err(_) => return false,
-    };
-    for (count, entry) in entries.enumerate() {
-        if count >= 256 {
-            return false;
-        }
-        let entry = match entry {
-            Ok(entry) => entry,
-            Err(_) => return false,
-        };
-        let metadata = match fs::symlink_metadata(entry.path()) {
-            Ok(metadata) => metadata,
-            Err(_) => return false,
-        };
-        // Git runs hooks by exact name, so only an entry with a hook's name
-        // matters; a symlink under such a name is not followed here.
-        let hook_named = EXECUTABLE_HOOKS.contains(&entry.file_name().to_string_lossy().as_ref());
-        if hook_named && metadata.file_type().is_symlink() {
-            return false;
-        }
-        if hook_named && metadata.is_file() && hook_is_executable(&metadata) {
-            return false;
-        }
-    }
-    true
-}
-
-#[cfg(unix)]
-fn hook_is_executable(metadata: &fs::Metadata) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    metadata.permissions().mode() & 0o111 != 0
-}
-
-#[cfg(not(unix))]
-fn hook_is_executable(metadata: &fs::Metadata) -> bool {
-    metadata.is_file()
+fn commit_id(output: &[u8]) -> Option<&str> {
+    let commit = std::str::from_utf8(output).ok()?.trim();
+    (commit.len() >= 40
+        && commit.len() <= 64
+        && commit.bytes().all(|byte| byte.is_ascii_hexdigit()))
+    .then_some(commit)
 }

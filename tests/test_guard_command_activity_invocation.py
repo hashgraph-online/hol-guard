@@ -11,11 +11,6 @@ import pytest
 from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_pre_hook_command_activity_best_effort,
 )
-from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_journal import (
-    _CommandActivityRecord,
-    append_journal,
-    recover_journal_records,
-)
 from codex_plugin_scanner.guard.runtime.command_activity_api_contract import CommandActivityListQuery
 from codex_plugin_scanner.guard.runtime.command_activity_display import (
     build_invocation_preview,
@@ -180,25 +175,3 @@ def test_compaction_deletes_invocation_preview(tmp_path: Path) -> None:
     with sqlite3.connect(store.path) as connection:
         remaining = connection.execute("select count(*) from command_activity_invocation").fetchone()
     assert remaining == (0,)
-
-
-def test_preview_sidecar_restores_preview_without_writing_the_journal(tmp_path: Path) -> None:
-    path = tmp_path / "runtime-hook-evidence.jsonl"
-    record = _CommandActivityRecord(
-        record_id="previewrecordabcdef1234567890aa",
-        harness="codex",
-        event="PreToolUse",
-        correlation=None,
-        has_command=True,
-        succeeded=True,
-        payload_bytes=1,
-        policy_action="warn",
-        occurred_at="2026-07-18T20:01:00+00:00",
-        invocation_preview="git status",
-    )
-    append_journal(path, record)
-    assert "git status" not in path.read_text(encoding="utf-8")
-    recovered, invalid = recover_journal_records(path, max_bytes=1_000_000)
-    assert invalid == 0
-    assert isinstance(recovered[0], _CommandActivityRecord)
-    assert recovered[0].invocation_preview == "git status"

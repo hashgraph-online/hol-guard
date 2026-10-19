@@ -148,7 +148,24 @@ def _resident_request(
         "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
         "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
     }.get(operation)
-    if result_schema is not None:
+    if operation == "cloud_catalog":
+        # Producer/completion replies use a strict payload/error union, with
+        # no status field. Keep native validation refusals intact.
+        if decoded.get("schema") != "guard-cloud-catalog-result.v2":
+            return None
+        if set(decoded) == {"schema", "payload"}:
+            if not isinstance(decoded["payload"], dict):
+                return None
+        elif set(decoded) == {"schema", "error"}:
+            if not isinstance(decoded["error"], str) or decoded["error"] not in {
+                "catalog_invalid",
+                "catalog_limit",
+                "catalog_unavailable",
+            }:
+                return None
+        else:
+            return None
+    elif result_schema is not None:
         # These versioned Rust replies have no status field. Do not discard
         # valid native results or reinterpret them through a Python fallback.
         if decoded.get("schema") != result_schema or set(decoded) != {"schema", "result"}:
@@ -164,7 +181,9 @@ def _resident_request(
             "policy_decision_lookup",
             "local_cli_grant_decide",
             "local_cli_hook",
+            "connector_setup_context",
             "guard_store",
+            "hook_evidence_writer",
             "local_mcp_grant_decide",
             "contributed_mcp_decide",
             "approval_proof_decide",
@@ -186,6 +205,10 @@ def _resident_request(
             "consumer_artifact_compose",
             "mcp_tool_call_identity",
             "package_context_build",
+            "policy_document_decide",
+            "command_policy_decide",
+            "command_expression_validate",
+            "reviewed_invocation_bindings_validate",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":

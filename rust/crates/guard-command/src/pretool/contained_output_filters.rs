@@ -1,5 +1,6 @@
 //! Output filters after a contained core: `| head -N`, `| tail -N` and a
-//! `grep` that only reads its standard input, chained up to three deep.
+//! `grep` or `rg` that only reads its standard input, chained up to three
+//! deep.
 //!
 //! The execution sink (`contained_output_filters.py`) peels the same chain,
 //! runs the core contained and applies the filters to its captured output.
@@ -15,7 +16,13 @@ pub(super) const MAX_FILTERS: usize = 3;
 /// listings (`-l`), and every option the sink does not apply are absent.
 const GREP_SWITCHES: &str = "EFGacinosvwx";
 
-/// `grep` options that take a line count.
+/// The same for `rg`, which spells its own set: `-S`/`-s` select case
+/// folding, `-N` drops line numbers and `-U` matches across lines. `-E`
+/// (encoding) and `-g` (glob) take a value in ripgrep, and `-P` opts into a
+/// second regex engine, so none of them is a switch here.
+const RG_SWITCHES: &str = "FNSUacinosvwx";
+
+/// Options that take a line count, spelled alike by both programs.
 const GREP_COUNTS: &[&str] = &["-A", "-B", "-C", "-m"];
 
 fn bounded_count(value: &str) -> bool {
@@ -33,7 +40,8 @@ pub(super) fn filter_stage(segment: &CommandSegmentV1, source: &str) -> bool {
     }
     match segment.executable.as_deref() {
         Some("head" | "tail") => head_tail_arguments(&segment.arguments),
-        Some("grep" | "egrep" | "fgrep") => grep_arguments(&segment.arguments),
+        Some("grep" | "egrep" | "fgrep") => stdin_arguments(&segment.arguments, GREP_SWITCHES),
+        Some("rg") => stdin_arguments(&segment.arguments, RG_SWITCHES),
         _ => false,
     }
 }
@@ -46,10 +54,10 @@ pub(super) fn head_tail_arguments(arguments: &[String]) -> bool {
     }
 }
 
-/// `grep` that reads only standard input: switches from `GREP_SWITCHES`,
+/// A matcher that reads only standard input: switches from `switches`,
 /// counted options, `-e PATTERN`, and one pattern operand unless `-e` gave
 /// the patterns. Any further operand is a file, so it is refused.
-pub(super) fn grep_arguments(arguments: &[String]) -> bool {
+fn stdin_arguments(arguments: &[String], switches: &str) -> bool {
     let mut expressions = 0usize;
     let mut operands = 0usize;
     let mut options_done = false;
@@ -94,8 +102,8 @@ pub(super) fn grep_arguments(arguments: &[String]) -> bool {
             }
             continue;
         }
-        let switches = argument.strip_prefix('-').unwrap_or_default();
-        if switches.is_empty() || !switches.chars().all(|flag| GREP_SWITCHES.contains(flag)) {
+        let flags = argument.strip_prefix('-').unwrap_or_default();
+        if flags.is_empty() || !flags.chars().all(|flag| switches.contains(flag)) {
             return false;
         }
     }
@@ -144,7 +152,7 @@ pub(super) fn plain_source(source: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{grep_arguments, plain_source};
+    use super::{plain_source, stdin_arguments, GREP_SWITCHES, RG_SWITCHES};
 
     fn words(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()
@@ -161,7 +169,10 @@ mod tests {
             &["-e", "FAIL", "-e", "Error"],
             &["--", "-x"],
         ] {
-            assert!(grep_arguments(&words(arguments)), "{arguments:?}");
+            assert!(
+                stdin_arguments(&words(arguments), GREP_SWITCHES),
+                "{arguments:?}"
+            );
         }
     }
 
@@ -186,7 +197,50 @@ mod tests {
             &["-", "x"],
             &["--color=always", "x"],
         ] {
-            assert!(!grep_arguments(&words(arguments)), "{arguments:?}");
+            assert!(
+                !stdin_arguments(&words(arguments), GREP_SWITCHES),
+                "{arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ripgrep_reading_standard_input_is_a_filter() {
+        for arguments in [
+            &["FAIL"][..],
+            &["-A", "12", "FAIL|AssertionError"],
+            &["-n", "FAIL"],
+            &["-NU", "-e", "FAIL", "-e", "Error"],
+            &["-B2", "-A6", "-i", "error"],
+            &["-c", "FAIL"],
+        ] {
+            assert!(
+                stdin_arguments(&words(arguments), RG_SWITCHES),
+                "{arguments:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn ripgrep_spelling_its_own_valued_options_is_not_a_filter() {
+        for arguments in [
+            &[][..],
+            &["x", "notes.txt"],
+            &["-f", "/home/user/.ssh/id_rsa"],
+            &["-l", "x"],
+            &["-P", "x"],
+            &["-z", "x"],
+            // `-g` and `-E` take a value in ripgrep, so the word after them
+            // is not a pattern and the stage is not a plain filter.
+            &["-g", "*.ts", "x"],
+            &["-E", "utf-8", "x"],
+            &["--files"],
+            &["--pre", "cat", "x"],
+        ] {
+            assert!(
+                !stdin_arguments(&words(arguments), RG_SWITCHES),
+                "{arguments:?}"
+            );
         }
     }
 

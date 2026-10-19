@@ -126,9 +126,6 @@ pub(super) fn review_binding(
     policy_binding: &NativePolicyBindingV1,
     launcher: impl FnOnce() -> Option<Reuse>,
 ) -> Option<String> {
-    if facts.action_type.as_deref() == Some("package") {
-        return None;
-    }
     let reuse = match command {
         Some(text) => payload_reuse(text, cwd).or_else(launcher)?,
         None => Reuse::Argv,

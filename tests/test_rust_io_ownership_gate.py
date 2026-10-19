@@ -61,6 +61,25 @@ def test_gate_inventories_reachable_io_and_passes_current_sources() -> None:
     assert "unclassified_python_io" not in categories
     assert "unclassified_python_content_io" not in categories
 
+    # The remaining unclassified I/O is Python control plane, not a gate backlog.
+    remainder = report["control_plane_remainder"]
+    assert remainder["reachable_count"] == 0
+    assert remainder["operation_count"] == sum(
+        count for category, count in report["inventory_by_category"].items() if category.startswith("unclassified_")
+    )
+
+    # The CLI hook command anchors the walk so that the two steps running ahead of any native
+    # call are inside the gate. Asserting the root itself is reachable would prove nothing --
+    # `_reachable_records` seeds itself from `ROOTS` -- so name the callees the root reaches.
+    reachable = {
+        (record.path, record.qualname) for record in MODULE._reachable_records(ROOT, MODULE._function_map(ROOT))
+    }
+    assert (
+        "src/codex_plugin_scanner/guard/runtime/harness_attribution.py",
+        "resolve_runtime_hook_harness",
+    ) in reachable
+    assert ("src/codex_plugin_scanner/guard/cli/commands_support_hook_payload.py", "_load_hook_payload") in reachable
+
 
 def test_gate_rejects_python_content_read_on_native_edge(tmp_path: Path) -> None:
     _copy_gate_sources(tmp_path)
@@ -195,3 +214,41 @@ def test_validation_reloads_sources_between_passes(tmp_path: Path, mutation: str
         edge.write_text(original.replace(marker, marker + '    open("new-secret.txt")\n', 1), encoding="utf-8")
         with pytest.raises(RuntimeError, match="reachable unclassified Python I/O"):
             MODULE.validate(tmp_path)
+
+
+def test_the_hook_worker_branch_check_ignores_root_order(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Adding an entry point ahead of the hook worker must not retarget the branch assertions."""
+    _copy_gate_sources(tmp_path)
+    records = MODULE._function_map(tmp_path)
+    assert MODULE._branch_failures(tmp_path, records) == []
+
+    reordered = tuple(reversed(MODULE.ROOTS))
+    assert reordered[0] is not MODULE.HOOK_WORKER_ROOT
+    monkeypatch.setattr(MODULE, "ROOTS", reordered)
+    assert MODULE._branch_failures(tmp_path, records) == []
+
+
+def test_the_remainder_block_says_the_unclassified_io_is_off_the_decision_path(tmp_path: Path) -> None:
+    """The raw category totals read like a backlog; the remainder block says what they are."""
+    _copy_gate_sources(tmp_path)
+    # Control-plane I/O the walk never reaches: the gate reports it without failing.
+    helper = tmp_path / "src/codex_plugin_scanner/guard/cli/unreached_control_plane.py"
+    helper.write_text('def export() -> None:\n    open("report.csv")\n', encoding="utf-8")
+
+    remainder = MODULE.validate(tmp_path)["control_plane_remainder"]
+
+    assert remainder["reachable_count"] == 0
+    assert remainder["operation_count"] >= 1
+    assert remainder["by_subpackage"]["cli"] >= 1
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("src/codex_plugin_scanner/guard/store.py", "<top-level>"),
+        ("src/codex_plugin_scanner/guard/cli/commands_hook.py", "cli"),
+        ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "daemon"),
+    ],
+)
+def test_the_remainder_groups_by_subpackage(path: str, expected: str) -> None:
+    assert MODULE._subpackage(path) == expected

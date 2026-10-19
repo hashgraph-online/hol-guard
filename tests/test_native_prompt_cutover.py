@@ -209,27 +209,3 @@ def test_actual_hook_uses_request_home_instead_of_ambient_default(native_hook_fo
     assert payload["decision"] == "block"
     assert payload.get("reason_code") != "native_prompt_unavailable"
     assert "HOL Guard" in payload["reason"]
-
-
-def test_attachment_stream_keeps_explicit_native_home(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard.cli import commands_support_codex_prompt_attachments as attachment
-
-    observed = []
-
-    def extract(text, *, guard_home):
-        observed.append(("extract", guard_home))
-        return []
-
-    def trailing(text, *, guard_home):
-        observed.append(("trailing", guard_home))
-        return None
-
-    monkeypatch.setattr(attachment, "extract_prompt_requests", extract)
-    monkeypatch.setattr(attachment, "_trailing_secret_read_state", trailing)
-    result = attachment._classify_stream_window(
-        "Public documentation",
-        inherited_secret_read_state=None,
-        guard_home=tmp_path,
-    )
-    assert result == ((), None)
-    assert observed == [("extract", tmp_path), ("trailing", tmp_path)]

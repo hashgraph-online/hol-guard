@@ -34,6 +34,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_limits import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 
 
 def _mutation_payload(*, revision: int = 4) -> dict[str, object]:
@@ -101,6 +102,7 @@ def test_catalog_and_effective_responses_are_bounded_public_dtos(tmp_path: Path)
     assert effective == {
         "schema_version": "guard.daemon.extension-controls.v1",
         "health": "protected",
+        "authority_unread": False,
         "revision": 4,
         "catalog_digest": BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
         "global_lockdown": False,

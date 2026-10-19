@@ -205,7 +205,6 @@ def test_native_command_model_rejects_input_above_transport_budget() -> None:
 NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
     {
         "xargs gh pr merge 17 --repo example/repo --squash",
-        "sh -c 'gh pr merge 17 --repo example/repo --squash'",
         "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
         "PATH=scratch/bin:$PATH hol-guard status",
         "printf '%s' \"$(cat workspace/sensitive)\"",
@@ -213,10 +212,31 @@ NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
 )
 
 
+# A shell that carries its whole script in the same text runs exactly those
+# words. The retired Python owner could not read the script, so it treated the
+# shell as indirection and raised the floor; the native model reads it, so the
+# command reaches the floor the script reaches on its own. Each row is checked
+# against that script's own native action rather than a literal, so the two
+# can never drift apart.
+#
+# A login shell is not listed here. It sources the profile files before the
+# script, so it runs code this text does not hold and keeps the wrapper's own
+# uncertainty, which blocks above.
+CARRIED_SCRIPT_CRITICAL_COMMANDS: dict[str, str] = {
+    "sh -c 'gh pr merge 17 --repo example/repo --squash'": "gh pr merge 17 --repo example/repo --squash",
+}
+
+
 @pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
 def test_real_native_critical_floor_matches_frozen_baseline(command: str, factor_floor: GuardAction) -> None:
     action, error = _native_action(command)
-    expected = "block" if command in NATIVE_STRICTER_CRITICAL_COMMANDS else factor_floor
+    script = CARRIED_SCRIPT_CRITICAL_COMMANDS.get(command)
+    if command in NATIVE_STRICTER_CRITICAL_COMMANDS:
+        expected: GuardAction = "block"
+    elif script is not None:
+        expected = _native_action(script)[0]
+    else:
+        expected = factor_floor
     assert action == expected
     if error is not None:
         assert action == "block"

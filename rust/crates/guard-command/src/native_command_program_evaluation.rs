@@ -6,24 +6,17 @@ pub(super) struct Evaluation<'a> {
     pub(super) program: &'a NativeCommandProgram,
     pub(super) command: &'a CanonicalCommandV1,
     pub(super) deadline: Option<Instant>,
-    pub(super) memo: Vec<Option<MatchResult>>,
+    pub(super) memo: NodeMemo,
 }
 
 impl Evaluation<'_> {
     pub(super) fn check_deadline(&self) -> Result<(), &'static str> {
-        if self
-            .deadline
-            .is_some_and(|deadline| Instant::now() >= deadline)
-        {
-            Err("native_command_deadline_exceeded")
-        } else {
-            Ok(())
-        }
+        deadline_ok(self.deadline)
     }
 
     pub(super) fn evaluate(&mut self, index: usize) -> MatchResult {
         self.check_deadline()?;
-        if let Some(value) = &self.memo[index] {
+        if let Some(value) = self.memo.get(index) {
             return value.clone();
         }
         let program = self.program;
@@ -101,114 +94,12 @@ impl Evaluation<'_> {
             }
         };
         self.check_deadline()?;
-        self.memo[index] = Some(value.clone());
+        self.memo.insert(index, value.clone())?;
         value
     }
 
     fn executable(&self, node: &ExecutableNode) -> MatchResult {
-        let contract = &node.contract;
-        let mut evidence = Vec::new();
-        for (index, segment) in self.command.segments.iter().enumerate() {
-            self.check_deadline()?;
-            if !executable_matches(segment, &contract.executables) {
-                continue;
-            }
-            let arguments: Vec<_> = segment
-                .arguments
-                .iter()
-                .map(|value| lowercase_for_ascii_comparison(value))
-                .collect();
-            let filtered = without_options(
-                &arguments,
-                &contract.interspersed_options_with_values,
-                &contract.interspersed_flags,
-            );
-            let remaining = if contract.allow_leading_options {
-                after_leading_options(
-                    &filtered,
-                    &contract.leading_options_with_values,
-                    &contract.interspersed_flags,
-                )
-            } else {
-                filtered.as_slice()
-            };
-            let matched = node.paths.iter().find(|path| remaining.starts_with(path));
-            let matched = matched.or_else(|| {
-                contract
-                    .fail_secure_unknown_options
-                    .then(|| {
-                        node.paths.iter().find(|path| {
-                            matches_subcommands_conservatively_with_deadline(
-                                &arguments,
-                                path,
-                                &node.all_value_options,
-                                &contract.interspersed_flags,
-                                self.deadline,
-                            )
-                        })
-                    })
-                    .flatten()
-            });
-            let Some(path) = matched else {
-                continue;
-            };
-            let flag_arguments = if contract.required_flags_in_all_arguments {
-                arguments.as_slice()
-            } else {
-                remaining.get(path.len()..).unwrap_or_default()
-            };
-            let semantics = argument_semantics(
-                flag_arguments,
-                &node.all_value_options,
-                &contract.inverse_flag_pairs,
-            );
-            let mut required_present = contract.required_flags.is_subset(&semantics.present_flags)
-                && contract
-                    .required_option_values
-                    .iter()
-                    .all(|(option, values)| {
-                        semantics
-                            .option_value(option)
-                            .is_some_and(|value| values.contains(value))
-                    });
-            if required_present
-                && contract.fail_secure_unknown_options
-                && contract.required_flags_in_all_arguments
-            {
-                let mut requirements = contract.required_flags.clone();
-                for (positive, negative) in &contract.inverse_flag_pairs {
-                    if !requirements.contains(positive) && !requirements.contains(negative) {
-                        continue;
-                    }
-                    requirements.remove(positive);
-                    requirements.remove(negative);
-                    if let Some(token) = semantics.option_token(positive) {
-                        requirements.insert(token.to_owned());
-                    }
-                }
-                requirements.extend(
-                    contract
-                        .required_option_values
-                        .iter()
-                        .map(|(option, _)| option.clone()),
-                );
-                required_present = flags_present_in_all_option_parses_with_deadline(
-                    &arguments,
-                    &requirements,
-                    &node.all_value_options,
-                    &node.proof_known_flags,
-                    self.deadline,
-                );
-            }
-            if required_present
-                && contract
-                    .forbidden_flags
-                    .is_disjoint(&semantics.present_flags)
-            {
-                evidence.push(index);
-            }
-        }
-        Ok(Arc::from(evidence))
+        executable_evidence(node, self.command, self.deadline)
     }
 
     /// Matches a launcher executable, a package token, and a fixed
@@ -277,6 +168,131 @@ impl Evaluation<'_> {
         }
         Ok(Arc::from(evidence))
     }
+}
+
+/// `deadline_ok` - the shared budget check, usable without an `Evaluation`.
+pub(super) fn deadline_ok(deadline: Option<Instant>) -> Result<(), &'static str> {
+    if deadline.is_some_and(|deadline| Instant::now() >= deadline) {
+        Err("native_command_deadline_exceeded")
+    } else {
+        Ok(())
+    }
+}
+
+/// `executable_evidence` - the segments of a command an executable node
+/// matches.
+///
+/// It takes the command and the deadline rather than an `Evaluation` so a
+/// caller holding a single node, such as the reviewed-invocation check,
+/// runs the matcher a compiled program runs.
+pub(super) fn executable_evidence(
+    node: &ExecutableNode,
+    command: &CanonicalCommandV1,
+    deadline: Option<Instant>,
+) -> MatchResult {
+    let contract = &node.contract;
+    let mut evidence = Vec::new();
+    for (index, segment) in command.segments.iter().enumerate() {
+        deadline_ok(deadline)?;
+        if !executable_matches(segment, &contract.executables) {
+            continue;
+        }
+        let arguments: Vec<_> = segment
+            .arguments
+            .iter()
+            .map(|value| lowercase_for_ascii_comparison(value))
+            .collect();
+        let filtered = without_options(
+            &arguments,
+            &contract.interspersed_options_with_values,
+            &contract.interspersed_flags,
+        );
+        let remaining = if contract.allow_leading_options {
+            after_leading_options(
+                &filtered,
+                &contract.leading_options_with_values,
+                &contract.interspersed_flags,
+            )
+        } else {
+            filtered.as_slice()
+        };
+        let matched = node.paths.iter().find(|path| remaining.starts_with(path));
+        let matched = matched.or_else(|| {
+            contract
+                .fail_secure_unknown_options
+                .then(|| {
+                    node.paths.iter().find(|path| {
+                        matches_subcommands_conservatively_with_deadline(
+                            &arguments,
+                            path,
+                            &node.all_value_options,
+                            &contract.interspersed_flags,
+                            deadline,
+                        )
+                    })
+                })
+                .flatten()
+        });
+        let Some(path) = matched else {
+            continue;
+        };
+        let flag_arguments = if contract.required_flags_in_all_arguments {
+            arguments.as_slice()
+        } else {
+            remaining.get(path.len()..).unwrap_or_default()
+        };
+        let semantics = argument_semantics(
+            flag_arguments,
+            &node.all_value_options,
+            &contract.inverse_flag_pairs,
+        );
+        let mut required_present = contract.required_flags.is_subset(&semantics.present_flags)
+            && contract
+                .required_option_values
+                .iter()
+                .all(|(option, values)| {
+                    semantics
+                        .option_value(option)
+                        .is_some_and(|value| values.contains(value))
+                });
+        if required_present
+            && contract.fail_secure_unknown_options
+            && contract.required_flags_in_all_arguments
+        {
+            let mut requirements = contract.required_flags.clone();
+            for (positive, negative) in &contract.inverse_flag_pairs {
+                if !requirements.contains(positive) && !requirements.contains(negative) {
+                    continue;
+                }
+                requirements.remove(positive);
+                requirements.remove(negative);
+                if let Some(token) = semantics.option_token(positive) {
+                    requirements.insert(token.to_owned());
+                }
+            }
+            requirements.extend(
+                contract
+                    .required_option_values
+                    .iter()
+                    .map(|(option, _)| option.clone()),
+            );
+            required_present = flags_present_in_all_option_parses_with_deadline(
+                &arguments,
+                &requirements,
+                &node.all_value_options,
+                &node.proof_known_flags,
+                deadline,
+            );
+        }
+        if required_present
+            && contract
+                .forbidden_flags
+                .is_disjoint(&semantics.present_flags)
+        {
+            evidence.push(index);
+        }
+    }
+    Ok(Arc::from(evidence))
 }
 
 fn after_leading_options<'a>(

@@ -357,7 +357,14 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     # The test conftest defaults HOL_GUARD_NATIVE to "off" outside regression lanes;
     # the report runner forces the supplied native binary only when the mode is unset.
     environ.pop("HOL_GUARD_NATIVE", None)
-    environ.update({"PYTHONHASHSEED": hash_seed, "TZ": timezone, "LC_ALL": locale})
+    environ.update(
+        {
+            "PYTHONHASHSEED": hash_seed,
+            "TZ": timezone,
+            "LC_ALL": locale,
+            "HOL_GUARD_CORPUS_MEMORY_DIAGNOSTICS": "1",
+        }
+    )
     completed = subprocess.run(
         [sys.executable, str(script), "--metrics"],
         check=False,
@@ -371,4 +378,30 @@ def test_fresh_process_report_is_environment_independent_and_bounded(
     metrics = cast(dict[str, object], value)
     assert metrics["report_framed_sha256"] == expected_digest
     assert float(str(metrics["elapsed_seconds"])) < evaluation_budget_seconds + spawn_overhead_seconds, metrics
-    assert float(str(metrics["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])), metrics
+    if not float(str(metrics["rss_mib"])) < int(str(manifest["evaluation_rss_budget_mib"])):
+        pytest.fail(f"{metrics}\n{completed.stderr.decode(errors='replace')[-4000:]}")
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+def test_worker_memory_diagnostics_are_opt_in_and_resource_only(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], enabled: bool
+) -> None:
+    from tests import guard_command_decision_diff_runner as runner
+
+    monkeypatch.setenv("HOL_GUARD_CORPUS_MEMORY_DIAGNOSTICS", "1" if enabled else "0")
+    monkeypatch.setenv("UNRELATED_PRIVATE_VALUE", "must-not-appear-in-resource-diagnostics")
+    monkeypatch.setattr(runner, "peak_rss_mib", lambda *, include_children=False: 150.0 if include_children else 90.0)
+    runner._memory_diagnostic(2, "after_first_batch")
+    output = capsys.readouterr()
+    assert output.out == ""
+    if not enabled:
+        assert output.err == ""
+        return
+    prefix, payload = output.err.strip().split(" ", maxsplit=1)
+    assert prefix == "corpus_memory"
+    assert json.loads(payload) == {
+        "worker": 2,
+        "phase": "after_first_batch",
+        "self_peak_mib": 90.0,
+        "self_plus_child_peak_mib": 150.0,
+    }

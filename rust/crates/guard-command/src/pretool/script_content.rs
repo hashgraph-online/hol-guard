@@ -13,10 +13,13 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+mod argv;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+
+pub(crate) use argv::{argv_script, ArgvScript};
 
 use super::{read_paths, PathContext};
 use crate::CanonicalCommandV1;
@@ -208,6 +211,36 @@ pub(crate) fn sourced_program_sources(
         sources.push(read_text(&resolve(target, context)?)?);
     }
     sourcing.then_some(sources)
+}
+
+/// The text of every file the command sources, when sourcing is the only
+/// nesting the command does.
+///
+/// [`sourced_program_sources`] answers for the files a command sources and
+/// says nothing about the rest of it, which is what a floor wants once the
+/// shape is already known to be reviewable. Deciding that shape needs the
+/// stricter question: `eval evil && source ok.sh` sources a file this scan
+/// reads, and reading it bounds nothing, because `eval` runs words that are
+/// not in the text at all. Any other nested executor in the command is
+/// refused here, so only sourcing is read through.
+pub(crate) fn sole_sourcing_sources(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+) -> Option<Vec<String>> {
+    let (_, segments) = structure(model, context)?;
+    let nested = segments.iter().any(|segment| {
+        !sources_a_file(segment)
+            && segment.executable.as_deref().is_some_and(|executable| {
+                crate::parser_executables::is_nested_command_executor(
+                    executable,
+                    &segment.arguments,
+                )
+            })
+    });
+    if nested {
+        return None;
+    }
+    sourced_program_sources(model, context)
 }
 
 /// Whether the segment runs the shell's `source` builtin, whatever file it
@@ -501,6 +534,23 @@ fn first_operand<'a>(
         }
     }
     None
+}
+
+/// The canonical path and text of a virtualenv activation script a command
+/// names, or `None` when the name does not resolve to one. The marker file
+/// PEP 405 writes beside `bin` is what distinguishes a real environment from
+/// a directory dressed as one, and the path is canonical, so no link can
+/// dress another file as an activation script.
+pub(crate) fn activation_script_text(
+    script: &str,
+    context: PathContext<'_>,
+) -> Option<(PathBuf, String)> {
+    let path = resolve(script, context)?;
+    if !read_paths::virtualenv_activation_script(&path) {
+        return None;
+    }
+    let text = read_text(&path)?;
+    Some((path, text))
 }
 
 fn resolve(script: &str, context: PathContext<'_>) -> Option<PathBuf> {

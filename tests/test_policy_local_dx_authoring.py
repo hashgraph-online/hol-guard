@@ -445,7 +445,7 @@ def test_policy_check_rejects_a_blank_command_with_exit_four(
     code, payload = _json(capsys, "check", str(target), "--command", "   ")
 
     assert code == 4
-    assert payload["error"] == "command_value_required"
+    assert payload["error"] == "native_command_policy_decision_command_value_required"
 
 
 def test_policy_tests_do_not_pass_examples_for_a_business_policy_that_has_no_local_rows() -> None:

@@ -1,10 +1,5 @@
 use super::*;
 
-/// `_resolve_workspace` (:52-77).
-pub(super) fn resolve_workspace(workspace: &Path) -> Result<PathBuf, RestrictedPytestError> {
-    resolve_workspace_with_home(workspace, None)
-}
-
 pub(super) fn resolve_workspace_with_home(
     workspace: &Path,
     home: Option<&Path>,

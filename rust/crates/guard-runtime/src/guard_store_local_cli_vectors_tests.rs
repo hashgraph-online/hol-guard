@@ -16,7 +16,7 @@ use crate::guard_store_op::evaluate_guard_store_request;
 const LOCAL_CLI_VECTORS: &str = include_str!("../testdata/guard_store/local_cli_vectors.json");
 const LOCAL_MCP_VECTORS: &str = include_str!("../testdata/guard_store/local_mcp_vectors.json");
 
-fn build_database(path: &Path, vectors: &Value, scenario: &Value) {
+pub(crate) fn build_database(path: &Path, vectors: &Value, scenario: &Value) {
     let connection = Connection::open(path).unwrap();
     connection.execute_batch("pragma journal_mode=wal").ok();
     connection
@@ -32,7 +32,7 @@ fn build_database(path: &Path, vectors: &Value, scenario: &Value) {
     }
 }
 
-fn run_step(home: &Path, source: &str, now: &str, step: &Value) -> Value {
+pub(crate) fn run_step(home: &Path, source: &str, now: &str, step: &Value) -> Value {
     let mut args: Map<String, Value> = step["wire_args"].as_object().unwrap().clone();
     if args.get("clock") == Some(&Value::from("<NOW>")) {
         args.insert("clock".to_owned(), Value::from(now));
@@ -51,7 +51,7 @@ fn run_step(home: &Path, source: &str, now: &str, step: &Value) -> Value {
     serde_json::from_slice(&bytes).unwrap()
 }
 
-fn replay_vectors(text: &str, schema: &str) -> usize {
+pub(crate) fn replay_vectors(text: &str, schema: &str) -> usize {
     let vectors: Value = serde_json::from_str(text).unwrap();
     assert_eq!(vectors["schema"], schema);
     let (source, now) = (

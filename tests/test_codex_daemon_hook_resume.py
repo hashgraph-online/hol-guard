@@ -4,16 +4,11 @@ from __future__ import annotations
 
 import argparse
 import http.client
-import io
-import json
-import threading
 import time
-from http.server import HTTPServer
 from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
 from codex_plugin_scanner.guard.cli import commands_support_interaction as interaction
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -22,11 +17,7 @@ from codex_plugin_scanner.guard.live_process_identity import (
     CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.codex_daemon_hook_bridge_fixtures import (
-    _bridge_config,
-    _ResumeDaemonHandler,
-    _write_authenticated_daemon_files,
-)
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_phase04_harness_ux import _json_line, _run_hook
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -253,6 +244,7 @@ def test_pending_pretool_parses_request_binding_from_reason() -> None:
 
 @pytest.mark.usefixtures("native_hook_force")
 def test_codex_json_pretool_package_install_reason_includes_request(tmp_path: Path) -> None:
+    review_package_signals(tmp_path / "guard-home")
     exit_code, output = _run_hook(
         tmp_path,
         harness="codex",
@@ -297,190 +289,3 @@ def test_poll_resolution_treats_http_exception_as_transient(
     )
     assert action == "allow"
     assert calls["count"] >= 2
-
-
-def test_bridge_converts_denied_pretool_to_allow_after_browser_approval(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _ResumeDaemonHandler)
-    thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _ResumeDaemonHandler.guard_home = guard_home
-    _ResumeDaemonHandler.resolution = "allow"
-    _ResumeDaemonHandler.policy_action = "require-reapproval"
-    _ResumeDaemonHandler.approve_after = 0.15
-    _ResumeDaemonHandler.started_at = time.monotonic()
-    _ResumeDaemonHandler.get_count = 0
-    _ResumeDaemonHandler.finalize_count = 0
-    _ResumeDaemonHandler.finalize_completed = True
-    _ResumeDaemonHandler.finalize_payload = None
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "npm install is-even@1.0.0"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(resume, "open_browser_url", lambda _url: True)
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, port))
-    finally:
-        daemon.shutdown()
-        thread.join(timeout=5)
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload == {"hookSpecificOutput": {"hookEventName": "PreToolUse"}}
-    assert "permissionDecision" not in payload.get("hookSpecificOutput", {})
-    assert _ResumeDaemonHandler.get_count >= 1
-    assert _ResumeDaemonHandler.finalize_count == 1
-    assert isinstance(_ResumeDaemonHandler.finalize_payload, dict)
-    hook_input = _ResumeDaemonHandler.finalize_payload.get("hook_input")
-    assert isinstance(hook_input, str)
-    assert json.loads(hook_input)["tool_input"]["command"] == "npm install is-even@1.0.0"
-    assert "guardApprovalRequestId" not in payload
-
-
-def test_bridge_keeps_deny_when_browser_blocks(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _ResumeDaemonHandler)
-    thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _ResumeDaemonHandler.guard_home = guard_home
-    _ResumeDaemonHandler.resolution = "block"
-    _ResumeDaemonHandler.policy_action = "require-reapproval"
-    _ResumeDaemonHandler.approve_after = 0.05
-    _ResumeDaemonHandler.started_at = time.monotonic()
-    _ResumeDaemonHandler.finalize_count = 0
-    _ResumeDaemonHandler.finalize_completed = True
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "npm install is-even@1.0.0"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(resume, "open_browser_url", lambda _url: True)
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, port))
-    finally:
-        daemon.shutdown()
-        thread.join(timeout=5)
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert _ResumeDaemonHandler.finalize_count == 1
-    assert "guardApprovalRequestId" not in payload
-
-
-def test_bridge_keeps_deny_when_policy_became_terminal(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _ResumeDaemonHandler)
-    thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _ResumeDaemonHandler.guard_home = guard_home
-    _ResumeDaemonHandler.resolution = "allow"
-    _ResumeDaemonHandler.policy_action = "sandbox-required"
-    _ResumeDaemonHandler.approve_after = 0.05
-    _ResumeDaemonHandler.started_at = time.monotonic()
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "npm install is-even@1.0.0"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(resume, "open_browser_url", lambda _url: True)
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, port))
-    finally:
-        daemon.shutdown()
-        thread.join(timeout=5)
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-
-
-def test_bridge_keeps_deny_when_browser_wait_times_out(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _ResumeDaemonHandler)
-    thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    thread.start()
-    port = daemon.server_address[1]
-    _write_authenticated_daemon_files(guard_home, port)
-    _ResumeDaemonHandler.guard_home = guard_home
-    _ResumeDaemonHandler.resolution = None
-    _ResumeDaemonHandler.approve_after = 30.0
-    _ResumeDaemonHandler.started_at = time.monotonic()
-    config = _bridge_config(guard_home, port)
-    config["hook_timeouts"] = {
-        "PreToolUse": 3,
-        "PermissionRequest": 3,
-        "UserPromptSubmit": 3,
-        "PostToolUse": 3,
-    }
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "npm install is-even@1.0.0"},
-                }
-            )
-        ),
-    )
-    monkeypatch.setattr(resume, "open_browser_url", lambda _url: True)
-    monkeypatch.setattr(resume, "_POLL_INTERVAL_SECONDS", 0.05)
-
-    try:
-        exit_code = bridge.main(**config)
-    finally:
-        daemon.shutdown()
-        thread.join(timeout=5)
-
-    assert exit_code == 0
-    payload = json.loads(capsys.readouterr().out)
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"

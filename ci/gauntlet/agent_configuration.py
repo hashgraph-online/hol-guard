@@ -18,7 +18,7 @@ def write_agent_configuration(
     """Point the actual OMP provider at the transparent live relay.
 
     ``config.yml`` pins ``launch.enabled`` off so the bash schema stays the
-    non-service variant: otherwise 18.4.12 advertises ``name``/``ready`` and the
+    non-service variant: otherwise 18.11.3 advertises ``name``/``ready`` and the
     model materializes inert defaults that add notice lines to every output.
     Synchronous task scenarios must await delegated results before print mode
     exits. Async scenarios retain the SDK default to exercise wait itself.

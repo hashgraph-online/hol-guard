@@ -1,15 +1,18 @@
-"""Hook stdin is UTF-8 even when the console code page is not (Windows cp1252)."""
+"""Hook stdin is UTF-8 even when the console code page is not (Windows cp1252).
+
+The Claude hook launcher no longer reads the body in Python: the native
+command inherits this call's stdio and reads the bytes itself, so that
+harness's passthrough is held by
+`rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs`.
+"""
 
 from __future__ import annotations
 
 import io
 import json
-import sys
-from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters.hook_input_reader import read_stdin_text
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload_loader import load_hook_payload
 from codex_plugin_scanner.guard.codex_hook_bridge_runtime import bounded_hook_input
@@ -61,32 +64,3 @@ def test_fallback_hook_payload_loader_decodes_utf8(monkeypatch: pytest.MonkeyPat
     payload = load_hook_payload(None, normalize=False)
 
     assert payload == _PAYLOAD
-
-
-def test_claude_bridge_forwards_utf8_paths_unchanged(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    captured: list[str] = []
-
-    def fake_post(endpoint: str, data: str, *, state_path: str | Path, deadline: float | None = None) -> str:
-        del endpoint, state_path, deadline
-        captured.append(data)
-        return json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "allow"}})
-
-    monkeypatch.setattr(bridge, "state_path_for_query", lambda state_path, query: state_path)
-    monkeypatch.setattr(bridge, "_daemon_url", lambda state_path, fallback: "http://127.0.0.1:5474")
-    monkeypatch.setattr(bridge, "_post_to_loopback_daemon", fake_post)
-    monkeypatch.setattr("sys.stdin", _cp1252_stdin(json.dumps(_PAYLOAD, ensure_ascii=False)))
-
-    assert (
-        bridge.main(
-            state_path=tmp_path / "daemon-state.json",
-            fallback_daemon_url="http://127.0.0.1:5474",
-            fallback_command=(sys.executable, "-c", "print('{}')"),
-            query="guard-home=/tmp/guard-home",
-        )
-        == 0
-    )
-
-    assert json.loads(captured[0])["tool_input"]["file_path"] == "C:/Users/zoë/café.txt"

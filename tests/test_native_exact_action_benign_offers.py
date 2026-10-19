@@ -12,6 +12,7 @@ from codex_plugin_scanner.guard.daemon.hook_native_exact_action import (
 from tests.test_native_review_exact_action_always import (
     _HARNESS,
     _native_package_intent,  # noqa: F401  (autouse fixture)
+    _proven,
     _token,
     _verdict,
     _wrangler_workspace,
@@ -27,9 +28,7 @@ def _workspace(root: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return workspace
 
 
-def _decide(
-    tool: str, tool_input: dict[str, object], workspace: Path, **overrides: object
-) -> tuple[str | None, str | None]:
+def _decide(tool: str, tool_input: object, workspace: Path, **overrides: object) -> tuple[str | None, str | None]:
     result, receipt = _verdict(**overrides)
     return native_exact_action_decision(
         harness=_HARNESS,
@@ -59,7 +58,7 @@ def test_version_probe_of_a_plain_binary_is_eligible(
         # alone does not bind what runs.
         "pytest --version",
         "cargo --version",
-        # The resident gives an interpreter with no entrypoint a fresh nonce.
+        # An interpreter with no entrypoint gets a fresh nonce, never a proof.
         "python3 --version",
         "node -V",
         "cargo --version --foo",
@@ -71,11 +70,11 @@ def test_version_probe_of_a_plain_binary_is_eligible(
         "python3 -c 'print(1)' --version",
     ],
 )
-def test_launchers_that_run_code_stay_once_only(
+def test_launchers_that_run_code_bind_only_the_command(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, command: str
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
-    assert _token(command, workspace) is None
+    assert not _proven(command, workspace)
 
 
 @pytest.mark.parametrize("tool", ["todo", "todo_write", "TodoWrite"])
@@ -91,12 +90,28 @@ def test_state_only_tools_are_eligible(
 
 
 @pytest.mark.parametrize("tool", ["eval", "write", "edit", "bash_background"])
-def test_code_and_write_tools_stay_once_only(
+def test_code_and_write_tools_bind_the_exact_call(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, tool: str
 ) -> None:
     workspace = _workspace(tmp_path, monkeypatch)
     token, reason = _decide(tool, {"path": "a.txt", "code": "1+1"}, workspace)
-    assert token is None and reason == "no_command_identity"
+    assert token is not None and reason is None
+    other, _ = _decide(tool, {"path": "a.txt", "code": "1+2"}, workspace)
+    # Without a proven identity the approval covers this call's input only.
+    assert other != token
+
+
+@pytest.mark.parametrize("tool", ["eval", "mcp__notes__search"])
+def test_an_input_that_is_not_an_object_binds_the_call(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path, tool: str
+) -> None:
+    workspace = _workspace(tmp_path, monkeypatch)
+    token, reason = _decide(tool, "list", workspace)
+    assert token is not None and reason is None
+    assert _decide(tool, "list", workspace)[0] == token
+    # Approving one call does not approve another input, or a call without one.
+    for other in ("delete all", ["list"], None):
+        assert _decide(tool, other, workspace)[0] not in (None, token), other
 
 
 @pytest.mark.parametrize(
@@ -114,7 +129,7 @@ def test_code_and_write_tools_stay_once_only(
 @pytest.mark.parametrize(
     ("tool", "tool_input"), [("Bash", {"command": "cat README.md"}), ("todo", {"ops": []}), ("read", {"path": "a"})]
 )
-def test_risk_signal_reviews_never_offer_always(
+def test_risk_signal_reviews_bind_only_the_exact_call(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     native_context_digest: Path,
@@ -122,9 +137,14 @@ def test_risk_signal_reviews_never_offer_always(
     tool: str,
     tool_input: dict[str, object],
 ) -> None:
+    # A risky review still offers Always allow (docs/guard/approval-invariant.md),
+    # but only for this exact call: any other input is a new command.
     workspace = _workspace(tmp_path, monkeypatch)
     token, reason = _decide(tool, tool_input, workspace, reason_code=reason_code)
-    assert token is None and reason == "non_overridable"
+    assert token is not None and reason is None
+    changed = {"command": "cat README.md -n"} if "command" in tool_input else {**tool_input, "extra": "x"}
+    other, _ = _decide(tool, changed, workspace, reason_code=reason_code)
+    assert other != token
 
 
 def test_first_seen_review_of_a_benign_command_keeps_its_offer(

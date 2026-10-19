@@ -25,6 +25,7 @@ from codex_plugin_scanner.guard.store import GuardStore
 from tests.conftest import guard_commands_module
 from tests.guard_cli_facade_isolation import isolate_terminal_block_patches, restore_cli_facade_approval_hooks
 from tests.guard_signed_approval_fixtures import write_synthetic_daemon_auth_token
+from tests.package_review_settings import review_package_signals
 
 pytestmark = [pytest.mark.usefixtures("approval_questionnaire_mode"), pytest.mark.usefixtures("bundle_first_cloud")]
 
@@ -384,6 +385,7 @@ def test_guard_hook_cloud_timeout_queues_package_review_instead_of_terminal_bloc
     store = GuardStore(home_dir)
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    review_package_signals(home_dir)
     monkeypatch.setattr(guard_commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
     def fail_daemon(_home: Path) -> object:

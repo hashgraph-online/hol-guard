@@ -8,6 +8,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from codex_plugin_scanner.guard.hook_execution_environment import collect_hook_execution_environment
+
 
 def envelope(command: str, request_id: str = "adversarial") -> bytes:
     return json.dumps(
@@ -20,6 +22,13 @@ def envelope(command: str, request_id: str = "adversarial") -> bytes:
             "cwd": os.getcwd(),
             "home_dir": os.getcwd(),
             "guard_home": os.getcwd(),
+            # The runtime answers for what the command inherits from the shell
+            # it would run in, and it cannot read that shell itself. A hook
+            # bridge stamps it on the way in; this harness runs the commands'
+            # own shell, so it stamps its own. Without it the rules that have
+            # to prove an inherited variable away, such as an rg that a
+            # RIPGREP_CONFIG_PATH could hand a path operand, stay at review.
+            "execution_environment": collect_hook_execution_environment(),
             "deadline_budget_ms": 5_000,
         },
         separators=(",", ":"),
@@ -60,6 +69,8 @@ def main() -> int:
         "dd if=/dev/zero of=/dev/sda",
         "mkfs.ext4 /dev/sda1",
         "shutdown -h now",
+        # A shell carrying a destructive script is the script it carries.
+        "sh -c 'shred ~/.ssh/id_ed25519'",
         "reboot",
         "wipefs -a /dev/sda",
     )
@@ -88,6 +99,13 @@ def main() -> int:
         result = decision(runtime, command, f"review-{index}")
         assert result["decision"] == "deny", (command, result)
         assert result["policy_action"] in {"review", "block"}, (command, result)
+
+    # A shell that reads no startup file runs exactly the script it carries, so
+    # the command reaches the same decision the script reaches on its own. A
+    # login shell runs the profile files first, so it stays reviewed above.
+    for index, command in enumerate(("sh -c 'pwd'", "bash -c 'pwd'")):
+        result = decision(runtime, command, f"inline-shell-{index}")
+        assert result["decision"] == "allow", (command, result)
 
     for index, command in enumerate(("python -c 'print(1)'", "node -e 'console.log(1)'")):
         result = decision(runtime, command, f"bounded-expression-{index}")

@@ -14,8 +14,8 @@ def _normalized_command(command: Sequence[str]) -> tuple[str, ...]:
     return tuple(restricted_native("normalized_command", {"command": [str(item) for item in command]}, list))
 
 
-def _resolve_workspace(workspace: Path) -> Path:
-    return Path(restricted_native("resolve_workspace", {"path": workspace}, str))
+def _resolve_workspace(workspace: Path, *, home_dir: Path | None = None) -> Path:
+    return Path(restricted_native("resolve_workspace", {"path": workspace, "home": home_dir}, str))
 
 
 def _resolve_cwd(cwd: Path, *, workspace: Path) -> Path:

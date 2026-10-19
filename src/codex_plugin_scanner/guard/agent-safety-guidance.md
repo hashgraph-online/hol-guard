@@ -12,6 +12,8 @@ Use these command-shaping rules to reduce avoidable Guard reviews while preservi
 - Separate inspection from mutation so Guard and the user can verify the target before it changes.
 - If Guard pauses an action, do not automatically retry equivalent spellings. Wait for approval or choose
   a safer operation.
+- A "not set up on this device" reason is a one-time setup decision the user makes in the HOL Guard inbox,
+  not an approval of the action. Do not retry it in another spelling; continue with permitted work.
 
 ## Leave approvals to the user
 

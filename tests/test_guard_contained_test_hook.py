@@ -153,7 +153,20 @@ def test_changed_or_missing_authority_never_starts_tests(
 def test_authorized_original_input_runs_only_with_readonly_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    from codex_plugin_scanner.guard import native_restricted_pytest
+
     calls = []
+    monkeypatch.setattr(
+        native_restricted_pytest,
+        "restricted_native",
+        lambda *args, **kwargs: {
+            "inline_eval": False,
+            "node_test": False,
+            "vitest": False,
+            "git": False,
+            "node_tool": False,
+        },
+    )
     monkeypatch.setattr(
         sink, "prepare_restricted_pytest", lambda *args, **kwargs: calls.append(("prepare", args, kwargs))
     )
@@ -171,10 +184,20 @@ def test_authorized_original_input_runs_only_with_readonly_profile(
         return 0
 
     monkeypatch.setattr(sink, "run_restricted_pytest", execute)
+    home = tmp_path / "home"
     assert (
-        sink.run_authorized_contained_test(payload(), workspace=tmp_path, timeout_seconds=20, authorize=authorize) == 0
+        sink.run_authorized_contained_test(
+            payload(),
+            workspace=tmp_path,
+            home_dir=home,
+            timeout_seconds=20,
+            authorize=authorize,
+        )
+        == 0
     )
     assert [call[0] for call in calls] == ["prepare", "authorize", "execute"]
+    assert calls[0][2]["home_dir"] == home
+    assert calls[2][2]["home_dir"] == home
 
 
 @pytest.mark.parametrize("fresh_profile", ["node-test-readonly-v1", "pytest-readonly-v2", "wrong"])

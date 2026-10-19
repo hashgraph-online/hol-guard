@@ -10,8 +10,8 @@
 use guard_contracts::{
     normalize_guard_action, normalize_guard_action_result, GrantSettleQueryV1, GuardAction,
     HookArtifactComposeQueryV1, HookArtifactComposeRequestV1, HookArtifactComposeResultV1,
-    HookNativeEdgeV1, NativeEdgeFactsV1, PolicyStackQueryV1, HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA,
-    HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA,
+    HookNativeEdgeV1, NativeEdgeFactsV1, ObserveExecutableActionQueryV1, PolicyStackQueryV1,
+    HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA, HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
@@ -70,6 +70,9 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, Strin
             "approval_context_policy_action": "allow",
         }),
         HookArtifactComposeQueryV1::GrantSettle(query) => grant_settle(query),
+        HookArtifactComposeQueryV1::ObserveExecutableAction(query) => {
+            observe_executable_action(query)
+        }
         HookArtifactComposeQueryV1::SavedReuse(query) => reuse::saved_reuse(query),
         HookArtifactComposeQueryV1::SavedBlockReuse {
             current_action,
@@ -340,6 +343,32 @@ fn grant_settle(query: &GrantSettleQueryV1) -> Value {
     result.insert("policy_action".into(), name(policy));
     result.insert("approval_context_policy_action".into(), name(context));
     Value::Object(result)
+}
+
+/// The action observe mode records as the one that would have executed.
+///
+/// Observe mode removes the gates that would have stopped the work, so the
+/// answer is composed only from sources that let work through: an `allow` or a
+/// `warn`. A source that asked for a review or a block is exactly what observe
+/// mode suppressed, so it names nothing here. With no executable source the
+/// answer is `allow` -- nothing stood between the harness and the work.
+fn observe_executable_action(query: &ObserveExecutableActionQueryV1) -> Value {
+    let sources = [
+        &query.current_config_action,
+        &query.current_action_override,
+        &query.trusted_cli_override,
+        &query.untrusted_hook_payload_hint,
+        &query.package_action,
+        &query.data_flow_action,
+        &query.scanner_action,
+        &query.package_evaluation_action,
+    ];
+    let executable = sources
+        .into_iter()
+        .filter_map(coerce)
+        .filter(|action| matches!(action, GuardAction::Allow | GuardAction::Warn))
+        .fold(GuardAction::Allow, stricter);
+    json!({ "executable_action": name(executable) })
 }
 
 #[cfg(test)]

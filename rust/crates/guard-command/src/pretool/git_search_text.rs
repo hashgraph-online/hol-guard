@@ -1,7 +1,8 @@
-//! Text a Git search matches: `git grep` patterns and the `-S`, `-G` and
-//! `--grep` values of `git log`. Git compares them against content and
-//! messages and never opens them, so a pattern such as `process.env` or
-//! `.ssh/` names no path. Every other token still meets the sensitive-text
+//! Text a Git search matches: `git grep` patterns, the `-S`, `-G` and
+//! `--grep` values of `git log`, and the `--match` and `--exclude` ref globs
+//! of `git describe`. Git compares them against content, messages and ref
+//! names and never opens them, so a pattern such as `process.env`, `.ssh/`
+//! or `v*` names no path. Every other token still meets the sensitive-text
 //! and path screens, and a credential keyword in a pattern still reads as a
 //! credential search.
 
@@ -17,6 +18,7 @@ pub(super) fn pattern_positions(arguments: &[String]) -> Vec<usize> {
     let positions = match arguments[start].as_str() {
         "grep" => grep_patterns(rest),
         "log" => log_patterns(rest),
+        "describe" => super::git_history_reads::describe_pattern_positions(rest),
         _ => Vec::new(),
     };
     positions
@@ -230,6 +232,15 @@ mod tests {
         assert_eq!(positions("log --grep .env -- .env"), vec![2]);
         assert_eq!(positions("log -5 --author me -n 3 -S .env"), vec![7]);
         assert_eq!(positions("log --since=2.weeks -S x --format=%h"), vec![3]);
+        assert_eq!(positions("describe --match v* --dirty=-wip"), vec![2]);
+        assert_eq!(
+            positions("describe --match=v* --exclude nightly*"),
+            vec![1, 3]
+        );
+        assert_eq!(
+            positions("describe --tags --candidates 10 --match v*"),
+            vec![5]
+        );
     }
 
     #[test]
@@ -243,5 +254,9 @@ mod tests {
         assert!(positions("log --committer -G .env -p").is_empty());
         assert!(positions("log --output out -S x").is_empty());
         assert_eq!(positions("grep foo .env -- src"), vec![1]);
+        assert!(positions("describe --tags HEAD").is_empty());
+        assert!(positions("describe --textconv --match v*").is_empty());
+        assert!(positions("describe --match").is_empty());
+        assert_eq!(positions("describe --match v* -- .env"), vec![2]);
     }
 }

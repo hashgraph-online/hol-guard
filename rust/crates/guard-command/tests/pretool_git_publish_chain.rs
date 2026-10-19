@@ -6,7 +6,7 @@
 #[allow(dead_code)]
 mod git_helper_fixture;
 
-use git_helper_fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
+use git_helper_fixture::{evaluate_with_node, FixtureCleanup};
 use guard_command::native_command_controls::CompiledNativeCommandControls;
 use guard_command::pretool::{install_git_push_verdict, GitPushRequest};
 use serde_json::json;
@@ -139,13 +139,12 @@ impl Repository {
         cwd: &Path,
         controls: &CompiledNativeCommandControls,
     ) -> guard_contracts::PreToolResultV1 {
-        evaluate_pre_tool_envelope_with_context(
+        evaluate_with_node(
             "codex",
             "PreToolUse",
             &json!({"tool_name":"bash", "tool_input":{"command":command}}),
             Some(controls),
-            None,
-            self.home.to_str(),
+            &self.home,
             cwd.to_str(),
         )
     }
@@ -357,6 +356,7 @@ fn in_session(
             cdpath_unset: false,
             rustup_override_absent: false,
             npm_config_inert: false,
+            pip_config_inert: false,
             shell_home_matches: false,
             ripgrep_config_absent: false,
             psql_environment: Default::default(),

@@ -13,7 +13,7 @@ import {
 } from "../local-cli-api";
 import { WorkspacePageHeader } from "../workspace-page-header";
 import { useDiscoveryFeed, useJoinedDiscovery } from "./extensions-discovery-feed";
-import { MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderFeaturedFirst } from "./extensions-discover-model";
+import { inFeedSlotIndexes, MIN_ORGANIC_ROWS_BEFORE_IN_FEED, orderFeaturedFirst } from "./extensions-discover-model";
 import { CatalogSlotRow, ExtensionsSpotlight } from "./extensions-spotlight";
 import {
   CATALOG_SLOT_PRODUCTS,
@@ -245,7 +245,9 @@ export function ExtensionsOverview(props: {
     () => slotInventoryLabel(discoveryOffers, CATALOG_SLOT_PRODUCTS),
     [discoveryOffers],
   );
-  const catalogSlotIndex = Math.min(6, Math.max(1, orderedCatalog.length - 1));
+  // Like a sponsored post in a feed, the offer recurs down a long list instead
+  // of showing once near the top and never again.
+  const catalogSlotIndexes = useMemo(() => new Set(inFeedSlotIndexes(orderedCatalog.length)), [orderedCatalog.length]);
   // The shelf states whether each extension is protecting this device right
   // now; it reads the same effective controls the rows below it read, and it
   // only ever reports that state - nothing on the shelf changes protection.
@@ -457,7 +459,7 @@ export function ExtensionsOverview(props: {
                       onOpen={props.onOpenExtension}
                     />
                   );
-                  if (!catalogSlotOpen || index !== catalogSlotIndex) return row;
+                  if (!catalogSlotOpen || !catalogSlotIndexes.has(index)) return row;
                   return (
                     <Fragment key={extension.extension_id}>
                       <CatalogSlotRow

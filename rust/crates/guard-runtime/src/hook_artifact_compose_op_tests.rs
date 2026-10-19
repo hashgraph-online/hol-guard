@@ -273,3 +273,72 @@ fn the_package_evaluator_owns_command_control_failures_but_not_secret_denies() {
     );
     assert_eq!(native_edge_floor(&secret, None), Some(GuardAction::Block));
 }
+
+fn observe_query(fields: Value) -> HookArtifactComposeQueryV1 {
+    let mut query = json!({
+        "kind": "observe_executable_action",
+        "current_config_action": Value::Null,
+        "current_action_override": Value::Null,
+        "trusted_cli_override": Value::Null,
+        "untrusted_hook_payload_hint": Value::Null,
+        "package_action": Value::Null,
+        "data_flow_action": Value::Null,
+        "scanner_action": Value::Null,
+        "package_evaluation_action": Value::Null,
+    });
+    for (key, value) in fields.as_object().unwrap() {
+        query[key] = value.clone();
+    }
+    serde_json::from_value(query).unwrap()
+}
+
+#[test]
+fn observe_mode_records_an_allow_when_nothing_let_work_through() {
+    let answer = compose(&observe_query(json!({}))).unwrap();
+
+    assert_eq!(answer["executable_action"], "allow");
+}
+
+#[test]
+fn observe_mode_keeps_the_strictest_source_that_still_executes() {
+    // The warning ran; the block is the gate observe mode removed, so it does
+    // not name the action the harness would have taken.
+    let answer = compose(&observe_query(json!({
+        "current_config_action": "allow",
+        "scanner_action": "warn",
+        "package_action": "block",
+    })))
+    .unwrap();
+
+    assert_eq!(answer["executable_action"], "warn");
+}
+
+#[test]
+fn observe_mode_ignores_every_source_that_asked_for_a_gate() {
+    for gate in ["review", "require-reapproval", "sandbox-required", "block"] {
+        let answer = compose(&observe_query(json!({ "data_flow_action": gate }))).unwrap();
+
+        assert_eq!(answer["executable_action"], "allow", "{gate}");
+    }
+}
+
+#[test]
+fn observe_mode_contributes_nothing_for_a_source_name_this_build_cannot_read() {
+    let answer = compose(&observe_query(json!({
+        "trusted_cli_override": "quarantine",
+        "untrusted_hook_payload_hint": "warn",
+    })))
+    .unwrap();
+
+    assert_eq!(answer["executable_action"], "warn");
+}
+
+#[test]
+fn observe_mode_reads_the_package_evaluations_own_action() {
+    let answer = compose(&observe_query(
+        json!({ "package_evaluation_action": "warn" }),
+    ))
+    .unwrap();
+
+    assert_eq!(answer["executable_action"], "warn");
+}

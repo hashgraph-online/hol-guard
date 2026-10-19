@@ -6,6 +6,8 @@
 
 use super::*;
 
+use crate::managed_policy_registry::{RegistryAuthority, RegistryRead};
+
 use std::fs;
 
 use guard_contracts::EgressOutcomeV1;
@@ -31,6 +33,7 @@ fn rooted(root: &TempDir) -> ManagedPolicySource {
         policy_path: None,
         write_cache: false,
         machine_root: Some(root.path().to_path_buf()),
+        registry: RegistryAuthority::Native,
     }
 }
 
@@ -42,6 +45,7 @@ fn explicit(path: &Path) -> ManagedPolicySource {
         policy_path: Some(path.to_path_buf()),
         write_cache: false,
         machine_root: None,
+        registry: RegistryAuthority::Native,
     }
 }
 
@@ -107,6 +111,7 @@ fn a_profile_that_did_not_load_refuses_the_network() {
         policy_path: None,
         write_cache: false,
         machine_root: Some(root.path().to_path_buf()),
+        registry: RegistryAuthority::Native,
     };
     let native = root.path().join("etc/hol-guard/managed-policy.json");
     fs::create_dir_all(native.parent().expect("parent")).expect("parents");
@@ -150,15 +155,15 @@ fn a_profile_that_did_not_load_refuses_the_network() {
 
 #[test]
 fn a_machine_whose_authority_this_runtime_cannot_read_exchanges_nothing() {
-    // Every Windows machine reports an unreadable authority, because the
-    // registry is the authority and this runtime does not read it yet. An
-    // administrator's proxy, CA, or public-registry rule lives there, so the
+    // A policy key this account may not read is configured authority. An
+    // administrator's proxy, CA, or public-registry rule may live there, so the
     // unmanaged default would exchange outside all of them.
     let registry = ManagedPolicySource {
         system: MachineSystem::Windows,
         policy_path: None,
         write_cache: false,
         machine_root: None,
+        registry: RegistryAuthority::Fixed(RegistryRead::Denied),
     };
 
     assert_eq!(

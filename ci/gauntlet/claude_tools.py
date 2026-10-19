@@ -4,6 +4,10 @@ A case that names its tools gets exactly those, because the request each tool
 makes is what the case tests: reading a file with the Read tool is a different
 request from spelling the same read in the shell. Cases that also list shell
 commands add Bash to the named tools rather than replacing them.
+
+``--tools`` only picks built-in tools. An MCP tool a case names (``mcp__server__tool``)
+comes from the MCP config the lane passes with ``--mcp-config``, so it is not a built-in
+and is left out of this list; a case that names only MCP tools hands the CLI no built-ins.
 """
 
 from __future__ import annotations
@@ -18,7 +22,7 @@ _CLAUDE_TOOL_NAMES = {"bash": "Bash", "read": "Read", "write": "Write", "edit": 
 
 
 def claude_tools(scenario: Scenario) -> str:
-    """The tools this lane hands the CLI for one case.
+    """The built-in tools this lane hands the CLI for one case.
 
     A case that names its tools gets exactly those. Several also list shell
     commands, and granting Bash alone for them would leave the model unable to
@@ -30,7 +34,7 @@ def claude_tools(scenario: Scenario) -> str:
     if scenario.oracle == "home-copy-task":
         return "Bash,Read"
     if scenario.required_tools:
-        granted = {_CLAUDE_TOOL_NAMES[tool] for tool in scenario.required_tools}
+        granted = {_CLAUDE_TOOL_NAMES[tool] for tool in scenario.required_tools if not tool.startswith("mcp__")}
         if scenario.commands:
             granted.add("Bash")
         return ",".join(name for name in _CLAUDE_TOOL_NAMES.values() if name in granted)

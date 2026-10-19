@@ -26,9 +26,7 @@ _UNQUOTED_EXPANSION = frozenset("$`*?[{")
 _DOUBLE_QUOTED_ESCAPES = frozenset('$`"\\')
 _ARGUMENT_REJECT = frozenset("<>|&;")
 # A final `; echo "<label>$?"`; a label with spaces must be double-quoted.
-_STATUS_ECHO = re.compile(
-    r'[ \t]*;[ \t]*echo[ \t]+(?:"([A-Za-z0-9_=: -]{0,32})\$\?"|([A-Za-z0-9_=:-]{0,32})\$\?)[ \t]*\Z'
-)
+_STATUS_ECHO = re.compile(r';[ \t]*echo[ \t]+(?:"([A-Za-z0-9_=: -]{0,32})\$\?"|([A-Za-z0-9_=:-]{0,32})\$\?)[ \t]*\Z')
 
 
 @dataclass(frozen=True)
@@ -194,6 +192,17 @@ _SCRIPT_RUNNERS = frozenset({"node", "bun", "deno", "tsx", "ts-node", "ruby", "p
 _PYTHON = re.compile(r"python(?:3(?:\.[0-9]+)?)?")
 
 
+def _node_heap_size(word: str) -> bool:
+    """Whether `word` is the `--max-old-space-size=<megabytes>` Node takes ahead of its script."""
+    value = word.removeprefix("--max-old-space-size=")
+    if value == word or not value.isascii() or not value.isdigit():
+        return False
+    # Past six significant digits the value is out of range anyway; checking
+    # the length first keeps `int` off a string past the conversion limit.
+    significant = value.lstrip("0") or "0"
+    return len(significant) <= 6 and 16 <= int(significant) <= 131072
+
+
 def _executed_path(words: list[str]) -> str | None:
     """The absolute path a command runs: the executable, an interpreter's first operand, or the
     file `python3 -m py_compile` checks, as `workspace_contained_sibling.rs` selects it."""
@@ -202,6 +211,8 @@ def _executed_path(words: list[str]) -> str | None:
         return executable
     name = executable.rsplit("/", 1)[-1]
     python = _PYTHON.fullmatch(name) is not None
+    if name == "node" and arguments and _node_heap_size(arguments[0]):
+        arguments = arguments[1:]
     if python and arguments[:1] == ["-m"] and len(arguments) >= 3 and arguments[1] in {"py_compile", "compileall"}:
         candidate = arguments[2]
     elif (python or name in _SCRIPT_RUNNERS) and arguments:
@@ -376,7 +387,7 @@ def peel_contained_wrapper(
     """
     status = _STATUS_ECHO.search(command)
     if status is not None:
-        command = command[: status.start()]
+        command = command[: status.start()].rstrip(" \t")
     if (quiet := _QUIET_CD.match(command)) is not None:
         command = quiet.group(1) + command[quiet.end() :]
     home_cd = home is not None and _HOME_CD.match(command) is not None

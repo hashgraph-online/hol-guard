@@ -33,6 +33,7 @@ def prepare_restricted_node_test(
     *,
     workspace: Path,
     cwd: Path | None = None,
+    home_dir: Path | None = None,
     platform: str | None = None,
     backend_executable: Path | None = None,
 ) -> RestrictedPytestPlan:
@@ -41,6 +42,7 @@ def prepare_restricted_node_test(
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=platform or sys.platform,
         backend_executable=backend_executable,
         profile=NODE_TEST_READ_ONLY_PROFILE_VERSION,

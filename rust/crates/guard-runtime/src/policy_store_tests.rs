@@ -32,6 +32,8 @@ mod business_source_tests;
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]
 mod command_floor_tests;
+#[path = "policy_store_command_pack_tests.rs"]
+mod command_pack_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
 #[path = "policy_store_fixture_tests.rs"]

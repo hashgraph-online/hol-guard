@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard.js","assets/chunks/home-protection-module.js","assets/chunks/fleet-workspace.js","assets/chunks/settings-save-proof-modal.js","assets/chunks/harness-version-label.js","assets/chunks/connect-guard-cloud-button.js","assets/chunks/settings-workspace.js","assets/chunks/confirm-dialog.js","assets/chunks/extensions-workspace.js","assets/chunks/app-detail-workspace.js","assets/chunks/policy-workspace-page.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-BK6hHlfF.js","assets/chunks/app-detail-workspace-D7AhoD71.js","assets/chunks/policy-workspace-page-BTvusmsE.js","assets/chunks/about-workspace-CMujLmFA.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -12827,6 +12827,9 @@ function HiMiniIdentification(props) {
 function HiMiniHome(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z", "clipRule": "evenodd" }, "child": [] }] })(props);
 }
+function HiMiniHandRaised(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M11 2a1 1 0 1 0-2 0v6.5a.5.5 0 0 1-1 0V3a1 1 0 1 0-2 0v5.5a.5.5 0 0 1-1 0V5a1 1 0 1 0-2 0v7a7 7 0 1 0 14 0V8a1 1 0 1 0-2 0v3.5a.5.5 0 0 1-1 0V3a1 1 0 1 0-2 0v5.5a.5.5 0 0 1-1 0V2Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
 function HiMiniGlobeAlt(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M16.555 5.412a8.028 8.028 0 0 0-3.503-2.81 14.899 14.899 0 0 1 1.663 4.472 8.547 8.547 0 0 0 1.84-1.662ZM13.326 7.825a13.43 13.43 0 0 0-2.413-5.773 8.087 8.087 0 0 0-1.826 0 13.43 13.43 0 0 0-2.413 5.773A8.473 8.473 0 0 0 10 8.5c1.18 0 2.304-.24 3.326-.675ZM6.514 9.376A9.98 9.98 0 0 0 10 10c1.226 0 2.4-.22 3.486-.624a13.54 13.54 0 0 1-.351 3.759A13.54 13.54 0 0 1 10 13.5c-1.079 0-2.128-.127-3.134-.366a13.538 13.538 0 0 1-.352-3.758ZM5.285 7.074a14.9 14.9 0 0 1 1.663-4.471 8.028 8.028 0 0 0-3.503 2.81c.529.638 1.149 1.199 1.84 1.66ZM17.334 6.798a7.973 7.973 0 0 1 .614 4.115 13.47 13.47 0 0 1-3.178 1.72 15.093 15.093 0 0 0 .174-3.939 10.043 10.043 0 0 0 2.39-1.896ZM2.666 6.798a10.042 10.042 0 0 0 2.39 1.896 15.196 15.196 0 0 0 .174 3.94 13.472 13.472 0 0 1-3.178-1.72 7.973 7.973 0 0 1 .615-4.115ZM10 15c.898 0 1.778-.079 2.633-.23a13.473 13.473 0 0 1-1.72 3.178 8.099 8.099 0 0 1-1.826 0 13.47 13.47 0 0 1-1.72-3.178c.855.151 1.735.23 2.633.23ZM14.357 14.357a14.912 14.912 0 0 1-1.305 3.04 8.027 8.027 0 0 0 4.345-4.345c-.953.542-1.971.981-3.04 1.305ZM6.948 17.397a8.027 8.027 0 0 1-4.345-4.345c.953.542 1.971.981 3.04 1.305a14.912 14.912 0 0 0 1.305 3.04Z" }, "child": [] }] })(props);
 }
@@ -12940,6 +12943,9 @@ function HiMiniBeaker(props) {
 }
 function HiMiniArrowUp(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M10 17a.75.75 0 0 1-.75-.75V5.612L5.29 9.77a.75.75 0 0 1-1.08-1.04l5.25-5.5a.75.75 0 0 1 1.08 0l5.25 5.5a.75.75 0 1 1-1.08 1.04l-3.96-4.158V16.25A.75.75 0 0 1 10 17Z", "clipRule": "evenodd" }, "child": [] }] })(props);
+}
+function HiMiniArrowUpTray(props) {
+  return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "d": "M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z" }, "child": [] }, { "tag": "path", "attr": { "d": "M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z" }, "child": [] }] })(props);
 }
 function HiMiniArrowTopRightOnSquare(props) {
   return GenIcon({ "attr": { "viewBox": "0 0 20 20", "fill": "currentColor", "aria-hidden": "true" }, "child": [{ "tag": "path", "attr": { "fillRule": "evenodd", "d": "M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z", "clipRule": "evenodd" }, "child": [] }, { "tag": "path", "attr": { "fillRule": "evenodd", "d": "M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z", "clipRule": "evenodd" }, "child": [] }] })(props);
@@ -13239,6 +13245,9 @@ function hasCompleteScopeContractBinding(item) {
   return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
 }
 function declaredScopesForAction(item, action) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
+    return [];
+  }
   if (hasScopeContractMetadata(item) && !hasCompleteScopeContractBinding(item)) {
     return [];
   }
@@ -13252,6 +13261,9 @@ function declaredScopesForAction(item, action) {
   return null;
 }
 function requestSupportsScope(item, action, scope) {
+  if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && scope !== "artifact") {
+    return false;
+  }
   const declaredScopes = declaredScopesForAction(item, action);
   if (declaredScopes !== null) {
     return declaredScopes.includes(scope);
@@ -13266,7 +13278,7 @@ function scopeChoicesForRequest(item, action = "allow") {
     item,
     action,
     action === "allow" ? DEFAULT_SCOPE_CHOICES : BLOCK_SCOPE_CHOICES
-  );
+  ).map((choice) => action === "allow" && choice.value === "artifact" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") ? { ...choice, label: "Exact reviewed action", description: "Choose a duration below. This request requires persistent consent." } : choice);
 }
 const ADVANCED_SCOPE_VALUES = /* @__PURE__ */ new Set(["global"]);
 function advancedScopeChoicesForRequest(item, action = "allow") {
@@ -13335,6 +13347,9 @@ function taskCapabilityExplanation(item) {
   if (item.exact_action_persistence_eligible === true) {
     return null;
   }
+  if (item.scope_restrictions?.includes("retry_cannot_reuse_approval")) {
+    return null;
+  }
   if (eligibility.reason_codes.includes("task_capability_not_enabled")) {
     const reason = item.once_only_reason;
     if (item.extension_recommendation && !EXTENSION_ROUTE_BLOCKED_REASONS.has(reason ?? "")) {
@@ -13362,6 +13377,9 @@ function buildDecisionPayload(input) {
     normalizedScope,
     input.persistExactAction === true
   );
+  if (input.action === "allow" && input.item.scope_restrictions?.includes("retry_cannot_reuse_approval") && !persistExactAction) {
+    throw new Error("Guard cannot bind this app's retry to the reviewed action. A one-time approval is unavailable.");
+  }
   return {
     requestId: input.item.request_id,
     action: input.action,
@@ -14259,21 +14277,19 @@ function allowPermissionLabels(item) {
   if (labels.length === 0) return null;
   return labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
 }
-function retryCannotReuseApprovalHint(item, harness) {
-  const base = `Approving just this once records your decision but does not let ${harness} run this command; it will be blocked again.`;
+function legacyRequestNextStep(item, harness) {
   if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let ${harness} run this exact command, choose "Always allow exact action".`;
+    return `Choose "Always allow exact action" to let ${harness} run this exact command.`;
   }
   const labels = allowPermissionLabels(item);
-  return labels === null ? `${base} Copy the command and run it yourself.` : `${base} To let ${harness} run commands like this, set ${labels} to Allow in Extensions, or copy the command and run it yourself.`;
+  const retry = `Ask ${harness} to run the command again; the new request offers Allow once and Always allow.`;
+  return labels === null ? retry : `${retry} To let ${harness} run commands like this, set ${labels} to Allow in Extensions.`;
+}
+function retryCannotReuseApprovalHint(item, harness) {
+  return `An older version of Guard recorded this request, so Run once cannot reach ${harness}'s retry. ${legacyRequestNextStep(item, harness)}`;
 }
 function retryBlockedApprovalCopy(item, harness) {
-  const base = `Decision recorded. ${harness} will still be blocked on this command.`;
-  if (item.exact_action_persistence_eligible === true) {
-    return `${base} To let it run this exact command, approve it with "Always allow exact action", or run it yourself.`;
-  }
-  const labels = allowPermissionLabels(item);
-  return labels === null ? `${base} Copy the command and run it yourself.` : `${base} To let it run commands like this, set ${labels} to Allow in Extensions, or run the command yourself.`;
+  return `Decision recorded. ${legacyRequestNextStep(item, harness)}`;
 }
 function receiptDescribesRequest(item, receipt) {
   if (!item.artifact_id.includes(":native-pretool:")) return true;
@@ -14299,8 +14315,7 @@ function countRetryBlockedActions(groups, items) {
 }
 function bulkApproveConsequenceCopyForSelection(actionCount, retryBlockedActionCount, defaultCopy) {
   if (retryBlockedActionCount <= 0) return defaultCopy(actionCount);
-  const blocked = `${retryBlockedActionCount} of them ${retryBlockedActionCount === 1 ? "is a command" : "are commands"} the agent will still be blocked on.`;
-  return `Guard will record your decision for ${actionCount} ${actionCount === 1 ? "action" : "actions"} once and won't remember it. ${blocked} Mass approval skips opening each request, so an unexpected action is harder to catch.`;
+  return `Run once is unavailable for ${retryBlockedActionCount} of these ${actionCount} actions. Open those requests to inspect their execution limitations before approving the remaining actions.`;
 }
 const APPROVAL_RETRY_BLOCKED_OVERRIDE = "approval-approved-retry-blocked";
 const APPROVAL_LEFT_STOPPED_LABEL = "Approved, still stopped";
@@ -14419,6 +14434,13 @@ function guardActionActivityCopy(value, subject, object) {
 function isBlockedGuardAction(value) {
   return guardActionDisposition(value) === "blocked";
 }
+const GUARD_REVIEW_INTENT_COPY = {
+  setup: {
+    label: "Needs setup",
+    action: "Set up once",
+    scope: "Decides every call to this tool on this device."
+  }
+};
 function getArtifactType(receipt) {
   return (receipt.artifact_type ?? "").toLowerCase();
 }
@@ -15599,11 +15621,11 @@ function computePeriodComparison(receipts, days, now2) {
 function nonNegativeNumber(value) {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function isRecord$8(value) {
+function isRecord$9(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function normalizeOperatorHealth(raw) {
-  if (!isRecord$8(raw)) {
+  if (!isRecord$9(raw)) {
     return void 0;
   }
   const state = raw["state"];
@@ -15713,7 +15735,7 @@ const PROTECTION_CHECK_IDS = [
 ];
 const CORE_CHECK_IDS = PROTECTION_CHECK_IDS.filter((checkId) => checkId !== "decision_stream");
 const STABLE_ID$1 = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
-function isRecord$7(value) {
+function isRecord$8(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function copyForState(state) {
@@ -15746,7 +15768,7 @@ function deriveState(checks) {
   return byId.get("decision_stream")?.status === "pass" ? "protected" : "partial";
 }
 function normalizeCheck(value) {
-  if (!isRecord$7(value)) return null;
+  if (!isRecord$8(value)) return null;
   const checkId = value.check_id;
   const status = value.status;
   const reasonCode = value.reason_code;
@@ -15837,7 +15859,7 @@ function useProtectionPresentationState(health) {
   });
 }
 function normalizeApp(value) {
-  if (!isRecord$7(value)) return null;
+  if (!isRecord$8(value)) return null;
   const harness = value.harness;
   if (typeof harness !== "string" || harness.length > 64 || !STABLE_ID$1.test(harness)) return null;
   const checks = normalizeChecks(value.checks);
@@ -15845,7 +15867,7 @@ function normalizeApp(value) {
   return { harness, ...healthFromChecks(checks) };
 }
 function normalizeProtectionHealth(value) {
-  if (!isRecord$7(value) || value.schema_version !== "guard.protection-health.v1") {
+  if (!isRecord$8(value) || value.schema_version !== "guard.protection-health.v1") {
     return unavailableProtectionHealth();
   }
   const checks = normalizeChecks(value.checks);
@@ -15943,12 +15965,12 @@ function remainingProtectionRepairMessage(health, displayName) {
     message: `${remaining} Open the repair details below for the exact check.`
   };
 }
-function isRecord$6(value) {
+function isRecord$7(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 const REASON_CODE_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 function checkReasonMapValue(value) {
-  if (!isRecord$6(value)) return {};
+  if (!isRecord$7(value)) return {};
   const reasons2 = {};
   for (const [checkId, reason] of Object.entries(value)) {
     if (!REASON_CODE_ID.test(checkId) || checkId.length > 96) continue;
@@ -15957,7 +15979,7 @@ function checkReasonMapValue(value) {
   }
   return reasons2;
 }
-function isRecord$5(value) {
+function isRecord$6(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function stringValue$2(value) {
@@ -15984,7 +16006,7 @@ function normalizeSupplyChainRepairResult(result) {
   const failures = [];
   if (Array.isArray(result.failed_steps)) {
     for (const candidate of result.failed_steps) {
-      if (!isRecord$5(candidate)) continue;
+      if (!isRecord$6(candidate)) continue;
       const parsed = failedStep(candidate);
       if (parsed !== null) failures.push(parsed);
     }
@@ -15992,7 +16014,7 @@ function normalizeSupplyChainRepairResult(result) {
   const remaining = [];
   if (Array.isArray(result.remaining_steps)) {
     for (const candidate of result.remaining_steps) {
-      if (!isRecord$5(candidate)) continue;
+      if (!isRecord$6(candidate)) continue;
       const parsed = remainingStep(candidate);
       if (parsed !== null) remaining.push(parsed);
     }
@@ -16159,7 +16181,7 @@ const MAX_PERMISSIONS$1 = 3;
 const CATALOG_ID = /^command\.[A-Za-z0-9._-]{1,248}$/;
 const DIGEST$3 = /^[0-9a-f]{64}$/;
 const CAUTION_REASONS = /* @__PURE__ */ new Set(["critical", "destructive", "sensitive"]);
-function isRecord$4(value) {
+function isRecord$5(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function boundedText(value, limit) {
@@ -16171,7 +16193,7 @@ function catalogId(value) {
   return typeof value === "string" && CATALOG_ID.test(value) ? value : null;
 }
 function normalizePermission(raw) {
-  if (!isRecord$4(raw)) return null;
+  if (!isRecord$5(raw)) return null;
   const permissionId = catalogId(raw.permission_id);
   const extensionId = catalogId(raw.extension_id);
   const label = boundedText(raw.label, 120);
@@ -16198,7 +16220,7 @@ function normalizePermission(raw) {
   };
 }
 function normalizeApprovalExtensionRecommendation(raw) {
-  if (!isRecord$4(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
+  if (!isRecord$5(raw) || raw.schema !== RECOMMENDATION_SCHEMA) return null;
   if (raw.status !== "available" && raw.status !== "authority_unavailable") return null;
   if (!Array.isArray(raw.permissions) || raw.permissions.length === 0 || raw.permissions.length > MAX_PERMISSIONS$1) {
     return null;
@@ -16255,7 +16277,258 @@ function approvalExtensionRecommendationCopy(recommendation) {
     successMessage: `Approved. ${owner} now allows ${commandText} automatically.`
   };
 }
-function isRecord$3(value) {
+const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
+const CHUNK_RELOAD_DELAY_MS = 400;
+const MODULE_LINK_ERROR_PATTERNS = [
+  /does not provide an export named/,
+  // Chromium
+  /importing binding name .* is not found/,
+  // WebKit
+  /import not found:/,
+  // Gecko
+  /ambiguous indirect export:/
+  // Gecko
+];
+function isChunkLoadError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes("failed to fetch dynamically imported module") || normalized.includes("error loading dynamically imported module") || normalized.includes("importing a module script failed") || normalized.includes("loading chunk") || MODULE_LINK_ERROR_PATTERNS.some((pattern) => pattern.test(normalized));
+}
+function defaultWait(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+function reloadDocument(reload) {
+  if (reload) {
+    reload();
+    return true;
+  }
+  if (typeof window !== "undefined") {
+    window.location.reload();
+    return true;
+  }
+  return false;
+}
+function storageGet(storage, key) {
+  try {
+    return storage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+function storageSet(storage, key, value) {
+  try {
+    storage.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function browserSessionStorage() {
+  try {
+    if (typeof sessionStorage === "undefined") {
+      return void 0;
+    }
+    return sessionStorage;
+  } catch {
+    return void 0;
+  }
+}
+async function loadWorkspaceModule(loader, options = {}) {
+  try {
+    return await loader();
+  } catch (error) {
+    if (!isChunkLoadError(error)) {
+      throw error;
+    }
+    const storage = options.storage;
+    const failureMessage = error instanceof Error ? error.message : String(error);
+    const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
+    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
+      throw error;
+    }
+    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
+      throw error;
+    }
+    const wait = options.wait ?? defaultWait;
+    await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);
+    if (!reloadDocument(options.reload)) {
+      throw error;
+    }
+    return new Promise(() => {
+    });
+  }
+}
+function lazyWorkspace(moduleId, loader) {
+  const load = async () => {
+    const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
+    return { default: module.default };
+  };
+  return reactExports.lazy(load);
+}
+const DASHBOARD_BUILD_HEADER = "X-Guard-Dashboard-Build";
+const DASHBOARD_BUILD_META_NAME = "guard-dashboard-build";
+const DASHBOARD_BUILD_RELOAD_STORAGE_KEY = "hol-guard-dashboard-build-reload";
+function readLoadedDashboardBuild(doc) {
+  const content = doc?.querySelector(`meta[name="${DASHBOARD_BUILD_META_NAME}"]`)?.getAttribute("content")?.trim();
+  return content ? content : null;
+}
+function isDashboardBuildStale(state) {
+  return state.loadedBuild !== null && state.serverBuild !== null && state.loadedBuild !== state.serverBuild;
+}
+function responseDashboardBuild(response, pageOrigin) {
+  const build = response.headers?.get?.(DASHBOARD_BUILD_HEADER)?.trim();
+  if (!build || !response.url) {
+    return null;
+  }
+  try {
+    return new URL(response.url).origin === pageOrigin ? build : null;
+  } catch {
+    return null;
+  }
+}
+function claimStaleBuildReload(state, storage) {
+  if (!isDashboardBuildStale(state) || !storage || state.serverBuild === null) {
+    return false;
+  }
+  try {
+    if (storage.getItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY) === state.serverBuild) {
+      return false;
+    }
+    storage.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, state.serverBuild);
+    return true;
+  } catch {
+    return false;
+  }
+}
+function releaseStaleBuildClaim(storage) {
+  try {
+    storage?.removeItem?.(DASHBOARD_BUILD_RELOAD_STORAGE_KEY);
+  } catch {
+  }
+}
+let serverBuild = null;
+function currentBuildState() {
+  return {
+    loadedBuild: typeof document === "undefined" ? null : readLoadedDashboardBuild(document),
+    serverBuild
+  };
+}
+function observeDashboardBuild(response) {
+  const pageOrigin = typeof window === "undefined" ? void 0 : window.location?.origin;
+  if (!pageOrigin || !response) {
+    return;
+  }
+  const build = responseDashboardBuild(response, pageOrigin);
+  if (build === null) {
+    return;
+  }
+  serverBuild = build;
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+    reloadWhenIdle();
+  }
+}
+function hasUnsavedWork() {
+  if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") {
+    return false;
+  }
+  return !window.dispatchEvent(new Event("beforeunload", { cancelable: true }));
+}
+function reloadWhenIdle() {
+  if (!dashboardBuildIsStale() || hasUnsavedWork()) {
+    return false;
+  }
+  return loadCurrentDashboardBuild();
+}
+async function probeServerBuild() {
+  try {
+    observeDashboardBuild(await fetch("/healthz", { cache: "no-store" }));
+  } catch {
+  }
+}
+function installStaleBuildGuard(probe = probeServerBuild) {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return () => void 0;
+  }
+  let checking = false;
+  const check = () => {
+    if (document.visibilityState === "hidden" || checking) {
+      return;
+    }
+    checking = true;
+    void probe().catch(() => void 0).finally(() => {
+      checking = false;
+      reloadWhenIdle();
+    });
+  };
+  const restored = (event) => {
+    if (event.persisted) {
+      releaseStaleBuildClaim(browserSessionStorage());
+      check();
+    }
+  };
+  document.addEventListener("visibilitychange", check);
+  window.addEventListener("focus", check);
+  window.addEventListener("pageshow", restored);
+  return () => {
+    document.removeEventListener("visibilitychange", check);
+    window.removeEventListener("focus", check);
+    window.removeEventListener("pageshow", restored);
+  };
+}
+function isFragmentOnlyChange(current, target2) {
+  return current.origin === target2.origin && current.pathname === target2.pathname && current.search === target2.search;
+}
+function dashboardBuildIsStale() {
+  return isDashboardBuildStale(currentBuildState());
+}
+let restoreClaimOnLeave = null;
+function releaseClaimIfLeaveIsCancelled(build) {
+  if (restoreClaimOnLeave !== null) {
+    window.removeEventListener("pagehide", restoreClaimOnLeave);
+    restoreClaimOnLeave = null;
+  }
+  window.addEventListener(
+    "beforeunload",
+    (event) => {
+      if (!event.defaultPrevented) {
+        return;
+      }
+      const storage = browserSessionStorage();
+      releaseStaleBuildClaim(storage);
+      const restore = () => {
+        restoreClaimOnLeave = null;
+        try {
+          storage?.setItem(DASHBOARD_BUILD_RELOAD_STORAGE_KEY, build);
+        } catch {
+        }
+      };
+      restoreClaimOnLeave = restore;
+      window.addEventListener("pagehide", restore, { once: true });
+    },
+    { once: true }
+  );
+}
+function loadCurrentDashboardBuild(href) {
+  const state = currentBuildState();
+  const storage = browserSessionStorage();
+  if (typeof window === "undefined" || state.serverBuild === null || !claimStaleBuildReload(state, storage)) {
+    return false;
+  }
+  releaseClaimIfLeaveIsCancelled(state.serverBuild);
+  const target2 = href ? new URL(href, window.location.href) : null;
+  if (target2 === null) {
+    window.location.reload();
+  } else if (isFragmentOnlyChange(window.location, target2)) {
+    window.history.replaceState(window.history.state, "", target2.href);
+    window.location.reload();
+  } else {
+    window.location.assign(target2.href);
+  }
+  return true;
+}
+function isRecord$4(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString$1(value) {
@@ -16266,18 +16539,18 @@ function readString$1(value) {
   return trimmed.length > 0 ? trimmed : null;
 }
 function isSupplyChainAuditIncomplete(detail) {
-  if (!isRecord$3(detail)) {
+  if (!isRecord$4(detail)) {
     return false;
   }
   return readString$1(detail.audit_status) === "incomplete";
 }
 function resolveSupplyChainAuditFailure(detail) {
-  if (!isRecord$3(detail) || !isSupplyChainAuditIncomplete(detail)) {
+  if (!isRecord$4(detail) || !isSupplyChainAuditIncomplete(detail)) {
     return null;
   }
   const outcome = readString$1(detail.audit_outcome);
   const message = readString$1(detail.message);
-  const supplyChain = isRecord$3(detail.supply_chain) ? detail.supply_chain : null;
+  const supplyChain = isRecord$4(detail.supply_chain) ? detail.supply_chain : null;
   const supplyStatus = readString$1(supplyChain?.status);
   if (outcome === "sync_required" || supplyStatus === "sync_required") {
     return message ?? "Guard supply-chain intel is not synced on this device. Run Sync, then audit again.";
@@ -16309,7 +16582,7 @@ const RUNTIME_HEARTBEAT_FUTURE_TOLERANCE_MS = 5e3;
 let guardTokenOverride = null;
 let guardTokenLocationKey = null;
 let guardDaemonReconnectDiagnostic = "dashboard_reconnect_not_started";
-async function readJson(input, init) {
+async function readJson$1(input, init) {
   const response = await fetchWithGuardAuth(input, init);
   if (!response.ok) {
     throw new Error(await requestErrorMessage(response, `Request failed with ${response.status}`));
@@ -16345,7 +16618,7 @@ function fetchLocalProtectionJson(input, init, timeoutMs, message) {
 async function requestErrorMessage(response, fallback) {
   try {
     const payload = await response.clone().json();
-    if (!isRecord$2(payload)) {
+    if (!isRecord$3(payload)) {
       return fallback;
     }
     const message = payload["message"];
@@ -16502,7 +16775,7 @@ async function probeGuardDaemonHealth(origin) {
     if (!response.ok) {
       return false;
     }
-    if (!isRecord$2(payload)) {
+    if (!isRecord$3(payload)) {
       return false;
     }
     return payload.ok === true && payload.compatibility_version === 2;
@@ -16514,7 +16787,7 @@ async function fetchGuardDaemonCandidateJson(input, init) {
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), GUARD_DAEMON_PROBE_TIMEOUT_MS);
   try {
-    const response = await fetch(input, { ...init, signal: controller.signal });
+    const response = await daemonFetch(input, { ...init, signal: controller.signal });
     const payload = await response.json();
     return { response, payload };
   } finally {
@@ -16608,7 +16881,7 @@ function constantTimeHexEqual(left, right) {
   return difference === 0;
 }
 function parseReconnectAuthorization(payload) {
-  if (!isRecord$2(payload)) {
+  if (!isRecord$3(payload)) {
     return null;
   }
   if (payload["protocol_version"] !== GUARD_DAEMON_RECONNECT_PROTOCOL_VERSION || payload["surface"] !== "dashboard" || !isHexDigest(payload["reconnect_id"]) || !isHexDigest(payload["verifier"]) || !isHexDigest(payload["installation_id"]) || !isHexDigest(payload["guard_home_id"]) || typeof payload["issued_at_ms"] !== "number" || typeof payload["expires_at_ms"] !== "number" || payload["expires_at_ms"] <= payload["issued_at_ms"]) {
@@ -16630,7 +16903,7 @@ function parseReconnectAuthorization(payload) {
   };
 }
 function parseReconnectChallenge(payload, authorization, candidateOrigin, clientNonce) {
-  if (!isRecord$2(payload)) {
+  if (!isRecord$3(payload)) {
     return null;
   }
   const stringFields = ["state_id"];
@@ -16663,7 +16936,7 @@ async function prepareGuardDaemonReconnect() {
     guardDaemonReconnectDiagnostic = "dashboard_reconnect_prepare_origin_unavailable";
     throw new Error("Guard could not identify the authenticated daemon for a secure reconnect.");
   }
-  let response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+  let response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: "{}",
@@ -16673,7 +16946,7 @@ async function prepareGuardDaemonReconnect() {
     const refreshedToken = await initializeGuardDashboardSessionAtOrigin(daemonOrigin, guardToken);
     if (refreshedToken && refreshedToken !== guardToken) {
       saveGuardToken(refreshedToken);
-      response = await fetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
+      response = await daemonFetch(`${daemonOrigin}/v1/update/reconnect/prepare`, withGuardAuthForToken({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: "{}",
@@ -16766,7 +17039,7 @@ async function authenticateGuardDaemonCandidate(origin, authorization) {
       guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
       return false;
     }
-    if (!isRecord$2(verificationPayload) || verificationPayload["verified"] !== true) {
+    if (!isRecord$3(verificationPayload) || verificationPayload["verified"] !== true) {
       guardDaemonReconnectDiagnostic = "dashboard_reconnect_client_proof_rejected";
       return false;
     }
@@ -16946,6 +17219,11 @@ function guardApiInput(input) {
 function withGuardAuth(init) {
   return withGuardAuthForToken(init, readGuardToken());
 }
+async function daemonFetch(input, init) {
+  const response = await fetch(input, init);
+  observeDashboardBuild(response);
+  return response;
+}
 function withGuardAuthForToken(init, guardToken) {
   if (!guardToken) {
     return init;
@@ -16960,7 +17238,7 @@ function withGuardAuthForToken(init, guardToken) {
 async function fetchWithGuardAuth(input, init) {
   const requestInput = guardApiInput(input);
   const guardToken = readGuardToken();
-  const response = await fetch(requestInput, withGuardAuthForToken(init, guardToken));
+  const response = await daemonFetch(requestInput, withGuardAuthForToken(init, guardToken));
   if (response.status !== 401 || !guardToken || input instanceof Request) {
     return response;
   }
@@ -16969,7 +17247,7 @@ async function fetchWithGuardAuth(input, init) {
     return response;
   }
   saveGuardToken(refreshedGuardToken);
-  return fetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
+  return daemonFetch(requestInput, withGuardAuthForToken(init, refreshedGuardToken));
 }
 async function fetchCommandActivityApi(input, init) {
   const approvedPath = typeof input === "string" && /^\/v1\/(?:command-activity(?:\/(?:analytics|diagnostics|events|feedback))?|command-extensions)(?:\?[^#]*)?$/.test(
@@ -17021,7 +17299,7 @@ function guardAuthHeadersForToken(guardToken) {
   return guardToken ? { "X-Guard-Dashboard-Session": guardToken } : {};
 }
 function parseDashboardSessionToken(payload) {
-  if (!isRecord$2(payload)) {
+  if (!isRecord$3(payload)) {
     return null;
   }
   const dashboardSessionToken = payload["dashboard_session_token"];
@@ -17029,7 +17307,7 @@ function parseDashboardSessionToken(payload) {
 }
 async function refreshGuardDashboardSession(guardToken, signal) {
   try {
-    const response = await fetch(guardApiInput("/v1/initialize"), {
+    const response = await daemonFetch(guardApiInput("/v1/initialize"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -17071,7 +17349,7 @@ function guardAwareHref(href) {
   }
   return `${url.pathname}${url.search}${url.hash}`;
 }
-function isRecord$2(value) {
+function isRecord$3(value) {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 function isGuardActionType(value) {
@@ -17093,7 +17371,7 @@ function isNonEmptyString(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 function isGuardHarnessActionErrorPayload(value) {
-  return isRecord$2(value) && isNonEmptyString(value["error"]);
+  return isRecord$3(value) && isNonEmptyString(value["error"]);
 }
 function isApprovalPageStatus(value) {
   return value === "pending" || value === "resolved" || value === "all";
@@ -17107,7 +17385,7 @@ function matchingAliasedField(raw, snakeKey, camelKey) {
   return { matches: true, value: hasSnake ? raw[snakeKey] : raw[camelKey] };
 }
 function parseActionEnvelope(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return null;
   }
   const allowedActionFields = /* @__PURE__ */ new Set([
@@ -17167,7 +17445,7 @@ function parseActionEnvelope(raw) {
   if (!isStringArray(targetPaths) || !isStringArray(networkHosts) || packageTargets !== void 0 && !isStringArray(packageTargets)) {
     return null;
   }
-  if (!isRecord$2(rawPayloadRedacted)) {
+  if (!isRecord$3(rawPayloadRedacted)) {
     return null;
   }
   return {
@@ -17217,14 +17495,14 @@ function isRiskSignalV2Array(value) {
     return false;
   }
   return value.every((item) => {
-    if (!isRecord$2(item)) {
+    if (!isRecord$3(item)) {
       return false;
     }
     return isNonEmptyString(item["signal_id"]) && isRiskSignalV2Category(item["category"]) && isRiskSignalV2Severity(item["severity"]) && isDecisionV2Confidence(item["confidence"]) && isNonEmptyString(item["detector"]) && isNonEmptyString(item["title"]) && isNonEmptyString(item["plain_reason"]) && isStringOrNull(item["technical_detail"]) && isStringOrNull(item["evidence_ref"]) && isRiskSignalV2RedactionLevel(item["redaction_level"]) && isStringOrNull(item["false_positive_hint"]) && isStringOrNull(item["advisory_id"]);
   });
 }
 function parseDecisionV2(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return null;
   }
   const allowedActionFields = /* @__PURE__ */ new Set(["guard_action", "action"]);
@@ -17260,7 +17538,7 @@ function parseDecisionV2(raw) {
   };
 }
 function parseLegacyPackageActionMetadata(raw) {
-  if (!isRecord$2(raw) || raw["schema_version"] !== void 0 || !("policy_action" in raw) || typeof raw["package_manager"] !== "string" || !isStringArray(raw["package_targets"]) || typeof raw["redacted_command"] !== "string") {
+  if (!isRecord$3(raw) || raw["schema_version"] !== void 0 || !("policy_action" in raw) || typeof raw["package_manager"] !== "string" || !isStringArray(raw["package_targets"]) || typeof raw["redacted_command"] !== "string") {
     return { recognized: false, action: null };
   }
   if (Object.keys(raw).some((key) => isActionBearingKey(key) && key !== "policy_action")) {
@@ -17330,9 +17608,9 @@ function normalizeApprovalRequest(item) {
   const scopeContractVersion = parseOptionalString(item.scope_contract_version);
   const scopeContractDigest = parseOptionalString(item.scope_contract_digest);
   const hasCompleteScopeContract = scopeContractVersion !== null && scopeContractDigest !== null;
-  const rawAllowedByAction = isRecord$2(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
-  const rawRecommendedByAction = isRecord$2(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
-  const rawTaskEligibility = isRecord$2(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
+  const rawAllowedByAction = isRecord$3(item.allowed_scopes_by_action) ? item.allowed_scopes_by_action : {};
+  const rawRecommendedByAction = isRecord$3(item.recommended_scope_by_action) ? item.recommended_scope_by_action : {};
+  const rawTaskEligibility = isRecord$3(item.task_capability_eligibility) ? item.task_capability_eligibility : null;
   const taskReasonCodes = parseStringList(rawTaskEligibility?.reason_codes);
   const taskCapabilityEligibility = typeof rawTaskEligibility?.eligible === "boolean" && taskReasonCodes !== null ? {
     eligible: rawTaskEligibility.eligible,
@@ -17371,7 +17649,7 @@ function normalizeApprovalRequests(items) {
   return items.map(normalizeApprovalRequest);
 }
 function normalizeOptionalApprovalRequest(item) {
-  return isRecord$2(item) ? normalizeApprovalRequest(item) : null;
+  return isRecord$3(item) ? normalizeApprovalRequest(item) : null;
 }
 function normalizeApprovalPage(payload, statusFallback = "pending") {
   recordBusinessQueueReadResult(payload);
@@ -17384,7 +17662,7 @@ function normalizeApprovalPage(payload, statusFallback = "pending") {
   };
 }
 function normalizeQueueSummary(raw, pendingCount) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return {
       active_request_id: null,
       next_request_id: null,
@@ -17410,7 +17688,7 @@ function normalizeProcessPathStatus(value) {
   return "missing";
 }
 function normalizePackageManagerProtection(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return void 0;
   }
   const pathStatus = raw["path_status"] === "in_path" ? "in_path" : raw["path_status"] === "restart_required" ? "restart_required" : "missing_from_path";
@@ -17435,7 +17713,7 @@ function normalizePackageManagerProtection(raw) {
   };
 }
 function normalizeSupplyChainSnapshot(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return void 0;
   }
   const packageManagerProtection = normalizePackageManagerProtection(raw["package_manager_protection"]);
@@ -17447,7 +17725,7 @@ function normalizeSupplyChainSnapshot(raw) {
   };
 }
 function normalizeManagedInstall(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return void 0;
   }
   const harness = raw["harness"];
@@ -17456,7 +17734,7 @@ function normalizeManagedInstall(raw) {
   }
   const active = raw["active"] === true;
   const workspace = isStringOrNull(raw["workspace"]) ? raw["workspace"] : null;
-  const manifest = isRecord$2(raw["manifest"]) ? raw["manifest"] : {};
+  const manifest = isRecord$3(raw["manifest"]) ? raw["manifest"] : {};
   const updatedAt = typeof raw["updated_at"] === "string" ? raw["updated_at"] : "";
   return {
     harness,
@@ -17480,11 +17758,11 @@ function normalizeManagedInstalls(raw) {
   return result;
 }
 function normalizeCloudCommandCapability(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return void 0;
   }
   const pending = Array.isArray(raw["pending_commands"]) ? raw["pending_commands"].flatMap((item) => {
-    if (!isRecord$2(item)) return [];
+    if (!isRecord$3(item)) return [];
     const id2 = item["id"];
     const operation = item["operation"];
     const issuer = item["issuer"];
@@ -17535,7 +17813,7 @@ function normalizeRuntimeSnapshot(snapshot) {
   };
 }
 function normalizeRuntimeState(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return null;
   }
   const sessionId = raw["session_id"];
@@ -17584,7 +17862,7 @@ function isMatchingRuntimeUrl(value, daemonHost, daemonPort) {
   }
 }
 function normalizeQueueCopy(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return null;
   }
   const title = raw["title"];
@@ -17598,7 +17876,7 @@ function isCodexResumeStatus(value) {
   return typeof value === "string" && CODEX_RESUME_STATUSES.some((s) => s === value);
 }
 function normalizeCodexResume(raw) {
-  if (!isRecord$2(raw)) {
+  if (!isRecord$3(raw)) {
     return null;
   }
   const status = raw["status"];
@@ -17708,7 +17986,7 @@ async function fetchInboxState(input = {}) {
     return { snapshot, items: snapshot.items };
   }
   const [snapshotPayload, items] = await Promise.all([
-    readJson(
+    readJson$1(
       queuePath("/v1/runtime", runtimeSnapshotSearchParams({ ...input, includeItems: false, includeReceipts: false }))
     ),
     fetchAllPendingRequests()
@@ -17729,7 +18007,7 @@ async function fetchApprovalPage(input = {}) {
       status: input.status ?? "pending"
     };
   }
-  const payload = await readJson(queuePath("/v1/requests", queueSearchParams(input)));
+  const payload = await readJson$1(queuePath("/v1/requests", queueSearchParams(input)));
   return normalizeApprovalPage(payload, input.status ?? "pending");
 }
 async function fetchRuntimeSnapshot(input = {}) {
@@ -17739,20 +18017,20 @@ async function fetchRuntimeSnapshot(input = {}) {
   const params = runtimeSnapshotSearchParams(input);
   const query = params.toString();
   const path = query.length > 0 ? `/v1/runtime?${query}` : "/v1/runtime";
-  const snapshot = await readJson(path);
+  const snapshot = await readJson$1(path);
   return normalizeRuntimeSnapshot(snapshot);
 }
 async function fetchReadState() {
   if (isGuardDemoMode()) {
     return { ids: [] };
   }
-  return readJson("/v1/read-state");
+  return readJson$1("/v1/read-state");
 }
 async function postReadStateMarkRead(requestId) {
   if (isGuardDemoMode()) {
     return { ids: [] };
   }
-  return readJson("/v1/read-state", {
+  return readJson$1("/v1/read-state", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_read", request_id: requestId })
@@ -17762,7 +18040,7 @@ async function postReadStateMarkUnread(requestId) {
   if (isGuardDemoMode()) {
     return { ids: [] };
   }
-  return readJson("/v1/read-state", {
+  return readJson$1("/v1/read-state", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_unread", request_id: requestId })
@@ -17772,7 +18050,7 @@ async function postReadStateMarkAllRead(requestIds) {
   if (isGuardDemoMode()) {
     return { ids: [] };
   }
-  return readJson("/v1/read-state", {
+  return readJson$1("/v1/read-state", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...guardAuthHeaders() },
     body: JSON.stringify({ action: "mark_all_read", request_ids: requestIds })
@@ -17893,7 +18171,7 @@ async function fetchInventory() {
   if (isGuardDemoMode()) {
     return [];
   }
-  const payload = await readJson("/v1/inventory");
+  const payload = await readJson$1("/v1/inventory");
   return normalizeInventory(payload.items);
 }
 async function fetchSettings() {
@@ -17933,13 +18211,13 @@ async function fetchSettings() {
       }
     };
   }
-  return readJson("/v1/settings");
+  return readJson$1("/v1/settings");
 }
 async function fetchCloudReviewSettings() {
-  return readJson("/v1/cloud-review", { cache: "no-store" });
+  return readJson$1("/v1/cloud-review", { cache: "no-store" });
 }
 async function changeCloudReviewSettings(input) {
-  return readJson("/v1/cloud-review", {
+  return readJson$1("/v1/cloud-review", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ...input, confirm: `cloud-review.${input.action}` })
@@ -17966,7 +18244,7 @@ async function updateSettings(settings) {
       }
     };
   }
-  return readJson("/v1/settings", {
+  return readJson$1("/v1/settings", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -17984,13 +18262,13 @@ async function exportSettings() {
       settings: current.settings
     };
   }
-  return readJson("/v1/settings/export");
+  return readJson$1("/v1/settings/export");
 }
 async function importSettings(settingsExport, proof) {
   if (isGuardDemoMode()) {
     return { guard_home: "~/.hol-guard", config_path: "~/.hol-guard/config.toml", settings: settingsExport.settings };
   }
-  return readJson("/v1/settings/import", {
+  return readJson$1("/v1/settings/import", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18007,7 +18285,7 @@ async function resetSettings(proof) {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  return readJson("/v1/settings/reset", {
+  return readJson$1("/v1/settings/reset", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18042,7 +18320,7 @@ async function fetchRequest(requestId) {
   if (isGuardDemoMode()) {
     return getDemoRequest(requestId);
   }
-  const payload = await readJson(`/v1/requests/${requestId}`);
+  const payload = await readJson$1(`/v1/requests/${requestId}`);
   return normalizeApprovalRequest(payload);
 }
 function normalizeReceipt(item) {
@@ -18092,11 +18370,11 @@ async function fetchReceipts() {
   if (isGuardDemoMode()) {
     return getDemoReceipts();
   }
-  const payload = await readJson("/v1/receipts");
+  const payload = await readJson$1("/v1/receipts");
   return normalizeReceipts(payload.items);
 }
 function normalizeReceiptAnalyticsBucket(raw) {
-  if (!isRecord$2(raw)) return null;
+  if (!isRecord$3(raw)) return null;
   const dateKey = raw["date_key"];
   const label = raw["label"];
   if (typeof dateKey !== "string" || typeof label !== "string") return null;
@@ -18109,13 +18387,13 @@ function normalizeReceiptAnalyticsBucket(raw) {
   };
 }
 function normalizeReceiptAnalytics(raw) {
-  if (!isRecord$2(raw)) return null;
+  if (!isRecord$3(raw)) return null;
   const dailyRaw = raw["daily_activity"];
   const trendRaw = raw["trend_buckets"];
   const harnessRaw = raw["by_harness"];
   const artifactRaw = raw["top_artifacts"];
   const daily_activity = Array.isArray(dailyRaw) ? dailyRaw.map((entry) => {
-    if (!isRecord$2(entry) || typeof entry["date_key"] !== "string") return null;
+    if (!isRecord$3(entry) || typeof entry["date_key"] !== "string") return null;
     return {
       date_key: entry["date_key"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0
@@ -18123,7 +18401,7 @@ function normalizeReceiptAnalytics(raw) {
   }).filter((entry) => entry !== null) : [];
   const trend_buckets = Array.isArray(trendRaw) ? trendRaw.map(normalizeReceiptAnalyticsBucket).filter((entry) => entry !== null) : [];
   const by_harness = Array.isArray(harnessRaw) ? harnessRaw.map((entry) => {
-    if (!isRecord$2(entry) || typeof entry["harness"] !== "string") return null;
+    if (!isRecord$3(entry) || typeof entry["harness"] !== "string") return null;
     return {
       harness: entry["harness"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
@@ -18132,7 +18410,7 @@ function normalizeReceiptAnalytics(raw) {
     };
   }).filter((entry) => entry !== null) : [];
   const top_artifacts = Array.isArray(artifactRaw) ? artifactRaw.map((entry) => {
-    if (!isRecord$2(entry) || typeof entry["name"] !== "string") return null;
+    if (!isRecord$3(entry) || typeof entry["name"] !== "string") return null;
     return {
       name: entry["name"],
       total: isNonNegativeNumber(entry["total"]) ? entry["total"] : 0,
@@ -18211,7 +18489,7 @@ async function fetchReceiptAnalytics() {
   if (isGuardDemoMode()) {
     return buildReceiptAnalyticsFromSample(getDemoReceipts());
   }
-  const payload = await readJson("/v1/receipts/analytics?activity_days=90&trend_days=7&top_limit=8");
+  const payload = await readJson$1("/v1/receipts/analytics?activity_days=90&trend_days=7&top_limit=8");
   const normalized = normalizeReceiptAnalytics(payload);
   if (!normalized) {
     throw new Error("Invalid receipt analytics payload");
@@ -18227,7 +18505,7 @@ async function publishInsightsShare(input) {
       expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1e3).toISOString()
     };
   }
-  const payload = await readJson("/v1/insights/share", {
+  const payload = await readJson$1("/v1/insights/share", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -18256,7 +18534,7 @@ async function publishInsightsShare(input) {
   throw new Error("Invalid insights share response");
 }
 function normalizeGuardCloudConnectStatus(value) {
-  if (!isRecord$2(value)) {
+  if (!isRecord$3(value)) {
     return { connect_required: false, connect_flow: null };
   }
   return {
@@ -18265,11 +18543,11 @@ function normalizeGuardCloudConnectStatus(value) {
   };
 }
 async function fetchGuardCloudConnectStatus(signal) {
-  return normalizeGuardCloudConnectStatus(await readJson("/v1/cloud/connect", { signal }));
+  return normalizeGuardCloudConnectStatus(await readJson$1("/v1/cloud/connect", { signal }));
 }
 async function startGuardCloudConnect(signal) {
   return normalizeGuardCloudConnectStatus(
-    await readJson("/v1/cloud/connect", {
+    await readJson$1("/v1/cloud/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
@@ -18296,7 +18574,7 @@ async function fetchPolicy(harness) {
   if (isGuardDemoMode()) {
     return getDemoPolicy(harness);
   }
-  const payload = await readJson(
+  const payload = await readJson$1(
     `/v1/policy?harness=${encodeURIComponent(harness)}`
   );
   return payload.items;
@@ -18306,14 +18584,14 @@ async function fetchCloudExceptions(harness) {
     return [];
   }
   const query = "";
-  const payload = await readJson(`/v1/policy/cloud-exceptions${query}`);
+  const payload = await readJson$1(`/v1/policy/cloud-exceptions${query}`);
   return payload.items;
 }
 async function fetchCloudExceptionRequests() {
   if (isGuardDemoMode()) {
     return { generatedAt: (/* @__PURE__ */ new Date()).toISOString(), items: [] };
   }
-  return readJson("/v1/policy/cloud-exception-requests");
+  return readJson$1("/v1/policy/cloud-exception-requests");
 }
 async function createCloudExceptionRequest(input) {
   if (isGuardDemoMode()) {
@@ -18332,7 +18610,7 @@ async function createCloudExceptionRequest(input) {
       ]
     };
   }
-  return readJson("/v1/policy/cloud-exception-requests", {
+  return readJson$1("/v1/policy/cloud-exception-requests", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18345,14 +18623,14 @@ async function fetchPolicies() {
   if (isGuardDemoMode()) {
     return getDemoPolicy("codex");
   }
-  const payload = await readJson("/v1/policy");
+  const payload = await readJson$1("/v1/policy");
   return payload.items;
 }
 async function clearPolicy(input) {
   if (isGuardDemoMode()) {
     return { cleared: 0, harness: input.harness ?? null, source: input.source ?? null };
   }
-  return readJson("/v1/policy/clear", {
+  return readJson$1("/v1/policy/clear", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18378,7 +18656,7 @@ async function clearReviewQueue(input) {
   if (isGuardDemoMode()) {
     return { cleared: 0, status: input.status ?? "pending", harness: input.harness ?? null };
   }
-  return readJson("/v1/requests/clear", {
+  return readJson$1("/v1/requests/clear", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18459,7 +18737,7 @@ async function revokeApprovalGateCooldown(password, totpCode) {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  const response = await fetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
+  const response = await daemonFetch(guardApiInput("/v1/approval-gate/cooldown/revoke"), withGuardAuth({
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18488,7 +18766,7 @@ async function enrollApprovalGateTotp(currentPassword, deviceLabel) {
       }
     };
   }
-  return readJson("/v1/approval-gate/totp/enroll", {
+  return readJson$1("/v1/approval-gate/totp/enroll", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18506,7 +18784,7 @@ async function verifyApprovalGateTotp(currentPassword, code) {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  return readJson("/v1/approval-gate/totp/verify", {
+  return readJson$1("/v1/approval-gate/totp/verify", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18524,7 +18802,7 @@ async function disableApprovalGateTotp(currentPassword, code) {
   if (isGuardDemoMode()) {
     return fetchSettings();
   }
-  return readJson("/v1/approval-gate/totp/disable", {
+  return readJson$1("/v1/approval-gate/totp/disable", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18584,7 +18862,7 @@ async function resolveRequestWithQueueResult(input) {
     let payload2 = null;
     try {
       const candidate = await response.clone().json();
-      payload2 = isRecord$2(candidate) ? candidate : null;
+      payload2 = isRecord$3(candidate) ? candidate : null;
     } catch {
       payload2 = null;
     }
@@ -18605,7 +18883,7 @@ async function bulkAllowReadOnce(input) {
       resolution_summary: `${input.requestIds.length} read-only file reads approved once.`
     };
   }
-  const payload = await readJson("/v1/requests/bulk-allow-once", {
+  const payload = await readJson$1("/v1/requests/bulk-allow-once", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -18628,7 +18906,7 @@ async function clearEvidence() {
   if (isGuardDemoMode()) {
     return;
   }
-  await readJson("/v1/evidence", {
+  await readJson$1("/v1/evidence", {
     method: "DELETE",
     headers: guardAuthHeaders()
   });
@@ -18694,9 +18972,9 @@ async function repairProtectionCheck(checkId) {
   });
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new GuardProtectionRepairError(response.status, isRecord$2(payload) ? payload : null);
+    throw new GuardProtectionRepairError(response.status, isRecord$3(payload) ? payload : null);
   }
-  if (!isRecord$2(payload) || payload.repaired !== true || payload.repair_scope !== "local_integrity" || !Array.isArray(payload.check_ids)) {
+  if (!isRecord$3(payload) || payload.repaired !== true || payload.repair_scope !== "local_integrity" || !Array.isArray(payload.check_ids)) {
     throw new Error("Guard returned an invalid protection repair result.");
   }
   return {
@@ -18707,7 +18985,7 @@ async function repairProtectionCheck(checkId) {
   };
 }
 function normalizeGuardUpdateVersionCheck(raw) {
-  const value = isRecord$2(raw) ? raw : {};
+  const value = isRecord$3(raw) ? raw : {};
   return {
     source: stringValue$1(value.source) ?? "pypi",
     status: stringValue$1(value.status) ?? "unavailable",
@@ -18717,7 +18995,7 @@ function normalizeGuardUpdateVersionCheck(raw) {
   };
 }
 function normalizeGuardUpdateStatus(raw, fallbackReleaseChannel = null) {
-  const value = isRecord$2(raw) ? raw : {};
+  const value = isRecord$3(raw) ? raw : {};
   const versionCheck = normalizeGuardUpdateVersionCheck(value.version_check);
   const currentVersion = stringValue$1(value.current_version) ?? versionCheck.current_version ?? "unknown";
   const latestVersion = stringValue$1(value.latest_version) ?? versionCheck.latest_version;
@@ -18756,8 +19034,8 @@ async function fetchGuardUpdateStatus() {
       blocked_reason: null
     });
   }
-  const payload = await readJson("/v1/update/status", { cache: "no-store" });
-  const declaredChannel = isRecord$2(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : null;
+  const payload = await readJson$1("/v1/update/status", { cache: "no-store" });
+  const declaredChannel = isRecord$3(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : null;
   const status = normalizeGuardUpdateStatus(payload, readRememberedGuardUpdateChannel());
   if (declaredChannel) {
     rememberGuardUpdateChannel(declaredChannel);
@@ -18802,10 +19080,10 @@ async function setGuardUpdateChannel(channel, proof) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const value = isRecord$2(payload) ? payload : {};
+    const value = isRecord$3(payload) ? payload : {};
     throw new Error(stringValue$1(value.message) ?? `Update channel failed with ${response.status}`);
   }
-  const declaredChannel = isRecord$2(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : channel;
+  const declaredChannel = isRecord$3(payload) && isGuardUpdateChannel(payload.release_channel) ? payload.release_channel : channel;
   rememberGuardUpdateChannel(declaredChannel);
   return normalizeGuardUpdateStatus(payload, declaredChannel);
 }
@@ -18822,7 +19100,7 @@ async function setupDesktopNotifications() {
       guidance: "macOS may open the general Notifications list. Choose terminal-notifier, enable Allow Notifications, then enable Banners or Alerts plus Sounds."
     };
   }
-  return readJson("/v1/notifications/setup", {
+  return readJson$1("/v1/notifications/setup", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({})
@@ -18858,7 +19136,7 @@ function numberValue(value) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 function normalizePackageFirewallEntitlement(value) {
-  const record2 = isRecord$2(value) ? value : {};
+  const record2 = isRecord$3(value) ? value : {};
   return {
     allowed: booleanValue$1(record2.allowed),
     reason: stringValue$1(record2.reason) ?? "unknown",
@@ -18868,7 +19146,7 @@ function normalizePackageFirewallEntitlement(value) {
   };
 }
 function normalizePackageFirewallReceipt(value) {
-  if (!isRecord$2(value)) {
+  if (!isRecord$3(value)) {
     return null;
   }
   const id2 = stringValue$1(value.id);
@@ -18881,7 +19159,7 @@ function normalizePackageFirewallReceipt(value) {
   return { id: id2, operation, status, timestamp };
 }
 function normalizePackageFirewallActions(value) {
-  if (!isRecord$2(value)) {
+  if (!isRecord$3(value)) {
     return {};
   }
   const allowedStates = /* @__PURE__ */ new Set([
@@ -18898,7 +19176,7 @@ function normalizePackageFirewallActions(value) {
   return Object.fromEntries(entries);
 }
 function normalizePackageFirewallCliFallback(value) {
-  if (!isRecord$2(value)) {
+  if (!isRecord$3(value)) {
     return null;
   }
   const fallback = {};
@@ -18921,7 +19199,7 @@ function normalizePackageFirewallCliFallback(value) {
   return Object.keys(fallback).length > 0 ? fallback : null;
 }
 function normalizePackageFirewallConnectFlow(value) {
-  if (!isRecord$2(value)) {
+  if (!isRecord$3(value)) {
     return null;
   }
   const state = value.state;
@@ -18978,7 +19256,7 @@ function readLastInterceptProofAtByManager(status) {
     readPackageShimField(status, "last_test_at", "lastTestAt")
   ];
   for (const source of sources) {
-    if (!isRecord$2(source)) {
+    if (!isRecord$3(source)) {
       continue;
     }
     for (const [manager, timestamp] of Object.entries(source)) {
@@ -19026,9 +19304,9 @@ function normalizePackageShimEntry(manager, detail, pathStatus, coverage) {
   };
 }
 function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
-  const status = isRecord$2(value) ? value : {};
+  const status = isRecord$3(value) ? value : {};
   const managerDetailsValue = readPackageShimField(status, "manager_details", "managerDetails");
-  const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord$2) : [];
+  const detailRows = Array.isArray(managerDetailsValue) ? managerDetailsValue.filter(isRecord$3) : [];
   const detailByManager = /* @__PURE__ */ new Map();
   for (const detail of detailRows) {
     const manager = stringValue$1(detail.manager);
@@ -19045,7 +19323,7 @@ function normalizePackageShimEntries(value, supportedManagers, pathStatus) {
   const bypassesValue = readPackageShimField(status, "bypasses", "bypasses");
   if (Array.isArray(bypassesValue)) {
     for (const entry of bypassesValue) {
-      if (!isRecord$2(entry)) {
+      if (!isRecord$3(entry)) {
         continue;
       }
       const manager = stringValue$1(entry.manager);
@@ -19088,9 +19366,9 @@ function actionResultSummary(operation, detail) {
   return `${operation} completed.`;
 }
 function normalizePackageFirewallStatus(value) {
-  const record2 = isRecord$2(value) ? value : {};
+  const record2 = isRecord$3(value) ? value : {};
   const supportedManagers = normalizeStringArray(record2.supported_managers);
-  const shimStatus = isRecord$2(record2.package_shims) ? record2.package_shims : {};
+  const shimStatus = isRecord$3(record2.package_shims) ? record2.package_shims : {};
   const installedManagers = readPackageShimStringArray(shimStatus, "installed_managers", "installedManagers");
   const activeManagers = readPackageShimStringArray(shimStatus, "active_managers", "activeManagers");
   const missingManagers = readPackageShimStringArray(shimStatus, "missing_managers", "missingManagers");
@@ -19142,8 +19420,8 @@ function normalizePackageFirewallStatus(value) {
   };
 }
 function normalizePackageFirewallAction(value) {
-  const record2 = isRecord$2(value) ? value : {};
-  const result = isRecord$2(record2.result) ? record2.result : {};
+  const record2 = isRecord$3(value) ? value : {};
+  const result = isRecord$3(record2.result) ? record2.result : {};
   const operation = stringValue$1(record2.operation) ?? "unknown";
   return {
     entitlement: normalizePackageFirewallEntitlement(record2.entitlement),
@@ -19156,7 +19434,7 @@ function normalizePackageFirewallAction(value) {
 }
 async function fetchPackageFirewallStatus() {
   const status = await withLocalProtectionDeadline(
-    (signal) => readJson("/v1/supply-chain/package-shims", { signal }),
+    (signal) => readJson$1("/v1/supply-chain/package-shims", { signal }),
     15e3,
     "Guard did not respond to the package status check. Check that Guard is running, then retry."
   );
@@ -19164,7 +19442,7 @@ async function fetchPackageFirewallStatus() {
 }
 async function startPackageFirewallConnect() {
   return normalizePackageFirewallConnectFlow(
-    await readJson("/v1/supply-chain/package-shims/connect", {
+    await readJson$1("/v1/supply-chain/package-shims/connect", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({})
@@ -19172,7 +19450,7 @@ async function startPackageFirewallConnect() {
   );
 }
 async function fetchSupplyChainBundle() {
-  const wrapper = await readJson("/v1/supply-chain/bundle");
+  const wrapper = await readJson$1("/v1/supply-chain/bundle");
   if (!wrapper || typeof wrapper !== "object") {
     return null;
   }
@@ -19226,7 +19504,7 @@ async function activatePackageFirewallRuntime() {
   if (response.ok) {
     return;
   }
-  if (isRecord$2(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
+  if (isRecord$3(payloadBody) && typeof payloadBody.message === "string" && payloadBody.message.trim()) {
     throw new Error(payloadBody.message);
   }
   throw new Error("Unable to activate package protection.");
@@ -19366,7 +19644,7 @@ async function repairSupplyChainProtection(credentials) {
       isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
     );
   }
-  if (!isRecord$2(payloadBody) || !isRecord$2(payloadBody.result)) {
+  if (!isRecord$3(payloadBody) || !isRecord$3(payloadBody.result)) {
     throw new Error("Guard returned an invalid supply-chain repair result.");
   }
   const result = payloadBody.result;
@@ -19386,7 +19664,7 @@ function normalizeMcpPolicyStatus(value) {
   return "pending";
 }
 function normalizeMcpPolicyApplyResult(value) {
-  const record2 = isRecord$2(value) ? value : {};
+  const record2 = isRecord$3(value) ? value : {};
   const inserted = record2["inserted"];
   const replaced = record2["replaced"];
   return {
@@ -19398,7 +19676,7 @@ function asStringList(value) {
   return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
 }
 function normalizeMcpPolicyWritePlan(value) {
-  const record2 = isRecord$2(value) ? value : {};
+  const record2 = isRecord$3(value) ? value : {};
   return {
     additions: asStringList(record2["additions"]),
     replacements: asStringList(record2["replacements"]),
@@ -19406,7 +19684,7 @@ function normalizeMcpPolicyWritePlan(value) {
   };
 }
 function normalizeMcpPolicySemanticDiff(value) {
-  const record2 = isRecord$2(value) ? value : {};
+  const record2 = isRecord$3(value) ? value : {};
   const additionCount = record2["additionCount"];
   const replacementCount = record2["replacementCount"];
   const removalCount = record2["removalCount"];
@@ -19417,7 +19695,7 @@ function normalizeMcpPolicySemanticDiff(value) {
   };
 }
 function normalizeMcpPolicyRequest(raw) {
-  const record2 = isRecord$2(raw) ? raw : {};
+  const record2 = isRecord$3(raw) ? raw : {};
   const expectedPolicyGeneration = record2["expectedPolicyGeneration"];
   return {
     requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
@@ -19472,7 +19750,7 @@ async function resolveMcpPolicyRequest(input) {
       isGuardHarnessActionErrorPayload(payloadBody) ? payloadBody : null
     );
   }
-  const record2 = isRecord$2(payloadBody) ? payloadBody : {};
+  const record2 = isRecord$3(payloadBody) ? payloadBody : {};
   return {
     resolved: record2["resolved"] === true,
     requestId: typeof record2["requestId"] === "string" ? record2["requestId"] : "",
@@ -19741,11 +20019,11 @@ class CloudRequestTimeoutError extends Error {
     this.name = "CloudRequestTimeoutError";
   }
 }
-function isRecord$1(value) {
+function isRecord$2(value) {
   return typeof value === "object" && value !== null;
 }
 function connectFlowFromPayload(value) {
-  if (!isRecord$1(value)) return null;
+  if (!isRecord$2(value)) return null;
   const connectUrl = typeof value.connect_url === "string" ? safeCloudConnectUrl(value.connect_url) : null;
   if (!connectUrl) return null;
   return {
@@ -19761,7 +20039,7 @@ function connectFlowFromPayload(value) {
   };
 }
 function parseGuardCloudConnectHttp(status, payload) {
-  const record2 = isRecord$1(payload) ? payload : {};
+  const record2 = isRecord$2(payload) ? payload : {};
   const dashboardUrl = typeof record2.dashboard_url === "string" ? safeCloudConnectUrl(record2.dashboard_url) : null;
   if (status === 409 && record2.error === "guard_cloud_connect_not_required") {
     return {
@@ -23828,7 +24106,7 @@ function HomeInsightsMetrics({ analytics }) {
   const items = buildInsightMetrics(analytics, "compact");
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-4", children: items.map((item, index) => renderInsightMetric(item, index, true)) });
 }
-function isRecord(value) {
+function isRecord$1(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 function readString(value) {
@@ -23866,13 +24144,13 @@ function parseAuditActionResult(result) {
       tone: "warning"
     };
   }
-  const evaluation = isRecord(result.evaluation) ? result.evaluation : null;
+  const evaluation = isRecord$1(result.evaluation) ? result.evaluation : null;
   const decision = readString(evaluation?.decision) ?? readString(result.decision) ?? "monitor";
   const manifestPaths = readStringArray(result.manifest_paths);
   const lockfilePaths = readStringArray(result.lockfile_paths);
-  const inventory = isRecord(result.inventory) ? result.inventory : null;
+  const inventory = isRecord$1(result.inventory) ? result.inventory : null;
   const packageCount = typeof inventory?.packages === "number" ? inventory.packages : null;
-  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord) : [];
+  const lockfileWarnings = Array.isArray(result.lockfile_warnings) ? result.lockfile_warnings.filter(isRecord$1) : [];
   const lines = [];
   if (manifestPaths.length > 0) {
     lines.push(`Manifests scanned: ${manifestPaths.join(", ")}.`);
@@ -23926,7 +24204,7 @@ function parseTestActionResult(result) {
   const interceptProved = result.intercept_proved === true;
   const testedManagers = readStringArray(result.tested_managers);
   const pathRepairRequired = readStringArray(result.path_repair_required);
-  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord) : [];
+  const managerResults = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
   const lines = [];
   for (const entry of managerResults) {
     const manager = readString(entry.manager) ?? "manager";
@@ -23960,18 +24238,18 @@ function parseTestActionResult(result) {
   };
 }
 function parsePackageFirewallActionResult(op, body) {
-  if (!isRecord(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
   let result;
-  if (isRecord(body.result)) {
+  if (isRecord$1(body.result)) {
     result = body.result;
-  } else if (isRecord(body.result_detail)) {
+  } else if (isRecord$1(body.result_detail)) {
     result = body.result_detail;
   } else {
     result = body;
   }
-  if (!isRecord(result)) {
+  if (!isRecord$1(result)) {
     return null;
   }
   if (op === "audit") {
@@ -23980,7 +24258,7 @@ function parsePackageFirewallActionResult(op, body) {
   if (op === "repair") {
     const pathRepairRequired = readStringArray(result.path_repair_required);
     if (pathRepairRequired.length > 0) {
-      const profile = isRecord(result.profile) ? result.profile : null;
+      const profile = isRecord$1(result.profile) ? result.profile : null;
       const manualPathRequired = profile?.manual_path_required === true;
       return {
         emptyState: false,
@@ -24002,13 +24280,13 @@ function parsePackageFirewallActionResult(op, body) {
   return null;
 }
 function readActionResultRecord(body) {
-  if (!isRecord(body)) {
+  if (!isRecord$1(body)) {
     return null;
   }
-  if (isRecord(body.result_detail)) {
+  if (isRecord$1(body.result_detail)) {
     return body.result_detail;
   }
-  if (isRecord(body.result)) {
+  if (isRecord$1(body.result)) {
     return body.result;
   }
   return body;
@@ -24037,7 +24315,7 @@ function parseInterceptProofSnapshot(body) {
   if (result === null) {
     return null;
   }
-  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord) : [];
+  const managerResultsRaw = Array.isArray(result.manager_results) ? result.manager_results.filter(isRecord$1) : [];
   const testedManagers = readStringArray(result.tested_managers);
   const pathRepairRequired = readStringArray(result.path_repair_required);
   const interceptProved = result.intercept_proved === true;
@@ -24046,7 +24324,7 @@ function parseInterceptProofSnapshot(body) {
   if (!hasProofContext && result.intercept_proved === void 0) {
     return null;
   }
-  const receipt = isRecord(body) && isRecord(body.receipt) ? body.receipt : null;
+  const receipt = isRecord$1(body) && isRecord$1(body.receipt) ? body.receipt : null;
   const receiptId = receipt !== null ? readString(receipt.id) : null;
   const timestamp = receipt !== null ? readString(receipt.timestamp) : null;
   const summary = interceptProved ? "Intercept test proved Guard blocked the package manager call." : "Intercept test finished without full proof. Review manager details below.";
@@ -26580,6 +26858,7 @@ function extensionPatternHref(extensionId, ruleId) {
 }
 const DASHBOARD_LOCATION_EVENT = "guard-dashboard-location";
 function commitDashboardLocation(href) {
+  if (loadCurrentDashboardBuild(href)) return;
   window.history.pushState({}, "", href);
   window.dispatchEvent(new Event(DASHBOARD_LOCATION_EVENT));
 }
@@ -27422,7 +27701,7 @@ const FORBIDDEN_KEYS = /* @__PURE__ */ new Set([
 function invalid(kind) {
   throw new Error(`Invalid ${kind} payload`);
 }
-function record$3(value, kind) {
+function record$4(value, kind) {
   if (value === null || typeof value !== "object" || Array.isArray(value)) invalid(kind);
   return value;
 }
@@ -27474,7 +27753,7 @@ function objectArray(value, kind, limit = 100) {
   return value;
 }
 function normalizeMatch(value) {
-  const item = record$3(value, "command activity");
+  const item = record$4(value, "command activity");
   return {
     ordinal: integer$3(item.ordinal, "command activity"),
     extension_id: stringValue(item.extension_id, "command activity"),
@@ -27490,7 +27769,7 @@ function normalizeMatch(value) {
   };
 }
 function normalizeActivity(value) {
-  const item = record$3(value, "command activity");
+  const item = record$4(value, "command activity");
   const matches = objectArray(item.matches, "command activity").map(normalizeMatch);
   const matchCount = integer$3(item.match_count, "command activity");
   if (matches.length !== matchCount) invalid("command activity");
@@ -27529,7 +27808,7 @@ function normalizeActivity(value) {
 }
 function normalizeCommandActivityPage(value) {
   rejectForbidden(value, "command activity");
-  const payload = record$3(value, "command activity");
+  const payload = record$4(value, "command activity");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
@@ -27539,17 +27818,17 @@ function normalizeCommandActivityPage(value) {
 }
 function countBuckets(value, kind) {
   return objectArray(value, kind, 50).map((raw) => {
-    const item = record$3(raw, kind);
+    const item = record$4(raw, kind);
     return { value: stringValue(item.value, kind), count: integer$3(item.count, kind) };
   });
 }
 function normalizeCommandActivityAnalytics(value) {
   rejectForbidden(value, "command activity analytics");
-  const payload = record$3(value, "command activity analytics");
-  const window2 = record$3(payload.window, "command activity analytics");
-  const scope = record$3(payload.scope, "command activity analytics");
-  const dimensions = record$3(payload.dimensions, "command activity analytics");
-  const health = record$3(payload.health, "command activity analytics");
+  const payload = record$4(value, "command activity analytics");
+  const window2 = record$4(payload.window, "command activity analytics");
+  const scope = record$4(payload.scope, "command activity analytics");
+  const dimensions = record$4(payload.dimensions, "command activity analytics");
+  const health = record$4(payload.health, "command activity analytics");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command activity analytics");
   const normalizedDimensions = Object.fromEntries(
     ANALYTICS_DIMENSIONS.map((name) => [name, countBuckets(dimensions[name], "command activity analytics")])
@@ -27567,13 +27846,13 @@ function normalizeCommandActivityAnalytics(value) {
     },
     commands_checked: integer$3(payload.commands_checked, "command activity analytics"),
     trend: objectArray(payload.trend, "command activity analytics", 397).map((raw) => {
-      const item = record$3(raw, "command activity analytics");
+      const item = record$4(raw, "command activity analytics");
       return { day: stringValue(item.day, "command activity analytics"), count: integer$3(item.count, "command activity analytics") };
     }),
     dimensions: normalizedDimensions,
     dimension_breakdowns_scope: enumValue$2(payload.dimension_breakdowns_scope, ["global"], "command activity analytics"),
     feedback: objectArray(payload.feedback, "command activity analytics", 2).map((raw) => {
-      const item = record$3(raw, "command activity analytics");
+      const item = record$4(raw, "command activity analytics");
       return {
         label: enumValue$2(item.label, FEEDBACK_LABELS, "command activity analytics"),
         count: integer$3(item.count, "command activity analytics")
@@ -27590,7 +27869,7 @@ function normalizeCommandActivityAnalytics(value) {
 }
 function normalizeCommandExtensionsPage(value) {
   rejectForbidden(value, "command extensions");
-  const payload = record$3(value, "command extensions");
+  const payload = record$4(value, "command extensions");
   if (payload.schema_version !== COMMAND_EXTENSION_SCHEMA_VERSION || payload.source !== "built-in") {
     invalid("command extensions");
   }
@@ -27598,9 +27877,9 @@ function normalizeCommandExtensionsPage(value) {
     schema_version: COMMAND_EXTENSION_SCHEMA_VERSION,
     source: "built-in",
     items: objectArray(payload.items, "command extensions").map((raw) => {
-      const item = record$3(raw, "command extensions");
+      const item = record$4(raw, "command extensions");
       const rules = objectArray(item.rules, "command extensions").map((ruleRaw) => {
-        const rule2 = record$3(ruleRaw, "command extensions");
+        const rule2 = record$4(ruleRaw, "command extensions");
         return {
           rule_id: stringValue(rule2.rule_id, "command extensions"),
           title: stringValue(rule2.title, "command extensions", 512),
@@ -27637,7 +27916,7 @@ function normalizeCommandExtensionsPage(value) {
 }
 function normalizeCommandFeedbackResult(value) {
   rejectForbidden(value, "command feedback");
-  const payload = record$3(value, "command feedback");
+  const payload = record$4(value, "command feedback");
   if (payload.schema_version !== COMMAND_ACTIVITY_API_SCHEMA_VERSION) invalid("command feedback");
   return {
     schema_version: COMMAND_ACTIVITY_API_SCHEMA_VERSION,
@@ -27649,14 +27928,14 @@ function normalizeCommandFeedbackResult(value) {
   };
 }
 function normalizedCounts(value, keys, kind) {
-  const payload = record$3(value, kind);
+  const payload = record$4(value, kind);
   return Object.fromEntries(keys.map((key) => [key, integer$3(payload[key], kind)]));
 }
 function normalizeCommandActivityDiagnostics(value) {
   rejectForbidden(value, "command activity diagnostics");
-  const payload = record$3(value, "command activity diagnostics");
-  const schemas = record$3(payload.schemas, "command activity diagnostics");
-  const stableIds = record$3(payload.stable_ids, "command activity diagnostics");
+  const payload = record$4(value, "command activity diagnostics");
+  const schemas = record$4(payload.schemas, "command activity diagnostics");
+  const stableIds = record$4(payload.stable_ids, "command activity diagnostics");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity diagnostics");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -27672,7 +27951,7 @@ function normalizeCommandActivityDiagnostics(value) {
       "command activity diagnostics"
     ),
     proof_coverage: objectArray(payload.proof_coverage, "command activity diagnostics", 3).map((raw) => {
-      const item = record$3(raw, "command activity diagnostics");
+      const item = record$4(raw, "command activity diagnostics");
       return {
         proof_level: enumValue$2(item.proof_level, PROOF_LEVELS, "command activity diagnostics"),
         count: integer$3(item.count, "command activity diagnostics")
@@ -27684,7 +27963,7 @@ function normalizeCommandActivityDiagnostics(value) {
       rules: stringArray(stableIds.rules, "command activity diagnostics", 1e3)
     },
     error_classes: objectArray(payload.error_classes, "command activity diagnostics", 4).map((raw) => {
-      const item = record$3(raw, "command activity diagnostics");
+      const item = record$4(raw, "command activity diagnostics");
       return {
         error_class: stringValue(item.error_class, "command activity diagnostics"),
         count: integer$3(item.count, "command activity diagnostics")
@@ -27694,7 +27973,7 @@ function normalizeCommandActivityDiagnostics(value) {
 }
 function normalizeCommandActivityDeletion(value) {
   rejectForbidden(value, "command activity deletion");
-  const payload = record$3(value, "command activity deletion");
+  const payload = record$4(value, "command activity deletion");
   if (payload.schema_version !== COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION) invalid("command activity deletion");
   return {
     schema_version: COMMAND_ACTIVITY_DIAGNOSTICS_SCHEMA_VERSION,
@@ -27704,7 +27983,7 @@ function normalizeCommandActivityDeletion(value) {
 function normalizeCommandActivityInvalidation(sequence, value) {
   rejectForbidden(value, "command activity invalidation");
   const id2 = integer$3(sequence, "command activity invalidation");
-  const payload = record$3(value, "command activity invalidation");
+  const payload = record$4(value, "command activity invalidation");
   if (payload.event === "command_activity_invalidated") {
     return {
       sequence: id2,
@@ -28836,6 +29115,7 @@ function QueueBulkDrawer(props) {
     return Array.from(map.entries());
   }, [riskLines]);
   const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const executionApprovalAvailable = (props.retryBlockedActionCount ?? 0) === 0;
   const actionFooter = /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-end gap-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
@@ -28851,7 +29131,7 @@ function QueueBulkDrawer(props) {
       "button",
       {
         type: "submit",
-        disabled: props.step === "submitting" || !props.canConfirm,
+        disabled: props.step === "submitting" || !props.canConfirm || !executionApprovalAvailable,
         className: "min-h-11 rounded-full bg-brand-blue px-6 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-brand-blue/90 disabled:cursor-not-allowed disabled:opacity-50",
         children: submitLabel
       }
@@ -28865,7 +29145,7 @@ function QueueBulkDrawer(props) {
       footer: actionFooter,
       onSubmit: (event) => {
         event.preventDefault();
-        if (props.step !== "submitting" && props.canConfirm) props.onConfirmApprove();
+        if (props.step !== "submitting" && props.canConfirm && executionApprovalAvailable) props.onConfirmApprove();
       },
       children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("header", { className: "flex items-start justify-between gap-4", children: [
@@ -28972,7 +29252,7 @@ function QueueBulkDrawer(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground", children: "Step 2 of 2" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "h-px flex-1 bg-slate-200", "aria-hidden": "true" })
           ] }),
-          gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
+          !executionApprovalAvailable ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-sm text-brand-attention", role: "status", children: "Run once is unavailable for part of this selection. Open those requests individually before approving the remaining actions." }) : gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 space-y-3 rounded-xl border border-slate-200 bg-white p-4", children: [
             bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark/80", children: "Your approval window is still open, so no password is needed." }),
             props.approvalGate?.totp_enabled !== true && !bulkApproveCooldownOpen(props.approvalGate) && /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
               /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-2", children: [
@@ -29124,9 +29404,8 @@ function buildBulkRiskDisclosure(stats) {
     };
   }
   const retryBlocked = stats.retryBlockedActionCount ?? 0;
-  const onceVerb = retryBlocked > 0 ? "is approved once" : "runs once";
   const bullets = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each ${onceVerb}; the decision is not remembered.`
+    retryBlocked > 0 ? `Reviewing ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. This selection includes actions that cannot run on once consent.` : `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`
   ];
   if (stats.highActionCount > 0) {
     bullets.push(
@@ -29140,7 +29419,7 @@ function buildBulkRiskDisclosure(stats) {
   }
   if (retryBlocked > 0) {
     bullets.push(
-      `${retryBlocked} of the selected ${pluralActions(stats.actionCount)} ${retryBlocked === 1 ? "is a command the agent" : "are commands the agent"} will still be blocked on after approval. Approving records your decision only. To let the agent run ${retryBlocked === 1 ? "it" : "them"}, open ${retryBlocked === 1 ? "it" : "each one"} and use "Always allow exact action" where Guard offers it, set a matching Extensions pattern to Allow, or run ${retryBlocked === 1 ? "it" : "them"} yourself.`
+      `Run once is unavailable for ${retryBlocked} of the selected ${pluralActions(stats.actionCount)}. Open those requests individually to inspect supported approval or recovery choices.`
     );
   }
   if (stats.duplicateActionCount > 0) {
@@ -29154,6 +29433,17 @@ function buildBulkRiskDisclosure(stats) {
     bullets.push(
       `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "action stays" : "actions stay"} in the queue and will NOT be approved here.${sampleText}`
     );
+  }
+  if (retryBlocked > 0) {
+    return {
+      tier,
+      tone: "attention",
+      headline: "This selection cannot be approved once",
+      body: "Open the unavailable actions individually to inspect supported approval or recovery choices, then remove them from this selection.",
+      bullets,
+      requiresTypedConfirm: false,
+      confirmPhrase: phrase
+    };
   }
   if (tier === "high") {
     return {
@@ -29171,7 +29461,7 @@ function buildBulkRiskDisclosure(stats) {
       tier,
       tone: "amber",
       headline: `Approving ${mix}`,
-      body: stats.elevatedActionCount > 0 ? `This batch includes elevated-risk actions (shell, edits, network). Each ${onceVerb} and the decision is not remembered. Skim the list before confirming.` : `Each selected action ${onceVerb} and the decision is not remembered. Skim the list before confirming.`,
+      body: stats.elevatedActionCount > 0 ? "This batch includes elevated-risk actions (shell, edits, network). Each runs once and the decision is not remembered. Skim the list before confirming." : "Each selected action runs once and the decision is not remembered. Skim the list before confirming.",
       bullets,
       requiresTypedConfirm: false,
       confirmPhrase: phrase
@@ -29181,7 +29471,7 @@ function buildBulkRiskDisclosure(stats) {
     tier,
     tone: "green",
     headline: `Approving ${mix}`,
-    body: `Each selected action ${onceVerb}. The decision is not remembered, so these will ask again next time.`,
+    body: "Each selected action runs once. The decision is not remembered, so these will ask again next time.",
     bullets,
     requiresTypedConfirm: false,
     confirmPhrase: phrase
@@ -29259,8 +29549,8 @@ function useQueueBulkApprove(props) {
     [riskDisclosure, typedConfirm]
   );
   const canConfirm = reactExports.useMemo(
-    () => credentialError === null && confirmMatches && selectedGroupCount > 0,
-    [credentialError, confirmMatches, selectedGroupCount]
+    () => credentialError === null && confirmMatches && selectedGroupCount > 0 && (selectionStats.retryBlockedActionCount ?? 0) === 0,
+    [credentialError, confirmMatches, selectedGroupCount, selectionStats.retryBlockedActionCount]
   );
   const resetBulkFlow = reactExports.useCallback(() => {
     setDrawerOpen(false);
@@ -29349,6 +29639,10 @@ function useQueueBulkApprove(props) {
     if (drawerStep === "submitting" || drawerStep === "completed" || selectedBulkGroups.length === 0) {
       return;
     }
+    if ((selectionStats.retryBlockedActionCount ?? 0) > 0) {
+      setBulkApproveError("Run once is unavailable for part of this selection. Open those requests individually.");
+      return;
+    }
     const ids = bulkApprovePrimaryIds(selectedBulkGroups);
     const approvedActionCount = bulkApproveActionCount(selectedBulkGroups);
     const credentialErrorCheck = validateBulkApproveCredentials(props.approvalGate, {
@@ -29389,7 +29683,8 @@ function useQueueBulkApprove(props) {
     props.approvalGate,
     props.onBulkApprove,
     riskDisclosure,
-    selectedBulkGroups
+    selectedBulkGroups,
+    selectionStats.retryBlockedActionCount
   ]);
   const bulkSelectableMap = reactExports.useMemo(() => {
     const map = /* @__PURE__ */ new Map();
@@ -29973,7 +30268,7 @@ function buildEvidenceItems(item) {
 function ReviewScopeControls(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 space-y-2", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Approval scope" }),
-    !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: "This action cannot be approved under its current Guard policy." }),
+    !props.hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-attention", role: "status", children: props.oneTimeRetryBlocked ? "Guard cannot bind this app's retry to the reviewed version. Execution approval is unavailable." : "This action cannot be approved under its current Guard policy." }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "grid grid-cols-1 gap-2 md:grid-cols-2", role: "radiogroup", "aria-label": "Allow scope selection", children: props.commonScopeOptions.map((choice) => /* @__PURE__ */ jsxRuntimeExports.jsx(
       ScopeChoiceButton,
       {
@@ -30043,7 +30338,7 @@ function ExactActionPersistenceChoice(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("fieldset", { className: "rounded-lg border border-brand-blue/20 bg-brand-blue/[0.03] p-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("legend", { className: "px-1 text-sm font-semibold text-brand-dark", children: "How long should Guard allow it?" }),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(!props.checked), children: [
+      !props.oneTimeRetryBlocked && /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(!props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
           "input",
           {
@@ -30056,7 +30351,7 @@ function ExactActionPersistenceChoice(props) {
           }
         ),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "This time" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: props.oneTimeRetryBlocked ? "Records your decision; the agent stays blocked." : `Retry within ${props.retryWindowMinutes} minutes.` })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(
@@ -30469,7 +30764,7 @@ const PERMISSION_ID$1 = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*\.permission\.[a-z
 const MAX_EXTENSIONS = 512;
 const MAX_PERMISSIONS = 4096;
 const MAX_REASONS = 64;
-function record$2(value, label) {
+function record$3(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid ${label}`);
   return value;
 }
@@ -30500,7 +30795,7 @@ function reasons(value, label) {
   return value.map((item, index) => text(item, `${label}[${index}]`, 128));
 }
 function extensionItem(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   return {
     extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
     effective_state: enumValue$1(item.effective_state, `${label}.effective_state`, ["allowed", "blocked"]),
@@ -30511,7 +30806,7 @@ function extensionItem(value, label) {
   };
 }
 function permissionItem(value, label) {
-  const item = record$2(value, label);
+  const item = record$3(value, label);
   return {
     permission_id: id$1(item.permission_id, `${label}.permission_id`, PERMISSION_ID$1),
     extension_id: id$1(item.extension_id, `${label}.extension_id`, EXTENSION_ID$1),
@@ -30524,7 +30819,7 @@ function permissionItem(value, label) {
   };
 }
 function normalizeEffectiveExtensionControlProjection(value) {
-  const root = record$2(value, "extension projection");
+  const root = record$3(value, "extension projection");
   const schemaVersion = text(root.schema_version, "projection.schema_version", 128);
   if (schemaVersion !== "guard.daemon.extension-control-projection.v1") throw new Error("Invalid extension projection schema");
   const digest2 = text(root.catalog_digest, "projection.catalog_digest", 64);
@@ -30564,7 +30859,7 @@ class ExtensionControlProtocolError extends Error {
     super(`Invalid extension-control response: ${message}`);
   }
 }
-function record$1(value, label) {
+function record$2(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new ExtensionControlProtocolError(`${label} must be an object`);
   }
@@ -30581,7 +30876,7 @@ function string$1(value, label, allowEmpty = false) {
   if (!allowEmpty && value.trim().length === 0) throw new ExtensionControlProtocolError(`${label} is required`);
   return value;
 }
-function optionalString(value, label) {
+function optionalString$1(value, label) {
   if (value === null) return null;
   return string$1(value, label);
 }
@@ -30589,7 +30884,7 @@ function catalogText(value) {
   return typeof value === "string" && value.trim() ? value : null;
 }
 function publisher(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   const url = item.url;
   return {
     id: string$1(item.id, `${label}.id`),
@@ -30599,7 +30894,7 @@ function publisher(value, label) {
 }
 function icon(value, label) {
   if (value === void 0 || value === null) return { kind: "none" };
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   if (typeof item.kind === "string" && !["react-icon", "svg-ref", "none"].includes(item.kind)) return { kind: "none" };
   const kind = enumValue(item.kind, `${label}.kind`, ["react-icon", "svg-ref", "none"]);
   const name = item.name === void 0 ? void 0 : string$1(item.name, `${label}.name`);
@@ -30638,7 +30933,7 @@ function version(value, label) {
 }
 function terminalCommands(value) {
   if (value === void 0) return void 0;
-  const item = record$1(value, "effective.terminal_commands");
+  const item = record$2(value, "effective.terminal_commands");
   return {
     ...item.shell === void 0 ? {} : { shell: enumValue(item.shell, "effective.terminal_commands.shell", ["powershell"]) },
     enroll: string$1(item.enroll, "effective.terminal_commands.enroll"),
@@ -30654,7 +30949,7 @@ function idList$1(value, label, pattern, max = EXTENSION_CLIENT_LIMITS.relations
   return items;
 }
 function safeVariant(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   return {
     variant_id: string$1(item.variant_id, `${label}.variant_id`),
     title: string$1(item.title, `${label}.title`),
@@ -30662,7 +30957,7 @@ function safeVariant(value, label) {
   };
 }
 function rule(value, extensionId, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   const ruleId = id(item.rule_id, `${label}.rule_id`, RULE_ID);
   if (!ruleId.startsWith(`${extensionId}.`)) throw new ExtensionControlProtocolError(`${label}.rule_id belongs to another extension`);
   const rawVersion = item.rule_version;
@@ -30685,7 +30980,7 @@ function rule(value, extensionId, label) {
   };
 }
 function permission(value, extensionId, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   const permissionId = id(item.permission_id, `${label}.permission_id`, PERMISSION_ID);
   const owner = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   if (owner !== extensionId || !permissionId.startsWith(`${extensionId}.permission.`)) {
@@ -30703,7 +30998,7 @@ function permission(value, extensionId, label) {
     baseline_floor: enumValue(item.baseline_floor, `${label}.baseline_floor`, ["allow", "warn", "review", "require-reapproval", "sandbox-required", "block"]),
     default_enabled: bool$1(item.default_enabled, `${label}.default_enabled`),
     configurable: bool$1(item.configurable, `${label}.configurable`),
-    fixed_reason: optionalString(item.fixed_reason, `${label}.fixed_reason`),
+    fixed_reason: optionalString$1(item.fixed_reason, `${label}.fixed_reason`),
     typed_capabilities: stringList(item.typed_capabilities, `${label}.typed_capabilities`),
     action_classes: stringList(item.action_classes, `${label}.action_classes`),
     rule_ids: idList$1(item.rule_ids, `${label}.rule_ids`, RULE_ID),
@@ -30719,7 +31014,7 @@ function permission(value, extensionId, label) {
   };
 }
 function mcpLaunch(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   if (typeof item.kind === "string" && !["package-launcher", "direct-command", "remote-http"].includes(item.kind)) {
     return { kind: "unsupported" };
   }
@@ -30741,7 +31036,7 @@ function mcpLaunch(value, label) {
   };
 }
 function mcpTool(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   return {
     name: string$1(item.name, `${label}.name`),
     state: enumValue(item.state, `${label}.state`, ["inherit", "allow", "review", "block"])
@@ -30760,7 +31055,7 @@ function mcpCatalogFields(item, label) {
   };
 }
 function extension(value, label) {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   const extensionId = id(item.extension_id, `${label}.extension_id`, EXTENSION_ID);
   const rules = array(item.rules, `${label}.rules`, EXTENSION_CLIENT_LIMITS.rulesPerExtension).map((entry, index) => rule(entry, extensionId, `${label}.rules[${index}]`));
   const permissions = array(item.permissions, `${label}.permissions`, EXTENSION_CLIENT_LIMITS.permissionsPerExtension).map((entry, index) => permission(entry, extensionId, `${label}.permissions[${index}]`));
@@ -30795,7 +31090,7 @@ function extension(value, label) {
     aliases: idList$1(item.aliases, `${label}.aliases`, EXTENSION_ID),
     dependencies: idList$1(item.dependencies, `${label}.dependencies`, EXTENSION_ID),
     conflicts: idList$1(item.conflicts, `${label}.conflicts`, EXTENSION_ID),
-    delegated_protection: optionalString(item.delegated_protection, `${label}.delegated_protection`),
+    delegated_protection: optionalString$1(item.delegated_protection, `${label}.delegated_protection`),
     ecosystem_ids: stringList(item.ecosystem_ids, `${label}.ecosystem_ids`),
     executables: stringList(item.executables, `${label}.executables`),
     project_markers: stringList(item.project_markers, `${label}.project_markers`),
@@ -30814,11 +31109,11 @@ function normalizeExtensionCatalogItem(value, label = "extension") {
   return extension(value, label);
 }
 function normalizeExtensionPermission(value, label = "permission") {
-  return permission(value, id(record$1(value, label).extension_id, `${label}.extension_id`, EXTENSION_ID), label);
+  return permission(value, id(record$2(value, label).extension_id, `${label}.extension_id`, EXTENSION_ID), label);
 }
 function normalizeExtensionCatalogSummary(value, label = "summary") {
-  const item = record$1(value, label);
-  const defaults = record$1(item.catalog_defaults, `${label}.catalog_defaults`);
+  const item = record$2(value, label);
+  const defaults = record$2(item.catalog_defaults, `${label}.catalog_defaults`);
   const { surface } = mcpCatalogFields({ surface: item.surface }, label);
   return {
     extension_id: id(item.extension_id, `${label}.extension_id`, EXTENSION_ID),
@@ -30844,9 +31139,9 @@ function normalizeExtensionCatalogSummary(value, label = "summary") {
   };
 }
 function normalizeExtensionControlLayer(value, label = "layer") {
-  const item = record$1(value, label);
+  const item = record$2(value, label);
   const controls = array(item.controls, `${label}.controls`, EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$1(entry, `${label}.controls[${index}]`);
+    const raw = record$2(entry, `${label}.controls[${index}]`);
     const kind = enumValue(raw.target_kind, `${label}.controls[${index}].target_kind`, ["extension", "permission"]);
     return {
       target_kind: kind,
@@ -30865,11 +31160,11 @@ function normalizeExtensionControlLayer(value, label = "layer") {
   };
 }
 function normalizeExtensionCatalog(value) {
-  const root = record$1(value, "catalog");
+  const root = record$2(value, "catalog");
   const extensions = array(root.extensions, "catalog.extensions", EXTENSION_CLIENT_LIMITS.extensions).map((entry, index) => extension(entry, `catalog.extensions[${index}]`));
   const ids = extensions.map((entry) => entry.extension_id);
   if (new Set(ids).size !== ids.length) throw new ExtensionControlProtocolError("catalog.extensions contains duplicate extension IDs");
-  const limits = root.limits === void 0 ? void 0 : record$1(root.limits, "catalog.limits");
+  const limits = root.limits === void 0 ? void 0 : record$2(root.limits, "catalog.limits");
   return {
     schema_version: string$1(root.schema_version, "catalog.schema_version"),
     control_schema_version: root.control_schema_version === void 0 ? void 0 : string$1(root.control_schema_version, "catalog.control_schema_version"),
@@ -30883,10 +31178,10 @@ function normalizeExtensionCatalog(value) {
   };
 }
 function normalizeEffectiveExtensionControls(value) {
-  const root = record$1(value, "effective");
+  const root = record$2(value, "effective");
   const controls = array(root.controls, "effective.controls", EXTENSION_CLIENT_LIMITS.controls).map((entry, index) => {
-    const raw = record$1(entry, `effective.controls[${index}]`);
-    const target2 = record$1(raw.target, `effective.controls[${index}].target`);
+    const raw = record$2(entry, `effective.controls[${index}]`);
+    const target2 = record$2(raw.target, `effective.controls[${index}].target`);
     const kind = enumValue(target2.kind, `effective.controls[${index}].target.kind`, ["extension", "permission"]);
     return {
       target: {
@@ -30900,7 +31195,7 @@ function normalizeEffectiveExtensionControls(value) {
   if (new Set(keys).size !== keys.length) throw new ExtensionControlProtocolError("effective.controls contains duplicate targets");
   const layers = array(root.layers, "effective.layers", EXTENSION_CLIENT_LIMITS.layers).map((entry, index) => normalizeExtensionControlLayer(entry, `effective.layers[${index}]`));
   const failures = array(root.failures, "effective.failures", EXTENSION_CLIENT_LIMITS.failures).map((entry, index) => {
-    const raw = record$1(entry, `effective.failures[${index}]`);
+    const raw = record$2(entry, `effective.failures[${index}]`);
     return {
       code: string$1(raw.code, `effective.failures[${index}].code`),
       detail: raw.detail === void 0 ? void 0 : string$1(raw.detail, `effective.failures[${index}].detail`, true),
@@ -30908,8 +31203,8 @@ function normalizeEffectiveExtensionControls(value) {
     };
   });
   const managedControls = root.managed_controls === void 0 ? void 0 : (() => {
-    const managed = record$1(root.managed_controls, "effective.managed_controls");
-    const acknowledgement = record$1(
+    const managed = record$2(root.managed_controls, "effective.managed_controls");
+    const acknowledgement = record$2(
       managed.acknowledgement,
       "effective.managed_controls.acknowledgement"
     );
@@ -30968,7 +31263,7 @@ const MAX_CHANGED_TARGETS = 4096;
 const MAX_AFFECTED_IDS = 4096;
 const MAX_WARNINGS = 64;
 const MAX_TEXT = 8192;
-function record(value, label) {
+function record$1(value, label) {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error(`Invalid extension-control ${label}: expected object`);
   return value;
 }
@@ -31013,7 +31308,7 @@ function optionalStringList(value, label) {
   return items;
 }
 function warning(value, label) {
-  const item = record(value, label);
+  const item = record$1(value, label);
   return {
     code: string(item.code, `${label}.code`, 128),
     message: string(item.message, `${label}.message`, 1024),
@@ -31022,8 +31317,8 @@ function warning(value, label) {
   };
 }
 function target(value, label) {
-  const item = record(value, label);
-  const rawTarget = record(item.target, `${label}.target`);
+  const item = record$1(value, label);
+  const rawTarget = record$1(item.target, `${label}.target`);
   const kind = string(rawTarget.kind, `${label}.target.kind`, 32);
   if (kind !== "extension" && kind !== "permission") throw new Error(`Invalid extension-control ${label}.target.kind`);
   const beforeExplicit = string(item.before_explicit, `${label}.before_explicit`, 32);
@@ -31059,10 +31354,10 @@ function target(value, label) {
   };
 }
 function normalizeExtensionSemanticPreview(value) {
-  const root = record(value, "semantic preview");
+  const root = record$1(value, "semantic preview");
   if (string(root.schema_version, "semantic_preview.schema_version", 128) !== "guard.daemon.extension-control-semantic-preview.v1") throw new Error("Invalid extension-control semantic preview schema");
-  const lockdown = record(root.global_lockdown, "semantic_preview.global_lockdown");
-  const summary = record(root.summary, "semantic_preview.summary");
+  const lockdown = record$1(root.global_lockdown, "semantic_preview.global_lockdown");
+  const summary = record$1(root.summary, "semantic_preview.summary");
   const changedTargets = boundedArray(root.changed_targets, "semantic_preview.changed_targets", MAX_CHANGED_TARGETS).map((entry, index) => target(entry, `semantic_preview.changed_targets[${index}]`));
   const changedTargetCount = integer(root.changed_target_count, "semantic_preview.changed_target_count");
   if (changedTargetCount !== changedTargets.length) throw new Error("Invalid extension-control semantic preview target count");
@@ -31086,7 +31381,7 @@ function normalizeExtensionSemanticPreview(value) {
   };
 }
 function normalizeExtensionMutationPreview(value) {
-  const root = record(value, "mutation preview");
+  const root = record$1(value, "mutation preview");
   return {
     schema_version: string(root.schema_version, "preview.schema_version", 128),
     previous_revision: integer(root.previous_revision, "preview.previous_revision"),
@@ -31100,7 +31395,7 @@ function normalizeExtensionMutationPreview(value) {
   };
 }
 function normalizeExtensionMutationApply(value) {
-  const root = record(value, "mutation apply");
+  const root = record$1(value, "mutation apply");
   if (string(root.status, "apply.status", 32) !== "applied") throw new Error("Invalid extension-control apply status");
   return {
     schema_version: string(root.schema_version, "apply.schema_version", 128),
@@ -31412,7 +31707,8 @@ function ApprovalExtensionRecommendationCard(props) {
     [recommendation]
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange } = props;
+  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
+  const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
   const dialogActive = confirmOpen || busy;
   reactExports.useEffect(() => {
     onDialogActiveChange?.(dialogActive);
@@ -31436,18 +31732,19 @@ function ApprovalExtensionRecommendationCard(props) {
       setError(null);
       void (async () => {
         try {
+          const decisionPayload = buildDecisionPayload({
+            item,
+            action: "allow",
+            scope: allowScope,
+            reason: "approved in review; extension setting allowed",
+            persistExactAction
+          });
           const outcome = await approveWithExtensionAllow(
             {
               ...defaultExtensionAllowDeps,
               resolve: async (proof) => {
                 await onResolve({
-                  ...buildDecisionPayload({
-                    item,
-                    action: "allow",
-                    scope: allowScope,
-                    reason: "approved in review; extension setting allowed",
-                    persistExactAction: false
-                  }),
+                  ...decisionPayload,
                   ...approvalGateRequiredForResolution(approvalGate, "allow", allowScope) ? proof : {}
                 });
               }
@@ -31469,7 +31766,7 @@ function ApprovalExtensionRecommendationCard(props) {
         }
       })();
     },
-    [allowScope, approvalGate, copy, item, onApproved, onResolve, recommendation]
+    [allowScope, approvalGate, copy, item, onApproved, onResolve, recommendation, persistExactAction]
   );
   if (!recommendation || !copy || !primary) return null;
   const caution = recommendation.caution;
@@ -31492,10 +31789,11 @@ function ApprovalExtensionRecommendationCard(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/80", children: copy.body }),
             copy.cautionLines.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1", "aria-label": "Before you allow this", children: copy.cautionLines.map((line) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { className: "text-sm font-medium text-brand-attention", children: line }, line)) }),
             authorityUnavailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Protection settings need attention before Guard can change them from here." }),
+            !resolutionAvailable && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-dark/80", children: "Inspect this permission in Extensions. Approving this request once is unavailable." }),
             savedMessage && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-green-text", role: "status", children: savedMessage }),
             error && !confirmOpen && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm text-brand-purple", role: "alert", children: error }),
             /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-2", children: [
-              !authorityUnavailable && savedMessage === null && gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(
+              resolutionAvailable && !authorityUnavailable && savedMessage === null && gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(
                 ActionButton,
                 {
                   variant: caution ? "outline" : "primary",
@@ -31504,7 +31802,7 @@ function ApprovalExtensionRecommendationCard(props) {
                   children: copy.primaryLabel
                 }
               ),
-              !authorityUnavailable && savedMessage === null && !gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval password" }),
+              resolutionAvailable && !authorityUnavailable && savedMessage === null && !gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval password" }),
               /* @__PURE__ */ jsxRuntimeExports.jsxs(
                 "button",
                 {
@@ -31602,6 +31900,7 @@ function useReviewDecisionResolve(params) {
     availableScopeChoices,
     blockScopeOptions,
     hasAllowScope,
+    canSubmitAllow,
     watchOnlyObservation,
     rememberExactAction,
     extensionDialogActive,
@@ -31643,6 +31942,10 @@ function useReviewDecisionResolve(params) {
   const handleResolve = reactExports.useCallback(
     async (action, gateOverride) => {
       if (!item || resolutionBlockReason !== null) return;
+      if (action === "allow" && !canSubmitAllow) {
+        setErrorMessage(hasAllowScope ? "Choose 'Always allow exact action' before approving; run once is unavailable." : "This action has no eligible approval scope.");
+        return;
+      }
       const requestId = item.request_id;
       const requestedScope = action === "allow" ? allowScope : blockScope;
       const gate = gateOverride ?? approvalGate;
@@ -31723,7 +32026,9 @@ function useReviewDecisionResolve(params) {
       approvalPassword,
       approvalTotpCode,
       cooldownOptOut,
-      resolutionBlockReason
+      resolutionBlockReason,
+      canSubmitAllow,
+      hasAllowScope
     ]
   );
   const handleRequestResolve = reactExports.useCallback(
@@ -31731,6 +32036,10 @@ function useReviewDecisionResolve(params) {
       if (resolutionBlockReason !== null || decisionBusy) return;
       if (action === "allow" && !hasAllowScope) {
         setErrorMessage("This action has no eligible approval scope.");
+        return;
+      }
+      if (action === "allow" && !canSubmitAllow) {
+        setErrorMessage("Choose 'Always allow exact action' before approving; run once is unavailable.");
         return;
       }
       if (action === "block" && blockScopeOptions.length === 0) {
@@ -31806,6 +32115,7 @@ function useReviewDecisionResolve(params) {
       decisionContractKey,
       handleResolve,
       hasAllowScope,
+      canSubmitAllow,
       isStillShown,
       item,
       approvalGate,
@@ -31945,6 +32255,7 @@ function ReviewDecisionCard(props) {
   const taskCapabilityCopy = item ? taskCapabilityExplanation(item) : null;
   const watchOnlyObservation = item !== null && isWatchOnlyObservation(item);
   const hasAllowScope = availableScopeChoices.length + advancedScopeOptions.length > 0;
+  const canSubmitAllow = hasAllowScope && (item === null || !retryCannotReuseApproval(item) || allowScope === "artifact" && rememberExactAction && item.exact_action_persistence_eligible === true);
   const decisionContractKey = item ? approvalDecisionContractKey(item) : null;
   const decisionSubjectKey = item ? approvalDecisionSubjectKey(item) : null;
   reactExports.useEffect(() => {
@@ -31995,6 +32306,7 @@ function ReviewDecisionCard(props) {
     availableScopeChoices,
     blockScopeOptions,
     hasAllowScope,
+    canSubmitAllow,
     watchOnlyObservation,
     rememberExactAction,
     extensionDialogActive,
@@ -32058,6 +32370,8 @@ function ReviewDecisionCard(props) {
     resolvedAllowButtonLabel = "Keep allowing";
   } else if (persistExactAllow) {
     resolvedAllowButtonLabel = "Approve and remember";
+  } else if (retryCannotReuseApproval(item)) {
+    resolvedAllowButtonLabel = "Choose an available approval duration";
   }
   let resolvedBlockButtonLabel = blockButtonLabel(blockScope);
   if (watchOnlyObservation || persistExactBlock) {
@@ -32143,7 +32457,8 @@ function ReviewDecisionCard(props) {
           item,
           approvalGate,
           allowScope,
-          disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
+          persistExactAction: persistExactAllow,
+          disabled: !canSubmitAllow || submitting !== null || pendingAction !== null,
           onResolve: props.onResolve,
           onApproved: handleExtensionApproved,
           onDialogActiveChange: setExtensionDialogActive
@@ -32186,13 +32501,13 @@ function ReviewDecisionCard(props) {
         ] })
       ] }) }),
       resolutionBlockReason === null && resolved === null && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
+        hasAllowScope && /* @__PURE__ */ jsxRuntimeExports.jsx(
           ActionButton,
           {
             ref: allowButtonRef,
             variant: "success",
             onClick: handleAllow,
-            disabled: !hasAllowScope || submitting !== null || pendingAction !== null,
+            disabled: !canSubmitAllow || submitting !== null || pendingAction !== null,
             children: submitting === "allow" ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "flex items-center gap-2", children: [
               /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowPath, { className: "h-4 w-4 animate-spin", "aria-hidden": "true" }),
               "Approving..."
@@ -32528,6 +32843,8 @@ const ReviewQueueList = reactExports.forwardRef(({
   searchTerm,
   sortDirection,
   semanticFilter,
+  setupFilter = false,
+  setupGroupCount = 0,
   dateFrom,
   dateTo,
   page,
@@ -32536,6 +32853,7 @@ const ReviewQueueList = reactExports.forwardRef(({
   onSearchTermChange,
   onSortDirectionChange,
   onSemanticFilterChange,
+  onSetupFilterChange,
   onDateFromChange,
   onDateToChange,
   onPageChange,
@@ -32571,6 +32889,7 @@ const ReviewQueueList = reactExports.forwardRef(({
     onCategoryFilterChange("all");
     onSortDirectionChange("newest");
     onSemanticFilterChange("all");
+    onSetupFilterChange?.(false);
     onDateFromChange("");
     onDateToChange("");
   }, [
@@ -32579,8 +32898,12 @@ const ReviewQueueList = reactExports.forwardRef(({
     onDateToChange,
     onSearchTermChange,
     onSemanticFilterChange,
+    onSetupFilterChange,
     onSortDirectionChange
   ]);
+  const handleToggleSetupFilter = reactExports.useCallback(() => {
+    onSetupFilterChange?.(!setupFilter);
+  }, [onSetupFilterChange, setupFilter]);
   const handlePreviousPage = reactExports.useCallback(() => {
     onPageChange(Math.max(1, page - 1));
   }, [page, onPageChange]);
@@ -32595,7 +32918,7 @@ const ReviewQueueList = reactExports.forwardRef(({
     }
     return REVIEW_SEMANTIC_GROUPS.filter((g) => g.id === "all" || available.has(g.id));
   }, [allFilteredRequests]);
-  const isFiltered = searchTerm || semanticFilter !== "all" || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
+  const isFiltered = searchTerm || semanticFilter !== "all" || setupFilter || categoryFilter !== "all" || sortDirection !== "newest" || dateFrom || dateTo;
   const showPagination = filteredCount > QUEUE_PAGE_SIZE$1;
   const pageSelectableItems = reactExports.useMemo(
     () => requests.filter((item) => isBulkSelectable?.(item) === true),
@@ -32658,18 +32981,41 @@ const ReviewQueueList = reactExports.forwardRef(({
           }
         )
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(
-        "button",
-        {
-          type: "button",
-          onClick: handleToggleFilters,
-          className: "flex min-h-11 min-w-11 items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
-          children: [
-            showFilters ? "Hide filters" : "Show filters",
-            isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
-          ]
-        }
-      ),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleToggleFilters,
+            className: "flex min-h-11 min-w-11 items-center gap-1 text-xs font-medium text-brand-blue hover:text-brand-dark transition-colors",
+            children: [
+              showFilters ? "Hide filters" : "Show filters",
+              isFiltered && !showFilters && /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "ml-1 h-1.5 w-1.5 rounded-full bg-brand-attention" })
+            ]
+          }
+        ),
+        (setupGroupCount > 0 || setupFilter) && onSetupFilterChange && /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleToggleSetupFilter,
+            "aria-pressed": setupFilter,
+            "data-testid": "needs-setup-filter",
+            className: `inline-flex min-h-11 items-center gap-1.5 rounded-full px-3 text-[11px] font-medium transition-all ${setupFilter ? "bg-brand-blue text-white" : "border border-slate-200 bg-white text-brand-dark hover:bg-slate-50"}`,
+            children: [
+              GUARD_REVIEW_INTENT_COPY.setup.label,
+              /* @__PURE__ */ jsxRuntimeExports.jsx(
+                "span",
+                {
+                  "aria-label": `${setupGroupCount} ${setupGroupCount === 1 ? "tool" : "tools"}`,
+                  className: `rounded-full px-1.5 font-mono text-[10px] font-semibold ${setupFilter ? "bg-white/20 text-white" : "bg-brand-blue/10 text-brand-blue"}`,
+                  children: setupGroupCount
+                }
+              )
+            ]
+          }
+        )
+      ] }),
       showFilters && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-1", children: visibleGroups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
           SemanticFilterButton,
@@ -32830,6 +33176,1246 @@ function SemanticFilterButton(props) {
     }
   );
 }
+const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+function isRecord(value) {
+  return typeof value === "object" && value !== null;
+}
+function requiredString(value, field) {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Invalid local CLI ${field}`);
+  return value.trim();
+}
+function requiredInt(value, field) {
+  if (typeof value !== "number" || !Number.isInteger(value)) throw new Error(`Invalid local CLI ${field}`);
+  return value;
+}
+function optionalString(value) {
+  if (value === null || value === void 0) return null;
+  if (typeof value !== "string") throw new Error("Invalid local CLI string");
+  return value;
+}
+function isLocalCliId(value) {
+  return CLI_ID_PATTERN.test(value);
+}
+async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
+  const normalize = (body) => {
+    if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
+      throw new Error("Invalid discovery progress");
+    }
+    return body;
+  };
+  const request2 = async (payload) => {
+    const body = await readJson2(await fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }));
+    const next = normalize(body);
+    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
+    return next;
+  };
+  let job = normalize(initialJob);
+  let finished = false;
+  try {
+    for (let poll = 0; poll < 120; poll += 1) {
+      if (signal.aborted) return;
+      if (job.state === "complete" || job.state === "cancelled") {
+        finished = true;
+        return;
+      }
+      if (job.state === "failed") {
+        finished = true;
+        let message;
+        switch (job.error) {
+          case "mcp_refresh_unavailable":
+            message = "Guard cannot list this connection directly. Refresh it in its host app.";
+            break;
+          case "mcp_launch_failed":
+            message = "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_transport_failed":
+            message = "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.";
+            break;
+          case "mcp_initialize_failed":
+            message = "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.";
+            break;
+          case "mcp_protocol_unsupported":
+            message = "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.";
+            break;
+          case "mcp_capability_rejected":
+            message = "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept.";
+            break;
+          case "catalog_revision_conflict":
+            message = "A newer discovery finished first. Reload the inventory.";
+            break;
+          case "configured_host_scan_failed":
+            message = "Guard could not read the host's configured connections. Check the host app and retry.";
+            break;
+          case "observed_provider_scan_failed":
+            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
+            break;
+          case "catalog_limit_reached":
+            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
+            break;
+          default:
+            console.warn("Unknown discovery error code:", job.error);
+            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
+        }
+        throw new Error(message);
+      }
+      await new Promise((resolve) => {
+        const done = () => {
+          window.clearTimeout(timer);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        const timer = window.setTimeout(done, 500);
+        signal.addEventListener("abort", done, { once: true });
+      });
+      if (!signal.aborted) job = await request2({ job_id: job.job_id });
+    }
+    throw new Error("Discovery took too long. Known tools and choices were kept.");
+  } finally {
+    if (!finished) await request2({ job_id: job.job_id, cancel: true });
+  }
+}
+function record(value) {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function hostMetadataText(value, maximum) {
+  if (typeof value !== "string" || !value.trim() || [...value].length > maximum || value.includes("\0")) {
+    throw new Error("Invalid host metadata");
+  }
+  return value;
+}
+function optionalText(value, maximum) {
+  return value === null || value === void 0 ? null : hostMetadataText(value, maximum);
+}
+function normalizeCodexHostInventory(value) {
+  if (!record(value) || value.host !== "Codex" || value.catalog_coverage !== "host-summary" || value.account_verified !== false || value.schemas_available !== false || value.permissions_granted !== false || value.snapshot_age !== "unknown" || typeof value.metadata_complete !== "boolean" || typeof value.expires_at_ms !== "number" || !Number.isSafeInteger(value.expires_at_ms) || value.expires_at_ms <= 0 || typeof value.connection_id !== "string" || !/^[a-f0-9]{64}$/.test(value.connection_id) || !Array.isArray(value.apps) || value.apps.length > 1e3) return void 0;
+  try {
+    const appIds = /* @__PURE__ */ new Set();
+    let totalTools = 0;
+    const apps = value.apps.map((entry) => {
+      if (!record(entry) || typeof entry.enabled !== "boolean" || typeof entry.callable !== "boolean" || typeof entry.metadata_available !== "boolean" || !Array.isArray(entry.tools)) {
+        throw new Error("Invalid host app");
+      }
+      const appId = hostMetadataText(entry.app_id, 256);
+      if (appIds.has(appId)) throw new Error("Duplicate host app");
+      appIds.add(appId);
+      totalTools += entry.tools.length;
+      if (totalTools > 1e4) throw new Error("Host summary limit");
+      const names = /* @__PURE__ */ new Set();
+      const tools = entry.tools.map((tool) => {
+        if (!record(tool)) throw new Error("Invalid host tool");
+        const name = hostMetadataText(tool.name, 256);
+        if (names.has(name)) throw new Error("Duplicate host tool");
+        names.add(name);
+        return { name, title: optionalText(tool.title, 512), description: optionalText(tool.description, 4e3) };
+      });
+      return {
+        app_id: appId,
+        name: hostMetadataText(entry.name, 256),
+        enabled: entry.enabled,
+        callable: entry.callable,
+        metadata_available: entry.metadata_available,
+        tools
+      };
+    });
+    return {
+      host: "Codex",
+      connection_id: value.connection_id,
+      catalog_coverage: "host-summary",
+      account_verified: false,
+      schemas_available: false,
+      permissions_granted: false,
+      snapshot_age: "unknown",
+      metadata_complete: value.metadata_complete,
+      expires_at_ms: value.expires_at_ms,
+      apps
+    };
+  } catch {
+    return void 0;
+  }
+}
+function filterCodexHostApps(apps, query) {
+  const search = query.trim().toLocaleLowerCase();
+  if (!search) return apps;
+  return apps.flatMap((app) => {
+    if (`${app.name} ${app.app_id}`.toLocaleLowerCase().includes(search)) return [app];
+    const tools = app.tools.filter((tool) => `${tool.name} ${tool.title ?? ""} ${tool.description ?? ""}`.toLocaleLowerCase().includes(search));
+    return tools.length ? [{ ...app, tools }] : [];
+  });
+}
+const BRAND_PATTERN = /^[a-z0-9-]{1,40}$/;
+const PROFILE_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+function normalizeProfileFields(value) {
+  const result = {};
+  if (typeof value.profile_id === "string" && PROFILE_ID_PATTERN.test(value.profile_id)) {
+    result.profile_id = value.profile_id;
+  }
+  if (typeof value.brand === "string" && BRAND_PATTERN.test(value.brand)) result.brand = value.brand;
+  if (typeof value.display_name === "string") {
+    const name = value.display_name.trim().slice(0, 120);
+    if (name) result.display_name = name;
+  }
+  if (typeof value.seeded === "boolean") result.seeded = value.seeded;
+  if (typeof value.installed === "boolean") result.installed = value.installed;
+  return result;
+}
+function normalizeSuggestedState(value) {
+  return value === "inherit" || value === "allow" || value === "review" || value === "block" ? { suggested_state: value } : {};
+}
+const LOCAL_CLI_CAPABILITIES = ["loopback-network", "state-dir-read", "state-dir-write"];
+function isLocalCliCapability(value) {
+  return typeof value === "string" && LOCAL_CLI_CAPABILITIES.includes(value);
+}
+function normalizeCapabilityFields(value) {
+  const result = {};
+  const raw = value.capabilities;
+  if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+    const states = raw;
+    if (LOCAL_CLI_CAPABILITIES.some((name) => name in states)) {
+      result.capabilities = Object.fromEntries(
+        LOCAL_CLI_CAPABILITIES.map((name) => [name, states[name] === "on" ? "on" : "off"])
+      );
+    }
+  }
+  if (isLocalCliCapability(value.suggested_capability) && result.capabilities?.[value.suggested_capability] !== "on") {
+    result.suggested_capability = value.suggested_capability;
+  }
+  return result;
+}
+function normalizeMcpClassification(value) {
+  if (!isRecord(value) || value.schema_version !== "guard.mcp-classification.v1" || value.advisory_only !== true || !["reviewed-mapping", "limited"].includes(String(value.confidence))) return void 0;
+  const labels = [value.effect, value.data, value.destination, value.reversibility];
+  if (!labels.every((label) => typeof label === "string" && /^[a-z-]{1,40}$/.test(label))) return void 0;
+  const codes = (list) => Array.isArray(list) && list.length <= 16 && list.every((code) => typeof code === "string" && /^[a-z0-9:-]{1,80}$/.test(code));
+  if (!codes(value.evidence) || !codes(value.warnings)) return void 0;
+  return {
+    effect: value.effect,
+    data: value.data,
+    destination: value.destination,
+    reversibility: value.reversibility,
+    confidence: value.confidence,
+    evidence: value.evidence,
+    warnings: value.warnings
+  };
+}
+function normalizeLocalCliItem(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI item");
+  const cliId = requiredString(value.cli_id, "id");
+  if (!isLocalCliId(cliId)) throw new Error("Invalid local CLI id");
+  const identityHash = requiredString(value.identity_hash, "identity");
+  if (!SHA256_PATTERN.test(identityHash)) throw new Error("Invalid local CLI identity");
+  const kind = value.kind;
+  if (kind !== "executable" && kind !== "script") throw new Error("Invalid local CLI kind");
+  const state = value.state;
+  if (state !== "unset" && state !== "allowed" && state !== "blocked") throw new Error("Invalid local CLI state");
+  const catalog = normalizeMcpCatalog(value.mcp_catalog);
+  const providerCatalog = normalizeProviderCatalog(value.provider_catalog);
+  return {
+    cli_id: cliId,
+    name: requiredString(value.name, "name").slice(0, 120),
+    kind,
+    identity_hash: identityHash,
+    example_label: requiredString(value.example_label, "example").slice(0, 160),
+    interpreter_name: optionalString(value.interpreter_name),
+    observed_count: requiredInt(value.observed_count, "count"),
+    last_seen_at: optionalString(value.last_seen_at),
+    source_path: optionalString(value.source_path),
+    help_status: normalizeHelpStatus(value.help_status),
+    surface: normalizeSurface(value.surface),
+    server_identity_hash: normalizeIdentityHash(value.server_identity_hash),
+    source_label: optionalSourceLabel(value.source_label),
+    state,
+    stale: value.stale === true,
+    grant_revision: value.grant_revision === null || value.grant_revision === void 0 ? null : requiredInt(value.grant_revision, "grant revision"),
+    authority_revision: requiredInt(value.authority_revision, "revision"),
+    suggestable: value.suggestable === true,
+    suggestion_score: optionalScore(value.suggestion_score),
+    commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
+    continuity: normalizeContinuity(value.continuity),
+    ...value.shares_enrolled_server === true ? { shares_enrolled_server: true } : {},
+    ...catalog ? { mcp_catalog: catalog } : {},
+    ...providerCatalog ? { provider_catalog: providerCatalog } : {},
+    ...["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope)) ? { permission_scope: value.permission_scope } : {},
+    ...typeof value.remote_origin === "string" && value.remote_origin.length <= 512 && /^https?:\/\/[^\s?#@]+$/.test(value.remote_origin) ? { remote_origin: value.remote_origin } : {},
+    ...normalizeProfileFields(value),
+    ...normalizeCapabilityFields(value)
+  };
+}
+function normalizeMcpCatalog(value) {
+  if (!isRecord(value) || typeof value.complete !== "boolean" || typeof value.stale !== "boolean") return null;
+  const count = (candidate) => typeof candidate === "number" && Number.isSafeInteger(candidate) && candidate >= 0 && candidate <= 1e4;
+  if (!count(value.pages) || !count(value.listed_count) || !count(value.known_count)) return null;
+  if (value.listed_count > value.known_count) return null;
+  if (typeof value.revision !== "number" || !Number.isSafeInteger(value.revision) || value.revision < 1) return null;
+  if (typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return null;
+  const reason = typeof value.reason === "string" ? value.reason.slice(0, 80) : null;
+  if (value.complete && reason !== null) return null;
+  const changes = normalizeMcpCatalogChanges(value.changes);
+  const skills = value.skills_catalog;
+  const skillsCatalog = isRecord(skills) && typeof skills.declared === "boolean" && typeof skills.complete === "boolean" && typeof skills.stale === "boolean" && count(skills.known_count) && skills.known_count <= 1e3 && skills.activation_supported === false ? {
+    declared: skills.declared,
+    complete: skills.complete,
+    stale: skills.stale,
+    known_count: skills.known_count,
+    reason: typeof skills.reason === "string" ? skills.reason.slice(0, 80) : null
+  } : void 0;
+  return {
+    complete: value.complete,
+    stale: value.stale,
+    reason,
+    pages: value.pages,
+    listed_count: value.listed_count,
+    known_count: value.known_count,
+    protocol_version: typeof value.protocol_version === "string" ? value.protocol_version.slice(0, 40) : null,
+    revision: value.revision,
+    updated_at: value.updated_at.slice(0, 64),
+    last_complete_at: typeof value.last_complete_at === "string" && Number.isFinite(Date.parse(value.last_complete_at)) ? value.last_complete_at.slice(0, 64) : null,
+    ...changes ? { changes } : {},
+    ...skillsCatalog ? { skills_catalog: skillsCatalog } : {},
+    ...typeof value.fresh_until === "string" && Number.isFinite(Date.parse(value.fresh_until)) ? { fresh_until: value.fresh_until } : {},
+    ...value.cache_scope === "private" || value.cache_scope === "public" ? { cache_scope: value.cache_scope } : {}
+  };
+}
+function normalizeProviderCatalog(value) {
+  if (!isRecord(value) || value.provider !== "composio" || value.coverage !== "discovery-subset" || value.account_binding !== "unverified" || typeof value.known_count !== "number" || !Number.isSafeInteger(value.known_count) || value.known_count < 1 || value.known_count > 1e4 || typeof value.full_schema_count !== "number" || !Number.isSafeInteger(value.full_schema_count) || value.full_schema_count < 0 || value.full_schema_count > value.known_count || typeof value.updated_at !== "string" || !Number.isFinite(Date.parse(value.updated_at))) return void 0;
+  return {
+    provider: "composio",
+    known_count: value.known_count,
+    full_schema_count: value.full_schema_count,
+    updated_at: value.updated_at.slice(0, 64),
+    coverage: "discovery-subset",
+    account_binding: "unverified"
+  };
+}
+function normalizeMcpCatalogChanges(value) {
+  if (!isRecord(value)) return void 0;
+  const result = { added: [], changed: [], removed: [], stale: [] };
+  for (const key of ["added", "changed", "removed", "stale"]) {
+    const names = value[key];
+    if (!Array.isArray(names) || names.length > 1e4 || !names.every(
+      (name) => typeof name === "string" && name.length > 0 && name.length <= 256 && name.trim() === name
+    )) return void 0;
+    result[key] = [...new Set(names)];
+  }
+  return result;
+}
+function normalizeContinuity(value) {
+  if (!isRecord(value)) return null;
+  const status = value.status;
+  if (status !== "applied" && status !== "pending_observation" && status !== "changed_identity" && status !== "locally_overridden" && status !== "removed" && status !== "stale") return null;
+  return {
+    status,
+    reason: typeof value.reason === "string" ? value.reason : "",
+    cloud_revision: typeof value.cloud_revision === "number" && Number.isInteger(value.cloud_revision) ? value.cloud_revision : null,
+    surface: value.surface === "cli" || value.surface === "mcp" || value.surface === "package-scripts" ? value.surface : null
+  };
+}
+function normalizeSurface(value) {
+  if (value === "mcp") return "mcp";
+  if (value === "package-scripts") return "package-scripts";
+  return "cli";
+}
+function normalizeHelpStatus(value) {
+  if (value === "ok" || value === "empty" || value === "failed") return value;
+  return null;
+}
+function normalizeIdentityHash(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string" || !SHA256_PATTERN.test(value)) return null;
+  return value;
+}
+function optionalScore(value) {
+  if (value === null || value === void 0) return 0;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw new Error("Invalid local CLI suggestion score");
+  }
+  return value;
+}
+function optionalSourceLabel(value) {
+  if (value === null || value === void 0 || value === "") return null;
+  if (typeof value !== "string") return null;
+  return value.trim().slice(0, 120) || null;
+}
+function normalizeLocalCliCommand(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI command");
+  const state = value.state;
+  if (state !== "inherit" && state !== "allow" && state !== "review" && state !== "block") {
+    throw new Error("Invalid local CLI command state");
+  }
+  const parent = value.parent_id;
+  if (parent !== null && parent !== void 0 && typeof parent !== "string") {
+    throw new Error("Invalid local CLI command parent");
+  }
+  return {
+    command_id: requiredString(value.command_id, "command").slice(0, 80),
+    name: requiredString(value.name, "command name").slice(0, 120),
+    usage: requiredString(value.usage, "command usage").slice(0, 160),
+    description: typeof value.description === "string" ? value.description.slice(0, 240) : "",
+    parent_id: typeof parent === "string" && parent.trim() ? parent : null,
+    state,
+    classification: normalizeMcpClassification(value.classification),
+    ...normalizeSuggestedState(value.suggested_state)
+  };
+}
+function normalizeLocalCliList(value) {
+  if (!isRecord(value)) throw new Error("Invalid local CLI list");
+  const cloud = isRecord(value.cloud) ? value.cloud : {};
+  const items = Array.isArray(value.items) ? value.items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }) : [];
+  const seededItems = Array.isArray(value.seeded_items) ? value.seeded_items.flatMap((entry) => {
+    try {
+      return [normalizeLocalCliItem(entry)];
+    } catch {
+      return [];
+    }
+  }).filter((item) => item.seeded === true) : [];
+  const revision = requiredInt(value.revision, "revision");
+  const publication = value.native_publication;
+  const discoveryIssue = value.discovery_issue;
+  const hostInventory = normalizeCodexHostInventory(value.host_inventory);
+  let nativePublication;
+  if (isRecord(publication) && publication.revision === revision && (publication.state === "pending" || publication.state === "failed" || publication.state === "unavailable")) {
+    nativePublication = { state: publication.state, revision };
+  } else if (isRecord(publication) && publication.state === "acknowledged" && publication.revision === revision && typeof publication.generation === "number" && Number.isSafeInteger(publication.generation) && publication.generation > 0 && typeof publication.policy_digest === "string" && /^[a-f0-9]{64}$/.test(publication.policy_digest)) {
+    nativePublication = { state: "acknowledged", revision, generation: publication.generation };
+  }
+  return {
+    schema_version: requiredString(value.schema_version, "schema"),
+    revision,
+    ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
+    ...nativePublication ? { native_publication: nativePublication } : {},
+    ...hostInventory ? { host_inventory: hostInventory } : {},
+    items,
+    seeded_items: seededItems,
+    cloud: {
+      sync_local_only: cloud.sync_local_only !== false,
+      continuity_enabled: cloud.continuity_enabled === true,
+      summary: typeof cloud.summary === "string" ? cloud.summary : "Custom Extensions remain local to this device until portable continuity is enabled."
+    }
+  };
+}
+async function startCancelableDiscoveryJob(signal, start) {
+  if (signal.aborted) return null;
+  const clientJobId = globalThis.crypto.randomUUID().replaceAll("-", "");
+  let cancelSent = false;
+  const cancel = () => {
+    if (cancelSent) return;
+    cancelSent = true;
+    void fetchLocalCliApi("/v1/local-clis/refresh-job", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: clientJobId, cancel: true })
+    }).catch(() => void 0);
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    const result = await start(clientJobId);
+    return signal.aborted ? null : result;
+  } catch (error) {
+    if (signal.aborted) return null;
+    throw error;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (signal.aborted) cancel();
+  }
+}
+class LocalCliApiError extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+function customExtensionNeedsReview(item) {
+  return item.stale || item.state === "unset" || item.mcp_catalog?.stale || item.mcp_catalog?.complete === false || Boolean(item.mcp_catalog?.changes?.added.length) || Boolean(item.mcp_catalog?.changes?.changed.length);
+}
+function connectorWorkspaceItems(items, query = "", seeded = []) {
+  const needle = query.trim().toLowerCase();
+  const known = new Set(items.map((item) => item.cli_id));
+  const seededRows = seeded.filter((item) => item.seeded === true && !known.has(item.cli_id));
+  return [...items, ...seededRows].filter((item) => item.state !== "unset" || item.suggestable && (item.surface === "mcp" || item.surface === "cli") || item.seeded === true).filter((item) => !needle || [
+    item.name,
+    item.display_name,
+    item.source_label,
+    item.surface,
+    ...item.commands.flatMap((command) => [command.name, command.usage, command.description])
+  ].some((value) => value?.toLowerCase().includes(needle))).sort((a, b) => Number(customExtensionNeedsReview(b)) - Number(customExtensionNeedsReview(a)) || (Date.parse(b.last_seen_at ?? "") || 0) - (Date.parse(a.last_seen_at ?? "") || 0) || a.name.localeCompare(b.name) || a.cli_id.localeCompare(b.cli_id));
+}
+function suggestedCustomExtensions(items) {
+  return items.filter((item) => item.state === "unset" && item.suggestable);
+}
+function suggestedHarnessExtensions(items) {
+  return suggestedCustomExtensions(items).filter((item) => item.source_label !== null);
+}
+function suggestedSeenExtensions(items) {
+  return suggestedCustomExtensions(items).filter((item) => item.source_label === null && item.surface !== "package-scripts").slice().sort(compareSeenSuggestions);
+}
+function suggestedPackageScriptExtensions(items) {
+  return suggestedCustomExtensions(items).filter((item) => item.surface === "package-scripts").slice().sort(compareSeenSuggestions);
+}
+function looksLikePackageScriptPaste(value) {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (/(^|\/)package\.json$/i.test(trimmed)) return true;
+  if (!trimmed.includes(" ") && (trimmed.includes("/") || trimmed.includes("\\") || trimmed === ".")) {
+    return true;
+  }
+  const manager = /^(npm|pnpm|yarn|bun)(?:\.cmd)?\b/i.exec(trimmed);
+  if (manager === null) return false;
+  if (/\b(run|run-script|start|test|stop|restart)\b/i.test(trimmed)) return true;
+  return /^yarn\s+\S+/i.test(trimmed);
+}
+function filterExtensionSuggestions(items, query) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [...items];
+  return items.filter((item) => suggestionMatchesQuery(item, needle));
+}
+function preferredPackageScriptExtension(items) {
+  return suggestedPackageScriptExtensions(items).find((item) => item.commands.length > 0) ?? null;
+}
+function looksLikeProjectRelocatePaste(value) {
+  const trimmed = unwrapPathPaste(value);
+  if (!trimmed) return false;
+  if (/(^|[\\/])package\.json$/i.test(trimmed)) return true;
+  if (/\s(--prefix|-C|--dir|--cwd|--workspace-dir)(=|\s)/i.test(trimmed)) return true;
+  if (/^[A-Za-z]:[\\/]/.test(trimmed) || trimmed.startsWith("/") || trimmed.startsWith("~/") || trimmed === ".") {
+    return true;
+  }
+  return !trimmed.includes(" ") && (trimmed.includes("/") || trimmed.includes("\\"));
+}
+function keepsPackageScriptCatalog(query, commands) {
+  const trimmed = query.trim();
+  if (!trimmed) return true;
+  if (looksLikeProjectRelocatePaste(trimmed)) return false;
+  if (looksLikePackageScriptPaste(trimmed)) return true;
+  const needle = packageScriptFilterNeedle(trimmed) || trimmed.toLowerCase();
+  return commands.some((command) => commandMatchesQuery(command, needle));
+}
+function commandMatchesQuery(command, needle) {
+  const haystacks = [command.name, command.usage, command.description];
+  if (haystacks.some((value) => value.toLowerCase().includes(needle))) return true;
+  return colonPartsMatch(command.name, needle);
+}
+function enrollablePackageScriptCommands(commands) {
+  return commands.filter((command) => command.command_id !== "root" && command.command_id !== "other");
+}
+function enrollmentCommandStates(commands, pending, surface) {
+  if (surface !== "package-scripts") return commandStatesFrom(commands);
+  return commands.map((command) => ({
+    command_id: command.command_id,
+    state: packageScriptEnrollmentState(command, pending)
+  }));
+}
+function bulkCommandState(commands) {
+  if (commands.length === 0) return "inherit";
+  const first = commands[0].state;
+  return commands.every((command) => command.state === first) ? first : "mixed";
+}
+function commandStatesFrom(commands) {
+  return commands.map((command) => ({ command_id: command.command_id, state: command.state }));
+}
+function packageScriptEnrollmentState(command, pending) {
+  if (command.command_id === "root" || command.command_id === "other") return command.state;
+  if (pending === "blocked") return "block";
+  if (command.state === "block") return "block";
+  if (pending === "allowed") return "allow";
+  return command.state;
+}
+function colonPartsMatch(name, needle) {
+  const queryParts = needle.split(":").map((part) => part.trim()).filter(Boolean);
+  if (queryParts.length < 2) return false;
+  const nameParts = name.toLowerCase().split(":");
+  let index = 0;
+  for (const part of nameParts) {
+    if (index < queryParts.length && part.includes(queryParts[index])) index += 1;
+  }
+  return index === queryParts.length;
+}
+function packageScriptFilterNeedle(query) {
+  const trimmed = query.trim().toLowerCase();
+  if (!trimmed) return "";
+  return trimmed.replace(/^(npm|pnpm|yarn|bun)(?:\.cmd)?(?:\s+run(?:-script)?)?\s*/, "").trim();
+}
+function unwrapPathPaste(value) {
+  const trimmed = value.trim();
+  if (trimmed.startsWith("'") && trimmed.endsWith("'") || trimmed.startsWith('"') && trimmed.endsWith('"')) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+function seenSuggestionMeta(item) {
+  if (item.observed_count <= 0) {
+    return item.kind === "script" ? "Script" : "Tool";
+  }
+  if (item.observed_count === 1) return "Seen once";
+  return `Seen ${item.observed_count} times`;
+}
+function compareSeenSuggestions(left, right) {
+  if (right.suggestion_score !== left.suggestion_score) {
+    return right.suggestion_score - left.suggestion_score;
+  }
+  if (right.observed_count !== left.observed_count) {
+    return right.observed_count - left.observed_count;
+  }
+  const recency = (right.last_seen_at ?? "").localeCompare(left.last_seen_at ?? "");
+  if (recency !== 0) return recency;
+  return left.name.localeCompare(right.name);
+}
+function suggestionMatchesQuery(item, needle) {
+  const compact = packageScriptFilterNeedle(needle) || needle;
+  const haystacks = [item.name, item.example_label, item.source_label ?? ""];
+  if (haystacks.some((value) => value.toLowerCase().includes(needle) || value.toLowerCase().includes(compact))) {
+    return true;
+  }
+  if (item.surface !== "package-scripts") return false;
+  return item.commands.some((command) => commandMatchesQuery(command, compact));
+}
+async function readJson(response) {
+  const payload = await response.json().catch(() => null);
+  if (!response.ok) {
+    const record2 = isRecord(payload) ? payload : {};
+    const code = typeof record2.error === "string" ? record2.error : "local_cli_request_failed";
+    const message = typeof record2.message === "string" && record2.message.trim() ? record2.message : response.status === 401 ? "Guard could not confirm this dashboard session. Reload this page, then try again." : "Guard could not update this custom extension.";
+    throw new LocalCliApiError(code, message);
+  }
+  if (payload === null) {
+    throw new LocalCliApiError("local_cli_request_failed", "Guard could not update this custom extension.");
+  }
+  return payload;
+}
+async function fetchLocalCliList() {
+  return normalizeLocalCliList(await readJson(await fetchLocalCliApi("/v1/local-clis")));
+}
+async function previewLocalCliMutation(payload) {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/preview", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }));
+  if (!isRecord(body)) throw new Error("Invalid local CLI preview");
+  return { summary: requiredString(body.summary, "summary") };
+}
+async function recognizeLocalCli(command, options) {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/recognize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      command,
+      ...options?.cliId ? { cli_id: options.cliId } : {},
+      ...options?.refresh ? { refresh: true } : {}
+    })
+  }));
+  if (!isRecord(body)) throw new Error("Invalid local CLI recognition");
+  const item = normalizeLocalCliItem(body.item);
+  return {
+    item,
+    summary: requiredString(body.summary, "summary"),
+    revision: requiredInt(body.revision, "revision"),
+    help_status: normalizeHelpStatus(body.help_status) ?? item.help_status
+  };
+}
+async function applyLocalCliMutation(payload) {
+  return readJson(await fetchLocalCliApi("/v1/local-clis/apply", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }));
+}
+async function refreshMcpInventory(cliId, signal, configuredConnections = false, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify(configuredConnections ? { operation: "configured-connections", client_job_id: clientJobId, ...forceRefresh ? { force_refresh: true } : {} } : { cli_id: cliId, confirm_process_start: true, client_job_id: clientJobId })
+    }
+  )));
+  if (initialJob === null) return;
+  await waitForMcpDiscoveryJob(cliId, initialJob, signal);
+}
+async function refreshCodexHostInventory(signal, forceRefresh = false) {
+  if (signal.aborted) return;
+  const initialJob = await startCancelableDiscoveryJob(signal, async (clientJobId) => readJson(await fetchLocalCliApi(
+    "/v1/local-clis/refresh-job",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal,
+      body: JSON.stringify({
+        operation: "codex-host-connections",
+        client_job_id: clientJobId,
+        ...forceRefresh ? { force_refresh: true } : {}
+      })
+    }
+  )));
+  if (initialJob !== null) await waitForMcpDiscoveryJob("inventory:codex-host", initialJob, signal);
+}
+async function waitForMcpDiscoveryJob(cliId, initialJob, signal) {
+  await waitForDiscoveryJob(cliId, initialJob, signal, readJson);
+}
+async function fetchMcpProviderActions(cliId, options) {
+  const body = await readJson(await fetchLocalCliApi("/v1/local-clis/provider-actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: options.signal,
+    body: JSON.stringify({
+      cli_id: cliId,
+      search: options.search,
+      offset: options.offset,
+      limit: 50,
+      ...options.catalogToken ? { catalog_token: options.catalogToken } : {}
+    })
+  }));
+  if (!isRecord(body) || body.cli_id !== cliId || body.coverage !== "discovery-subset" || !Array.isArray(body.actions) || body.actions.length > 50 || typeof body.catalog_token !== "string" || !SHA256_PATTERN.test(body.catalog_token)) throw new Error("Invalid provider action inventory");
+  const actions = body.actions.map((entry) => {
+    if (!isRecord(entry) || typeof entry.tool_slug !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.tool_slug) || typeof entry.toolkit !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(entry.toolkit) || typeof entry.description !== "string" || entry.description.length > 2e3 || typeof entry.full_schema !== "boolean" || !["review", "block"].includes(String(entry.permission_state)) || entry.allow_supported !== false || entry.account_binding !== "unverified" || typeof entry.revision !== "number" || !Number.isSafeInteger(entry.revision) || entry.revision < 1 || typeof entry.updated_at !== "string" || !Number.isFinite(Date.parse(entry.updated_at))) {
+      throw new Error("Invalid provider action evidence");
+    }
+    return {
+      tool_slug: entry.tool_slug,
+      toolkit: entry.toolkit,
+      description: entry.description,
+      full_schema: entry.full_schema,
+      revision: entry.revision,
+      updated_at: entry.updated_at,
+      permission_state: entry.permission_state,
+      allow_supported: false,
+      account_binding: "unverified",
+      classification: normalizeMcpClassification(entry.classification)
+    };
+  });
+  const nextOffset = body.next_offset;
+  if (nextOffset !== null && (typeof nextOffset !== "number" || !Number.isSafeInteger(nextOffset) || nextOffset !== options.offset + 50 || nextOffset > 1e4)) throw new Error("Invalid provider inventory page");
+  return { actions, nextOffset, catalogToken: body.catalog_token };
+}
+const EXTENSION_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const RULE_ID_PATTERN = /^command\.[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const DEFAULT_EXTENSION_DETAIL_URL_STATE = {
+  tab: "overview",
+  query: "",
+  risk: "all",
+  state: "all",
+  configurable: "all",
+  source: "all",
+  deprecated: "all",
+  type: "all",
+  sort: "name",
+  ruleId: null
+};
+function oneOf(value, allowed, fallback) {
+  return value !== null && allowed.includes(value) ? value : fallback;
+}
+function parseExtensionRoute(pathname) {
+  if (pathname === "/extensions" || pathname === "/extensions/") return { kind: "overview" };
+  if (!pathname.startsWith("/extensions/")) return { kind: "invalid" };
+  const encoded = pathname.slice("/extensions/".length);
+  if (!encoded || encoded.includes("/")) return { kind: "invalid" };
+  try {
+    const decoded = decodeURIComponent(encoded).trim().toLowerCase();
+    if (decoded === "command.dns") return { kind: "overview" };
+    if (!EXTENSION_ID_PATTERN.test(decoded)) return { kind: "invalid" };
+    return { kind: "detail", extensionId: decoded };
+  } catch {
+    return { kind: "invalid" };
+  }
+}
+function readExtensionDetailUrlState(search) {
+  const params = new URLSearchParams(search);
+  const rawQuery = params.get("q") ?? "";
+  const query = rawQuery.slice(0, 160);
+  const rawRule = params.get("rule")?.trim().toLowerCase() ?? null;
+  const ruleId = rawRule && RULE_ID_PATTERN.test(rawRule) ? rawRule : null;
+  return {
+    tab: oneOf(params.get("tab"), ["overview", "permissions", "managed-controls", "activity", "technical", "commands", "policy", "test-lab"], "overview"),
+    query,
+    risk: oneOf(params.get("risk"), ["all", "low", "medium", "high", "critical"], "all"),
+    state: oneOf(params.get("state"), ["all", "allowed", "blocked"], "all"),
+    configurable: oneOf(params.get("configurable"), ["all", "yes", "no"], "all"),
+    source: oneOf(params.get("source"), ["all", "built-in", "local-admin", "signed-cloud"], "all"),
+    deprecated: oneOf(params.get("deprecated"), ["all", "yes", "no"], "all"),
+    type: oneOf(params.get("type"), ["all", "permission", "rule"], "all"),
+    sort: oneOf(params.get("sort"), ["name", "risk", "id"], "name"),
+    ruleId
+  };
+}
+function extensionDetailSearch(state) {
+  const params = new URLSearchParams();
+  if (state.tab !== "overview") params.set("tab", state.tab);
+  if (state.query.trim()) params.set("q", state.query.trim().slice(0, 160));
+  if (state.risk !== "all") params.set("risk", state.risk);
+  if (state.state !== "all") params.set("state", state.state);
+  if (state.configurable !== "all") params.set("configurable", state.configurable);
+  if (state.source !== "all") params.set("source", state.source);
+  if (state.deprecated !== "all") params.set("deprecated", state.deprecated);
+  if (state.type !== "all") params.set("type", state.type);
+  if (state.sort !== "name") params.set("sort", state.sort);
+  if (state.ruleId && RULE_ID_PATTERN.test(state.ruleId)) params.set("rule", state.ruleId);
+  const encoded = params.toString();
+  return encoded ? `?${encoded}` : "";
+}
+function extensionDetailHref(extensionId, state = DEFAULT_EXTENSION_DETAIL_URL_STATE) {
+  const canonical = extensionId.trim().toLowerCase();
+  if (!EXTENSION_ID_PATTERN.test(canonical)) return "/extensions";
+  return `/extensions/${encodeURIComponent(canonical)}${extensionDetailSearch(state)}`;
+}
+function canonicalExtensionId(catalog, candidate) {
+  if (!candidate) return null;
+  const normalized = candidate.trim().toLowerCase();
+  const direct = catalog.find((extension2) => extension2.extension_id === normalized);
+  if (direct) return direct.extension_id;
+  return catalog.find((extension2) => extension2.aliases.includes(normalized))?.extension_id ?? null;
+}
+function explicitControlState(effective, kind, targetId2) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.local_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.local_state;
+  if (projected) return projected === "inherited" ? null : projected;
+  return effective.controls.find(
+    (control) => control.target.kind === kind && control.target.target_id === targetId2
+  )?.state ?? null;
+}
+function managedExplicitControlState(effective, kind, targetId2) {
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2)?.managed_state : effective.projection?.permissions.find((item) => item.permission_id === targetId2)?.managed_state;
+  if (projected) return projected === "inherited" ? null : projected;
+  for (const layer of effective.layers) {
+    if (layer.kind !== "signed-cloud") continue;
+    const control = layer.controls.find((item) => item.target_kind === kind && item.target_id === targetId2);
+    if (control) return control.state;
+  }
+  return null;
+}
+function managedPermissionState(effective, permissionId) {
+  return managedExplicitControlState(effective, "permission", permissionId);
+}
+function extensionEffectiveState(effective, extension2) {
+  const projected = effective.projection?.extensions.find((item) => item.extension_id === extension2.extension_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
+  if (effective.health !== "protected") return "disabled";
+  if (effective.global_lockdown) return "disabled";
+  if (extension2.required) return "enabled";
+  const explicit = explicitControlState(effective, "extension", extension2.extension_id);
+  if (extension2.trust_class === "external" || extension2.activation === "opt-in") {
+    return explicit === "enabled" ? "enabled" : "disabled";
+  }
+  return explicit ?? "enabled";
+}
+function permissionEffectiveState(effective, extension2, permission2) {
+  const projected = effective.projection?.permissions.find((item) => item.permission_id === permission2.permission_id);
+  if (projected) return projected.effective_state === "allowed" ? "enabled" : "disabled";
+  if (extensionEffectiveState(effective, extension2) === "disabled") return "disabled";
+  if (!permission2.configurable) return permission2.default_enabled ? "enabled" : "disabled";
+  return explicitControlState(effective, "permission", permission2.permission_id) ?? (permission2.default_enabled ? "enabled" : "disabled");
+}
+function extensionDisplayName(name) {
+  for (const suffix of [" command protection", " protection"]) {
+    if (!name.toLowerCase().endsWith(suffix)) continue;
+    const shortened = name.slice(0, name.length - suffix.length);
+    if (shortened.length < 3 || /[-\s,.]$/.test(shortened)) break;
+    return shortened;
+  }
+  return name;
+}
+function extensionStateLabel(effective, extension2) {
+  if (effective.health !== "protected") return "Unavailable";
+  if (effective.global_lockdown) return "Lockdown";
+  if (managedExplicitControlState(effective, "extension", extension2.extension_id) !== null) return "Managed";
+  if (extension2.required) return "Required";
+  return extensionEffectiveState(effective, extension2) === "enabled" ? "Allowed" : "Blocked";
+}
+function catalogRowSecondLine(extension2, state) {
+  if (state === "Managed" || state === "Lockdown" || state === "Unavailable") return state;
+  if (extension2.trust_class === "external" && state !== "Allowed" && state !== "Required") {
+    return "Off until you turn it on";
+  }
+  if (state === "Blocked") return state;
+  const executables = extension2.executables.join(" · ").trim();
+  return executables || extension2.description;
+}
+function controlProvenance(effective, kind, targetId2) {
+  const managedSource = effective.managed_controls?.authority_mode === "managed-restrictive" ? `Managed by ${effective.managed_controls.workspace_id}` : "Synced from Guard Cloud";
+  const projected = kind === "extension" ? effective.projection?.extensions.find((item) => item.extension_id === targetId2) : effective.projection?.permissions.find((item) => item.permission_id === targetId2);
+  if (projected) {
+    const sources2 = [];
+    if (effective.global_lockdown) sources2.push("Emergency Lockdown");
+    if (projected.managed_state !== "inherited") sources2.push(managedSource);
+    if (projected.local_state !== "inherited") sources2.push("Set on this device");
+    if (sources2.length === 0) sources2.push("Recommended by Guard");
+    return sources2;
+  }
+  const sources = [];
+  if (effective.global_lockdown) sources.push("Emergency Lockdown");
+  for (const layer of effective.layers) {
+    if (layer.controls.some((control) => control.target_kind === kind && control.target_id === targetId2)) {
+      sources.push(layer.kind === "signed-cloud" ? managedSource : "Set on this device");
+    }
+  }
+  if (sources.length === 0) sources.push("Recommended by Guard");
+  return sources;
+}
+function permissionForRule(extension2, rule2) {
+  return extension2.permissions.find((permission2) => permission2.rule_ids.includes(rule2.rule_id)) ?? null;
+}
+function treatmentLabel(value) {
+  const labels = {
+    allow: "Allow",
+    warn: "Warn",
+    review: "Review",
+    "require-reapproval": "Require reapproval",
+    "sandbox-required": "Require sandbox",
+    block: "Block",
+    required: "Required",
+    enforce: "Enforce",
+    monitor: "Monitor",
+    disabled: "Disabled"
+  };
+  return labels[value] ?? value.replaceAll("-", " ");
+}
+function familyHeading(permissions) {
+  const examples = permissions.map((permission2) => permission2.example_command).filter((example) => Boolean(example)).map((example) => example.split(/\s+/));
+  if (!examples.length) return permissions[0]?.label ?? "";
+  const first = examples[0];
+  const shared = [];
+  for (let index = 0; index < first.length; index += 1) {
+    const token = first[index];
+    if (examples.every((parts) => parts[index] === token)) shared.push(token);
+    else break;
+  }
+  return shared.length ? shared.join(" ") : permissions[0]?.label ?? "";
+}
+function groupPermissionsByFamily(permissions) {
+  const byFamily = /* @__PURE__ */ new Map();
+  const ungrouped = [];
+  for (const permission2 of permissions) {
+    if (!permission2.family) ungrouped.push(permission2);
+    else {
+      const members = byFamily.get(permission2.family) ?? [];
+      members.push(permission2);
+      byFamily.set(permission2.family, members);
+    }
+  }
+  const families = [...byFamily.entries()].map(([family, members]) => ({ family, heading: familyHeading(members), permissions: members })).sort((left, right) => left.family.localeCompare(right.family));
+  return { ungrouped, families };
+}
+const LOCAL_CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
+function addCustomExtensionHref() {
+  return "/extensions/add";
+}
+function parseProtectionRoute(pathname) {
+  if (pathname === "/extensions/add" || pathname === "/extensions/add/") {
+    return { kind: "add-custom" };
+  }
+  if (pathname.startsWith("/extensions/local-cli/")) {
+    try {
+      const cliId = decodeURIComponent(pathname.slice("/extensions/local-cli/".length)).trim().toLowerCase();
+      if (cliId && !cliId.includes("/") && LOCAL_CLI_ID_PATTERN.test(cliId)) {
+        return { kind: "local-cli", cliId };
+      }
+    } catch {
+      return { kind: "invalid" };
+    }
+    return { kind: "invalid" };
+  }
+  return parseExtensionRoute(pathname);
+}
+function localCliHref(cliId) {
+  return `/extensions/local-cli/${encodeURIComponent(cliId)}`;
+}
+const CONNECTOR_GROUP_PREFIX = "connector:";
+const PROTECT_LIST_HREF = "/extensions";
+const IDENTITY_HASH_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+function connectorGroupKey(queueGroupId) {
+  if (typeof queueGroupId !== "string" || !queueGroupId.startsWith(CONNECTOR_GROUP_PREFIX)) return null;
+  const identityHash = queueGroupId.slice(CONNECTOR_GROUP_PREFIX.length).split(":")[0] ?? "";
+  return IDENTITY_HASH_PATTERN.test(identityHash) ? `${CONNECTOR_GROUP_PREFIX}${identityHash}` : null;
+}
+function isConnectorSetupItem(item) {
+  return item.status === "pending" && connectorGroupKey(item.queue_group_id) !== null;
+}
+function connectorItemCallCount(item) {
+  return Math.max(1, item.dedupe_count ?? 1);
+}
+function connectorItemNeedsCaution(item) {
+  if (item.extension_recommendation?.caution === true) return true;
+  const categoryId = resolveQueueCategory(item).id;
+  return BULK_HIGH_CATEGORY_IDS.has(categoryId) || BULK_BLOCKED_CATEGORY_IDS.has(categoryId);
+}
+function connectorSurfaceLabel(surface) {
+  if (surface === "mcp") return "MCP server";
+  if (surface === "package-scripts") return "Package scripts";
+  return "Local CLI";
+}
+function itemTimestamp(item) {
+  const value = new Date(item.last_seen_at ?? item.created_at).getTime();
+  return Number.isFinite(value) ? value : 0;
+}
+function itemCommand(item) {
+  return item.action_envelope_json?.command ?? item.raw_command_text ?? null;
+}
+function workspaceLabel(item) {
+  const directory = resolveRequestWorkingDirectory(item);
+  if (directory === null) return null;
+  const segments = directory.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] ?? null;
+}
+const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+const PACKAGE_MANAGER_VALUE_FLAGS = /* @__PURE__ */ new Set(["--filter", "-F", "--prefix", "-C", "--dir", "--cwd", "--workspace", "-w", "--workspace-dir"]);
+const SCRIPT_RUN_VERBS = /* @__PURE__ */ new Set(["run", "run-script"]);
+function leadingOperands(command, limit, valueFlags) {
+  const tokens = command.trim().split(/\s+/);
+  while (tokens.length > 0 && ENV_ASSIGNMENT.test(tokens[0])) tokens.shift();
+  const operands = [];
+  for (let index = 1; index < tokens.length && operands.length < limit; index += 1) {
+    const token = tokens[index];
+    if (token.startsWith("-")) {
+      if (valueFlags.has(token)) index += 1;
+      continue;
+    }
+    operands.push(token);
+  }
+  return operands;
+}
+function packageScriptName(command) {
+  const [first, second] = leadingOperands(command, 2, PACKAGE_MANAGER_VALUE_FLAGS);
+  if (first === void 0) return null;
+  return SCRIPT_RUN_VERBS.has(first) ? second ?? null : first;
+}
+function triedCatalogCommands(items, cli) {
+  if (cli === null) return [];
+  const packageScripts = cli.surface === "package-scripts";
+  const known = new Set(
+    packageScripts ? enrollablePackageScriptCommands(cli.commands).map((command) => command.name) : cli.commands.filter((command) => command.parent_id === null).map((command) => command.name)
+  );
+  const tried = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    const command = itemCommand(item);
+    if (command === null) continue;
+    const name = packageScripts ? packageScriptName(command) : leadingOperands(command, 1, /* @__PURE__ */ new Set())[0] ?? null;
+    if (name !== null && known.has(name)) tried.add(name);
+  }
+  return [...tried].sort();
+}
+function connectorSetupHref(cli) {
+  return cli === null ? PROTECT_LIST_HREF : localCliHref(cli.cli_id);
+}
+function buildConnectorSetupGroups(items, localClis = []) {
+  const byKey = /* @__PURE__ */ new Map();
+  for (const item of items) {
+    if (!isConnectorSetupItem(item)) continue;
+    const key = connectorGroupKey(item.queue_group_id);
+    if (key === null) continue;
+    const rows = byKey.get(key) ?? [];
+    rows.push(item);
+    byKey.set(key, rows);
+  }
+  const groups = [];
+  for (const [key, rows] of byKey) {
+    const sorted = [...rows].sort((a, b) => itemTimestamp(b) - itemTimestamp(a));
+    const identityHash = key.slice(CONNECTOR_GROUP_PREFIX.length);
+    const cli = localClis.find((entry) => entry.identity_hash === identityHash) ?? null;
+    const cautionCount = sorted.filter(connectorItemNeedsCaution).reduce((sum, item) => sum + connectorItemCallCount(item), 0);
+    groups.push({
+      key,
+      identityHash,
+      items: sorted,
+      callCount: sorted.reduce((sum, item) => sum + connectorItemCallCount(item), 0),
+      harnesses: [...new Set(sorted.map((item) => harnessDisplayName(item.harness)))],
+      latest: sorted[0],
+      workspaceLabel: workspaceLabel(sorted[0]),
+      caution: cautionCount > 0,
+      cautionCount,
+      cli,
+      setupHref: connectorSetupHref(cli),
+      triedCommands: triedCatalogCommands(sorted, cli)
+    });
+  }
+  return groups.sort((a, b) => itemTimestamp(b.latest) - itemTimestamp(a.latest));
+}
+function connectorSetupIdentityKey(items) {
+  const hashes = /* @__PURE__ */ new Set();
+  for (const item of items) {
+    if (!isConnectorSetupItem(item)) continue;
+    const key = connectorGroupKey(item.queue_group_id);
+    if (key !== null) hashes.add(key.slice(CONNECTOR_GROUP_PREFIX.length));
+  }
+  return [...hashes].sort().join(",");
+}
+const SETUP_COPY = GUARD_REVIEW_INTENT_COPY.setup;
+const CLI_LIST_RETRY_DELAYS_MS = [2e3, 1e4];
+function useConnectorSetupClis(identityKey) {
+  const [items, setItems] = reactExports.useState([]);
+  reactExports.useEffect(() => {
+    if (identityKey === "") return;
+    let cancelled = false;
+    let timer = null;
+    const load = (attempt) => {
+      fetchLocalCliList().then((list) => {
+        if (!cancelled) setItems([...list.items, ...list.seeded_items]);
+      }).catch(() => {
+        if (cancelled || attempt >= CLI_LIST_RETRY_DELAYS_MS.length) return;
+        timer = setTimeout(() => load(attempt + 1), CLI_LIST_RETRY_DELAYS_MS[attempt]);
+      });
+    };
+    load(0);
+    return () => {
+      cancelled = true;
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [identityKey]);
+  return items;
+}
+function connectorName(group) {
+  const name = group.cli?.display_name ?? group.cli?.name;
+  return name && name.trim().length > 0 ? name : "a local tool";
+}
+function callCountCopy(count) {
+  return `${count} ${count === 1 ? "call" : "calls"} waiting on this`;
+}
+function Block(props) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dt", { className: "text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground", children: props.label }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx("dd", { className: "mt-1 text-sm leading-relaxed text-brand-dark", children: props.children })
+  ] });
+}
+function EvidenceRow(props) {
+  const { item, onOpenRequest } = props;
+  const handleOpen = reactExports.useCallback(() => onOpenRequest(item.request_id), [item.request_id, onOpenRequest]);
+  const repeats = connectorItemCallCount(item);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleOpen,
+      "aria-current": props.active ? "true" : void 0,
+      className: `flex min-h-11 w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-blue/20 ${props.active ? "bg-brand-blue/[0.06]" : ""}`,
+      children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "min-w-0 truncate font-mono text-xs text-brand-dark", children: queueItemPreview(item) }),
+        repeats > 1 && /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "shrink-0 text-[11px] font-medium text-muted-foreground", children: [
+          "×",
+          repeats
+        ] })
+      ]
+    }
+  ) });
+}
+function ConnectorSetupCard(props) {
+  const { group } = props;
+  const name = connectorName(group);
+  const surface = connectorSurfaceLabel(group.cli?.surface ?? null);
+  const gateReady = isBulkApproveGateReady(props.approvalGate);
+  const doing = group.latest.trigger_summary ?? group.latest.why_now ?? null;
+  const titleId = `connector-setup-${group.identityHash}`;
+  const tone = group.caution ? "border-brand-attention/30 bg-brand-attention/[0.04]" : "border-brand-blue/20 bg-brand-blue/[0.04]";
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(
+    "section",
+    {
+      className: `rounded-2xl border p-4 ${tone}`,
+      "aria-labelledby": titleId,
+      "data-testid": "connector-setup-card",
+      "data-connector-group": group.key,
+      children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniWrenchScrewdriver, { className: "mt-0.5 h-5 w-5 shrink-0 text-brand-blue", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 flex-1 space-y-3", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-semibold uppercase tracking-wide text-slate-500", children: SETUP_COPY.label }),
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("h2", { id: titleId, className: "mt-1 text-sm font-semibold text-brand-dark", children: [
+                SETUP_COPY.action,
+                ": ",
+                name
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-xs font-medium text-muted-foreground", children: callCountCopy(group.callCount) })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm leading-relaxed text-brand-dark/80", children: [
+            "Guard does not recognise this ",
+            surface.toLowerCase(),
+            " and it is not set up on this device, so its calls are paused. ",
+            SETUP_COPY.scope
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "grid gap-3 sm:grid-cols-2", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { label: "What it is", children: [
+              surface,
+              group.cli?.source_label ? ` · ${group.cli.source_label}` : " · seen only from agent calls",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block font-mono text-xs text-muted-foreground", children: [
+                "identity ",
+                group.identityHash.slice(0, 12)
+              ] })
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs(Block, { label: "What the agent was doing", children: [
+              doing ?? "Running a command that uses this tool.",
+              /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: [
+                group.harnesses.join(", "),
+                group.workspaceLabel ? ` · ${group.workspaceLabel}` : ""
+              ] })
+            ] }),
+            group.triedCommands.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsx(Block, { label: "What it tried to use", children: /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex flex-wrap gap-1", children: group.triedCommands.map((command) => /* @__PURE__ */ jsxRuntimeExports.jsx("code", { className: "rounded bg-white px-1.5 py-0.5 font-mono text-xs text-brand-dark", children: command }, command)) }) })
+          ] }),
+          group.caution && /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-2 rounded-lg border border-brand-attention/30 bg-white px-3 py-2", role: "note", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "mt-0.5 h-4 w-4 shrink-0 text-brand-attention", "aria-hidden": "true" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-sm font-medium text-brand-attention", children: [
+              group.cautionCount,
+              " of these calls ",
+              group.cautionCount === 1 ? "is" : "are",
+              " destructive or touch sensitive data. Review each one before you set this tool up."
+            ] })
+          ] }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+            gateReady ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: group.setupHref, variant: group.caution ? "outline" : "primary", children: "Set up" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: "/settings?section=approval", variant: "outline", children: "Set up approval password" }),
+            gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { href: group.setupHref, variant: "quiet", children: "Block on this device" })
+          ] }),
+          !gateReady && /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-slate-500", children: "Setting up a tool needs an approval password so agents cannot change protection on their own." }),
+          /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-lg border border-slate-200/70 bg-white", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "flex min-h-11 cursor-pointer items-center px-3 text-sm font-medium text-brand-blue", children: [
+              "Review details (",
+              group.items.length,
+              " ",
+              group.items.length === 1 ? "action" : "actions",
+              ")"
+            ] }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "space-y-0.5 border-t border-slate-100 p-1.5", "aria-label": `Paused calls for ${name}`, children: group.items.map((item) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+              EvidenceRow,
+              {
+                item,
+                active: item.request_id === props.activeRequestId,
+                onOpenRequest: props.onOpenRequest
+              },
+              item.request_id
+            )) })
+          ] })
+        ] })
+      ] })
+    }
+  );
+}
+function ConnectorSetupCards(props) {
+  if (props.groups.length === 0) return null;
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "space-y-3", "data-testid": "connector-setup-cards", children: props.groups.map((group) => /* @__PURE__ */ jsxRuntimeExports.jsx(
+    ConnectorSetupCard,
+    {
+      group,
+      approvalGate: props.approvalGate,
+      activeRequestId: props.activeRequestId,
+      onOpenRequest: props.onOpenRequest
+    },
+    group.key
+  )) });
+}
+function queuePageSyncTarget(input) {
+  const { pagedRequests, activeRequestId, detailRequestId, pinnedRequestId } = input;
+  if (pagedRequests.length === 0) return null;
+  if (activeRequestId !== null && activeRequestId === pinnedRequestId) return null;
+  const activeOnPage = activeRequestId !== null && (pagedRequests.some((item) => item.request_id === activeRequestId) || detailRequestId === activeRequestId);
+  return activeOnPage ? null : pagedRequests[0].request_id;
+}
 const QUEUE_PAGE_SIZE = 10;
 function ReviewWorkspace(props) {
   const businessQueueReadFailed2 = useBusinessQueueReadFailure();
@@ -32840,23 +34426,38 @@ function ReviewWorkspace(props) {
   const [categoryFilter, setCategoryFilter] = reactExports.useState("all");
   const [sortDirection, setSortDirection] = reactExports.useState("newest");
   const [semanticFilter, setSemanticFilter] = reactExports.useState("all");
+  const [setupFilter, setSetupFilter] = reactExports.useState(false);
   const [dateFrom, setDateFrom] = reactExports.useState("");
   const [dateTo, setDateTo] = reactExports.useState("");
   const [mobileQueueOpen, setMobileQueueOpen] = reactExports.useState(false);
   const [page, setPage] = reactExports.useState(1);
+  const [setupPinnedRequestId, setSetupPinnedRequestId] = reactExports.useState(null);
   const selectRequest = reactExports.useCallback((id2) => {
     props.onOpenRequest(id2);
     setMobileQueueOpen(false);
   }, [props.onOpenRequest]);
   const handleOpenRequest = reactExports.useCallback((id2) => {
+    setSetupPinnedRequestId(null);
     selectRequest(id2);
     readState.markRead(id2);
   }, [selectRequest, readState]);
+  const handleOpenSetupEvidence = reactExports.useCallback((id2) => {
+    setSetupPinnedRequestId(id2);
+    selectRequest(id2);
+    readState.markRead(id2);
+  }, [selectRequest, readState]);
+  const handlePageChange = reactExports.useCallback((nextPage) => {
+    setSetupPinnedRequestId(null);
+    setPage(nextPage);
+  }, []);
   const handleToggleMobileQueue = reactExports.useCallback(() => {
     setMobileQueueOpen((v) => !v);
   }, []);
+  const setupIdentityKey = reactExports.useMemo(() => connectorSetupIdentityKey(requests), [requests]);
+  const setupClis = useConnectorSetupClis(setupIdentityKey);
+  const setupGroups = reactExports.useMemo(() => buildConnectorSetupGroups(requests, setupClis), [requests, setupClis]);
   const filteredRequests = reactExports.useMemo(() => {
-    let items = requests;
+    let items = setupFilter ? requests.filter(isConnectorSetupItem) : requests;
     if (semanticFilter !== "all") {
       const group = REVIEW_SEMANTIC_GROUPS.find((g) => g.id === semanticFilter);
       if (group && group.matches.length > 0) {
@@ -32868,10 +34469,11 @@ function ReviewWorkspace(props) {
     items = filterQueueByDateRange(items, { from: dateFrom, to: dateTo });
     const searched = searchQueue(items, searchTerm);
     return sortQueue(searched, sortDirection);
-  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, sortDirection, semanticFilter]);
+  }, [categoryFilter, dateFrom, dateTo, requests, searchTerm, setupFilter, sortDirection, semanticFilter]);
   reactExports.useEffect(() => {
+    setSetupPinnedRequestId(null);
     setPage(1);
-  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, dateFrom, dateTo]);
+  }, [searchTerm, categoryFilter, sortDirection, semanticFilter, setupFilter, dateFrom, dateTo]);
   const totalPages = Math.max(1, Math.ceil(filteredRequests.length / QUEUE_PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pageStart = (currentPage - 1) * QUEUE_PAGE_SIZE;
@@ -32912,12 +34514,14 @@ function ReviewWorkspace(props) {
     selectRequest(filteredRequests[0].request_id);
   }, [activeRequestId, requests, filteredRequests, detail?.item.request_id, selectRequest]);
   reactExports.useEffect(() => {
-    if (pagedRequests.length === 0) return;
-    const activeOnPage = pagedRequests.some((item) => item.request_id === activeRequestId) || detail?.item.request_id === activeRequestId;
-    if (!activeOnPage) {
-      selectRequest(pagedRequests[0].request_id);
-    }
-  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, selectRequest]);
+    const target2 = queuePageSyncTarget({
+      pagedRequests,
+      activeRequestId,
+      detailRequestId: detail?.item.request_id ?? null,
+      pinnedRequestId: setupPinnedRequestId
+    });
+    if (target2 !== null) selectRequest(target2);
+  }, [currentPage, pagedRequests, activeRequestId, detail?.item.request_id, setupPinnedRequestId, selectRequest]);
   const bulkApprove = useQueueBulkApprove({
     items: filteredRequests,
     approvalGate: props.approvalGate ?? null,
@@ -33007,6 +34611,15 @@ function ReviewWorkspace(props) {
       " reads selected for bulk approval."
     ] }),
     /* @__PURE__ */ jsxRuntimeExports.jsx(QueueBulkDrawer, { ...bulkApprove.drawer }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ConnectorSetupCards,
+      {
+        groups: setupGroups,
+        approvalGate: props.approvalGate ?? null,
+        activeRequestId: activeItem.request_id,
+        onOpenRequest: handleOpenSetupEvidence
+      }
+    ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "md:hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
       "button",
       {
@@ -33037,6 +34650,8 @@ function ReviewWorkspace(props) {
           searchTerm,
           sortDirection,
           semanticFilter,
+          setupFilter,
+          setupGroupCount: setupGroups.length,
           dateFrom,
           dateTo,
           page: currentPage,
@@ -33045,9 +34660,10 @@ function ReviewWorkspace(props) {
           onSearchTermChange: setSearchTerm,
           onSortDirectionChange: setSortDirection,
           onSemanticFilterChange: setSemanticFilter,
+          onSetupFilterChange: setSetupFilter,
           onDateFromChange: setDateFrom,
           onDateToChange: setDateTo,
-          onPageChange: setPage,
+          onPageChange: handlePageChange,
           onOpenRequest: handleOpenRequest,
           selectionMode: bulkApprove.bulkSelection.selectionMode,
           isBulkSelectable: bulkApprove.bulkSelection.isSelectable,
@@ -33125,96 +34741,6 @@ function QueueConnectionError(props) {
     ] })
   ] }) });
 }
-const CHUNK_RELOAD_STORAGE_KEY = "hol-guard-dashboard-chunk-reload";
-const CHUNK_RELOAD_DELAY_MS = 400;
-const MODULE_LINK_ERROR_PATTERNS = [
-  /does not provide an export named/,
-  // Chromium
-  /importing binding name .* is not found/,
-  // WebKit
-  /import not found:/,
-  // Gecko
-  /ambiguous indirect export:/
-  // Gecko
-];
-function isChunkLoadError(error) {
-  const message = error instanceof Error ? error.message : String(error);
-  const normalized = message.toLowerCase();
-  return normalized.includes("failed to fetch dynamically imported module") || normalized.includes("error loading dynamically imported module") || normalized.includes("importing a module script failed") || normalized.includes("loading chunk") || MODULE_LINK_ERROR_PATTERNS.some((pattern) => pattern.test(normalized));
-}
-function defaultWait(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-function reloadDocument(reload) {
-  if (reload) {
-    reload();
-    return true;
-  }
-  if (typeof window !== "undefined") {
-    window.location.reload();
-    return true;
-  }
-  return false;
-}
-function storageGet(storage, key) {
-  try {
-    return storage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-function storageSet(storage, key, value) {
-  try {
-    storage.setItem(key, value);
-    return true;
-  } catch {
-    return false;
-  }
-}
-function browserSessionStorage() {
-  try {
-    if (typeof sessionStorage === "undefined") {
-      return void 0;
-    }
-    return sessionStorage;
-  } catch {
-    return void 0;
-  }
-}
-async function loadWorkspaceModule(loader, options = {}) {
-  try {
-    return await loader();
-  } catch (error) {
-    if (!isChunkLoadError(error)) {
-      throw error;
-    }
-    const storage = options.storage;
-    const failureMessage = error instanceof Error ? error.message : String(error);
-    const failureFingerprint = `${options.moduleId ?? "anonymous-workspace-module"}:${failureMessage}`;
-    if (!storage || storageGet(storage, CHUNK_RELOAD_STORAGE_KEY) === failureFingerprint) {
-      throw error;
-    }
-    if (!storageSet(storage, CHUNK_RELOAD_STORAGE_KEY, failureFingerprint)) {
-      throw error;
-    }
-    const wait = options.wait ?? defaultWait;
-    await wait(options.delayMs ?? CHUNK_RELOAD_DELAY_MS);
-    if (!reloadDocument(options.reload)) {
-      throw error;
-    }
-    return new Promise(() => {
-    });
-  }
-}
-function lazyWorkspace(moduleId, loader) {
-  const load = async () => {
-    const module = await loadWorkspaceModule(loader, { moduleId, storage: browserSessionStorage() });
-    return { default: module.default };
-  };
-  return reactExports.lazy(load);
-}
 const CHUNK_LOAD_ERROR_HEADLINE = "This screen couldn't load";
 const CHUNK_LOAD_ERROR_BODY = "Guard lost its connection while opening this page. Reload once Guard is running on this device.";
 const GENERIC_ERROR_HEADLINE = "This screen ran into a problem";
@@ -33258,6 +34784,11 @@ class ErrorBoundary extends reactExports.Component {
   }
   componentDidCatch(error, errorInfo) {
     console.error("ErrorBoundary caught:", error, errorInfo);
+    if ((this.props.loadCurrentBuild ?? loadCurrentDashboardBuild)()) {
+      this.clearRetryTimer();
+      this.setState({ retrying: true, retryDecided: true });
+      return;
+    }
     const now2 = Date.now();
     if (!shouldAutoRetry(error, this.lastAutoRetryAt, now2)) {
       this.setState({ retryDecided: true });
@@ -33666,7 +35197,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-C6vsh2fs.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -34064,30 +35595,31 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
     }
   }, [view, mainSelector]);
 }
-const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard.js"), true ? __vite__mapDeps([0,1]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace.js"), true ? __vite__mapDeps([2,3,4,5]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace.js"), true ? __vite__mapDeps([6,3,7,5]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const HOME_QUEUE_PREVIEW_LIMIT = 50;
+const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-Wxa6VirA.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CkMTJ0-Z.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DdhT0dGq.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace.js"), true ? __vite__mapDeps([8,7]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BK6hHlfF.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace.js"), true ? __vite__mapDeps([9,4]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
-const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-D7AhoD71.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-CTlU0pow.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page.js"), true ? __vite__mapDeps([10,5]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-BTvusmsE.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace.js"), true ? [] : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-CMujLmFA.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-Dwd86NIL.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -34250,7 +35782,7 @@ function App() {
   const latestRefresh = reactExports.useRef(null);
   const bulkApproveInFlight = reactExports.useRef(false);
   const queuedItems = requests.kind === "ready" ? requests.items : [];
-  const activeRequestId = requestId ?? queuedItems[0]?.request_id ?? null;
+  const activeRequestId = requestId ?? (view === "home" ? null : queuedItems[0]?.request_id) ?? null;
   reactExports.useEffect(() => {
     if (activeRequestId === null) {
       setDetail({ kind: "idle" });
@@ -34299,6 +35831,7 @@ function App() {
     let clearedQueue = false;
     const needsFullQueue = view === "inbox" && requestId === null;
     const needsQueuePage = view === "inbox" || requestId !== null;
+    const needsHomePreview = view === "home" && requestId === null;
     const needsRuntimeReceipts = view === "home" || view === "fleet" || view === "app-detail" || view === "supply-chain" || view === "audit" || view === "feed-health";
     const loadApprovalQueue = () => {
       if (refreshInFlight || cancelled || resolutionInFlight.current) {
@@ -34328,6 +35861,16 @@ function App() {
           if (!cancelled && !resolutionInFlight.current) {
             const message = error instanceof Error ? error.message : queueErrorMessage;
             setRequests({ kind: "error", message });
+          }
+        });
+      } else if (needsHomePreview) {
+        pendingRequests = fetchApprovalPage({ status: "pending", limit: HOME_QUEUE_PREVIEW_LIMIT }).then((page) => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items: page.items });
+          }
+        }).catch(() => {
+          if (!cancelled && !resolutionInFlight.current) {
+            setRequests({ kind: "ready", items: [] });
           }
         });
       } else {
@@ -34870,7 +36413,9 @@ function App() {
             approvalGate,
             onConfirmClear: handleConfirmClear,
             onCancelClear: handleCancelClear,
-            onOpenHelp: handleOpenHelp
+            onOpenHelp: handleOpenHelp,
+            onOpenRequest: handleOpenRequest,
+            onConnectHarness: handleConnectHarness
           }
         ) }),
         onGoHome: handleGoHome,
@@ -34937,274 +36482,327 @@ const container = document.getElementById("guard-dashboard-root");
 if (container === null) {
   throw new Error("Missing guard-dashboard-root");
 }
+installStaleBuildGuard();
 clientExports.createRoot(container).render(
   /* @__PURE__ */ jsxRuntimeExports.jsx(reactExports.StrictMode, { children: /* @__PURE__ */ jsxRuntimeExports.jsx(App, {}) })
 );
 export {
-  HiMiniExclamationCircle as $,
+  resolveCloudIntelCopy as $,
   ActionButton as A,
-  formatRelativeTime as B,
-  approvalLeftActionStopped as C,
-  DeviceProofCard as D,
+  createCommandActivityClient as B,
+  fetchCommandActivityApi as C,
+  queueErrorIsUnauthorizedSession as D,
   EvidenceInsightsShareButton as E,
-  guardActionActivityCopy as F,
+  useReceiptAnalytics as F,
   GuardStatMetric as G,
-  HomeInsightsMetrics as H,
-  HiMiniSparkles as I,
-  HiMiniXMark as J,
-  HiMiniChevronUp as K,
-  HiMiniChevronDown as L,
-  resolveCloudIntelCopy as M,
-  HiMiniCloud as N,
-  OperatorHealthCard as O,
-  HiMiniQuestionMarkCircle as P,
-  useFocusTrap as Q,
-  approvalProofRequiresPassword as R,
+  HiMiniChevronRight as H,
+  updateSettings as I,
+  turnProtectionOnUpdate as J,
+  useProtectionPresentationState as K,
+  protectionHealthFor as L,
+  unavailableProtectionHealth as M,
+  EmptyState as N,
+  watchBannerModel as O,
+  EvidenceInsightsShareModal as P,
+  OperatorHealthCard as Q,
+  HiMiniShieldCheck as R,
   SectionLabel as S,
-  HiMiniExclamationTriangle as T,
-  HiMiniBolt as U,
-  Badge as V,
+  Tag as T,
+  DeviceProofCard as U,
+  guardActionDisposition as V,
   WatchProtectionBanner as W,
-  HiMiniMinusCircle as X,
-  isUnsupportedPlatformCheck as Y,
-  RECHECK_UNAVAILABLE_SIGNATURE as Z,
-  protectionReasonText as _,
-  EvidenceActivityHeatmapMini as a,
-  settingsWatchBannerModel as a$,
-  hasRepairableProtectionGap as a0,
-  remainingProtectionRepairParts as a1,
-  protectionGapSignature as a2,
-  repairOutcomeIsStalled as a3,
-  ProtectionRepairFlowError as a4,
-  nextProtectionRepairOutcome as a5,
-  waitForAuthorizeUrl as a6,
-  startOrRecoverCloudConnect as a7,
-  safeCloudConnectUrl as a8,
-  openPackageFirewallAuthorizeFallback as a9,
-  HiMiniBellAlert as aA,
-  HiMiniAdjustmentsHorizontal as aB,
-  HiMiniCircleStack as aC,
-  TabBar as aD,
-  fetchCloudReviewSettings as aE,
-  HiMiniArrowPath as aF,
-  ApprovalProofFieldInputs as aG,
-  isApprovalProofSubmitDisabled as aH,
-  buildApprovalProofCredentials as aI,
-  changeCloudReviewSettings as aJ,
-  resolveProtectionLevelCopy as aK,
-  fetchRuntimeSnapshot as aL,
-  clearHarnessWatchOverrides as aM,
-  withHarnessPosturePatch as aN,
-  clearPolicy as aO,
-  clearReviewQueue as aP,
-  revokeApprovalGateCooldown as aQ,
-  disableApprovalGateTotp as aR,
-  importSettings as aS,
-  resetSettings as aT,
-  enrollApprovalGateTotp as aU,
-  verifyApprovalGateTotp as aV,
-  clearEvidence as aW,
-  exportDiagnostics as aX,
-  repairApprovalCenter as aY,
-  exportSettings as aZ,
-  setupDesktopNotifications as a_,
-  waitForCloudConnection as aa,
-  activeFailedHarnesses as ab,
-  resetRepairOutcomeTracker as ac,
-  HiMiniWrenchScrewdriver as ad,
-  fetchSettings as ae,
-  harnessPostureRows as af,
-  selectHarnessPosture as ag,
-  harnessPosturePatch as ah,
-  harnessRowTone as ai,
-  harnessPostureOptions as aj,
-  HiMiniEye as ak,
-  harnessRowStatus as al,
-  PROTECTION_POSTURE_COPY as am,
-  globalPosture as an,
-  ProofStrip as ao,
-  HiMiniXCircle as ap,
-  HiMiniClipboardDocumentCheck as aq,
-  HiMiniClipboard as ar,
-  fetchResolvedApprovalGate as as,
-  ApprovalProofModal as at,
-  Tag as au,
-  POSTURE_OUTCOME_COLUMNS as av,
-  getDefaultExportFromCjs as aw,
-  React as ax,
-  HiMiniSquares2X2 as ay,
-  HiMiniLockClosed as az,
-  HiMiniCommandLine as b,
-  acknowledgeDegradedExtensionControlAuthority as b$,
-  WorkspacePageHeader as b0,
-  HiMiniMagnifyingGlass as b1,
-  commitDashboardLocation as b2,
-  guardAwareHref as b3,
-  humanizeList as b4,
-  isProtectionPosture as b5,
-  deriveProtectionPosture as b6,
-  normalizeHarnessPostures as b7,
-  approvalGateCooldownLabel as b8,
-  isGuardDemoMode as b9,
-  fetchEffectiveExtensionControls as bA,
-  previewExtensionMutation as bB,
-  isCurrentExtensionPolicyDraft as bC,
-  applyExtensionMutation as bD,
-  fetchExtensionControlHistory as bE,
-  HiMiniNoSymbol as bF,
-  useResolvedApprovalGate as bG,
-  HiMiniInformationCircle as bH,
-  approvalProofRecentlySatisfied as bI,
-  GenIcon as bJ,
-  HiMiniGlobeAlt as bK,
-  HiMiniCube as bL,
-  HiMiniServerStack as bM,
-  HiMiniFolder as bN,
-  FaWindows as bO,
-  FaAws as bP,
-  isBulkApproveGateReady as bQ,
-  HiMiniArrowLeft as bR,
-  HiMiniPlus as bS,
-  startGuardCloudConnect as bT,
-  HiMiniArrowTopRightOnSquare as bU,
-  fetchExtensionControlApi as bV,
-  fetchExtensionDiscoveryApi as bW,
-  HiMiniArrowRight as bX,
-  HiMiniClock as bY,
-  HiMiniCheck as bZ,
-  HiMiniFunnel as b_,
-  isRecord$3 as ba,
-  fetchWithGuardAuth as bb,
-  overrideRows as bc,
-  harnessPostureSummary as bd,
-  joinNames as be,
-  sortHarnessRows as bf,
-  restartHarnessWatch as bg,
-  harnessWatchPrompt as bh,
-  canRestartHarnessWatch as bi,
-  HiMiniKey as bj,
-  fetchLocalCliApi as bk,
-  fetchExtensionCatalog as bl,
-  normalizeExtensionCatalogSummary as bm,
-  normalizeExtensionPermission as bn,
-  ExtensionControlProtocolError as bo,
-  ExtensionControlApiError as bp,
-  normalizeExtensionCatalogItem as bq,
-  guardApiCacheScope as br,
-  fetchExtensionCatalogV2Api as bs,
-  localPermissionDraftState as bt,
-  setLocalPermissionDraftState as bu,
-  extensionPolicyAuthorityUnchanged as bv,
-  newExtensionPolicyDraftIdentity as bw,
-  extensionPolicyDraftIsDirty as bx,
-  setLocalPermissionDraftStates as by,
-  buildExtensionPolicyDraftMutation as bz,
-  HiMiniChevronRight as c,
-  fetchCloudExceptionRequests as c$,
-  recoverExtensionControlAuthority as c0,
-  GuardModalLayer as c1,
-  runHarnessAction as c2,
-  GuardHarnessActionError as c3,
-  HiMiniRocketLaunch as c4,
-  HiMiniTrash as c5,
-  fetchGuardApi as c6,
-  formatHarnessCommand as c7,
-  fetchApprovalPage as c8,
-  fetchPolicy as c9,
-  HiMiniCloudArrowDown as cA,
-  fetchPackageFirewallStatus as cB,
-  runPackageAudit as cC,
-  resolveSupplyChainAuditFailure as cD,
-  runPackageSync as cE,
-  startPackageFirewallConnect as cF,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as cG,
-  repairSupplyChainProtection as cH,
-  runPackageFirewallAction as cI,
-  parseInterceptProofSnapshot as cJ,
-  activatePackageFirewallRuntime as cK,
-  EntitlementNotice as cL,
-  chooseSupplyChainAuditFolder as cM,
-  fetchReceipts as cN,
-  lazyWorkspace as cO,
-  __vitePreload as cP,
-  scopeLabel as cQ,
-  HiMiniDocumentText as cR,
-  HiMiniCloudArrowUp as cS,
-  HiMiniCodeBracket as cT,
-  HiMiniClipboardDocument as cU,
-  HiMiniUsers as cV,
-  HiMiniIdentification as cW,
-  policyActionLabel as cX,
-  createCloudExceptionRequest as cY,
-  HiMiniPuzzlePiece as cZ,
-  fetchCloudExceptions as c_,
-  HiMiniHome as ca,
-  appSetupTarget as cb,
-  guardActionPresentation as cc,
-  DEFAULT_FILTER_STATE as cd,
-  filterEvidence as ce,
-  sortEvidence as cf,
-  computeMetrics as cg,
-  CommandActivityWorkspace as ch,
-  EvidenceFilterBar as ci,
-  EvidenceInsightStrip as cj,
-  EvidenceActionList as ck,
-  EvidenceActionDetail as cl,
-  policyIdentityKey as cm,
-  clearLabelForScope as cn,
-  HiMiniChartBar as co,
-  HiMiniCheckBadge as cp,
-  isSupplyChainAuditIncomplete as cq,
-  isSupplyChainAuditEvidence as cr,
-  readString$1 as cs,
-  IconActionButton as ct,
-  HiMiniBeaker as cu,
-  ActivationSummary as cv,
-  ActionResultPanel as cw,
-  HiMiniBugAnt as cx,
-  ConnectFlowCard as cy,
-  ApprovalProofInline as cz,
-  createCommandActivityClient as d,
-  downloadBlob as d0,
-  PolicyStatField as d1,
-  PaginationControls as d2,
-  HiMiniArrowDownTray as d3,
-  HiMiniQueueList as d4,
-  Surface as d5,
-  fetchMcpPolicyRequest as d6,
-  resolveMcpPolicyRequest as d7,
-  HiMiniDocumentPlus as d8,
-  HiMiniDocumentMagnifyingGlass as d9,
-  fetchSupplyChainBundle as da,
-  isSupplyChainScannerEvidence as db,
-  isBlockedGuardAction as dc,
-  HiMiniShieldExclamation as dd,
-  HiMiniComputerDesktop as de,
-  HiMiniChevronLeft as df,
-  HiMiniArrowDown as dg,
-  HiMiniArrowUp as dh,
-  runAuditRemediation as di,
-  HiMiniSignal as dj,
-  updateSettings as e,
-  fetchCommandActivityApi as f,
-  getHeatmapLevel as g,
-  homeCommandActivityModel as h,
-  harnessDisplayName as i,
+  approvalLeftActionStopped as X,
+  guardActionActivityCopy as Y,
+  HiMiniSparkles as Z,
+  HiMiniXMark as _,
+  formatNumber as a,
+  disableApprovalGateTotp as a$,
+  HiMiniCloud as a0,
+  HiMiniQuestionMarkCircle as a1,
+  useFocusTrap as a2,
+  approvalProofRequiresPassword as a3,
+  HiMiniExclamationTriangle as a4,
+  HiMiniBolt as a5,
+  Badge as a6,
+  HiMiniMinusCircle as a7,
+  isUnsupportedPlatformCheck as a8,
+  RECHECK_UNAVAILABLE_SIGNATURE as a9,
+  GuardHero as aA,
+  ProofStrip as aB,
+  HiMiniXCircle as aC,
+  HiMiniClipboardDocumentCheck as aD,
+  HiMiniClipboard as aE,
+  fetchResolvedApprovalGate as aF,
+  ApprovalProofModal as aG,
+  POSTURE_OUTCOME_COLUMNS as aH,
+  getDefaultExportFromCjs as aI,
+  React as aJ,
+  HiMiniSquares2X2 as aK,
+  HiMiniBellAlert as aL,
+  HiMiniAdjustmentsHorizontal as aM,
+  HiMiniCircleStack as aN,
+  TabBar as aO,
+  fetchCloudReviewSettings as aP,
+  ApprovalProofFieldInputs as aQ,
+  isApprovalProofSubmitDisabled as aR,
+  buildApprovalProofCredentials as aS,
+  changeCloudReviewSettings as aT,
+  resolveProtectionLevelCopy as aU,
+  fetchRuntimeSnapshot as aV,
+  clearHarnessWatchOverrides as aW,
+  withHarnessPosturePatch as aX,
+  clearPolicy as aY,
+  clearReviewQueue as aZ,
+  revokeApprovalGateCooldown as a_,
+  protectionReasonText as aa,
+  HiMiniExclamationCircle as ab,
+  hasRepairableProtectionGap as ac,
+  remainingProtectionRepairParts as ad,
+  protectionGapSignature as ae,
+  repairOutcomeIsStalled as af,
+  ProtectionRepairFlowError as ag,
+  nextProtectionRepairOutcome as ah,
+  waitForAuthorizeUrl as ai,
+  startOrRecoverCloudConnect as aj,
+  safeCloudConnectUrl as ak,
+  openPackageFirewallAuthorizeFallback as al,
+  waitForCloudConnection as am,
+  activeFailedHarnesses as an,
+  resetRepairOutcomeTracker as ao,
+  HiMiniWrenchScrewdriver as ap,
+  fetchSettings as aq,
+  harnessPostureRows as ar,
+  selectHarnessPosture as as,
+  harnessPosturePatch as at,
+  harnessRowTone as au,
+  harnessPostureOptions as av,
+  HiMiniEye as aw,
+  harnessRowStatus as ax,
+  PROTECTION_POSTURE_COPY as ay,
+  globalPosture as az,
+  HiMiniChevronUp as b,
+  FaAws as b$,
+  importSettings as b0,
+  resetSettings as b1,
+  enrollApprovalGateTotp as b2,
+  verifyApprovalGateTotp as b3,
+  clearEvidence as b4,
+  exportDiagnostics as b5,
+  repairApprovalCenter as b6,
+  exportSettings as b7,
+  setupDesktopNotifications as b8,
+  settingsWatchBannerModel as b9,
+  fetchExtensionCatalogV2Api as bA,
+  localPermissionDraftState as bB,
+  setLocalPermissionDraftState as bC,
+  extensionPolicyAuthorityUnchanged as bD,
+  newExtensionPolicyDraftIdentity as bE,
+  extensionPolicyDraftIsDirty as bF,
+  setLocalPermissionDraftStates as bG,
+  buildExtensionPolicyDraftMutation as bH,
+  fetchEffectiveExtensionControls as bI,
+  previewExtensionMutation as bJ,
+  isCurrentExtensionPolicyDraft as bK,
+  applyExtensionMutation as bL,
+  fetchExtensionControlHistory as bM,
+  managedPermissionState as bN,
+  controlProvenance as bO,
+  treatmentLabel as bP,
+  useResolvedApprovalGate as bQ,
+  groupPermissionsByFamily as bR,
+  HiMiniInformationCircle as bS,
+  approvalProofRecentlySatisfied as bT,
+  bulkCommandState as bU,
+  fetchLocalCliApi as bV,
+  GenIcon as bW,
+  HiMiniGlobeAlt as bX,
+  HiMiniServerStack as bY,
+  HiMiniFolder as bZ,
+  FaWindows as b_,
+  WorkspacePageHeader as ba,
+  commitDashboardLocation as bb,
+  guardAwareHref as bc,
+  humanizeList as bd,
+  isProtectionPosture as be,
+  deriveProtectionPosture as bf,
+  normalizeHarnessPostures as bg,
+  approvalGateCooldownLabel as bh,
+  isGuardDemoMode as bi,
+  isRecord$4 as bj,
+  fetchWithGuardAuth as bk,
+  overrideRows as bl,
+  harnessPostureSummary as bm,
+  joinNames as bn,
+  sortHarnessRows as bo,
+  restartHarnessWatch as bp,
+  harnessWatchPrompt as bq,
+  canRestartHarnessWatch as br,
+  HiMiniKey as bs,
+  fetchExtensionCatalog as bt,
+  normalizeExtensionCatalogSummary as bu,
+  normalizeExtensionPermission as bv,
+  ExtensionControlProtocolError as bw,
+  ExtensionControlApiError as bx,
+  normalizeExtensionCatalogItem as by,
+  guardApiCacheScope as bz,
+  HiMiniChevronDown as c,
+  HiMiniHome as c$,
+  fetchMcpProviderActions as c0,
+  previewLocalCliMutation as c1,
+  applyLocalCliMutation as c2,
+  LocalCliApiError as c3,
+  LOCAL_CLI_CAPABILITIES as c4,
+  readJson as c5,
+  enrollablePackageScriptCommands as c6,
+  seenSuggestionMeta as c7,
+  HiMiniPlus as c8,
+  looksLikeProjectRelocatePaste as c9,
+  localCliHref as cA,
+  filterCodexHostApps as cB,
+  connectorWorkspaceItems as cC,
+  customExtensionNeedsReview as cD,
+  extensionDisplayName as cE,
+  catalogRowSecondLine as cF,
+  extensionStateLabel as cG,
+  HiMiniFunnel as cH,
+  refreshCodexHostInventory as cI,
+  loadCurrentDashboardBuild as cJ,
+  canonicalExtensionId as cK,
+  extensionDetailHref as cL,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as cM,
+  acknowledgeDegradedExtensionControlAuthority as cN,
+  recoverExtensionControlAuthority as cO,
+  readExtensionDetailUrlState as cP,
+  parseProtectionRoute as cQ,
+  addCustomExtensionHref as cR,
+  GuardModalLayer as cS,
+  runHarnessAction as cT,
+  GuardHarnessActionError as cU,
+  HiMiniRocketLaunch as cV,
+  HiMiniTrash as cW,
+  fetchGuardApi as cX,
+  formatHarnessCommand as cY,
+  fetchApprovalPage as cZ,
+  fetchPolicy as c_,
+  packageScriptFilterNeedle as ca,
+  suggestedPackageScriptExtensions as cb,
+  filterExtensionSuggestions as cc,
+  suggestedHarnessExtensions as cd,
+  suggestedSeenExtensions as ce,
+  keepsPackageScriptCatalog as cf,
+  recognizeLocalCli as cg,
+  preferredPackageScriptExtension as ch,
+  looksLikePackageScriptPaste as ci,
+  enrollmentCommandStates as cj,
+  isBulkApproveGateReady as ck,
+  HiMiniArrowLeft as cl,
+  fetchLocalCliList as cm,
+  normalizeLocalCliList as cn,
+  refreshMcpInventory as co,
+  startGuardCloudConnect as cp,
+  extensionEffectiveState as cq,
+  permissionEffectiveState as cr,
+  HiMiniArrowTopRightOnSquare as cs,
+  fetchExtensionControlApi as ct,
+  permissionForRule as cu,
+  fetchExtensionDiscoveryApi as cv,
+  HiMiniClock as cw,
+  startCancelableDiscoveryJob as cx,
+  waitForMcpDiscoveryJob as cy,
+  isLocalCliId as cz,
+  HiMiniArrowPath as d,
+  fetchSupplyChainBundle as d$,
+  appSetupTarget as d0,
+  guardActionPresentation as d1,
+  DEFAULT_FILTER_STATE as d2,
+  filterEvidence as d3,
+  sortEvidence as d4,
+  computeMetrics as d5,
+  CommandActivityWorkspace as d6,
+  EvidenceFilterBar as d7,
+  EvidenceInsightStrip as d8,
+  EvidenceActionList as d9,
+  activatePackageFirewallRuntime as dA,
+  EntitlementNotice as dB,
+  chooseSupplyChainAuditFolder as dC,
+  fetchReceipts as dD,
+  lazyWorkspace as dE,
+  __vitePreload as dF,
+  scopeLabel as dG,
+  HiMiniCloudArrowUp as dH,
+  HiMiniCodeBracket as dI,
+  HiMiniClipboardDocument as dJ,
+  HiMiniUsers as dK,
+  HiMiniIdentification as dL,
+  policyActionLabel as dM,
+  createCloudExceptionRequest as dN,
+  HiMiniPuzzlePiece as dO,
+  fetchCloudExceptions as dP,
+  fetchCloudExceptionRequests as dQ,
+  downloadBlob as dR,
+  PolicyStatField as dS,
+  PaginationControls as dT,
+  HiMiniArrowDownTray as dU,
+  HiMiniQueueList as dV,
+  Surface as dW,
+  fetchMcpPolicyRequest as dX,
+  resolveMcpPolicyRequest as dY,
+  HiMiniDocumentPlus as dZ,
+  HiMiniDocumentMagnifyingGlass as d_,
+  EvidenceActionDetail as da,
+  policyIdentityKey as db,
+  clearLabelForScope as dc,
+  HiMiniChartBar as dd,
+  HiMiniCheckBadge as de,
+  isSupplyChainAuditIncomplete as df,
+  isSupplyChainAuditEvidence as dg,
+  readString$1 as dh,
+  IconActionButton as di,
+  HiMiniBeaker as dj,
+  ActivationSummary as dk,
+  ActionResultPanel as dl,
+  HiMiniBugAnt as dm,
+  ConnectFlowCard as dn,
+  ApprovalProofInline as dp,
+  HiMiniCloudArrowDown as dq,
+  fetchPackageFirewallStatus as dr,
+  runPackageAudit as ds,
+  resolveSupplyChainAuditFailure as dt,
+  runPackageSync as du,
+  startPackageFirewallConnect as dv,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dw,
+  repairSupplyChainProtection as dx,
+  runPackageFirewallAction as dy,
+  parseInterceptProofSnapshot as dz,
+  HiMiniCheck as e,
+  isSupplyChainScannerEvidence as e0,
+  isBlockedGuardAction as e1,
+  HiMiniShieldExclamation as e2,
+  HiMiniComputerDesktop as e3,
+  HiMiniChevronLeft as e4,
+  HiMiniArrowDown as e5,
+  HiMiniArrowUp as e6,
+  runAuditRemediation as e7,
+  HiMiniSignal as e8,
+  formatRelativeTime as f,
+  HiMiniNoSymbol as g,
+  harnessDisplayName as h,
+  HiMiniHandRaised as i,
   jsxRuntimeExports as j,
-  isConnectableAppHarness as k,
-  useProtectionPresentationState as l,
-  unavailableProtectionHealth as m,
-  EmptyState as n,
-  EvidenceInsightsShareModal as o,
-  protectionHealthFor as p,
-  queueErrorIsUnauthorizedSession as q,
+  HiMiniArrowUpTray as k,
+  HiMiniCube as l,
+  HiMiniPencilSquare as m,
+  normalizeHarnessSlug as n,
+  HiMiniCommandLine as o,
+  HiMiniMagnifyingGlass as p,
+  HiMiniDocumentText as q,
   reactExports as r,
   HiMiniCheckCircle as s,
-  turnProtectionOnUpdate as t,
-  useReceiptAnalytics as u,
-  GuardHero as v,
-  watchBannerModel as w,
-  formatNumber as x,
-  HiMiniShieldCheck as y,
-  guardActionDisposition as z
+  HiMiniArrowRight as t,
+  isConnectableAppHarness as u,
+  HiMiniLockClosed as v,
+  getHeatmapLevel as w,
+  HomeInsightsMetrics as x,
+  EvidenceActivityHeatmapMini as y,
+  homeCommandActivityModel as z
 };

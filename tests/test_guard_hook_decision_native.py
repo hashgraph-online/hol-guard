@@ -304,3 +304,37 @@ def test_resident_relaxes_review_default_for_benign_read_without_a_python_verdic
     assert "benign_native_file_read" not in facts
     composition, _facts = compose({**event, "tool_name": "Read", "tool_input": {"path": str(workspace / "gone.md")}})
     assert composition["composed_action"] == "review"
+
+
+def test_a_prompt_scan_the_resident_cannot_answer_is_not_clean(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A dead resident leaves the prompt unclassified, it does not end the hook."""
+
+    from codex_plugin_scanner.guard import native_prompt
+    from codex_plugin_scanner.guard.cli import commands_support_codex_paths as paths
+    from codex_plugin_scanner.guard.cli import commands_support_codex_prompt_attachments as attachments
+    from codex_plugin_scanner.guard.cli.commands_hook_native_generic_facts import hook_classifiers
+    from codex_plugin_scanner.guard.native_codex_tool_output import ToolOutputAnswer
+
+    # The credential-file scan answers "nothing to review"; only the
+    # attachment scan is the one the resident cannot answer.
+    monkeypatch.setattr(native_prompt, "extract_prompt_requests", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        paths,
+        "codex_tool_output_native",
+        lambda *_args, **_kwargs: ToolOutputAnswer(True, "null", None),
+    )
+    monkeypatch.setattr(
+        attachments,
+        "codex_tool_output_native",
+        lambda *_args, **_kwargs: ToolOutputAnswer(False, None, "native_codex_tool_output_unavailable"),
+    )
+    classifiers = hook_classifiers(
+        canonical_harness="codex",
+        guard_home=None,
+        home_dir=tmp_path,
+        payload={"hook_event_name": "UserPromptSubmit", "prompt": "Read .codex/attachments/a/b.txt please."},
+        runtime_artifact_checked=False,
+        runtime_workspace=tmp_path,
+    )
+
+    assert classifiers["prompt_clean"](None) is False

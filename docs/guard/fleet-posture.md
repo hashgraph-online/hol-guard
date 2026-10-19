@@ -111,13 +111,19 @@ hol-guard extensions list [--json]
 hol-guard mcp list [--json]
 ```
 
-Print the installed plugins and extensions, or the installed MCP servers, from the same local inventory that
-fleet posture reads. They show name, harness, type, scope, last policy verdict and last-seen time as a table,
-or the full records with `--json` (`generated_at`, `kind`, `count` and `items`, where each item also carries
-`config_path`, `artifact_hash`, and `first_seen_at`). `extensions list` covers the items reported as the
-`plugin` kind (plugins, plugin files and extensions); `mcp list` covers MCP servers. Items Guard has marked
-removed, and items from tools that fleet posture does not report on, are left out. Both commands are
-read-only: they do not send anything and do not queue an inventory request.
+`extensions list` prints the installed plugins and extensions from the same local inventory that fleet
+posture reads. It shows name, harness, type, scope, last policy verdict and last-seen time as a table, or the
+full records with `--json` (`generated_at`, `kind`, `count` and `items`, where each item also carries
+`config_path`, `artifact_hash`, and `first_seen_at`). It covers the items reported as the `plugin` kind
+(plugins, plugin files and extensions). Items Guard has marked removed, and items from tools that fleet
+posture does not report on, are left out.
+
+`mcp list` prints the MCP servers the Protect page lists: servers configured in a harness, stdio or remote,
+and servers Guard has seen an agent call. Each one is grouped as needing setup, allowed, or blocked. When the
+local dashboard is running, a server that needs setup comes with a link to its Protect page. See
+[custom extensions](./local-cli-allowlist.md#from-the-command-line).
+
+Both commands are read-only: they do not send anything and do not queue an inventory request.
 
 ## Policy acknowledgement
 

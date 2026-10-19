@@ -10,7 +10,8 @@
 //! which the default DLL search order reaches after the system directories,
 //! with the executables there a bare-name child launch finds first, and the
 //! DLLs of every `PATH` directory outside the system and install roots,
-//! where the search ends. Batch
+//! where the search ends, except those the system directories already hold,
+//! which the loader finds before it reaches `PATH`. Batch
 //! files, App Execution Aliases, shims, loader-steering variables and every
 //! spelling the two resolvers could read differently stay once-only.
 
@@ -29,6 +30,14 @@ const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
 const MAX_BOUND_FILES: usize = 16;
 const MAX_BOUND_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_DIRECTORY_ENTRIES: usize = 4096;
+/// `PATH` DLLs have their own budget, so a long developer `PATH` neither
+/// crowds out the application and working directories nor turns every
+/// launch once-only.
+const MAX_PATH_DLLS: usize = 128;
+const MAX_PATH_DLL_BYTES: u64 = 64 * 1024 * 1024;
+/// The system directory an image searches before `PATH`, for each
+/// architecture it may run as.
+const SYSTEM_DIRS: [&str; 3] = ["System32", "SysWOW64", "SysArm32"];
 /// `PATHEXT` as `cmd.exe` defaults it, and the shortcut Cygwin-style shells
 /// also start.
 const DEFAULT_EXTENSIONS: [&str; 5] = [".com", ".exe", ".bat", ".cmd", ".lnk"];
@@ -147,7 +156,7 @@ pub(super) fn native_launch(
         return Err(MUTABLE_LAUNCHER);
     }
     resolvers_agree(command, &image_dir, &image_name, cwd, ctx)?;
-    let mut budget = Budget::default();
+    let mut budget = Budget::new(MAX_BOUND_FILES, MAX_BOUND_BYTES);
     let (location, app_dir) = if under_install_root(&image) {
         ("install-root", Value::Null)
     } else {
@@ -155,13 +164,14 @@ pub(super) fn native_launch(
             &image_dir,
             Some(&image_name),
             &LOADED_SUFFIXES,
+            &|_| false,
             &mut budget,
             ctx,
         )?;
         ("content-bound", json!(files))
     };
-    let cwd_dlls = bound_files(cwd, None, &LOADED_SUFFIXES, &mut budget, ctx)?;
-    let path_dlls = search_path_dlls(&mut budget, ctx)?;
+    let cwd_dlls = bound_files(cwd, None, &LOADED_SUFFIXES, &|_| false, &mut budget, ctx)?;
+    let path_dlls = search_path_dlls(ctx)?;
     identity["entrypoint"] = json!({
         "kind": "windows-native-image",
         "status": "bound-by-executable",
@@ -188,14 +198,19 @@ fn steers_loader(ctx: &Ctx) -> bool {
 /// Content digests of the DLLs in each `PATH` directory, where the loader
 /// search ends, and in each `~/bin` Git Bash puts ahead of it, outside the
 /// Windows and install roots. A missing directory binds as empty, so a DLL
-/// planted in it later changes the token; over the caps stays once-only.
-fn search_path_dlls(budget: &mut Budget, ctx: &Ctx) -> Proof<BTreeMap<String, String>> {
+/// planted in it later changes the token; over the caps stays once-only. A
+/// directory listed twice binds once, and a DLL every image finds in a system
+/// directory first is never loaded from here, so neither spends the budget.
+fn search_path_dlls(ctx: &Ctx) -> Proof<BTreeMap<String, String>> {
     let windows = guard_runtime_windows_process::windows_directory()
         .and_then(|path| path.to_str().map(str::to_owned))
         .ok_or(UNPROVEN_LAUNCH)?;
     let path = env_value(ctx.env, "PATH")?.ok_or(UNPROVEN_LAUNCH)?;
     let (_, homes) = super::git_windows::user_config_roots(ctx)?;
     let homes = homes.iter().map(|home| fs_path::join(home, "bin"));
+    let mut budget = Budget::new(MAX_PATH_DLLS, MAX_PATH_DLL_BYTES);
+    let mut seen = BTreeSet::new();
+    let shadowed = |name: &str| found_before_path(&windows, name);
     let mut found = BTreeMap::new();
     for entry in path.split(';').map(str::to_owned).chain(homes) {
         ctx.check()?;
@@ -218,13 +233,34 @@ fn search_path_dlls(budget: &mut Budget, ctx: &Ctx) -> Proof<BTreeMap<String, St
         if resolved.is_some() && (system || under_install_root(&entry)) {
             continue;
         }
+        if !seen.insert(entry.to_ascii_lowercase()) {
+            continue;
+        }
         if fs_path::is_dir(&entry) {
-            found.extend(bound_files(&entry, None, &[".dll"], budget, ctx)?);
+            let dlls = bound_files(&entry, None, &[".dll"], &shadowed, &mut budget, ctx)?;
+            found.extend(dlls);
         } else if std::fs::symlink_metadata(&entry).is_ok() {
             return Err(UNPROVEN_LAUNCH);
         }
     }
     Ok(found)
+}
+
+/// Whether every image finds a DLL named `name` before the search reaches
+/// `PATH`: in the Windows directory, or in every architecture's system
+/// directory as only a 64-bit process sees them unredirected. Each search
+/// order that reaches `PATH` visits these first; `LOAD_LIBRARY_SEARCH_*` never.
+fn found_before_path(windows: &str, name: &str) -> bool {
+    let holds = |dir: &str| fs_path::is_file(&fs_path::join(dir, name));
+    if holds(windows) {
+        return true;
+    }
+    let mut present = SYSTEM_DIRS
+        .iter()
+        .map(|dir| fs_path::join(windows, dir))
+        .filter(|dir| fs_path::is_dir(dir))
+        .peekable();
+    cfg!(target_pointer_width = "64") && present.peek().is_some() && present.all(|dir| holds(&dir))
 }
 
 /// A spelling bash and `CreateProcessW` read as the same file: no MSYS root
@@ -366,21 +402,35 @@ fn launchable_entries(dir: &str, name: &str, extensions: &[String]) -> Proof<Vec
     Ok(present)
 }
 
-#[derive(Default)]
 struct Budget {
     files: usize,
     bytes: u64,
+    max_files: usize,
+    max_bytes: u64,
+}
+
+impl Budget {
+    fn new(max_files: usize, max_bytes: u64) -> Self {
+        Self {
+            files: 0,
+            bytes: 0,
+            max_files,
+            max_bytes,
+        }
+    }
 }
 
 /// Content digests of the loader inputs in `dir`: its files ending in
 /// `suffixes` and, for the application directory of `image_name`, its manifests,
 /// `.config` and .NET host files and each private assembly
 /// (`<name>\<name>.dll`, `.manifest`).
-/// A `<image>.local` redirection is refused.
+/// A `<image>.local` redirection is refused, and a name `skip` accepts is
+/// never read.
 fn bound_files(
     dir: &str,
     image_name: Option<&str>,
     suffixes: &[&str],
+    skip: &dyn Fn(&str) -> bool,
     budget: &mut Budget,
     ctx: &Ctx,
 ) -> Proof<BTreeMap<String, String>> {
@@ -417,7 +467,7 @@ fn bound_files(
             {
                 bind(&path, budget, &mut found)?;
             }
-            _ if suffixes.iter().any(|suffix| lowered.ends_with(suffix)) => {
+            _ if suffixes.iter().any(|suffix| lowered.ends_with(suffix)) && !skip(&name) => {
                 bind(&path, budget, &mut found)?
             }
             _ => {}
@@ -427,9 +477,9 @@ fn bound_files(
 }
 
 fn bind(path: &str, budget: &mut Budget, found: &mut BTreeMap<String, String>) -> Proof<()> {
-    let remaining = MAX_BOUND_BYTES - budget.bytes;
+    let remaining = budget.max_bytes - budget.bytes;
     budget.files += 1;
-    if budget.files > MAX_BOUND_FILES {
+    if budget.files > budget.max_files {
         return Err(UNPROVEN_LAUNCH);
     }
     let data = fs_path::read_bounded(path, remaining).ok_or(UNPROVEN_LAUNCH)?;

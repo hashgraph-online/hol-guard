@@ -1,6 +1,6 @@
 use super::{
-    cache_list_arguments, inert_line, list_arguments, npmrc_inert, plain_registry_spec,
-    view_arguments,
+    cache_list_arguments, global_configuration_inert, inert_line, list_arguments, npmrc_inert,
+    plain_registry_spec, view_arguments,
 };
 
 fn arguments(text: &str) -> Vec<String> {
@@ -46,13 +46,16 @@ fn list_takes_display_flags_and_package_names() {
         "--all --json",
         "-p -l",
         "--omit=dev zod",
+        "-g",
+        "--global",
+        "--location=global",
+        "-g --depth=0",
     ] {
         assert!(list_arguments(&arguments(text)), "{text}");
     }
     for text in [
-        "-g",
-        "--global",
         "--prefix=/tmp",
+        "--location=/tmp/elsewhere",
         "--depth=999",
         "--omit=everything",
         "../outside",
@@ -104,6 +107,8 @@ fn npmrc_lines_that_move_the_fetch_or_send_credentials_are_unsafe() {
         "engine-strict = true",
         "legacy-peer-deps=true",
         "//registry.npmjs.org/:_authToken=${NPM_TOKEN}",
+        "\u{feff}save-exact=true",
+        "' \"save-exact\" '=true",
     ] {
         assert!(inert_line(line), "{line}");
     }
@@ -127,6 +132,32 @@ fn npmrc_lines_that_move_the_fetch_or_send_credentials_are_unsafe() {
         "[section]",
         "${X?}registry=https://registry.example.test/",
         "user${X?}config=/tmp/other",
+        "\u{feff}registry=https://registry.example.test/",
+        "\u{feff}\"registry\"=https://registry.example.test/",
+        "' \"registry\" '=https://registry.example.test/",
+        "' [\"registry\"] '=https://registry.example.test/",
+    ] {
+        assert!(!inert_line(line), "{line}");
+    }
+}
+
+#[test]
+fn npmrc_lines_are_screened_as_npm_decodes_them() {
+    for line in [
+        "\"save-exact\"=true",
+        "'save-exact'=true",
+        "save-exact=true ; registry=https://registry.example.test/",
+        "\"registry=https://registry.example.test/",
+    ] {
+        assert!(inert_line(line), "{line}");
+    }
+    for line in [
+        "\"\\u0072egistry\"=https://registry.example.test/",
+        "\"regist\\u0072y\"=https://registry.example.test/",
+        "'registry'=https://registry.example.test/",
+        "registry;ignored=https://registry.example.test/",
+        "registry#ignored=https://registry.example.test/",
+        "\"\\u0063afile\"=/tmp/ca.pem",
     ] {
         assert!(!inert_line(line), "{line}");
     }
@@ -142,12 +173,23 @@ fn npmrc_files_are_inert_only_when_absent_or_regular_and_clean() {
     std::fs::write(&moved, "registry=https://registry.example.test/\n").unwrap();
     let directory = root.join("directory");
     std::fs::create_dir_all(&directory).unwrap();
+    let carriage_return = root.join("carriage-return");
+    std::fs::write(
+        &carriage_return,
+        "save-exact=true\rregistry=https://registry.example.test/\n",
+    )
+    .unwrap();
     let oversized = root.join("oversized");
     std::fs::write(&oversized, "a=b\n".repeat(20_000)).unwrap();
 
+    let stray = root.join("stray");
+    std::fs::write(&stray, "not a directory\n").unwrap();
+
     assert!(npmrc_inert(&root.join("absent")));
+    assert!(npmrc_inert(&stray.join("etc/npmrc")));
     assert!(npmrc_inert(&clean));
     assert!(!npmrc_inert(&moved));
+    assert!(!npmrc_inert(&carriage_return));
     assert!(!npmrc_inert(&directory));
     assert!(!npmrc_inert(&oversized));
     #[cfg(unix)]
@@ -156,5 +198,33 @@ fn npmrc_files_are_inert_only_when_absent_or_regular_and_clean() {
         std::os::unix::fs::symlink(&clean, &linked).unwrap();
         assert!(!npmrc_inert(&linked));
     }
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+/// macOS leaves a `.DS_Store` file beside the version directories a Node
+/// version manager keeps. Reading a configuration path below that file fails
+/// with `ENOTDIR`, which is as absent as a missing file, so the stray entry
+/// must not send an ordinary `npm ls` to review.
+#[test]
+fn a_version_root_with_a_stray_file_reads_like_one_without_it() {
+    let root = std::env::temp_dir().join(format!("guard-npm-versions-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&root);
+    let bare = root.join("bare");
+    std::fs::create_dir_all(&bare).unwrap();
+    let stray = root.join("stray");
+    let versions = stray.join(".nvm/versions/node");
+    std::fs::create_dir_all(versions.join("v22.1.0/etc")).unwrap();
+    std::fs::write(versions.join("v22.1.0/etc/npmrc"), "save-exact=true\n").unwrap();
+    std::fs::write(versions.join(".DS_Store"), "\x00\x01").unwrap();
+
+    // The stray entry has to read as an absent configuration on its own.
+    // Comparing the two homes alone proves nothing on a host that keeps a
+    // live `<prefix>/etc/npmrc`, since both homes are then not inert whether
+    // or not `ENOTDIR` is handled.
+    assert!(npmrc_inert(&versions.join(".DS_Store").join("etc/npmrc")));
+    assert_eq!(
+        global_configuration_inert(&stray),
+        global_configuration_inert(&bare)
+    );
     let _ = std::fs::remove_dir_all(&root);
 }

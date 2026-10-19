@@ -155,6 +155,10 @@ fn text(row: &Row, name: &str) -> Option<String> {
     row.get(name).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// Oldest schema with every column these reads use. Version 12 only added
+/// the declaration columns, which these reads never touch.
+const MIN_READ_SCHEMA_VERSION: i64 = 11;
+
 /// The Python writer migrates an older store before this read; a store from
 /// a newer Guard, or one whose schema marker is damaged, stays unread.
 pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
@@ -163,7 +167,12 @@ pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<boo
         return Ok(false);
     }
     match local_store_read::schema_version(connection).map_err(unreadable)? {
-        Some(local_store_read::SUPPORTED_SCHEMA_VERSION) => Ok(true),
+        Some(version)
+            if (MIN_READ_SCHEMA_VERSION..=local_store_read::SUPPORTED_SCHEMA_VERSION)
+                .contains(&version) =>
+        {
+            Ok(true)
+        }
         _ => Err(StoreError::Invalid(
             "native_guard_store_local_cli_schema_unreadable",
         )),

@@ -53,6 +53,9 @@ class ExtensionControlAuthorityView:
     catalog_digest: str
     layers: tuple[ExtensionControlLayer, ...]
     managed_revision: int = 0
+    # The authority was never read, so this view reports no reading rather than
+    # a verdict about it. It grants nothing, and the next read replaces it.
+    unread: bool = False
 
     def layers_for(self, surface: ControlSurface) -> tuple[ExtensionControlLayer, ...]:
         if self.health is AuthorityHealth.PROTECTED:
