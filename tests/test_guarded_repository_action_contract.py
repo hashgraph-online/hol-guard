@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 ACTION = ROOT / "guarded-repository" / "action.yml"
 WORKFLOW = ROOT / ".github" / "workflows" / "guarded-repository.yml"
 SECRET_WORD_BOUNDARY_FIX_SHA = "09c6f67cb59c9453981b2ae3f5675155eb003874"
-GUARDED_ACTION_USE = re.compile(r"(?m)^[ \t]+uses: hashgraph-online/hol-guard/guarded-repository@([a-f0-9]{40})$")
+GUARDED_ACTION_USE = re.compile(r"(?m)^[ \t]*(?:-[ \t]+)?uses:[ \t]*hashgraph-online/hol-guard/guarded-repository@(\S+)")
 
 
 def test_composite_action_defaults_portal_registration_off() -> None:
