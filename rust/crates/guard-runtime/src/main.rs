@@ -238,6 +238,7 @@ mod direct_tool_context_op;
 #[cfg(test)]
 mod direct_tool_context_tests;
 mod direct_tool_managed_bun;
+mod directory_trust;
 mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
@@ -266,6 +267,7 @@ mod guard_config_update_coerce;
 mod guard_config_update_harness;
 mod guard_config_update_settings;
 mod guard_config_update_value;
+mod guard_paths;
 mod guard_store_advisory_cache;
 #[cfg(test)]
 mod guard_store_advisory_cache_vectors_tests;

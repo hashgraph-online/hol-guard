@@ -487,6 +487,7 @@
     "src/codex_plugin_scanner/guard/native_binary_write_lock.py",
     "src/codex_plugin_scanner/guard/native_runtime_values.py",
     "src/codex_plugin_scanner/guard/native_runtime_admission.py",
+    "src/codex_plugin_scanner/guard/native_directory_trust.py",
     "src/codex_plugin_scanner/guard/native_execution.py",
     "src/codex_plugin_scanner/guard/native_prompt.py",
     "src/codex_plugin_scanner/guard/native_data_flow.py",

@@ -119,7 +119,6 @@ def _vectors() -> dict[str, object]:
         provided, workdir = handler._runtime_hook_exec_command_workdir(payload)
         workdirs.append({"payload": payload, "provided": provided, "workdir": workdir})
     deadlines = _deadline_vectors(server, RuntimeHookDeadline)
-    directory_authority = _directory_authority_vectors()
     return {
         "schema": "hook-admission-parity.v1",
         "lane": lane,
@@ -129,7 +128,6 @@ def _vectors() -> dict[str, object]:
         "workspace_string": workspaces,
         "exec_command_workdir": workdirs,
         "deadline": deadlines,
-        "directory_authority": directory_authority,
     }
 
 
@@ -168,45 +166,6 @@ def _deadline_vectors(server: object, deadline_type: type) -> list[dict[str, obj
             )
     finally:
         from_hint.__kwdefaults__["monotonic"] = original
-    return vectors
-
-
-DIRECTORY_CANDIDATES: list[str] = [
-    "",
-    "relative/dir",
-    "~no-such-user-for-parity",
-    "{root}",
-    "{root}/",
-    "{root}/a",
-    "{root}/a/./b",
-    "{root}/a/../b",
-    "{root}/../escape",
-    "{root}-sibling",
-    "{root}/a/..",
-]
-
-
-def _directory_authority_vectors() -> list[dict[str, object]]:
-    """Record accepted canonical paths and rejection reasons of the directory validator."""
-    import tempfile
-
-    from codex_plugin_scanner.guard.directory_path_authority import (
-        DirectoryPathTrustError,
-        validate_guard_directory_path,
-    )
-
-    vectors: list[dict[str, object]] = []
-    with tempfile.TemporaryDirectory() as raw_root:
-        root = Path(raw_root).resolve()
-        for template in DIRECTORY_CANDIDATES:
-            candidate = template.replace("{root}", root.as_posix())
-            try:
-                accepted = validate_guard_directory_path(candidate, (root,))
-            except DirectoryPathTrustError as error:
-                outcome: dict[str, object] = {"rejected": error.reason}
-            else:
-                outcome = {"accepted": Path(accepted).relative_to(root).as_posix()}
-            vectors.append({"candidate": template, **outcome})
     return vectors
 
 

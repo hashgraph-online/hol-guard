@@ -855,52 +855,6 @@
       "transport": 11.0
     }
   ],
-  "directory_authority": [
-    {
-      "candidate": "",
-      "rejected": "relative_path"
-    },
-    {
-      "candidate": "relative/dir",
-      "rejected": "relative_path"
-    },
-    {
-      "candidate": "~no-such-user-for-parity",
-      "rejected": "relative_path"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}/"
-    },
-    {
-      "accepted": "a",
-      "candidate": "{root}/a"
-    },
-    {
-      "accepted": "a/b",
-      "candidate": "{root}/a/./b"
-    },
-    {
-      "accepted": "b",
-      "candidate": "{root}/a/../b"
-    },
-    {
-      "candidate": "{root}/../escape",
-      "rejected": "unexpected_root"
-    },
-    {
-      "candidate": "{root}-sibling",
-      "rejected": "unexpected_root"
-    },
-    {
-      "accepted": ".",
-      "candidate": "{root}/a/.."
-    }
-  ],
   "exec_command_workdir": [
     {
       "payload": {},
