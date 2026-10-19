@@ -1005,7 +1005,18 @@ jobs:
           compiler = Path(os.environ["SOURCE_COMPILER"]).resolve(strict=True)
           source = json.loads(Path("rust/crates/guard-command/tests/fixtures/command-source-example.v1.json").read_text(encoding="utf-8"))
           trust = json.loads(Path("contracts/extensions/build-trust-class-map.v1.json").read_text(encoding="utf-8"))
-          build = {"schema": "guard.command-extension-build.v1", "sources": [source], "mcp_sources": [], "trust": trust, "base": "packaged"}
+          # Authoring against the packaged base carries the global validation
+          # context: the packaged catalog this build just regenerated and
+          # verified, with no installed packs.
+          catalog = json.loads(Path("contracts/extensions/command-catalog.v1.json").read_text(encoding="utf-8"))["catalog"]
+          build = {
+              "schema": "guard.command-extension-build.v1",
+              "sources": [source],
+              "mcp_sources": [],
+              "trust": trust,
+              "base": "packaged",
+              "validation_base": {"catalog": catalog, "programs": []},
+          }
           # Use the same native global admission context as maintainer authoring.
           with tempfile.TemporaryDirectory(prefix="hol-guard-publish-context-") as scratch:
               request = authoring_request(
