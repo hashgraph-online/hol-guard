@@ -3,7 +3,7 @@
   "id": "mcp.krusch",
   "version": "1.0.0",
   "name": "Krusch Harness MCP",
-  "description": "PostgreSQL-backed coding harness and agentic execution proxy that stages diffs, runs sandboxed verification, and commits working-tree writes via a two-phase commit (2PC) apply journal. Status, diff, and diagnostic reads inherit Guard policy; task execution, diff apply, rejection, and abort require review. Off until you turn it on.",
+  "description": "PostgreSQL-backed coding and staged execution harness that stages diffs, runs sandboxed verification, and commits working-tree writes via a two-phase commit (2PC) apply journal. Status, diff, and diagnostic reads inherit Guard policy; task execution, diff apply, rejection, and abort require review. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
