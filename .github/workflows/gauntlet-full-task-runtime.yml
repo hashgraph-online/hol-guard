@@ -61,6 +61,10 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+          # The bundle stamps `git rev-parse HEAD` as its source SHA and the wheel build
+          # checks it against SOURCE_SHA below, so a pull request has to build its own head
+          # rather than the merge commit Actions checks out by default.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
