@@ -11,7 +11,7 @@
     "displayName": "DEA",
     "url": "https://github.com/shreyassaw5394/dea"
   },
-  "icon": { "kind": "react-icon", "name": "HiMiniBugAnt", "background": "#0B0F17" },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0B0F17" },
   "homepage": "https://debuganything.dev",
   "license": "MIT",
   "launch": {
