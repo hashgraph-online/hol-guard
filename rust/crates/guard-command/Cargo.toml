@@ -10,6 +10,8 @@ rust-version.workspace = true
 autotests = false
 
 [dependencies]
+rusqlite.workspace = true
+tempfile = "3.10"
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
@@ -68,6 +70,10 @@ time = "=0.3.47"
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "guard-cloud-catalog"
+path = "src/cloud_catalog_cli.rs"
 
 [[test]]
 name = "integration"

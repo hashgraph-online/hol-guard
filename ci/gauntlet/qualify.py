@@ -19,10 +19,11 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from . import qualify_setup
 from .fixtures import create_numbered_dir
@@ -75,6 +76,7 @@ def attempt_argv(
     work_root: Path,
     timeout: float,
     max_rounds: int,
+    native_route: str | None = None,
 ) -> list[str]:
     """The candidate's own runner invocation for one complete fresh attempt."""
     argv = [
@@ -82,7 +84,7 @@ def attempt_argv(
         "-m",
         "ci.gauntlet",
         "run",
-        "--native-luna-route",
+        *(["--native-route", native_route] if native_route else ["--native-luna-route"]),
         "--reasoning-effort",
         effort,
         "--sdk-root",
@@ -304,6 +306,12 @@ def main(args: Any) -> int:
     started = time.monotonic()
     timings = PhaseTimings()
     sha = args.sha
+    native_route = getattr(args, "native_route", None)
+    if native_route:
+        from .luna_route import BACKENDS, parse_backend
+
+        if args.effort not in BACKENDS[parse_backend(native_route)]:
+            raise ValueError("unsupported effort for --native-route")
     if SHA.fullmatch(sha) is None:
         raise ValueError("--sha must be a full 40-character commit")
     if args.candidate_sha is not None and SHA.fullmatch(args.candidate_sha) is None:
@@ -382,6 +390,7 @@ def main(args: Any) -> int:
                 argv = attempt_argv(
                     python=candidate / ".venv" / "bin" / "python",
                     effort=args.effort,
+                    native_route=native_route,
                     sdk_root=Path(sdk_info["root"]),
                     jobs=args.jobs,
                     host_slots=args.host_slots,
@@ -408,7 +417,7 @@ def main(args: Any) -> int:
                         cwd=candidate,
                         env=env,
                         log=run_root / "logs" / f"attempt-{k}.log",
-                        on_started=lambda: driven.append(k),
+                        on_started=lambda attempt=k: driven.append(attempt),
                     )
                 record = summarize_attempt(k, evidence, rc, time.monotonic() - t0, _read_summary(evidence))
                 record["work_root"] = str(work)

@@ -403,7 +403,15 @@ fn decide(
     request: &McpRelayDecideRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Answer, &'static str> {
+    policy_store
+        .require_guard_home(&request.guard_home)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let admitted = admit(request, policy_store)?;
+    // Keep authority fixed through routing and evidence finalization, not
+    // only while the tool policy is evaluated.
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let intent = package::package_gate(request)?;
     if let Some(answer) = evaluation_leg(request, intent.is_some()) {
         return answer;
@@ -421,6 +429,7 @@ fn decide(
         &admitted,
         connection.as_deref(),
         intent.as_ref().map(PackageLeg::Decide),
+        policy_store,
     )?;
     drop(snapshot);
     // A package call is answered by its own lane, under the package policy and
@@ -591,7 +600,14 @@ fn resolve(
     admitted: &Admitted,
     connection: Option<&Connection>,
     leg: Option<PackageLeg<'_>>,
+    policy_store: &PolicySnapshotStore,
 ) -> Result<(Resolved, Option<Legged>), &'static str> {
+    policy_store
+        .require_guard_home(&request.guard_home)
+        .map_err(|_| BINDING_INCOMPLETE)?;
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let binding = &admitted.binding;
     let control_digest = binding
         .exact_action_control_digest
@@ -609,7 +625,11 @@ fn resolve(
     };
     let identity = identity(request, &view, control_digest.clone())?;
     let subject = subject::subject(request, &identity, &view)?;
-    let decision = run_policy(&subject, saved.as_ref(), connection)?;
+    let catalog = crate::contributed_mcp_decision_op::Catalog {
+        guard_home: &request.guard_home,
+        controls: admitted.snapshot.command_extensions.as_ref(),
+    };
+    let decision = run_policy(&subject, saved.as_ref(), connection, &catalog)?;
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(
@@ -625,6 +645,7 @@ fn resolve(
                 request,
                 inputs,
                 &subject,
+                &catalog,
                 // The queue route of the package lane is answered by the same
                 // bound mode and redaction level the tool lane's queue route is.
                 package_lane::QueueBinding {

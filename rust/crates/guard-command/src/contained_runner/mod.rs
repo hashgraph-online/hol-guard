@@ -69,3 +69,20 @@ pub fn execute_typescript(launch: &RunnerLaunch, execution: &Value) -> Result<Va
 pub fn execute_package_script(launch: &RunnerLaunch) -> Result<Value, String> {
     flows::run_package_script(&launch.launch())?.to_value()
 }
+
+/// Whether one exact `bun run <operation>` still binds to its package, lock,
+/// executable and inputs in `workspace`.
+///
+/// `_bounded_local_runner_chain_is_safe`
+/// (`secret_file_request_services/shell_quote_parsing.py:198`) asks the
+/// evidence builder exactly this one question and keeps nothing else from the
+/// answer, so the resident can answer it from the crate's own port instead of
+/// calling back into Python. An unreadable workspace, a script that does not
+/// bind, or any builder error is not complete: the chain stays unrecognized
+/// and the caller refuses it.
+pub fn bun_script_evidence_complete(argv: &[String], workspace: &Path) -> bool {
+    matches!(
+        script_evidence::build_local_package_script_evidence("bun", argv, workspace),
+        Ok(Some(evidence)) if evidence.complete
+    )
+}

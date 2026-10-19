@@ -152,12 +152,44 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
         return run(build_command, root, env)
 
     def export() -> dict:
-        """Read the complete program and catalog embedded by the source compiler."""
+        """Read the immutable core program and catalog embedded by the source compiler."""
         return json.loads(run([str(compiler), "export-built"], root, env).stdout)
 
-    def verify() -> None:
+    def fixture_result(fixture: dict, *, check: bool = True):
+        """Supply complete offline interfaces while keeping contributor fixtures unchanged."""
+        with tempfile.TemporaryDirectory(prefix="hol-guard-isolation-context-") as scratch:
+            context = run(
+                [
+                    sys.executable,
+                    "-c",
+                    "import json,sys; from pathlib import Path; "
+                    "sys.path.insert(0,sys.argv[3]); "
+                    "from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request; "
+                    "from prepare_extension_contribution import _development_release as development_release; "
+                    "json.dump(authoring_request('test',json.load(sys.stdin),Path(sys.argv[1]),"
+                    "installed=False,cache_directory=Path(sys.argv[2]).resolve(),"
+                    "development=development_release),sys.stdout)",
+                    str(compiler),
+                    scratch,
+                    str(root / "scripts"),
+                ],
+                root,
+                env,
+                payload=fixture,
+            )
+            return run([str(compiler), "test"], root, env, payload=json.loads(context.stdout), check=check)
+
+    def verify(*, check_public: bool = True) -> None:
         """Stage and strictly verify projections from the current compiler."""
-        run([sys.executable, "scripts/ci/verify_native_command_program.py", "--compiler", str(compiler)], root, env)
+        if check_public:
+            run([sys.executable, "scripts/ci/verify_native_command_program.py", "--compiler", str(compiler)], root, env)
+        else:
+            # The harness's new record is deliberately uncommitted, so HEAD
+            # cannot contain it. Keep normal CI's Git-blob check unchanged;
+            # verify the synthetic source/descriptor through native generation.
+            command = [sys.executable, "scripts/build_native_command_program.py", "--compiler", str(compiler)]
+            run(command, root, env)
+            run([*command, "--check"], root, env)
 
     def prepare(source: Path, fixture: Path) -> None:
         """Exercise source preparation and installed contributor handoff without executing target commands."""
@@ -282,13 +314,13 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
         ],
     }
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n")
-    initial_fixture = json.loads(run([str(compiler), "test"], root, env, payload=fixture).stdout)
+    initial_fixture = json.loads(fixture_result(fixture).stdout)
     require(initial_fixture.get("ok") is True, "new portable fixture failed against the prior packaged base")
     build()
-    verify()
     prepare(source_path, fixture_path)
+    verify(check_public=False)
     current = export()
-    require({entry["extension_id"] for entry in current["catalog"]} == baseline_ids | {EXTENSION_ID}, "inventory loss")
+    require(current == baseline and digest(compiler) == binary, "optional addition changed the resident core")
     descriptor = root / "contributions/extensions" / f"{EXTENSION_ID}.json"
     public = json.loads(descriptor.read_bytes())
     require(public["activation"] == "opt-in" and public["trustClass"] == "external", "external trust changed")
@@ -296,7 +328,7 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
 
     bad_fixture = json.loads(json.dumps(fixture))
     bad_fixture["cases"][0]["expected_action"] = "allow"
-    negative = run([str(compiler), "test"], root, env, payload=bad_fixture, check=False)
+    negative = fixture_result(bad_fixture, check=False)
     require(json.loads(negative.stdout).get("ok") is False, "incorrect security expectation passed")
     record("incorrect_behavior_fixture_rejected")
 
@@ -304,8 +336,9 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     source_path.write_text(json.dumps(source, separators=(",", ":")) + "\n")
     fixture_path.write_text(json.dumps(fixture, indent=2) + "\n")
     build()
-    verify()
+    require(digest(compiler) == binary and export() == baseline, "optional edit changed the resident core")
     prepare(source_path, fixture_path)
+    verify(check_public=False)
     require(json.loads(descriptor.read_bytes())["description"] == source["extension"]["description"], "edit lost")
     record("source_only_edit_and_existing_handoff")
 
@@ -333,21 +366,26 @@ def exercise(root: Path, target: Path, results: list[dict[str, object]]) -> None
     program_path = root / "contracts/extensions/native-command-program.v1.json"
     previous_program = program_path.read_bytes()
     source_path.write_text('{"schema":"invalid"}\n')
-    failed = run(build_command, root, env, check=False)
-    require(failed.returncode != 0, "malformed source produced a successful build")
+    build()
+    require(digest(compiler) == binary, "malformed optional data rebuilt the resident")
+    failed = run(
+        [sys.executable, "scripts/build_native_command_program.py", "--compiler", str(compiler)], root, env, check=False
+    )
+    require(failed.returncode != 0, "malformed optional source passed independent data validation")
     require(program_path.read_bytes() == previous_program, "failed source overwrote valid product projections")
     record("malformed_source_rejected_without_replacing_outputs")
     source_path.unlink()
     fixture_path.unlink()
     binding_path.unlink()
+    # This harness owns the synthetic public record. Production regeneration
+    # deliberately preserves published records until explicit retirement.
+    descriptor.unlink()
     build()
     verify()
     require(export() == baseline and not descriptor.exists(), "source removal did not restore the original inventory")
     record("source_only_remove")
-    run([sys.executable, "scripts/export_extension_directory.py"], root, env)
-    run([sys.executable, "scripts/render_command_extension_directory.py"], root, env)
-    run([sys.executable, "scripts/export_extension_directory.py", "--check"], root, env)
-    run([sys.executable, "scripts/render_command_extension_directory.py", "--check"], root, env)
+    run([sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(compiler)], root, env)
+    run([sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(compiler), "--check"], root, env)
     require(
         all(digest(path) == value for path, value in preserved.items()), "an unrelated fixture or test was rewritten"
     )

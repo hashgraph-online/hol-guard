@@ -38,13 +38,42 @@ const GRANT_REFINABLE: [&str; 4] = ["allow", "review", "require-reapproval", "wa
 const HOLDABLE: [&str; 3] = ["allow", "warn", "review"];
 
 /// `Value::Null` when no extension applies, else `{action, source, summary}`.
+#[cfg(test)]
 pub(crate) fn extension_decision(ext: &McpExtensionInputV1, action: &str) -> Value {
+    extension_decision_with_catalog(ext, action, None)
+}
+
+pub(crate) fn extension_decision_with_catalog(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Value {
+    // A device grant cannot bypass a captured catalog block, disabled
+    // permission, or authenticated quarantine.
+    if catalog.is_some() && GRANT_REFINABLE.contains(&action) {
+        match contributed_once(ext, "allow", catalog) {
+            Ok(Some(found)) if found.0 == "block" => {
+                return json!({"action": found.0, "source": found.1, "summary": found.2});
+            }
+            Err(code) => {
+                unanswered("captured_catalog", code);
+                let held = if HOLDABLE.contains(&action) {
+                    "review"
+                } else {
+                    action
+                };
+                return json!({"action":held, "source":"catalog-mcp-extension",
+                    "summary":"This device's catalog MCP defaults could not be verified. Review this tool call before execution."});
+            }
+            _ => {}
+        }
+    }
     let decided = match local_grant(ext, action) {
         Ok(Some(found)) => Some(found),
-        Ok(None) => contributed_or_hold(ext, action),
+        Ok(None) => contributed_or_hold(ext, action, catalog),
         Err(code) => {
             unanswered("local_grant", code);
-            hold_unverified(ext, action)
+            hold_unverified(ext, action, catalog)
         }
     };
     match decided {
@@ -105,8 +134,12 @@ fn local_grant(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided
     })
 }
 
-fn contributed_once(ext: &McpExtensionInputV1, action: &str) -> Result<Option<Decided>, Code> {
-    if ext.layers_unavailable {
+fn contributed_once(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Result<Option<Decided>, Code> {
+    if ext.layers_unavailable && catalog.is_none() {
         return Err("layers_unavailable");
     }
     let request = ContributedMcpDecisionRequestV1 {
@@ -121,7 +154,7 @@ fn contributed_once(ext: &McpExtensionInputV1, action: &str) -> Result<Option<De
         tool_name: ext.contributed_tool_name.clone(),
         layers: ext.layers.clone(),
     };
-    let payload = crate::contributed_mcp_decision_op::decide(&request)?;
+    let payload = crate::contributed_mcp_decision_op::decide_with_catalog(&request, catalog)?;
     if payload.get("state").and_then(Value::as_str) != Some("decided") {
         return Ok(None);
     }
@@ -134,7 +167,11 @@ fn contributed_once(ext: &McpExtensionInputV1, action: &str) -> Result<Option<De
 
 /// The contributed decision. With no answer, an allowed or reviewed call is
 /// held in review rather than guessed at or allowed.
-fn contributed_or_hold(ext: &McpExtensionInputV1, action: &str) -> Option<Decided> {
+fn contributed_or_hold(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<Decided> {
     let held = |code: Code| {
         unanswered("contributed", code);
         if !HOLDABLE.contains(&action) {
@@ -149,10 +186,10 @@ fn contributed_or_hold(ext: &McpExtensionInputV1, action: &str) -> Option<Decide
             "This device's catalog MCP defaults could not be verified. Review this tool call before execution.",
         )
     };
-    match contributed_once(ext, action) {
+    match contributed_once(ext, action, catalog) {
         Err(code) => held(code),
         Ok(Some(found)) => Some(found),
-        Ok(None) if action == "review" => match contributed_once(ext, "allow") {
+        Ok(None) if action == "review" => match contributed_once(ext, "allow", catalog) {
             Err(code) => held(code),
             Ok(Some(found)) if found.0 == "review" => Some(found),
             Ok(_) => None,
@@ -166,8 +203,12 @@ fn contributed_or_hold(ext: &McpExtensionInputV1, action: &str) -> Option<Decide
 /// row, so any row holds an otherwise allowed call, and a call already under
 /// review stays decisively in review so a temporary approval cannot upgrade it
 /// past a stored block.
-fn hold_unverified(ext: &McpExtensionInputV1, action: &str) -> Option<Decided> {
-    let contributed = contributed_or_hold(ext, action);
+fn hold_unverified(
+    ext: &McpExtensionInputV1,
+    action: &str,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<Decided> {
+    let contributed = contributed_or_hold(ext, action, catalog);
     if let Some(found) = &contributed {
         if found.0 == "block" || found.0 == "review" {
             return contributed;
@@ -254,8 +295,11 @@ fn no_grant_row(request: &LocalMcpGrantRequestV1) -> bool {
 /// query or credential ever enters the identity. A remote server is checked
 /// for a grant under that observed identity and under its configured identity,
 /// the one the resident's own grant lookup uses: a row under either is an answer.
-pub(crate) fn unset_connector(ext: &McpExtensionInputV1) -> Option<String> {
-    if ext.local_unavailable || ext.layers_unavailable {
+pub(crate) fn unset_connector(
+    ext: &McpExtensionInputV1,
+    catalog: Option<&crate::contributed_mcp_decision_op::Catalog<'_>>,
+) -> Option<String> {
+    if ext.local_unavailable || (ext.layers_unavailable && catalog.is_none()) {
         return None;
     }
     let unbound = ext
@@ -284,7 +328,7 @@ pub(crate) fn unset_connector(ext: &McpExtensionInputV1) -> Option<String> {
         return None;
     }
     for action in ["review", "allow"] {
-        if !matches!(contributed_once(ext, action), Ok(None)) {
+        if !matches!(contributed_once(ext, action, catalog), Ok(None)) {
             return None;
         }
     }

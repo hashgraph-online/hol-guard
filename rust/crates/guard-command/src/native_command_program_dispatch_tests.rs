@@ -1,6 +1,28 @@
 use super::*;
 
 #[test]
+fn security_routing_uses_compiler_hints_instead_of_author_executables() {
+    let mut program =
+        NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes()).unwrap();
+    let git = program
+        .extensions
+        .iter_mut()
+        .find(|e| e.extension_id == "command.git")
+        .unwrap();
+    git.executables = vec!["author-declared-decoy".into()];
+    let index =
+        CommandCandidateIndex::for_active(&program, &BTreeSet::from(["command.git".into()]));
+    let command = crate::parse_command(&crate::CommandModelRequestV1 {
+        command: "git push origin main".into(),
+        dialect: "posix".into(),
+        transport: "shell_string".into(),
+        extraction_provenance: "guard-shell".into(),
+    })
+    .unwrap();
+    assert!(!index.candidates(&command).is_empty());
+}
+
+#[test]
 fn active_dispatch_matches_exhaustive_observations_for_every_fixture_and_control_set() {
     let program = packaged_command_program().unwrap();
     let fixture: Value = serde_json::from_str(include_str!(

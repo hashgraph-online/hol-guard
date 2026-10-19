@@ -5,7 +5,7 @@ pub(super) use allowances::{
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
 #[path = "read_feature_directories.rs"]
-mod feature_directories;
+pub(super) mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
 #[path = "hidden_listing.rs"]

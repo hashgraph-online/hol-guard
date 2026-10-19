@@ -7,7 +7,6 @@ identities. This development command is never called on the hook hot path.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import importlib.util
 import json
 import subprocess
@@ -78,7 +77,25 @@ def source_object(data: bytes, path: Path) -> dict:
     return value
 
 
-def source_paths() -> tuple[list[Path], list[Path]]:
+def _build_inputs():
+    path = Path(__file__).with_name("core_command_build_inputs.py")
+    spec = importlib.util.spec_from_file_location("core_command_build_inputs", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def core_entries() -> list[dict]:
+    return _build_inputs().core_entries(ROOT, read_object)
+
+
+def source_paths(*, core_only: bool = False) -> tuple[list[Path], list[Path]]:
+    if core_only:
+        paths = [ROOT / entry["source"] for entry in core_entries()]
+        return (
+            [path for path in paths if path.parent.name == "command-sources"],
+            [path for path in paths if path.parent.name == "mcp-servers"],
+        )
     source_paths = [
         path
         for path in sorted((ROOT / "contributions/command-sources").glob("*.json"))
@@ -91,9 +108,9 @@ def source_paths() -> tuple[list[Path], list[Path]]:
     return source_paths, mcp_paths
 
 
-def build_request() -> dict:
+def build_request(*, core_only: bool = False) -> dict:
     """Legacy in-process adapter for archive checks; release builds use raw records."""
-    command_paths, mcp_paths = source_paths()
+    command_paths, mcp_paths = source_paths(core_only=core_only)
     sources = []
     for path in command_paths:
         source = read_object(path)
@@ -106,15 +123,15 @@ def build_request() -> dict:
         "schema": "guard.command-extension-build.v1",
         "sources": sources,
         "mcp_sources": [read_object(path) for path in mcp_paths],
-        "trust": _trust_request_payload(),
+        "trust": _trust_request_payload(core_only=core_only),
     }
 
 
 @contextmanager
-def source_stream():
+def source_stream(*, core_only: bool = False):
     """Spool bounded raw records without holding or normalizing the whole corpus."""
-    command_paths, mcp_paths = source_paths()
-    trust = _trust_request_payload()
+    command_paths, mcp_paths = source_paths(core_only=core_only)
+    trust = _trust_request_payload(core_only=True) if core_only else _trust_request_payload()
     with tempfile.TemporaryFile() as stream:
 
         def frame(data: bytes) -> None:
@@ -147,7 +164,7 @@ def source_stream():
         yield stream, trust, command_paths + mcp_paths
 
 
-def _trust_request_payload() -> dict:
+def _trust_request_payload(*, core_only: bool = False) -> dict:
     """Assemble the trust block from authored per-extension bindings.
 
     The aggregate is an ignored package projection. Only authored bindings
@@ -156,7 +173,9 @@ def _trust_request_payload() -> dict:
     sys.path.insert(0, str(ROOT / "src"))
     from codex_plugin_scanner.guard.runtime.extension_trust import trust_map_from_bindings
 
-    return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
+    if not core_only:
+        return trust_map_from_bindings(ROOT / "contracts" / "extensions" / "trust")
+    return _build_inputs().core_trust(ROOT, read_object)
 
 
 def packaged_trust_map(request: dict) -> dict:
@@ -171,42 +190,11 @@ def packaged_trust_map(request: dict) -> dict:
 
 
 def _implementation_files(directory: Path) -> set[Path]:
-    """Match the native walk: reject links before selecting regular sources."""
-    if directory.is_symlink():
-        raise ValueError("invalid native implementation input")
-    selected = set()
-    for path in directory.rglob("*"):
-        if path.is_symlink():
-            raise ValueError("invalid native implementation input")
-        if path.is_file() and path.suffix in (".rs", ".json"):
-            selected.add(path)
-    return selected
+    return _build_inputs()._implementation_files(directory)
 
 
 def implementation_digest() -> str:
-    """Mirror the Rust build fingerprint, not its compilation or admission logic."""
-    workspace = ROOT / "rust"
-    paths = {workspace / "Cargo.lock", workspace / "Cargo.toml"}
-    for crate in (workspace / "crates").iterdir():
-        if crate.is_symlink():
-            raise ValueError("invalid native implementation input")
-        for name in ("Cargo.toml", "build.rs"):
-            if (crate / name).is_file():
-                paths.add(crate / name)
-        if (crate / "src").is_dir():
-            paths.update(_implementation_files(crate / "src"))
-    paths.update(_implementation_files(workspace / "build_support"))
-    digest = hashlib.sha256(b"hol-guard.native-source-implementation.v1\0")
-    for path in sorted(paths, key=lambda item: item.relative_to(workspace).as_posix()):
-        if path.is_symlink() or not path.is_file():
-            raise ValueError("invalid native implementation input")
-        name = path.relative_to(workspace).as_posix().encode()
-        content = path.read_bytes().replace(b"\r\n", b"\n")
-        digest.update(len(name).to_bytes(8, "big"))
-        digest.update(name)
-        digest.update(len(content).to_bytes(8, "big"))
-        digest.update(content)
-    return digest.hexdigest()
+    return _build_inputs().implementation_digest(ROOT)
 
 
 class DeliveryBudgetError(ValueError):
@@ -253,6 +241,10 @@ def compilation_failure(completed: subprocess.CompletedProcess, paths: list[Path
     return NativeCompilationError(code, f"native source compilation failed (exit {completed.returncode}){detail}")
 
 
+def _pack_descriptors(compiler: Path | None) -> list[dict]:
+    return _build_inputs().pack_descriptors(ROOT, compiler, read_object)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Build or strictly check projections bound to current native implementation and authored sources."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -261,6 +253,12 @@ def main(argv: list[str] | None = None) -> int:
         "--projections-only", action="store_true", help="Stage package inputs without rewriting published descriptors."
     )
     parser.add_argument("--compiler", type=Path, help="Explicit already-built native source compiler.")
+    parser.add_argument("--legacy-complete", action="store_true", help="Bounded whole-catalog migration output.")
+    parser.add_argument(
+        "--core-only",
+        action="store_true",
+        help="Stage resident core/default projections without a legacy optional aggregate.",
+    )
     parser.add_argument(
         "--descriptor-dir",
         type=Path,
@@ -300,7 +298,12 @@ def main(argv: list[str] | None = None) -> int:
             "compile-stream",
         ]
     )
-    with source_stream() as (stream, trust_value, paths):
+    # Package staging must not depend on optional inventory fitting the legacy
+    # whole-program limits. Full output remains explicit migration tooling.
+    if args.legacy_complete and (args.core_only or args.projections_only):
+        parser.error("Legacy complete output cannot be combined with core projection selection.")
+    core_only = not args.legacy_complete
+    with source_stream(core_only=True) if core_only else source_stream() as (stream, trust_value, paths):
         completed, bootstrap = _compiler_transport().compile_stream(
             command[:-1], stream, root=ROOT, implementation=implementation_digest(), inspect_mode=bool(args.compiler)
         )
@@ -317,7 +320,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ValueError("canonical contributions lack authored trust bindings: " + ", ".join(missing_bindings))
     if compiled["implementation_digest"] != implementation_digest():
         raise ValueError("source compiler does not match the current native implementation; rebuild it")
-    if not bootstrap:
+    if not bootstrap and core_only:
         built = subprocess.run(
             [*command[:-1], "export-built"], stdout=subprocess.PIPE, cwd=ROOT, timeout=60, check=False
         )
@@ -330,6 +333,8 @@ def main(argv: list[str] | None = None) -> int:
             raise ValueError(
                 "source compiler trust map does not match the authored bindings; rebuild it before staging"
             )
+    if core_only and not args.core_only and not args.projections_only:
+        compiled["descriptors"] = _pack_descriptors(args.compiler)
     public_directory = ROOT / "contributions/extensions"
     descriptors = {descriptor["id"]: descriptor for descriptor in compiled["descriptors"]}
     if set(args.publish_descriptor) - descriptors.keys():
@@ -434,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 1
-        if not bootstrap:
+        if not bootstrap and core_only:
             embedded = subprocess.run(
                 [*command[:-1], "evaluate-batch"],
                 input=canonical_bytes(

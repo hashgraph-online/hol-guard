@@ -146,15 +146,35 @@ pub struct CommandCatalog {
 
 impl CommandCatalog {
     fn from_embedded() -> Result<Self, &'static str> {
+        Self::from_bytes(embedded_catalog_bytes())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_authored_test_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        Self::from_bytes(bytes)
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         #[derive(Deserialize)]
         struct Wrapper {
             catalog: Vec<CatalogExtension>,
             catalog_digest: String,
             program_digest: String,
         }
-        let wrapper: Wrapper = serde_json::from_slice(embedded_catalog_bytes())
-            .map_err(|_| "command_catalog_decode_failed")?;
-        let mut extensions = wrapper.catalog;
+        let wrapper: Wrapper =
+            serde_json::from_slice(bytes).map_err(|_| "command_catalog_decode_failed")?;
+        Self::from_extensions(
+            wrapper.catalog,
+            wrapper.program_digest,
+            wrapper.catalog_digest,
+        )
+    }
+
+    pub(crate) fn from_extensions(
+        mut extensions: Vec<CatalogExtension>,
+        program_digest: String,
+        catalog_digest: String,
+    ) -> Result<Self, &'static str> {
         extensions.sort_by(|a, b| a.extension_id.cmp(&b.extension_id));
 
         // Flatten rules in the same order the Python catalog does: extensions
@@ -216,8 +236,8 @@ impl CommandCatalog {
         }
 
         Ok(Self {
-            catalog_digest: wrapper.catalog_digest,
-            program_digest: wrapper.program_digest,
+            catalog_digest,
+            program_digest,
             extensions,
             by_extension_id,
             by_rule_id,
