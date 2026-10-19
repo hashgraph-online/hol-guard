@@ -35,7 +35,7 @@ pub struct CompiledSourceCatalog {
     pub base_program_digest: Option<String>,
 }
 
-fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
+pub(super) fn digest(domain: &[u8], value: &Value) -> Result<String, &'static str> {
     let bytes = canonical_json_bytes(value).map_err(|_| "command_source_encoding_failed")?;
     Ok(digest_canonical_bytes(domain, &bytes))
 }
@@ -87,7 +87,7 @@ pub(super) fn lower_catalog(
     lower_catalog_inner(sources, mcp_sources, trust, true)
 }
 
-fn lower_catalog_inner(
+pub(super) fn lower_catalog_inner(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
@@ -413,7 +413,7 @@ pub(super) fn compile_pack(
 }
 
 #[path = "native_command_source_addition.rs"]
-mod addition;
+pub(super) mod addition;
 pub use addition::{compile_addition, compile_addition_with_mcp};
 
 #[cfg(test)]

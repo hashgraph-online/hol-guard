@@ -443,14 +443,13 @@ python -m ci.gauntlet installed \
   `~/.codex`, `~/.omp` or `~/.hol-guard`.
 - Evidence is `hol-guard-installed-acceptance.v1` in `installed-acceptance.json`, and the exit
   status is zero only when every harness registered, every replay agreed and the aged pass left
-  nothing behind. `.github/workflows/gauntlet-installed-acceptance.yml` runs it on a weekly
-  schedule and on dispatch, against both the wheel and a PyInstaller onedir build of the same
-  commit. Like the rest of the Gauntlet it is not a required check.
-- **A pull request that changes the lane runs it with `--report-only`.** These steps assert
-  against the shipped build, so gating lane changes on them would block the lane on defects it did
-  not introduce and cannot fix from here. Report-only still writes the evidence, prints the
-  findings and puts them in the job summary; it only declines to fail the job. The scheduled and
-  dispatched runs are strict.
+  nothing behind. `.github/workflows/gauntlet-installed-acceptance.yml` runs it only on manual
+  dispatch, against both the wheel and a PyInstaller onedir build of the same commit. Like the
+  rest of the Gauntlet it runs asynchronously, off CI/CD: no pull request or schedule triggers it,
+  and it is never a required check.
+- **The `report_only` dispatch input runs it with `--report-only`.** Report-only still writes the
+  evidence, prints the findings and puts them in the job summary; it only declines to fail the
+  job. Dispatched runs are strict by default.
 
 #### What it found on installed 3.46.0
 

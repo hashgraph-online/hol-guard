@@ -97,7 +97,7 @@ dev = [
 
 [tool.uv]
 override-dependencies = [
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
@@ -150,6 +150,7 @@ only-include = [
     "rust",
     "contracts",
     "contributions",
+    "tests/fixtures",
     "docs/guard/contracts/guard-cloud-review.md",
     "README.md",
     "LICENSE",
@@ -190,6 +191,9 @@ exclude = [
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/contributions/**",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/command-sources/**",
+    "src/codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/**",
     ".guard-live/**",
     ".guard-package-venv/**",
     ".guard-e2e/**",

@@ -395,8 +395,15 @@ fn swapped_directory_and_symlink_are_detected_after_modeling() {
     // Replace the resolved directory itself with a new inode.
     fs::remove_file(root.join("ws/link")).unwrap();
     std::os::unix::fs::symlink("inner", root.join("ws/link")).unwrap();
-    fs::remove_dir(root.join("ws/inner")).unwrap();
+    // Retain the old directory so a filesystem cannot immediately recycle
+    // its inode for the replacement and invalidate the fixture's premise.
+    fs::rename(root.join("ws/inner"), root.join("ws/retired-inner")).unwrap();
     fs::create_dir(root.join("ws/inner")).unwrap();
+    use std::os::unix::fs::MetadataExt;
+    assert_ne!(
+        fs::metadata(root.join("ws/inner")).unwrap().ino(),
+        fs::metadata(root.join("ws/retired-inner")).unwrap().ino()
+    );
     let replaced = validate(&context, 1);
     assert_eq!(replaced["payload"]["reason_code"], "shell_cwd_path_changed");
     let _ = fs::remove_dir_all(&root);

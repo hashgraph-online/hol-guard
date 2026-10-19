@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import hashlib
 
-from .authority import VerifiedDistribution
 from .metadata_objects import lookup_entry
 from .pack_store import digest
+from .preparation_authority import publication
 
 
 class RevokedPackError(ValueError):
@@ -28,9 +28,9 @@ def revocation_key(identity, kind, manifest=None):
 
 
 def check(verified, store, identity, manifest):
-    if not isinstance(verified, VerifiedDistribution) or not digest(manifest):
+    if not digest(manifest):
         raise ValueError("revocation lookup requires an authenticated pack identity")
-    revocations = verified.manifest()["policy"]["revocations"]
+    revocations = publication(verified)[0]["policy"]["revocations"]
     if not revocations["count"]:
         return
     for kind, target in [("extension", None), ("pack", manifest)]:

@@ -3,6 +3,10 @@ use super::*;
 pub(super) fn run() -> Result<(), String> {
     let args: Vec<String> = env::args().skip(1).collect();
     match args.as_slice() {
+        [command, flag] if command == "pack-lifecycle" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_json(&pack_lifecycle::run(&bytes)?)
+        }
         [command, ..] if command == "restricted-linux-launch" => {
             let digest = if args.len() == 2 { args[1].as_str() } else { "" };
             std::process::exit(restricted_linux_launch::launch(digest))

@@ -14,6 +14,8 @@ permissions:
 
 env:
   CI_PYTHON_VERSION: "3.12.14"
+  # Historical client, native evaluators and projections share this exact tree.
+  NATIVE_OFFLINE_PREVIOUS_SHA: dce81d85485dbc0bb1d88847ffeb0f66db1436b2
   # Release wheels use fat LTO with one codegen unit (rust/Cargo.toml). PR test
   # builds keep the per-crate defaults so sccache and incremental link time
   # stay on the critical path budget; this does not change program behavior.
@@ -324,10 +326,8 @@ jobs:
           save-cache: "true"
       - name: Prepare current public directory before pytest collection
         run: |
-          uv run --no-sync python scripts/export_extension_directory.py
-          uv run --no-sync python scripts/render_command_extension_directory.py
-          uv run --no-sync python scripts/export_extension_directory.py --check
-          uv run --no-sync python scripts/render_command_extension_directory.py --check
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source
+          uv run --no-sync python scripts/prepare_extension_directory.py --compiler rust/target/release/guard-command-source --check
       - name: Upload native command evaluators
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -367,6 +367,107 @@ jobs:
           json=$(echo "$indices" | tr ' ' '\n' | jq -R 'tonumber' | jq -cs .)
           echo "indices=${json}" >> "$GITHUB_OUTPUT"
           echo "count=$(echo "$indices" | wc -w | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+  native-offline-previous:
+    name: native-offline-previous
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Check out matching historical client and native sources
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: previous-client
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: native-offline-upgrade
+      - name: Build the real prior native pair and matching projections
+        working-directory: previous-client
+        env:
+          CARGO_TARGET_DIR: ${{ github.workspace }}/rust/target/previous-client
+        run: |
+          test "$(git rev-parse HEAD)" = "$NATIVE_OFFLINE_PREVIOUS_SHA"
+          ../.venv/bin/python scripts/refresh_extension_artifacts.py --trust-only
+          cargo build --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
+          ../.venv/bin/python scripts/build_native_command_program.py \
+            --compiler "$CARGO_TARGET_DIR/release/guard-command-source"
+      - name: Upload pinned prior native command evaluators
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: |
+            rust/target/previous-client/release/guard-command-source
+            rust/target/previous-client/release/hol-guard-runtime
+          if-no-files-found: error
+          retention-days: 1
+      - name: Upload matching prior command projections
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: |
+            previous-client/contracts/extensions/
+            previous-client/src/codex_plugin_scanner/guard/contracts/data/extensions/
+          if-no-files-found: error
+          retention-days: 1
+
+  native-offline-upgrade:
+    name: native-offline-upgrade
+    needs: [native-command-evaluators, native-offline-previous]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Check out matching historical client
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: previous-client
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Download pinned prior native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-prior-native-command-evaluators-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: rust/target/previous-client/release
+      - name: Restore matching prior command projections
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-prior-native-command-projections-${{ env.NATIVE_OFFLINE_PREVIOUS_SHA }}
+          path: previous-client
+      - name: Download current native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - uses: ./.github/actions/restore-command-projections
+      - name: Prove packaged cross-engine recovery with network IO forbidden
+        env:
+          HOL_GUARD_NATIVE_BINARY: ${{ github.workspace }}/rust/target/release/hol-guard-runtime
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source
+          NATIVE_ACTIVATION_PREVIOUS_BINARY: ${{ github.workspace }}/rust/target/previous-client/release/hol-guard-runtime
+          NATIVE_ACTIVATION_PREVIOUS_SOURCE: ${{ github.workspace }}/previous-client
+          HOL_GUARD_NATIVE_REGRESSION: "1"
+        run: |
+          test "$(git -C previous-client rev-parse HEAD)" = "$NATIVE_OFFLINE_PREVIOUS_SHA"
+          chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+          chmod 0755 rust/target/previous-client/release/guard-command-source "$NATIVE_ACTIVATION_PREVIOUS_BINARY"
+          test -x "$NATIVE_ACTIVATION_PREVIOUS_BINARY"
+          uv run --no-sync pytest -q --tb=short tests/test_native_pack_offline_upgrade.py
 
   native-gates:
     name: native-gates (${{ matrix.shard-index }})
@@ -970,7 +1071,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-gates, native-release-size, quality, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, native-release-size, quality, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -998,7 +1099,8 @@ jobs:
           # plan, including data-only. A failed or cancelled provider (or a
           # skipped one, which means its `if`/needs chain broke) must not let a
           # data-only plan coast through on surviving lane-gated residue.
-          always_on = ["plan","native-workspace","native-command-evaluators","native-gates",
+          always_on = ["plan","native-workspace","native-command-evaluators","native-offline-previous",
+                       "native-offline-upgrade","native-gates",
                        "native-release-size","quality","ci-python-312"]
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.

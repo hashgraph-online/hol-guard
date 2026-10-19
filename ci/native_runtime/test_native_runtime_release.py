@@ -30,6 +30,8 @@ def _native_wheel(
     runtime: bytes = b"native-runtime",
     target: str | None = None,
     version: str = VERSION,
+    bundle_root: bytes | None = None,
+    descriptor: dict[str, object] | None = None,
 ) -> Path:
     wheel = root / f"hol_guard-{version}-py3-none-{platform}.whl"
     runtime_path = release.WINDOWS_RUNTIME_PATH if platform.startswith("win") else release.RUNTIME_PATH
@@ -44,9 +46,13 @@ def _native_wheel(
         "runtime_sha256": hashlib.sha256(runtime).hexdigest(),
         "runtime_size": len(runtime),
     }
+    if descriptor is not None:
+        manifest["command_pack_bundle"] = descriptor
     with zipfile.ZipFile(wheel, "w") as archive:
         archive.writestr(release.MANIFEST_PATH, json.dumps(manifest))
         archive.writestr(runtime_path, runtime)
+        if bundle_root is not None:
+            archive.writestr(release.BUNDLE_ROOT_PATH, bundle_root)
     return wheel
 
 
@@ -536,3 +542,45 @@ def test_local_guard_set_requires_exact_native_wheel_manifest(tmp_path: Path, ch
         _embed_native_manifest(pure, wheels, version=version)
     with pytest.raises(release.NativeReleaseError, match="native wheel manifest"):
         release.local_guard_hashes(dist, version=VERSION, source_sha=SOURCE_SHA)
+
+
+def _bundle_descriptor(bundle_root: bytes) -> dict[str, object]:
+    return {
+        "schema": "guard.command-pack-bundle.v1",
+        "path": release.BUNDLE_ROOT_PATH,
+        "sha256": hashlib.sha256(bundle_root).hexdigest(),
+        "length": len(bundle_root),
+        "source_sha": SOURCE_SHA,
+        "engine": "c" * 64,
+    }
+
+
+def test_local_native_hashes_accepts_wheels_carrying_a_bound_command_pack_bundle(tmp_path: Path) -> None:
+    tmp_path.mkdir(exist_ok=True)
+    bundle_root = b'{"schema":"guard.command-pack-bundle.v1"}'
+    for platform in TARGETS:
+        _native_wheel(tmp_path, platform, bundle_root=bundle_root, descriptor=_bundle_descriptor(bundle_root))
+
+    hashes = release.local_native_hashes(tmp_path, version=VERSION, source_sha=SOURCE_SHA)
+
+    assert len(hashes) == len(TARGETS)
+
+
+@pytest.mark.parametrize(
+    ("embedded", "descriptor"),
+    [
+        (b"other root", _bundle_descriptor(b"root")),
+        (None, _bundle_descriptor(b"root")),
+        (b"root", None),
+        (b"root", {**_bundle_descriptor(b"root"), "length": 99}),
+        (b"root", {**_bundle_descriptor(b"root"), "engine": "not-hex"}),
+    ],
+)
+def test_local_native_hashes_rejects_an_unbound_command_pack_bundle(
+    tmp_path: Path, embedded: bytes | None, descriptor: dict[str, object] | None
+) -> None:
+    _native_set(tmp_path)
+    _native_wheel(tmp_path, "win_amd64", bundle_root=embedded, descriptor=descriptor)
+
+    with pytest.raises(release.NativeReleaseError, match="command pack bundle"):
+        release.local_native_hashes(tmp_path, version=VERSION, source_sha=SOURCE_SHA)

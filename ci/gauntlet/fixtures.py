@@ -17,7 +17,7 @@ from .business_policy import BUSINESS_CLI_CASES, BUSINESS_CLI_EXECUTABLES
 from .clone_fixtures import add_long_lived_clone_config, long_lived_clone_checks
 from .edge_clone_fixtures import write_edge_clone
 from .extension_adapters import EXTENSION_ADAPTERS
-from .fast_forward_fixtures import add_fast_forward_shape, fast_forward_checks
+from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forward_shape, fast_forward_checks
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import add_home_tools, add_main_shapes, add_worktree_venv, borrow_main_modules
 from .review_fixtures import (
@@ -281,6 +281,8 @@ def create_fixture(
         workspace = _add_realistic_shapes(workspace, home, environment, scenario_id)
         # A linked worktree's .git is a pointer file, so it has no config to fingerprint.
         protected_names = (".env", "deletion-target/keep.txt")
+    else:
+        add_plain_fast_forward_shape(workspace, home, environment, scenario_id)
     protected = {p: digest_file(workspace / p) for p in protected_names}
     metadata = {".env": file_metadata(workspace / ".env")}
     return Fixture(root, home, workspace, canary, protected, metadata)

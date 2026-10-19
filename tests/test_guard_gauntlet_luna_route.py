@@ -78,7 +78,13 @@ def test_sdk_root_comes_from_the_omp_executable_and_must_hold_the_packages(tmp_p
 
 
 @pytest.mark.parametrize(
-    ("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high"), ({"effort": "low"}, "low")]
+    ("requested", "effort"),
+    [
+        ({}, "medium"),
+        ({"effort": "high"}, "high"),
+        ({"effort": "low"}, "low"),
+        ({"backend": ("openai-codex", "gpt-6.1-sol"), "effort": "medium"}, "medium"),
+    ],
 )
 def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monkeypatch, requested, effort):
     _root, omp = _sdk(tmp_path)
@@ -89,7 +95,9 @@ def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monk
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
     assert provider["allow_loopback"] is True and bool(provider["api_key"])
     assert provider["reasoning_effort"] == effort
-    assert f"openai-codex/gpt-6-luna/{effort} via" in provider["identity"]
+    backend = requested.get("backend", luna_route.BACKEND)
+    assert f"{'/'.join(backend)}/{effort} via" in provider["identity"]
+    assert "to Responses)" in provider["identity"]
 
 
 def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
@@ -99,12 +107,18 @@ def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
         NativeLunaRoute(omp=str(omp), effort="xhigh")
 
 
-def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch):
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-sol"])
+def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch, model):
     _root, omp = _sdk(tmp_path)
-    ready = json.dumps({**READY, "thinking": "high"})
-    script = f"[ \"$GUARD_GAUNTLET_LUNA_THINKING\" = high ] || exit 4\necho '{ready}'\nexec sleep 300\n"
+    backend = luna_route.parse_backend("openai-codex/" + model)
+    ready = json.dumps({**READY, "thinking": "high", "model": model})
+    script = (
+        f'[ "$GUARD_GAUNTLET_LUNA_THINKING" = high ] || exit 4\n'
+        f'[ "$GUARD_GAUNTLET_NATIVE_BACKEND" = openai-codex/{model} ] || exit 5\n'
+        f"echo '{ready}'\nexec sleep 300\n"
+    )
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, script)) + os.pathsep + os.environ["PATH"])
-    with NativeLunaRoute(omp=str(omp), effort="high") as route:
+    with NativeLunaRoute(omp=str(omp), effort="high", backend=backend) as route:
         assert route.port == 40123
 
 

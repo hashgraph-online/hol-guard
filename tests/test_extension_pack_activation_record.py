@@ -8,6 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard.catalog_delivery import activation_record, preparation
 from codex_plugin_scanner.guard.runtime.extension_control_authority import ExtensionControlAuthorityError
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_extension_pack_preparation import delivery as delivery
 
 

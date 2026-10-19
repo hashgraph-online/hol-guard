@@ -60,7 +60,15 @@ def _commit_local(store: GuardStore, extension_id: str, state: ControlState, *, 
         expected_revision=revision,
         idempotency_key=key,
         nonce=nonce,
-        proof=_proof(store, layers, revision=revision, key=key, actor_id="local-admin", nonce=nonce),
+        proof=_proof(
+            store,
+            layers,
+            revision=revision,
+            key=key,
+            actor_id="local-admin",
+            nonce=nonce,
+            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+        ),
     )
 
 

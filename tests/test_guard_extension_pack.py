@@ -10,10 +10,16 @@ import pytest
 
 from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 from codex_plugin_scanner.guard.extension_builder.pack import load_pack, plan_pack_selection, validate_pack
-from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog
+from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
+from scripts.export_extension_directory import native_extensions
 from tests.extension_builder_support import REPOSITORY
 
 PACK = REPOSITORY / "contributions/extension-packs/business.google-workspace.json"
+
+
+@pytest.fixture(scope="module")
+def authoring_catalog() -> GeneratedCommandCatalog:
+    return GeneratedCommandCatalog(native_extensions())
 
 
 @dataclass(frozen=True)
@@ -100,8 +106,8 @@ def test_pack_contract_is_packaged_byte_for_byte() -> None:
     assert source.read_bytes() == packaged.read_bytes()
 
 
-def test_google_workspace_pack_matches_the_generated_catalog() -> None:
-    catalog = load_generated_command_catalog()
+def test_google_workspace_pack_matches_the_generated_catalog(authoring_catalog) -> None:
+    catalog = authoring_catalog
     pack = load_pack(PACK, catalog=catalog, repository=REPOSITORY)
     assert [item["extensionId"] for item in pack["extensions"]] == [
         "command.google-workspace.gws",
@@ -114,8 +120,8 @@ def test_google_workspace_pack_matches_the_generated_catalog() -> None:
         assert extension.activation == "opt-in"
 
 
-def test_selecting_the_pack_leaves_disabled_external_extensions_inert() -> None:
-    catalog = load_generated_command_catalog()
+def test_selecting_the_pack_leaves_disabled_external_extensions_inert(authoring_catalog) -> None:
+    catalog = authoring_catalog
     pack = load_pack(PACK, catalog=catalog, repository=REPOSITORY)
     before = {item["extensionId"]: catalog.get(item["extensionId"]).enabled for item in pack["extensions"]}
     for role in ("personal", "managed-team"):
@@ -129,8 +135,8 @@ def test_selecting_the_pack_leaves_disabled_external_extensions_inert() -> None:
     assert before == after == dict.fromkeys(before, False)
 
 
-def test_only_locally_enabled_extensions_receive_suggestions() -> None:
-    catalog = load_generated_command_catalog()
+def test_only_locally_enabled_extensions_receive_suggestions(authoring_catalog) -> None:
+    catalog = authoring_catalog
     pack = load_pack(PACK, catalog=catalog, repository=REPOSITORY)
     plan = plan_pack_selection(
         pack, catalog=catalog, enabled_extension_ids={"command.google-workspace.gws"}, role="managed-team"

@@ -119,10 +119,12 @@ def test_gnu_sed_detection_prefers_path_then_gnubin(tmp_path: Path, monkeypatch:
         qualify_setup.gnu_sed_dir(probe=bsd)
 
 
-def test_attempt_command_and_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize("native_route", [None, "openai-codex/gpt-6.1-sol"])
+def test_attempt_command_and_environment(tmp_path: Path, native_route: str | None) -> None:
     argv = qualify.attempt_argv(
         python=tmp_path / "candidate" / ".venv" / "bin" / "python",
         effort="medium",
+        native_route=native_route,
         sdk_root=tmp_path / "sdk",
         jobs=4,
         host_slots=8,
@@ -136,7 +138,13 @@ def test_attempt_command_and_environment(tmp_path: Path) -> None:
         max_rounds=32,
     )
     assert argv[1:3] == ["-m", "ci.gauntlet"]
-    for flag in ("--native-luna-route", "--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
+    if native_route:
+        assert argv[argv.index("--native-route") + 1] == native_route
+        assert "--native-luna-route" not in argv
+    else:
+        assert "--native-luna-route" in argv
+        assert "--native-route" not in argv
+    for flag in ("--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
     assert argv[argv.index("--max-load-wait") + 1] == "600.0"

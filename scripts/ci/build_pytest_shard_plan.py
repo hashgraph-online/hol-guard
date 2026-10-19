@@ -90,6 +90,9 @@ SANDBOX_GATE_FILES = frozenset(
         "tests/test_guard_cli_hook_rpc_budget.py",
     }
 )
+# This integration test needs two real engines and the historical Python client.
+# native-offline-upgrade owns it and is required by the aggregate check.
+NATIVE_OFFLINE_UPGRADE_FILES = frozenset({"tests/test_native_pack_offline_upgrade.py"})
 
 
 class _Arguments(Protocol):
@@ -190,6 +193,7 @@ def build_affinity_node_shards(
         if node_id not in SCHEDULING_ONLY_NODE_IDS
         and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
         and node_id.split("::", maxsplit=1)[0] not in SANDBOX_GATE_FILES
+        and node_id.split("::", maxsplit=1)[0] not in NATIVE_OFFLINE_UPGRADE_FILES
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")

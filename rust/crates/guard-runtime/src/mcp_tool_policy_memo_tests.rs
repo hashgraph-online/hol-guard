@@ -47,6 +47,7 @@ fn pass(
         observations,
         lookup: None,
         memo,
+        catalog: None,
     };
     outcome(evaluate_pass(&ctx, subject, Phase::Initial, claim))
 }
@@ -159,7 +160,7 @@ fn the_extension_decision_is_read_once_per_memo() {
     let memo = PassMemo::new(&subject);
     let mut pinned = Vec::new();
     for action in ["allow", "review", "block"] {
-        let answer = extension(Some(&memo), &subject, own, action);
+        let answer = extension(Some(&memo), &subject, own, action, None);
         assert_eq!(answer, extension_decision(own, action), "{action}");
         pinned.push(answer);
     }
@@ -167,17 +168,45 @@ fn the_extension_decision_is_read_once_per_memo() {
     // reads the store again.
     std::fs::remove_file(home.join("guard.db")).unwrap();
     for (action, answer) in ["allow", "review", "block"].iter().zip(&pinned) {
-        assert_eq!(&extension(Some(&memo), &subject, own, action), answer);
+        assert_eq!(&extension(Some(&memo), &subject, own, action, None), answer);
         let fresh = PassMemo::new(&subject);
         assert_eq!(
-            extension(Some(&fresh), &subject, own, action),
+            extension(Some(&fresh), &subject, own, action, None),
             extension_decision(own, action)
         );
     }
     // Another extension input is never answered from the memo.
     let other = input(&home);
     assert_eq!(
-        extension(Some(&memo), &subject, &other, "allow"),
+        extension(Some(&memo), &subject, &other, "allow", None),
         extension_decision(&other, "allow")
     );
+}
+
+#[test]
+fn extension_memo_never_crosses_captured_catalogs() {
+    use crate::contributed_mcp_decision_op::Catalog;
+    let home =
+        std::env::temp_dir().join(format!("hol-guard-mcp-memo-catalog-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    let home = home.canonicalize().unwrap();
+    let document = vectors();
+    let mut subject = subject_of(&document, &document["vectors"][0]);
+    subject.extension = Some(input(&home));
+    let pinned = Catalog {
+        guard_home: home.to_str().unwrap(),
+        controls: None,
+    };
+    let foreign = Catalog {
+        guard_home: "/different-guard-home",
+        controls: None,
+    };
+    let memo = PassMemo::with_catalog(&subject, &pinned);
+    let own = subject.extension.as_ref().unwrap();
+    assert!(extension(Some(&memo), &subject, own, "allow", Some(&pinned)).is_null());
+    assert_eq!(
+        extension(Some(&memo), &subject, own, "allow", Some(&foreign))["action"],
+        "review"
+    );
+    assert!(extension(Some(&memo), &subject, own, "allow", Some(&pinned)).is_null());
 }

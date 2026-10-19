@@ -1,0 +1,183 @@
+"""Frozen prior-client fixture; execute with the explicitly pinned prior checkout."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard.catalog_delivery import (
+    activation_store,
+    installed_bundle,
+    lifecycle,
+    lifecycle_store,
+    preparation_authority,
+)
+from codex_plugin_scanner.guard.catalog_delivery import (
+    transport as remote,
+)
+from codex_plugin_scanner.guard.catalog_delivery.bundle_metadata import MANIFEST, descriptor
+from codex_plugin_scanner.guard.daemon import extension_control_prepared as candidates
+from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+from codex_plugin_scanner.guard.extension_builder import native_source_compiler as transport
+from codex_plugin_scanner.guard.native_command_control_authority_io import hold_command_control_authority_lock
+from codex_plugin_scanner.guard.native_command_control_authority_store import _key
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
+from tests.guard_extension_control_authority_fixtures import _PASSWORD
+from tests.guard_extension_control_authority_fixtures import (
+    _allow_local_terminal_confirmation as _allow_local_terminal_confirmation,
+)
+from tests.test_native_command_control_binding_publisher import (
+    _pinned_integrity_material_and_resident_key as _pinned_integrity_material_and_resident_key,
+)
+from tests.test_native_pack_upgrade import legacy_store
+
+
+def initialize(tmp_path, monkeypatch):
+    previous = Path(os.environ["NATIVE_ACTIVATION_PREVIOUS_BINARY"])
+    assert previous.is_file()
+    source_root = Path(os.environ["NATIVE_ACTIVATION_PREVIOUS_SOURCE"]).resolve()
+    monkeypatch.syspath_prepend(str(source_root / "scripts"))
+    import build_command_pack_bundle as builder
+
+    store = legacy_store(tmp_path, monkeypatch)
+    original_version = transport.metadata.version
+    package_version = {"value": "3.49.0"}
+    monkeypatch.setattr(
+        transport.metadata,
+        "version",
+        lambda name: package_version["value"] if name == "hol-guard" else original_version(name),
+    )
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", installed_bundle.load_installed_bundle)
+    monkeypatch.setattr(candidates, "load_installed_bundle", installed_bundle.load_installed_bundle)
+    reports = []
+
+    def install(binary, version, source):
+        package = tmp_path / ("package-" + version)
+        native_dir = package / "_native"
+        native_dir.mkdir(parents=True)
+        raw = binary.read_bytes()
+        digest = hashlib.sha256(raw).hexdigest()
+        info = json.loads(subprocess.check_output([str(binary), "compiler-info"]))
+        engine = info["implementation_digest"]
+        executable = native_dir / "hol-guard-runtime"
+        executable.write_bytes(raw)
+        executable.chmod(0o700)
+        bundle = package / "guard/contracts/data/extensions/command-pack-bundle"
+        bundle.parent.mkdir(parents=True)
+        # The retained earlier binary compiled the same authored command
+        # sources. Pin its actual fingerprint only for the historical fixture
+        # builder; production admission remains the manifest-bound native check.
+        with monkeypatch.context() as historical:
+            historical.setattr(builder.packs.legacy, "implementation_digest", lambda: engine)
+            # This fixture activates the prior release without network IO too.
+            # Its normal bundle omits optional archives, so export all of them.
+            report = builder.build(binary, bundle, source, source_root=source_root, offline=True)
+        assert report["profile"] == "complete-offline"
+        reports.append(report)
+        data = (bundle / MANIFEST).read_bytes()
+        exported = json.loads(subprocess.check_output([str(binary), "export-built"]))
+        program = package / "native-command-program.v1.json"
+        program.write_text(json.dumps(exported["program"]))
+        common = dict(
+            protocol_version=1,
+            package_version=version,
+            source_sha=source,
+            target="test",
+            platform_tag="test",
+            command_pack_bundle=descriptor(data, source_sha=source, engine=engine),
+        )
+        runtime = dict(common, schema="hol-guard-native-runtime.v1", runtime_size=len(raw), runtime_sha256=digest)
+        compiler = dict(
+            common,
+            schema="hol-guard-native-source-compiler.v2",
+            compiler_size=len(raw),
+            compiler_sha256=digest,
+            executable="hol-guard-runtime",
+            implementation_digest=engine,
+            base_program_digest=exported["program"]["program_digest"],
+        )
+        for name, value in [("runtime-manifest.json", runtime), ("source-compiler-manifest.json", compiler)]:
+            (native_dir / name).write_text(json.dumps(value))
+        monkeypatch.setattr(transport, "_NATIVE_PACKAGE", native_dir)
+        monkeypatch.setattr(transport, "_PACKAGED_PROGRAM", program)
+        monkeypatch.setattr(installed_bundle, "_package", lambda: package)
+        package_version["value"] = version
+        return installed_bundle.load_installed_bundle()
+
+    authority = install(previous, "3.49.0", "a" * 40)
+    # Use the pinned historical client's actual enrollment protocol, including
+    # its protected enrollment stamp. Never synthesize a prior engine record.
+    with hold_command_control_authority_lock(store.guard_home):
+        lifecycle_store.enroll_installed(store, authority)
+    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+    view = store.read_extension_control_authority_for_registry(registry, read_only=True)
+    service = ExtensionControlApiService(store=store, registry=registry, runtime=ExtensionControlRuntime(view))
+
+    def offline(*args, **kwargs):
+        pytest.fail("installed upgrade attempted network lineage/publication IO")
+
+    monkeypatch.setattr(lifecycle, "ancestry", offline)
+    monkeypatch.setattr(remote, "fetch_root", offline)
+    monkeypatch.setattr(remote, "download", offline)
+
+    def apply(key):
+        digest = service.catalog_digest
+        payload = dict(
+            previous_revision=service._runtime.current().revision,
+            catalog_digest=digest,
+            actor_id="fixture-admin",
+            idempotency_key=key,
+            nonce=key,
+            layers=[
+                dict(
+                    schema_version="1.0.0",
+                    kind="local-admin",
+                    catalog_digest=digest,
+                    global_lockdown=False,
+                    controls=[dict(target_kind="extension", target_id="command.agentbridge", state="enabled")],
+                )
+            ],
+        )
+        approved = service.preview({**payload, "session_nonce": key, "approval_password": _PASSWORD})
+        service.apply({**payload, "proof_id": approved["proof_id"]})
+        return activation_store.read(store)
+
+    old = apply("previous-release")
+    old_identity = lifecycle.installed_identity(authority)
+    assert "command.agentbridge" in old.selected
+    before, _floor = lifecycle_store.inspect(store)
+    remote_identity = {**old_identity, "profile": "remote", "version": "100.7"}
+    remote_floor = lifecycle.invoke("transition", key=_key(store).hex(), floor=before, candidate=remote_identity)[
+        "record"
+    ]
+    with hold_command_control_authority_lock(store.guard_home):
+        lifecycle_store.commit(store, before, remote_floor)
+    checkpoint = dict(
+        control_secrets=store._extension_control_authority_secret_store.values,
+        integrity_secrets=store._policy_integrity_secret_store.values,
+        old_identity=old_identity,
+        remote_identity=remote_identity,
+        report=reports[0],
+    )
+    (tmp_path / "previous-client-checkpoint.json").write_text(json.dumps(checkpoint))
+
+
+if __name__ == "__main__":
+    import sys
+
+    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+    fixture_home = Path(sys.argv[1]).resolve()
+    with pytest.MonkeyPatch.context() as patches:
+        _allow_local_terminal_confirmation.__wrapped__(patches)
+        _pinned_integrity_material_and_resident_key.__wrapped__(fixture_home, patches)
+        try:
+            initialize(fixture_home, patches)
+        finally:
+            close_native_residents(fixture_home)
