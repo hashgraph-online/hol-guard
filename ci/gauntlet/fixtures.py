@@ -549,7 +549,7 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
     _git(("worktree", "add", "--quiet", "-b", "inner", str(worktree / ".worktrees/inner")), worktree, environment)
     add_fast_forward_shape(main, worktree, home, environment, scenario_id)
     # Last, so default signing never touches the fixture's own commits.
-    add_long_lived_clone_config(main, scenario_id)
+    add_long_lived_clone_config(main, scenario_id, environment)
     if scenario_id == PARENT_WORKSPACE_CASE:
         parent = write_parent_workspace(home, environment)
         for relative in (".env", "deletion-target/keep.txt"):

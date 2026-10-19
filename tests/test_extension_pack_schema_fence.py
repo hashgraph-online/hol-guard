@@ -15,9 +15,13 @@ from codex_plugin_scanner.guard.store_extension_control_authority_schema import 
 
 def old_schema():
     # Frozen from public19f6969; CI does not need Git history or a download.
-    source = (Path(__file__).parent / "fixtures/extension-control-schema-v4.py.txt").read_text()
+    fixture = Path(__file__).parent / "fixtures/extension-control-schema-v4.py.txt"
     scope = {"__name__": "codex_plugin_scanner.guard._v4_schema_fixture", "__package__": "codex_plugin_scanner.guard"}
-    exec(compile(source, "extension-control-schema-v4.py.txt", "exec"), scope)
+    # The scope above makes coverage trace this as package code, so give
+    # `compile` the fixture's real path: a bare name matches no `omit`
+    # pattern and leaves `coverage report` looking for a file that is not
+    # there.
+    exec(compile(fixture.read_text(), str(fixture), "exec"), scope)
     return scope["ensure_extension_control_authority_schema"]
 
 

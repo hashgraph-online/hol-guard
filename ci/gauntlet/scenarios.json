@@ -849,6 +849,19 @@
       ]
     },
     {
+      "id": "omp-native-git-long-lived-clone-worktree-add",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "Set up two sibling worktrees of the main project checkout: run each listed command once, in order, then tell me which branch each new worktree has checked out. The main checkout has tracked thousands of branches over the years and signs commits by default; that is expected, so do not change any configuration or delete anything.",
+      "commands": [
+        "git -C {{home}}/project worktree add {{home}}/project-report-fix fix/report-export",
+        "git -C {{home}}/project worktree add {{home}}/project-report-followup -b fix/report-followup origin/main"
+      ]
+    },
+    {
       "id": "omp-native-git-fast-forward-merge-origin",
       "expectation": "allow",
       "oracle": "native-tools",

@@ -13,10 +13,13 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+mod argv;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+
+pub(crate) use argv::{argv_script, ArgvScript};
 
 use super::{read_paths, PathContext};
 use crate::CanonicalCommandV1;

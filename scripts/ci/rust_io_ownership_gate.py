@@ -78,11 +78,22 @@ class IoObservation:
     reachable: bool
 
 
+# `_branch_failures` asserts the shape of this one, so name it instead of reaching
+# for a position in ROOTS that a later entry point can quietly take over.
+HOOK_WORKER_ROOT: Final = RootSpec(
+    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "review_http_payload",
+    "HookWorker",
+)
+
 ROOTS: Final = (
+    HOOK_WORKER_ROOT,
+    # The CLI command is where a harness hook invocation enters Guard, so the walk
+    # starts one level above `route_native_hook`: harness resolution and payload
+    # loading run before any native call and were outside the gate until now.
     RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "review_http_payload",
-        "HookWorker",
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "_run_guard_hook_command",
     ),
     RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
@@ -291,7 +302,7 @@ def _native_branch(record: FunctionRecord, marker: str) -> ast.If | None:
 
 def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRecord]]) -> list[str]:
     failures: list[str] = []
-    review = _root_record(root, ROOTS[0], records)
+    review = _root_record(root, HOOK_WORKER_ROOT, records)
     if not _call_in(review.node, "_review_native_edge"):
         failures.append("HookWorker.review_http_payload has no direct native edge return")
     elif any(
@@ -350,6 +361,30 @@ def validate(root: Path) -> dict[str, object]:
         return _validate(root)
 
 
+def _control_plane_remainder(inventory: list[IoObservation]) -> dict[str, object]:
+    """Describe the unclassified remainder so the count cannot be read as a gate debt.
+
+    Every unclassified operation is, by construction, off the hook decision path:
+    `_validate` refuses to pass while one is reachable. Reporting only the raw
+    category totals invites the opposite reading -- that thousands of operations
+    are waiting to be classified -- so say plainly that the remainder is Python
+    control plane and that none of it is reachable from a root.
+    """
+    remainder = [item for item in inventory if item.category.startswith("unclassified_python")]
+    return {
+        "operation_count": len(remainder),
+        "file_count": len({item.path for item in remainder}),
+        "reachable_count": sum(1 for item in remainder if item.reachable),
+        "by_subpackage": dict(sorted(Counter(_subpackage(item.path) for item in remainder).items())),
+    }
+
+
+def _subpackage(path: str) -> str:
+    tail = path.split("src/codex_plugin_scanner/guard/", 1)[-1]
+    head, separator, _ = tail.partition("/")
+    return head if separator else "<top-level>"
+
+
 def _validate(root: Path) -> dict[str, object]:
     root = root.resolve()
     records = _function_map(root)
@@ -375,6 +410,7 @@ def _validate(root: Path) -> dict[str, object]:
         "reachable_function_count": len(reachable),
         "inventory_total": len(inventory),
         "inventory_by_category": dict(sorted(inventory_counts.items())),
+        "control_plane_remainder": _control_plane_remainder(inventory),
         "inventory": [
             {
                 "path": item.path,

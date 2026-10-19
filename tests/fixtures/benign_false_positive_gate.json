@@ -8574,6 +8574,57 @@
       "expect": "allow"
     },
     {
+      "id": "git-worktree-add-long-lived-clone-existing-branch",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/project worktree add ${HOME}/project-report-fix fix/report-export"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "git-worktree-add-long-lived-clone-new-branch-from-origin",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/project worktree add ${HOME}/project-report-followup -b fix/report-followup origin/main"
+      },
+      "cwd": "parent",
+      "expect": "allow"
+    },
+    {
+      "id": "neg-git-worktree-add-long-lived-clone-post-checkout-hook",
+      "fix_area": "worktree-add",
+      "harnesses": [
+        "claude-code",
+        "codex",
+        "cursor",
+        "omp",
+        "zcode"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "git -C ${HOME}/project-hooked worktree add ${HOME}/project-hooked-report-fix fix/report-export"
+      },
+      "cwd": "parent",
+      "expect": "not_allow"
+    },
+    {
       "id": "git-worktree-add-existing-branch-home-tilde",
       "fix_area": "worktree-add",
       "harnesses": [

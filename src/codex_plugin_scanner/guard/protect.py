@@ -98,14 +98,14 @@ def build_protect_payload(
 
     if len(command) == 0:
         raise ValueError("Guard protect requires a command to wrap.")
-    request, cached_verdict = _native_protect(command, guard_home=None, store=store)
+    request, cached_verdict = _native_protect(command, guard_home=None, store=store, cwd=workspace_dir)
     observe_mode = config is not None and config.mode == "observe"
     cached_gate = cached_verdict.blocking and not observe_mode
     cached_policy_context = _cached_advisory_policy_context(cached_verdict)
     from .local_supply_chain import build_package_protect_payload
 
     def current_cached_advisory_authority() -> tuple[object | None, dict[str, object] | None]:
-        current_verdict = evaluate_protect_request(request, store)
+        current_verdict = evaluate_protect_request(request, store, cwd=workspace_dir)
         return current_verdict.action, _cached_advisory_policy_context(current_verdict)
 
     final_config_provider = current_config_provider
@@ -190,7 +190,7 @@ def build_protect_payload(
         additional_authority_provider=final_advisory_provider,
     )
     if package_payload is not None:
-        current_cached_verdict = evaluate_protect_request(request, store)
+        current_cached_verdict = evaluate_protect_request(request, store, cwd=workspace_dir)
         if (
             not observe_mode
             and current_cached_verdict.blocking
@@ -470,10 +470,10 @@ def parse_protect_command(command: list[str], *, guard_home: Path | None = None)
     return request
 
 
-def evaluate_protect_request(request: ProtectRequest, store: Any) -> ProtectVerdict:
+def evaluate_protect_request(request: ProtectRequest, store: Any, *, cwd: Path | None = None) -> ProtectVerdict:
     """Calculate the local install-time verdict against the store's cached advisories."""
 
-    _request, verdict = _native_protect(list(request.command), guard_home=None, store=store)
+    _request, verdict = _native_protect(list(request.command), guard_home=None, store=store, cwd=cwd)
     return verdict
 
 
@@ -482,6 +482,7 @@ def _native_protect(
     *,
     guard_home: Path | None,
     store: Any | None,
+    cwd: Path | None = None,
 ) -> tuple[ProtectRequest, ProtectVerdict]:
     home = Path(store.guard_home) if store is not None else guard_home
     store_path = Path(store.path) if store is not None else None
@@ -489,6 +490,7 @@ def _native_protect(
         command,
         guard_home=None if home is None else home.expanduser().resolve(strict=False),
         store_path=None if store_path is None else store_path.expanduser().resolve(strict=False),
+        cwd=cwd,
     )
     return (
         ProtectRequest(

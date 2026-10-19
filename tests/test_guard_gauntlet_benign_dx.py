@@ -12,6 +12,7 @@ from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.clone_fixtures import (
     LONG_LIVED_BRANCH,
     LONG_LIVED_CLONE_CASE,
+    LONG_LIVED_WORKTREE_CASE,
     long_lived_clone_checks,
     long_lived_clone_config,
 )
@@ -273,6 +274,20 @@ def test_long_lived_clone_fixture_signs_by_default_and_tracks_many_branches(tmp_
     assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_CLONE_CASE) == {"long-lived-branch-checked-out": True}
     other = create_fixture(tmp_path / "other", realistic=True, scenario_id="omp-native-git-compound-reads")
     assert "retired/" not in _git(other.workspace, other.home, "config", "--list")
+
+
+def test_long_lived_clone_worktree_fixture_adds_both_sibling_worktrees(tmp_path: Path) -> None:
+    scenario = {s.id: s for s in load_catalog()}[LONG_LIVED_WORKTREE_CASE]
+    assert (scenario.expectation, scenario.oracle) == ("allow", "native-tools")
+    fixture = create_fixture(tmp_path / "fx", realistic=True, scenario_id=LONG_LIVED_WORKTREE_CASE)
+    main = fixture.home / "project"
+    assert len(_git(main, fixture.home, "config", "--null", "--list").encode()) > 256 * 1024
+    assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_WORKTREE_CASE) == {"long-lived-worktrees-added": False}
+    for command in scenario.commands:
+        arguments = command.replace("{{home}}", str(fixture.home)).split()
+        assert arguments[:3] == ["git", "-C", str(main)]
+        _git(main, fixture.home, *arguments[3:])
+    assert long_lived_clone_checks(fixture.workspace, LONG_LIVED_WORKTREE_CASE) == {"long-lived-worktrees-added": True}
 
 
 @pytest.mark.parametrize("case", [FAST_FORWARD_CASE, FAST_FORWARD_HOOK_CASE])

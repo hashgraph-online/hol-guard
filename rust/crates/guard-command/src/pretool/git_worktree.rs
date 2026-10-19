@@ -11,7 +11,12 @@ mod sources;
 use hooks::{hooks_are_inert, repository_hooks_inert};
 use sources::{expand_config_path, safe_worktree_config, ConfigFacts};
 
-const CONFIG_LIMIT: u64 = 65_536;
+/// The whole configuration listing, every entry of which the screen below
+/// judges. Long-lived repositories collect a `branch.<name>` section for each
+/// branch a worktree was ever created on, so a busy checkout's listing runs to
+/// hundreds of kilobytes; a smaller cap turned every later `worktree add` in
+/// such a repository into a review. This matches the session probe's bound.
+const CONFIG_LIMIT: u64 = 8 * 1024 * 1024;
 const WORKTREE_PROBE_LIMIT: u64 = 8 * 1024;
 
 #[allow(clippy::too_many_arguments)]

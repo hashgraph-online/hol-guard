@@ -135,6 +135,7 @@ pub(crate) mod safe_reads;
 mod safe_scalar;
 mod safe_writes;
 mod script_content;
+pub(crate) use script_content::{argv_script, ArgvScript};
 mod search;
 mod search_pattern_clearance;
 mod search_scope;

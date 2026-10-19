@@ -507,7 +507,7 @@ class TestGuardProtect:
     def test_native_protect_sends_absolute_store_paths(self, monkeypatch: pytest.MonkeyPatch) -> None:
         seen: dict[str, Path | None] = {}
 
-        def capture(command, *, guard_home, store_path):
+        def capture(command, *, guard_home, store_path, cwd=None):
             seen["guard_home"] = guard_home
             seen["store_path"] = store_path
             return (

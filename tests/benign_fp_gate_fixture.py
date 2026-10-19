@@ -55,10 +55,11 @@ from tests.benign_fp_gate_developer_checkout import head_commit, write_developer
 from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_git import _git, _session_worktree, _stopped_rebase
 from tests.benign_fp_gate_hooked_clone import hooked_worktree_path, write_hooked_clone
+from tests.benign_fp_gate_long_lived_clone import write_long_lived_clones
 from tests.benign_fp_gate_projects import (
-    COMMITTED_SOURCE,
     _INSTALLED_PACKAGES,
     _NODE_PACKAGES,
+    COMMITTED_SOURCE,
     _application_database,
     _build_toolchain,
     _bun_lockfile,
@@ -350,6 +351,8 @@ def build_fixture(root: Path) -> BenignFixture:
     _session_worktree(org, home)
     write_developer_checkout(org, home, _git, _write)
     write_hooked_clone(org, home, _git)
+    # Years-old clones gaining sibling worktrees, one with a post-checkout hook.
+    write_long_lived_clones(home, _git)
     _stopped_rebase(org, home, "app-portal-rebase")
     # A rebase started with an `exec` step keeps that program in its saved todo list.
     _stopped_rebase(org, home, "app-portal-rebase-exec", "-x", "true")
