@@ -240,7 +240,10 @@ fn package_display_name_round_trips_scope_for_two_scoped_packages_same_unscoped_
     second.insert("namespace".into(), json!("@earendil-works"));
     second.insert("requestedVersion".into(), json!("0.1.0"));
     assert_eq!(package_display_name(&first), "@oh-my-pi/pi-coding-agent");
-    assert_eq!(package_display_name(&second), "@earendil-works/pi-coding-agent");
+    assert_eq!(
+        package_display_name(&second),
+        "@earendil-works/pi-coding-agent"
+    );
     assert_ne!(
         package_display_name(&first),
         package_display_name(&second),
