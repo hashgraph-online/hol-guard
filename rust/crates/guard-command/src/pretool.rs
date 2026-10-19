@@ -34,10 +34,12 @@ pub struct PathContext<'a> {
 
 mod contained_wrapper;
 pub(crate) mod curl_reads;
+pub(crate) mod dd_reads;
 mod digest_reads;
 pub(crate) mod docker_reads;
 mod docker_start;
 mod doctl_reads;
+mod inert_environment;
 pub(crate) mod kubectl_reads;
 mod loopback_ports;
 pub(crate) mod port_probes;
@@ -60,6 +62,7 @@ mod brace_words;
 mod brew_reads;
 mod bun_eval;
 mod chain_temporary;
+mod clone_siblings;
 mod compound_reason;
 mod fanout_reads;
 mod find_reads;
@@ -81,12 +84,14 @@ mod git_reads;
 mod git_ref_listings;
 mod git_rev_list;
 mod git_search_text;
+pub(crate) mod git_stash_reads;
 pub(crate) mod git_tag_listing;
 mod repo_create_reason;
 mod root_removal;
 use git_reads::safe_git_arguments;
 mod git_helper_context;
 mod git_history_reads;
+mod git_hook_files;
 pub(crate) mod git_listing_reads;
 mod git_local_writes;
 mod git_probe;
@@ -131,6 +136,7 @@ mod safe_scalar;
 mod safe_writes;
 mod script_content;
 mod search;
+mod search_pattern_clearance;
 mod search_scope;
 mod search_scope_filter;
 mod search_scope_glob;
@@ -1025,6 +1031,7 @@ fn evaluate_single_command(
         .or_else(|| repo_create_reason::created_remote_push_reason(&model))
         .or_else(|| fanout_reads::whitespace_split_reason(&model))
         .or_else(|| search::rg_hidden_whitelist_reason(&model, context))
+        .or_else(|| search::grep::sensitive_reach_reason(&model, context))
         .or_else(|| compound_reason::unproven_steps_reason(&model, context))
         .or_else(|| worktree_add::outside_home_reason(&model, context));
     // `;2>&1 python3 evil.py` is an unread script. A glued redirect keeps the

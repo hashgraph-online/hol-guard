@@ -151,22 +151,62 @@ fn execution_intent_same_session_call_id_is_harness_scoped() {
             execution_intent_digest(&retry).unwrap()
         );
     }
-    let mut first = envelope(
-        "PreToolUse",
-        serde_json::json!({
-            "tool_name": "eval",
-            "tool_call_id": "first-call",
-            "session_id": "session-one",
-            "tool_input": {"code": "1 + 1"}
-        }),
-    );
-    first.harness = "claude-code".to_owned();
-    let mut retry = first.clone();
-    retry.raw_payload["tool_call_id"] = serde_json::json!("retry-call");
-    assert_ne!(
-        execution_intent_digest(&first).unwrap(),
-        execution_intent_digest(&retry).unwrap()
-    );
+    // Claude Code and Codex stamp `tool_use_id` on every tool-use block, so a
+    // retry of the same action carries a new one; their `tool_call_id` is not
+    // a transport ID and stays in the commitment, as does every other
+    // harness's call ID.
+    for (harness, key, retried) in [
+        ("claude-code", "tool_use_id", true),
+        ("codex", "tool_use_id", true),
+        ("claude-code", "tool_call_id", false),
+        ("codex", "tool_call_id", false),
+        ("cursor", "tool_use_id", false),
+    ] {
+        let mut first = envelope(
+            "PreToolUse",
+            serde_json::json!({
+                "tool_name": "Bash",
+                key: "first-call",
+                "session_id": "session-one",
+                "tool_input": {"command": "ls -la"}
+            }),
+        );
+        first.harness = harness.to_owned();
+        let mut retry = first.clone();
+        retry.raw_payload[key] = serde_json::json!("retry-call");
+        assert_eq!(
+            execution_intent_digest(&first).unwrap() == execution_intent_digest(&retry).unwrap(),
+            retried,
+            "{harness} {key}"
+        );
+        assert_eq!(
+            request_identity(&first).unwrap().1 == request_identity(&retry).unwrap().1,
+            retried,
+            "{harness} {key}"
+        );
+        if retried {
+            retry.raw_payload["tool_input"]["command"] = serde_json::json!("ls -l");
+            assert_ne!(
+                execution_intent_digest(&first).unwrap(),
+                execution_intent_digest(&retry).unwrap(),
+                "{harness} reworded"
+            );
+            retry.raw_payload["tool_input"]["command"] = serde_json::json!("ls -la");
+            retry.raw_payload["session_id"] = serde_json::json!("session-two");
+            assert_ne!(
+                execution_intent_digest(&first).unwrap(),
+                execution_intent_digest(&retry).unwrap(),
+                "{harness} another session"
+            );
+            retry.raw_payload["session_id"] = serde_json::json!("");
+            first.raw_payload["session_id"] = serde_json::json!("");
+            assert_ne!(
+                execution_intent_digest(&first).unwrap(),
+                execution_intent_digest(&retry).unwrap(),
+                "{harness} without a session"
+            );
+        }
+    }
 }
 
 #[test]

@@ -37,7 +37,7 @@ from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_cod
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
 from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
-from tests.native_gate_retry import UNAVAILABLE_REASON, review_with_unavailable_retry
+from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -361,7 +361,7 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
             f"negative control was allowed: {description}"
         )
-        assert _reason(result) != UNAVAILABLE_REASON, f"native review unavailable: {description}"
+        assert _reason(result) not in BUDGET_MISS_REASONS, f"native review unavailable: {description}"
         return
     if case.expect == "setup":
         assert case.case_id not in _PENDING_FIX, "setup cases cannot be pending_fix"

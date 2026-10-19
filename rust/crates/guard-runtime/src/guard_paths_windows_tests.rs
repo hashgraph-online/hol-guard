@@ -26,11 +26,11 @@ fn a_share_is_a_root_of_its_own() {
 
 #[test]
 fn a_path_naming_no_volume_is_not_one_this_resolver_settles() {
-    assert_eq!(normpath(r"\Users\me"), Err(PathError::Unusable));
-    assert_eq!(normpath(r"Users\me"), Err(PathError::Unusable));
+    assert_eq!(normpath(r"\Users\me"), Err(PathError::Relative));
+    assert_eq!(normpath(r"Users\me"), Err(PathError::Relative));
     assert_eq!(
         python_realpath_lax(Path::new(r"\Users\me")),
-        Err(PathError::Unusable)
+        Err(PathError::Relative)
     );
 }
 

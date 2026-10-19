@@ -41,8 +41,11 @@ pub(super) fn run() -> Result<(), String> {
         {
             claude_hook_bridge::run(config)
         }
+        // The hook carries its config as the last argument. Installs made
+        // before the Python bridge became a launcher pass the whole Python
+        // argv ahead of it, so both shapes reach the same bridge.
         [command, python_argv @ ..]
-            if command == codex_hook_bridge::BRIDGE_COMMAND && python_argv.len() >= 2 =>
+            if command == codex_hook_bridge::BRIDGE_COMMAND && !python_argv.is_empty() =>
         {
             std::process::exit(codex_hook_bridge::run(python_argv))
         }

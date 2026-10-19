@@ -7,11 +7,13 @@
 use std::ffi::OsString;
 use std::path::{Component, Path, PathBuf};
 
-/// A path the caller's rules cannot settle: a relative path, an
-/// implementation-defined prefix, bytes CPython would reject, or a symlink
-/// chain too long to follow.
+/// A path the caller's rules cannot settle: an implementation-defined prefix,
+/// bytes CPython would reject, or a symlink chain too long to follow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PathError {
+    /// The path names no root, so nothing here can say what it points at
+    /// without reading the process's own working directory.
+    Relative,
     Unusable,
 }
 
@@ -72,7 +74,12 @@ pub(crate) fn normpath(value: &str) -> Result<String, PathError> {
 
 #[cfg(not(windows))]
 pub(crate) fn normpath(value: &str) -> Result<String, PathError> {
-    if !value.starts_with('/') || (value.starts_with("//") && !value.starts_with("///")) {
+    if !value.starts_with('/') {
+        return Err(PathError::Relative);
+    }
+    // The POSIX `//` prefix is implementation-defined, so it is not a path
+    // this resolver may read lexically; `///` and longer are plain roots.
+    if value.starts_with("//") && !value.starts_with("///") {
         return Err(PathError::Unusable);
     }
     let mut parts: Vec<&str> = Vec::new();
@@ -129,7 +136,10 @@ fn path_root(path: &Path) -> Result<PathBuf, PathError> {
         }
     }
     if root.as_os_str().is_empty() || !root.as_path().is_absolute() {
-        return Err(PathError::Unusable);
+        // A drive-relative or rootless spelling: `ntpath` would read it
+        // against the process's own current directory, which is not a root
+        // this resolver may assume.
+        return Err(PathError::Relative);
     }
     Ok(root)
 }
@@ -319,7 +329,7 @@ pub(crate) fn owned_by_current_user(_path: &Path) -> bool {
 /// long chain are not told apart here.
 pub(crate) fn python_realpath_lax(path: &Path) -> Result<PathBuf, PathError> {
     if !path.is_absolute() {
-        return Err(PathError::Unusable);
+        return Err(PathError::Relative);
     }
     if path.as_os_str().as_encoded_bytes().contains(&0) {
         return Err(PathError::Unusable);

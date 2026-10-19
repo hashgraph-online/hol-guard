@@ -5,6 +5,7 @@ from __future__ import annotations
 from .pi_extension_contained_tests_source import with_contained_test_routing
 from .pi_extension_input_source import INPUT_HANDLER_SOURCE
 from .pi_extension_source_tail_shared_v1 import build_source_tail_shared_v1
+from .pi_extension_tool_resume_source import with_tool_approval_resume
 
 
 def build_extension_source_tail(
@@ -47,6 +48,7 @@ def build_extension_source_tail(
     shared_source = shared_source[:input_start] + INPUT_HANDLER_SOURCE + shared_source[input_end:]
     if harness in {"omp", "pi"}:
         shared_source = with_contained_test_routing(shared_source, harness=harness)
+    shared_source = with_tool_approval_resume(shared_source, harness=harness)
     return shared_source + (
         "    const hookDeadlineAt = Date.now() + GUARD_TIMEOUT_MS - GUARD_DEADLINE_RESERVE_MS;\n"
         "    const signal = handlerAbortSignal(ctx);\n"

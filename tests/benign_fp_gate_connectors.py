@@ -31,7 +31,7 @@ from codex_plugin_scanner.guard.local_cli_trust import utc_now
 from codex_plugin_scanner.guard.native_context import bound_context_digest_home
 from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIdentity, identify_unlisted_cli
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.benign_fp_gate_mcp import FORBIDDEN_WORDING, mcp_config, write_server
+from tests.benign_fp_gate_mcp import mcp_config, write_server
 from tests.benign_fp_gate_projects import _write
 
 UNSET_CLI = "lanectl"
@@ -48,6 +48,10 @@ def write_connectors(home: Path) -> None:
         program = home / ".local" / "bin" / name
         _write(program, f'#!/bin/sh\necho "{name} $*"\n')
         program.chmod(0o755)
+    # A job wrapper that runs whatever follows `--`, installed by the user and never decided on.
+    wrapper = home / ".local" / "bin" / "run-queued"
+    _write(wrapper, '#!/bin/sh\n[ "$1" = "--" ] && shift\nexec "$@"\n')
+    wrapper.chmod(0o755)
     _write(home / ".lanectl" / "state.json", '{"lane": "example", "ready": true}\n')
     _write(home / ".lanectl" / "config.toml", 'endpoint = "local"\n')
     write_server(home)
@@ -103,15 +107,18 @@ def connector_setup_failure(rows: list[dict[str, object]], result: dict[str, obj
     if result.get("prompted") is True:
         return "connector setup must not prompt the agent"
     text = " ".join(_strings(result))
-    # A generic per-action review reads "requires review"; setup names the connector and
-    # carries the default-mode guidance verbatim.
+    # A generic per-action review reads "requires review"; setup names the connector and tells
+    # the agent its call waits for the user's Allow once or Always allow
+    # (docs/guard/approval-invariant.md), with the approval link.
     if connector_setup_reason(UNSET_CLI, "cli", ask=False) not in text:
         return "not worded as setup"
-    if SAFE_ALTERNATIVE_GUIDANCE not in text:
-        return "setup lost the safe-alternative guidance"
-    leaked = [word for word in FORBIDDEN_WORDING if word in text.lower()]
-    if leaked:
-        return f"default-mode setup text carries {leaked}"
+    if "Allow once or Always allow" not in text:
+        return "setup lost the Allow once or Always allow wait"
+    if SAFE_ALTERNATIVE_GUIDANCE in text:
+        return "an approvable local CLI setup review must not redirect the agent away from the approval"
+    # The fixture runs no dashboard, so the link is the signed-link fallback that points at the Inbox.
+    if "http" not in text and "open Inbox from Guard" not in text:
+        return "setup review pointed the agent at neither an approval link nor the Inbox"
     if len(rows) != 1:
         return f"setup must queue exactly one approval row, got {len(rows)}"
     if rows[0]["reason_code"] != SETUP_ROW_REASON:
@@ -124,7 +131,7 @@ def connector_setup_failure(rows: list[dict[str, object]], result: dict[str, obj
 def assert_connector_setup(
     rows: list[dict[str, object]], result: dict[str, object], description: str, *, home: Path, guard_home: Path
 ) -> None:
-    """A never-decided CLI is held as setup: grouped row, setup wording, no link, no ask."""
+    """A never-decided CLI is held as setup: grouped row, setup wording, approval wait and link."""
     failure = connector_setup_failure(rows, result)
     assert failure is None, f"{failure}: {description}"
     group = CONNECTOR_GROUP_ID.fullmatch(str(rows[0]["queue_group_id"]))

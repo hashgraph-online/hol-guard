@@ -227,3 +227,32 @@ fn a_call_sent_to_the_package_policy_hands_its_server_to_the_proxy() {
     super::super::mark_package_server(&call, &fixture.store);
     assert_eq!(servers.relayable(&server), Err(SERVER_PROXY_TOOLS));
 }
+
+#[test]
+fn a_package_call_the_relay_could_not_evaluate_is_refused_once_for_the_server() {
+    use super::super::PACKAGE_DEFER_PREFIX;
+    use super::super::{evaluation_leg, package_leg::EVALUATION_ABSENT, Answer};
+
+    let mut call = request(
+        "bash",
+        mapping(json!([["command", "npm install left-pad"]])),
+    );
+    // A call the gate reads as a package request is asked for its evaluation.
+    assert!(matches!(
+        evaluation_leg(&call, true),
+        Some(Ok(Answer::Evaluate { ticket: None }))
+    ));
+    // A call that is not one is decided by the rest of the lane.
+    assert!(evaluation_leg(&call, false).is_none());
+
+    // The relay says its rounds did not settle: this decide is the refusal,
+    // not a second request for an evaluation that is not coming.
+    call.package_evaluation_unsettled = true;
+    assert!(matches!(
+        evaluation_leg(&call, true),
+        Some(Err(EVALUATION_ABSENT))
+    ));
+    // And the refusal is a package-lane defer, so it hands the server to the
+    // proxy for its later sessions rather than refusing the call again.
+    assert!(EVALUATION_ABSENT.starts_with(PACKAGE_DEFER_PREFIX));
+}

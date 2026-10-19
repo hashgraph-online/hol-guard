@@ -26,6 +26,8 @@ mod omp_bash_cwd_tests;
 mod open_quote;
 #[path = "generic_pure_eval.rs"]
 mod pure_eval;
+#[path = "generic_read_note.rs"]
+mod read_note;
 #[path = "redirect_projection.rs"]
 mod redirect_projection;
 #[path = "generic_result.rs"]
@@ -101,6 +103,8 @@ pub fn bounded_task_metadata_output(payload: &serde_json::Value, harness: &str) 
     }
     agent_metadata::bounded_task_list(&input, Some(tool))
 }
+#[path = "generic_github.rs"]
+mod github;
 #[path = "generic_tools.rs"]
 mod tools;
 #[path = "generic_web_fetch.rs"]
@@ -331,6 +335,10 @@ fn evaluate_envelope(
         Ok(value) => value,
         Err(error) => return generic_error_result(harness, event, error),
     };
+    signals.github_read_only = harness == "omp"
+        && event == "PreToolUse"
+        && omp::strict_tool_input(payload)
+            .is_some_and(|input| github::read_only_call(input, signals.tool_name.as_deref()));
     // A search pattern is data, not a command: a proven Claude `Grep` scope
     // skips the command authority but still passes the command controls below.
     let search_scope_proven = event == "PreToolUse"
@@ -721,6 +729,8 @@ fn evaluate_envelope(
     if result.reason_code == "native_file_read_review" {
         if let Some(note) = omp::grep_review_note(payload, &signals, &omp_context) {
             result.reason = format!("{} {note}", result.reason);
+        } else if let Some(reason) = read_note::read_review_reason(&signals, &omp_context) {
+            result.reason = reason;
         }
     }
     if event == "UserPromptSubmit" {

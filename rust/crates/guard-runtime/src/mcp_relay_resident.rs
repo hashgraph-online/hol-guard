@@ -341,6 +341,20 @@ impl ResidentRelayAuthority {
         }
         settled.payload.as_object().cloned()
     }
+
+    /// Tell the resident this call has no evaluation to decide from.
+    ///
+    /// The relay has already failed this call closed; the resident answers
+    /// with the refusal the lane names, and that defer hands this server's
+    /// later sessions to the proxy, which decides such calls without the
+    /// relay (`mcp_relay_servers.rs`). Without it a server whose package
+    /// calls the lane cannot settle would refuse them in every session.
+    fn mark_unsettled(&mut self, guard_home: &Path, request: &Value) {
+        let Some(payload) = request::unsettled_payload(request) else {
+            return;
+        };
+        let _ = self.exchange(guard_home, &payload);
+    }
 }
 
 /// A package evaluation borrows the same lane a decision travels on: the
@@ -400,6 +414,7 @@ impl RelayAuthority for ResidentRelayAuthority {
         // again with it attached.
         if matches!(reply_of(output.as_deref()), Some(Reply::Evaluate { .. })) {
             let Some(payload) = self.evaluated(&request) else {
+                self.mark_unsettled(&guard_home, &request);
                 defer::note(defer::PACKAGE_UNEVALUATED);
                 return no_decision();
             };
@@ -427,6 +442,7 @@ impl RelayAuthority for ResidentRelayAuthority {
             // The evaluation travels with the second send, so a second request
             // for one is an answer this exchange cannot take.
             Some(Reply::Evaluate { .. }) => {
+                self.mark_unsettled(&guard_home, &request);
                 defer::note(defer::PACKAGE_UNDECIDED);
                 no_decision()
             }

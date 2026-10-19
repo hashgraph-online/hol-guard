@@ -4,6 +4,18 @@
 //! proofs gave on the same tree. The two machine-dependent engines (launch
 //! identity, package intent) are replaced by the deterministic fakes the
 //! recorder used, so only the proofs under test can differ.
+//!
+//! Where the resident deliberately departs from the retired implementation,
+//! the recorded answer is updated with it and the departure is argued in the
+//! change that makes it; re-running the recorder would restore the old answer,
+//! so it is not the way to resolve a difference. The tool-target family departs
+//! in three places: the bytes a write tool puts into the file it names no
+//! longer bind the approval, paging and formatting options no longer bind a
+//! read, and one file a read tool names outside the workspace is a scope an
+//! approval can cover. A directory outside it still is not, neither is any
+//! path a search tool is given to walk, and neither is a write out there: the
+//! bytes are not part of the identity, so naming only the path would let one
+//! allow answer for every later edit of a shell profile or a launch agent.
 
 use std::collections::BTreeMap;
 use std::io::Read;

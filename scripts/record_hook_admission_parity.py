@@ -2,8 +2,10 @@
 
 The vectors pin the behaviour of the pure helpers the daemon runs before a
 runtime hook reaches the native edge (lane selection, scheduler client key,
-payload size, remaining-budget hints, deadline math, workspace and workdir
-normalisation).  A native handler that replaces them must reproduce every vector.
+payload size, remaining-budget hints, deadline math, and the workspace and
+workdir spellings it reads out of a request).  A native handler that replaces
+them must reproduce every vector.  What a spelling means is the runtime's to
+settle: `rust/crates/guard-runtime/src/hook_path_rules_tests.rs` pins that.
 Run without arguments to rewrite the fixture; the test module compares it.
 """
 
@@ -111,9 +113,7 @@ def _vectors() -> dict[str, object]:
                 "remaining_payload_keys": sorted(working),
             }
         )
-    workspaces = [
-        {"value": value, "normalized": handler._normalized_hook_workspace_string(value)} for value in WORKSPACE_STRINGS
-    ]
+    workspaces = [{"value": value, "spelling": handler._hook_workspace_spelling(value)} for value in WORKSPACE_STRINGS]
     workdirs = []
     for payload in WORKDIR_PAYLOADS:
         provided, workdir = handler._runtime_hook_exec_command_workdir(payload)

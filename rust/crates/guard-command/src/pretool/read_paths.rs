@@ -4,6 +4,8 @@ pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
+#[path = "read_feature_directories.rs"]
+mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
 #[path = "hidden_listing.rs"]
@@ -265,23 +267,44 @@ pub(super) fn resolved_path_allowed_for_operation(
     verified_temporary: bool,
     read_only: bool,
 ) -> bool {
-    if !resolved_location_allowed(canonical, home_dir, cwd, verified_temporary)
-        || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
-            || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
-            || (read_only && project_dotfile_read(canonical, home_dir))
-            || guard_safety_doc(canonical, home_dir)
-            || (read_only
-                && (agent_skill_document(canonical, home_dir)
-                    || agent_home_state(canonical, home_dir)
-                    || project_skill_document(canonical, home_dir, cwd)
-                    || codex_notes_document(canonical, home_dir)
-                    || harness_notes::harness_home_document(canonical, home_dir)
-                    || git_ref_document(canonical, home_dir, cwd)
-                    || git_config_document(canonical, cwd)
-                    || worktree_gitfile(canonical)
-                    || scratch::workspace_scratch_read(canonical, home_dir, cwd)
-                    || virtualenv_activation_script(canonical)))
-            || (read_only && execution_output_log(canonical, home_dir)))
+    path_gate(canonical, home_dir, cwd, verified_temporary, read_only, true)
+        // A directory named for a login feature inside a repository is code,
+        // not a credential store; every other screen still runs on the path.
+        || (read_only
+            && feature_directories::feature_only_credential_name(canonical, home_dir)
+            && path_gate(canonical, home_dir, cwd, verified_temporary, read_only, false))
+}
+
+fn path_gate(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    read_only: bool,
+    credential_names: bool,
+) -> bool {
+    if !location_allowed(
+        canonical,
+        home_dir,
+        cwd,
+        verified_temporary,
+        credential_names,
+    ) || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
+        || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
+        || (read_only && project_dotfile_read(canonical, home_dir))
+        || guard_safety_doc(canonical, home_dir)
+        || (read_only
+            && (agent_skill_document(canonical, home_dir)
+                || agent_home_state(canonical, home_dir)
+                || project_skill_document(canonical, home_dir, cwd)
+                || codex_notes_document(canonical, home_dir)
+                || harness_notes::harness_home_document(canonical, home_dir)
+                || git_ref_document(canonical, home_dir, cwd)
+                || git_config_document(canonical, cwd)
+                || worktree_gitfile(canonical)
+                || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                || virtualenv_activation_script(canonical)))
+        || (read_only && execution_output_log(canonical, home_dir)))
     {
         return false;
     }
@@ -367,6 +390,16 @@ pub(super) fn resolved_location_allowed(
     cwd: Option<&str>,
     verified_temporary: bool,
 ) -> bool {
+    location_allowed(canonical, home_dir, cwd, verified_temporary, true)
+}
+
+fn location_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    credential_names: bool,
+) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
     const ROOTS: [&str; 7] = [
@@ -385,7 +418,7 @@ pub(super) fn resolved_location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || guard_secure_fs::credential_named_path(canonical))
+        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
 }
 
 pub(super) fn foreign_user_home(

@@ -11,6 +11,7 @@ from ..models import HarnessDetection
 from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import HarnessAdapter, HarnessContext, PreparedHarnessInstall, _resolve_command
 from .omp_code_mode import with_omp_code_mode_warnings
+from .pi_extension_pinned_core import with_pinned_core_warning
 from .pi_extension_previous_source import previous_managed_extension_source
 from .pi_support import (
     OMP_AGENT_DIR,
@@ -79,6 +80,13 @@ class _PiFamilyHarnessAdapter(HarnessAdapter):
 
     def _managed_settings_path(self, context: HarnessContext) -> Path:
         return self._global_root(context) / PI_SETTINGS_FILE
+
+    def diagnostics(self, context: HarnessContext) -> dict[str, object]:
+        return with_pinned_core_warning(
+            super().diagnostics(context),
+            extension_path=self._managed_extension_path(context),
+            display_name=self.display_name,
+        )
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
         roots = [(self._global_root(context), "global")]

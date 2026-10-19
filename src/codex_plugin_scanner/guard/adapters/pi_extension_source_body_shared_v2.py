@@ -103,10 +103,22 @@ def build_source_body_shared_v2(*, display_name: str, blocked_reason_prelude: st
         'deadline. Retry the action.";\n'
         "  }\n"
         f'  const prefix = "HOL Guard blocked this tool output before {display_name} could use it.";\n'
+        "  // The native reason can quote the blocked output, so it stays with the\n"
+        "  // user notice. The reason code is Guard's own token and names the cause\n"
+        "  // without carrying any of the text, which is what the agent needs to\n"
+        "  // stop guessing and say something useful to the user.\n"
+        "  const cause =\n"
+        '    reasonCode === "output_secret_match" || reasonCode === "native_secret_exfiltration"\n'
+        '      ? " The output carried credential-shaped text, which HOL Guard keeps out of the model context."\n'
+        '      : reasonCode === "native_prompt_injection_review"\n'
+        '        ? " The output carried instructions addressed to the agent, which the user reviews first."\n'
+        "        : reasonCode && /^[a-z][a-z0-9_]{2,63}$/.test(reasonCode)\n"
+        "          ? ` HOL Guard recorded this as ${reasonCode}.`\n"
+        "          : '';\n"
         "  const approvalUrl = reason.match(/https?:\\/\\/\\S+/)?.[0]?.replace(/[.,;:]+$/, '');\n"
         "  const approvalHint = approvalUrl ? ` Human approval is pending in HOL Guard: ${approvalUrl}.` : '';\n"
-        "  return `${prefix}${approvalHint} Do not retry the same tool call automatically; wait for the user to "
-        "approve or change the task.`;\n"
+        "  return `${prefix}${cause}${approvalHint} Do not retry the same tool call "
+        "automatically; wait for the user to approve or change the task.`;\n"
         "}\n"
         "\n"
         "function blockedToolResult(reason: string, details: unknown) {\n"

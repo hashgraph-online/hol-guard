@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_directory_trust as native_directory_trust_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -1901,6 +1902,25 @@ class TestGuardSurfaceServer:
                 seen_payload.update(payload)
                 return {"decision": "allow"}
 
+            def settled_reference(candidates, **_kwargs):
+                """Stand in for the runtime that settles the reference path.
+
+                The dispatch above is already a double, so this daemon never
+                reaches a resident. Whether the path is Guard-owned is the
+                runtime's verdict and has its own tests; what this test watches
+                is that the referenced payload stays opaque on the way through.
+                """
+
+                return [
+                    native_directory_trust_module.DirectoryTrustVerdict(
+                        parameter=parameter,
+                        path=value,
+                        reason=None,
+                    )
+                    for parameter, value in candidates
+                ]
+
+            monkeypatch.setattr(native_directory_trust_module, "native_directory_trust", settled_reference)
             monkeypatch.setattr(daemon_server_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
             monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_handle_runtime_hook_fast", native_dispatch)
             daemon.start()

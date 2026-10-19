@@ -17,6 +17,19 @@
 //! its running containers with, so unlike `compose ps` it never resolves a
 //! compose file, its `.env` or its `include` sources.
 //!
+//! `docker buildx imagetools inspect <image>` asks the image's registry for the
+//! manifest (or manifest list) it publishes and prints its digest, platforms and
+//! attestations. It is registry metadata, the same kind of query as `npm view`:
+//! it pulls no layer, loads no project file, builds nothing and writes nothing
+//! locally. Exactly one image reference is allowed, and the only options are
+//! `--raw` and `--format`. A `--format` template may read only the image name,
+//! the manifest and the index (`{{.Manifest.Digest}}`, `{{json .Manifest}}`):
+//! `.Image` is the image's configuration, whose `Env` can hold a credential the
+//! image was built with, so a template naming it, or any other field, function
+//! or control action, stays reviewed. `--builder` points the query at another
+//! builder's configuration, and every other `imagetools` verb stays reviewed,
+//! `create` most of all, because it pushes a new manifest to a registry.
+//!
 //! Still reviewed:
 //! - any option before the subcommand. `-H`/`--host`, `--context` and
 //!   `--config` move the client to another daemon or configuration, and
@@ -58,12 +71,17 @@ const BUILDER_VALUES: [&str; 0] = [];
 /// the root `--file` and the value names a compose file to resolve. Only the
 /// long spelling filters.
 const PROJECT_VALUES: [&str; 2] = ["--filter", "--format"];
+/// A registry manifest query prints the manifest as published (`--raw`) or
+/// through a Go template over that one document (`--format`).
+const REGISTRY_FLAGS: [&str; 1] = ["--raw"];
+const REGISTRY_VALUES: [&str; 1] = ["--format"];
 
 /// Single-letter flags that may be clustered (`-aq`).
 const CONTAINER_SHORT: &str = "aqsl";
 const IMAGE_SHORT: &str = "aq";
 const BUILDER_SHORT: &str = "";
 const PROJECT_SHORT: &str = "aq";
+const REGISTRY_SHORT: &str = "";
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Listing {
@@ -71,6 +89,7 @@ enum Listing {
     Images,
     Builders,
     Projects,
+    Manifest,
 }
 
 pub(super) fn safe_docker_segment(
@@ -122,6 +141,7 @@ pub(super) fn safe_docker_arguments(arguments: &[String]) -> bool {
         ["image", "ls" | "list", rest @ ..] => (Listing::Images, rest),
         ["buildx", "ls", rest @ ..] => (Listing::Builders, rest),
         ["compose", "ls" | "list", rest @ ..] => (Listing::Projects, rest),
+        ["buildx", "imagetools", "inspect", rest @ ..] => (Listing::Manifest, rest),
         _ => return super::docker_start::safe_start_arguments(&words),
     };
     listing_options_safe(listing, rest)
@@ -133,6 +153,7 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
         Listing::Images => (&IMAGE_FLAGS[..], &IMAGE_VALUES[..], IMAGE_SHORT),
         Listing::Builders => (&NO_FLAGS[..], &BUILDER_VALUES[..], BUILDER_SHORT),
         Listing::Projects => (&NO_FLAGS[..], &PROJECT_VALUES[..], PROJECT_SHORT),
+        Listing::Manifest => (&REGISTRY_FLAGS[..], &REGISTRY_VALUES[..], REGISTRY_SHORT),
     };
     let mut positionals = 0usize;
     let mut index = 0;
@@ -164,7 +185,9 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
                     None => return false,
                 },
             };
-            if !option_value_safe(name, value) {
+            if !option_value_safe(name, value)
+                || (listing == Listing::Manifest && !manifest_format_safe(value))
+            {
                 return false;
             }
             continue;
@@ -174,10 +197,11 @@ fn listing_options_safe(listing: Listing, words: &[&str]) -> bool {
         }
     }
     // `docker images <repository[:tag]>` filters by one reference; the
-    // container listing takes none.
+    // container listing takes none. A manifest query names exactly one image.
     match listing {
         Listing::Containers | Listing::Builders | Listing::Projects => positionals == 0,
         Listing::Images => positionals <= 1,
+        Listing::Manifest => positionals == 1,
     }
 }
 
@@ -201,6 +225,42 @@ fn option_value_safe(name: &str, value: &str) -> bool {
         "--format" => true,
         _ => false,
     }
+}
+
+/// A manifest query's template reads only the published name, manifest and
+/// index. The image configuration (`.Image`) can carry a build-time credential
+/// in its environment, so it is not among them.
+fn manifest_format_safe(value: &str) -> bool {
+    let mut rest = value;
+    while let Some(start) = rest.find("{{") {
+        if rest[..start].contains("}}") {
+            return false;
+        }
+        let after = &rest[start + 2..];
+        let Some(end) = after.find("}}") else {
+            return false;
+        };
+        if !manifest_action_safe(after[..end].trim()) {
+            return false;
+        }
+        rest = &after[end + 2..];
+    }
+    !rest.contains("}}")
+}
+
+fn manifest_action_safe(action: &str) -> bool {
+    let field = match action.strip_prefix("json") {
+        Some(after) if after.starts_with(char::is_whitespace) => after.trim_start(),
+        _ => action,
+    };
+    let Some(path) = field.strip_prefix('.') else {
+        return false;
+    };
+    let mut segments = path.split('.');
+    matches!(segments.next(), Some("Name" | "Manifest" | "Index"))
+        && segments.all(|segment| {
+            !segment.is_empty() && segment.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        })
 }
 
 /// `name[:tag]` or `name@digest` with registry path characters only.

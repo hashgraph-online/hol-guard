@@ -262,6 +262,18 @@ pub(super) fn evaluated_request(
     decide_payload(&Value::Object(request))
 }
 
+/// The same decide request again, saying the relay has no evaluation to send.
+///
+/// The lane decides nothing without one, so the resident answers this with the
+/// refusal and hands this server's later sessions to the proxy
+/// (`mcp_relay_decide.rs`). The relay keeps its own fail-closed answer; it
+/// sends this for the mark, not for a verdict.
+pub(super) fn unsettled_payload(request: &Value) -> Option<Vec<u8>> {
+    let mut request = request.as_object()?.clone();
+    request.insert("package_evaluation_unsettled".to_owned(), Value::Bool(true));
+    decide_payload(&Value::Object(request))
+}
+
 /// `dict(os.environ)` of the relaying process. A variable this process cannot
 /// read as UTF-8 is one the proxy could not have sent either (`json.dumps`
 /// raises on a surrogate), so the call is not re-sent at all.

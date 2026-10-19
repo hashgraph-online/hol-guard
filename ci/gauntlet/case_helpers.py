@@ -10,7 +10,7 @@ from typing import Any
 from .agent_prompt import scenario_prompt
 from .catalog import Scenario
 from .evidence import public_events, read_events
-from .fixtures import Fixture, scratch_checkout
+from .fixtures import Fixture, scratch_checkout, stage_directory
 from .host_evidence import complete_host_events
 from .input_evidence import fixture_path_aliases, public_observations
 
@@ -97,6 +97,9 @@ def _fixture_replacements(fixture: Fixture) -> dict[str, str]:
     replacements[scratch] = replacements["/private" + scratch] = "{{scratch}}"
     # Git for Windows prints the same drive path with forward slashes.
     replacements[scratch.replace("\\", "/")] = "{{scratch}}"
+    stage = str(stage_directory(fixture.root))
+    replacements[stage] = replacements["/private" + stage] = "{{stage}}"
+    replacements[stage.replace("\\", "/")] = "{{stage}}"
     # Commands quote each interpolated fixture path. Normalize the entire
     # shell-quoted spelling before redacting raw paths, including apostrophes.
     for value, placeholder in tuple(replacements.items()):

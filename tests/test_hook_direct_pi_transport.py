@@ -26,8 +26,8 @@ class _SettledDirectories:
     so each candidate settles as the string it arrived as.
     """
 
-    def __init__(self, candidates: tuple[tuple[str, str | None], ...]) -> None:
-        self._paths = {parameter: value for parameter, value in candidates}
+    def __init__(self, candidates: tuple[tuple[str, ...], ...]) -> None:
+        self._paths = {candidate[0]: candidate[1] for candidate in candidates}
 
     def require(self, parameter: str) -> str | None:
         return self._paths.get(parameter)
@@ -170,7 +170,7 @@ def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
         _settled_hook_directories=lambda *candidates, **kwargs: _SettledDirectories(candidates),
-        _normalized_hook_workspace_string=lambda value: value,
+        _hook_workspace_spelling=lambda value: value,
         _runtime_hook_exec_command_workdir=lambda payload: (False, None),
         _record_hook_path_rejection=lambda **values: None,
         _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
@@ -240,6 +240,7 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
         _settled_hook_directories=reject,
+        _hook_workspace_spelling=lambda value: value,
         # This request names no Guard home, so the lane is asked and defers.
         _hook_guard_home_query_is_this_home=lambda *_args: True,
         _normalized_hook_workspace_string=lambda value: value,

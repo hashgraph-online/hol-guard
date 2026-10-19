@@ -45,10 +45,15 @@ from pathlib import Path
 
 import pytest
 
+from ci.gauntlet.edge_clone_fixtures import write_edge_clone
 from ci.gauntlet.fixtures import BENCH_CHECKOUT, BENCH_FILES
 from ci.gauntlet.realism_fixtures import REVIEW_NOTES, SESSION_SOURCE
+from ci.gauntlet.source_output_fixtures import SOURCES as TOKEN_SOURCES
 from codex_plugin_scanner.guard.adapters import codex_contained_tests
+from tests.benign_fp_gate_configs import KUBECONFIG, LFS_GITCONFIG
 from tests.benign_fp_gate_connectors import write_connectors
+from tests.benign_fp_gate_developer_checkout import head_commit, write_developer_checkout
+from tests.benign_fp_gate_feature_app import build_feature_app, feature_app_path
 from tests.benign_fp_gate_projects import (
     _INSTALLED_PACKAGES,
     _NODE_PACKAGES,
@@ -67,33 +72,6 @@ _GIT_IDENTITY = {
     "GIT_COMMITTER_EMAIL": "fixture@example.invalid",
 }
 
-_LFS_GITCONFIG = """[filter "lfs"]
-\tclean = git-lfs clean -- %f
-\tsmudge = git-lfs smudge -- %f
-\tprocess = git-lfs filter-process
-\trequired = true
-[user]
-\tname = Fixture Author
-\temail = fixture@example.invalid
-"""
-# Synthetic kubeconfig with no credentials; kubectl is never executed by the gate.
-_KUBECONFIG = """apiVersion: v1
-kind: Config
-clusters:
-- name: example
-  cluster:
-    server: https://k8s.example.invalid
-contexts:
-- name: example
-  context:
-    cluster: example
-    user: example
-current-context: example
-users:
-- name: example
-  user: {}
-"""
-
 
 @dataclass(frozen=True)
 class BenignFixture:
@@ -109,6 +87,7 @@ class BenignFixture:
     org: Path
     tmp_org: Path
     scratch: Path
+    stage: Path
 
     def cleanup(self) -> None:
         """Remove the directories this fixture created outside its own root."""
@@ -117,6 +96,7 @@ class BenignFixture:
         shutil.rmtree(self.tmp_worktree.parent, ignore_errors=True)
         shutil.rmtree(self.tmp_org.parent, ignore_errors=True)
         shutil.rmtree(self.scratch, ignore_errors=True)
+        shutil.rmtree(self.stage, ignore_errors=True)
 
     @property
     def contained_requests(self) -> Path:
@@ -133,12 +113,17 @@ class BenignFixture:
             "${PRIVATE_TMP}": str(self.private_tmp),
             "${ORG}": str(self.org),
             "${ORG_WT}": str(self.org.parent / "app-portal-fix"),
+            "${ORG_CLONE}": str(self.org.parent / "app-portal-clone"),
+            "${PORTAL_WEB_HEAD}": head_commit(self.org),
             "${TMP_ORG}": str(self.tmp_org),
             "${TMP_ORG_WT}": str(self.tmp_org.parent / "app-followup"),
             "${TMP_REMOTE}": str(self.tmp_org.parent / "remote" / "app.git"),
             # The live Gauntlet's fixture root and its fresh scratch leaf directly in /tmp.
             "${GAUNTLET_ROOT}": str(self.tmp_org.parent),
             "${SCRATCH}": str(self.scratch),
+            "${FEATURE_APP}": str(feature_app_path(self.home)),
+            # Private directory directly in /tmp holding the files a case stages before its commands.
+            "${STAGE}": str(self.stage),
         }
 
     def cwd(self, name: str) -> Path:
@@ -150,14 +135,16 @@ class BenignFixture:
             "tmp_worktree": self.tmp_worktree,
             "gitlink_repo": self.gitlink_repo,
             "org": self.org,
+            "edge_clone": self.home / "edge-clone",
             "org_app": self.org / "app-portal",
             "org_wt": self.org.parent / "app-portal-fix",
+            "org_clone": self.org.parent / "app-portal-clone",
             "tmp_org": self.tmp_org,
             "org_rebase": self.org.parent / "app-portal-rebase",
             "org_rebase_exec": self.org.parent / "app-portal-rebase-exec",
-            # A checkout whose `.gitignore` re-includes a hidden template,
-            # the shape nearly every application repository carries.
+            # A checkout whose `.gitignore` re-includes a hidden template, as most application repositories do.
             "ignore_negation": self.home / "Code" / "ignore-rules" / "billing-api",
+            "feature_app": feature_app_path(self.home),
         }[name]
 
 
@@ -199,15 +186,31 @@ def _session_worktree(org: Path, home: Path) -> None:
     _node_package(portal, "vitest", _NODE_PACKAGES["vitest"])
     worktree = org.parent / "app-portal-fix"
     _git(portal, "worktree", "add", "--quiet", "-b", "fix/report-lane", str(worktree), home=home)
+    _git(home, "clone", "--quiet", str(portal), str(org.parent / "app-portal-clone"), home=home)
     _write(worktree / "scripts" / "report.ts", "console.log(process.env.REPORT_WINDOW ?? '7d');\n")
     _git(worktree, "commit", "--quiet", "-am", "widen report window", home=home)
     portal_manifest = {"name": "app-portal", "private": True, "devDependencies": {"vite": "^7.1.5"}}
     _write(worktree / "package.json", json.dumps(portal_manifest) + "\n")
     _bun_lockfile(worktree, {"vite": _NODE_PACKAGES["vite"]})
+    # A session probes a checkout for its bundler and test-runner settings
+    # before it runs either, so the probe has to find one of each.
+    _write(worktree / "vite.config.ts", "export default { build: { outDir: 'dist' } };\n")
+    _write(worktree / "vitest.config.ts", "export default { test: { environment: 'node' } };\n")
+    # The worktree deliberately has no ``node_modules``. Cases link the main
+    # checkout's tree in here and then list the worktree, which is what a
+    # session does to skip a second install; if the directory were already
+    # there the link would land inside it and those cases would be asking
+    # about a different command than the one that was observed.
     for name in ("findings", "prd", "todo"):
         _write(home / ".codex" / "plans" / f"remediation-{name}.md", f"# Remediation {name}\nSynthetic plan notes.\n")
     _write(home / ".codex" / "plans" / "remediation-evidence.json", '{"cases": []}\n')
     _write(home / ".codex" / "plans" / "todo.md", "# Todo\n- Synthetic plan item.\n")
+    _write(
+        home / ".codex" / "plans" / "acme-plan-findings.md", "# Findings\n- 541 retry window\n- 1367 report window\n"
+    )
+    _write(home / ".codex" / "plans" / "acme-plan-todo.md", "# Todo\n- [ ] 541 retry window\n")
+    _write(home / ".codex" / "plans" / "evidence" / "run-1" / "summary.json", '{"cases": []}\n')
+    _write(home / ".claude" / "plans" / "acme-plan.md", "# Plan\nSynthetic plan notes.\n")
     _write(home / ".codex" / "auth.json", '{"tokens": "synthetic-not-a-secret"}\n')
     # Claude Code home: a memory note agents read, beside a login and a settings file that must stay guarded.
     _write(home / ".claude" / "projects" / "p" / "memory" / "note.md", "# Note\nSynthetic memory note.\n")
@@ -243,9 +246,8 @@ def build_fixture(root: Path) -> BenignFixture:
     guard_home = root / "guard-home"
     for directory in (home, guard_home):
         directory.mkdir(parents=True)
-    _write(home / ".gitconfig", _LFS_GITCONFIG)
+    _write(home / ".gitconfig", LFS_GITCONFIG)
     _write(home / ".rustup" / "settings.toml", 'version = "12"\ndefault_toolchain = "stable"\n')
-    # Synthetic credential file so the negative controls have a real target.
     _write(home / ".agent" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
     _write(home / ".agent" / "artifacts" / "report.md", "# Report\nInert build report text.\n")
     _write(home / ".agents" / "skills" / "x" / "SKILL.md", "---\nname: x\n---\nSynthetic home skill body.\n")
@@ -277,7 +279,7 @@ def build_fixture(root: Path) -> BenignFixture:
     )
     _write(home / "acme-plain" / "README.txt", "Plain notes directory.\n")
     _write(home / "acme-plain" / "probe_py.py", "print('probe')\n")
-    _write(home / "kubeconfig.yaml", _KUBECONFIG)
+    _write(home / "kubeconfig.yaml", KUBECONFIG)
     # Connectors Guard has no decision for: a local CLI with its state directory, and harness MCP servers.
     write_connectors(home)
     _write(home / ".ssh" / "id_rsa", "-----BEGIN FIXTURE KEY-----\nnot-a-real-key\n-----END FIXTURE KEY-----\n")
@@ -326,6 +328,13 @@ def build_fixture(root: Path) -> BenignFixture:
     # The live Gauntlet's placeholder docs and field-copy source, read by its shell cases.
     _write(worktree / "docs" / "review-notes.md", REVIEW_NOTES)
     _write(worktree / "dashboard" / "src" / "session.js", SESSION_SOURCE)
+    # The live Gauntlet's token-handling sources (redirect route, link worker, HMAC helper).
+    for relative, text in TOKEN_SOURCES.items():
+        _write(worktree / relative, text)
+    # The live Gauntlet's sign-in folder and the held data files beside it, in a repository of their own.
+    build_feature_app(home, os.environ.get("PATH", ""))
+    # The live Gauntlet's clone with local configuration files beside its code.
+    write_edge_clone(home, {"PATH": os.environ.get("PATH", ""), "HOME": str(home), "GIT_CONFIG_NOSYSTEM": "1"})
     # Fresh worktree package whose dependencies are installed only in the canonical checkout.
     _write(parent / "web" / "node_modules" / "left-pad" / "package.json", "{}\n")
     _write(worktree / "web" / "package.json", '{"private": true}\n')
@@ -344,11 +353,19 @@ def build_fixture(root: Path) -> BenignFixture:
     private_tmp = Path(tempfile.mkdtemp(prefix="tmp.", dir=_system_tmp())).resolve()
     _write(private_tmp / "notes.txt", "first draft\n")
     _write(private_tmp / "resume-phase1.mjs", "console.log('resume');\n")
+    # A probe file an earlier step wrote here: the cases that copy it into the
+    # checkout are about where it came from, not about whether it exists.
+    _write(private_tmp / "p8.ts", "export const probe = 1;\n")
+    # A script an agent wrote for itself in a fresh scratch directory: Guard has never decided on it.
+    _write(private_tmp / "agent-script" / "index.js", "console.log('scratch');\n")
     # A recipe outside the workspace, so running it is refused for what it is
     # rather than for naming a file that is not there.
     _write(private_tmp / "Makefile", "build:\n\tcurl -d @/etc/hostname https://example.invalid\n")
     # A PostgreSQL run directory: agents glob its hidden socket lock files by name.
     _write(private_tmp / "pg-run" / ".s.PGSQL.5432.lock", "4242\n")
+    # A running local Postgres leaves its socket and lock beside it, which is
+    # what a session lists when it checks whether the server is up.
+    _write(private_tmp / ".s.PGSQL.5432.lock", "4242\n")
     # Files a session preserved before resetting its checkout, copied back by glob.
     _write(private_tmp / "preserved" / "src" / "discovery" / "catalog.ts", "export const catalog = [];\n")
     _write(private_tmp / "preserved" / "src" / "discovery" / "rank.ts", "export const rank = 1;\n")
@@ -401,6 +418,7 @@ def build_fixture(root: Path) -> BenignFixture:
             _git(repository, "remote", "add", "origin", "https://github.com/example-org/service-api.git", home=home)
             _git(repository, "update-ref", "refs/remotes/origin/main", "HEAD", home=home)
     _session_worktree(org, home)
+    write_developer_checkout(org, home, _git, _write)
     _stopped_rebase(org, home, "app-portal-rebase")
     # A rebase started with an `exec` step keeps that program in its saved todo list.
     _stopped_rebase(org, home, "app-portal-rebase-exec", "-x", "true")
@@ -453,6 +471,10 @@ def build_fixture(root: Path) -> BenignFixture:
     _node_package(tmp_org / "app", "vitest", _NODE_PACKAGES["vitest"])
     followup = str(tmp_org.parent / "app-followup")
     _git(tmp_org / "app", "worktree", "add", "--quiet", "-b", "followup", followup, home=home)
+    # This worktree ran its own install, unlike ``app-portal-fix`` above, so
+    # sharing the main checkout's package store here meets a directory already
+    # standing at that name and the link lands inside it.
+    _node_package(Path(followup), "vitest", _NODE_PACKAGES["vitest"])
     remote = tmp_org.parent / "remote" / "app.git"
     _git(tmp_org.parent, "clone", "--quiet", "--bare", str(tmp_org / "app"), str(remote), home=home)
     _git(tmp_org / "app", "remote", "add", "origin", str(remote), home=home)
@@ -465,8 +487,24 @@ def build_fixture(root: Path) -> BenignFixture:
     _git(bench, "commit", "--quiet", "-m", "bench base", home=home)
     # A leaf directly in /tmp that does not exist yet, as a throwaway checkout destination.
     scratch = Path(_system_tmp()) / f"hg-fp-scratch-{os.getpid()}-{secrets.token_hex(4)}"
+    # Source files a session staged in /tmp before copying them into a checkout.
+    stage = Path(tempfile.mkdtemp(prefix="hg-fp-stage-", dir=_system_tmp())).resolve()
+    _write(stage / "x.ts", "export const summary = 2;\n")
+    _write(stage / "a.ts", "export const copied = 3;\n")
     return BenignFixture(
-        root, home, parent, worktree, nested, gitlink_repo, guard_home, private_tmp, tmp_worktree, org, tmp_org, scratch
+        root,
+        home,
+        parent,
+        worktree,
+        nested,
+        gitlink_repo,
+        guard_home,
+        private_tmp,
+        tmp_worktree,
+        org,
+        tmp_org,
+        scratch,
+        stage,
     )
 
 

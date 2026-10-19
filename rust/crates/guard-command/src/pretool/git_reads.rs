@@ -120,6 +120,13 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_ref_listings::read_form(subcommand, &arguments[1..]);
     }
+    if subcommand == "stash" {
+        // A stash listing is a log over `refs/stash` and `stash show` runs
+        // the diff machinery, so both page and can convert blobs; the
+        // configuration probe has to clear those helpers first. Every stash
+        // spelling that moves work keeps its own review.
+        return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
+    }
     if subcommand == "rev-list" {
         // A commit walk honors pager.rev-list and can fetch from a partial
         // clone's promisor, so the configuration probe has to clear it first.
@@ -225,7 +232,7 @@ pub(super) fn inspection_writes_nothing(
     };
     if !matches!(
         subcommand.as_str(),
-        "status" | "diff" | "log" | "show" | "grep" | "merge-base"
+        "status" | "diff" | "log" | "show" | "grep" | "merge-base" | "stash"
     ) {
         return false;
     }

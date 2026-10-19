@@ -56,6 +56,11 @@ def test_native_review_defaults_to_safe_alternative(
     assert "safe, permitted alternative" not in reason
     # The agent hands the queued request's link to the user.
     request_id = store.list_approval_requests(status="pending")[0]["request_id"]
+    # Only the OMP extension waits for the approval and resumes the agent.
+    if harness == "omp":
+        assert response["approval_resume"] == {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
+    else:
+        assert "approval_resume" not in response
     if harness == "codex":
         # Codex gets only signed loopback links, and this daemon has no token to sign with.
         assert "could not create a signed approval link" in reason
@@ -111,6 +116,8 @@ def test_unbound_native_review_does_not_tell_the_agent_to_wait(
     assert_silent_review_recorded(store)
     pending = store.list_approval_requests(status="pending")
     assert pending and pending[0]["artifact_hash"] == pending[0]["request_id"]
+    # A one-time approval cannot release the retry, so nothing resumes the agent.
+    assert "approval_resume" not in response
     reason = response.get("reason") or response["hookSpecificOutput"]["permissionDecisionReason"]
     assert "Do not retry the same action until it is approved" not in reason
     if exact_allowable:

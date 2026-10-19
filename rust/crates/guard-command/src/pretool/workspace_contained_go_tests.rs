@@ -1,6 +1,7 @@
 //! Go's local verbs build and test inside the workspace sandbox; the verbs
-//! that fetch keep the admission they have.
-use crate::pretool::workspace_contained_tests::{controls, workspace, CONTAINED};
+//! that fetch keep the admission they have. A host without the sandbox, such
+//! as Windows, keeps the admission for local verbs too.
+use crate::pretool::workspace_contained_tests::{controls, host, workspace, CONTAINED};
 
 const MODULE: &str = "module example.com/app\n\ngo 1.22\n";
 
@@ -39,8 +40,14 @@ fn go_builds_and_tests_the_module_inside_the_sandbox() {
         "go version",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
-            let (reason, _) = outcome(harness, command, &ws);
-            assert_eq!(reason, CONTAINED, "{harness}: {command}");
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
         }
     }
 }
@@ -100,8 +107,14 @@ fn the_module_a_verb_builds_moves_with_the_command() {
     std::fs::write(ws.join("api/go.mod"), MODULE).unwrap();
     std::fs::create_dir_all(ws.join("docs")).unwrap();
     for harness in ["codex", "claude-code", "omp"] {
-        let (reason, _) = outcome(harness, "cd api && go build ./...", &ws);
-        assert_eq!(reason, CONTAINED, "{harness}");
+        let (reason, minimum) = outcome(harness, "cd api && go build ./...", &ws);
+        assert_eq!(reason == CONTAINED, host(), "{reason} {harness}");
+        if !host() {
+            assert_eq!(
+                minimum, "review",
+                "{reason}: no sandbox must require review"
+            );
+        }
         // `docs` is no module, so go would resolve imports through the proxy.
         let (reason, _) = outcome(harness, "cd docs && go build ./...", &ws);
         assert_ne!(reason, CONTAINED, "{harness}");
@@ -135,8 +148,14 @@ fn a_fetching_flag_keeps_its_review_however_it_is_spelled() {
     // not a flag at all, are still ordinary local work.
     for command in ["go test -update ./...", "go list ./versions"] {
         for harness in ["codex", "claude-code", "omp"] {
-            let (reason, _) = outcome(harness, command, &ws);
-            assert_eq!(reason, CONTAINED, "{harness}: {command}");
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
         }
     }
 }

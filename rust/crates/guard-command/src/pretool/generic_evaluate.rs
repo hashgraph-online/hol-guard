@@ -35,6 +35,12 @@ pub(super) fn evaluate_signals(
         action_type = PreToolActionTypeV1::Package;
         operation = PreToolOperationV1::Install;
     }
+    // One of Oh My Pi's `github` lookups is a request to GitHub, not an
+    // unrecognized tool.
+    let github_read = super::github::proven_read(signals);
+    if github_read {
+        (action_type, operation) = (PreToolActionTypeV1::Network, PreToolOperationV1::Request);
+    }
     let benign_prompt = event == "UserPromptSubmit"
         && action_type == PreToolActionTypeV1::Prompt
         && signals.benign_prompt;
@@ -80,7 +86,10 @@ pub(super) fn evaluate_signals(
     // name Guard does not recognize, which no longer types as a prompt just
     // because it has a `query`. A tool matched by name keeps the proofs its
     // own type carries, so it reaches these gates no more often than before.
+    // A proven `github` lookup is typed like any other network request: its
+    // `query` is search syntax sent to GitHub, never an instruction to a model.
     let prompt_text = signals.prompt_present
+        && !github_read
         && (action_type == PreToolActionTypeV1::Prompt
             || !tool_name_is_typed(signals.tool_name.as_deref().unwrap_or_default()));
     // A prompt is never queued for approval, so its reason says so. The same
@@ -366,6 +375,16 @@ pub(super) fn evaluate_signals(
             "allow",
             "native_exact_safe_file_write",
             "The Rust authority proved this ordinary file write targets the verified workspace, a registered worktree, the verified user home, or a private user-owned temporary directory and clears sensitive-path checks.",
+        );
+    }
+    if github_read {
+        // The installed new_network_domain_action floor decides whether the
+        // lookup runs, as it does for a plain web fetch.
+        return generic_result(
+            action,
+            "allow",
+            "native_github_read",
+            "The Rust authority proved this Oh My Pi github call is one of the tool's read-only lookups; the installed network setting decides the outcome.",
         );
     }
     if action_type == PreToolActionTypeV1::Network

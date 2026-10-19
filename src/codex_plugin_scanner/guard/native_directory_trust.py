@@ -21,7 +21,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 from .native_context import (
     _canonical_request_sha256,
@@ -41,6 +41,12 @@ from .native_runtime_resilience import (
 from .path_resolution_cache import IdentityWitness, identity_unchanged, identity_witness
 
 _FEATURE = "directory-trust-v1"
+_HOOK_PATH_FEATURE = "hook-path-rules-v1"
+
+#: The rules whose value is a harness spelling rather than a directory: the
+#: runtime normalizes them before it decides, so a runtime that predates that
+#: would read the spelling as a plain path.
+_HOOK_PATH_RULES = frozenset({"hook-workspace", "exec-workdir", "payload-reference"})
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _REQUEST_SCHEMA = "guard-directory-trust-request.v1"
 _RESULT_SCHEMA = "guard-directory-trust-result.v1"
@@ -63,22 +69,47 @@ class NativeDirectoryTrustError(ValueError):
 
 
 class DirectoryTrustVerdict:
-    """One candidate's answer: the path to use, or why it may not be used."""
+    """One candidate's answer: the path to use, or why it may not be used.
 
-    __slots__ = ("parameter", "path", "reason")
+    A hook spelling has a third answer. ``absent`` means the request named
+    no directory at all -- a blank value, a harness sentinel, or the shared
+    temporary root a process without a workspace of its own runs in -- which
+    is not a rejection and carries no reason.
+    """
 
-    def __init__(self, parameter: str, path: str | None, reason: str | None) -> None:
+    __slots__ = ("absent", "parameter", "path", "reason")
+
+    def __init__(self, parameter: str, path: str | None, reason: str | None, absent: bool = False) -> None:
         self.parameter = parameter
         self.path = path
         self.reason = reason
+        self.absent = absent
 
     @property
     def trusted(self) -> bool:
         return self.path is not None
 
 
+#: One candidate: the caller's label and the value, optionally followed by the
+#: rule to hold it to when the label is not the rule's own name.
+DirectoryTrustCandidate: TypeAlias = tuple[str, str] | tuple[str, str, str]
+
+
+def _candidate_rule(candidate: DirectoryTrustCandidate) -> str:
+    """The rule a candidate is held to: the third element, or its label."""
+
+    return candidate[2] if len(candidate) == 3 else candidate[0]
+
+
+def _candidate_payload(candidate: DirectoryTrustCandidate) -> dict[str, str]:
+    payload = {"parameter": candidate[0], "value": candidate[1]}
+    if len(candidate) == 3:
+        payload["rule"] = candidate[2]
+    return payload
+
+
 def native_directory_trust(
-    candidates: Sequence[tuple[str, str]],
+    candidates: Sequence[DirectoryTrustCandidate],
     *,
     guard_home: Path | str,
     home_dir: Path | str | None = None,
@@ -86,10 +117,17 @@ def native_directory_trust(
 ) -> list[DirectoryTrustVerdict]:
     """Settle every ``(parameter, value)`` candidate in one resident call.
 
-    ``parameter`` names the rule: ``guard-home`` has to resolve to the store
+    ``parameter`` names the rule, unless the candidate carries a third element
+    that names it instead -- which is how one request asks about several
+    spellings of the same directory without its labels colliding. The rules:
+    ``guard-home`` has to resolve to the store
     this process is serving, ``workspace`` may also name a scratch directory
     the caller owns under a temporary root, and anything else has to sit under
-    a trusted root. The verdicts come back in the order they were asked for.
+    a trusted root. ``hook-workspace`` and ``exec-workdir`` are the harness
+    spellings of a workspace, which the runtime normalizes before it applies
+    the workspace rule, and ``payload-reference`` is an out-of-band payload
+    file only Guard's own writer could have put where it is. The verdicts
+    come back in the order they were asked for.
 
     ``deadline_monotonic`` caps the wait. A caller working to a deadline of
     its own — a hook with a host budget to keep — passes it so a slow resident
@@ -106,7 +144,7 @@ def native_directory_trust(
         return []
     home = Path.home() if home_dir is None else Path(home_dir)
     temp_dir = tempfile.gettempdir()
-    asked = tuple((parameter, value) for parameter, value in candidates)
+    asked = tuple(candidates)
     remembered_key = (str(guard_home), str(home), temp_dir, asked)
     remembered = _remembered_answer(remembered_key)
     if remembered is not None:
@@ -119,18 +157,21 @@ def native_directory_trust(
         # The resident has its own `TMPDIR`, which an isolated environment may
         # not share; the temporary-root rules follow this process's.
         "temp_dir": temp_dir,
-        "candidates": [{"parameter": parameter, "value": value} for parameter, value in asked],
+        "candidates": [_candidate_payload(candidate) for candidate in asked],
     }
+    hook_paths = any(_candidate_rule(candidate) in _HOOK_PATH_RULES for candidate in asked)
     result = _round_trip(
         request,
         _resolve_digest_home(Path(guard_home)),
         deadline_monotonic=deadline_monotonic,
+        hook_paths=hook_paths,
     )
     verdicts = result.get("results")
     if not isinstance(verdicts, list) or len(verdicts) != len(candidates):
         raise NativeDirectoryTrustError(_INVALID_RESULT)
     answers: list[DirectoryTrustVerdict] = []
-    for (parameter, _value), verdict in zip(candidates, verdicts, strict=True):
+    for candidate, verdict in zip(candidates, verdicts, strict=True):
+        parameter = candidate[0]
         if not isinstance(verdict, dict) or verdict.get("parameter") != parameter:
             raise NativeDirectoryTrustError(_INVALID_RESULT)
         path = verdict.get("path")
@@ -139,6 +180,9 @@ def native_directory_trust(
             if not isinstance(path, str) or not path:
                 raise NativeDirectoryTrustError(_INVALID_RESULT)
             answers.append(DirectoryTrustVerdict(parameter, path, None))
+            continue
+        if verdict.get("absent") is True:
+            answers.append(DirectoryTrustVerdict(parameter, None, None, absent=True))
             continue
         if not isinstance(reason, str) or not reason:
             raise NativeDirectoryTrustError(_INVALID_RESULT)
@@ -169,7 +213,7 @@ def native_directory_trust(
 # not resolve is never remembered either.
 _MAX_REMEMBERED_ASKS = 256
 _memo_lock = threading.Lock()
-_AskKey = tuple[str, str, str, tuple[tuple[str, str], ...]]
+_AskKey = tuple[str, str, str, tuple[DirectoryTrustCandidate, ...]]
 _remembered_asks: dict[_AskKey, tuple[tuple[tuple[str, str], ...], IdentityWitness]] = {}
 
 
@@ -190,7 +234,7 @@ def _remembered_answer(key: _AskKey) -> list[DirectoryTrustVerdict] | None:
 
 def _remember_answer(
     key: _AskKey,
-    asked: tuple[tuple[str, str], ...],
+    asked: tuple[DirectoryTrustCandidate, ...],
     answers: Sequence[DirectoryTrustVerdict],
 ) -> None:
     """Remember an ask the runtime trusted every candidate of, if it can be witnessed."""
@@ -202,7 +246,7 @@ def _remember_answer(
         settled.append((answer.parameter, answer.path))
     guard_home, home, temp_dir, _candidates = key
     witness = identity_witness(
-        [guard_home, home, temp_dir] + [value for _parameter, value in asked] + [path for _parameter, path in settled]
+        [guard_home, home, temp_dir] + [candidate[1] for candidate in asked] + [path for _parameter, path in settled]
     )
     if witness is None:
         return
@@ -222,6 +266,7 @@ def _round_trip(
     guard_home: Path,
     *,
     deadline_monotonic: float | None = None,
+    hook_paths: bool = False,
 ) -> dict[str, object]:
     """One bound resident round trip; returns the verified result document."""
 
@@ -236,6 +281,7 @@ def _round_trip(
         or status.capabilities is None
         or _FEATURE not in status.capabilities.features
         or _RESIDENT_PROTOCOL_FEATURE not in status.capabilities.features
+        or (hook_paths and _HOOK_PATH_FEATURE not in status.capabilities.features)
     ):
         raise NativeDirectoryTrustError(UNAVAILABLE_REASON)
     try:

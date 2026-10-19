@@ -38,6 +38,7 @@ from .hook_request_parsing import pre_tool_command, pre_tool_input
 from .native_review_allow_hint import native_review_hint
 from .native_review_connector import (
     connector_agent_reason,
+    connector_is_local,
     native_review_setup_connector,
     raise_connector_setup_notice,
     record_native_review_connector_context,
@@ -201,7 +202,14 @@ def pause_native_pre_tool_for_approval(
     # cannot let the agent run the action, so the reason never sends the user there.
     approval_can_unblock = identity is not None or exact_token is not None
     # The row keeps the native reason as evidence; only the agent text changes.
-    setup_reason = None if connector is None else connector_agent_reason(connector, ask=ask and approval_can_unblock)
+    if connector is None or (connector_is_local(connector) and identity is None and exact_token is not None):
+        # Only an exact-action Always allow can release a local row without a retry binding;
+        # the ordinary review text says so.
+        setup_reason = None
+    else:
+        setup_reason = connector_agent_reason(
+            connector, ask=ask and approval_can_unblock, approvable=identity is not None
+        )
     if not ask or (identity is None and exact_token is None):
         # The agent stays on the silent block. The inbox row is a separate record.
         queued = queue_native_pre_tool_review(
@@ -222,6 +230,9 @@ def pause_native_pre_tool_for_approval(
         )
         if queued is None:
             _LOGGER.warning("Silent review blocked without an inbox row for %s", harness)
+            # With no row there is nothing to approve, so the setup text that tells the
+            # agent to wait for the user's approval must not be shown.
+            setup_reason = None
         else:
             record_silent_native_review_event(store, queued)
         reason = setup_reason or safe_alternative_reason(
@@ -233,8 +244,9 @@ def pause_native_pre_tool_for_approval(
             retry_reuses_approval=identity is not None,
             exact_action_allowable=exact_token is not None,
         )
-        # A setup review never links in the default mode.
-        link = approval_can_unblock and (ask or setup_reason is None)
+        # An MCP setup review never links in the default mode; a local CLI or script one is an
+        # ordinary review, so it links like any other that the user's approval can release.
+        link = approval_can_unblock and (ask or setup_reason is None or connector_is_local(connector))
         raw_url = queued.get("approval_url") if queued is not None and link else None
         if isinstance(raw_url, str) and raw_url.strip():
             # The agent passes the link on, so the user can open the queued row.
@@ -244,6 +256,12 @@ def pause_native_pre_tool_for_approval(
         response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
         response["prompted"] = False
         response["blocked_request_mode"] = "safe-alternative"
+        # The OMP extension waits for this approval in the background and then
+        # asks the agent to run the identical call again. Only a review bound
+        # to that retry gets the handle: approving any other row cannot let it run.
+        request_id = queued.get("request_id") if queued is not None else None
+        if identity is not None and isinstance(request_id, str) and request_id and canonical_harness(harness) == "omp":
+            response["approval_resume"] = {"request_id": request_id, "poll_path": f"/v1/requests/{request_id}"}
         return response
 
     queued = queue_native_pre_tool_review(

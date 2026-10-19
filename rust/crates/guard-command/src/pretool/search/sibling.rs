@@ -28,7 +28,13 @@ use negations::Whitelist;
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-const MAX_ENTRIES: usize = 10_000;
+/// The same `rg` call is screened by this walk and by the negation walk in
+/// `rg_whitelist`, which bounds itself at the same number. A lower bound here
+/// decides every search named at a whole sibling repository, and an ordinary
+/// one already exceeds ten thousand: this repository counts 11,217 entries
+/// below its own root. Refusing to finish looking is not a safety margin —
+/// the search goes to review with nothing proven either way.
+const MAX_ENTRIES: usize = 100_000;
 const MAX_DEPTH: usize = 64;
 const MAX_IGNORE_BYTES: u64 = 64 * 1024;
 const WHITELISTING_FILES: [&str; 2] = [".ignore", ".rgignore"];
@@ -338,15 +344,21 @@ fn walk(root: &Path, operand: &Path, ignored: &mut Ignored, whitelisting: &[&str
             if ignored.prunes(name, directory == root) {
                 continue;
             }
-            let Ok(metadata) = std::fs::symlink_metadata(&path) else {
+            // The listing already carries each entry's kind on the platforms
+            // this runs on, so this reads it instead of spending a `lstat`
+            // per entry; it falls back to one only where the filesystem
+            // leaves the kind unknown. It answers about the link itself, as
+            // `symlink_metadata` does, so a symlink is still neither a
+            // directory nor a file and still refuses the proof below.
+            let Ok(kind) = entry.file_type() else {
                 return false;
             };
-            if !tree::descendant_allowed(&path, root, metadata.is_file()) {
+            if !tree::descendant_allowed(&path, root, kind.is_file()) {
                 return false;
             }
-            if metadata.is_dir() {
+            if kind.is_dir() {
                 pending.push((path, depth + 1));
-            } else if !metadata.is_file() {
+            } else if !kind.is_file() {
                 return false;
             }
         }

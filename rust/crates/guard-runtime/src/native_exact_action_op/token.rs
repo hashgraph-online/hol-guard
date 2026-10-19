@@ -23,7 +23,15 @@ const COMMAND_HASH_VERSION: &str = "native-command-hash-v1";
 /// A review raised for one of these signals is a risk finding, not a first-seen
 /// prompt: it never gets the proven token, so an approval of it binds only the
 /// exact command (`command_hash`).
-const RISK_REASON_MARKERS: [&str; 11] = [
+///
+/// `persist` is here because a file tool's proven identity names the file
+/// rather than the bytes written into it. That is what an approval for an
+/// ordinary source edit should cover, but a review raised over a boot or login
+/// mechanism is about the bytes: the file is `~/.zshrc` or a launch agent
+/// every time, and what changes between the allowed write and the next one is
+/// exactly what the review was raised for. Binding those to the command keeps
+/// both choices on the review and asks again when the content changes.
+const RISK_REASON_MARKERS: [&str; 12] = [
     "secret",
     "sensitive",
     "credential",
@@ -35,6 +43,7 @@ const RISK_REASON_MARKERS: [&str; 11] = [
     "encoded",
     "poison",
     "dangerous",
+    "persist",
 ];
 
 fn is_review_action(action: Option<&str>) -> bool {

@@ -140,6 +140,7 @@ pub(crate) fn extract_generic_signals(
         path_values,
         url_values,
         request_body_or_method: request_body_or_method(&maps),
+        github_read_only: false,
         prompt_present: !prompt_values.is_empty(),
         env_reference,
         benign_prompt,

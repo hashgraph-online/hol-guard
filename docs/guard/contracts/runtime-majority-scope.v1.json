@@ -560,6 +560,7 @@
           "src/codex_plugin_scanner/guard/runtime/secret_file_request*",
           "src/codex_plugin_scanner/guard/contained_*.py",
           "src/codex_plugin_scanner/guard/containment_*.py",
+          "src/codex_plugin_scanner/guard/desktop_core_currency.py",
           "src/codex_plugin_scanner/guard/shims.py",
           "src/codex_plugin_scanner/guard/package_shim_*.py",
           "src/codex_plugin_scanner/guard/protect.py"
@@ -769,6 +770,7 @@
           "src/codex_plugin_scanner/guard/adapters/paseo_config.py",
           "src/codex_plugin_scanner/guard/adapters/paseo_install.py",
           "src/codex_plugin_scanner/guard/adapters/pi.py",
+          "src/codex_plugin_scanner/guard/adapters/pi_extension_pinned_core.py",
           "src/codex_plugin_scanner/guard/adapters/pi_support.py",
           "src/codex_plugin_scanner/guard/adapters/zcode.py",
           "src/codex_plugin_scanner/json_comment_stripping.py"

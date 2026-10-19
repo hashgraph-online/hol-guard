@@ -72,6 +72,7 @@ pub(crate) fn capabilities() -> RuntimeCapabilitiesV1 {
         crate::policy_store::policy_store_direct_lane::HOOK_DIRECT_REVIEW_FACTS_FEATURE.into(),
         crate::hook_direct_evidence::HOOK_DIRECT_EVIDENCE_FEATURE.into(),
         crate::directory_trust::DIRECTORY_TRUST_FEATURE.into(),
+        crate::directory_trust::HOOK_PATH_RULES_FEATURE.into(),
         crate::mcp_relay_decide::MCP_RELAY_DECIDE_FEATURE.into(),
         crate::mcp_relay_servers::MCP_RELAY_SERVER_REPORT_FEATURE.into(),
         "native-approval-artifact-v3".into(),

@@ -13,12 +13,16 @@ use serde_json::{Map, Value};
 use crate::codex_output_commands::is_focused_pytest_verification;
 use crate::codex_output_entry::{scope_of, secret_like_source_name};
 use crate::codex_output_fs as pyfs;
-use crate::codex_output_inspection_flow::is_read_only_source_inspection;
+use crate::codex_output_inspection_flow::{
+    is_read_only_source_inspection, target_name_is_secret_like,
+};
 use crate::codex_output_post_tool::{absolute, Input, PostToolError, Run};
 use crate::codex_output_post_tool_sources::sensitive_local_source_matches;
-use crate::codex_output_py::{py_splitlines, py_strip, shlex_split, PyPath};
+use crate::codex_output_py::{py_splitlines, py_strip, shlex_split, strip_quotes, PyPath};
 use crate::codex_output_source_paths::resolve_source_candidate_path;
+use crate::sfrs_constants::FILE_READ_TOOL_NAMES;
 use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
+use crate::shell_secret_read_support::classify_request_secret_path;
 
 const NATIVE_SEARCH_TOOLS: [&str; 4] = ["grep", "egrep", "fgrep", "rg"];
 const EXPLICIT_COMMAND_KEYS: [&str; 4] = ["command", "cmd", "shell_command", "shellCommand"];
@@ -206,8 +210,22 @@ fn native_search_target_is_safe(
     target: &str,
     home: Option<&Path>,
 ) -> bool {
-    if target.contains(['*', '?', '[', ']']) || !read_only_lookup_target_is_safe(target, true, home)
+    // A native tool may quote its path. Classify exactly the spelling that
+    // the resolver uses, rather than checking a quoted basename and then
+    // silently unquoting it during filesystem resolution.
+    let target = strip_quotes(py_strip(target));
+    if target.is_empty()
+        || target.contains(['*', '?', '[', ']'])
+        || !read_only_lookup_target_is_safe(target, true, home)
     {
+        return false;
+    }
+    let cwd = os_path(input.cwd.as_ref());
+    if classify_request_secret_path(target, cwd.as_deref(), home).is_some() {
+        return false;
+    }
+    let scope = scope_of(run.ctx, input.cwd.as_ref(), input.home_dir.as_ref());
+    if target_name_is_secret_like(target, scope) {
         return false;
     }
     let Some(candidate) =
@@ -222,8 +240,21 @@ fn native_search_target_is_safe(
     let Some(resolved) = pyfs::resolve(&candidate) else {
         return false;
     };
-    (pyfs::is_file(&resolved) == Ok(true) || pyfs::is_dir(&resolved) == Ok(true))
-        && read_only_lookup_target_is_safe(&resolved.to_string(), true, home)
+    if pyfs::is_file(&resolved) != Ok(true) && pyfs::is_dir(&resolved) != Ok(true) {
+        return false;
+    }
+    // A link's own name says nothing about what it points at. The spelling was
+    // classified above; classify the path the read actually opens by the same
+    // rules, so `notes.ts -> secrets/token.json` cannot carry a credential
+    // source past the checks its real name would have failed.
+    let resolved_text = resolved.to_string();
+    if resolved != candidate
+        && (classify_request_secret_path(&resolved_text, cwd.as_deref(), home).is_some()
+            || target_name_is_secret_like(&resolved_text, scope))
+    {
+        return false;
+    }
+    read_only_lookup_target_is_safe(&resolved_text, true, home)
 }
 
 /// `native_post_tool_search_is_read_only`.
@@ -274,6 +305,59 @@ fn native_search_is_read_only(run: &Run, input: &Input) -> bool {
         .all(|target| native_search_target_is_safe(run, input, target, home.as_deref()))
 }
 
+/// A harness read tool may carry the lines it wants in the path it was given
+/// (`src/app.ts:1-52`). The range is not part of the file name, and a Windows
+/// drive letter (`C:\\src`) is not a range.
+fn without_line_range(target: &str) -> &str {
+    let Some(colon) = target.rfind(':') else {
+        return target;
+    };
+    let (path, range) = (&target[..colon], &target[colon + 1..]);
+    let numbered = |text: &str| !text.is_empty() && text.bytes().all(|byte| byte.is_ascii_digit());
+    let ranged = match range.split_once('-') {
+        Some((start, end)) => numbered(start) && numbered(end),
+        None => numbered(range),
+    };
+    if ranged && !path.is_empty() {
+        path
+    } else {
+        target
+    }
+}
+
+/// A harness-native read of one file, with no command line of its own. The
+/// tool names the file directly, so the same target rules as a native search
+/// decide whether reading it was read-only inspection.
+fn native_read_is_read_only(run: &Run, input: &Input) -> bool {
+    let tool = match input.tool_name() {
+        Value::String(name) => py_strip(name).to_lowercase(),
+        _ => return false,
+    };
+    let Some(tool_input) = input.tool_input.as_object() else {
+        return false;
+    };
+    if !FILE_READ_TOOL_NAMES.contains(&tool.as_str())
+        || EXPLICIT_COMMAND_KEYS
+            .iter()
+            .any(|key| tool_input.get(*key).and_then(nonempty).is_some())
+    {
+        return false;
+    }
+    let Some(targets) = native_search_targets(tool_input) else {
+        return false;
+    };
+    if targets.is_empty() {
+        return false;
+    }
+    let home = os_path(input.home_dir.as_ref());
+    targets.iter().all(|target| {
+        // Native line ranges are presentation metadata, not part of the
+        // filename that the sensitive-source classifier must see.
+        let target = without_line_range(strip_quotes(py_strip(target)));
+        native_search_target_is_safe(run, input, target, home.as_deref())
+    })
+}
+
 /// The command reads no local secret and names no secret-like source.
 fn names_no_secret_source(
     run: &Run,
@@ -302,10 +386,12 @@ pub(crate) fn source_inspection_can_skip(
     input: &Input,
     command: &str,
     content: &[Value],
+    reads_sensitive_file: bool,
 ) -> Result<bool, PostToolError> {
     let scope = scope_of(run.ctx, input.cwd.as_ref(), input.home_dir.as_ref());
-    let read_only =
-        is_read_only_source_inspection(command, scope) || native_search_is_read_only(run, input);
+    let read_only = is_read_only_source_inspection(command, scope)
+        || native_search_is_read_only(run, input)
+        || (!reads_sensitive_file && native_read_is_read_only(run, input));
     if !read_only || !names_no_secret_source(run, input, command, false)? {
         return Ok(false);
     }

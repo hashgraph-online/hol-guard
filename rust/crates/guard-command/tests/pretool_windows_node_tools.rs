@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 
 const NODE_TOOL: &str = "native_node_tool_readonly_containment_required";
 const REVIEW: &str = "native_command_review_required";
+const PACKAGE_REVIEW: &str = "native_package_review";
 /// The read-only tool runs the direct sink stages, in every spelling the
 /// classifier admits.
 const REPORTING: [&str; 7] = [
@@ -66,6 +67,17 @@ fn project(marker: Option<&str>) -> (PathBuf, PathBuf) {
     (project, home)
 }
 
+/// The review a run keeps when nothing contains it. A pnpm or Bun spelling is
+/// the package manager's own command, so it keeps that review rather than the
+/// generic one, exactly as it does on the other platforms.
+fn review(command: &str) -> &'static str {
+    if command.starts_with("pnpm ") || command.starts_with("bun ") {
+        PACKAGE_REVIEW
+    } else {
+        REVIEW
+    }
+}
+
 fn weighed(cwd: &Path, home: &Path, harness: &str, command: &str) -> (String, String) {
     let result = evaluate_pre_tool_envelope_with_context(
         harness,
@@ -94,7 +106,7 @@ fn a_reporting_tool_run_is_contained_instead_of_reviewed() {
         // profile alone, so its tool runs keep the single review prompt.
         assert_eq!(
             weighed(&project, &home, "codex", command).1,
-            REVIEW,
+            review(command),
             "codex: {command}"
         );
     }
@@ -138,7 +150,7 @@ fn an_install_the_runner_cannot_stage_keeps_the_review_prompt() {
         for command in REPORTING {
             assert_eq!(
                 weighed(&project, &home, "claude-code", command).1,
-                REVIEW,
+                review(command),
                 "{marker}: {command}"
             );
         }
@@ -153,7 +165,7 @@ fn a_tool_that_is_not_installed_locally_keeps_the_review_prompt() {
     for command in ["npx tsc --noEmit", "pnpm exec tsc --noEmit"] {
         assert_eq!(
             weighed(&project, &home, "claude-code", command).1,
-            REVIEW,
+            review(command),
             "{command}"
         );
     }

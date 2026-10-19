@@ -6,6 +6,7 @@
 //! tracked, sensitive-named file (see `search_scope_tracked`); otherwise only
 //! ignore files are parsed. Any ambiguity falls back to normal review.
 
+use super::search_pattern_clearance::PatternClearance;
 use super::search_scope_filter::{Override, SearchFilter};
 use super::search_scope_ignore::{
     holds_custom_ignore_file, is_ignored, link_ignored, load_custom_rules, load_ignore_file,
@@ -201,17 +202,25 @@ pub(super) fn content_search_blocker(
     target: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
+    clearance: Option<&PatternClearance>,
 ) -> Option<PathBuf> {
     let root = unfiltered_directory_root(target, home_dir, cwd)?;
     let filter = SearchFilter::from_input(&Map::new())?;
     let mut blocker = None;
-    walk_scope(&root, &filter, Ignores::None, false, &mut blocker).err()?;
+    walk_scope_cleared(&root, &filter, Ignores::None, clearance, &mut blocker).err()?;
     blocker.and_then(|path| path.strip_prefix(&root).ok().map(Path::to_path_buf))
 }
 
 fn unfiltered_walk_proven(root: &Path) -> bool {
-    SearchFilter::from_input(&Map::new())
-        .is_some_and(|filter| walk_scope(root, &filter, Ignores::None, false, &mut None).is_ok())
+    unfiltered_walk_cleared(root, None)
+}
+
+/// [`unfiltered_walk_proven`], where a sensitive file the `clearance` pattern
+/// provably cannot match does not fail the proof.
+fn unfiltered_walk_cleared(root: &Path, clearance: Option<&PatternClearance>) -> bool {
+    SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+        walk_scope_cleared(root, &filter, Ignores::None, clearance, &mut None).is_ok()
+    })
 }
 
 /// Oh My Pi `glob` walks below its fixed prefix and returns names only. Below
@@ -286,21 +295,28 @@ pub(super) fn omp_glob_scope_proven(
 /// searches hidden files and, unless `gitignore` is false, skips what the
 /// repository's `.gitignore` files exclude. Only those files narrow the walk,
 /// so a gitignored `.env` stays out of scope while a tracked one fails it.
+///
+/// A plain-text `clearance` pattern lets the search through when every
+/// sensitive file in reach is one the pattern cannot match: the host prints
+/// only matching lines, so such a file adds nothing to its output.
 pub(super) fn omp_grep_scope_proven(
     target: &str,
     home_dir: Option<&str>,
     cwd: Option<&str>,
     gitignore: bool,
+    clearance: Option<&PatternClearance>,
 ) -> bool {
-    if !gitignore {
-        return content_search_scope_proven(target, home_dir, cwd);
-    }
     unfiltered_directory_root(target, home_dir, cwd).is_some_and(|root| {
         (!super::read_paths::inside_agent_state_tree(&root, home_dir)
             || super::read_paths::agent_state_tree_holds_only_documents(&root, home_dir))
-            && SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
-                walk_scope(&root, &filter, Ignores::Gitignore, false, &mut None).is_ok()
-            })
+            && if gitignore {
+                SearchFilter::from_input(&Map::new()).is_some_and(|filter| {
+                    walk_scope_cleared(&root, &filter, Ignores::Gitignore, clearance, &mut None)
+                        .is_ok()
+                })
+            } else {
+                unfiltered_walk_cleared(&root, clearance)
+            }
     })
 }
 
@@ -482,6 +498,18 @@ fn walk_scope(
     walk_scope_with(root, filter, ignores, names, &|_| false, blocker)
 }
 
+/// A content walk where a sensitive file `clearance` proves the pattern
+/// cannot match is not a blocker.
+fn walk_scope_cleared(
+    root: &Path,
+    filter: &SearchFilter,
+    ignores: Ignores,
+    clearance: Option<&PatternClearance>,
+    blocker: &mut Option<PathBuf>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(root, filter, ignores, false, &|_| false, clearance, blocker)
+}
+
 /// [`walk_scope`], where a names-only walk also accepts a link out of `root`
 /// whose canonical target `outside_link` proves.
 fn walk_scope_with(
@@ -490,6 +518,18 @@ fn walk_scope_with(
     ignores: Ignores,
     names: bool,
     outside_link: &dyn Fn(&Path) -> bool,
+    blocker: &mut Option<PathBuf>,
+) -> Result<(), ScopeUnproven> {
+    walk_scope_inner(root, filter, ignores, names, outside_link, None, blocker)
+}
+
+fn walk_scope_inner(
+    root: &Path,
+    filter: &SearchFilter,
+    ignores: Ignores,
+    names: bool,
+    outside_link: &dyn Fn(&Path) -> bool,
+    clearance: Option<&PatternClearance>,
     blocker: &mut Option<PathBuf>,
 ) -> Result<(), ScopeUnproven> {
     let repository = repository_root(root).filter(|_| ignores != Ignores::None);
@@ -625,6 +665,7 @@ fn walk_scope_with(
                 && !names
                 && sensitive_scope_file(&path)
                 && !tracked.non_secret(&path)
+                && !clearance.is_some_and(|clearance| clearance.clears(&path))
             {
                 *blocker = Some(path);
                 return Err(ScopeUnproven);

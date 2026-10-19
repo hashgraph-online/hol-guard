@@ -5,7 +5,8 @@ local CLI this device has never allowed or blocked, is a setup decision rather
 than a per-action one. Its inbox row is still written, under the connector's
 ``connector:<identity_hash>:<action>`` group, so the Inbox can show one setup
 card over every call waiting on it. The agent is told the CLI is not set up on
-this device, not asked to approve the action.
+this device. For a local CLI or script the row stays an ordinary review: the
+agent waits for the user's Allow once or Always allow, as for any other review.
 """
 
 from __future__ import annotations
@@ -18,7 +19,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Final
 
-from ..blocked_request_mode import connector_setup_reason
+from ..blocked_request_mode import LOCAL_CONNECTOR_SURFACES, connector_setup_reason
 from .hook_native_exact_action import launch_cwd, launch_path
 from .hook_request_parsing import pre_tool_command
 
@@ -137,8 +138,14 @@ def connector_display_name(connector: SetupConnector) -> str:
     return name if _SAFE_NAME.fullmatch(name) else "this local CLI"
 
 
-def connector_agent_reason(connector: SetupConnector, *, ask: bool) -> str:
-    return connector_setup_reason(connector_display_name(connector), connector.surface, ask=ask)
+def connector_agent_reason(connector: SetupConnector, *, ask: bool, approvable: bool = True) -> str:
+    return connector_setup_reason(connector_display_name(connector), connector.surface, ask=ask, approvable=approvable)
+
+
+def connector_is_local(connector: SetupConnector | None) -> bool:
+    """Whether the setup review is for a local CLI or script, which is an ordinary approvable review."""
+
+    return connector is not None and connector.surface in LOCAL_CONNECTOR_SURFACES
 
 
 def raise_connector_setup_notice(store: object, queued: object, connector: SetupConnector | None) -> None:
@@ -156,6 +163,7 @@ __all__ = [
     "NON_RECOGNITION_REASON_CODES",
     "connector_agent_reason",
     "connector_display_name",
+    "connector_is_local",
     "native_review_setup_connector",
     "raise_connector_setup_notice",
     "record_native_review_connector_context",

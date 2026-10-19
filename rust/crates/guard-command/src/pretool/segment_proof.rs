@@ -94,6 +94,7 @@ pub(crate) fn benign_command_segments(
                         basename,
                     "ls" | "cat"
                         | "base64"
+                        | "dd"
                         | "cp"
                         | "mkdir"
                         | "touch"
@@ -236,6 +237,7 @@ pub(super) fn exact_safe_segment_with_context(
                         && sensitive_path_argument(argument)
                 }))
         || !(segment.environment_names.is_empty()
+            || super::inert_environment::inert_prefix(segment)
             || (basename == "kubectl"
                 && super::kubectl_reads::trusted_kubeconfig_prefix(segment, context)))
         || (executable.contains(['/', '\\'])
@@ -253,6 +255,7 @@ pub(super) fn exact_safe_segment_with_context(
                 && super::directory_targets::drive_targets_quoted(segment)
         }
         "pwd" | "true" | "echo" | "printf" | "which" | "whoami" | "uname" => true,
+        "unset" | "set" => super::inert_environment::safe_shell_setting(basename, segment),
         "type" | "command" => {
             super::lookup_reads::safe_lookup_arguments(basename, &segment.arguments)
         }
@@ -294,6 +297,7 @@ pub(super) fn exact_safe_segment_with_context(
                 || (segment.pipeline_index > 0
                     && super::stdin_filters::safe_arguments(basename, &segment.arguments))
         }
+        "dd" => super::dd_reads::safe_dd_arguments(&segment.arguments, context),
         "du" => super::metadata_reads::safe_du_arguments(&segment.arguments, context),
         "df" => super::metadata_reads::safe_df_arguments(&segment.arguments),
         "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
@@ -304,11 +308,14 @@ pub(super) fn exact_safe_segment_with_context(
         "cp" => {
             super::chain_temporary::copy_segments_allowed(model, segment, context)
                 && super::directory_targets::drive_targets_quoted(segment)
-                && (safe_reads::safe_copy_arguments(&segment.arguments, context)
-                    || super::recursive_copy::safe_recursive_copy_arguments(
-                        &segment.arguments,
-                        context,
-                    ))
+                && (safe_reads::safe_copy_arguments_into(
+                    &segment.arguments,
+                    context,
+                    &super::chain_temporary::created_scratch_directories(model, context),
+                ) || super::recursive_copy::safe_recursive_copy_arguments(
+                    &segment.arguments,
+                    context,
+                ))
         }
         "mktemp" | "mkdir" | "touch" | "mv" | "ln" | "rm" => {
             let alone = basename != "ln" || model.segments.len() == 1;
@@ -340,7 +347,10 @@ pub(super) fn exact_safe_segment_with_context(
         "gh" => safe_gh_arguments(&segment.arguments, &segment.text),
         "curl" => super::curl_reads::safe_curl_segment(model, segment, context),
         "kubectl" => super::kubectl_reads::safe_kubectl_segment(model, segment, context),
-        "export" => super::kubectl_reads::safe_export_segment(model, segment, context),
+        "export" => {
+            super::kubectl_reads::safe_export_segment(model, segment, context)
+                || super::inert_environment::safe_shell_setting(basename, segment)
+        }
         "wrangler" => super::wrangler_reads::safe_wrangler_arguments(&segment.arguments),
         "doctl" => super::doctl_reads::safe_doctl_arguments(&segment.arguments),
         "docker" => super::docker_reads::safe_docker_segment(model, segment),

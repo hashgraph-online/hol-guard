@@ -118,6 +118,7 @@ def _run_guard_execute_contained_test_command(
     store: GuardStore | None = None,
     **_kwargs: object,
 ) -> int:
+    from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
     from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
     from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
     from ..runtime.restricted_pytest import RestrictedPytestError
@@ -143,6 +144,12 @@ def _run_guard_execute_contained_test_command(
             Path(args.request_file), str(args.request_sha256), workspace=workspace,
         )
         request_validated = True
+        # A CLI that Desktop has replaced cannot reach the resident that
+        # follows the new Core. Say so now instead of after every
+        # acknowledgement window has run out.
+        superseded = superseded_desktop_core()
+        if superseded is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
         # The workspace sandbox asks this store for the grant it is widened by.
         with grant_store(store):
             return run_authorized_contained_test(

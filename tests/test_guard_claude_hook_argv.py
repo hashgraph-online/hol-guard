@@ -331,7 +331,7 @@ def test_daemon_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
-        lambda: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
+        lambda *, deadline_monotonic=None: _native_status((claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE,), runtime),
     )
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 
@@ -358,7 +358,7 @@ def test_daemon_hook_keeps_the_python_bridge_without_the_native_feature(
     monkeypatch.setattr(
         native_runtime,
         "native_runtime_status",
-        lambda: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
+        lambda *, deadline_monotonic=None: _native_status(("resident-protocol-v2",), tmp_path / "hol-guard-runtime"),
     )
     context = HarnessContext(home_dir=tmp_path / "h", workspace_dir=None, guard_home=tmp_path / "g")
 

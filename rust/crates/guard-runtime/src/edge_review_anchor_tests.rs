@@ -231,6 +231,37 @@ fn anchor_binds_the_action_it_was_approved_for() {
     assert_ne!(anchor(&other_harness, &published), baseline);
 }
 
+/// The model emits a new tool-use block for its retry, so Claude Code stamps
+/// the retry with a new `tool_use_id`. The approval the user gave for the
+/// command has to reach it, and only it: another command or another session
+/// is another action.
+#[test]
+fn anchor_reaches_a_retry_under_a_new_tool_use_id() {
+    let published = snapshot();
+    let mut request = review_envelope();
+    request.0.raw_payload["session_id"] = serde_json::json!("session-one");
+    request.0.raw_payload["tool_use_id"] = serde_json::json!("toolu_first");
+    let baseline = anchor(&request, &published);
+    let mut retry = request.0.clone();
+    retry.raw_payload["tool_use_id"] = serde_json::json!("toolu_retry");
+    assert_eq!(anchor(&retry, &published), baseline);
+    let mut other_session = retry.clone();
+    other_session.raw_payload["session_id"] = serde_json::json!("session-two");
+    assert_ne!(anchor(&other_session, &published), baseline);
+    let mut other_command = retry.clone();
+    other_command.raw_payload["tool_input"]["command"] = serde_json::json!("rm -rf /");
+    assert_ne!(anchor(&other_command, &published), baseline);
+    // Without a session the call ID is all that ties a retry to its request.
+    let mut sessionless = request.0.clone();
+    sessionless.raw_payload["session_id"] = serde_json::json!("");
+    let mut sessionless_retry = sessionless.clone();
+    sessionless_retry.raw_payload["tool_use_id"] = serde_json::json!("toolu_retry");
+    assert_ne!(
+        anchor(&sessionless_retry, &published),
+        anchor(&sessionless, &published)
+    );
+}
+
 /// Without an authenticated snapshot there is nothing narrower to trust, so
 /// the anchor keeps the whole claimed identity rather than widen what a retry
 /// may be matched against.

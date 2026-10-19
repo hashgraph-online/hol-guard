@@ -7,6 +7,7 @@
 //! trusted by the same runtime that decides the call.
 
 use crate::guard_paths::{self, PathError};
+use crate::hook_path_rules;
 use crate::resident_diagnostics::{observe_value, Phase};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -26,6 +27,9 @@ pub(crate) enum DirectoryTrustRejection {
     UnexpectedRoot,
     /// A `guard-home` that resolves somewhere other than the running store.
     UnexpectedGuardHome,
+    /// An out-of-band payload reference that Guard's own writer could not
+    /// have put where it is.
+    UntrustedPayloadReference,
 }
 
 impl DirectoryTrustRejection {
@@ -35,12 +39,16 @@ impl DirectoryTrustRejection {
             Self::PathResolveFailed => "path_resolve_failed",
             Self::UnexpectedRoot => "unexpected_root",
             Self::UnexpectedGuardHome => "unexpected_guard_home",
+            Self::UntrustedPayloadReference => "untrusted_payload_reference",
         }
     }
 }
 
-fn unresolvable(_error: PathError) -> DirectoryTrustRejection {
-    DirectoryTrustRejection::PathResolveFailed
+fn unresolvable(error: PathError) -> DirectoryTrustRejection {
+    match error {
+        PathError::Relative => DirectoryTrustRejection::RelativePath,
+        PathError::Unusable => DirectoryTrustRejection::PathResolveFailed,
+    }
 }
 
 /// `canonical_guard_home_path`: the spelling identity-scoped state is keyed
@@ -172,9 +180,15 @@ pub(crate) fn validated_hook_guard_home(
 #[serde(deny_unknown_fields)]
 pub(crate) struct DirectoryTrustCandidateV1 {
     /// The hook parameter this value arrived as: `home`, `guard-home` or
-    /// `workspace`. It names the rule and labels the rejection.
+    /// `workspace`. It labels the verdict the caller reads back, and names
+    /// the rule unless `rule` names a different one.
     pub parameter: String,
     pub value: String,
+    /// The rule to hold this value to, when a request carries several
+    /// spellings of the same directory and needs them told apart. A caller
+    /// that predates this sends none, and the parameter names the rule.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -201,6 +215,28 @@ const DIRECTORY_TRUST_MAX_BYTES: usize = 64 * 1024;
 /// Announced so a daemon that predates this operation keeps its own rules
 /// instead of calling one the runtime does not answer.
 pub(crate) const DIRECTORY_TRUST_FEATURE: &str = "directory-trust-v1";
+
+/// Announced separately, because a daemon that sends `hook-workspace`,
+/// `exec-workdir` or `payload-reference` to a runtime that predates them
+/// would have its spellings read as plain directories.
+pub(crate) const HOOK_PATH_RULES_FEATURE: &str = "hook-path-rules-v1";
+
+/// What one candidate settled to. A hook spelling has a third answer the
+/// directory parameters do not: the request named no directory at all.
+enum CandidateVerdict {
+    Trusted(PathBuf),
+    Absent,
+    Rejected(DirectoryTrustRejection),
+}
+
+impl From<Result<PathBuf, DirectoryTrustRejection>> for CandidateVerdict {
+    fn from(verdict: Result<PathBuf, DirectoryTrustRejection>) -> Self {
+        match verdict {
+            Ok(path) => Self::Trusted(path),
+            Err(rejection) => Self::Rejected(rejection),
+        }
+    }
+}
 
 /// Settles every candidate in one call. A rejection carries the parameter and
 /// the reason the daemon's counters already use; it never carries the path.
@@ -229,6 +265,22 @@ pub(crate) fn evaluate_directory_trust_request(
     serde_json::to_vec(&result).map_err(|error| error.to_string())
 }
 
+/// A hook spelling that named something is held to the workspace rule,
+/// which is the rule the daemon applied to it before.
+fn trusted_workspace(
+    value: &str,
+    roots: &Result<Vec<PathBuf>, DirectoryTrustRejection>,
+    request: &DirectoryTrustRequestV1,
+    temp_dir: &Path,
+) -> CandidateVerdict {
+    match roots {
+        Ok(roots) => {
+            validate_guard_directory_path(value, roots, &request.home_dir, temp_dir, true).into()
+        }
+        Err(rejection) => CandidateVerdict::Rejected(*rejection),
+    }
+}
+
 fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
     let temp_dir = PathBuf::from(&request.temp_dir);
     let roots = trusted_guard_directory_roots(&request.guard_home, &request.home_dir);
@@ -236,30 +288,66 @@ fn evaluate(request: &DirectoryTrustRequestV1) -> Value {
         .candidates
         .iter()
         .map(|candidate| {
-            let verdict = match candidate.parameter.as_str() {
+            let rule = candidate.rule.as_deref().unwrap_or(&candidate.parameter);
+            let verdict: CandidateVerdict = match rule {
                 "guard-home" => validated_hook_guard_home(
                     &candidate.value,
                     &request.guard_home,
                     &request.home_dir,
-                ),
-                parameter => match &roots {
+                )
+                .into(),
+                "payload-reference" => {
+                    match hook_path_rules::trusted_payload_reference(&candidate.value, &temp_dir) {
+                        Some(path) => CandidateVerdict::Trusted(path),
+                        None => CandidateVerdict::Rejected(
+                            DirectoryTrustRejection::UntrustedPayloadReference,
+                        ),
+                    }
+                }
+                rule @ ("hook-workspace" | "exec-workdir") => {
+                    let normalized = if rule == "hook-workspace" {
+                        hook_path_rules::normalized_hook_workspace(
+                            &candidate.value,
+                            &request.home_dir,
+                            &temp_dir,
+                        )
+                    } else {
+                        hook_path_rules::normalized_exec_workdir(
+                            &candidate.value,
+                            &request.home_dir,
+                            &temp_dir,
+                        )
+                    };
+                    match normalized {
+                        Err(error) => CandidateVerdict::Rejected(unresolvable(error)),
+                        Ok(None) => CandidateVerdict::Absent,
+                        Ok(Some(value)) => trusted_workspace(&value, &roots, request, &temp_dir),
+                    }
+                }
+                rule => match &roots {
                     Ok(roots) => validate_guard_directory_path(
                         &candidate.value,
                         roots,
                         &request.home_dir,
                         &temp_dir,
-                        parameter == "workspace",
-                    ),
-                    Err(rejection) => Err(*rejection),
+                        rule == "workspace",
+                    )
+                    .into(),
+                    Err(rejection) => CandidateVerdict::Rejected(*rejection),
                 },
             };
             match verdict {
-                Ok(path) => json!({
+                CandidateVerdict::Trusted(path) => json!({
                     "parameter": candidate.parameter,
                     "trusted": true,
                     "path": path.to_string_lossy(),
                 }),
-                Err(rejection) => json!({
+                CandidateVerdict::Absent => json!({
+                    "parameter": candidate.parameter,
+                    "trusted": false,
+                    "absent": true,
+                }),
+                CandidateVerdict::Rejected(rejection) => json!({
                     "parameter": candidate.parameter,
                     "trusted": false,
                     "reason": rejection.reason(),

@@ -12,6 +12,7 @@ use std::process::Command;
 use std::time::Instant;
 
 const PATH_LIMIT: u64 = 3 * 4096;
+const CONFIG_LIMIT: u64 = 8 * 1024 * 1024;
 
 /// Whether the repository `base` points at cannot start a hook for this read
 /// and, below the shared temporary directory, is owned by the current user
@@ -65,7 +66,50 @@ pub(in crate::pretool) fn repository_inert(
     if let Some(hook) = hook.first().filter(|hook| drive_relative_root(hook)) {
         return null_hook_inert(base, directories, hook, deadline);
     }
-    Some(hook.iter().all(|hook| hook_inert(hook)))
+    Some(hook.iter().all(|hook| {
+        hook_inert(hook, &|directory| {
+            husky_directory_reached(base, directory, deadline)
+        })
+    }))
+}
+
+/// Whether Git reaches `directory` through the repository's own relative
+/// `core.hooksPath` with no link on the way (see `git_hook_files`). Asked only
+/// when a hook manager's shim is the file Git would run.
+fn husky_directory_reached(base: &Command, directory: &Path, deadline: Instant) -> bool {
+    let Some(Some(top)) = toplevel(base, deadline) else {
+        return false;
+    };
+    let Some(mut command) = super::copy_command(base) else {
+        return false;
+    };
+    command.args([
+        "--no-pager",
+        "config",
+        "--includes",
+        "--show-scope",
+        "--null",
+        "--list",
+    ]);
+    let Some((status, output)) = super::output(&mut command, deadline, CONFIG_LIMIT) else {
+        return false;
+    };
+    let Some((effective, repository)) = status
+        .success()
+        .then(|| super::super::git_remote_config::parse_scoped(&output))
+        .flatten()
+    else {
+        return false;
+    };
+    let values = |config: &super::super::git_remote_config::GitConfig| {
+        config.get("core.hookspath").cloned().unwrap_or_default()
+    };
+    super::super::git_hook_files::reached_without_a_link(
+        &top,
+        &values(&effective),
+        &values(&repository),
+        directory,
+    )
 }
 
 /// Git for Windows answers the hook below `core.hooksPath=/dev/null` without
@@ -187,7 +231,7 @@ fn absolute_lines(bytes: &[u8], count: usize) -> Option<Vec<PathBuf>> {
 
 /// A missing hook, a directory or a plain non-executable file never runs, nor
 /// does a hook path below a file (`core.hooksPath=/dev/null`).
-fn hook_inert(path: &Path) -> bool {
+fn hook_inert(path: &Path, husky_directory_reached: &dyn Fn(&Path) -> bool) -> bool {
     match std::fs::symlink_metadata(path) {
         Err(error) => {
             error.kind() == std::io::ErrorKind::NotFound
@@ -198,6 +242,17 @@ fn hook_inert(path: &Path) -> bool {
         }
         Ok(metadata) => {
             !(metadata.file_type().is_symlink() || metadata.is_file() && executable(&metadata))
+                // A hook manager's shim that stops before it runs anything.
+                || path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|hook| {
+                        super::super::git_hook_files::hook_file_inert(
+                            path,
+                            hook,
+                            husky_directory_reached,
+                        )
+                    })
         }
     }
 }

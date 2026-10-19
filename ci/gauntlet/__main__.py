@@ -238,10 +238,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(rows, indent=2))
             return 0
         if args.command == "installed":
+            from .harness_case import require_account_database
             from .installed_lane import run_lane
 
             if not 1 <= args.repeat <= 100:
                 raise ValueError("--repeat is supported from 1 through 100")
+            require_account_database()
             evidence = run_lane(
                 runtime_path=args.runtime,
                 harnesses=list(args.harness),
@@ -468,6 +470,11 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
         raise ValueError("host timeout is outside supported bounds")
+    from .harness_case import require_account_database
+
+    # All managed installs, including Cursor, acquire the lifecycle lock.
+    # Fail before setting up a lane if the OS account cannot be resolved.
+    require_account_database()
     if args.profile == "full-tasks":
         from .full_task_cli import run_harness_profile
 

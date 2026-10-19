@@ -4,14 +4,18 @@
     "surface": "cli",
     "ask": false,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "lanectl",
     "surface": "cli",
     "ask": true,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "lanectl",
@@ -21,7 +25,9 @@
       "lanectl status",
       "lanectl ping"
     ],
-    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Permitted on this device: `lanectl status`, `lanectl ping`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "lanectl",
@@ -31,21 +37,27 @@
       "lanectl status",
       "lanectl ping"
     ],
-    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "build",
     "surface": "package-scripts",
     "ask": false,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `build` (package script) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `build` (package script) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "build",
     "surface": "package-scripts",
     "ask": true,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `build` (package script) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `build` (package script) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "echo-mcp",
@@ -54,6 +66,8 @@
     "permitted": [
       "echo"
     ],
+    "approvable": true,
+    "unlinked": true,
     "text": "HOL Guard has not been set up for `echo-mcp` (MCP server) on this device. Permitted on this device: `echo`. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
   },
   {
@@ -63,6 +77,8 @@
     "permitted": [
       "echo"
     ],
+    "approvable": true,
+    "unlinked": false,
     "text": "HOL Guard has not been set up for `echo-mcp` (MCP server) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
   },
   {
@@ -70,13 +86,62 @@
     "surface": "cli",
     "ask": false,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `this local CLI` (local CLI) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `this local CLI` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
   },
   {
     "name": "this local CLI",
     "surface": "cli",
     "ask": true,
     "permitted": [],
-    "text": "HOL Guard has not been set up for `this local CLI` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+    "approvable": true,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `this local CLI` (local CLI) on this device. It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where Allow once or Always allow lets it run. Do not retry the same action until it is approved; continue with other work meanwhile."
+  },
+  {
+    "name": "lanectl",
+    "surface": "cli",
+    "ask": false,
+    "permitted": [],
+    "approvable": false,
+    "unlinked": true,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+    "name": "lanectl",
+    "surface": "cli",
+    "ask": true,
+    "permitted": [],
+    "approvable": false,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `lanectl` (local CLI) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+  },
+  {
+    "name": "build",
+    "surface": "package-scripts",
+    "ask": false,
+    "permitted": [],
+    "approvable": false,
+    "unlinked": true,
+    "text": "HOL Guard has not been set up for `build` (package script) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
+  },
+  {
+    "name": "build",
+    "surface": "package-scripts",
+    "ask": true,
+    "permitted": [],
+    "approvable": false,
+    "unlinked": false,
+    "text": "HOL Guard has not been set up for `build` (package script) on this device. Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), not an approval of this action. Do not retry it, in this or another spelling, until it is set up; continue with other work meanwhile."
+  },
+  {
+    "name": "echo-mcp",
+    "surface": "mcp",
+    "ask": false,
+    "permitted": [],
+    "approvable": false,
+    "unlinked": true,
+    "text": "HOL Guard has not been set up for `echo-mcp` (MCP server) on this device. This action remains blocked. Continue with a safe, permitted alternative that respects the same protection. Do not retry an equivalent command, bypass Guard, or seek permission to run it. If no safe alternative can complete the task, explain the limitation."
   }
 ]

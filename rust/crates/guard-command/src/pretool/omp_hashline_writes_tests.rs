@@ -99,3 +99,49 @@ fn deletes_moves_and_rewritten_paths_stay_unproven() {
         assert_eq!(targets(input), None, "{input:?}");
     }
 }
+
+#[test]
+fn bare_rows_under_a_put_are_body_text() {
+    // Oh My Pi keeps a row without the `+` as body text under a `PUT`.
+    assert_eq!(
+        targets("*** Begin Patch\n[src/a.ts#0AC4]\nPUT 1.=1:\nexport const a = 3;\n  return a;\n*** End Patch\n"),
+        Some(vec!["src/a.ts".to_owned()])
+    );
+    assert_eq!(
+        targets("[src/a.ts#0AC4]\nPUT >$:\n+// end\nexport const b = 4;\n// MVP notes\n"),
+        Some(vec!["src/a.ts".to_owned()])
+    );
+    assert_eq!(
+        targets("[src/a.ts#0AC4]\nPUT 1.=1:\nPUTTY();\nREMOVE_ME();\n"),
+        Some(vec!["src/a.ts".to_owned()])
+    );
+}
+
+#[test]
+fn bare_rows_that_read_as_something_else_stay_unproven() {
+    for input in [
+        // Outside a `PUT` body a bare row has no meaning.
+        "[src/a.ts#0AC4]\nexport const a = 3;\n",
+        "[src/a.ts#0AC4]\nCUT 1.=1\nexport const a = 3;\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n+x\n[src/b.ts#0AC4]\nexport const a = 3;\n",
+        // Operations and envelope lines are never body text.
+        "[src/a.ts#0AC4]\nPUT 1.=1:\nREM\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\nMV src/b.ts\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n  REM\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n\tMV: src/b.ts\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\nCUT 2.=2\nexport const a = 3;\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n*** Update File: src/b.ts\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n  *** Delete File: src/b.ts\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n¶src/b.ts\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n  ¶src/b.ts\n",
+        // Anything bracketed might be a header, however it is decorated.
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n  [src/b.ts#0AC4]\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n\t[~/.zshrc#0AC4]\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n[~/.zshrc#0AC4] note\n",
+        "[src/a.ts#0AC4]\nPUT 1.=1:\n[1, 2],\n",
+        // After the envelope closes nothing may follow.
+        "[src/a.ts#0AC4]\nPUT 1.=1:\nx\n*** End Patch\nexport const a = 3;\n",
+    ] {
+        assert_eq!(targets(input), None, "{input:?}");
+    }
+}

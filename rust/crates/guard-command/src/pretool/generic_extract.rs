@@ -26,6 +26,8 @@ pub(super) struct GenericSignals {
     pub(super) path_values: Vec<String>,
     pub(super) url_values: Vec<String>,
     pub(super) request_body_or_method: bool,
+    /// Set after extraction, from the tool's own input; see `generic_github`.
+    pub(super) github_read_only: bool,
     pub(super) prompt_present: bool,
     pub(super) env_reference: bool,
     pub(super) benign_prompt: bool,

@@ -69,6 +69,7 @@ from ..native_directory_trust import (
     UNAVAILABLE_REASON as _DIRECTORY_TRUST_UNAVAILABLE,
 )
 from ..native_directory_trust import (
+    DirectoryTrustCandidate,
     DirectoryTrustVerdict,
     NativeDirectoryTrustError,
     native_directory_trust,
@@ -79,7 +80,6 @@ from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
-from ..path_resolution_cache import cached_realpath
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
@@ -89,7 +89,6 @@ from ..runtime.extension_control_runtime import (
     ExtensionControlRuntimeSnapshot,
 )
 from ..runtime.isolation_provider import load_managed_provider_registry
-from ..runtime.local_temp_paths import trusted_temporary_root_for_path
 from ..runtime.network_status import project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.runner import (
@@ -227,6 +226,23 @@ class _HookPathValidationError(ValueError):
         self.code = f"invalid_hook_{parameter_slug}_path"
 
 
+# One request spells the same directory several ways -- the query string, the
+# payload, the exec command's own working directory -- and each spelling is
+# labelled apart so their verdicts cannot collide. A caller still sees the
+# parameter the route has always reported, whichever spelling was refused.
+_REPORTED_HOOK_PARAMETER = {
+    "exec-workdir": "workspace",
+    "workspace-payload": "workspace",
+    "workspace-query": "workspace",
+}
+
+
+def _reported_hook_parameter(parameter: str) -> str:
+    """The name a rejection of this candidate is reported under."""
+
+    return _REPORTED_HOOK_PARAMETER.get(parameter, parameter)
+
+
 class _HookDirectories:
     """The directories one hook request named, as the native owner settled them.
 
@@ -240,11 +256,13 @@ class _HookDirectories:
         self._verdicts = {verdict.parameter: verdict for verdict in verdicts}
 
     def require(self, parameter: str) -> str | None:
+        """The settled path for one candidate, or `None` where it named none."""
+
         verdict = self._verdicts.get(parameter)
         if verdict is None:
             return None
         if verdict.reason is not None:
-            raise _HookPathValidationError(parameter, verdict.reason)
+            raise _HookPathValidationError(_reported_hook_parameter(parameter), verdict.reason)
         return verdict.path
 
 
@@ -1814,7 +1832,7 @@ class _GuardDaemonHandler(
         """
 
         params = parse_qs(query)
-        workspace_candidate = self._normalized_hook_workspace_string(
+        workspace_candidate = self._hook_workspace_spelling(
             params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
         )
         try:
@@ -1828,7 +1846,9 @@ class _GuardDaemonHandler(
                     extra_headers={"Cache-Control": "no-store"},
                 )
                 return
-            workspace = self._settled_hook_directories(("workspace", workspace_candidate)).require("workspace")
+            workspace = self._settled_hook_directories(("workspace", workspace_candidate, "hook-workspace")).require(
+                "workspace"
+            )
         except _HookPathValidationError as error:
             self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
             self._write_json(
@@ -1932,23 +1952,31 @@ class _GuardDaemonHandler(
                 return
 
         try:
-            workspace_query = self._normalized_hook_workspace_string(params.get("workspace", [None])[-1])
-            action_workdir_provided, action_workdir = self._runtime_hook_exec_command_workdir(payload)
-            payload_workspace = self._normalized_hook_workspace_string(payload.get("cwd"))
-            workspace_candidate = action_workdir or payload_workspace or workspace_query
-            # One call settles every directory this request named; the
-            # verdicts are still read in the order the route rejects in.
+            action_workdir_provided, action_workdir_spelling = self._runtime_hook_exec_command_workdir(payload)
+            # One call settles every directory this request named, including
+            # each spelling of the workspace; the verdicts are still read in
+            # the order the route rejects in, and a spelling the route never
+            # reaches is never held against it.
             directories = self._settled_hook_directories(
                 ("home", self._optional_string(params.get("home", [None])[-1])),
                 ("guard-home", self._optional_string(params.get("guard-home", [None])[-1])),
-                ("workspace", workspace_candidate),
+                ("exec-workdir", action_workdir_spelling, "exec-workdir"),
+                ("workspace-payload", self._hook_workspace_spelling(payload.get("cwd")), "hook-workspace"),
+                (
+                    "workspace-query",
+                    self._hook_workspace_spelling(params.get("workspace", [None])[-1]),
+                    "hook-workspace",
+                ),
                 deadline_monotonic=hook_deadline.expires_at,
             )
             home_dir = directories.require("home")
             guard_home = directories.require("guard-home")
+            action_workdir = directories.require("exec-workdir")
             if action_workdir_provided and action_workdir is None:
                 raise _HookPathValidationError("workspace", "invalid_action_workdir")
-            workspace = directories.require("workspace")
+            workspace = (
+                action_workdir or directories.require("workspace-payload") or directories.require("workspace-query")
+            )
         except _HookPathValidationError as error:
             # The Rust edge still receives the complete raw payload. Use
             # daemon-owned metadata when an optional caller context is
@@ -1969,7 +1997,11 @@ class _GuardDaemonHandler(
             (runtime_harness or default_harness).strip().lower().replace("_", "-")
         )
         try:
-            referenced_payload_bytes = hook_payload_reference_size(payload)
+            referenced_payload_bytes = hook_payload_reference_size(
+                payload,
+                guard_home=daemon_server.store.guard_home,
+                deadline_monotonic=hook_deadline.expires_at,
+            )
             payload_bytes = (
                 referenced_payload_bytes
                 if referenced_payload_bytes is not None
@@ -2940,30 +2972,25 @@ class _GuardDaemonHandler(
         return None
 
     @staticmethod
-    def _normalized_hook_workspace_string(value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        stripped = value.strip()
-        if not stripped or stripped.lower() in {"none", "null"}:
-            return None
-        # Mirror the CLI hook contract until runtime callers stop emitting `/None`
-        # as the explicit "no workspace" sentinel.
-        candidate = os.path.expanduser(stripped)
-        if os.path.basename(candidate) == "None":
-            candidate = os.path.dirname(candidate)
-            if not candidate.strip():
-                return None
-        candidate = os.path.normpath(candidate)
-        try:
-            temporary_root = trusted_temporary_root_for_path(Path(candidate))
-        except OSError:
-            temporary_root = None
-        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
-            return None
-        return candidate
+    def _hook_workspace_spelling(value: object) -> str | None:
+        """The workspace spelling a hook sent, read out of the request as-is.
+
+        What the spelling means -- a sentinel standing for "no workspace", a
+        `~` to expand, the shared temporary root a workspaceless process runs
+        in -- is the runtime's to settle, under the `hook-workspace` rule.
+        """
+
+        return value if isinstance(value, str) else None
 
     @staticmethod
     def _runtime_hook_exec_command_workdir(payload: dict[str, object]) -> tuple[bool, str | None]:
+        """Whether this call named a working directory, and how it spelled it.
+
+        The flag and the spelling are separate answers: a call that carries a
+        `workdir` Guard cannot use is rejected, while a call that carries none
+        falls through to the workspace the request named elsewhere.
+        """
+
         tool_name = payload.get("tool_name")
         if not isinstance(tool_name, str) or tool_name.strip().casefold() != "exec_command":
             return False, None
@@ -2971,23 +2998,11 @@ class _GuardDaemonHandler(
         if not isinstance(tool_input, dict) or "workdir" not in tool_input:
             return False, None
         value = tool_input.get("workdir")
-        if not isinstance(value, str):
-            return True, None
-        stripped = value.strip()
-        if not stripped or stripped.casefold() in {"none", "null"}:
-            return True, None
-        candidate = os.path.normpath(os.path.expanduser(stripped))
-        try:
-            temporary_root = trusted_temporary_root_for_path(Path(candidate))
-        except OSError:
-            temporary_root = None
-        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
-            return True, None
-        return True, candidate
+        return True, value if isinstance(value, str) else None
 
     def _settled_hook_directories(
         self,
-        *candidates: tuple[str, str | None],
+        *candidates: tuple[str, str | None] | tuple[str, str | None, str],
         deadline_monotonic: float | None = None,
     ) -> _HookDirectories:
         """Ask the native owner about every directory this request named.
@@ -2998,11 +3013,20 @@ class _GuardDaemonHandler(
         verdict out for itself, so an unreachable resident never widens what
         a hook reaches.
 
+        A candidate may carry a third element naming the rule to hold it to,
+        which is how one request asks about several spellings of the same
+        workspace -- the query string, the payload, the call's own working
+        directory -- without their labels colliding.
+
         A route holding a deadline passes it, so settling paths cannot spend
         a budget the hook still needs for its own answer.
         """
 
-        asked = [(parameter, value) for parameter, value in candidates if value is not None]
+        asked: list[DirectoryTrustCandidate] = [
+            (candidate[0], candidate[1], candidate[2]) if len(candidate) == 3 else (candidate[0], candidate[1])
+            for candidate in candidates
+            if candidate[1] is not None
+        ]
         if not asked:
             return _HookDirectories(())
         try:
@@ -3019,7 +3043,13 @@ class _GuardDaemonHandler(
                 deadline_monotonic=deadline_monotonic,
             )
         except NativeDirectoryTrustError as error:
-            raise _HookPathValidationError(asked[0][0], _DIRECTORY_TRUST_UNAVAILABLE) from error
+            # Nothing was settled, so the request is refused under the first
+            # candidate it named -- reported the same way a verdict against
+            # that candidate would be, not under the label the spellings are
+            # held apart by.
+            raise _HookPathValidationError(
+                _reported_hook_parameter(asked[0][0]), _DIRECTORY_TRUST_UNAVAILABLE
+            ) from error
         return _HookDirectories(verdicts)
 
     def _write_json(

@@ -1,7 +1,8 @@
 //! Listing the local builders and the running compose projects prints what the
 //! client's own configuration and the daemon's container labels already hold.
 //! Bootstrapping a builder, removing one, and any listing that has to resolve a
-//! compose project keep the review.
+//! compose project keep the review. Asking a registry for the manifest an image
+//! publishes is a metadata query; pushing a manifest list is not.
 #![cfg(unix)]
 
 use crate::git_helper_fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
@@ -42,6 +43,9 @@ fn builder_and_project_listings_run_without_review() {
             "docker compose ls -a",
             "docker compose ls --format json",
             "docker buildx ls | head -20",
+            "docker buildx imagetools inspect registry.example.com/acme/acme-app:1a2b3c4 --format '{{.Manifest.Digest}}'",
+            "docker buildx imagetools inspect registry.example.com/acme/acme-app:1a2b3c4 --format '{{.Manifest.Digest}}' 2>&1 | head -5",
+            "docker buildx imagetools inspect --raw registry.example.com/acme/acme-app:1a2b3c4 | head -40",
         ] {
             assert_eq!(
                 evaluate("allow", harness, command).decision,
@@ -69,6 +73,12 @@ fn builder_changes_and_resolved_projects_stay_reviewed() {
             "docker -H tcp://build.example.com:2376 buildx ls",
             "DOCKER_HOST=tcp://build.example.com:2376 docker buildx ls",
             "docker buildx ls $(cat builders.txt)",
+            "docker buildx imagetools create -t registry.example.com/acme/acme-app:latest registry.example.com/acme/acme-app:1a2b3c4",
+            "docker buildx imagetools inspect --builder remote registry.example.com/acme/acme-app:1a2b3c4",
+            "docker buildx imagetools inspect $(cat image.txt)",
+            "docker buildx imagetools inspect registry.example.com/acme/acme-app:1a2b3c4 > /srv/out.json",
+            "docker -H tcp://build.example.com:2376 buildx imagetools inspect registry.example.com/acme/acme-app:1a2b3c4",
+            "DOCKER_HOST=tcp://build.example.com:2376 docker buildx imagetools inspect registry.example.com/acme/acme-app:1a2b3c4",
         ] {
             assert_ne!(
                 evaluate("review", harness, command).decision,

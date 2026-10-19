@@ -381,6 +381,7 @@ class LocalCliApiService:
                         except LocalCliCatalogLimitError:
                             raise DiscoveryStageError("catalog_limit_reached") from None
                         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+                            _LOGGER.warning("observed MCP tool discovery failed", exc_info=True)
                             raise DiscoveryStageError("observed_provider_scan_failed") from None
                         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
                         if saturated:
@@ -545,6 +546,7 @@ class LocalCliApiService:
             if saturated:
                 discovery_issue = "catalog_limit_reached"
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+            _LOGGER.warning("observed MCP tool discovery failed", exc_info=True)
             discovery_issue = "observed_provider_scan_failed"
         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
         try:

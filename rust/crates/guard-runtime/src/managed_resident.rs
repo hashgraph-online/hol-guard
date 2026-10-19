@@ -186,6 +186,10 @@ pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<()
     .is_ok()
     {
         containment::wait_for_stop_containment(&scope, &digest, deadline, &process_ids)?;
+        // The children are gone; wait for the supervisors that reaped them to
+        // finish writing before the budget is cleared and the scope is read
+        // as final, with no new supervisor let in while the probe waits.
+        exit_record::quiesce_under_startup_lock(state_base, &digest, &scope)?;
         let _ = restart_budget::clear(&scope);
         return Ok(());
     }
@@ -318,8 +322,10 @@ pub(crate) fn supervise_managed_for_owner(
     {
         let executable = std::env::current_exe()
             .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
-        // Resolve the scope first: a failure here must leave no serving child.
-        let scope = state_scope(state_base, expected_digest)?;
+        // Resolve the scope and claim it first: a failure here must leave
+        // no serving child, and a stop must see this supervisor inside the
+        // scope from before the spawn until its exit record is written.
+        let supervised = exit_record::supervised_scope(state_base, expected_digest)?;
         let mut child = Command::new(&executable);
         child
             .arg("serve-managed")
@@ -366,13 +372,7 @@ pub(crate) fn supervise_managed_for_owner(
         let ran_for = started.elapsed();
         child_done.store(true, Ordering::Release);
         let _ = watcher.join();
-        exit_record::record_supervised_exit(
-            &scope,
-            stderr_record.and_then(|stderr| stderr.recv_timeout(MANAGED_STOP_TIMEOUT).ok()),
-            status.success(),
-            status.code(),
-            ran_for,
-        );
+        exit_record::record_supervised_run(supervised, stderr_record, status, ran_for);
         if status.success() {
             Ok(())
         } else {

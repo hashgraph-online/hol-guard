@@ -131,8 +131,14 @@ fn credential_shaped_values_untracked_files_and_stores_keep_review() {
         &[(".gitignore", ".env.local\n"), (".env", PLAIN)],
         &[(".env.local", PLAIN)],
     );
-    for cwd in ["leaky", "short", "mixed", "stored"] {
-        let input = json!({"pattern": "MODE", "path": "."});
+    // Each pattern is one the sensitive file holds.
+    for (cwd, pattern) in [
+        ("leaky", "AKIA"),
+        ("short", "PASSWORD"),
+        ("mixed", "MODE"),
+        ("stored", "MODE"),
+    ] {
+        let input = json!({"pattern": pattern, "path": "."});
         assert!(!allowed(&omp(&f, cwd, "grep", input)), "{cwd}");
     }
     let input = json!({"pattern": "MODE", "path": ".", "gitignore": false});
@@ -176,6 +182,6 @@ fn nested_checkouts_each_bring_their_own_entry_budget() {
     assert!(allowed(&result), "{}", result.reason_code);
     // A sensitive file inside a nested checkout is still in reach.
     write(f.home.join("app/wt-two/.env"), PLAIN);
-    let input = json!({"pattern": "export", "path": "."});
+    let input = json!({"pattern": "MODE", "path": "."});
     assert!(!allowed(&omp(&f, "app", "grep", input)));
 }

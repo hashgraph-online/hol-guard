@@ -3,8 +3,9 @@
 The verdicts themselves moved to the native runtime, which checks them in
 `rust/crates/guard-runtime/src/directory_trust_tests.rs`. These cover the
 spellings Python still computes for itself: the canonical Guard home a caller
-needs before it can reach the resident, the supply-chain root resolver, and the
-hook's own "/None"-style workspace normalization.
+needs before it can reach the resident, and the supply-chain root resolver. The
+hook's own workspace spellings are the runtime's to settle, and
+`rust/crates/guard-runtime/src/hook_path_rules_tests.rs` covers those rules.
 """
 
 from __future__ import annotations
@@ -14,7 +15,6 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import directory_path_authority
-from codex_plugin_scanner.guard.daemon import server as server_module
 from codex_plugin_scanner.path_support import resolve_path_within_allowed_roots
 
 
@@ -53,10 +53,3 @@ def test_supply_chain_directory_validation_rejects_prefix_collisions_and_travers
         candidate = tmp_path / relative
         candidate.mkdir(parents=True, exist_ok=True)
         assert resolve_path_within_allowed_roots(str(candidate), (root,), require_exists=True) is None
-
-
-def test_the_temporary_root_is_not_itself_a_hook_workspace(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    handler = object.__new__(server_module._GuardDaemonHandler)
-    monkeypatch.setattr(server_module.tempfile, "gettempdir", lambda: str(tmp_path))
-
-    assert handler._normalized_hook_workspace_string(str(tmp_path)) is None

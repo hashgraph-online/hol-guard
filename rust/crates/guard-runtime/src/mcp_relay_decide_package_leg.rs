@@ -38,7 +38,7 @@ use super::view::HarnessView;
 use super::{run_policy, McpRelayDecideRequestV1};
 
 /// A package call sent without the evaluation the lane decides from.
-const EVALUATION_ABSENT: &str = "mcp_relay_package_evaluation_absent";
+pub(super) const EVALUATION_ABSENT: &str = "mcp_relay_package_evaluation_absent";
 /// A package call without the relaying process's own facts: the workspace the
 /// policy lookup is valid for, its working directory or its environment.
 const FACTS_ABSENT: &str = "mcp_relay_package_facts_absent";

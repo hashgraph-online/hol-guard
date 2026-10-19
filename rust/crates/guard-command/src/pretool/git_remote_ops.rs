@@ -1,6 +1,6 @@
 //! A plain `origin` refresh, or a pull of one that fast-forwards or merges
 //! the fetched branch. It runs only Git built-ins once the effective
-//! configuration proves `origin` is a GitHub HTTPS remote with no program,
+//! configuration proves `origin` is a GitHub HTTPS or SSH remote with no program,
 //! proxy or URL rewrite in the way, every credential helper resolves to a
 //! trusted executable, and no hook Git would start for the fetch can run.
 
@@ -101,7 +101,7 @@ pub(super) fn exact_safe_command(
     }
     fetch_seen.then_some((
         "native_exact_safe_git_origin_refresh",
-        "The Rust command authority proved this fetch or pull reaches only a GitHub HTTPS origin with trusted credential helpers, plain refspecs and no hooks, filters or transport programs.",
+        "The Rust command authority proved this fetch or pull reaches only a GitHub origin with trusted credential helpers, plain refspecs and no hooks, filters or transport programs.",
     ))
 }
 
@@ -272,7 +272,7 @@ fn prove(
     if urls.is_empty()
         || !urls.iter().all(|url| {
             config::rewritten_remote_url(&effective, url.trim())
-                .is_some_and(|url| config::safe_github_https_remote_url(&url))
+                .is_some_and(|url| config::safe_github_remote_url(&url))
         })
         || config::fetch_config_routes_execution(&effective)
         || !probe.credential_helpers_trusted(&config::credential_helpers(&effective))
@@ -284,6 +284,10 @@ fn prove(
     !config::config_weakens_transport(&effective)
         && !config::repository_config_routes_transport(&repository)
         && !effective.keys().any(|key| key.starts_with("submodule."))
-        && probe.hooks_inert(["pre-auto-gc", "reference-transaction", "post-fetch"])
+        && probe.hooks_inert_in_a_stable_tree([
+            "pre-auto-gc",
+            "reference-transaction",
+            "post-fetch",
+        ])
         && upstream.is_none_or(|shape| pull::pull_inert(&effective, &repository, shape, &probe))
 }
