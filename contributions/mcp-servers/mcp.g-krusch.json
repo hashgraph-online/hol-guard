@@ -90,7 +90,7 @@
   ],
   "saferAlternatives": [
     "Use search_drive_rag, read_drive_file, list_drive_workspace, and get_agent_steering to inspect workspace documents without modifying Google Drive.",
-    "Keep compose_gmail_message on Review and leave send=false (the default) so outbound messages are staged as Gmail drafts rather than sent immediately.",
+    "Keep compose_gmail_message on Review and leave send_immediately=false (the default) so outbound messages are staged as Gmail drafts rather than sent immediately.",
     "Keep delete_drive_file and write_drive_file on Review: although G-Krusch enforces workspace ancestry checks (isFileInWorkspace), writes and deletes mutate files inside the configured G-Krusch Drive folder."
   ]
 }
