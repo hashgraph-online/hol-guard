@@ -3,7 +3,7 @@
   "id": "mcp.leadline",
   "version": "1.1.0",
   "name": "leadline",
-  "description": "Deterministic function-level complexity analysis for Go, Java, JavaScript, C, C++, TypeScript, TSX, Rust, Python, and Zig. Twenty read-only analyzer tools over stdio; the only subprocess is a fixed-argument git adapter and the server touches no network. Off until you turn it on.",
+  "description": "Deterministic function-level complexity analysis for Go, Java, JavaScript, C, C++, TypeScript, TSX, Rust, Python, and Zig. Start the server with `leadline mcp` (stdio); Guard matches the `leadline` executable. Twenty read-only analyzer tools; the only subprocess is a fixed-argument git adapter and the server touches no network. Off until you turn it on.",
   "trustClass": "external",
   "activation": "opt-in",
   "publisher": {
