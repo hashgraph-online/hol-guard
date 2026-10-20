@@ -18,12 +18,14 @@ import {
   Badge,
   EmptyState,
   SectionLabel,
-  GuardHero,
 } from "./approval-center-primitives";
 import { harnessDisplayName, formatRelativeTime, formatNumber } from "./approval-center-utils";
 import { useFocusTrap } from "./use-focus-trap";
 import { DeviceProofCard, OperatorHealthCard, resolveCloudIntelCopy } from "./runtime-overview";
 import { HomeProtectionModule } from "./home-protection-module";
+import { HomeHero, buildHomeHeroModel } from "./home-hero";
+import { HomeHowGuardWorks, useHowGuardWorksReveal } from "./home-how-guard-works";
+import { HomeSetupCard, WhatStaysLocalCard, resolveSetupApps } from "./home-setup-card";
 import { approvalProofRequiresPassword } from "./approval-proof-inline";
 import { EvidenceInsightsHomePreview } from "./evidence/evidence-insights-home-preview";
 import { EvidenceInsightsShareModal } from "./evidence/evidence-insights-share-modal";
@@ -34,6 +36,7 @@ import { WatchProtectionBanner } from "./watch-protection-banner";
 import { turnProtectionOnUpdate, watchBannerModel } from "./harness-posture-ui";
 import { updateSettings } from "./guard-api";
 import { guardActionActivityCopy, guardActionDisposition } from "./guard-action";
+import { approvalLeftActionStopped } from "./evidence/approval-outcome";
 import { isConnectableAppHarness } from "./apps/harness-setup-target";
 import { buildHomeRuntimeErrorCopy } from "./home-runtime-error";
 import type {
@@ -107,11 +110,12 @@ export function redactHomeArtifactLabel(value: string | null | undefined): strin
 }
 
 export function buildRecentProtectionCopy(receipt: GuardReceipt): string {
-  return guardActionActivityCopy(
-    receipt.policy_decision,
-    harnessDisplayName(receipt.harness),
-    redactHomeArtifactLabel(receipt.artifact_name),
-  );
+  const harness = harnessDisplayName(receipt.harness);
+  const label = redactHomeArtifactLabel(receipt.artifact_name);
+  if (approvalLeftActionStopped(receipt)) {
+    return `${harness} stayed stopped on ${label} after a one-time approval`;
+  }
+  return guardActionActivityCopy(receipt.policy_decision, harness, label);
 }
 
 type HomeRequestState =
@@ -150,6 +154,8 @@ export function HomeWorkspace(props: {
   onConfirmClear: (credentials?: { approval_password?: string; approval_totp_code?: string }) => Promise<void>;
   onCancelClear: () => void;
   onOpenHelp?: () => void;
+  onOpenRequest?: (requestId: string) => void;
+  onConnectHarness?: (harness: string) => void;
 }) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [clearPassword, setClearPassword] = useState("");
@@ -280,6 +286,17 @@ export function HomeWorkspace(props: {
     [snapshot, queuedCount]
   );
 
+  const queuedItems = props.requests.kind === "ready" ? props.requests.items : [];
+  const heroModel = buildHomeHeroModel({
+    status: state.heroStatus,
+    watchedAppsCount,
+    queuedCount,
+    queuedItems,
+    latestReceipts: snapshot?.latest_receipts ?? [],
+    analytics: analyticsState.kind === "ready" ? analyticsState.data : null,
+  });
+  const howGuardWorks = useHowGuardWorksReveal();
+
   const ctaAction =
     state.ctaTarget === "inbox"
       ? props.onOpenInbox
@@ -343,15 +360,38 @@ export function HomeWorkspace(props: {
         </div>
       )}
 
-      <GuardHero
+      <HomeHero
         status={state.heroStatus}
         headline={state.headline}
         subheadline={state.subheadline}
+        facts={heroModel.facts}
+        liveLabel={heroModel.liveLabel}
+        queue={heroModel.queue}
         cta={
           <ActionButton onClick={ctaAction} data-primary="true">
             {state.ctaLabel}
           </ActionButton>
         }
+        secondaryCta={
+          <ActionButton variant="outline" onClick={howGuardWorks.reveal}>
+            {state.heroStatus === "setup_gap" ? "See how it works" : "How Guard works"}
+          </ActionButton>
+        }
+        onOpenRequest={props.onOpenRequest}
+      />
+
+      {state.heroStatus === "setup_gap" ? (
+        <HomeSetupCard
+          apps={resolveSetupApps(managedInstalls, observedHarnesses)}
+          onConnectHarness={props.onConnectHarness ?? props.onOpenAppDetail}
+          onOpenProtect={props.onOpenFleet}
+        />
+      ) : null}
+
+      <HomeHowGuardWorks
+        receiptCount={snapshot.receipt_count ?? 0}
+        connectedHarnesses={activeInstalls.map((item: GuardManagedInstall) => item.harness)}
+        openSignal={howGuardWorks.openSignal}
       />
 
       {snapshot.operator_health ? <OperatorHealthCard health={snapshot.operator_health} /> : null}
@@ -383,12 +423,14 @@ export function HomeWorkspace(props: {
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,0.9fr)]">
         <section className="space-y-6">
-          <AppsAtAGlance
-            managedInstalls={managedInstalls}
-            observedHarnesses={observedHarnesses}
-            queuedItems={props.requests.kind === "ready" ? props.requests.items : []}
-            onOpenAppDetail={props.onOpenAppDetail}
-          />
+          {state.heroStatus !== "setup_gap" && (
+            <AppsAtAGlance
+              managedInstalls={managedInstalls}
+              observedHarnesses={observedHarnesses}
+              queuedItems={queuedItems}
+              onOpenAppDetail={props.onOpenAppDetail}
+            />
+          )}
 
           <HomeProtectionModule
             snapshot={snapshot}
@@ -425,6 +467,8 @@ export function HomeWorkspace(props: {
         </section>
 
         <section className="space-y-6">
+          {state.heroStatus === "setup_gap" && <WhatStaysLocalCard />}
+
           {snapshot.latest_receipts.length > 0 && (
             <RecentProtectionSection receipts={snapshot.latest_receipts} />
           )}
@@ -605,9 +649,9 @@ export function deriveHomeState(input: {
   if (!hasActiveInstalls && !hasObservedHarnesses) {
     return {
       heroStatus: "setup_gap",
-      headline: "Guard is ready",
-      subheadline: "Connect your first AI app so Guard can start protecting it.",
-      ctaLabel: "Open Protect",
+      headline: "Welcome to Guard",
+      subheadline: "Guard sits between your AI apps and this computer. Routine work runs, harmful actions are stopped, and Guard asks you when it can’t tell.",
+      ctaLabel: "See setup steps",
       ctaTarget: "protect",
     };
   }
@@ -616,8 +660,8 @@ export function deriveHomeState(input: {
     return {
       heroStatus: "setup_gap",
       headline: "Finish setup",
-      subheadline: "Guard detected apps but they need setup to be fully protected.",
-      ctaLabel: "Open Protect",
+      subheadline: "Guard found apps on this computer, but they need setup before they are fully protected.",
+      ctaLabel: "Finish setup",
       ctaTarget: "protect",
     };
   }

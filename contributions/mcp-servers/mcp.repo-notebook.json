@@ -1,0 +1,44 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.repo-notebook",
+  "version": "1.0.0",
+  "name": "Repo Notebook MCP",
+  "description": "Local shelf of saved GitHub repositories: list and search, save, annotate, clone, and remove entries. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.tmshuybrechts",
+    "displayName": "Thomas Huybrechts",
+    "url": "https://github.com/TMSHuybrechts"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniFolder", "background": "#171816" },
+  "homepage": "https://github.com/TMSHuybrechts/The-repo-notebook",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "repo-notebook-mcp"
+  },
+  "riskClasses": ["external-repository-read", "local-file-write", "package-or-source-installation"],
+  "tools": [
+    { "name": "list_saved_repos", "state": "inherit" },
+    { "name": "search_github", "state": "inherit" },
+    { "name": "trending_repos", "state": "inherit" },
+    { "name": "save_repo", "state": "review" },
+    { "name": "bulk_save", "state": "review" },
+    { "name": "set_repo_meta", "state": "review" },
+    { "name": "remove_repo", "state": "review" },
+    { "name": "clone_repo", "state": "review" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/TMSHuybrechts/The-repo-notebook",
+    "https://github.com/TMSHuybrechts/The-repo-notebook/blob/main/mcp/server.js",
+    "https://github.com/TMSHuybrechts/The-repo-notebook/blob/main/bin/repo-notebook-mcp.js"
+  ],
+  "saferAlternatives": [
+    "Set RN_DATA_DIR to a dedicated folder so the server reads and writes only that notebook and its clones.",
+    "Keep save, annotate, remove and clone tools on review; they change the stored notebook or write cloned source code to disk.",
+    "Cloning downloads third-party code but never installs or runs it; review the repository before running anything from the clones folder.",
+    "Leave GITHUB_TOKEN unset unless you need higher GitHub API rate limits; the server only sends it with GitHub API read requests."
+  ]
+}

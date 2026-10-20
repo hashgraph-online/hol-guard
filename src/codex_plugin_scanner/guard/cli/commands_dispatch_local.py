@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
+import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
@@ -19,6 +21,7 @@ if TYPE_CHECKING:
     from .protect_approvals import _queue_local_protect_approvals, _suppress_package_shim_allow_output
 
 
+from ..approval_gate_nudge import approval_gate_posture
 from ..package_shim_status import PACKAGE_SHIM_STATUS_FD_ENV_VAR
 from . import protect_output as _protect_output
 from ._commands_shared import *
@@ -116,9 +119,11 @@ def _run_guard_execute_contained_test_command(
     store: GuardStore | None = None,
     **_kwargs: object,
 ) -> int:
+    from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
     from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
     from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
     from ..runtime.restricted_pytest import RestrictedPytestError
+    from ..runtime.restricted_workspace_grant_lookup import grant_store
     from .commands_hook_native_authority import try_native_hook_authority
 
     if guard_home is None or workspace is None or context is None or store is None:
@@ -140,33 +145,109 @@ def _run_guard_execute_contained_test_command(
             Path(args.request_file), str(args.request_sha256), workspace=workspace,
         )
         request_validated = True
-        return run_authorized_contained_test(
-            payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
-            home_dir=context.home_dir,
-            authorize=lambda original: try_native_hook_authority(
-                # The adapter snapshots the hook payload before stamping it, so
-                # declare the environment this process will launch the command
-                # from rather than letting Rust fall back to the resident's.
-                payload={
-                    **original,
-                    "guard_containment_receipt_only": True,
-                    HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
-                },
-                harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
-                guard_home=guard_home,
-                workspace=execution_workspace(original),
-                store=store,
-            ),
-        )
+        # A CLI that Desktop has replaced cannot reach the resident that
+        # follows the new Core. Say so now instead of after every
+        # acknowledgement window has run out.
+        superseded = superseded_desktop_core()
+        if superseded is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
+        # The workspace sandbox asks this store for the grant it is widened by.
+        with grant_store(store):
+            return run_authorized_contained_test(
+                payload, workspace=workspace, timeout_seconds=int(args.timeout_seconds),
+                home_dir=context.home_dir,
+                authorize=lambda original: try_native_hook_authority(
+                    # The adapter snapshots the hook payload before stamping it, so
+                    # declare the environment this process will launch the command
+                    # from rather than letting Rust fall back to the resident's.
+                    payload={
+                        **original,
+                        "guard_containment_receipt_only": True,
+                        HOOK_EXECUTION_ENVIRONMENT_KEY: collect_hook_execution_environment(),
+                    },
+                    harness=str(getattr(args, "harness", "omp")), home_dir=context.home_dir,
+                    guard_home=guard_home,
+                    workspace=execution_workspace(original),
+                    store=store,
+                ),
+            )
     except RestrictedPytestError as error:
         print(f"{error.reason_code}: {error}", file=sys.stderr)
         return error.exit_code
     finally:
-        if request_validated and getattr(args, "harness", "omp") in {"zcode", "claude-code", "codex"}:
+        # A validated request is single-use. The sink removes it for every
+        # harness because an OMP or Pi call that moves to the background settles
+        # before its job reads the request, so the extension cannot.
+        if request_validated:
             with suppress(OSError):
                 request_file = Path(args.request_file)
                 request_file.unlink(missing_ok=True)
                 request_file.parent.rmdir()
+
+def _run_guard_ack_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_ack import acknowledge
+    from ..native_bash_protocol import NativeBashError
+
+    if guard_home is None or workspace is None or store is None:
+        return 126
+    try:
+        recorded = acknowledge(
+            guard_home=guard_home, store_path=store.path, project=workspace,
+            base_id=str(args.operation_id), harness=str(args.harness),
+            tool_call_id=str(args.tool_call_id), exit_code=args.exit_code,
+        )
+        if recorded:
+            return 0
+        print("native_bash_ack_not_recorded", file=sys.stderr)
+        return 125
+    except (NativeBashError, OSError, RuntimeError, ValueError, sqlite3.Error):
+        print("native_bash_ack_unavailable", file=sys.stderr)
+        return 125
+
+
+def _run_guard_execute_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, context: HarnessContext | None = None,
+    store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_protocol import NativeBashError
+    from ..runtime.bound_bash_sink import run_bound_bash
+    from ..runtime.contained_test_hook import read_contained_test_request
+    from ..runtime.restricted_pytest import RestrictedPytestError
+
+    if guard_home is None or workspace is None or context is None or store is None:
+        return 126
+    validated = False
+    try:
+        payload = read_contained_test_request(Path(args.request_file), str(args.request_sha256), workspace=workspace)
+        validated = True
+        return run_bound_bash(
+            payload, store=store, workspace=workspace, harness=str(args.harness),
+            operation_id=str(args.operation_id), timeout_seconds=args.timeout_seconds,
+            host_owner_pid=getattr(args, "host_owner_pid", None),
+            tool_call_id=getattr(args, "tool_call_id", None),
+        )
+    except NativeBashError as error:
+        print(error.code, file=sys.stderr)
+        return 125
+    except RestrictedPytestError as error:
+        print(error.reason_code, file=sys.stderr)
+        return error.exit_code
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
+        # A missing policy/store answer cannot select an alternate executor.
+        # Do not expose request contents or integrity-provider diagnostics.
+        print("native_bash_sink_unavailable", file=sys.stderr)
+        return 125
+    finally:
+        if validated:
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
+
 
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,
@@ -511,6 +592,7 @@ def _run_guard_status_command(
     store = _require_guard_store(store)
     config = _require_guard_config(config)
     payload = importlib.import_module(".product", __package__).build_guard_status_payload(context, store, config)
+    payload["approval_gate"] = approval_gate_posture(context.guard_home)
     _emit("status", payload, getattr(args, "json", False))
     return 0
 
@@ -667,6 +749,24 @@ def _run_guard_install_command(
     store = _require_guard_store(store)
     if not bool(getattr(args, "dry_run", False)):
         _migrate_legacy_macos_secrets(store)
+    native_repair: dict[str, object] | None = None
+    if not bool(getattr(args, "dry_run", False)):
+        # Hooks fail closed without the native runtime, so fetch it before wiring any harness.
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=store,
+            workspace=str(workspace) if workspace else None,
+            now=_now(),
+            guard_home=guard_home,
+        )
+        if repair is not None:
+            native_repair, repair_exit = repair
+            if repair_exit != 0 or native_repair.get("status") in {"failed", "blocked"}:
+                if getattr(args, "json", False):
+                    print(json.dumps({"status": "failed", "native_runtime_repair": native_repair}, indent=2))
+                else:
+                    print(str(native_repair.get("message") or ""), file=sys.stderr)
+                return 1
     try:
         if bool(getattr(args, "dry_run", False)):
             payload = build_managed_install_plan(args.harness, bool(getattr(args, "all", False)), context, store)
@@ -683,6 +783,12 @@ def _run_guard_install_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
+    if native_repair is not None:
+        payload["native_runtime_repair"] = native_repair
+    if not bool(getattr(args, "dry_run", False)):
+        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
     _emit("install", payload, getattr(args, "json", False))
     return 0
 
@@ -715,11 +821,13 @@ def _run_guard_mcp_command(
 
 
 __all__ = [
+    "_run_guard_ack_bound_bash_command",
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
     "_run_guard_command_inspection_command",
     "_run_guard_dashboard_command",
     "_run_guard_detect_command",
+    "_run_guard_execute_bound_bash_command",
     "_run_guard_execute_contained_test_command",
     "_run_guard_init_command",
     "_run_guard_install_command",

@@ -269,6 +269,18 @@ fn probe_env_locked_keys_filtered() {
     assert_eq!(env.get("INNOCENT").map(String::as_str), Some("yes"));
 }
 
+#[test]
+fn probe_env_keeps_windows_interpreter_and_temp_settings() {
+    // A server config cannot redirect temporary files or the command
+    // interpreter, in any letter case.
+    let mut extra = BTreeMap::new();
+    for name in ["TEMP", "tmp", "ComSpec", "PATHEXT", "windir"] {
+        extra.insert(name.to_owned(), "evil".to_owned());
+    }
+    let env = probe_env("/tmp/probe", Some(&extra), None);
+    assert!(env.values().all(|value| value != "evil"), "{env:?}");
+}
+
 // ---------------------------------------------------------------------------
 // End-to-end: spawn a real fake stdio MCP server and negotiate + paginate.
 // ---------------------------------------------------------------------------

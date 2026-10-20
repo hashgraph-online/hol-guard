@@ -55,6 +55,7 @@ def native_protect_request(
     *,
     guard_home: Path | None,
     store_path: Path | None,
+    cwd: Path | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Return the parsed ``(request, verdict)`` dicts for one wrapped command.
 
@@ -69,6 +70,14 @@ def native_protect_request(
         "store_path": str(store_path) if store_path is not None else None,
         "command": [str(item) for item in command],
     }
+    if cwd is not None:
+        # A custom command that launches a relative script is read from here;
+        # the resident reads a script only against an absolute directory.
+        # `parse_protect_command` and a verdict asked for without a working
+        # directory have none, so the field is left out rather than sent as
+        # null: their request, and the digest the reply is bound to, stay the
+        # bytes a caller that never knew about `cwd` would send.
+        request["cwd"] = str(Path(cwd).absolute())
     try:
         home = _resolve_digest_home(guard_home)
         request["guard_home"] = str(home)

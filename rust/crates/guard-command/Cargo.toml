@@ -10,9 +10,12 @@ rust-version.workspace = true
 autotests = false
 
 [dependencies]
+rusqlite.workspace = true
+tempfile = "3.10"
 base64.workspace = true
 caseless.workspace = true
 mailparse.workspace = true
+guard-scanner = { path = "../guard-scanner" }
 guard-secure-fs = { path = "../guard-secure-fs" }
 guard-contracts = { path = "../guard-contracts" }
 guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
@@ -29,6 +32,7 @@ pep440_rs.workspace = true
 toml.workspace = true
 roxmltree.workspace = true
 getrandom.workspace = true
+fs2.workspace = true
 libc.workspace = true
 ring.workspace = true
 rsa.workspace = true
@@ -36,6 +40,10 @@ base64ct.workspace = true
 ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
 url = "=2.5.8"
 unicode-normalization = "0.1.25"
+tree-sitter = "=0.25.10"
+tree-sitter-bash = "=0.25.1"
+# Newer patch releases require Rust beyond the workspace MSRV.
+tree-sitter-language = "=0.1.5"
 
 [target.'cfg(unix)'.dependencies]
 nix = { workspace = true, features = ["user"] }
@@ -52,6 +60,8 @@ sha2.workspace = true
 zstd.workspace = true
 
 [dev-dependencies]
+tempfile = "3.10"
+guard-contained-process = { path = "../guard-contained-process" }
 flate2 = { version = "1.1.9", default-features = false, features = ["rust_backend"] }
 rcgen = { version = "=0.13.2", default-features = false, features = ["crypto", "ring"] }
 rustls = { version = "=0.23.45", default-features = false, features = ["ring", "std", "tls12"] }
@@ -60,6 +70,10 @@ time = "=0.3.47"
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "guard-cloud-catalog"
+path = "src/cloud_catalog_cli.rs"
 
 [[test]]
 name = "integration"
@@ -82,5 +96,37 @@ name = "pretool_git_push_unregistered"
 path = "tests/pretool_git_push_unregistered.rs"
 
 [[test]]
+name = "pretool_windows_drive_path_writes"
+path = "tests/pretool_windows_drive_path_writes.rs"
+
+[[test]]
+name = "pretool_windows_sibling_repository_writes"
+path = "tests/pretool_windows_sibling_repository_writes.rs"
+
+[[test]]
+name = "pretool_worktree_cd_windows"
+path = "tests/pretool_worktree_cd_windows.rs"
+
+[[test]]
+name = "pretool_windows_sibling_project_root"
+path = "tests/pretool_windows_sibling_project_root.rs"
+
+[[test]]
 name = "shim_admin_vectors"
 path = "tests/shim_admin_vectors.rs"
+
+[[test]]
+name = "mcp_stdio_probe_windows"
+path = "tests/mcp_stdio_probe_windows.rs"
+
+[[test]]
+name = "launch_identity_windows"
+path = "tests/launch_identity_windows.rs"
+
+[[test]]
+name = "pretool_rg_hidden_whitelist"
+path = "tests/pretool_rg_hidden_whitelist.rs"
+
+[[test]]
+name = "pretool_search_pattern_options"
+path = "tests/pretool_search_pattern_options.rs"

@@ -17,7 +17,9 @@ from pathlib import Path
 def _environment(home: Path) -> dict[str, str]:
     environment = os.environ.copy()
     for name in tuple(environment):
-        if name in {"PYTHONPATH", "PYTHONHOME"} or name.startswith(("COV_CORE_", "COVERAGE_")):
+        # Guard variables include development compiler and runtime overrides,
+        # which would bypass the packaged identity this check exists to prove.
+        if name in {"PYTHONPATH", "PYTHONHOME"} or name.startswith(("COV_CORE_", "COVERAGE_", "HOL_GUARD_")):
             environment.pop(name)
     home.mkdir()
     environment.update({"HOME": str(home), "USERPROFILE": str(home), "PYTHONDONTWRITEBYTECODE": "1"})

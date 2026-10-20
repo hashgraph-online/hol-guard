@@ -312,6 +312,12 @@ class LoopbackCollector:
                 self.send_response(204)
                 self.end_headers()
 
+            def do_GET(self):
+                """Record a download, such as a remote script fetch, and answer with no body."""
+                collector.requests.append({"bytes": 0, "sha256": hashlib.sha256(b"").hexdigest()})
+                self.send_response(204)
+                self.end_headers()
+
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.server.daemon_threads = True
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)

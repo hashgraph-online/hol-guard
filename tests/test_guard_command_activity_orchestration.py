@@ -40,6 +40,7 @@ def _artifact(tmp_path: Path) -> GuardArtifact:
 def _decision(action: GuardAction) -> ToolCallDecision:
     return ToolCallDecision(
         action=action,
+        policy_action=action,
         source="heuristic",
         signals=("fixture signal",),
         summary="Fixture decision.",

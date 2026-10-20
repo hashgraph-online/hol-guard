@@ -32,11 +32,6 @@ def offer_hash(offer: ContinuationOffer) -> str:
     return continuation_authority("identity", offer=offer_wire(offer))["offer_hash"]
 
 
-def public_reason(offer: ContinuationOffer, result: ContinuationResult) -> str:
-    projected = project(offer, result)["payload"]
-    return projected["codexResume" if offer.harness == "codex" else "harnessResume"]["reason"]
-
-
 def attempt_count(value: Mapping[str, object] | None) -> int:
     return continuation_authority("attempt", prior=value)["attempt_count"]
 
@@ -62,12 +57,6 @@ def mapping_value(value: object) -> Mapping[str, object]:
         return {}
     mapping = cast(Mapping[object, object], value)
     return {key: item for key, item in mapping.items() if isinstance(key, str)}
-
-
-def string_list(value: object) -> list[str]:
-    if not isinstance(value, list):
-        return []
-    return [item for item in cast(list[object], value) if isinstance(item, str)]
 
 
 def text_value(value: object) -> str | None:

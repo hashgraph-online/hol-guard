@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+#[path = "policy_store_services.rs"]
+mod services;
+
 use guard_policy_snapshot::{
     snapshot_bytes, validate_v3, PolicySnapshotAckV1, PolicySnapshotPushV1, PolicySnapshotV3,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION, POLICY_SNAPSHOT_MAX_BYTES,
@@ -9,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     Arc, Mutex,
 };
 
@@ -28,7 +31,7 @@ pub(crate) mod approval_v4_secure_state;
 #[path = "native_review_origin.rs"]
 pub(crate) mod native_review_origin;
 #[path = "policy_store_approval.rs"]
-mod policy_store_approval;
+pub(crate) mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
 #[path = "policy_store_business_floor.rs"]
@@ -39,12 +42,16 @@ mod policy_store_business_source;
 mod policy_store_command_authority;
 #[path = "policy_store_command_floor.rs"]
 mod policy_store_command_floor;
+#[path = "policy_store_command_packs.rs"]
+mod policy_store_command_packs;
 #[path = "policy_store_direct_lane.rs"]
 pub(crate) mod policy_store_direct_lane;
 #[path = "policy_store_migration.rs"]
 mod policy_store_migration;
 #[path = "policy_store_persistence.rs"]
 mod policy_store_persistence;
+#[path = "policy_store_push.rs"]
+mod policy_store_push;
 #[path = "policy_store_request.rs"]
 mod policy_store_request;
 #[path = "policy_store_validation.rs"]
@@ -165,6 +172,10 @@ struct PolicyState {
     pub(super) invalid_on_startup: bool,
     pub(super) command_control_floor: Option<policy_store_command_floor::CommandControlFloor>,
     pub(super) business_policy_floor: Option<String>,
+    /// The snapshot `validate_v3` last accepted and the generation floor it
+    /// was checked against. Everything it checks but the clock is fixed for
+    /// an `Arc` and floor, so a request re-checks only expiry against it.
+    pub(super) verified: Option<(Arc<AdmittedPolicySnapshot>, u64)>,
 }
 
 struct LoadedAuthority {
@@ -199,10 +210,13 @@ pub(crate) struct PolicySnapshotStore {
     authority_changed: Arc<AtomicBool>,
     state: Mutex<PolicyState>,
     direct_lane: Mutex<Option<Arc<policy_store_direct_lane::DirectLaneBinding>>>,
+    direct_lane_ack_wait: policy_store_direct_lane::DirectLaneAckWait,
     direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue,
     mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
-    mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext>,
+    mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim>,
     mcp_relay_servers: crate::mcp_relay_servers::RelayServers,
+    #[cfg(target_os = "macos")]
+    bash_launches: policy_store_approval::bash_cancellation::Launches,
 }
 
 impl PolicySnapshotStore {
@@ -274,7 +288,8 @@ impl PolicySnapshotStore {
             Arc::downgrade(&authority_changed),
         );
         let (admitted_snapshot, admission_failed) = match loaded.snapshot.as_ref() {
-            Some(snapshot) => match AdmittedPolicySnapshot::new(snapshot.clone()) {
+            Some(snapshot) => match policy_store_command_packs::admit(snapshot.clone(), state_base)
+            {
                 Ok(snapshot) => (Some(Arc::new(snapshot)), false),
                 Err(_) => (None, true),
             },
@@ -304,39 +319,21 @@ impl PolicySnapshotStore {
                 invalid_on_startup: loaded.invalid_on_startup || admission_failed,
                 command_control_floor: loaded.command_control_floor,
                 business_policy_floor: loaded.business_policy_floor,
+                verified: None,
             }),
             direct_lane: Mutex::new(None),
+            direct_lane_ack_wait: policy_store_direct_lane::DirectLaneAckWait::default(),
             direct_evidence: crate::hook_direct_evidence::DirectEvidenceQueue::default(),
             mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence::default(),
             mcp_relay_claims: crate::mcp_relay_claims::HeldClaims::default(),
             mcp_relay_servers: crate::mcp_relay_servers::RelayServers::default(),
+            #[cfg(target_os = "macos")]
+            bash_launches: policy_store_approval::bash_cancellation::Launches::default(),
         })
     }
 
     pub(crate) fn state_base(&self) -> &Path {
         &self.state_base
-    }
-
-    /// Evidence of direct hook answers, waiting for the daemon to drain it.
-    pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
-        &self.direct_evidence
-    }
-
-    /// Relayed forwards' evidence, waiting for the relay to commit it.
-    pub(crate) fn mcp_relay_pending(&self) -> &crate::mcp_relay_pending::PendingRelayEvidence {
-        &self.mcp_relay_pending
-    }
-
-    /// Relayed decisions' saved-approval claims, waiting for the relay.
-    pub(crate) fn mcp_relay_claims(
-        &self,
-    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::ClaimContext> {
-        &self.mcp_relay_claims
-    }
-
-    /// The MCP servers whose relay sessions run under the proxy.
-    pub(crate) fn mcp_relay_servers(&self) -> &crate::mcp_relay_servers::RelayServers {
-        &self.mcp_relay_servers
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.
@@ -380,113 +377,5 @@ impl PolicySnapshotStore {
         }
         let state_base = self.state_base().to_owned();
         approval_enrollment::with_transition_lock(&state_base, || self.push_locked(request))
-    }
-
-    fn push_locked(&self, mut request: PolicySnapshotPushV1) -> Result<Vec<u8>, String> {
-        let direct_lane = request.direct_lane.take();
-        let _command_lease = self.command_authority_lease(&request.snapshot)?;
-        let snapshot_bytes = snapshot_bytes(&request.snapshot).map_err(snapshot_error)?;
-        let now = now_ms()?;
-        let mut state = self
-            .state
-            .lock()
-            .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
-        if state.invalid_on_startup && state.generation_floor == 0 {
-            return Err("native_policy_snapshot_invalid".to_owned());
-        }
-        // Validate the candidate before considering authenticated floor recovery.
-        let minimum_generation = if state.snapshot.is_none()
-            && state.policy_digest.is_some()
-            && request.snapshot.generation <= state.generation_floor
-        {
-            1
-        } else {
-            state.generation_floor.max(1)
-        };
-        validate_v3(
-            &request.snapshot,
-            minimum_generation,
-            &self.expected_runtime_identity,
-            &self.expected_rule_digest,
-            &self.verifier_key,
-            now,
-        )
-        .map_err(snapshot_error)?;
-        if request.snapshot.scope_contract.scope_digest != self.expected_scope_digest {
-            return Err("native_policy_snapshot_scope_mismatch".to_owned());
-        }
-        if let Some(current) = state.snapshot.as_ref() {
-            if request.snapshot.generation < current.generation {
-                return Err("native_policy_snapshot_generation_downgrade".to_owned());
-            }
-            if request.snapshot.generation == current.generation {
-                if snapshot_bytes != state.canonical_bytes {
-                    return Err("native_policy_snapshot_generation_reused".to_owned());
-                }
-                // An idempotent push refreshes what the same snapshot is
-                // bound to, so the publisher can reopen the lane after a
-                // benign input change without allocating a generation.
-                self.bind_direct_lane(current.generation, &current.policy_digest, direct_lane);
-                return encode_ack(current.as_ref(), true, self.resident_generation);
-            }
-        } else if request.snapshot.generation <= state.generation_floor {
-            // There is no current snapshot to compare for normal idempotent
-            // retry.  The authenticated floor is still authoritative, so
-            // equal/older input must force the publisher to allocate a new
-            // generation rather than silently reusing the floor.
-            return encode_requires_new_generation(&state, self.resident_generation);
-        }
-        let control_floor = policy_store_command_floor::next_floor(
-            state.command_control_floor.as_ref(),
-            &request.snapshot,
-        )?;
-        let business_floor = policy_store_business_floor::next_floor(
-            state.business_policy_floor.as_deref(),
-            &request.snapshot,
-        )?;
-        let admitted = Arc::new(AdmittedPolicySnapshot::new(request.snapshot)?);
-        let mut observed = match self.authority_observed.lock() {
-            Ok(observed) => observed,
-            Err(_) => {
-                self.authority_changed.store(true, Ordering::SeqCst);
-                return Err("native_policy_snapshot_context_mismatch".to_owned());
-            }
-        };
-        // The watcher samples the authority while holding this same lock. Keep
-        // it across the atomic replacement and expected-fingerprint publication
-        // so a legitimate push never presents a new file with an old expected
-        // identity to the watcher.
-        persist_authority_with_control_floor(
-            &self.authority_path,
-            admitted.generation,
-            &admitted.policy_digest,
-            Some(admitted.snapshot()),
-            &self.verifier_key,
-            control_floor.as_ref(),
-            business_floor.as_deref(),
-        )?;
-        state.generation_floor = admitted.generation;
-        state.policy_digest = Some(admitted.policy_digest.clone());
-        state.snapshot = Some(Arc::clone(&admitted));
-        state.canonical_bytes = snapshot_bytes;
-        state.invalid_on_startup = false;
-        state.command_control_floor = control_floor;
-        state.business_policy_floor = business_floor;
-        self.bind_direct_lane(admitted.generation, &admitted.policy_digest, direct_lane);
-        *observed = authority_fingerprint(&self.authority_path);
-        drop(observed);
-        self.authority_changed.store(
-            !policy_store_authority::authorities_unchanged(self),
-            Ordering::SeqCst,
-        );
-        encode_ack(admitted.snapshot(), false, self.resident_generation)
-    }
-
-    #[cfg(test)]
-    pub(crate) fn current_generation(&self) -> Option<u64> {
-        self.state
-            .lock()
-            .ok()
-            .and_then(|state| state.snapshot.as_ref().map(|snapshot| snapshot.generation))
     }
 }

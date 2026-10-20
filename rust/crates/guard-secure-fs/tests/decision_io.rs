@@ -3,9 +3,28 @@ use std::fs::{self, OpenOptions};
 use std::io::Write;
 
 fn fixture_root(name: &str) -> std::path::PathBuf {
-    let temporary_root =
-        fs::canonicalize(std::env::temp_dir()).unwrap_or_else(|_| std::env::temp_dir());
+    let temporary_root = fs::canonicalize(std::env::temp_dir())
+        .map(host_spelling)
+        .unwrap_or_else(|_| std::env::temp_dir());
     temporary_root.join(format!("guard-secure-fs-{name}-{}", std::process::id()))
+}
+
+/// `canonicalize` spells Windows paths in the verbatim `\\?\C:\` form, which
+/// source classification refuses as a glob. Hosts send the ordinary drive
+/// form, so the fixture root uses that. A root on a share canonicalizes to
+/// `\\?\UNC\server\share\...`, whose ordinary spelling is
+/// `\\server\share\...`.
+fn host_spelling(path: std::path::PathBuf) -> std::path::PathBuf {
+    let Some(stripped) = path.to_str().and_then(|text| text.strip_prefix(r"\\?\")) else {
+        return path;
+    };
+    if let Some(share) = stripped.strip_prefix(r"UNC\") {
+        return format!(r"\\{share}").into();
+    }
+    if stripped.as_bytes().get(1) == Some(&b':') {
+        return stripped.into();
+    }
+    path
 }
 
 #[test]

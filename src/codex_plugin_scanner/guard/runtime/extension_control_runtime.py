@@ -39,6 +39,10 @@ class ExtensionControlRuntimeSnapshot:
     effective_digest: str
     layers: tuple[ExtensionControlLayer, ...]
     managed_revision: int = 0
+    # Carried from the view this snapshot was built from: the authority behind
+    # it was never read. It stays out of the effective digest so an unread
+    # placeholder and a read authority with the same contents still agree.
+    unread: bool = False
 
     @classmethod
     def from_authority_view(cls, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
@@ -62,6 +66,7 @@ class ExtensionControlRuntimeSnapshot:
             effective_digest=hashlib.sha256(framed.encode("utf-8")).hexdigest(),
             layers=view.layers,
             managed_revision=view.managed_revision,
+            unread=view.unread,
         )
 
     @property

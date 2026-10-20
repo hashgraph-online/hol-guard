@@ -55,6 +55,78 @@ pub(crate) fn resolve(workspace: &str) -> PortableIdentity {
     }
 }
 
+/// The identity `resolve_portable_project_identity(workspace)` returns for a
+/// workspace the calling process names relative to its own directory, which
+/// `Path(...).resolve(strict=False)` reads against that process's `cwd`. The
+/// relay never runs in that directory, so the join is mirrored from the `cwd`
+/// the caller reports and only in the one shape a relative workspace takes:
+/// a plain name, under a directory that is already canonical, naming nothing
+/// on disk. Every other relative workspace is `Unknown`.
+pub(crate) fn resolve_relative(workspace: &str, cwd: &str) -> PortableIdentity {
+    let stripped = python_strip(workspace);
+    if is_portable_project_identity(stripped) {
+        return PortableIdentity::Identity(stripped.to_owned());
+    }
+    if stripped.is_empty() || stripped.starts_with('/') {
+        return resolve(stripped);
+    }
+    match relative_path(stripped, cwd).and_then(|path| derive_resolved(&path)) {
+        Ok(Some(identity)) => PortableIdentity::Identity(identity),
+        Ok(None) => PortableIdentity::Absent,
+        Err(Unmirrored) => PortableIdentity::Unknown,
+    }
+}
+
+/// `Path(workspace).expanduser().resolve(strict=False)` against `cwd`.
+fn relative_path(workspace: &str, cwd: &str) -> Mirror<PathBuf> {
+    if workspace.starts_with('~') || workspace.contains('/') || workspace.starts_with('.') {
+        // `expanduser` rewrites a `~` name, and a separator or a dot segment
+        // is a resolution this reader does not reproduce.
+        return Err(Unmirrored);
+    }
+    if !cfg!(unix) || !cwd.starts_with('/') {
+        return Err(Unmirrored);
+    }
+    let resolved = fs::canonicalize(cwd).map_err(|_| Unmirrored)?;
+    if resolved.as_os_str() != cwd {
+        // A directory `resolve` would rewrite resolves the name under the
+        // rewritten path, which this reader does not reproduce.
+        return Err(Unmirrored);
+    }
+    let candidate = resolved.join(workspace);
+    match status(&candidate, false)? {
+        // Only a name that is absent resolves to the join itself; one that
+        // exists may be a link `resolve` follows.
+        None => Ok(candidate),
+        Some(_) => Err(Unmirrored),
+    }
+}
+
+/// `is_portable_project_identity(value)` (`project_identity.py`): the
+/// prefix followed by exactly the 64 lowercase hex digits of a digest.
+pub(crate) fn is_portable_project_identity(value: &str) -> bool {
+    value
+        .strip_prefix(PORTABLE_PROJECT_IDENTITY_PREFIX)
+        .is_some_and(|digest| {
+            digest.len() == 64
+                && digest
+                    .bytes()
+                    .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+        })
+}
+
+/// `_portable_project_workspace(workspace)`
+/// (`store_portable_project_memory.py`): the workspace itself when it
+/// already names a portable identity, and the identity its Git metadata
+/// derives otherwise.
+pub(crate) fn portable_workspace(workspace: &str) -> PortableIdentity {
+    let stripped = python_strip(workspace);
+    if is_portable_project_identity(stripped) {
+        return PortableIdentity::Identity(stripped.to_owned());
+    }
+    resolve(stripped)
+}
+
 /// The errors `pathlib._ignore_error` reads as a false predicate; Python
 /// 3.12 raises every other one (3.14 swallows them all).
 fn ignorable(error: &io::Error) -> bool {
@@ -93,8 +165,15 @@ fn is_symlink(metadata: &Option<Metadata>) -> bool {
         .is_some_and(|found| found.file_type().is_symlink())
 }
 
-/// `_workspace_path`: the stripped workspace, mirrored only where
-/// `expanduser().resolve(strict=False)` leaves it as it is.
+/// `_workspace_path`: the stripped workspace as
+/// `expanduser().resolve(strict=False)` leaves it.
+///
+/// An absolute name with no `~` to expand resolves to its real path, which
+/// is what `realpath` answers for a name that exists, so a workspace reached
+/// through a symlink is read as the directory it names rather than deferred.
+/// A name that does not exist resolves the part that does and appends the
+/// rest without reading it, and a loop or an unreadable parent answers the
+/// part reached so far; neither is reproduced here, so both stay unmirrored.
 fn workspace_path(workspace: &str) -> Mirror<Option<PathBuf>> {
     let stripped = python_strip(workspace);
     if stripped.is_empty() {
@@ -104,10 +183,7 @@ fn workspace_path(workspace: &str) -> Mirror<Option<PathBuf>> {
     if !cfg!(unix) || !stripped.starts_with('/') {
         return Err(Unmirrored);
     }
-    match fs::canonicalize(stripped) {
-        Ok(resolved) if resolved.as_os_str() == stripped => Ok(Some(resolved)),
-        _ => Err(Unmirrored),
-    }
+    fs::canonicalize(stripped).map(Some).map_err(|_| Unmirrored)
 }
 
 struct Repository<'w> {
@@ -285,6 +361,16 @@ fn identity(workspace: &Path, repository: &Repository<'_>) -> Mirror<Option<Stri
     )))
 }
 
+/// `resolve_portable_project_identity` from the resolved path alone, read
+/// without the identity cache: a relative workspace names a different
+/// directory in every process it is read from, so its text is no cache key.
+fn derive_resolved(path: &Path) -> Mirror<Option<String>> {
+    let Some(repository) = discover(path)? else {
+        return Ok(None);
+    };
+    identity(path, &repository)
+}
+
 fn derive(workspace: &str) -> Mirror<Option<String>> {
     let Some(path) = workspace_path(workspace)? else {
         return Ok(None);
@@ -294,6 +380,7 @@ fn derive(workspace: &str) -> Mirror<Option<String>> {
     };
     let key = cache::Key::new(
         python_strip(workspace),
+        &path,
         &repository.git_dir,
         &repository.config,
         &repository.head_log,

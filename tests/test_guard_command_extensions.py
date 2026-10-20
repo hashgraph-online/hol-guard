@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -364,10 +365,13 @@ def test_inspection_handles_unregistered_legacy_action_without_crashing(
 
     payload = inspect_command("echo value", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "future sensitive command"
+    # A caller label is display metadata. Without effective native rule evidence for
+    # this command it cannot add a review floor: sparse active catalogs omit inactive
+    # extension owners, so an unowned label does not authenticate itself.
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["action_class"] is None
     assert payload["rules"] == []
-    assert payload["minimum_action"] == "review"
+    assert payload["minimum_action"] == "allow"
 
 
 def test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional() -> None:
@@ -756,7 +760,9 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
         "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
         "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
     )
-    assert _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    # The native body-file proof models POSIX paths only, so Windows fails closed.
+    safe_body = _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    assert safe_body is (sys.platform != "win32")
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(
             health=health,
@@ -767,12 +773,7 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
     )
 
     with use_extension_control_snapshot(snapshot):
-        request = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=workspace,
-            home_dir=home_dir,
-        )
+        request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=workspace, home_dir=home_dir)
 
     # Host discovery can recognize the file, but the offline native request
     # does not bind its contents or identity. Proposal permission cannot remove
@@ -932,8 +933,10 @@ def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path:
             "allow",
         ),
         ("gh repo sync example/project --force", (), "block"),
+        # A shell that carries its whole script runs exactly that script, so an
+        # Allow for another permission leaves the script's own floor standing.
         (
-            "sh -c 'gh pr merge 5115 --repo example/project --squash --auto'",
+            "sh -c 'gh repo sync example/project --force'",
             ("command.github.permission.merge-remote",),
             "block",
         ),

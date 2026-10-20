@@ -302,12 +302,6 @@ _HARNESS_NAMES = (
 )
 
 
-def action_envelope_harnesses() -> tuple[str, ...]:
-    """Return every harness name accepted by the shared action-envelope boundary."""
-
-    return _HARNESS_NAMES
-
-
 def _envelope_from_native(payload: Mapping[str, object]) -> GuardActionEnvelope:
     """Bind the resident's ``to_dict`` answer to the DTO without re-normalizing it."""
 
@@ -416,7 +410,6 @@ normalize_kimi_payload = _harness_normalizer("kimi", "Normalize a Kimi Code nati
 __all__ = [
     "GuardActionEnvelope",
     "GuardActionType",
-    "action_envelope_harnesses",
     "normalize_claude_hook_payload",
     "normalize_codex_hook_payload",
     "normalize_copilot_payload",

@@ -4,93 +4,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Sequence
 from hashlib import sha256
+from pathlib import Path
+from typing import cast
 
-from .runtime.composio_discovery import ComposioActionSchema
-from .runtime.mcp_classification import classify_mcp_action
-from .runtime.observed_mcp_tools import ObservedMcpTool
+from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
 
 _MAX_ACTIONS = 10_000
 _MAX_BYTES = 2_000_000
-
-
-def write_composio_metadata(
-    connection: sqlite3.Connection,
-    source: ObservedMcpTool,
-    actions: tuple[ComposioActionSchema, ...],
-    *,
-    cli_id: str,
-    seen_at: str,
-    before_authority_change: Callable[[], None] = lambda: None,
-) -> bool:
-    identity_hash = source.server_identity.identity_hash
-    observation = connection.execute(
-        "select identity_hash, server_command from local_cli_observation where cli_id = ? and surface = 'mcp'",
-        (cli_id,),
-    ).fetchone()
-    if observation is None or observation[0] != identity_hash or observation[1] != source.server_identity.command:
-        raise ValueError("provider metadata connection changed")
-    authority_changed = False
-    for action in actions:
-        raw = json.dumps(action.input_schema, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False)
-        authority_hash = sha256(
-            json.dumps(
-                {"toolkit": action.toolkit, "tool_slug": action.tool_slug, "input_schema": action.input_schema},
-                sort_keys=True,
-                separators=(",", ":"),
-                ensure_ascii=True,
-                allow_nan=False,
-            ).encode("utf-8")
-        ).hexdigest()
-        previous = connection.execute(
-            "select revision, authority_hash, full_schema from local_mcp_provider_action "
-            "where cli_id = ? and identity_hash = ? and provider = 'composio' and tool_slug = ?",
-            (cli_id, identity_hash, action.tool_slug),
-        ).fetchone()
-        revision = (
-            1
-            if previous is None
-            else previous[0] + int(previous[1] != authority_hash or previous[2] != int(action.full_schema))
-        )
-        if previous is None or revision != previous[0]:
-            authority_changed = True
-        connection.execute(
-            """insert into local_mcp_provider_action
-            (cli_id, identity_hash, provider, tool_slug, toolkit, description, input_schema_json,
-             authority_hash, full_schema, source_tool, revision, updated_at)
-            values (?, ?, 'composio', ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            on conflict(cli_id, identity_hash, provider, tool_slug) do update set
-            toolkit = excluded.toolkit, description = excluded.description,
-            input_schema_json = excluded.input_schema_json, authority_hash = excluded.authority_hash,
-            full_schema = excluded.full_schema, source_tool = excluded.source_tool,
-            revision = excluded.revision, updated_at = excluded.updated_at""",
-            (
-                cli_id,
-                identity_hash,
-                action.tool_slug,
-                action.toolkit,
-                action.description,
-                raw,
-                authority_hash,
-                int(action.full_schema),
-                source.qualified_name,
-                revision,
-                seen_at,
-            ),
-        )
-    count, size = connection.execute(
-        "select count(*), coalesce(sum(length(cast(input_schema_json as blob)) "
-        "+ length(cast(description as blob))), 0) "
-        "from local_mcp_provider_action where cli_id = ? and identity_hash = ?",
-        (cli_id, identity_hash),
-    ).fetchone()
-    if count > _MAX_ACTIONS or size > _MAX_BYTES:
-        raise ValueError("provider metadata catalog capacity exceeded")
-    if authority_changed:
-        before_authority_change()
-        rebuild_provider_authority(connection, cli_id, identity_hash)
-    return authority_changed
 
 
 def rebuild_provider_authority(connection: sqlite3.Connection, cli_id: str, identity_hash: str) -> None:
@@ -148,7 +70,14 @@ def read_provider_actions(
     offset: int = 0,
     search: str = "",
     expected_token: str | None = None,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
+    """A page of provider actions and the declarations that describe them.
+
+    The declarations travel to the resident, which is a round trip the caller
+    makes after this connection's read transaction has ended; classifying here
+    would hold a reader open for the length of that call.
+    """
+
     if not 1 <= limit <= 100 or offset < 0 or len(search) > 128:
         raise ValueError("invalid provider catalog page")
     fingerprint = sha256(identity_hash.encode())
@@ -177,29 +106,62 @@ def read_provider_actions(
         order by a.toolkit asc, a.tool_slug asc limit ? offset ?""",
         (cli_id, identity_hash, pattern, pattern, pattern, limit + 1, offset),
     ).fetchall()
-    return {
-        "actions": [
-            {
-                "tool_slug": slug,
-                "toolkit": toolkit,
-                "description": description,
-                "full_schema": bool(full),
-                "revision": revision,
-                "updated_at": updated_at,
-                "permission_state": state,
-                "allow_supported": False,
-                "account_binding": "unverified",
-                "source": "observed-provider-result",
-                "classification": classify_mcp_action(
-                    slug,
-                    json.loads(raw_schema),
-                    provider="composio",
-                    full_schema=bool(full),
-                ),
-            }
-            for slug, toolkit, description, full, revision, updated_at, state, raw_schema in rows[:limit]
-        ],
-        "next_offset": offset + limit if len(rows) > limit else None,
-        "coverage": "discovery-subset",
-        "catalog_token": token,
-    }
+    page = rows[:limit]
+    declarations: tuple[dict[str, object], ...] = tuple(
+        {
+            "name": slug,
+            "schema": json.loads(raw_schema),
+            "provider": "composio",
+            "full_schema": bool(full),
+        }
+        for slug, _, _, full, _, _, _, raw_schema in page
+    )
+    return (
+        {
+            "actions": [
+                {
+                    "tool_slug": slug,
+                    "toolkit": toolkit,
+                    "description": description,
+                    "full_schema": bool(full),
+                    "revision": revision,
+                    "updated_at": updated_at,
+                    "permission_state": state,
+                    "allow_supported": False,
+                    "account_binding": "unverified",
+                    "source": "observed-provider-result",
+                }
+                for slug, toolkit, description, full, revision, updated_at, state, _ in page
+            ],
+            "next_offset": offset + limit if len(rows) > limit else None,
+            "coverage": "discovery-subset",
+            "catalog_token": token,
+        },
+        declarations,
+    )
+
+
+def describe_provider_actions(
+    page: dict[str, object],
+    declarations: Sequence[dict[str, object]],
+    *,
+    guard_home: Path,
+) -> dict[str, object]:
+    """Attach the resident's advisory classification to a page of actions.
+
+    The classification is display evidence, not authority: a page without a
+    resident still names every action and its permission state, so an absent
+    description leaves the entry out rather than failing the read.
+    """
+
+    actions = cast("list[dict[str, object]]", page["actions"])
+    if not actions:
+        return page
+    try:
+        described = classify_mcp_actions(list(declarations), guard_home=guard_home)
+    except McpClassificationUnavailableError:
+        return page
+    for action, classification in zip(actions, described, strict=True):
+        if classification is not None:
+            action["classification"] = classification
+    return page

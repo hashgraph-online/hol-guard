@@ -11,6 +11,9 @@ use serde_json::json;
 const VECTORS: &[u8] =
     include_bytes!("../tests/fixtures/consumer_artifact_project_vectors.json.gz");
 
+/// The vectors were recorded with POSIX `pathlib`: a Windows command is one
+/// name and every display path is joined with `/`.
+#[cfg_attr(not(unix), ignore = "POSIX-recorded path vectors")]
 #[test]
 fn matches_recorded_vectors() {
     let vectors = gunzip_json(VECTORS);
@@ -25,6 +28,27 @@ fn matches_recorded_vectors() {
         let actual = project(&query).unwrap_or_else(|code| panic!("{name}: {code}"));
         assert_eq!(actual, case["expected"], "{name}");
     }
+}
+
+/// On Windows a command such as `C:\Windows\PowerShell.exe` is named by its
+/// basename, as Python's `Path` names it there.
+#[cfg(windows)]
+#[test]
+fn a_windows_command_is_named_by_its_basename() {
+    let vectors = gunzip_json(VECTORS);
+    let case = vectors
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["name"] == "powershell/first-seen/known-good")
+        .unwrap();
+    let query: ConsumerArtifactProjectQueryV1 =
+        serde_json::from_value(case["query"].clone()).unwrap();
+    let actual = project(&query).unwrap();
+    assert_eq!(
+        actual["capability_snapshot"]["shell_wrappers"],
+        json!(["powershell.exe:/c"])
+    );
 }
 
 fn resident(request: Value) -> Result<Value, String> {

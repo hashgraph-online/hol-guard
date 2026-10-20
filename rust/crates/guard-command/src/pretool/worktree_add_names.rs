@@ -64,7 +64,7 @@ pub(super) fn valid_path_text(value: &str) -> bool {
 /// A destination as `git worktree add` receives it. `~/<path>` is accepted
 /// here; `parse` requires the shell to expand it (no quoted or escaped `~`)
 /// and `fresh_destination` requires the shell's HOME to be the declared one.
-pub(super) fn valid_destination_text(value: &str) -> bool {
+pub(in crate::pretool) fn valid_destination_text(value: &str) -> bool {
     match value.strip_prefix('~') {
         Some(rest) => rest.starts_with('/') && valid_path_text(rest),
         None => valid_path_text(value),

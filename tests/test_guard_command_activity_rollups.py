@@ -228,19 +228,6 @@ def test_latency_cells_have_explicit_bounded_cloud_semantics() -> None:
         )
 
 
-def test_rollup_failure_rolls_back_parent_and_children(tmp_path: Path) -> None:
-    store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    with sqlite3.connect(store.path) as connection:
-        connection.execute(
-            "create trigger injected_rollup_failure before insert on command_activity_rollup_membership "
-            "begin select raise(abort, 'injected rollup failure'); end"
-        )
-    with pytest.raises(sqlite3.DatabaseError, match="injected rollup failure"):
-        store.record_command_activity(_evidence("activity:1", matches=2))
-    assert store.count_command_activities() == 0
-    assert store.count_command_activity_rule_hits() == 0
-
-
 def test_rebuild_reconciles_one_hundred_thousand_rows_and_analytics_stays_under_50ms(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

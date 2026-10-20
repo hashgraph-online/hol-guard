@@ -59,16 +59,26 @@ pub(crate) fn most_restrictive(a: GuardAction, b: GuardAction) -> GuardAction {
 /// review stays review, but a review that follows a rejected attempt to reuse
 /// prior authority is a fresh-approval boundary.
 pub(crate) fn enforcement(action: &str, facts: &McpToolFactsV1) -> GuardAction {
-    let normalized = norm(action, GuardAction::Review);
-    let stale = facts.approval_reuse_status.as_deref() == Some("rejected")
-        && !matches!(
-            facts.approval_reuse_reason_code.as_deref(),
-            None | Some(APPROVAL_REUSE_NO_SAVED_DECISION)
-        );
-    if normalized == GuardAction::Review && stale {
+    enforcement_of(
+        norm(action, GuardAction::Review),
+        facts.approval_reuse_status.as_deref(),
+        facts.approval_reuse_reason_code.as_deref(),
+    )
+}
+
+/// `_enforcement_action` over a reuse status the caller names itself, for the
+/// paths that rewrite a decision rather than read one off the facts.
+pub(crate) fn enforcement_of(
+    action: GuardAction,
+    status: Option<&str>,
+    reason_code: Option<&str>,
+) -> GuardAction {
+    let stale = status == Some("rejected")
+        && !matches!(reason_code, None | Some(APPROVAL_REUSE_NO_SAVED_DECISION));
+    if action == GuardAction::Review && stale {
         GuardAction::RequireReapproval
     } else {
-        normalized
+        action
     }
 }
 

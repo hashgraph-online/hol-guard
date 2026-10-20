@@ -41,10 +41,11 @@ from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
-from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
 from .hook_direct_counters import HookCounterLog
+from .hook_evidence_dispatch import HookEvidenceDispatch, run_hook_evidence
 from .hook_request_parsing import (
     runtime_hook_event_name,
 )
@@ -80,16 +81,11 @@ WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECOND
 # The publisher retries these on its own: another writer re-committed the
 # command-control authority, or a late renewal let the snapshot expire. A hook
 # waits for that fresh ACK within its deadline instead of failing at once.
-_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
-    {
-        "native_policy_snapshot_resident_changed",
-        "native_resident_restart_budget_busy",
-        "native_command_control_mutation_in_progress",
-        "native_command_control_authority_not_current",
-        "native_business_source_mutation_in_progress",
-        "native_policy_snapshot_expired",
-    }
-)
+_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native_policy_snapshot_expired"}
+# Harnesses whose PermissionRequest hook gets no decision, so the harness
+# shows its own approval prompt. Each raises it only after its PreToolUse
+# hook reviewed the same call.
+_PERMISSION_PASSTHROUGH_HARNESSES = frozenset({"codex", "copilot", "devin", "zcode"})
 
 
 @final
@@ -103,6 +99,7 @@ class HookWorker(HookWorkerNativeMixin):
         workspace: Path | None = None,
         home_dir: Path | None = None,
         activity_writer: CommandActivityWriter | None = None,
+        evidence_dispatch: HookEvidenceDispatch | None = None,
         capture_writer: CodexBindingCaptureWriter | None = None,
         wait_for_native_policy: bool = True,
         publish_native_policy: bool = True,
@@ -111,6 +108,9 @@ class HookWorker(HookWorkerNativeMixin):
         self.store = store
         self.guard_home = store.guard_home
         self.activity_writer = activity_writer
+        # Without one, evidence is recorded on the thread that answered the
+        # hook, exactly as it was before the dispatch existed.
+        self.evidence_dispatch = evidence_dispatch
         self.capture_writer = capture_writer
         self._publish_native_policy = publish_native_policy
         self._last_native_decision_receipt: dict[str, object] | None = None
@@ -139,12 +139,6 @@ class HookWorker(HookWorkerNativeMixin):
             wait_until_ready = getattr(self.policy_snapshot_publisher, "wait_until_ready", None)
             if callable(wait_until_ready):
                 _ = wait_until_ready(time.monotonic() + _NATIVE_POLICY_STARTUP_READY_TIMEOUT_SECONDS)
-
-    @property
-    def last_native_decision_receipt(self) -> dict[str, object] | None:
-        """Return the receipt produced by the most recent native review."""
-
-        return self._last_native_decision_receipt
 
     def _load_config(self, guard_home: Path, workspace: Path | None) -> GuardConfig:
         return load_guard_config(guard_home, workspace=workspace)
@@ -287,11 +281,14 @@ class HookWorker(HookWorkerNativeMixin):
             from .claude_permission_request import claude_permission_request_response
 
             return claude_permission_request_response(self.store, payload)
-        if event_name == "PermissionRequest" and harness.strip().lower().replace("_", "-") == "codex":
-            # Codex asks this only for an escalation of a call its PreToolUse
-            # hook, with the same matcher, already sent to Guard. A deny here
-            # would refuse every approval Codex asks for, so the decision
-            # stays with Codex's own approval prompt.
+        if (
+            event_name == "PermissionRequest"
+            and harness.strip().lower().replace("_", "-") in _PERMISSION_PASSTHROUGH_HARNESSES
+        ):
+            # These harnesses ask this only for a call their PreToolUse hook
+            # already sent to Guard. A deny here would refuse every approval
+            # the harness asks for, so the decision stays with the harness's
+            # own approval prompt.
             return {"hookSpecificOutput": {"hookEventName": "PermissionRequest"}}
         # Send even unknown or malformed event labels to Rust. The edge
         # returns no semantic result for unsupported events, which this
@@ -356,16 +353,28 @@ class HookWorker(HookWorkerNativeMixin):
         succeeded: bool,
     ) -> None:
         if self.activity_writer is not None:
-            discovery_writer = getattr(self.activity_writer, "submit_composio_discovery", None)
-            if callable(discovery_writer):
+            writer = self.activity_writer
+            discovery_writer = getattr(writer, "submit_composio_discovery", None)
+
+            # Recording what a hook decided must not change what it decided.
+            # The writer reaches the resident now, so these calls can fail
+            # where the in-process writer could not, and each costs a round
+            # trip the response the caller is waiting on should not pay for.
+            # Both go to the dispatch as one unit so the discovery is still
+            # submitted before the activity.
+            def record() -> None:
+                if callable(discovery_writer):
+                    with suppress(Exception):
+                        discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
                 with suppress(Exception):
-                    discovery_writer(harness=harness, payload=payload, succeeded=succeeded)
-            _ = self.activity_writer.submit_command_activity(
-                harness=harness,
-                event="PostToolUse",
-                payload=payload,
-                succeeded=succeeded,
-            )
+                    _ = writer.submit_command_activity(
+                        harness=harness,
+                        event="PostToolUse",
+                        payload=payload,
+                        succeeded=succeeded,
+                    )
+
+            run_hook_evidence(self, record)
             return
         _ = record_post_hook_command_activity_best_effort(
             store=self.store,

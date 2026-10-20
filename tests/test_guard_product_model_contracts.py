@@ -2,12 +2,8 @@
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
 from codex_plugin_scanner.guard.daemon.server import _GuardDaemonHandler
-from codex_plugin_scanner.guard.models import DECISION_SCOPE_VALUES, GUARD_ACTION_VALUES
 from codex_plugin_scanner.guard.product_model import (
     ACTION_CATEGORY_VALUES,
     ACTIVATION_STAGE_VALUES,
@@ -19,26 +15,13 @@ from codex_plugin_scanner.guard.product_model import (
     EVENT_PRIVACY_TIERS,
     EXTERNAL_INTEL_SOURCE_VALUES,
     FUNNEL_EVENT_VALUES,
-    GUARD_PRODUCT_MODEL_VERSION,
     HERMES_OPENCLAW_RUNTIME_MODELS,
     LOCAL_API_OWNERSHIP,
     LOCAL_ROUTE_OWNERSHIP,
-    MANAGER_FIELD_VALUES,
     PERSONA_VALUES,
-    PRODUCT_DECISION_SCOPE_VALUES,
     SEO_CONTENT_TYPE_VALUES,
     SEVERITY_LABELS,
-    VIBE_CODER_FIELD_VALUES,
-    export_product_model_v1,
 )
-
-
-def test_product_model_reuses_existing_guard_action_and_scope_contracts() -> None:
-    exported = export_product_model_v1()
-
-    assert tuple(exported["guard_actions"]) == GUARD_ACTION_VALUES
-    assert tuple(exported["decision_scopes"]) == DECISION_SCOPE_VALUES
-    assert PRODUCT_DECISION_SCOPE_VALUES == DECISION_SCOPE_VALUES
 
 
 def test_personas_and_activation_stages_cover_local_cloud_users() -> None:
@@ -91,12 +74,6 @@ def test_shared_action_categories_and_plain_labels_are_complete() -> None:
     )
     assert set(SEVERITY_LABELS) == {"info", "low", "medium", "high", "critical"}
     assert SEVERITY_LABELS["critical"]["plain"] == "Stop and review now"
-
-
-def test_persona_value_fields_are_explicit() -> None:
-    assert MANAGER_FIELD_VALUES == ("team_members", "roles", "coverage", "incidents", "notifications", "agent_risk")
-    assert VIBE_CODER_FIELD_VALUES == ("headline", "safe_explanation", "primary_action", "learn_more")
-    assert "shared_memory" in export_product_model_v1()["paid_value_fields"]
 
 
 def test_external_models_cover_agents_billing_affiliate_seo_funnel_and_privacy() -> None:
@@ -190,19 +167,3 @@ def test_local_route_and_api_ownership_contracts_are_explicit() -> None:
     assert apis_by_method[("GET", "/v1/evidence/export")].auth_required is True
     assert apis_by_method[("GET", "/v1/settings")].writes_state is False
     assert apis_by_method[("POST", "/v1/settings")].category == "config"
-
-
-def test_exported_json_fixture_matches_runtime_contract() -> None:
-    fixture_path = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "codex_plugin_scanner"
-        / "guard"
-        / "schemas"
-        / "guard_product_model_v1.json"
-    )
-
-    fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
-
-    assert fixture["version"] == GUARD_PRODUCT_MODEL_VERSION
-    assert fixture == export_product_model_v1()

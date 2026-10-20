@@ -10,6 +10,19 @@ pub(crate) fn evaluate(
     if bytes.len() > 2 * 1024 * 1024 || operation.len() > 64 {
         return Err("native_restricted_pytest_input_invalid");
     }
+    if matches!(
+        operation,
+        "linux_readonly_argv"
+            | "linux_read_grants"
+            | "linux_elf_loader"
+            | "linux_socket_filter"
+            | "linux_mount_targets"
+            | "linux_validate_records"
+    ) {
+        let result = crate::restricted_linux_launch::evaluate(operation, input, budget.deadline());
+        budget.check()?;
+        return Ok(result);
+    }
     if operation == "process_ceiling" {
         let result = crate::restricted_process_ceiling::evaluate(budget.deadline());
         budget.check()?;
@@ -26,6 +39,18 @@ pub(crate) fn evaluate(
         result
     } else if operation == "normalized_command" {
         guard_command::restricted_command::evaluate_normalized(input)
+    } else if cfg!(windows) && operation == "prepare_inline" {
+        #[cfg(windows)]
+        let result = crate::windows_readonly::prepare_inline(input);
+        #[cfg(not(windows))]
+        let result = Value::Null;
+        result
+    } else if cfg!(windows) && operation == "prepare_node_build" {
+        #[cfg(windows)]
+        let result = crate::windows_node_build::prepare_node_build(input);
+        #[cfg(not(windows))]
+        let result = Value::Null;
+        result
     } else {
         serde_json::json!({
             "reason_code": "pytest_restricted_sandbox_unavailable",

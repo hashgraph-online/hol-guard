@@ -72,6 +72,29 @@ fn daemon_answer_is_forwarded_with_its_proof() {
     assert_eq!(body["tool_name"], "Bash");
 }
 
+/// Claude writes the hook body as UTF-8 whatever the console code page is,
+/// so the bridge reads bytes and hands them on as bytes. A path with accents
+/// has to reach the daemon spelled the way the harness sent it.
+#[test]
+fn a_non_ascii_payload_reaches_the_daemon_unchanged() {
+    const PATH: &str = "C:/Users/zo\u{eb}/caf\u{e9}.txt";
+    let input = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": PATH},
+    })
+    .to_string();
+    let (home, daemon) = home_with_daemon("utf8", vec![Exchange::Hook(200, ALLOW.to_owned())]);
+    let config = config_for(&home, fallback_exiting(3), Vec::new());
+    assert_eq!(respond(&config, &input), ALLOW);
+    let hooks = daemon.join().unwrap();
+    let [hook] = hooks.as_slice() else {
+        panic!("one hook request, got {hooks:?}");
+    };
+    let body: serde_json::Value = serde_json::from_slice(&hook.body).unwrap();
+    assert_eq!(body["tool_input"]["file_path"], PATH);
+}
+
 #[test]
 fn refused_authentication_denies_without_fallback() {
     let (home, daemon) = home_with_daemon(
@@ -89,25 +112,38 @@ fn refused_authentication_denies_without_fallback() {
 }
 
 #[test]
-fn unavailable_daemon_falls_back_to_the_local_hook() {
+fn unavailable_daemon_is_denied_without_the_local_hook() {
     let (home, daemon) = home_with_daemon(
         "fallback",
         vec![Exchange::Hook(503, "unavailable".to_owned())],
     );
     let config = config_for(&home, fallback_printing(FALLBACK_ALLOW), Vec::new());
-    assert_eq!(respond(&config, PRE_TOOL_USE), FALLBACK_ALLOW);
+    assert_eq!(
+        degraded_reason(&respond(&config, PRE_TOOL_USE)),
+        "HOL Guard could not complete native review \
+         (daemon returned HTTP 503: unavailable) and denied this action."
+    );
     daemon.join().unwrap();
 }
 
 #[test]
-fn missing_state_reports_the_failed_fallback() {
+fn overloaded_daemon_is_denied_without_the_local_hook() {
+    let (home, daemon) = home_with_daemon("overload", vec![Exchange::Hook(429, "busy".to_owned())]);
+    let config = config_for(&home, fallback_printing(FALLBACK_ALLOW), shell("exit 0"));
+    let reason = degraded_reason(&respond(&config, PRE_TOOL_USE));
+    assert!(reason.contains("HTTP 429"), "{reason}");
+    assert_eq!(daemon.join().unwrap().len(), 1);
+}
+
+#[test]
+fn missing_state_is_denied_without_the_local_hook() {
     let home = GuardHome::new("missing");
     std::fs::remove_file(home.home.join("daemon-discovery-key")).unwrap();
     let config = config_for(&home, fallback_exiting(3), Vec::new());
     assert_eq!(
         degraded_reason(&respond(&config, PRE_TOOL_USE)),
         "HOL Guard could not complete native review \
-         (daemon state is unavailable; fallback exited 3) and denied this action."
+         (daemon state is unavailable) and denied this action."
     );
 }
 
@@ -130,7 +166,7 @@ fn non_http_fallback_url_is_a_control_plane_failure() {
 }
 
 #[test]
-fn query_for_another_home_goes_to_the_fallback() {
+fn query_for_another_home_is_refused_without_the_fallback() {
     let home = GuardHome::new("mismatch");
     let mut config: serde_json::Value =
         serde_json::from_str(&config_for(&home, fallback_exiting(3), Vec::new())).unwrap();
@@ -138,7 +174,7 @@ fn query_for_another_home_goes_to_the_fallback() {
     assert_eq!(
         degraded_reason(&respond(&config.to_string(), PRE_TOOL_USE)),
         "HOL Guard could not complete native review (daemon state path does not \
-         match the hook Guard home; fallback exited 3) and denied this action."
+         match the hook Guard home) and denied this action."
     );
 }
 
@@ -173,10 +209,40 @@ fn failed_recovery_retry_is_reported() {
         reason.contains("; daemon recovery retry failed: "),
         "{reason}"
     );
-    assert!(
-        reason.ends_with("; fallback exited 3) and denied this action."),
-        "{reason}"
+    assert!(reason.ends_with(") and denied this action."), "{reason}");
+    assert!(!reason.contains("fallback"), "{reason}");
+}
+
+#[test]
+fn a_daemon_the_recovery_starts_later_answers_the_hook_once() {
+    let (home, daemon) = home_with_daemon(
+        "started-later",
+        vec![
+            Exchange::ProveIdentity,
+            Exchange::Hook(200, ALLOW.to_owned()),
+        ],
     );
+    // The recovery command only schedules the start: the daemon's state
+    // appears a little after the command has already exited.
+    let pending = home.scratch("pending-state.json");
+    std::fs::rename(&home.state_path, &pending).unwrap();
+    let marker = home.scratch("recovery-ran");
+    let config = config_for(
+        &home,
+        fallback_exiting(3),
+        shell(&format!(": > '{}'", marker.display())),
+    );
+    let state_path = home.state_path.clone();
+    let publisher = std::thread::spawn(move || {
+        while !marker.exists() {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        std::thread::sleep(Duration::from_millis(300));
+        std::fs::rename(pending, state_path).unwrap();
+    });
+    assert_eq!(respond(&config, PRE_TOOL_USE), ALLOW);
+    publisher.join().unwrap();
+    assert_eq!(daemon.join().unwrap().len(), 1);
 }
 
 #[test]
@@ -185,6 +251,7 @@ fn recovered_daemon_answers_the_retry() {
         "recovered",
         vec![
             Exchange::RefuseChallenge(503, "down"),
+            Exchange::ProveIdentity,
             Exchange::Hook(200, ALLOW.to_owned()),
         ],
     );
@@ -206,7 +273,6 @@ fn recovered_daemon_answers_the_retry() {
 fn config_requires_string_fields_and_a_fallback() {
     let valid = r#"{"state_path":"/h/daemon-state.json","fallback_daemon_url":"http://127.0.0.1:1","query":"guard-home=%2Fh","fallback_command":["guard"]}"#;
     let config = parse_config(valid).unwrap();
-    assert_eq!(config.fallback_command, ["guard"]);
     assert!(config.recovery_command.is_empty());
     for invalid in [
         "[]",
@@ -339,4 +405,28 @@ fn fallback_daemon_url_must_be_loopback_http() {
 fn endpoint_query_drops_controls_and_fragment() {
     assert_eq!(endpoint_query("a=1\t&b=2\n#frag"), "a=1&b=2");
     assert_eq!(endpoint_query("guard-home=%2Fh"), "guard-home=%2Fh");
+}
+
+/// Claude gives a hook command ten seconds before it gives up on it, and a
+/// hook that misses that window leaves the harness with no verdict at all.
+/// Every timeout the bridge can spend has to fit inside one hook call, and
+/// a daemon request that spends its whole budget still has to leave a
+/// recovery window worth starting.
+#[test]
+fn timeouts_stay_under_the_harness_budget() {
+    const HARNESS_BUDGET: Duration = Duration::from_secs(10);
+
+    assert!(HOOK_DEADLINE < HARNESS_BUDGET);
+    assert!(DAEMON_IO_TIMEOUT <= HOOK_DEADLINE);
+    assert!(RECOVERY_TIMEOUT <= HOOK_DEADLINE);
+    assert!(MINIMUM_RECOVERY > Duration::ZERO);
+    assert!(MINIMUM_RECOVERY <= RECOVERY_TIMEOUT);
+    // `recover_and_retry` only starts a recovery when the window left is at
+    // least `MINIMUM_RECOVERY`, so a first request that times out must not
+    // have eaten the whole deadline.
+    assert!(DAEMON_IO_TIMEOUT + MINIMUM_RECOVERY <= HOOK_DEADLINE);
+    // Each stage caps its own timeout against the absolute deadline, so the
+    // stages do not add up past it: the retry after a recovery gets what is
+    // left of the hook deadline, not another full IO timeout.
+    assert!(capped(Instant::now() + MINIMUM_RECOVERY, DAEMON_IO_TIMEOUT) <= MINIMUM_RECOVERY);
 }

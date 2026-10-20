@@ -12,6 +12,8 @@ from .native_policy_snapshot_codec import _strict_json_loads_v3
 from .native_policy_snapshot_constants import (
     _PUBLISH_RETRY_MAX_SECONDS,
     _REQUIRED_PUBLISH_FEATURES,
+    _TRANSIENT_PUBLISH_RETRY_MAX_SECONDS,
+    TRANSIENT_PUBLICATION_ERRORS,
     NativePolicySnapshotError,
 )
 from .native_policy_snapshot_direct_lane import (
@@ -140,6 +142,7 @@ class NativePolicySnapshotPublicationMixin:
                 )
                 renewal_after_generation = publisher._renewal_after_generation
             if should_publish:
+                publisher._note_publish_attempt()
                 publisher._publish_once(renew_after_generation=renewal_after_generation)
 
     def _recheck_direct_lane_review_facts(self) -> None:
@@ -210,8 +213,11 @@ class NativePolicySnapshotPublicationMixin:
             if not (publisher._acked and isinstance(expires, int) and expires > int(publisher._wall_clock() * 1_000)):
                 publisher._acked = False
             publisher._failure_count += 1
+            revive_due = publisher._note_publish_failure_locked(safe)
             delay = min(
-                _PUBLISH_RETRY_MAX_SECONDS,
+                _TRANSIENT_PUBLISH_RETRY_MAX_SECONDS
+                if safe in TRANSIENT_PUBLICATION_ERRORS
+                else _PUBLISH_RETRY_MAX_SECONDS,
                 publisher._poll_interval_seconds * (2 ** min(publisher._failure_count - 1, 5)),
             )
             retry_seed = hashlib.sha256(f"{publisher._failure_count}:{safe}".encode("ascii")).digest()
@@ -226,6 +232,8 @@ class NativePolicySnapshotPublicationMixin:
                 * retry_fraction
             )
             publisher._condition.notify_all()
+        if revive_due:
+            publisher._start_resident_revival()
 
     def _publish_once(self, *, renew_after_generation: int | None = None) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -435,6 +443,7 @@ class NativePolicySnapshotPublicationMixin:
                     publisher._last_error = None
                     publisher._renewal_after_generation = None
                     publisher._failure_count = 0
+                    publisher._note_resident_acknowledged_locked()
                     publisher._retry_not_before_monotonic = None
                     publisher._schedule_renewal_locked(snapshot)
                     publisher._commit_workspace_readiness_locked(compiled_workspaces)

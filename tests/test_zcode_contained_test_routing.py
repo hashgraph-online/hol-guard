@@ -365,3 +365,20 @@ def test_linux_routes_only_the_workspace_sandbox(tmp_path, monkeypatch, reason, 
     }
     result = contained_zcode_response(receipt, input_text=json.dumps(payload), config=config, cli_args=[])
     assert (result is not None) is routed
+
+
+def test_windows_sink_bootstrap_has_no_escaped_backslashes(tmp_path, monkeypatch):
+    """Git Bash halves doubled backslashes, so the bootstrap must not need them."""
+    from codex_plugin_scanner.guard.adapters import zcode_contained_tests as adapter
+
+    package_root = tmp_path / "site\\packages"
+    package_root.mkdir(parents=True)
+    config = {"python_executable": sys.executable, "package_root": str(package_root)}
+    monkeypatch.setattr(sys, "platform", "darwin")
+    unchanged = adapter._sink_command_prefix(config)
+    assert repr(str(package_root.resolve())) in unchanged[-1]
+    monkeypatch.setattr(sys, "platform", "win32")
+    windows = adapter._sink_command_prefix(config)
+    assert windows[:-1] == unchanged[:-1]
+    assert "\\" not in windows[-1]
+    assert repr(str(package_root.resolve()).replace("\\", "/")) in windows[-1]

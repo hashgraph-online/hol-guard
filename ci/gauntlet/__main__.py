@@ -9,18 +9,20 @@ import math
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
-from .catalog import load_catalog
+from .catalog import CATALOG, CONNECTOR_CATALOG, load_catalog
 from .parallel import qualification_jobs
 from .provider import REASONING_EFFORTS
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Dispatch Gauntlet commands and return a process exit status."""
     parser = argparse.ArgumentParser(description="Guard Gauntlet: real agents, real tools, observed protection")
     sub = parser.add_subparsers(dest="command", required=True)
-    sub.add_parser("list", help="List the fixed required scenarios without running them")
+    listing = sub.add_parser("list", help="List the fixed required scenarios without running them")
+    listing.add_argument("--catalog", choices=("core", "connector-setup"), default="core")
     run = sub.add_parser("run", help="Run actual Oh My Pi with a live inference provider")
     run.add_argument("--expected-source-sha")
     run.add_argument("--candidate-sha", help="PR head when testing its exact two-parent merge")
@@ -60,7 +62,8 @@ def main() -> int:
     run.add_argument(
         "--fail-fast",
         action="store_true",
-        help="Stop scheduling new cases after the first non-pass outcome; in-flight cases finish normally",
+        help="Stop scheduling new cases after the first false positive or false negative; a case the model "
+        "never exercised, a dead provider round or a host-tool failure is recorded and the run continues",
     )
     run.add_argument(
         "--host-slots",
@@ -99,10 +102,10 @@ def main() -> int:
     run.add_argument("--work-root", type=Path, help="Parent for newly created disposable fixtures")
     run.add_argument(
         "--profile",
-        choices=("core", "contained-bun-vitest", "full-tasks"),
+        choices=("core", "contained-bun-vitest", "full-tasks", "approval-retry", "connector-setup"),
         default="core",
-        help="Complete core qualification, the additive contained Bun/Vitest profile, or full developer tasks "
-        "(never merge-qualifying)",
+        help="Complete core qualification, the additive contained Bun/Vitest profile, full developer tasks, "
+        "the approve-then-retry lane or the connector-setup lane (only core qualifies a merge)",
     )
     run.add_argument(
         "--full-task-mode",
@@ -118,6 +121,41 @@ def main() -> int:
     from . import full_task_cli
 
     full_task_cli.add_arguments(run)
+    installed = sub.add_parser(
+        "installed",
+        help="Installed acceptance: run the shipped executable's own install and hooks (never a merge gate)",
+    )
+    installed.add_argument("--runtime", type=Path, required=True, help="The hol-guard executable under test")
+    installed.add_argument(
+        "--harness",
+        nargs="+",
+        default=["claude-code", "codex", "omp"],
+        help="Harnesses to install and check",
+    )
+    installed.add_argument(
+        "--repeat",
+        type=int,
+        default=10,
+        help="Times each replay case runs against identical input; any disagreement fails the lane",
+    )
+    installed.add_argument(
+        "--require-frozen",
+        action="store_true",
+        help="Refuse a wheel console script; accept only the frozen bundle the Desktop app installs",
+    )
+    installed.add_argument(
+        "--no-aged-store",
+        dest="aged_store",
+        action="store_false",
+        help="Skip the pass that installs over a home with upgrade history",
+    )
+    installed.add_argument("--output", type=Path, required=True)
+    installed.add_argument("--keep-work", action="store_true", help="Keep the lane's homes even when it passes")
+    installed.add_argument(
+        "--report-only",
+        action="store_true",
+        help="Write and print the findings but exit 0; for runs that test the lane rather than the build",
+    )
     verify = sub.add_parser("verify", help="Independently reconcile a complete evidence package")
     verify.add_argument("directory", type=Path)
     verify.add_argument("--expected-sha", required=True)
@@ -138,9 +176,13 @@ def main() -> int:
     )
     qualify.add_argument("--sha", required=True, help="Full commit of the tested source or test merge")
     qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
-    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
+    # The ceiling is spelled here rather than imported so the parser stays cheap to build;
+    # `test_attempt_budget` pins it to `qualify.ATTEMPT_LIMIT`, which does the rejecting.
+    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-10)")
     qualify.add_argument(
-        "--jobs", type=int, default=qualification_jobs(),
+        "--jobs",
+        type=int,
+        default=qualification_jobs(),
         help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
     )
     qualify.add_argument(
@@ -162,6 +204,7 @@ def main() -> int:
         help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
+    qualify.add_argument("--native-route", help="Explicit pinned native OMP backend (default: Luna)")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
     qualify.add_argument(
         "--run-root",
@@ -173,7 +216,14 @@ def main() -> int:
         type=Path,
         help="Parent for the short per-attempt fixture work directories (default /tmp/hol-guard-gauntlet-<uid>/w)",
     )
-    qualify.add_argument("--wheel", type=Path, help="Prebuilt native wheel; required off macOS")
+    qualify.add_argument(
+        "--wheel", type=Path, help="Prebuilt native wheel; required on hosts other than macOS and Linux x86_64"
+    )
+    qualify.add_argument(
+        "--wheel-release-assets",
+        type=Path,
+        help="Directory of command packs that --wheel's build exported, served to the extension-control cases",
+    )
     qualify.add_argument(
         "--release-profile-wheel",
         action="store_true",
@@ -182,17 +232,46 @@ def main() -> int:
     )
     qualify.add_argument("--sdk-root", type=Path, help="Pinned SDK directory; skips the lock-keyed SDK cache")
     qualify.add_argument("--keep-work", action="store_true", help="Keep passing attempts' work roots")
+    qualify.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Set up the SDK, wheel and installed candidate, print their paths and stop; "
+        "for local `run` invocations, never qualifies",
+    )
     qualify.add_argument("--timeout", type=float, default=300)
     qualify.add_argument("--max-inference-rounds", type=int, default=32)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     try:
         if args.command == "list":
-            print(
-                json.dumps(
-                    [{"id": s.id, "expectation": s.expectation, "oracle": s.oracle} for s in load_catalog()], indent=2
-                )
-            )
+            catalog = load_catalog(CONNECTOR_CATALOG if args.catalog == "connector-setup" else CATALOG)
+            rows = [{"id": s.id, "expectation": s.expectation, "oracle": s.oracle} for s in catalog]
+            print(json.dumps(rows, indent=2))
             return 0
+        if args.command == "installed":
+            from .harness_case import require_account_database
+            from .installed_lane import run_lane
+
+            if not 1 <= args.repeat <= 100:
+                raise ValueError("--repeat is supported from 1 through 100")
+            require_account_database()
+            evidence = run_lane(
+                runtime_path=args.runtime,
+                harnesses=list(args.harness),
+                repeat=args.repeat,
+                require_frozen=args.require_frozen,
+                aged_store=args.aged_store,
+                output=args.output,
+                work_root=(args.output / "work") if args.keep_work else None,
+            )
+            print(json.dumps({key: evidence[key] for key in ("version", "accepted", "failures") if key in evidence}))
+            # The lane asserts against the shipped build, so a run on a pull
+            # request that only changes the lane would fail for defects the
+            # change did not introduce and cannot fix. Report-only keeps those
+            # findings visible without turning the product's current state into
+            # a merge gate; the scheduled and dispatched runs stay strict.
+            if args.report_only:
+                return 0
+            return 0 if evidence.get("accepted") else 1
         if args.command == "pack":
             from .bundle import pack as pack_bundle
             from .verify import verify_report
@@ -233,6 +312,8 @@ def main() -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
+        if args.profile == "connector-setup" and args.harness == "omp":
+            raise ValueError(f"--profile {args.profile} runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
         if args.harness_cli or args.harness_model:
@@ -263,8 +344,8 @@ def main() -> int:
         from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
-        if args.profile != "core" and args.jobs != 1:
-            raise ValueError("--jobs is only supported by the core profile")
+        if args.profile not in ("core", "full-tasks") and args.jobs != 1:
+            raise ValueError("--jobs is only supported by the core and full-tasks profiles")
         if args.profile != "full-tasks" and args.full_task_mode != "enforce":
             raise ValueError("--full-task-mode requires --profile full-tasks")
         if args.profile == "full-tasks" and (
@@ -301,6 +382,7 @@ def main() -> int:
         from .contained import run_contained_profile
         from .runner import run_suite
 
+        route_health: Callable[[], str | None] | None = None
         with contextlib.ExitStack() as stack:
             if args.native_luna_route:
                 from .luna_route import NativeLunaRoute
@@ -320,6 +402,7 @@ def main() -> int:
                     )
                 )
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))
+                route_health = route.health
             else:
                 provider = {
                     "base_url": args.provider_url,
@@ -356,10 +439,12 @@ def main() -> int:
                     candidate_sha=args.candidate_sha,
                     jobs=args.jobs,
                     fail_fast=args.fail_fast,
+                    route_health=route_health,
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
                     max_load=args.max_load,
                     max_load_wait=args.max_load_wait if args.max_load_wait is not None else 180.0,
+                    profile=args.profile,
                 )
         print(
             json.dumps(
@@ -393,30 +478,56 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
     if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
         raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
-    if args.profile != "core":
-        raise ValueError("--harness supports only the core profile")
-    if args.full_task_mode != "enforce":
-        raise ValueError("--full-task-mode is not supported with --harness")
+    if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
+        raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
+    if args.profile != "full-tasks" and args.full_task_mode != "enforce":
+        raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
         raise ValueError("host timeout is outside supported bounds")
-    from .harness_suite import run_harness_suite
+    from .harness_case import require_account_database
 
-    report = run_harness_suite(
-        harness=args.harness,
-        expected_source_sha=args.expected_source_sha,
-        output=args.output,
-        model_timeout=args.timeout,
-        selected_ids=args.cases,
-        executable=args.harness_cli,
-        model=args.harness_model,
-        work_root=args.work_root,
-        candidate_sha=args.candidate_sha,
-        jobs=args.jobs,
-    )
+    # All managed installs, including Cursor, acquire the lifecycle lock.
+    # Fail before setting up a lane if the OS account cannot be resolved.
+    require_account_database()
+    if args.profile == "full-tasks":
+        from .full_task_cli import run_harness_profile
+
+        report = run_harness_profile(args)
+    elif args.profile in {"approval-retry", "connector-setup"}:
+        from .approval_retry_suite import run_approval_retry_suite
+
+        report = run_approval_retry_suite(
+            catalog_path=CONNECTOR_CATALOG if args.profile == "connector-setup" else None,
+            harness=args.harness,
+            expected_source_sha=args.expected_source_sha,
+            output=args.output,
+            model_timeout=args.timeout,
+            selected_ids=args.cases,
+            executable=args.harness_cli,
+            model=args.harness_model,
+            work_root=args.work_root,
+            candidate_sha=args.candidate_sha,
+        )
+    else:
+        from .harness_suite import run_harness_suite
+
+        report = run_harness_suite(
+            harness=args.harness,
+            expected_source_sha=args.expected_source_sha,
+            output=args.output,
+            model_timeout=args.timeout,
+            selected_ids=args.cases,
+            executable=args.harness_cli,
+            model=args.harness_model,
+            work_root=args.work_root,
+            candidate_sha=args.candidate_sha,
+            jobs=args.jobs,
+        )
     print(
         json.dumps(
             {
                 "harness": args.harness,
+                "profile": args.profile,
                 "pass": report["pass"],
                 "merge_qualified": False,
                 "scenarios": len(report["cases"]),

@@ -7,13 +7,14 @@ upstream recovery reads it unchanged. The relay asks the resident for every
 ``tools/call`` decision and blocks any call the resident does not decide, so
 selecting it never widens what a call may do.
 
-Installers select the relay only when the validated runtime advertises
-``mcp-stdio-relay-v1``; until then they keep launching the Python proxy.
-``HOL_GUARD_MCP_RELAY=python`` keeps the Python proxy, like the hook bridge
-overrides. ``HOL_GUARD_MCP_RELAY=native`` is a pre-activation canary for test
-installs: it selects the relay from a validated runtime that serves the
-resident's relay decision before the relay itself is advertised. Calls the
-resident defers are still refused.
+Installers select the relay when the validated runtime advertises
+``mcp-stdio-relay-v1``; otherwise they keep launching the
+Python proxy. A session whose calls the resident cannot decide is handed to the
+Python proxy by the relay at startup. ``HOL_GUARD_MCP_RELAY=python`` keeps the
+Python proxy, like the hook bridge overrides. ``HOL_GUARD_MCP_RELAY=native``
+selects the relay from any validated runtime that serves the resident's relay
+decision, including one that does not advertise the relay. Calls the resident
+defers are still refused.
 """
 
 from __future__ import annotations
@@ -36,7 +37,7 @@ def native_mcp_relay() -> Path | None:
     """The validated native runtime that should launch MCP proxies, or None."""
 
     selection = os.environ.get(MCP_RELAY_SELECTION_ENV)
-    if selection == "python" or os.name == "nt" or getattr(sys, "frozen", False):
+    if selection == "python" or getattr(sys, "frozen", False):
         return None
     if selection == "native":
         return _validated_runtime(NATIVE_MCP_RELAY_DECIDE_FEATURE)

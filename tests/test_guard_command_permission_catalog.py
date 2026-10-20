@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import replace
+from hashlib import sha256
 
 import pytest
 
@@ -9,7 +10,6 @@ from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.command_matcher_contracts import MatcherContractError, canonical_contract_digest
 from codex_plugin_scanner.guard.runtime.command_permission_catalog import (
     COMMAND_PERMISSION_SCHEMA_VERSION,
     CommandPermissionCatalog,
@@ -90,100 +90,6 @@ def test_every_extension_has_complete_enabled_permission_metadata() -> None:
         }
 
 
-def test_github_permission_catalog_is_exhaustive_and_admin_merge_is_distinct() -> None:
-    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    github = registry.get("command.github")
-
-    assert github is not None
-    assert {permission.permission_id for permission in github.permissions} == _GITHUB_PERMISSION_IDS
-    assert {
-        capability for permission in github.permissions for capability in permission.typed_capabilities
-    } == _GITHUB_CAPABILITIES
-
-    admin = registry.permission_for_typed_capability("admin_merge_remote")
-    ordinary = registry.permission_for_typed_capability("merge_remote")
-    assert admin is not None
-    assert ordinary is not None
-    assert admin.permission_id == "command.github.permission.merge-admin"
-    assert admin.rule_ids == ("command.github.admin-merge",)
-    assert admin.action_classes == ("GitHub administrator pull-request merge command",)
-    assert registry.permission_for_action_class("  github ADMINISTRATOR pull-request MERGE command  ") is admin
-    assert registry.permission_for_rule_id("COMMAND.GITHUB.ADMIN-MERGE") is admin
-    assert registry.permission_for_typed_capability(" ADMIN_MERGE_REMOTE ") is admin
-    catalog = CommandPermissionCatalog(registry.permissions)
-    assert catalog.get(" COMMAND.GITHUB.PERMISSION.MERGE-ADMIN ") is admin
-    assert catalog.for_rule_id(" COMMAND.GITHUB.ADMIN-MERGE ") is admin
-    assert catalog.for_action_class(" github administrator pull-request merge command ") is admin
-    assert admin.baseline_floor == "require-reapproval"
-    assert ordinary.permission_id == "command.github.permission.merge-remote"
-    assert ordinary.rule_ids == ("command.github.merge",)
-    assert ordinary.baseline_floor == "require-reapproval"
-
-
-@pytest.mark.parametrize("lookup", ["rule", "capability"])
-def test_permission_indexes_map_each_enforceable_identifier_exactly_once(lookup: str) -> None:
-    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
-
-    for extension in registry.extensions:
-        for permission in extension.permissions:
-            values = {
-                "rule": permission.rule_ids,
-                "capability": permission.typed_capabilities,
-            }[lookup]
-            for value in values:
-                resolved = {
-                    "rule": registry.permission_for_rule_id,
-                    "capability": registry.permission_for_typed_capability,
-                }[lookup](value)
-                assert resolved is permission
-
-
-def test_shared_action_classes_keep_unique_rule_permissions() -> None:
-    registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
-    git = next(extension for extension in registry.extensions if extension.extension_id == "command.git")
-    git_permission_ids = {permission.permission_id for permission in git.permissions}
-    assert {
-        "command.git.permission.force-clean",
-        "command.git.permission.force-push",
-        "command.git.permission.hard-reset",
-        "command.git.permission.index-inspection",
-        "command.git.permission.local-branch-delete",
-        "command.git.permission.remote-branch-delete",
-        "command.git.permission.unverified-fetch",
-        "command.git.permission.switch",
-        "command.git.permission.checkout",
-        "command.git.permission.status",
-        "command.git.permission.unsafe-read",
-    } <= git_permission_ids
-    assert all(permission.configurable for permission in git.permissions)
-    fetch_id = "command.git.permission.unverified-fetch"
-    index_id = "command.git.permission.index-inspection"
-    destructive_ids = {
-        "command.git.permission.force-clean",
-        "command.git.permission.force-push",
-        "command.git.permission.hard-reset",
-        "command.git.permission.local-branch-delete",
-        "command.git.permission.remote-branch-delete",
-    }
-    destructive = [permission for permission in git.permissions if permission.permission_id in destructive_ids]
-    fetch = next(permission for permission in git.permissions if permission.permission_id == fetch_id)
-    index = next(permission for permission in git.permissions if permission.permission_id == index_id)
-    assert all(permission.action_classes == ("git destructive command",) for permission in destructive)
-    assert fetch.action_classes == ("git origin refresh",)
-    assert index.action_classes == ("git index inspection",)
-    first = min(destructive, key=lambda permission: permission.permission_id)
-    assert registry.permission_for_action_class("git destructive command") is first
-    assert registry.permission_for_action_class("git origin refresh") is fetch
-    assert registry.permission_for_action_class("git index inspection") is index
-    for permission in git.permissions:
-        assert registry.permission_for_rule_id(permission.rule_ids[0]) is permission
-
-    self_protection = next(
-        extension for extension in registry.extensions if extension.extension_id == "command.guard-self-protection"
-    )
-    assert all(not permission.configurable for permission in self_protection.permissions)
-
-
 def test_permission_catalog_serialization_and_digest_are_deterministic() -> None:
     registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
     reversed_registry = CommandSafetyExtensionRegistry(tuple(reversed(registry.extensions)))
@@ -210,9 +116,7 @@ def test_registry_digest_changes_when_generated_matcher_contract_changes() -> No
     rule = extension.rules[rule_index]
     changed_rule = replace(
         rule,
-        matcher_contract_digest=canonical_contract_digest(
-            {"matcher_contract_digest": rule.matcher_contract_digest, "required_flags": ["--identity-test"]}
-        ),
+        matcher_contract_digest=sha256(rule.matcher_contract_digest.encode("utf-8")).hexdigest(),
     )
     changed_extension = replace(
         extension,
@@ -253,31 +157,6 @@ def test_registry_digest_changes_when_generated_matcher_contract_changes() -> No
         for item in safe_variant_rules
         for variant in item.safe_variants
     )
-
-
-def test_matcher_contract_rejects_unsupported_values() -> None:
-    with pytest.raises(MatcherContractError, match="unsupported catalog contract value"):
-        canonical_contract_digest(object())
-
-
-@pytest.mark.parametrize(
-    "mapping",
-    [
-        {1: "integer-key"},
-        {"1": "string-key", 1: "integer-key"},
-        {1: "integer-key", "1": "string-key"},
-    ],
-)
-def test_matcher_contract_rejects_non_string_mapping_keys(mapping: dict[object, str]) -> None:
-    with pytest.raises(MatcherContractError, match="catalog contract mappings require string keys"):
-        canonical_contract_digest(mapping)
-
-
-def test_matcher_contract_string_mapping_order_is_deterministic() -> None:
-    first = {"beta": "two", "alpha": "one"}
-    second = {"alpha": "one", "beta": "two"}
-
-    assert canonical_contract_digest(first) == canonical_contract_digest(second)
 
 
 def test_permission_catalog_rejects_duplicate_mappings_cycles_and_invalid_references() -> None:

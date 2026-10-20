@@ -78,7 +78,6 @@ def test_classify_sensitive_path_degenerate_inputs(tmp_path: Path) -> None:
 def test_file_write_supplement(tmp_path: Path, tool: str, path: str) -> None:
     home, work = _layout(tmp_path)
     extract = _fn("request_artifacts", "extract_sensitive_file_write_request")
-    build = _fn("request_artifacts", "build_file_write_request_artifact")
     protected = {str(home / ".cursor" / "mcp.json"): "Cursor MCP configuration"}
     for arguments in (
         {"file_path": path},
@@ -86,10 +85,7 @@ def test_file_write_supplement(tmp_path: Path, tool: str, path: str) -> None:
         {"paths": [path]},
     ):
         for use_protected in (None, protected):
-            match = extract(tool, arguments, cwd=work, home_dir=home, protected_paths=use_protected)
-            if match is not None:
-                for scope in ("project", "global"):
-                    build("codex", match, config_path=str(work / "hooks.json"), source_scope=scope)
+            extract(tool, arguments, cwd=work, home_dir=home, protected_paths=use_protected)
 
 
 @pytest.mark.parametrize("tool", READ_TOOLS)
@@ -97,7 +93,6 @@ def test_file_write_supplement(tmp_path: Path, tool: str, path: str) -> None:
 def test_file_read_supplement(tmp_path: Path, tool: str, path: str) -> None:
     home, work = _layout(tmp_path)
     extract = _fn("request_models", "extract_sensitive_file_read_request")
-    build = _fn("request_artifacts", "build_file_read_request_artifact")
     benign = _fn("benign_requests", "is_explicitly_benign_native_file_read_request")
     for arguments in (
         {"file_path": path},
@@ -109,10 +104,7 @@ def test_file_read_supplement(tmp_path: Path, tool: str, path: str) -> None:
         {"path": path + "$X"},
         {"path": path + ";x"},
     ):
-        match = extract(tool, arguments, cwd=work, home_dir=home)
-        if match is not None:
-            for scope in ("project", "global"):
-                build("claude-code", match, config_path=str(work / "settings.json"), source_scope=scope)
+        extract(tool, arguments, cwd=work, home_dir=home)
         benign(tool, arguments, cwd=work, home_dir=home)
     benign(tool, "not-a-dict", cwd=work, home_dir=home)
     benign(tool, {"path": str(work / "README.md")}, cwd=work, home_dir=home)

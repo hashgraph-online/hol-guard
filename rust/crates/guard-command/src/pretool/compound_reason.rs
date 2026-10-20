@@ -67,13 +67,13 @@ pub(super) fn unproven_steps_reason(
     } else {
         ""
     };
-    let (noun, verb) = if unproven.len() == 1 {
-        ("Step", "is")
+    let (noun, verb, need) = if unproven.len() == 1 {
+        ("Step", "is", "needs")
     } else {
-        ("Steps", "are")
+        ("Steps", "are", "need")
     };
     Some(format!(
-        "HOL Guard requires review because this command chains {total} steps and {noun} {}{more} ({}) {verb} not proven read-only. The other steps were proven safe; run them as separate commands, and approve the named {} in the HOL Guard inbox.",
+        "HOL Guard requires review because this command chains {total} steps and {noun} {}{more} ({}) {verb} not proven read-only. Run the proven-safe steps as separate commands; only the unproven {} {need} review.",
         steps.join(", "),
         labels.join(", "),
         noun.to_lowercase(),
@@ -82,7 +82,7 @@ pub(super) fn unproven_steps_reason(
 
 /// The executable basename plus a subcommand-shaped first argument, or a
 /// neutral word when neither token has a safe shape.
-fn step_label(segment: &crate::CommandSegmentV1) -> String {
+pub(super) fn step_label(segment: &crate::CommandSegmentV1) -> String {
     let basename = segment
         .executable
         .as_deref()

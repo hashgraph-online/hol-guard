@@ -23,6 +23,13 @@ from .restricted_pytest_model import (
 )
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
 
+# Appended when a read-only run fails after printing a denied file operation.
+READ_ONLY_WRITE_DENIAL_NOTE = (
+    "This run hit a denied file operation (EPERM or EROFS). HOL Guard runs these tests with "
+    "the project read-only; only $TMPDIR is writable. If a test writes reports, caches or other "
+    "files into the project, point that output at $TMPDIR and run the same command again."
+)
+
 
 def _tsx_package_dir(command: Sequence[str]) -> Path | None:
     """Directory of the tsx package named by a contained `--import` loader."""
@@ -62,13 +69,14 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
 
 
 def prepare_restricted_vitest(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     return native_launch_plan(
         "prepare_vitest",
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=sys.platform,
         backend_executable=None,
         profile=VITEST_READ_ONLY_PROFILE_VERSION,
@@ -203,4 +211,7 @@ def run_restricted_node_plan(
             cwd=plan.cwd,
             node_virtual_address_space=plan.backend == "linux-bubblewrap",
             merge_stderr=merge_stderr,
+            write_denial_note=(
+                READ_ONLY_WRITE_DENIAL_NOTE if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION else None
+            ),
         )

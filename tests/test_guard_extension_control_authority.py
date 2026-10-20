@@ -360,7 +360,9 @@ def test_authenticated_catalog_upgrade_preserves_controls_and_records_provenance
     assert dict(persisted_legacy_manifest) == dict(legacy_manifest)
     assert persisted_upgraded_manifest is not None
     assert event is not None
-    assert json.loads(event["payload_json"]) == {
+    recorded_event = json.loads(event["payload_json"])
+    assert recorded_event.pop("provenance")["trigger"] == "catalog-migration"
+    assert recorded_event == {
         "previous_revision": 1,
         "revision": 2,
         "previous_catalog_digest": original_digest,

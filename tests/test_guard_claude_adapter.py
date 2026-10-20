@@ -10,7 +10,12 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import claude_code, claude_daemon_hook_bridge, claude_hook_argv, get_adapter
+from codex_plugin_scanner.guard.adapters import (
+    claude_code,
+    claude_hook_argv,
+    claude_hook_config,
+    get_adapter,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.claude_code import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
@@ -144,20 +149,22 @@ def test_claude_install_writes_session_start_and_command_hook_schema_and_is_idem
     assert {entry["matcher"] for entry in session_start} == {"startup", "resume", "clear", "compact"}
     assert all(entry["hooks"][0]["type"] == "command" for entry in session_start)
     assert len(pre_tool_use) == 1
-    assert pre_tool_use[0]["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert pre_tool_use[0]["matcher"] == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
     assert pre_tool_use[0]["hooks"][0]["type"] == "command"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in "\0".join(_handler_argv(pre_tool_use[0]["hooks"][0]))
     assert "url" not in pre_tool_use[0]["hooks"][0]
     assert pre_tool_use[0]["hooks"][0]["timeout"] == 30
     assert pre_tool_use[0]["hooks"][0]["statusMessage"] == "HOL Guard is checking this tool use"
     assert len(permission_request) == 1
-    assert permission_request[0]["matcher"] == "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    assert (
+        permission_request[0]["matcher"] == "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    )
     assert permission_request[0]["hooks"][0]["type"] == "command"
     assert permission_request[0]["hooks"][0]["timeout"] == 10
     assert permission_request[0]["hooks"][0]["statusMessage"] == "HOL Guard is reviewing this approval prompt"
     assert len(post_tool_use) == 1
     assert post_tool_use[0]["matcher"] == (
-        "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
+        "Bash|PowerShell|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*|AskUserQuestion"
     )
     assert post_tool_use[0]["hooks"][0]["type"] == "command"
     assert payload["hooks"].get("UserPromptSubmit", []) == []
@@ -254,6 +261,43 @@ def test_claude_install_replaces_legacy_http_guard_hooks(tmp_path):
     assert all("url" not in handler for handler in installed_handlers)
 
 
+def test_claude_refresh_adds_the_powershell_tool_to_an_older_matcher(tmp_path):
+    context = _build_context(tmp_path)
+    adapter = ClaudeCodeHarnessAdapter()
+    settings_path = context.home_dir / ".claude" / "settings.json"
+    older_matcher = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
+    guard_hook = {
+        "type": "http",
+        "url": "http://127.0.0.1:5371/v1/hooks/claude-code?guard-home=%2Fold",
+        "timeout": 30,
+    }
+    settings = {
+        "hooks": {
+            "PreToolUse": [{"matcher": older_matcher, "hooks": [guard_hook]}],
+            "PermissionRequest": [{"matcher": older_matcher, "hooks": [guard_hook]}],
+        }
+    }
+    _write_json(settings_path, settings)
+
+    assert claude_hook_config.missing_guard_hook_events(settings) == ["PreToolUse", "PermissionRequest"]
+
+    original_guard_daemon_url_for_home = claude_code.guard_daemon_url_for_home
+    original_load_guard_daemon_url = claude_code.load_guard_daemon_url
+    claude_code.guard_daemon_url_for_home = lambda _guard_home: "http://127.0.0.1:5888"
+    claude_code.load_guard_daemon_url = lambda _guard_home: "http://127.0.0.1:5999"
+    try:
+        adapter.refresh_runtime_hook_urls(context)
+    finally:
+        claude_code.guard_daemon_url_for_home = original_guard_daemon_url_for_home
+        claude_code.load_guard_daemon_url = original_load_guard_daemon_url
+
+    payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    for event in ("PreToolUse", "PermissionRequest"):
+        assert [entry["matcher"] for entry in payload["hooks"][event]] == [CLAUDE_GUARD_TOOL_MATCHER]
+    assert "PowerShell" in CLAUDE_GUARD_TOOL_MATCHER.split("|")
+    assert claude_hook_config.missing_guard_hook_events(payload) == []
+
+
 def test_claude_refresh_runtime_hook_urls_rewrites_stale_daemon_port(tmp_path):
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
@@ -343,7 +387,7 @@ def test_claude_shell_command_uses_list2cmdline_on_windows():
 
 
 def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
-    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
+    monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
     context = _build_context(tmp_path)
     adapter = ClaudeCodeHarnessAdapter()
     command_parts = adapter._daemon_hook_command_parts(context)
@@ -351,26 +395,6 @@ def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
     assert command_parts[0] == sys.executable
     assert command_parts[0] != "node"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
-
-
-def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path, monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_authenticated_transport(**kwargs):
-        captured.update(kwargs)
-        return "{}"
-
-    monkeypatch.setattr(claude_daemon_hook_bridge, "authenticated_claude_hook_response", fake_authenticated_transport)
-
-    response = claude_daemon_hook_bridge._post_to_loopback_daemon(
-        "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x",
-        "{}",
-        state_path=tmp_path / "guard-home" / "daemon-state.json",
-    )
-
-    assert response == "{}"
-    assert captured["query"] == "guard-home=x"
-    assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):
@@ -616,3 +640,15 @@ def test_claude_detect_tolerates_unreadable_markdown_artifacts(tmp_path):
 
     assert "claude-code:project:skill:review" in artifacts
     assert artifacts["claude-code:project:skill:review"].metadata == {}
+
+
+def test_claude_workspace_install_writes_global_settings_only(tmp_path: Path) -> None:
+    # Deliberate design: Guard hooks live in ~/.claude/settings.json; a workspace
+    # only scopes the hook URL. Pin it and ensure the manifest says so.
+    context = _build_context(tmp_path)
+    manifest = ClaudeCodeHarnessAdapter().install(context)
+
+    assert (context.home_dir / ".claude" / "settings.json").is_file()
+    assert not (context.workspace_dir / ".claude").exists()
+    assert manifest["config_path"] == str(context.home_dir / ".claude" / "settings.json")
+    assert any("installed globally" in str(note) for note in manifest["notes"])

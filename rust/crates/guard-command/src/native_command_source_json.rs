@@ -11,25 +11,36 @@ const MAX_VALUES: usize = 1_000_000;
 // Inline matcher trees add object/array syntax levels around each matcher.
 // Matcher depth itself is independently limited to 32 during lowering.
 const MAX_JSON_DEPTH: usize = 96;
+const MAX_OBJECT_MEMBERS: usize = 4_096;
+// A compiled program keys every lowered matcher node in one object, and
+// program admission accepts up to 16,384 nodes. Requests that embed a whole
+// packaged program (offline parity) must decode that same envelope.
+pub(super) const MAX_PROGRAM_OBJECT_MEMBERS: usize = 16_384;
+
+/// Retained work in one complete-program compilation stays within the existing
+/// compiler input budget. Charge validated compact bytes, never raw formatting.
+pub(super) fn compact_record(
+    value: &Value,
+    remaining: &mut usize,
+) -> Result<Vec<u8>, &'static str> {
+    let bytes = serde_json::to_vec(value).map_err(|_| "command_source_encoding_failed")?;
+    *remaining = remaining
+        .checked_sub(bytes.len())
+        .ok_or("command_source_catalog_work_budget_exceeded")?;
+    Ok(bytes)
+}
 
 pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
-    if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
-        return Err("command_source_bytes_invalid");
-    }
-    let mut remaining = MAX_VALUES;
-    let mut decoder = serde_json::Deserializer::from_slice(bytes);
-    let value = Seed {
-        remaining: &mut remaining,
-        depth: 0,
-    }
-    .deserialize(&mut decoder)
-    .map_err(|_| "command_source_json_invalid")?;
-    decoder.end().map_err(|_| "command_source_json_invalid")?;
-    // A source program must be a JSON object. Under serde_json
-    // `arbitrary_precision`, a bare number decodes through the private
-    // `$serde_json::private::Number` marker map and `is_object()` reports true;
-    // reject that marker shape too so scalars and ambiguous top-levels are
-    // refused regardless of numeric encoding.
+    decode_with_object_members(bytes, MAX_OBJECT_MEMBERS)
+}
+
+pub(super) fn decode_with_object_members(
+    bytes: &[u8],
+    max_object_members: usize,
+) -> Result<Value, &'static str> {
+    let value = decode_value(bytes, max_object_members)?;
+    // Authored source envelopes remain objects; immutable compiled metadata
+    // also contains arrays and uses the same strict bounded value decoder.
     let is_number_marker = value
         .as_object()
         .map(|map| map.len() == 1 && map.contains_key("$serde_json::private::Number"))
@@ -40,9 +51,27 @@ pub(super) fn decode(bytes: &[u8]) -> Result<Value, &'static str> {
     Ok(value)
 }
 
+pub(super) fn decode_value(bytes: &[u8], max_object_members: usize) -> Result<Value, &'static str> {
+    if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
+        return Err("command_source_bytes_invalid");
+    }
+    let mut remaining = MAX_VALUES;
+    let mut decoder = serde_json::Deserializer::from_slice(bytes);
+    let value = Seed {
+        remaining: &mut remaining,
+        depth: 0,
+        max_object_members,
+    }
+    .deserialize(&mut decoder)
+    .map_err(|_| "command_source_json_invalid")?;
+    decoder.end().map_err(|_| "command_source_json_invalid")?;
+    Ok(value)
+}
+
 struct Seed<'a> {
     remaining: &'a mut usize,
     depth: usize,
+    max_object_members: usize,
 }
 
 impl<'de> DeserializeSeed<'de> for Seed<'_> {
@@ -97,6 +126,7 @@ impl<'de> Visitor<'de> for Seed<'_> {
         while let Some(value) = sequence.next_element_seed(Seed {
             remaining: self.remaining,
             depth: self.depth + 1,
+            max_object_members: self.max_object_members,
         })? {
             if values.len() >= 4_096 {
                 return Err(A::Error::custom("source_items_limit"));
@@ -114,12 +144,16 @@ impl<'de> Visitor<'de> for Seed<'_> {
             if key == "$serde_json::private::Number" {
                 return Err(A::Error::custom("source_integer_limit"));
             }
-            if key.len() > 4_096 || values.len() >= 4_096 || values.contains_key(&key) {
+            if key.len() > 4_096
+                || values.len() >= self.max_object_members
+                || values.contains_key(&key)
+            {
                 return Err(A::Error::custom("source_duplicate_key_or_items_limit"));
             }
             let value = mapping.next_value_seed(Seed {
                 remaining: self.remaining,
                 depth: self.depth + 1,
+                max_object_members: self.max_object_members,
             })?;
             values.insert(key, value);
         }
@@ -154,12 +188,46 @@ mod tests {
     }
 
     #[test]
+    fn program_envelopes_admit_wide_node_maps_but_sources_do_not() {
+        let members = |count: usize| {
+            let fields: Vec<String> = (0..count).map(|index| format!("\"n{index}\":0")).collect();
+            format!("{{\"nodes\":{{{}}}}}", fields.join(","))
+        };
+        let wide = members(MAX_OBJECT_MEMBERS + 1);
+        assert!(decode(wide.as_bytes()).is_err());
+        assert!(decode_with_object_members(wide.as_bytes(), MAX_PROGRAM_OBJECT_MEMBERS).is_ok());
+        let too_wide = members(MAX_PROGRAM_OBJECT_MEMBERS + 1);
+        assert!(
+            decode_with_object_members(too_wide.as_bytes(), MAX_PROGRAM_OBJECT_MEMBERS).is_err()
+        );
+    }
+
+    #[test]
     fn preserves_unicode_integer_and_ordered_array_values() {
         let value = decode("{\"z\": [\"ß\", \"İ\", -2, 1], \"a\":true}\r\n".as_bytes()).unwrap();
         assert_eq!(value["z"], serde_json::json!(["ß", "İ", -2, 1]));
         assert_eq!(
             serde_json::to_string(&value).unwrap(),
             "{\"a\":true,\"z\":[\"ß\",\"İ\",-2,1]}"
+        );
+    }
+
+    #[test]
+    fn compact_work_budget_is_shared_and_independent_of_raw_whitespace() {
+        let padded = format!(
+            "{}{{\"value\":\"é\"}}{}",
+            " ".repeat(1000),
+            "\n".repeat(1000)
+        );
+        let value = decode(padded.as_bytes()).unwrap();
+        let compact = serde_json::to_vec(&value).unwrap();
+        let mut remaining = compact.len() * 2;
+        assert_eq!(compact_record(&value, &mut remaining).unwrap(), compact);
+        assert!(compact_record(&value, &mut remaining).is_ok());
+        assert_eq!(remaining, 0);
+        assert_eq!(
+            compact_record(&value, &mut remaining).unwrap_err(),
+            "command_source_catalog_work_budget_exceeded"
         );
     }
 }

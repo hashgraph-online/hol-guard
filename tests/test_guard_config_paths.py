@@ -19,6 +19,11 @@ from codex_plugin_scanner.guard.config import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - Python 3.10
+    import tomli as tomllib  # type: ignore[no-redef]
+
 
 def _seed_guard_cloud(store, *, workspace_id=None, sync_url=None, token="demo-token", now="2026-05-19T00:00:00Z"):
     """Seed OAuth credentials (replaces legacy set_sync_credentials scaffolding).
@@ -249,6 +254,12 @@ def test_dashboard_settings_switch_to_custom_carries_forward_effective_risk_map(
         "guard_bypass": "block",
         "cloud_advisory": "require-reapproval",
         "encoded_exfiltration": "block",
+        "package_unknown": "block",
+        "package_lockfile_drift": "require-reapproval",
+        "package_direct_source": "require-reapproval",
+        "package_custom_registry": "allow",
+        "package_install": "allow",
+        "low_trust_artifact": "require-reapproval",
     }
     assert resolve_risk_action(loaded, "network_egress", harness="codex") == "require-reapproval"
 
@@ -327,7 +338,7 @@ def test_dashboard_settings_update_preserves_existing_float_config_values(tmp_pa
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["score_threshold"] == 0.75
@@ -347,7 +358,7 @@ def test_dashboard_settings_update_preserves_existing_array_config_values(tmp_pa
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["trusted_harnesses"] == ["codex", "claude-code"]
@@ -366,7 +377,7 @@ def test_dashboard_settings_update_preserves_existing_inline_table_array_config_
             "mode": "enforce",
         },
     )
-    config_payload = guard_config_module._read_toml(guard_home / "config.toml")
+    config_payload = tomllib.loads((guard_home / "config.toml").read_text(encoding="utf-8"))
 
     assert updated.mode == "enforce"
     assert config_payload["rules"] == [{"name": "canary", "action": "review", "weight": 0.5}]

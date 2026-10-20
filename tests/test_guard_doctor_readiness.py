@@ -43,7 +43,7 @@ def test_doctor_json_does_not_promote_registration_or_cli_success_to_readiness(
     }
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.cli.commands_dispatch_admin.doctor_native_availability",
-        lambda: availability,
+        lambda _guard_home=None: availability,
     )
     monkeypatch.setattr(
         CodexHarnessAdapter,

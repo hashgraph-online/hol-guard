@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import os
 import shutil
-from dataclasses import fields
+from dataclasses import fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+from . import native_git_execution_safety
+from .models import GuardArtifact
 from .native_direct_tool_context import _facts
 from .native_git_execution_safety import _environment_snapshot
 from .native_request_context import NativeRequestContextFailure, _call
@@ -59,7 +61,7 @@ _OPTIONAL_TEXT = frozenset(
 )
 _SENSITIVITIES = frozenset({"high", "critical"})
 # Names the native classifiers read that neither shared snapshot carries.
-_CLASSIFIER_ENVIRONMENT_NAMES = ("GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH")
+_CLASSIFIER_ENVIRONMENT_NAMES = ("GH_HOST", "GH_PAGER", "PAGER", "RIPGREP_CONFIG_PATH", "TMPDIR", "TEMP", "TMP")
 
 
 class NativeSensitiveRequestError(RuntimeError):
@@ -300,10 +302,171 @@ def native_sensitive_file_write_request(
         cwd=cwd,
         home_dir=home_dir or Path.home(),
     )
-    if result is None:
+    return _write_match(result)
+
+
+# Every key the resident puts on an artifact wire. The ones a sensitive-request
+# artifact never carries — command, args, url, transport, publisher and the
+# runtime-private metadata — are sent as their empty forms and must still be
+# present, so a reply that quietly grew or lost a field is a malformed reply
+# rather than an artifact missing a field nobody checked.
+_ARTIFACT_FIELDS = frozenset(
+    {
+        "artifact_id",
+        "name",
+        "harness",
+        "artifact_type",
+        "source_scope",
+        "config_path",
+        "command",
+        "args",
+        "url",
+        "transport",
+        "publisher",
+        "metadata",
+        "runtime_private_metadata",
+    }
+)
+
+
+def _write_match(value: object) -> FileWriteRequestMatch | None:
+    if value is None:
         return None
-    wire = _object(result, _WRITE_FIELDS)
+    wire = _object(value, _WRITE_FIELDS)
     return FileWriteRequestMatch(**{name: _text(value) for name, value in wire.items()})
+
+
+def _artifact(value: object) -> GuardArtifact:
+    """A Guard artifact the resident built, or a raise.
+
+    An artifact that will not decode is not an absent artifact: the request it
+    describes was found, and reading a malformed reply as "nothing to review"
+    would drop the review.
+    """
+
+    wire = _object(value, _ARTIFACT_FIELDS)
+    # A file request artifact carries no launch fields; a reply that fills one
+    # has drifted from the builder and would otherwise lose that data silently.
+    if any(wire[name] is not None for name in ("command", "url", "transport", "publisher")):
+        raise _invalid()
+    if wire["args"] != [] or wire["runtime_private_metadata"] != {}:
+        raise _invalid()
+    metadata = wire["metadata"]
+    if not isinstance(metadata, dict) or not all(isinstance(key, str) for key in metadata):
+        raise _invalid()
+    return GuardArtifact(
+        artifact_id=_text(wire["artifact_id"]),
+        name=_text(wire["name"]),
+        harness=_text(wire["harness"]),
+        artifact_type=_text(wire["artifact_type"]),
+        source_scope=_text(wire["source_scope"]),
+        config_path=_text(wire["config_path"]),
+        metadata=dict(metadata),
+    )
+
+
+def _request_and_artifact(result: object) -> tuple[Any, GuardArtifact | None]:
+    wire = _object(result, frozenset({"match", "artifact"}))
+    if wire["match"] is None:
+        if wire["artifact"] is not None:
+            raise _invalid()
+        return None, None
+    if wire["artifact"] is None:
+        raise _invalid()
+    return wire["match"], _artifact(wire["artifact"])
+
+
+def native_sensitive_file_read_request_artifact(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileReadRequestMatch | None, GuardArtifact | None]:
+    """The sensitive file-read request a tool call makes, and the review it earns.
+
+    Both come back from one call because the artifact names the request: a
+    second round trip could describe a request the caller no longer acts on,
+    and the artifact id is the key a saved approval binds under.
+    """
+
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_read_artifact",
+            {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _read_match(match), artifact
+
+
+def native_sensitive_file_read_request_artifact_from_action(
+    action: GuardActionEnvelope,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileReadRequestMatch | None, GuardArtifact | None]:
+    projection = {
+        "action_type": action.action_type,
+        "tool_name": action.tool_name,
+        "target_paths": list(action.target_paths),
+    }
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_read_from_action_artifact",
+            {
+                "action": projection,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _read_match(match), artifact
+
+
+def native_sensitive_file_write_request_artifact(
+    tool_name: object,
+    arguments: object,
+    *,
+    cwd: Path | None,
+    home_dir: Path | None,
+    protected_paths: dict[str, str] | None,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+) -> tuple[FileWriteRequestMatch | None, GuardArtifact | None]:
+    match, artifact = _request_and_artifact(
+        _ask(
+            "file_write_artifact",
+            {
+                "tool_name": tool_name,
+                "arguments": arguments,
+                "protected_paths": protected_paths,
+                "harness": harness,
+                "config_path": config_path,
+                "source_scope": source_scope,
+            },
+            cwd=cwd,
+            home_dir=home_dir or Path.home(),
+        )
+    )
+    return _write_match(match), artifact
 
 
 def native_command_list_candidate_texts(values: list[str], *, preserve_items: bool) -> tuple[str, ...]:
@@ -320,6 +483,88 @@ def native_command_list_candidate_texts(values: list[str], *, preserve_items: bo
 
 def native_benign_file_read(tool_name: object, arguments: object, *, cwd: Path | None, home_dir: Path | None) -> bool:
     return _bool(_ask("benign_file_read", {"tool_name": tool_name, "arguments": arguments}, cwd=cwd, home_dir=home_dir))
+
+
+def native_unmodeled_shell_artifact(
+    command_text: str, *, workspace: Path | None, home_dir: Path
+) -> tuple[str, dict[str, object]] | None:
+    """The fingerprint and metadata of the one review an incompletely modeled shell command needs."""
+
+    result = _ask(
+        "unmodeled_shell_artifact",
+        {
+            "command_text": command_text,
+            "workspace": _path_text(workspace),
+            "home": str(home_dir),
+            "account_home": native_git_execution_safety._account_home_directory(),
+        },
+        cwd=None,
+        home_dir=None,
+    )
+    if result is None:
+        return None
+    wire = _object(result, frozenset({"fingerprint", "metadata"}))
+    pairs = wire["metadata"]
+    if not isinstance(pairs, list) or not all(
+        isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in pairs
+    ):
+        raise _invalid()
+    return _text(wire["fingerprint"]), dict(pairs)
+
+
+# The finding fields the resident reads when it binds findings to one command.
+_COMPOUND_FINDING_FIELDS = (
+    "action_class",
+    "command_rule_matches",
+    "risk_classes",
+    "runtime_request_reason",
+    "runtime_request_signals",
+    "runtime_request_summary",
+)
+
+
+def native_compound_artifact(
+    artifacts: list[GuardArtifact],
+    *,
+    command_text: str | None,
+    decision: dict[str, object],
+    workspace: Path | None,
+    home_dir: Path,
+) -> GuardArtifact:
+    """The findings bound to the whole command, or the primary alone (resident-owned)."""
+
+    findings = [
+        {
+            "artifact_id": artifact.artifact_id,
+            "artifact_type": artifact.artifact_type,
+            "name": artifact.name,
+            "metadata": {key: artifact.metadata[key] for key in _COMPOUND_FINDING_FIELDS if key in artifact.metadata},
+        }
+        for artifact in artifacts
+    ]
+    reply = _ask(
+        "compound_artifact",
+        {"artifacts": findings, "command_text": command_text, "decision": decision},
+        cwd=workspace,
+        home_dir=home_dir,
+    )
+    index = reply.get("primary") if isinstance(reply, dict) else None
+    if type(index) is not int or not 0 <= index < len(artifacts):
+        raise _invalid()
+    primary = artifacts[index]
+    if set(reply) == {"primary", "metadata"} and reply["metadata"] is None:
+        return primary
+    pairs = reply.get("metadata")
+    if set(reply) != {"primary", "artifact_id", "name", "metadata"} or not isinstance(pairs, list):
+        raise _invalid()
+    if not all(isinstance(pair, list) and len(pair) == 2 and isinstance(pair[0], str) for pair in pairs):
+        raise _invalid()
+    metadata = dict(primary.metadata)
+    if len(artifacts) > 1:
+        # The hint only covers the extension evaluation; other findings keep reviewing.
+        metadata.pop("extension_allow_hint", None)
+    metadata.update((key, value) for key, value in pairs)
+    return replace(primary, artifact_id=_text(reply["artifact_id"]), name=_text(reply["name"]), metadata=metadata)
 
 
 def native_read_only_lookup_target_is_safe(target: str, *, allow_dirs: bool, home_dir: Path | None) -> bool:

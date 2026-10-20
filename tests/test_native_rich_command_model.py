@@ -211,27 +211,6 @@ def test_env_outage_returns_incomplete_transport_dto(monkeypatch):
     assert result.executable_argv == ()
 
 
-def test_local_cli_parser_outage_uses_existing_unverified_grant_path(monkeypatch, tmp_path):
-    from codex_plugin_scanner.guard import local_cli_hook, local_cli_trust
-
-    def unavailable(*args, **kwargs):
-        raise client.NativeCommandModelError("native_rich_command_model_unavailable")
-
-    monkeypatch.setattr(local_cli_trust, "identify_package_json_scripts", unavailable)
-    seen = []
-    monkeypatch.setattr(
-        local_cli_hook, "unverified_local_cli_action", lambda store, action: seen.append(action) or "review"
-    )
-    action = local_cli_hook.apply_local_cli_grant(
-        store=object(),
-        command="blocked-cli",
-        cwd=tmp_path,
-        home_dir=tmp_path,
-        current_action="allow",
-    )
-    assert action == "review" and seen == ["allow"]
-
-
 def test_fresh_status_probe_receives_deadline_and_expired_probe_does_not_start(monkeypatch):
     from types import SimpleNamespace
 
@@ -309,22 +288,24 @@ def test_explicit_inspection_home_identity_outage_returns_blocked_diagnostic(mon
 @pytest.mark.parametrize("harness", ["codex", "codex-alias"])
 @pytest.mark.parametrize(
     "error_type",
-    ["command-model", "sensitive-request"],
+    ["command-model", "sensitive-request", "artifact-identity"],
 )
 def test_runtime_artifact_native_outage_does_not_reparse_or_fabricate_identity(
     monkeypatch, tmp_path, harness, error_type
 ):
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts as artifacts
+    from codex_plugin_scanner.guard.native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
     from codex_plugin_scanner.guard.native_sensitive_request import NativeSensitiveRequestError
 
     monkeypatch.setattr(artifacts, "_canonical_harness_name", lambda _: "codex")
 
     def forbidden(*args, **kwargs):
+        if error_type == "artifact-identity":
+            raise NativeRuntimeArtifactIdentityError("native_runtime_artifact_identity_unavailable")
         if error_type == "sensitive-request":
             raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
         raise client.NativeCommandModelError("native_rich_command_model_unavailable")
 
-    monkeypatch.setattr(artifacts, "parse_shell_command", forbidden)
     monkeypatch.setattr(artifacts, "_hook_runtime_artifact_with_native", forbidden)
     result = artifacts._hook_runtime_artifact(
         harness=harness,
@@ -365,14 +346,13 @@ def test_command_id_resolution_never_converts_parser_errors_to_root_tokens(monke
 def test_reviewed_invocation_native_outage_is_structured_builder_failure(monkeypatch):
     from types import SimpleNamespace
 
+    from codex_plugin_scanner.guard import native_reviewed_invocation_bindings as bindings
     from codex_plugin_scanner.guard.extension_builder import review_invocations
     from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
 
-    owner = SimpleNamespace(operation_id="fixture")
+    owner = SimpleNamespace(operation_id="fixture", path=(), flags=frozenset(), options_with_values=frozenset())
     discovery = SimpleNamespace(operations=(owner,), metadata=SimpleNamespace(executable="echo"))
-    monkeypatch.setattr(review_invocations, "_matcher", lambda *args: None)
-    monkeypatch.setattr(review_invocations, "validate_known_options", lambda *args: None)
-    monkeypatch.setattr(client, "ensure_resident_prerequisite", lambda _: False)
+    monkeypatch.setattr(bindings, "ensure_resident_prerequisite", lambda _: False)
     with pytest.raises(BuilderError) as raised:
         review_invocations.validate_native_bindings(discovery, ((owner, ("hi",)),), frozenset())
     assert raised.value.code == "native_unavailable"

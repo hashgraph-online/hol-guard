@@ -18,6 +18,14 @@ from ..launcher import merge_guard_launcher_env
 from ..models import HarnessDetection
 from ..native_path_anchor import anchor_to_process_directory
 from ..shims import install_guard_shim, prepare_guard_shim, remove_guard_shim
+from ._modules.copilot.copilot_state_paths import (
+    commit_copilot_target_and_state,
+    copilot_lifecycle_install,
+    copilot_lifecycle_uninstall,
+    copilot_state_authorizes_backup_reuse,
+    copilot_state_payload,
+    validated_copilot_state_entries,
+)
 from .adapter_safe_output import write_text_at_authorized_path
 from .base import (
     HarnessAdapter,
@@ -29,14 +37,6 @@ from .base import (
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .codex_detect_sources import path_restorations, restore_paths
-from .copilot_state_paths import (
-    commit_copilot_target_and_state,
-    copilot_lifecycle_install,
-    copilot_lifecycle_uninstall,
-    copilot_state_authorizes_backup_reuse,
-    copilot_state_payload,
-    validated_copilot_state_entries,
-)
 from .hook_payloads import inline_hooks_payload
 from .mcp_relay_native import mcp_proxy_launch, python_proxy_launch
 from .mcp_servers import (

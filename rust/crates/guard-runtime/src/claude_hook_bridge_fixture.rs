@@ -171,7 +171,11 @@ pub(crate) fn read_request(reader: &mut BufReader<TcpStream>) -> Option<Request>
             .headers
             .push((key.trim().to_owned(), value.trim().to_owned()));
     }
-    let length: usize = request.header("Content-Length")?.parse().ok()?;
+    // A bodyless GET is sent without a Content-Length.
+    let length: usize = match request.header("Content-Length") {
+        Some(length) => length.parse().ok()?,
+        None => 0,
+    };
     request.body = vec![0; length];
     reader.read_exact(&mut request.body).ok()?;
     Some(request)
@@ -195,9 +199,15 @@ pub(crate) enum Exchange {
     RefuseChallenge(u16, &'static str),
     /// Prove identity, then answer the hook with this status and body.
     Hook(u16, String),
+    /// Prove identity to a client that sends no hook after it.
+    ProveIdentity,
+    /// Answer one request without an identity challenge, as the daemon's
+    /// approval endpoints do.
+    Plain(u16, String),
 }
 
-/// Serve `script`, one connection per entry, recording each hook request.
+/// Serve `script`, one connection per entry, recording each hook request
+/// and each plain request.
 pub(crate) fn spawn_daemon(
     listener: TcpListener,
     state: Map<String, Value>,
@@ -217,10 +227,25 @@ pub(crate) fn spawn_daemon(
             let Some(challenge) = read_request(&mut reader) else {
                 continue;
             };
+            if let Exchange::Plain(status, body) = &exchange {
+                write_response(&mut writer, *status, body, true);
+                hooks.push(challenge);
+                continue;
+            }
             assert_eq!(challenge.target, "/v1/daemon/identity-challenge");
             match exchange {
                 Exchange::RefuseChallenge(status, body) => {
                     write_response(&mut writer, status, body, true);
+                }
+                Exchange::ProveIdentity => {
+                    let request: Value = serde_json::from_slice(&challenge.body).unwrap();
+                    let answer = challenge_answer(
+                        &state,
+                        request["nonce"].as_str().unwrap(),
+                        request["hook_event"].as_str().unwrap(),
+                    );
+                    let answer = serde_json::to_string(&Value::Object(answer)).unwrap();
+                    write_response(&mut writer, 200, &answer, true);
                 }
                 Exchange::Hook(status, body) => {
                     let request: Value = serde_json::from_slice(&challenge.body).unwrap();
@@ -236,6 +261,7 @@ pub(crate) fn spawn_daemon(
                         hooks.push(hook);
                     }
                 }
+                Exchange::Plain(..) => unreachable!(),
             }
         }
         hooks

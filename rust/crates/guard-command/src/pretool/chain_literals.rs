@@ -15,6 +15,13 @@ use std::collections::{HashMap, HashSet};
 #[path = "chain_literals_lex.rs"]
 mod lex;
 use lex::{identifier, items, names_variable, opaque, tokenize, Token};
+#[path = "chain_literals_inert.rs"]
+pub(crate) mod inert;
+#[path = "chain_literals_launch.rs"]
+mod launch;
+use launch::{launches_as_judged, reviewed};
+#[path = "chain_literals_home.rs"]
+mod home;
 #[path = "chain_literals_pwd.rs"]
 mod pwd;
 
@@ -25,10 +32,12 @@ const MAX_BINDINGS: usize = 32;
 // Word lists below are whitespace-separated and matched whole.
 
 /// Builtins and zsh commands that can set a variable or run text as shell
-/// code. A chain that calls one has bindings this recognizer cannot track.
+/// code, as `zstyle -e` and zregexparse's actions do. A chain that calls one
+/// has bindings this recognizer cannot track.
 const STATE_COMMANDS: &str = ". alias autoload builtin declare emulate enable eval exec export \
     float function getopts integer let local mapfile private read readarray readonly select set \
-    setopt shopt source trap typeset unalias unset unsetopt vared wait zmodload zparseopts";
+    setopt shopt source trap typeset unalias unset unsetopt vared wait zmodload zparseopts \
+    zregexparse zstyle";
 
 /// Reserved words. A literal in their place would be parsed as syntax,
 /// while the expansion it replaces is an ordinary word.
@@ -74,10 +83,14 @@ struct Binding {
 
 /// The extension controls cannot see through an expansion they do not model.
 const EVALUATION_FAILED: &str = "native_command_extension_evaluation_failed";
+/// A command the workspace sandbox runs because no rule proves it.
+const CONTAINED: &str = "native_workspace_containment_required";
 
 /// Replace a raw review with the verdict for the substituted command, which
-/// runs the same words. Another sandbox verdict is kept only when its
-/// launcher, which re-derives the shape from the raw text, would run it. A
+/// runs the same words, or the same words with each value-producing command
+/// substitution written as a stand-in no broader than its value. Another
+/// sandbox verdict is kept only when its launcher, which re-derives the shape
+/// from the raw text, would run it. A
 /// raw block that only says the expansions could not be evaluated also takes
 /// the substituted command's review, which every control did evaluate.
 pub(super) fn rejudge(
@@ -96,9 +109,49 @@ pub(super) fn rejudge(
     else {
         return raw;
     };
-    let directory = context.cwd.and_then(|cwd| pwd::project(&command, cwd));
-    let base = directory.as_deref().unwrap_or(&command);
-    let Some(substituted) = substitute(base).or(directory) else {
+    // A value producer counts only when it would be allowed as a command of
+    // its own, so lockdown, managed policy and extension controls on it hold.
+    let allowed = |body: &str| {
+        evaluate(&super::payload_with_command(payload, &command, body)).minimum_action == "allow"
+    };
+    let opened = inert::project(&command, allowed);
+    // A fresh `mktemp -d` directory expanded later in its `&&` chain is
+    // judged as `$TMPDIR`, which holds it; only a sandbox launch counts, and
+    // only once `opened` found each substitution allowed on its own.
+    if let Some(expanded) = opened
+        .is_some()
+        .then(|| inert::temp_cd::expanded(&command))
+        .flatten()
+    {
+        let projected = evaluate(&super::payload_with_command(payload, &command, &expanded));
+        if projected.minimum_action == "sandbox-required"
+            && launches_as_judged(&projected, &command, context)
+        {
+            return projected;
+        }
+    }
+    // `dirname` reads no file but no read rule names it, so on its own it
+    // runs in the workspace sandbox. The contained run prints the same path,
+    // so that verdict lets it name the parent too.
+    let produces = |body: &str| {
+        let verdict = evaluate(&super::payload_with_command(payload, &command, body));
+        verdict.minimum_action == "allow"
+            || (body.starts_with("dirname ")
+                && verdict.minimum_action == "sandbox-required"
+                && verdict.reason_code == CONTAINED)
+    };
+    let unopened = opened.as_deref().unwrap_or(&command);
+    let directory = context
+        .cwd
+        .and_then(|cwd| pwd::project(unopened, cwd, produces));
+    let base = directory.as_deref().unwrap_or(unopened);
+    // `$HOME` names the declared home only while the shell's HOME does.
+    let homed = context
+        .home_dir
+        .filter(|_| context.shell_home_matches)
+        .and_then(|home| home::project(base, home));
+    let base = homed.as_deref().unwrap_or(base);
+    let Some(substituted) = substitute(base).or(homed).or(directory).or(opened) else {
         return raw;
     };
     let projected_payload = super::payload_with_command(payload, &command, &substituted);
@@ -120,36 +173,6 @@ pub(super) fn rejudge(
         "sandbox-required" if unevaluated => reviewed(projected),
         _ => raw,
     }
-}
-
-fn reviewed(mut projected: PreToolResultV1) -> PreToolResultV1 {
-    projected.minimum_action = "review".into();
-    projected.policy_action = "review".into();
-    projected.decision = "deny".into();
-    projected.explicitly_benign = false;
-    projected.reason_code = "native_command_review_required".into();
-    projected.reason = "HOL Guard requires review because protected execution cannot run this command as it was judged.".into();
-    projected
-}
-
-fn launches_as_judged(
-    projected: &PreToolResultV1,
-    command: &str,
-    context: PathContext<'_>,
-) -> bool {
-    projected.reason_code == crate::pretool::workspace_contained::REASON
-        && crate::pretool::workspace_contained::admitted_workspace(context)
-            .is_some_and(|workspace| launcher_shape(command, &workspace))
-}
-
-#[cfg(unix)]
-fn launcher_shape(command: &str, workspace: &std::path::Path) -> bool {
-    crate::restricted_pytest::workspace_exact_shape(command, workspace).is_some()
-}
-
-#[cfg(not(unix))]
-fn launcher_shape(_command: &str, _workspace: &std::path::Path) -> bool {
-    false
 }
 
 /// The command with each `$NAME` / `${NAME}` bound to a literal by an
@@ -337,7 +360,7 @@ fn assignment(word: &[char]) -> Option<(String, Option<String>)> {
     Some((name, literal.then_some(value)))
 }
 
-fn ordinary_name(name: &str) -> bool {
+pub(crate) fn ordinary_name(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     name != "_"
         && name.len() <= 64

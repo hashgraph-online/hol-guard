@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_previous_source_body import build_previous_source_body
-from codex_plugin_scanner.guard.adapters.pi_extension_source_body import build_extension_source_body
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_previous_source_body import build_previous_source_body
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_source_body import build_extension_source_body
 
 
 @pytest.mark.parametrize("harness,display_name", [("pi", "Pi"), ("omp", "Oh My Pi")])

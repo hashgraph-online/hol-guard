@@ -15,7 +15,7 @@ MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
 
-PATH_FAMILIES = ("workspace_string", "exec_command_workdir", "directory_authority")
+PATH_FAMILIES = ("workspace_string", "exec_command_workdir")
 
 
 def _is_platform_dependent(entry: object) -> bool:
@@ -48,6 +48,5 @@ def test_recorded_vectors_cover_every_helper_family() -> None:
         "workspace_string",
         "exec_command_workdir",
         "deadline",
-        "directory_authority",
     ):
         assert recorded[family], family

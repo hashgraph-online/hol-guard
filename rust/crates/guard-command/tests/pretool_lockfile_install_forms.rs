@@ -188,3 +188,77 @@ fn quiet_flags_follow_the_same_proof() {
         }
     }
 }
+
+#[test]
+fn an_install_for_a_lockfile_the_project_lacks_names_the_one_it_has() {
+    let lab = Lab::new();
+    let bun = lab.project(
+        "bun-only",
+        &[("package.json", PACKAGE_JSON), ("bun.lock", BUN_LOCK)],
+    );
+    let npm = lab.project(
+        "npm-only",
+        &[
+            ("package.json", PACKAGE_JSON),
+            ("package-lock.json", PACKAGE_LOCK),
+        ],
+    );
+    let both = lab.project(
+        "bun-and-npm",
+        &[
+            ("package.json", PACKAGE_JSON),
+            ("bun.lock", BUN_LOCK),
+            ("package-lock.json", PACKAGE_LOCK),
+        ],
+    );
+    let bare = lab.project("no-lockfile", &[("package.json", PACKAGE_JSON)]);
+    let binary = lab.project(
+        "bun-binary-lock",
+        &[
+            ("package.json", PACKAGE_JSON),
+            ("bun.lock", BUN_LOCK),
+            ("bun.lockb", "binary"),
+        ],
+    );
+    for (project, install, hint) in [
+        (
+            &bun,
+            PNPM,
+            "This folder has no `pnpm-lock.yaml`. It has `bun.lock`, so the install that \
+             fits it is `bun install --frozen-lockfile --ignore-scripts`.",
+        ),
+        (
+            &npm,
+            BUN,
+            "This folder has no `bun.lock`. It has `package-lock.json`, so the install \
+             that fits it is `npm ci --ignore-scripts`.",
+        ),
+    ] {
+        let result = lab.classify(project, install, &[]);
+        assert_eq!(result.reason_code, "native_package_review", "{install}");
+        assert!(
+            result.reason.ends_with(hint),
+            "{install}: {}",
+            result.reason
+        );
+        // The named form is one the proof settles.
+        let form = hint.rsplit('`').nth(1).unwrap();
+        assert_eq!(
+            lab.classify(project, form, &[]).reason_code,
+            ALLOWED,
+            "{form}"
+        );
+    }
+    // Two other lockfiles, none at all, the manager's own lockfile beside a
+    // file that fails the check, or another lockfile beside a file that would
+    // send its install to review too give no advice.
+    for (project, install) in [(&both, PNPM), (&bare, BUN), (&binary, BUN), (&binary, PNPM)] {
+        let result = lab.classify(project, install, &[]);
+        assert_ne!(result.reason_code, ALLOWED, "{install}");
+        assert!(
+            !result.reason.contains("This folder has no"),
+            "{install}: {}",
+            result.reason
+        );
+    }
+}

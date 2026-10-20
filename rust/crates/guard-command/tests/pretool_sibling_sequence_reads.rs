@@ -166,14 +166,14 @@ fn semicolon_cd_runs_later_reads_in_either_directory() {
             format!("cd {sibling}; ls src && pwd"),
             format!("cd {sibling}; git status"),
             format!("cd {parent}; true"),
+            // `git log` can start a configured diff helper, and the helper
+            // probe inspects both directories this read can run in.
+            format!("cd {sibling}; git log -1"),
         ],
         &[
             format!("cd {ssh}; cat id_rsa"),
             format!("cd {sibling}; cat .env"),
             format!("cd {sibling}; rm -rf src"),
-            // `git log` can start a configured diff helper, and the helper
-            // probe runs in one directory only.
-            format!("cd {sibling}; git log -1"),
         ],
     );
 }
@@ -210,6 +210,9 @@ fn and_cd_reads_then_semicolon_reads_run_where_the_shell_runs_them() {
             ),
             format!("cd {sibling} && git status --short && ls src; git status"),
             format!("cd {sibling} && ls src; ls"),
+            // `git log` can start a configured diff helper, and the helper
+            // probe inspects both directories this list can run its reads in.
+            format!("cd {sibling} && git log -1; git status"),
         ],
         &[
             // `||` runs its right side in the original directory when the
@@ -219,9 +222,6 @@ fn and_cd_reads_then_semicolon_reads_run_where_the_shell_runs_them() {
             format!("cd {sibling} && git status; cat .env"),
             format!("cd {sibling} && git status; cd src; git status"),
             format!("cd {sibling} && git config core.pager id; git status"),
-            // `git log` can start a configured diff helper, and the helper
-            // probe runs in one directory only.
-            format!("cd {sibling} && git log -1; git status"),
         ],
     );
 }
@@ -259,6 +259,7 @@ fn and_cd_reads_with_or_fallbacks_run_where_the_shell_runs_them() {
             ),
             format!("cd {sibling} && ls src || echo missing"),
             format!("cd {sibling} && git status --short || echo none; git worktree list"),
+            format!("cd {sibling} && ls || echo none && git log -1"),
         ],
         &[
             // A failed `cd` runs the alternative and everything after it in
@@ -268,7 +269,6 @@ fn and_cd_reads_with_or_fallbacks_run_where_the_shell_runs_them() {
             format!("cd {sibling} && ls || git push"),
             format!("cd {sibling} && ls || cd src && git status"),
             format!("cd {sibling} && ls || gh pr merge 1 --repo example-org/app-portal"),
-            format!("cd {sibling} && ls || echo none && git log -1"),
         ],
     );
 }

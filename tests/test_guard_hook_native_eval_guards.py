@@ -7,149 +7,97 @@ from types import SimpleNamespace
 import pytest
 
 from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
+from codex_plugin_scanner.guard.cli.commands_hook_native_edge_facts import _native_edge_facts
 from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
-    _native_edge_floor_action,
-    _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
 from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _observed_action_detail
+from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
 
 
-@pytest.mark.parametrize(
-    "raw_command",
-    [
-        None,
-        "`id`",
-        "$(id)",
-        "cat file\nwhoami",
-        "cat file\rwhoami",
-        "'unbalanced",
-    ],
-)
-def test_archive_command_matcher_rejects_unsafe_or_malformed_commands(raw_command: str | None) -> None:
-    assert _runtime_external_archive_command_matches_executable(raw_command, "cat") is False
+def test_native_edge_facts_forward_the_edge_verdict_without_deciding() -> None:
+    assert _native_edge_facts(None, "PostToolUse") is None
+    edge = {"decision": "deny", "policy_action": "block", "reason_code": "native_secret_exfiltration", "extra": 1}
+    assert _native_edge_facts(edge, "PreToolUse", artifact_type="package_request") == {
+        "event_name": "PreToolUse",
+        "policy_action": "block",
+        "minimum_action": None,
+        "decision": "deny",
+        "reason_code": "native_secret_exfiltration",
+        "package_request": True,
+    }
+    assert _native_edge_facts({}, "PostToolUse", artifact_type="command")["package_request"] is False
 
 
-def test_archive_command_matcher_rejects_wrong_executable_and_metachar_tokens() -> None:
-    assert _runtime_external_archive_command_matches_executable("ls -la", "cat") is False
-    assert _runtime_external_archive_command_matches_executable("cat ;", "cat") is False
-    assert _runtime_external_archive_command_matches_executable("cat file > out", "cat") is False
+def test_digest_binding_sink_never_asks_without_package_metadata(tmp_path) -> None:
+    """Without a manager and an executable there is nothing for a shim to own."""
+
+    def refuse(*args: object, **fields: object) -> bool:
+        raise AssertionError("asked the resident about an artifact that names no shim")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(eval_module, "package_shim_digest_binding_sink", refuse)
+        for metadata in (None, {"package_manager": "uv"}, {"package_executable": "/usr/bin/uv"}):
+            assert (
+                _runtime_external_archive_has_digest_binding_sink(
+                    artifact=SimpleNamespace(metadata=metadata),
+                    context=SimpleNamespace(),
+                    raw_command="tar xf a.tgz",
+                    runtime_workspace=tmp_path,
+                )
+                is False
+            )
 
 
-def test_archive_command_matcher_accepts_plain_matching_command() -> None:
-    assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is True
-    assert _runtime_external_archive_command_matches_executable("unzip -l bundle.zip", "unzip") is True
+def test_digest_binding_sink_forwards_the_facts_and_returns_the_resident_answer(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The parse and the path resolution are the resident's; this forwards them."""
 
+    asked: list[dict[str, object]] = []
 
-def test_native_edge_floor_action_only_floors_post_tool_use() -> None:
-    assert _native_edge_floor_action(None, "PostToolUse") is None
-    assert _native_edge_floor_action({"decision": "deny"}, "PreToolUse") is None
-    assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse") == "require-reapproval"
-    assert _native_edge_floor_action({"decision": "deny"}, "PostToolUse", artifact_default_action="warn") is None
-    assert _native_edge_floor_action({"policy_action": "allow"}, "PostToolUse") == "allow"
+    def record(context: object, **fields: object) -> bool:
+        asked.append(dict(fields))
+        return True
 
-
-@pytest.mark.parametrize("action", ["block", "sandbox-required"])
-def test_pre_tool_native_terminal_action_cannot_be_relaxed_to_review(action: str) -> None:
-    assert (
-        _native_edge_floor_action(
-            {"decision": "deny", "policy_action": action}, "PreToolUse", artifact_default_action="warn"
-        )
-        == action
-    )
-    assert _native_edge_floor_action({"policy_action": "review"}, "PreToolUse") is None
-    assert _native_edge_floor_action({"policy_action": "allow"}, "PreToolUse") is None
-
-
-def test_package_evaluator_owns_command_control_failure_but_not_secret_deny() -> None:
-    failure = {"policy_action": "block", "reason_code": "native_command_extension_evaluation_failed"}
-    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="package_request") is None
-    assert _native_edge_floor_action(failure, "PreToolUse", artifact_type="command") == "block"
-    assert (
-        _native_edge_floor_action(
-            {"policy_action": "block", "reason_code": "native_secret_exfiltration"},
-            "PreToolUse",
-            artifact_type="package_request",
-        )
-        == "block"
-    )
-
-
-def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> None:
-    context = SimpleNamespace()
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata=None),
-            context=context,
-            raw_command="tar xf a.tgz",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv"}),
-            context=context,
-            raw_command="tar xf a.tgz",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "uv"}),
-            context=context,
-            raw_command="uv run tool",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"}),
-            context=context,
-            raw_command="cat other",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-
-
-def test_digest_binding_sink_matches_resolved_shim_path(tmp_path, monkeypatch) -> None:
-    real_executable = tmp_path / "uv"
-    real_executable.write_text("#!/bin/sh\n", encoding="utf-8")
-    other = tmp_path / "other-uv"
-    other.write_text("#!/bin/sh\n", encoding="utf-8")
-
-    def fake_status(_context, *, path_env=None):
-        return {
-            "manager_details": [
-                {"manager": "pip", "integrity": "mismatch", "shim_path": str(other)},
-                {"manager": "uv", "integrity": "ok", "shim_path": str(real_executable)},
-            ]
-        }
-
-    monkeypatch.setattr(eval_module, "package_shim_status", fake_status)
-    artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": str(real_executable)})
+    monkeypatch.setattr(eval_module, "package_shim_digest_binding_sink", record)
+    artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"})
     assert (
         _runtime_external_archive_has_digest_binding_sink(
             artifact=artifact,
             context=SimpleNamespace(),
-            raw_command=f"{real_executable} run tool",
+            raw_command="/usr/bin/uv run tool",
             runtime_workspace=tmp_path,
         )
         is True
     )
+    assert asked == [
+        {
+            "manager": "uv",
+            "executable": "/usr/bin/uv",
+            "command": "/usr/bin/uv run tool",
+            "workspace_dir": tmp_path,
+            "path_env": asked[0]["path_env"],
+        }
+    ]
 
-    def mismatched_status(_context, *, path_env=None):
-        return {"manager_details": [{"manager": "uv", "integrity": "ok", "shim_path": str(other)}]}
 
-    monkeypatch.setattr(eval_module, "package_shim_status", mismatched_status)
+def test_digest_binding_sink_treats_an_unreachable_resident_as_no_sink(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No binding sink leaves the approval with the user, not with the shim."""
+
+    def unavailable(context: object, **fields: object) -> bool:
+        raise NativeShimAdminError("native_shim_admin_unavailable")
+
+    monkeypatch.setattr(eval_module, "package_shim_digest_binding_sink", unavailable)
     assert (
         _runtime_external_archive_has_digest_binding_sink(
-            artifact=artifact,
+            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"}),
             context=SimpleNamespace(),
-            raw_command=f"{real_executable} run tool",
+            raw_command="/usr/bin/uv run tool",
             runtime_workspace=tmp_path,
         )
         is False

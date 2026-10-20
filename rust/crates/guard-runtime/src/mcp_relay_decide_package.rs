@@ -2,13 +2,18 @@
 //!
 //! The proxy asks `extract_package_intent_request` whether a call installs or
 //! runs a package (`runtime_mcp.py` `_package_request_artifact`) and sends a
-//! call that does through the package policy, which this operation does not
-//! answer. A call the parser finds no intent in goes on with
-//! `package_present: false`. The resident decides only such a call, asking
-//! the same parser with the inputs the proxy hands it: the tool name and the
-//! arguments as the host sent them, their `_command_argument`, the proxy's
-//! workspace, no home directory and the proxy's own `PATH`
-//! (`_resident_environment`). An input the two could read differently defers.
+//! call that does through the package policy; a call the parser finds no
+//! intent in goes on with `package_present: false`. The resident asks the same
+//! parser with the inputs the proxy hands it: the tool name and the arguments
+//! as the host sent them, their `_command_argument`, the proxy's workspace, no
+//! home directory and the proxy's own `PATH` (`_resident_environment`). An
+//! input the two could read differently defers.
+//!
+//! The intent itself is the answer, because the package lane decides the call
+//! from it (`mcp_relay_decide_package_leg.rs`). It is not wire-serializable --
+//! `to_dict` sanitizes the raw spec and drops the source url -- so the relay
+//! and the resident each parse it in process from the same inputs rather than
+//! shipping one to the other.
 //!
 //! The parser's answer does not depend on key order: it finds an intent when
 //! any candidate command has one, and the candidates are the same set in any
@@ -18,15 +23,17 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use guard_command::mcp_tool_signals::risk_arguments;
+use guard_command::package_intent_common::PackageIntent;
 use guard_command::package_intent_parser::extract_package_intent_request;
 use serde_json::{Map, Value};
 
 use super::McpRelayDecideRequestV1;
 use crate::context_digest::python_strip;
 
-/// The call installs or runs a package, which the proxy's package policy
-/// answers.
-pub(super) const PACKAGE_INTENT: &str = "mcp_relay_package_intent";
+/// A claimed call the gate now finds a package intent in. The claim is held
+/// only for a call with none, so the claim rolls back rather than answering a
+/// package request the lane never routed it for.
+pub(super) const PACKAGE_CLAIMED: &str = "mcp_relay_package_claimed";
 /// The proxy strips a name or a command the parser would read unstripped.
 pub(super) const PACKAGE_AMBIGUOUS: &str = "mcp_relay_package_ambiguous";
 /// The workspace is not in the form `str(Path(...).resolve())` prints, so the
@@ -36,8 +43,11 @@ pub(super) const WORKSPACE_UNNORMALIZED: &str = "mcp_relay_workspace_unnormalize
 /// `_command_argument`: the argument keys the proxy reads as the command.
 const COMMAND_KEYS: [&str; 4] = ["command", "cmd", "shell_command", "shellCommand"];
 
-/// Whether the proxy would take the call past its package check.
-pub(super) fn package_gate(request: &McpRelayDecideRequestV1) -> Result<(), &'static str> {
+/// The package request the proxy's check finds in the call, or `None` for the
+/// call it takes straight to the tool policy.
+pub(super) fn package_gate(
+    request: &McpRelayDecideRequestV1,
+) -> Result<Option<PackageIntent>, &'static str> {
     let workspace = match request.workspace.as_deref() {
         Some(workspace) if !resolved_path_text(workspace) => {
             return Err(WORKSPACE_UNNORMALIZED);
@@ -56,18 +66,14 @@ pub(super) fn package_gate(request: &McpRelayDecideRequestV1) -> Result<(), &'st
         .as_ref()
         .filter(|path| !path.is_empty())
         .map(|path| BTreeMap::from([("PATH".to_owned(), path.clone())]));
-    let intent = extract_package_intent_request(
+    Ok(extract_package_intent_request(
         tool,
         &arguments,
         command_argument(arguments.as_object()),
         workspace,
         None,
         environment.as_ref(),
-    );
-    match intent {
-        Some(_) => Err(PACKAGE_INTENT),
-        None => Ok(()),
-    }
+    ))
 }
 
 /// `_command_argument`: the first command key holding a non-blank string,

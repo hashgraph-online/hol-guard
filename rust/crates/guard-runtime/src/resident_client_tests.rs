@@ -112,7 +112,7 @@ fn rejects_non_loopback_tcp_endpoint() {
         &ExpectedProcessIdentity {
             process_id: 1,
             start_marker: "",
-            digest: None,
+            runtime: ExpectedRuntime::Package,
         },
     ) {
         Ok(_) => panic!("non-loopback endpoint was accepted"),

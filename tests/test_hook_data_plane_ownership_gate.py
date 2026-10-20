@@ -30,6 +30,13 @@ def test_changed_path_gate_accepts_mapped_native_source(monkeypatch: pytest.Monk
     assert changed == ("rust/crates/guard-runtime/src/hook_edge.rs",)
 
 
+@pytest.mark.parametrize("suffix", ["Cargo.toml", "src/main.rs", "tests/session.rs"])
+def test_changed_path_gate_maps_native_pack_compiler(monkeypatch: pytest.MonkeyPatch, suffix: str) -> None:
+    path = f"rust/crates/guard-pack-compiler/{suffix}"
+    monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))
+    assert MODULE._changed_path_gate(MODULE._manifest(), "base") == (path,)
+
+
 def test_changed_path_gate_maps_live_cli_hook_support(monkeypatch: pytest.MonkeyPatch) -> None:
     path = "src/codex_plugin_scanner/guard/cli/commands_support_interaction.py"
     monkeypatch.setattr(MODULE, "_changed_files", lambda _base_ref: (path,))

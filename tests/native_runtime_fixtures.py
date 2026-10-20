@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import os
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from codex_plugin_scanner.guard.native_hook_artifact_compose import native_hook_compose
+
+from .mcp_policy_catalog_fixture import (  # noqa: F401
+    mcp_policy_delivery,
+    mcp_policy_inventory,
+    native_mcp_catalog_admission,
+)
+from .mcp_policy_native_fixture import native_mcp_policy_admission  # noqa: F401
 
 
 def _resolve_native_hook_runtime() -> Path:
@@ -68,6 +78,9 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
     # The managed resident refuses to serve until the policy verifier key the
     # publisher would normally provision exists; seed a test key once.
     provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    from .mcp_policy_native_fixture import _FIXTURE_KEYS
+
+    _FIXTURE_KEYS[guard_home] = b"\x07" * 32
     # Pre-warm the capabilities cache and the persistent resident client pool
     # at session scope.  Tests that patch subprocess.Popen globally would
     # otherwise intercept the first probe/pool spawn mid-test and break the
@@ -116,6 +129,33 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = previous_seams
     yield guard_home
     close_native_residents(guard_home)
+
+
+@pytest.fixture
+def native_signal_composition(
+    native_hook_force: Path,
+    _native_context_home: Path,
+) -> Callable[[Sequence[object], object], SimpleNamespace]:
+    """Calibrate a base action against detector signals in the resident.
+
+    The composition rules live in the Rust runtime; this side only carries the
+    signals the detector registry emitted and reads back the composed action,
+    so tests that need a composition assert on the authority's answer rather
+    than on a second copy of the rules.
+    """
+
+    def compose(signals: Sequence[object], base_action: object) -> SimpleNamespace:
+        payload = native_hook_compose(
+            "signal_composition",
+            {
+                "signals": [signal.to_dict() for signal in signals],
+                "base_action": base_action,
+            },
+            guard_home=_native_context_home,
+        )
+        return SimpleNamespace(**payload)
+
+    return compose
 
 
 @pytest.fixture
@@ -189,7 +229,12 @@ def _ambient_context_digest_home(
 
     ``context_digest`` calls resolve their guard home either from the bound
     flow context or the default user home; both are pointed at the keyed
-    session home.  Unit tests default to ``HOL_GUARD_NATIVE=off`` so the
+    session home.  ``native_hook_approval_context`` imports the lookup by
+    name at module load, so it holds its own reference and has to be bound
+    separately; without that its tokens are asked of whatever guard home the
+    runner happens to have, and whether a resident can answer there depends
+    on what else already ran in the same worker process.  Unit tests default
+    to ``HOL_GUARD_NATIVE=off`` so the
     adapter's status probe is additionally re-evaluated under ``force`` —
     scoped to the ``native_context`` module only, leaving every other
     off-mode surface (hook eval, fail-safe denials) untouched.  With no
@@ -197,7 +242,7 @@ def _ambient_context_digest_home(
     preserving the no-binary behavior.
     """
 
-    from codex_plugin_scanner.guard import native_context, native_runtime
+    from codex_plugin_scanner.guard import native_context, native_hook_approval_context, native_runtime
     from codex_plugin_scanner.guard.runtime import approval_context
 
     real_status = native_runtime.native_runtime_status
@@ -227,6 +272,11 @@ def _ambient_context_digest_home(
 
     monkeypatch.setattr(native_context, "native_runtime_status", _digest_status)
     monkeypatch.setattr(native_context, "context_digest_guard_home", lambda: _native_context_home)
+    monkeypatch.setattr(
+        native_hook_approval_context,
+        "context_digest_guard_home",
+        lambda: _native_context_home,
+    )
     monkeypatch.setattr(
         approval_context,
         "_context_digest_guard_home",
@@ -400,42 +450,6 @@ def native_command_artifact_reviews(monkeypatch: pytest.MonkeyPatch) -> None:
             pytest.fail(f"Native command artifact fixture failed: {type(exc).__name__}: {exc}")
 
     monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", review)
-
-
-@pytest.fixture(autouse=True)
-def _close_native_policy_publishers_before_monkeypatch_restore(
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[None]:
-    """Join native snapshot publishers created by test-owned workers."""
-    del monkeypatch
-    from codex_plugin_scanner.guard import native_policy_snapshot
-
-    with native_policy_snapshot._PUBLISHER_LOCK:
-        existing_publishers = {
-            id(publisher) for registered in native_policy_snapshot._PUBLISHERS.values() for publisher in registered
-        }
-    yield
-
-    with native_policy_snapshot._PUBLISHER_LOCK:
-        publishers = tuple(
-            publisher
-            for registered in native_policy_snapshot._PUBLISHERS.values()
-            for publisher in registered
-            if id(publisher) not in existing_publishers
-        )
-    live_publishers: list[str] = []
-    for publisher in publishers:
-        publisher.close(timeout_seconds=5.0)
-        thread = getattr(publisher, "_thread", None)
-        if isinstance(thread, threading.Thread) and thread.is_alive():
-            with native_policy_snapshot._PUBLISHER_LOCK:
-                native_policy_snapshot._PUBLISHERS.setdefault(
-                    native_policy_snapshot._publisher_key(Path(publisher.guard_home)),
-                    set(),
-                ).add(publisher)
-            live_publishers.append(f"{publisher.guard_home}:{thread.name}")
-    if live_publishers:
-        raise AssertionError("native policy publisher thread(s) survived test teardown: " + ", ".join(live_publishers))
 
 
 @pytest.fixture

@@ -13,14 +13,112 @@ pub(in crate::pretool) fn bounded_omp_file_read_target(
     home_dir: Option<&str>,
     cwd: Option<&str>,
 ) -> bool {
+    if let Some(base) = super::omp_json_query::json_query_base(value) {
+        // The host queries the file only when it exists; a missing one falls
+        // back to a workspace suffix match, which this proof does not model.
+        return value.trim() == value
+            && !base.split(['/', '\\']).any(|part| part == "..")
+            && bounded_existing_file_read_target(base, home_dir, cwd);
+    }
+    if let Some(parts) = omp_read_list(value, home_dir, cwd) {
+        return parts
+            .iter()
+            .all(|part| bounded_omp_list_part_read_target(part, home_dir, cwd));
+    }
+    bounded_omp_list_part_read_target(value, home_dir, cwd)
+}
+
+fn bounded_omp_list_part_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
     match bounded_selector_path(value, home_dir, cwd) {
-        BoundedSelectorPath::Base(base) | BoundedSelectorPath::RawFile(base) => {
+        BoundedSelectorPath::Base(base)
+        | BoundedSelectorPath::RawFile(base)
+        | BoundedSelectorPath::RawWindow(base) => {
             return bounded_existing_file_read_target(&base, home_dir, cwd);
         }
         BoundedSelectorPath::Unsupported => return false,
         BoundedSelectorPath::NotSelector => {}
     }
     bounded_structured_file_read_target(value, home_dir, cwd)
+}
+
+const MAX_OMP_READ_LIST_PARTS: usize = 16;
+
+/// The parts of OMP's documented `;` read list (`a.ts:1-20; b.ts`). OMP fans
+/// the list out only when neither the whole input nor its selector base
+/// exists, then reads each trimmed, non-empty part on its own. Braces,
+/// escapes, quotes and URLs change how OMP splits or routes the input, so
+/// those stay on the single-path proofs.
+fn omp_read_list(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> Option<Vec<String>> {
+    if !value.contains(';')
+        || value.trim() != value
+        || value.len() > 4096
+        || value.contains(['{', '}', '\\', '"', '\''])
+        || value.contains("://")
+        || value.chars().any(|c| c.is_control() || c == '\u{feff}')
+        || !verified_path_context(home_dir, cwd)
+    {
+        return None;
+    }
+    let literal_missing = |path: &str| {
+        let Some(candidate) = verified_selector_candidate(path, home_dir, cwd) else {
+            return false;
+        };
+        matches!(
+            std::fs::symlink_metadata(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound
+        )
+    };
+    if !literal_missing(value) || selector_bases(value).any(|base| !literal_missing(base)) {
+        return None;
+    }
+    let parts: Vec<String> = value
+        .split(';')
+        .map(str::trim)
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect();
+    (!parts.is_empty() && parts.len() <= MAX_OMP_READ_LIST_PARTS).then_some(parts)
+}
+
+/// Paths the host could read in place of `value` by peeling a trailing read
+/// selector. It peels a `:tail` only when the tail fits its selector grammar
+/// (line windows, `raw`, `conflicts`, `img`), and at most twice, for
+/// `:1-5:raw`. Every such tail is made of letters, digits and `.+,-`, so a
+/// tail that holds the rest of a list, like `1-5; b.json`, is never peeled.
+fn selector_bases(value: &str) -> impl Iterator<Item = &str> {
+    let mut rest = value;
+    std::iter::from_fn(move || {
+        let (base, tail) = rest.rsplit_once(':')?;
+        let peelable = !tail.is_empty()
+            && tail.bytes().all(|byte| {
+                byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'+' | b',' | b'-')
+            });
+        rest = base;
+        peelable.then_some(base)
+    })
+    .take(2)
+}
+
+/// Whether `value` is OMP's `path:N-M` (or `path:raw`) form for an existing
+/// bounded file. `read` and `grep` both narrow to that file's lines, so the
+/// form reads no more than the bare file would. A bare path is not a match.
+pub(in crate::pretool) fn bounded_omp_file_selector_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+) -> bool {
+    match bounded_selector_path(value, home_dir, cwd) {
+        BoundedSelectorPath::Base(base) | BoundedSelectorPath::RawFile(base) => {
+            bounded_existing_file_read_target(&base, home_dir, cwd)
+        }
+        BoundedSelectorPath::RawWindow(_)
+        | BoundedSelectorPath::Unsupported
+        | BoundedSelectorPath::NotSelector => false,
+    }
 }
 
 pub(in crate::pretool) fn bounded_omp_selector_requires_review(
@@ -46,7 +144,9 @@ pub(in crate::pretool) fn bounded_omp_directory_read_target(
         BoundedSelectorPath::Base(base) => {
             return bounded_omp_directory_read_target_without_selector(&base, home_dir, cwd);
         }
-        BoundedSelectorPath::RawFile(_) | BoundedSelectorPath::Unsupported => return false,
+        BoundedSelectorPath::RawFile(_)
+        | BoundedSelectorPath::RawWindow(_)
+        | BoundedSelectorPath::Unsupported => return false,
         BoundedSelectorPath::NotSelector => {}
     }
     bounded_omp_directory_read_target_without_selector(value, home_dir, cwd)
@@ -106,13 +206,17 @@ enum BoundedSelectorPath {
     /// Bare `:raw` returns the same file's bytes without line formatting, so
     /// it carries the plain file-read proof but never a directory listing.
     RawFile(String),
+    /// `:N-M:raw` or `:raw:N-M`: a line window of one file without line
+    /// formatting. Only `read` takes this compound; OMP's `grep` rejects it.
+    RawWindow(String),
 }
 
 /// OMP peels a selector only after proving that the complete input is not a
 /// literal filesystem path. The native proof accepts OMP's line windows
-/// (`line_selector`) and a bare file `:raw`, each of which reads no more than
-/// the bare path. Compound selectors such as `:1-5:raw`, time selectors and
-/// binary views remain on the normal review path.
+/// (`line_selector`), a bare file `:raw`, and the two-chunk compound of one
+/// line window plus `raw` in either order, each of which reads no more than
+/// the bare path. Other compounds, time selectors and binary views remain on
+/// the normal review path.
 fn bounded_selector_path(
     value: &str,
     home_dir: Option<&str>,
@@ -151,7 +255,10 @@ fn bounded_selector_path(
     // native proof; never reinterpret it as a selector in that case.
     match std::fs::symlink_metadata(&candidate) {
         Ok(_) => return BoundedSelectorPath::NotSelector,
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+        Err(error)
+            if error.kind() != std::io::ErrorKind::NotFound
+                && !windows_stream_spelling(&candidate) =>
+        {
             return BoundedSelectorPath::NotSelector;
         }
         Err(_) => {}
@@ -164,12 +271,16 @@ fn bounded_selector_path(
             BoundedSelectorPath::NotSelector
         };
     }
-    // `raw` alone; a colon left in the final component would be a compound
-    // selector such as `file:1-5:raw`, which stays on the review path.
+    // A colon left in the final component makes a compound selector. OMP
+    // peels exactly one line window plus `raw`, in either order; a `raw`
+    // compound of any other shape stays on the review path.
     let compound = base
         .rsplit(['/', '\\'])
         .next()
         .is_some_and(|name| name.contains(':'));
+    if let Some(file) = compound.then(|| raw_window_path(base, selector)).flatten() {
+        return BoundedSelectorPath::RawWindow(file);
+    }
     if selector.eq_ignore_ascii_case("raw") && !compound {
         return BoundedSelectorPath::RawFile(base.to_owned());
     }
@@ -181,6 +292,39 @@ fn bounded_selector_path(
         };
     }
     BoundedSelectorPath::Base(base.to_owned())
+}
+
+/// Windows file names cannot hold `:`; one there names an NTFS data stream
+/// (`main.rs:raw:raw` is stream `raw` of type `raw`), and an invalid stream
+/// spelling fails with an error other than `NotFound`. Such a name is no
+/// literal file, so it is judged as the OMP selector it spells.
+fn windows_stream_spelling(candidate: &std::path::Path) -> bool {
+    cfg!(windows)
+        && candidate
+            .file_name()
+            .is_some_and(|name| name.to_string_lossy().contains(':'))
+}
+
+/// The file behind OMP's `path:N-M:raw` or `path:raw:N-M`. The window must
+/// be a range list or a lone `-N` tail, as OMP requires before peeling both
+/// chunks, and the remaining name must hold no further selector.
+fn raw_window_path(base: &str, selector: &str) -> Option<String> {
+    let (path, inner) = base.rsplit_once(':')?;
+    let window = if selector.eq_ignore_ascii_case("raw") {
+        inner
+    } else if inner.eq_ignore_ascii_case("raw") {
+        selector
+    } else {
+        return None;
+    };
+    let tail = window.starts_with('-');
+    let range_list = !window.split(',').any(|part| part.starts_with('-'));
+    let file = path.rsplit(['/', '\\']).next().unwrap_or(path);
+    (line_selector(window)
+        && (range_list || (tail && !window.contains(',')))
+        && !file.is_empty()
+        && !file.contains(':'))
+    .then(|| path.to_owned())
 }
 
 /// OMP's line windows: `N`, `N-`, `N-M`, `N+K` and `-N`, alone or joined by
@@ -227,11 +371,11 @@ fn bounded_existing_file_read_target(
     if guard_secure_fs::contains_symlink_component(&candidate) {
         return false;
     }
-    let Ok(canonical) = std::fs::canonicalize(candidate) else {
+    let Ok(canonical) = std::fs::canonicalize(&candidate) else {
         return false;
     };
     canonical.is_file()
-        && resolved_path_allowed_for_operation(&canonical, home_dir, cwd, false, true)
+        && super::resolved_read_target_allowed(&candidate, &canonical, home_dir, cwd)
 }
 
 /// Resolve selector targets through the verified context roots first. macOS
@@ -246,18 +390,18 @@ fn verified_selector_candidate(
     let expanded = expand_home_read_path(value, home_dir).unwrap_or_else(|| value.to_owned());
     let expanded_path = std::path::Path::new(&expanded);
     if expanded_path.is_absolute() {
+        // The same fixed alias mapping `verified_cwd_target` accepts.
+        let aliased =
+            super::super::directory_targets::tmp_alias::private_tmp_spelling(expanded_path);
         for root in [home_dir, cwd].into_iter().flatten() {
             let root = expand_home_read_path(root, home_dir).or_else(|| Some(root.to_owned()))?;
             let root_path = std::path::Path::new(&root);
             let canonical_root = std::fs::canonicalize(root_path).ok()?;
             let Ok(relative) = expanded_path.strip_prefix(root_path) else {
-                let tmp_alias = std::path::Path::new("/tmp");
-                let Ok(tmp_relative) = expanded_path.strip_prefix(tmp_alias) else {
-                    continue;
-                };
-                let canonical_tmp = std::fs::canonicalize(tmp_alias).ok()?;
-                let mapped = canonical_tmp.join(tmp_relative);
-                let Ok(relative) = mapped.strip_prefix(&canonical_root) else {
+                let Some(relative) = aliased
+                    .as_deref()
+                    .and_then(|mapped| mapped.strip_prefix(&canonical_root).ok())
+                else {
                     continue;
                 };
                 return Some(canonical_root.join(relative));
@@ -266,11 +410,78 @@ fn verified_selector_candidate(
         }
         // Location alone is not a denial reason for OMP's names-only listing.
         // Callers still canonicalize this path and apply every sensitive-root,
-        // credential, foreign-home, and hidden-component check below.
-        return Some(expanded_path.to_path_buf());
+        // credential, foreign-home, and hidden-component check below. A
+        // sibling project below the `/tmp` alias keeps those checks on its
+        // `/private/tmp` spelling, so only links below the alias still count.
+        return Some(aliased.unwrap_or_else(|| expanded_path.to_path_buf()));
     }
     let root = cwd
         .and_then(|root| expand_home_read_path(root, home_dir).or_else(|| Some(root.to_owned())))
         .filter(|root| std::path::Path::new(root).is_absolute())?;
     Some(std::fs::canonicalize(root).ok()?.join(expanded_path))
+}
+
+/// Whether a structured read names a path that does not exist. The read is
+/// stopped either way; this only lets Guard say why, so the agent can correct
+/// the path instead of waiting on an approval. OMP's `path:selector` form
+/// counts as missing only when the selector base is missing too.
+pub(in crate::pretool) fn missing_read_target(
+    value: &str,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    selectors: bool,
+) -> bool {
+    let missing = |value: &str| missing_literal_path(value, home_dir, cwd);
+    if let Some(parts) = selectors
+        .then(|| omp_read_list(value, home_dir, cwd))
+        .flatten()
+    {
+        // A list names each part; only a missing part is a wrong path.
+        return parts
+            .iter()
+            .any(|part| missing_read_target(part, home_dir, cwd, true));
+    }
+    if !missing(value) {
+        return false;
+    }
+    !selectors
+        || value
+            .rsplit_once(':')
+            .is_none_or(|(base, _)| base.is_empty() || missing(base))
+}
+
+fn missing_literal_path(value: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
+    if value.is_empty()
+        || value.trim() != value
+        || value.len() > 4096
+        || value.chars().any(char::is_control)
+        || value.contains(['$', '`', '*', '?', '[', ']', '{', '}'])
+        || value.contains("://")
+        || !verified_path_context(home_dir, cwd)
+    {
+        return false;
+    }
+    let expanded = if value.starts_with('~') {
+        let Some(expanded) = expand_home_read_path(value, home_dir) else {
+            return false;
+        };
+        expanded
+    } else {
+        value.to_owned()
+    };
+    let path = std::path::Path::new(&expanded);
+    let candidate = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        let Some(root) = cwd.and_then(|root| {
+            expand_home_read_path(root, home_dir).or_else(|| Some(root.to_owned()))
+        }) else {
+            return false;
+        };
+        std::path::Path::new(&root).join(path)
+    };
+    matches!(
+        std::fs::symlink_metadata(&candidate),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound
+    )
 }

@@ -10,6 +10,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters._modules.devin.devin_hooks import (
+    devin_hook_response_from_guard,
+    emit_devin_hook_response,
+    prepare_devin_hook_payload,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
@@ -17,12 +22,6 @@ from codex_plugin_scanner.guard.adapters.devin_config import (
     GUARD_MANAGED_MARKER,
     is_guard_managed_hook_command,
     load_devin_jsonc,
-)
-from codex_plugin_scanner.guard.adapters.devin_hooks import (
-    devin_hook_response_from_guard,
-    devin_hook_should_block,
-    emit_devin_hook_response,
-    prepare_devin_hook_payload,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 
@@ -782,11 +781,6 @@ class TestDevinHookResponses:
         emit_devin_hook_response(policy_action="block", reason="no", event_name="PreToolUse", output_stream=stream)
         response = json.loads(stream.getvalue())
         assert response["decision"] == "block"
-
-    def test_should_block_classification(self) -> None:
-        for action in ("review", "require-reapproval", "sandbox-required", "block"):
-            assert devin_hook_should_block(policy_action=action) is True
-        assert devin_hook_should_block(policy_action="allow") is False
 
 
 class TestDevinManagedMarker:

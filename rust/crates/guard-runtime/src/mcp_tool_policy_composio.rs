@@ -57,7 +57,7 @@ fn observed_harness(harness: &str) -> Option<String> {
     guard_policy_snapshot::normalized_harness_selector(&lowered)
 }
 
-fn valid_slug(slug: &str) -> bool {
+pub(crate) fn valid_slug(slug: &str) -> bool {
     let bytes = slug.as_bytes();
     !bytes.is_empty()
         && bytes.len() <= 128

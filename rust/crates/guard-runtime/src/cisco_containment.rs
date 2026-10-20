@@ -75,7 +75,7 @@ fn accessible(path: &Path, exec: bool) -> bool {
     }
 }
 
-fn expand(value: &str, home: Option<&str>) -> PathBuf {
+pub(crate) fn expand(value: &str, home: Option<&str>) -> PathBuf {
     match (value, home) {
         ("~", Some(home)) => PathBuf::from(home),
         (_, Some(home)) if value.starts_with("~/") => Path::new(home).join(&value[2..]),

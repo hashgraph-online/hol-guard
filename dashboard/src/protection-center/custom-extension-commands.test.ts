@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { LocalCliCommand, LocalCliItem } from "../local-cli-api";
 import { normalizeLocalCliItem } from "../local-cli-api";
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
-import { commandNestingDepth, commandRowUsage, commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { commandStatesPayload, withCommandState } from "./custom-extension-commands";
 import { customExtensionStateLabel } from "./local-clis-panel";
 
 {
@@ -146,19 +146,27 @@ assert.equal(
   "Every tool from this server is blocked.",
 );
 
-assert.equal(
-  commandNestingDepth({
-    command_id: "guard.reddit-targeting.audit",
-    name: "guard:reddit-targeting:audit",
-    usage: "pnpm run guard:reddit-targeting:audit",
-    description: "audit",
-    parent_id: "guard.reddit-targeting",
-    state: "inherit",
-  }),
-  2,
-);
-
-assert.equal(commandRowUsage("click", "click"), null);
-assert.equal(commandRowUsage("deploy", "pnpm run deploy"), "pnpm run deploy");
 
 console.log("custom-extension-commands.test.ts: all assertions passed");
+
+{
+  const remote = (origin: unknown) => normalizeLocalCliItem({
+    cli_id: "local-cli.mcp-remote", name: "echo-mcp", kind: "executable",
+    identity_hash: "b".repeat(64), example_label: "mcp__echo-mcp__", observed_count: 1,
+    state: "unset", grant_revision: 0, authority_revision: 1, surface: "mcp", commands: [],
+    permission_scope: "host-namespace", remote_origin: origin,
+  });
+  const item = remote("https://mcp.example.test/mcp");
+  assert.equal(item.remote_origin, "https://mcp.example.test/mcp");
+  assert.equal(mcpCatalogCopy(item)?.title, "Remote connector");
+  assert.match(mcpCatalogCopy(item)?.description ?? "", /does not connect to remote servers/);
+  const longOrigin = `https://mcp.example.test/${"p".repeat(512 - "https://mcp.example.test/".length)}`;
+  assert.equal(remote(longOrigin).remote_origin, longOrigin);
+  assert.equal(remote(`${longOrigin}p`).remote_origin, undefined);
+  const allowed = normalizeLocalCliItem({ ...item, state: "allowed", grant_revision: 1 });
+  assert.match(customExtensionStateLabel(allowed), /Use one of its tools in your host app/);
+  for (const invalid of ["mcp.example.test", "https://user@mcp.example.test", "https://mcp.example.test/?k=1", 7]) {
+    assert.equal(remote(invalid).remote_origin, undefined);
+    assert.equal(mcpCatalogCopy(remote(invalid))?.title, "Inventory not checked");
+  }
+}

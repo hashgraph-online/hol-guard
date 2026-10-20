@@ -2,17 +2,16 @@
 
 use crate::git_helper_fixture as fixture;
 
-use fixture::{evaluate_pre_tool_envelope_with_context, git_github_controls, FixtureCleanup};
+use fixture::{evaluate_with_node, git_github_controls, FixtureCleanup};
 use serde_json::json;
 
 fn evaluate(root: &std::path::Path, command: &str) -> guard_contracts::PreToolResultV1 {
-    evaluate_pre_tool_envelope_with_context(
+    evaluate_with_node(
         "zcode",
         "PreToolUse",
         &json!({"tool_name":"bash", "tool_input":{"command":command}}),
         Some(&git_github_controls("default", "default")),
-        None,
-        root.to_str(),
+        root,
         root.join("project").to_str(),
     )
 }
@@ -191,7 +190,9 @@ fn an_open_quote_is_named_instead_of_the_extension_controls() {
         result.reason
     );
     assert!(
-        result.reason.contains("leaves a quote open"),
+        result
+            .reason
+            .contains("has a shell syntax error: it leaves a quote open"),
         "{}",
         result.reason
     );
@@ -220,6 +221,159 @@ fn a_substituted_setting_is_named_with_a_safe_alternative() {
             result.reason.contains("SERVICE_TOKEN")
                 && result.reason.contains("command substitution")
                 && result.reason.contains("run the commands separately"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+#[test]
+fn a_credential_setting_is_named_with_a_safe_alternative() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-credential-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project/scripts")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    std::fs::write(root.join("project/scripts/report.ts"), "console.log(1)\n").unwrap();
+    for (command, setting) in [
+        ("REPORT_API_KEY=fixture-value ls", "REPORT_API_KEY"),
+        (
+            "REPORT_API_KEY=fixture-value REPORT_ID=7 bun scripts/report.ts --json",
+            "REPORT_API_KEY",
+        ),
+        (
+            "REPORT_ID=7 SERVICE_TOKEN=fixture-value node scripts/report.ts",
+            "SERVICE_TOKEN",
+        ),
+        ("env SERVICE_TOKEN=fixture-value ls", "SERVICE_TOKEN"),
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains(setting)
+                && result.reason.contains("passes a credential")
+                && result.reason.contains("ask the user to run the command")
+                && !result.reason.contains("fixture-value")
+                && !result.reason.contains("hol-guard doctor"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+#[test]
+fn a_heap_only_node_options_setting_points_to_the_sandboxed_node_form() {
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-node-heap-{}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+    for command in [
+        "NODE_OPTIONS=--max-old-space-size=6144 bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=6144 npx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result
+                .reason
+                .contains("the NODE_OPTIONS setting can load code")
+                && result.reason.contains(
+                    "`node --max-old-space-size=6144 node_modules/typescript/bin/tsc --noEmit`"
+                ),
+            "{command}: {}",
+            result.reason
+        );
+    }
+    // Anything beyond a bare memory size keeps the plain refusal.
+    for command in [
+        "NODE_OPTIONS='--max-old-space-size=6144 --require ./x.js' bunx tsc --noEmit",
+        "NODE_OPTIONS=--max-old-space-size=99999999 bunx tsc --noEmit",
+        "NODE_OPTIONS=--require=./x.js bunx tsc --noEmit",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            result.minimum_action, "block",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            result.reason.contains("Run the command without it")
+                && !result.reason.contains("more memory"),
+            "{command}: {}",
+            result.reason
+        );
+    }
+}
+
+/// An `env` that names no program prints the environment and exits. Reading it
+/// as an interpreter that launches a file nobody opened blocked `env`,
+/// `env -0` and `env | grep '^PATH='` outright, with no approval row to give
+/// them. The dump is still a read of every secret the session exports, so it
+/// stays at review; what it must not be is unapprovable.
+#[test]
+fn an_env_that_names_no_program_is_reviewed_rather_than_refused() {
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let root = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!("guard-env-dump-{}-{nonce}", std::process::id()));
+    std::fs::create_dir_all(root.join("project")).unwrap();
+    let _cleanup = FixtureCleanup(root.clone());
+
+    for command in [
+        "env",
+        "env -0",
+        "env | grep '^PATH='",
+        "/usr/bin/env | head -5",
+        "env -u NODE_OPTIONS | sort",
+    ] {
+        let result = evaluate(&root, command);
+        assert_ne!(
+            result.reason_code, "native_command_extension_evaluation_failed",
+            "{command}: {}",
+            result.reason
+        );
+        assert!(
+            matches!(
+                result.minimum_action.as_str(),
+                "review" | "sandbox-required"
+            ),
+            "{command}: {} ({})",
+            result.minimum_action,
+            result.reason
+        );
+    }
+
+    // An `env` that does name a program still runs whatever that program is,
+    // so the prefix keeps the evaluation failure it arrived with. `-S` and
+    // `--split-string` carry the program inside the option's own value, so the
+    // launch arrives as one dash-prefixed word and must be read as a launch.
+    for command in [
+        "env -i sh -c 'echo hi'",
+        "env -S bash",
+        "env -Sbash",
+        "env --split-string=sh",
+        "env -iS'sh -c id'",
+    ] {
+        let result = evaluate(&root, command);
+        assert_eq!(
+            (result.minimum_action.as_str(), result.reason_code.as_str()),
+            ("block", "native_command_extension_evaluation_failed"),
             "{command}: {}",
             result.reason
         );

@@ -75,3 +75,33 @@ def test_owner_conflict_names_the_deleted_program(tmp_path):
     assert str(bridge) in message
     assert "no longer exists" in message
     assert "existing hooks have been preserved" in message
+
+
+def test_owner_conflict_tells_the_user_where_it_is_and_what_to_do(tmp_path):
+    """A refusal the user cannot act on is a dead end, so the message carries the facts.
+
+    Guard reaches here only for a handler it genuinely cannot speak for, so
+    the person has to settle it. That needs the handler's location, what it
+    runs, the fact that Guard changed nothing, and the single edit.
+    """
+
+    bridge = tmp_path / "other-install" / "codex_daemon_hook_bridge.py"
+    bridge.parent.mkdir(parents=True)
+    bridge.write_text("", encoding="utf-8")
+    command = _bridge_command(bridge)
+    config = tmp_path / ".codex" / "config.toml"
+
+    with pytest.raises(RuntimeError, match="codex_hook_owner_conflict") as raised:
+        require_codex_hook_owner(
+            command,
+            ownership="unmanaged",
+            coordinate="PreToolUse/group[0]/handler[1]",
+            source_path=str(config),
+        )
+
+    message = str(raised.value)
+    assert "PreToolUse/group[0]/handler[1]" in message
+    assert str(config) in message
+    assert command in message
+    assert "Guard installed nothing" in message
+    assert f"Delete that handler from {config}" in message

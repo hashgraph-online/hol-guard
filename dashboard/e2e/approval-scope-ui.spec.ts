@@ -53,6 +53,65 @@ const request: GuardApprovalRequest = {
   decision_v2_json: null,
 };
 
+for (const width of [1440, 390]) {
+  test(`native Bash offers both version-bound durations at width ${width}`, async ({ page }) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const command = `/bin/bash '/workspace/project/${"nested/".repeat(30)}maintenance.sh' dry`;
+    const item: GuardApprovalRequest = {
+      ...request, request_id: "native-bash-e2e", harness: "omp", artifact_type: "native_bash_request",
+      artifact_id: "native-bash-owner:native-pretool:v3", artifact_hash: "guard-approval-context:v1:fixture",
+      exact_action_persistence_eligible: true, allowed_scopes: ["artifact"],
+      raw_command_text: command, launch_target: command,
+      allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+    };
+    await page.setViewportSize({ width, height: 900 });
+    await mountApprovalFixture(page, bodies, item, {
+      settingsPayload: {
+        ...defaultSettingsPayload,
+        settings: {
+          ...defaultSettingsPayload.settings,
+          approval_gate: {
+            enabled: true, configured: true, cooldown_seconds: 0,
+            cooldown_active: false, cooldown_expires_at: null, locked_until: null,
+            fail_closed: true, strict_all_decisions: true, totp_enabled: false,
+          },
+        },
+      },
+    });
+    await page.goto(`/requests/${item.request_id}?${DAEMON}`);
+    await expect(page.getByRole("radio", { name: /^Run once/ })).toBeChecked();
+    const persistent = page.getByRole("radio", { name: /^Always allow this version in this project/ });
+    await persistent.focus();
+    await persistent.press("Space");
+    await expect(persistent).toBeChecked();
+    await page.getByRole("button", { name: "Always allow this version in this project", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Go back", exact: true }).press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(bodies).toHaveLength(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+
+  test(`unavailable script binding rejects stale Allow choices at width ${width}`, async ({ page }) => {
+    const bodies: Array<Record<string, unknown>> = [];
+    const item: GuardApprovalRequest = {
+      ...request, request_id: "unbound-script-e2e", once_only_reason: "script_execution_binding_unavailable",
+      exact_action_persistence_eligible: true, allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+      scope_restrictions: [],
+    };
+    await page.setViewportSize({ width, height: 900 });
+    await mountApprovalFixture(page, bodies, item);
+    await page.goto(`/requests/${item.request_id}?${DAEMON}`);
+    await expect(page.getByText(/Guard cannot bind this app's retry to the reviewed version/).first()).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Allow|Run once/ })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^(Run once|Allow just this once|Always allow)/ })).toHaveCount(0);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    expect(bodies).toHaveLength(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
+}
+
 async function mountApprovalFixture(
   page: Page,
   resolutionBodies: Array<Record<string, unknown>>,
@@ -145,6 +204,54 @@ test("approval review renders action-eligible scopes and binds the selected cont
   });
 });
 
+test("a request from an older Guard sends the user to a fresh request, never to run it themselves", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const unbound: GuardApprovalRequest = {
+    ...request, harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
+    launch_target: "bash maintenance.sh dry", raw_command_text: "bash maintenance.sh dry",
+    allowed_scopes: ["artifact"], allowed_scopes_by_action: { allow: ["artifact"], block: ["artifact"] },
+    recommended_scope_by_action: { allow: "artifact", block: "artifact" },
+    scope_restrictions: ["retry_cannot_reuse_approval"], exact_action_persistence_eligible: false,
+  };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await mountApprovalFixture(page, bodies, unbound);
+  await page.goto(`/requests/scope-e2e?${DAEMON}`);
+  await expect(page.getByText(/the new request offers Allow once and Always allow/)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Run this yourself" })).toHaveCount(0);
+  await expect(page.getByText(/run it yourself|change nothing/i)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Allow just this once|Approve and remember/ })).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText(/You can allow it once/)).toHaveCount(0);
+  await page.keyboard.press("Enter");
+  expect(bodies).toHaveLength(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("persistent-only native review requires explicit duration before submitting", async ({ page }) => {
+  const bodies: Array<Record<string, unknown>> = [];
+  const persistent: GuardApprovalRequest = {
+    ...request, harness: "omp", artifact_id: "omp:native-pretool:bash", artifact_type: "tool_call",
+    allowed_scopes: ["artifact", "workspace", "harness", "global"],
+    allowed_scopes_by_action: { allow: ["artifact", "workspace", "harness", "global"], block: ["artifact"] },
+    recommended_scope_by_action: { allow: "workspace", block: "artifact" },
+    scope_restrictions: ["retry_cannot_reuse_approval"], exact_action_persistence_eligible: true,
+  };
+  await mountApprovalFixture(page, bodies, persistent);
+  await page.goto(`/requests/scope-e2e?${DAEMON}`);
+  await expect(page.getByRole("radio", { name: /^This time/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: /Allow just this once|Allow and remember for this project/ })).toHaveCount(0);
+  await expect(page.getByRole("radio", { name: /Exact reviewed action/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose an available approval duration" })).toBeDisabled();
+  await page.keyboard.press("a");
+  await expect(page.getByText("Choose 'Always allow exact action' before approving; run once is unavailable.")).toBeVisible();
+  await expect(page.getByText("This action has no eligible approval scope.")).toHaveCount(0);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByText("Always allow exact action", { exact: true }).click();
+  await expect(page.getByRole("radio", { name: /Always allow exact action/ })).toBeChecked();
+  await expect(page.getByRole("button", { name: "Approve and remember", exact: true })).toBeEnabled();
+  expect(bodies).toHaveLength(0);
+});
+
 for (const toolName of ["read", "eval"]) {
   test(`native ${toolName} review shows the exact redacted action`, async ({ page }) => {
     const envelope = JSON.parse(readFileSync(
@@ -227,7 +334,8 @@ for (const totpEnabled of [false, true]) {
     await expect.poll(() => bodies.length).toBe(1);
     expect(bodies[0]).toMatchObject({
       request_ids: expect.arrayContaining(["bulk-enter-0", "bulk-enter-1"]),
-      approval_gate_use_cooldown: false,
+      // A configured cooldown is used by default; an Authenticator code never starts one.
+      approval_gate_use_cooldown: !totpEnabled,
       ...(totpEnabled ? { approval_totp_code: "123456" } : { approval_password: "test-password" }),
     });
     expect(bodies[0].request_ids).toHaveLength(2);
@@ -275,6 +383,8 @@ for (const totpEnabled of [false, true]) {
       await proof.press("Enter");
       expect(bodies).toHaveLength(0);
       await proof.fill(totpEnabled ? "123456" : "test-password");
+      await proof.dispatchEvent("keydown", { key: "Enter", bubbles: true, isComposing: true });
+      expect(bodies).toHaveLength(0);
       await proof.press("Enter");
       await expect.poll(() => bodies.length).toBe(1);
       await expect(cancel).toBeDisabled();
@@ -351,6 +461,11 @@ test("keyboard approval uses gate settings that arrive after request detail", as
   await page.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
   );
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true, isComposing: true }));
+  });
+  await expect(page.getByRole("dialog", { name: "Approval password required" })).toHaveCount(0);
+  expect(resolutionBodies).toHaveLength(0);
   await page.keyboard.press("a");
 
   await expect(page.getByRole("dialog", { name: "Approval password required" })).toBeVisible();

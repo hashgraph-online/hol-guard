@@ -10,7 +10,6 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.trusted_local_tool_jq import safe_jq_arguments
 from codex_plugin_scanner.guard.trusted_local_tools import (
     local_tool_approval_eligibility,
     parse_local_tool_grant_selection,
@@ -145,10 +144,6 @@ def test_local_tool_eligibility_supports_verified_jq_output_processing(
     )
     assert changed_filter is not None
     assert changed_filter.tool_identity_hash != eligibility.tool_identity_hash
-
-
-def test_jq_trust_rejects_unknown_options() -> None:
-    assert safe_jq_arguments(["--indent"]) is False
 
 
 def test_impeccable_local_scan_can_receive_conditional_package_trust(tmp_path: Path) -> None:

@@ -155,6 +155,10 @@ fn plan_query(root: &Scratch, query: &Value) -> CiscoPlanQueryV1 {
         cwd: text(&query["cwd"]).expect("cwd"),
         home: text(&query["home"]),
         approved_scan_roots: list(&query["approved_scan_roots"]),
+        shell_cwds: match query.get("shell_cwds") {
+            Some(value) => list(value),
+            None => Vec::new(),
+        },
         target_paths: list(&query["target_paths"]),
         sources: list(&query["sources"]),
     }
@@ -319,6 +323,7 @@ fn a_planned_scan_is_revalidated_through_its_own_binding() {
         cwd: root.text("{root}/ws"),
         home: None,
         approved_scan_roots: Vec::new(),
+        shell_cwds: Vec::new(),
         target_paths: vec!["skills/a/SKILL.md".to_owned()],
         sources: vec!["skill".to_owned()],
     };
@@ -344,4 +349,77 @@ fn a_planned_scan_is_revalidated_through_its_own_binding() {
     let mut unknown = recheck.clone();
     unknown.kind = "other".to_owned();
     assert!(cisco_plan::revalidated(&unknown).is_err());
+}
+
+#[cfg(unix)]
+#[test]
+fn every_proven_shell_directory_is_planned_in_one_exchange() {
+    let root = Scratch::new("cwds");
+    for workspace in ["w1", "w2"] {
+        let skill_dir = root.0.join(workspace).join("skills/a");
+        std::fs::create_dir_all(&skill_dir).expect("dirs");
+        std::fs::write(skill_dir.join("SKILL.md"), "x").expect("skill");
+    }
+    let query = CiscoPlanQueryV1 {
+        action_type: "file_write".to_owned(),
+        workspace: Some(root.text("{root}/w1")),
+        cwd: root.text("{root}/w1"),
+        home: None,
+        approved_scan_roots: Vec::new(),
+        shell_cwds: vec![
+            root.text("{root}/w1"),
+            root.text("{root}/w1"),
+            "   ".to_owned(),
+            root.text("{root}/w2"),
+        ],
+        target_paths: vec!["skills/a/SKILL.md".to_owned()],
+        sources: vec!["skill".to_owned()],
+    };
+    let steps = cisco_plan::plan(&query);
+    assert_eq!(
+        scans_of(&steps, &root),
+        vec![
+            json!({"kind": "skill", "scan_root": "{root}/w1/skills"}),
+            json!({"kind": "skill", "scan_root": "{root}/w2/skills"}),
+        ],
+        "each distinct proven directory is planned once, in the order proven"
+    );
+    assert!(
+        !steps
+            .iter()
+            .any(|step| matches!(step, CiscoStepV1::Signal { .. })),
+        "two proven directories that both contain the target earn no containment signal"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_proven_shell_directory_that_cannot_be_read_contains_the_whole_action() {
+    let root = Scratch::new("cwd-gone");
+    let skill_dir = root.0.join("w1/skills/a");
+    std::fs::create_dir_all(&skill_dir).expect("dirs");
+    std::fs::write(skill_dir.join("SKILL.md"), "x").expect("skill");
+    let query = CiscoPlanQueryV1 {
+        action_type: "file_write".to_owned(),
+        workspace: Some(root.text("{root}/w1")),
+        cwd: root.text("{root}/w1"),
+        home: None,
+        approved_scan_roots: Vec::new(),
+        shell_cwds: vec![root.text("{root}/w1"), root.text("{root}/never-created")],
+        target_paths: vec!["skills/a/SKILL.md".to_owned()],
+        sources: vec!["skill".to_owned()],
+    };
+    let steps = cisco_plan::plan(&query);
+    assert!(
+        scans_of(&steps, &root).is_empty(),
+        "an unprovable directory is an approved root for every plan, so none of them may scan"
+    );
+    assert_eq!(
+        steps
+            .iter()
+            .filter(|step| matches!(step, CiscoStepV1::Signal { .. }))
+            .count(),
+        1,
+        "the plans report that containment once, not once per planned workspace"
+    );
 }

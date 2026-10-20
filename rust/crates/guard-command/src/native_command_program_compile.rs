@@ -144,7 +144,10 @@ fn compile_versioned_package_subcommand(
     Ok(node)
 }
 
-fn compile_executable(operation: &str, mut config: Value) -> Result<ExecutableNode, &'static str> {
+pub(super) fn compile_executable(
+    operation: &str,
+    mut config: Value,
+) -> Result<ExecutableNode, &'static str> {
     let object = config
         .as_object_mut()
         .ok_or("native_command_executable_invalid")?;

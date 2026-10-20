@@ -38,44 +38,26 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
-    """True when native miss must pause the harness instead of continuing the turn."""
+    """True when native miss must pause the harness instead of continuing the turn.
+
+    This answer cannot come from the resident: it is the policy for the turns
+    where the resident is the thing that could not be reached.
+    """
 
     compact = _compact_hook_event_name(event_name)
     if compact in {"userpromptsubmit", "userpromptsubmitted"}:
         return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
-    if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
-        return False
+    # The tool already ran, so pausing the turn protects nothing.
     return compact not in {"posttooluse", "posttool"} and not compact.startswith("after")
-
-
-def hook_review_is_recording_only(
-    *,
-    guard_home: Path | None = None,
-    workspace: Path | None = None,
-    recording_only: bool = False,
-) -> bool:
-    """True when Watch/observe must record without stopping the harness."""
-
-    if recording_only:
-        return True
-    if guard_home is None:
-        return False
-    try:
-        from ..config import load_guard_config
-        from ..protection_posture import protection_is_off
-
-        config = load_guard_config(guard_home, workspace=workspace)
-    except (OSError, RuntimeError, TypeError, ValueError):
-        return False
-    return protection_is_off(posture=config.protection_posture, mode=config.mode)
 
 
 _PERMISSION_REQUEST_EVENTS = frozenset({"permissionrequest", "permissionrequestv2", "copilotpermissionrequest"})
 _REVIEW_CANNOT_FINISH_REASON_CODES = frozenset(
     {
         "native_policy_not_ready",
+        "native_policy_update_in_progress",
         "native_hook_event_unavailable",
         "native_pre_tool_unavailable",
         "native_post_tool_unavailable",
@@ -207,5 +189,4 @@ __all__ = [
     "hook_event_is_permission_request",
     "hook_event_pauses_when_unavailable",
     "hook_reason_continues_session",
-    "hook_review_is_recording_only",
 ]

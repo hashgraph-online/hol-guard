@@ -7,6 +7,7 @@ the caller already holds. It does not initialize or repair control authority.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -41,10 +42,17 @@ def review_command_native(
     compatibility_action_class: str | None = None,
     compatibility_reason: str | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    execution_environment: Mapping[str, object] | None = None,
     timeout_seconds: float = 0.5,
     record_health: bool = True,
 ) -> NativeCommandEvaluation | None:
-    """Return a bound native projection, or None without a usable native result."""
+    """Return a bound native projection, or None without a usable native result.
+
+    ``execution_environment`` is the stamp the hook bridge took in the shell
+    the command would run in. The rules that have to prove an inherited
+    variable away read it from there; without it the runtime answers from its
+    own process environment, which in the resident daemon is not the caller's.
+    """
     snapshot = extension_control_snapshot or current_extension_control_snapshot()
     if snapshot is None or snapshot.authority_failure is not None:
         return None
@@ -53,6 +61,7 @@ def review_command_native(
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
+        execution_environment=execution_environment,
         timeout_seconds=timeout_seconds,
         record_health=record_health,
     )
@@ -99,6 +108,7 @@ def evaluate_command_native(
     compatibility_action_class: str | None = None,
     compatibility_reason: str | None = None,
     workflow_authorization: GitHubWorkflowAuthorization | None = None,
+    execution_environment: Mapping[str, object] | None = None,
 ) -> CompositeCommandEvaluation | None:
     reviewed = review_command_native(
         command,
@@ -109,5 +119,6 @@ def evaluate_command_native(
         compatibility_action_class=compatibility_action_class,
         compatibility_reason=compatibility_reason,
         workflow_authorization=workflow_authorization,
+        execution_environment=execution_environment,
     )
     return reviewed.evaluation if reviewed is not None else None

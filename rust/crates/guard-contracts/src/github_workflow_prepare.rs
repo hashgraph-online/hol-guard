@@ -4,6 +4,9 @@
 //! `describe` mode collects the live `git`/`gh` context for one hook command and
 //! returns the privacy-safe approval record plus the exact command identity.
 //! `verify` mode re-derives a persisted record's command binding natively.
+//! `lineage` mode decides whether a persisted approval request, the Guard
+//! operation it resolved and that operation's session are one unbroken
+//! workflow lineage; the host reads those three rows and ships them.
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,8 +25,11 @@ pub const GITHUB_WORKFLOW_PREPARE_MAX_BYTES: usize = 1024 * 1024;
 pub struct GithubWorkflowPrepareRequestV1 {
     pub schema: String,
     pub request_id: String,
-    /// `describe` or `verify`.
+    /// `describe`, `verify` or `lineage`.
     pub mode: String,
+    /// The hook command `describe` prepares and `verify` re-derives. `lineage`
+    /// reads the command out of the operation's metadata instead and sends an
+    /// empty string here.
     pub command_text: String,
     /// `describe`: workspace root the hook runs in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -41,6 +47,15 @@ pub struct GithubWorkflowPrepareRequestV1 {
     /// `verify`: the persisted approval record to re-derive.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub record: Option<Value>,
+    /// `lineage`: the persisted approval request row.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_request: Option<Value>,
+    /// `lineage`: the Guard operation the request resolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<Value>,
+    /// `lineage`: the Guard session the operation names.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub session: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -64,4 +79,10 @@ pub struct GithubWorkflowPrepareResultV1 {
     /// `verify`: whether the persisted command still matches the record.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verified: Option<bool>,
+    /// `lineage`: the validated identities — `request_id`, `operation_id`,
+    /// `session_id` and the approval `record`. A broken lineage leaves this
+    /// absent and sets `code` to `none`; which condition broke it stays in
+    /// the runtime, since the messages quote workspace paths and identifiers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<Value>,
 }

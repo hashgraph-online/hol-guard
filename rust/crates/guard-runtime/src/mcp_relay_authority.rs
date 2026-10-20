@@ -40,6 +40,10 @@ pub(crate) struct ClaimTicket {
     pub(crate) expected: CatalogSnapshot,
     /// The authority's handle on the held claim.
     pub(crate) claim: String,
+    /// The decide request this call was decided from. A package call's claim
+    /// is spent against a post-claim evaluation of the package request this
+    /// carries, which the relay performs when the authority asks for it.
+    pub(crate) request: Value,
 }
 
 impl ClaimTicket {
@@ -64,6 +68,10 @@ pub(crate) enum ToolCallVerdict {
     Forward(ForwardTicket),
     /// Claim the saved approval once the catalog still matches, then answer.
     Claim(ClaimTicket),
+    /// Raise the client's inline approval prompt with these
+    /// `elicitation/create` params, then decide the same call again with the
+    /// answer. The relay owns the request id, so the authority never sees it.
+    Elicit(Value),
 }
 
 /// Decides `tools/call` requests; the relay never decides one itself.
@@ -84,6 +92,16 @@ pub(crate) trait RelayAuthority {
         ToolCallVerdict::Respond(ticket.no_decision())
     }
 
+    /// `_record_client_capabilities`: the client's `initialize` params, which
+    /// say whether it offers the inline approval prompt. An authority that
+    /// never asks for one ignores them.
+    fn client_capabilities(&mut self, _params: Option<&Value>) {}
+
+    /// The answer to the prompt the relay raised, which the next decide of
+    /// the same call routes. `None` is a prompt that went unanswered, which
+    /// the proxy answers itself with a cancel.
+    fn elicited(&mut self, _answer: Option<&Value>) {}
+
     /// The catalog changed between the decision and the write.
     fn boundary_changed(&mut self, ticket: ForwardTicket) -> Value;
 
@@ -93,6 +111,12 @@ pub(crate) trait RelayAuthority {
     /// Finish recording after the host was sent a response, so that work
     /// never delays the response itself.
     fn settle(&mut self) {}
+
+    /// A listing made the catalog whole: `tools` is every advertised
+    /// definition. Called once per catalog, after the host has the listing's
+    /// response; the authority owns delivery, never blocks on it, and keeps
+    /// a report the resident did not record due for a later `settle`.
+    fn catalog_complete(&mut self, _tools: &[Value]) {}
 }
 
 /// Fail-closed authority that decides nothing.

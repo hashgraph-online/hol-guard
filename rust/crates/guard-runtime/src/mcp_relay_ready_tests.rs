@@ -85,6 +85,17 @@ fn a_bound_workspace_and_harness_is_ready() {
 }
 
 #[test]
+fn an_observing_session_is_ready() {
+    let mut observe = view();
+    observe["harnesses"]["codex"]["config"]["mode"] = json!("observe");
+    let (fixture, workspace) = bound("observe", json!({"mcp_relay": observe}));
+    assert_eq!(
+        ask(&fixture, &workspace, "codex"),
+        json!({"schema": MCP_RELAY_READY_SCHEMA, "ready": true})
+    );
+}
+
+#[test]
 fn an_unbound_lane_names_the_lane_defer() {
     let fixture = fixture("relay-ready-unbound");
     let directory = fixture.root.join("repo");
@@ -101,6 +112,8 @@ fn a_workspace_the_lane_did_not_settle_is_not_ready() {
     let (fixture, _workspace) = bound("other", json!({}));
     let other = fixture.root.join("other");
     fs::create_dir_all(&other).unwrap();
+    // An overlay keeps the unbound directory waiting for its own publish.
+    fs::write(fixture.root.join(".hol-guard.toml"), b"").unwrap();
     assert_eq!(
         ask(&fixture, other.to_str().unwrap(), "codex"),
         not_ready("direct_lane_workspace_unknown")
@@ -143,10 +156,13 @@ fn a_session_the_resident_cannot_decide_is_not_ready() {
     );
     let mut observe = view();
     observe["harnesses"]["codex"]["config"]["mode"] = json!("observe");
-    let (fixture, workspace) = bound("observe", json!({"mcp_relay": observe}));
+    let (fixture, workspace) = bound(
+        "observe-ask",
+        json!({"mcp_relay": observe, "blocked_request_mode": "ask"}),
+    );
     assert_eq!(
         ask(&fixture, &workspace, "codex"),
-        not_ready("mcp_relay_session_observe")
+        not_ready("mcp_relay_session_review_mode")
     );
     let (fixture, workspace) = bound("view", json!({"mcp_relay": {"harnesses": {}}}));
     assert_eq!(

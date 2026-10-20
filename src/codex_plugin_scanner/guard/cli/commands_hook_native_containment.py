@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, TextIO
 
 from ..action_lattice import normalize_guard_action
 from ..adapters.zcode_contained_tests import route_zcode_containment
+from ..daemon.hook_contained_grant import granted_containment_response
 from ..daemon.hook_fail_closed import render_pre_tool
 from .commands_support_command_activity import record_pre_hook_command_activity_best_effort
 
@@ -37,20 +38,34 @@ def emit_native_containment_route(
     if not isinstance(edge, Mapping) or edge.get("recording_only") or edge.get("event_name") != "PreToolUse":
         return None
     result = edge.get("result")
-    if not isinstance(result, Mapping) or result.get("minimum_action") != "sandbox-required":
+    if not isinstance(result, Mapping):
         return None
     harness = str(edge.get("harness") or "")
-    receipt = render_pre_tool(harness, result, guard_home=context.guard_home)
-    routed = route_zcode_containment(
-        receipt,
-        harness=harness,
-        payload=payload,
-        guard_home=context.guard_home,
-        home_dir=context.home_dir,
-        workspace=workspace,
-    )
-    if routed is receipt:
-        return None
+    if result.get("minimum_action") != "sandbox-required":
+        # An outside-roots review this device's grant covers runs contained too.
+        routed = granted_containment_response(
+            store,
+            result,
+            harness=harness,
+            payload=payload,
+            guard_home=context.guard_home,
+            home_dir=context.home_dir,
+            workspace=workspace,
+        )
+        if routed is None:
+            return None
+    else:
+        receipt = render_pre_tool(harness, result, guard_home=context.guard_home)
+        routed = route_zcode_containment(
+            receipt,
+            harness=harness,
+            payload=payload,
+            guard_home=context.guard_home,
+            home_dir=context.home_dir,
+            workspace=workspace,
+        )
+        if routed is receipt:
+            return None
     # The daemon records this PreToolUse activity too; keep history the same when it is down.
     native_receipt = edge.get("receipt")
     receipt_id = native_receipt.get("decision_id") if isinstance(native_receipt, Mapping) else None

@@ -111,3 +111,27 @@ fn authenticated_initial_probe_reaches_restart_and_preserves_auth_failure() {
     assert_eq!(probes, 2);
     assert_eq!(error, "native_policy_verifier_key_missing");
 }
+
+#[test]
+fn a_state_whose_pid_was_reused_does_not_count_as_live() {
+    let process_id = std::process::id();
+    let marker = crate::resident_state::process_start_marker(process_id).unwrap();
+    let mut state = crate::resident_state::ResidentState {
+        schema: String::new(),
+        generation: 1,
+        process_id,
+        process_start_marker: marker,
+        owner_process_id: process_id,
+        owner_process_start_marker: String::new(),
+        runtime_sha256: String::new(),
+        transport: String::new(),
+        endpoint: String::new(),
+        unix_endpoint_identity: None,
+        token_hex: String::new(),
+        created_ms: 1,
+        state_mac: String::new(),
+    };
+    assert!(state_may_be_live(&state));
+    state.process_start_marker = "stale-process-marker".to_owned();
+    assert!(!state_may_be_live(&state));
+}

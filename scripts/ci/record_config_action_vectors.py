@@ -21,6 +21,7 @@ import json
 import random
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -146,20 +147,63 @@ def _typed_override(value: object) -> object:
 
 
 def _old_data_flow_action(config: GuardConfig, strong: bool) -> object:
-    """The configured data-flow action the previous Python hook evaluation sent."""
+    """The configured data-flow action the previous Python hook evaluation sent.
+
+    The posture ladder this reproduces is the resident's now, so the rule is
+    written out here rather than imported: a recorded oracle that calls into
+    the code it is meant to check stops being an oracle. Strong data-flow
+    exfiltration was terminal under either protecting posture, whether or not
+    the posture had been set explicitly; everything else kept the configured
+    action.
+    """
     from codex_plugin_scanner.guard.config import resolve_risk_action
-    from codex_plugin_scanner.guard.protection_posture import apply_posture_confidence
 
     action = resolve_risk_action(config, "data_flow_exfiltration", harness=HARNESS)
     if action is None:
         return None
-    return apply_posture_confidence(
-        posture=config.protection_posture,
-        explicit=config.protection_posture_explicit,
-        risk_class="data_flow_exfiltration",
-        action=action,
-        confidence="strong" if strong else None,
-    )
+    if strong and config.protection_posture in {"protected", "extra_careful"}:
+        return "block"
+    return action
+
+
+# The recorded vectors are the independent oracle for the resident's artifact
+# facts, so these readers live here rather than being imported from the runtime
+# the vectors check. They are the Python readers as they stood when the facts
+# moved into `hook_artifact_facts_op.rs`.
+def _recorded_risk_confidence(artifact) -> object:  # type: ignore[no-untyped-def]
+    confidence = artifact.metadata.get("risk_confidence")
+    if confidence is None:
+        confidence = artifact.metadata.get("confidence")
+    if isinstance(confidence, str) and confidence.strip():
+        return confidence
+    signals = artifact.metadata.get("risk_signals")
+    if not isinstance(signals, Sequence) or isinstance(signals, (str, bytes)):
+        return confidence
+    for signal in signals:
+        if not isinstance(signal, Mapping):
+            continue
+        signal_confidence = signal.get("confidence")
+        if isinstance(signal_confidence, str) and signal_confidence.strip():
+            return signal_confidence
+    return confidence
+
+
+def _recorded_skill_is_known_bad(artifact) -> bool:  # type: ignore[no-untyped-def]
+    if artifact.metadata.get("known_bad_skill") is True:
+        return True
+    if artifact.metadata.get("skill_is_known_bad") is True:
+        return True
+    intel = artifact.metadata.get("threat_intel")
+    return isinstance(intel, Mapping) and intel.get("known_bad") is True
+
+
+def _recorded_writes_launch_agent(artifact) -> bool:  # type: ignore[no-untyped-def]
+    return artifact.metadata.get("persistence_writes_launch_agent") is True
+
+
+def _recorded_action_class(artifact) -> str | None:  # type: ignore[no-untyped-def]
+    action_class = artifact.metadata.get("action_class")
+    return action_class if isinstance(action_class, str) else None
 
 
 def record() -> list[dict[str, object]]:
@@ -169,7 +213,6 @@ def record() -> list[dict[str, object]]:
     from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_requires_hard_block
     from codex_plugin_scanner.guard.harness_posture import harness_posture_override
-    from codex_plugin_scanner.guard.protection_posture import is_high_confidence
 
     events: list[dict[str, object]] = []
     protection_events.record_protection_event = lambda _home, _name, payload: events.append(dict(payload))
@@ -184,7 +227,7 @@ def record() -> list[dict[str, object]]:
         action = policy._runtime_artifact_policy_action(config, artifact, HARNESS)
         metadata = artifact.metadata
         default = metadata.get("guard_default_action")
-        confidence = runtime_policy._artifact_risk_confidence(artifact)
+        confidence = _recorded_risk_confidence(artifact)
         query = {
             "policy_config": {
                 "default_action": config.default_action,
@@ -213,9 +256,9 @@ def record() -> list[dict[str, object]]:
                 "shell_local_script_review": metadata.get("reason_code") == "shell_local_script_execution_review",
                 "guard_default_action": default if default is None or isinstance(default, str) else "",
                 "confidence_text": str(confidence or ""),
-                "confidence_strong": is_high_confidence(confidence),
-                "writes_launch_agent": runtime_policy._artifact_writes_launch_agent(artifact),
-                "skill_is_known_bad": runtime_policy._artifact_skill_is_known_bad(artifact),
+                "writes_launch_agent": _recorded_writes_launch_agent(artifact),
+                "action_class": _recorded_action_class(artifact),
+                "skill_is_known_bad": _recorded_skill_is_known_bad(artifact),
             },
         }
         data_flow = {

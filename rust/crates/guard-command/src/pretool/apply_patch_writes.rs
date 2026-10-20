@@ -125,8 +125,9 @@ pub(super) fn apply_patch_targets(patch: &str) -> Option<Vec<String>> {
 
 /// True only when every patch target is an ordinary file write that the
 /// host Write and Edit tools would also be allowed: the workspace, a linked
-/// worktree or the verified home, with home execution-control files and the
-/// agent-instruction and VCS names below still reviewed.
+/// worktree, the verified home or a private user-owned temporary directory,
+/// with home execution-control files and the agent-instruction and VCS names
+/// below still reviewed.
 pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Option<&str>) -> bool {
     let Some(workspace) = cwd.and_then(|root| std::fs::canonicalize(root).ok()) else {
         return false;
@@ -138,12 +139,13 @@ pub(super) fn routine_apply_patch(patch: &str, home_dir: Option<&str>, cwd: Opti
         // Codex resolves patch paths literally against cwd and never expands
         // `~`, so a tilde target would be screened as a different file.
         !target.starts_with('~')
-            && super::safe_writes::bounded_native_file_write_target(target, home_dir, cwd)
+            && (super::safe_writes::bounded_native_file_write_target(target, home_dir, cwd)
+                || super::safe_writes::bounded_native_temporary_write_target(target, home_dir, cwd))
             && !protected_target(target, &workspace, cwd)
     })
 }
 
-fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
+pub(super) fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
     let supplied = Path::new(target);
     let joined = if supplied.is_absolute() {
         supplied.to_path_buf()
@@ -165,7 +167,7 @@ fn protected_target(target: &str, workspace: &Path, cwd: Option<&str>) -> bool {
     protected_name(scope) || protected_name(spelled)
 }
 
-fn protected_name(path: &Path) -> bool {
+pub(super) fn protected_name(path: &Path) -> bool {
     let instruction_file = match path.file_name() {
         Some(name) => name.to_str().is_none_or(|name| {
             AGENT_INSTRUCTION_FILE_NAMES.contains(&name.to_ascii_lowercase().as_str())

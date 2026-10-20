@@ -9,6 +9,7 @@ after refreshing it, so the publisher refreshes the row before binding it.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -149,7 +150,7 @@ def test_a_policy_write_republishes_the_state_it_leaves(tmp_path: Path) -> None:
     assert after["generation"] == signed_generation
 
 
-_REFRESH = saved.refresh_integrity_state
+_REFRESH = saved._refresh_integrity_state
 
 
 class _Lane(saved.NativePolicySnapshotSavedStateMixin):
@@ -176,11 +177,11 @@ class _Lane(saved.NativePolicySnapshotSavedStateMixin):
 def _counted_refreshes(monkeypatch: pytest.MonkeyPatch) -> list[object]:
     calls: list[object] = []
 
-    def refresh(store: object) -> None:
+    def refresh(store: object) -> bool | None:
         calls.append(store)
-        _REFRESH(store)
+        return _REFRESH(store)
 
-    monkeypatch.setattr(saved, "refresh_integrity_state", refresh)
+    monkeypatch.setattr(saved, "_refresh_integrity_state", refresh)
     return calls
 
 
@@ -202,12 +203,14 @@ def test_a_saved_decision_rebinds_the_lane_from_the_reconcile(tmp_path: Path, mo
     assert lane._direct_lane_integrity_state == stored
 
     # A refresh that wrote the row costs one more refresh, which writes
-    # nothing; after that an unchanged database refreshes nothing.
+    # nothing. What matters is that the refreshes stop: the stamp also moves
+    # when SQLite checkpoints the write-ahead log, so how many of them the
+    # first write costs is not the lane's to decide.
     refreshes = _counted_refreshes(monkeypatch)
-    lane._recheck_direct_lane_saved_state()
-    lane._recheck_direct_lane_saved_state()
-    assert len(refreshes) <= 1
+    for _ in range(4):
+        lane._recheck_direct_lane_saved_state()
     settled = len(refreshes)
+    assert settled <= 2
     lane._recheck_direct_lane_saved_state()
     assert (lane.rebinds, len(refreshes)) == (1, settled)
 
@@ -226,12 +229,13 @@ def test_a_write_after_the_refresh_is_refreshed_on_the_next_reconcile(
     lane._recheck_direct_lane_saved_state()
     late: list[int] = []
 
-    def refresh_then_write(target: object) -> None:
-        _REFRESH(target)
+    def refresh_then_write(target: object) -> bool | None:
+        result = _REFRESH(target)
         if not late:
             late.append(_save_decision(store))
+        return result
 
-    monkeypatch.setattr(saved, "refresh_integrity_state", refresh_then_write)
+    monkeypatch.setattr(saved, "_refresh_integrity_state", refresh_then_write)
     first = _save_decision(store)
     lane._recheck_direct_lane_saved_state()
     assert lane.rebinds == 1
@@ -246,6 +250,65 @@ def test_a_write_after_the_refresh_is_refreshed_on_the_next_reconcile(
     stored = _stored(store)
     assert isinstance(stored, dict) and stored["generation"] == late[0]
     assert lane._direct_lane_integrity_state == stored
+
+
+@pytest.mark.parametrize("generation", [1, 2])
+@pytest.mark.parametrize("error", [OSError("gone"), sqlite3.OperationalError("locked"), RuntimeError("resident")])
+def test_a_failed_refresh_retries_without_another_database_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, generation: int, error: Exception
+) -> None:
+    # Exercise only publisher bookkeeping, without a native signer or daemon.
+    class _Store:
+        guard_home = tmp_path
+        generation = 1
+        calls = 0
+        fail = False
+
+        def __init__(self):
+            self.state = {
+                "backend": "test",
+                "cutover_complete": True,
+                "degraded_reasons": [],
+                "enforcement": "required",
+                "generation": 1,
+                "key_id": "test-key",
+                "mode": "protected",
+            }
+
+        def _connect(self):
+            return nullcontext(None)
+
+        def _load_policy_integrity_state(self, connection):
+            return dict(self.state)
+
+        def _refresh_policy_integrity_state(self, connection, *, now, create_key):
+            self.calls += 1
+            if self.fail:
+                self.fail = False
+                raise error
+            self.state = {**self.state, "generation": self.generation}
+
+    store = _Store()
+    lane = _Lane(store)
+    before = _stored(store)
+    store.generation = generation
+    store.calls = 0
+    store.fail = True
+    monkeypatch.setattr(saved, "_database_stamp", lambda _home: ((1, 1), None))
+    lane._recheck_direct_lane_saved_state()
+    assert store.calls == 1
+    assert _stored(store) == before
+    assert lane.rebinds == 0
+
+    lane._recheck_direct_lane_saved_state()
+    assert store.calls == 2
+    stored = _stored(store)
+    assert isinstance(stored, dict) and stored["generation"] == generation
+    assert lane.rebinds == (generation != 1)
+
+    # A successful unchanged refresh still settles at this stamp.
+    lane._recheck_direct_lane_saved_state()
+    assert store.calls == 2
 
 
 @pytest.mark.parametrize("error", [OSError("gone"), sqlite3.OperationalError("locked"), RuntimeError("resident")])

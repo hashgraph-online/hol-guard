@@ -28,7 +28,7 @@ _RUST_SOURCE = _REPO / "rust" / "crates" / "guard-runtime" / "src" / "claude_ses
 _CURSOR_ENV = ("CURSOR_VERSION", "CURSOR_PROJECT_DIR", "CURSOR_TRACE_ID", "CURSOR_SESSION_ID", "CURSOR_TRANSCRIPT_PATH")
 _BOTH_FEATURES = (claude_hook_argv.NATIVE_CLAUDE_HOOK_FEATURE, claude_hook_argv.NATIVE_CLAUDE_SESSION_START_FEATURE)
 
-posix_only = pytest.mark.skipif(os.name == "nt", reason="the native SessionStart lane is POSIX only")
+posix_only = pytest.mark.skipif(os.name == "nt", reason="these lane fixtures are POSIX only")
 
 
 def _status(features: tuple[str, ...], path: Path) -> NativeRuntimeStatus:
@@ -145,8 +145,8 @@ def test_installer_keeps_the_python_command_without_the_native_lane(
 ) -> None:
     context = _own_home_context(tmp_path, monkeypatch)
     if features is None:
-        monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda _feature: None)
-        monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda: None)
+        monkeypatch.setattr(claude_hook_argv, "native_hook_bridge_executable", lambda _feature, **_kwargs: None)
+        monkeypatch.setattr(claude_hook_argv, "_native_bridge_executable", lambda *_args, **_kwargs: None)
     else:
         _use_runtime(monkeypatch, tmp_path / "hol-guard-runtime", features)
 

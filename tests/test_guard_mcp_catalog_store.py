@@ -400,29 +400,6 @@ def test_command_failure_rolls_back_catalog_evidence(tmp_path: Path) -> None:
     assert [command["command_id"] for command in item["commands"]] == ["read"]
 
 
-def test_authorization_reads_only_exact_cached_digest_and_fences_its_revision(tmp_path: Path, monkeypatch):
-    import sqlite3
-
-    from codex_plugin_scanner.guard import store_mcp_catalog
-
-    store, identity = _store(tmp_path)
-    _publish(store, identity, "read", "delete")
-    store.upsert_local_cli_grant(identity=identity, state="allowed", expected_revision=0, updated_at=_FIRST)
-    digest = store_mcp_catalog.tool_definition_authority_hash(_catalog("read").tools[0])
-
-    def forbid_catalog_decode(_raw):
-        raise AssertionError("Authorization must not decode a whole discovery catalog")
-
-    monkeypatch.setattr(store_mcp_catalog, "_decode_snapshot", forbid_catalog_decode)
-    catalog = _tool_authority(store, identity, "read")
-    assert catalog == {"authority_hashes": {"read": digest}}
-    assert store_mcp_catalog.catalog_tool_authority_matches(catalog, "read", digest)
-    assert not store_mcp_catalog.catalog_tool_authority_matches(catalog, "delete", digest)
-    with sqlite3.connect(store.path) as connection:
-        connection.execute("update local_mcp_tool_authority set catalog_revision = 99")
-    assert _tool_authority(store, identity, "read") == {"authority_hashes": {}}
-
-
 def test_v10_migration_rebuilds_tool_hashes_without_changing_grants(tmp_path: Path):
     import sqlite3
 

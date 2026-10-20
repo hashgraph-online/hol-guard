@@ -10,6 +10,7 @@ import {
 import { approvalGateProofReady } from "./approval-proof-inline";
 import { ApprovalProofModal } from "./approval-proof-modal";
 import { buildDecisionPayload } from "./approval-scopes";
+import { retryCannotReuseApproval } from "./approval-retry-guidance";
 import {
   approveWithExtensionAllow,
   defaultExtensionAllowDeps,
@@ -25,6 +26,7 @@ export function ApprovalExtensionRecommendationCard(props: {
   item: GuardApprovalRequest;
   approvalGate: GuardApprovalGatePublicConfig | null;
   allowScope: DecisionScope;
+  persistExactAction?: boolean;
   disabled: boolean;
   onResolve: ReviewWorkspaceProps["onResolve"];
   onApproved: (message: string) => void;
@@ -43,7 +45,8 @@ export function ApprovalExtensionRecommendationCard(props: {
     [recommendation],
   );
   const primary = recommendation?.permissions[0] ?? null;
-  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange } = props;
+  const { item, allowScope, approvalGate, onResolve, onApproved, onDialogActiveChange, persistExactAction = false } = props;
+  const resolutionAvailable = !retryCannotReuseApproval(item) || persistExactAction;
   const dialogActive = confirmOpen || busy;
   useEffect(() => {
     onDialogActiveChange?.(dialogActive);
@@ -69,18 +72,17 @@ export function ApprovalExtensionRecommendationCard(props: {
       setError(null);
       void (async () => {
         try {
+          // Validate duration and scope before changing a protection setting.
+          const decisionPayload = buildDecisionPayload({
+            item, action: "allow", scope: allowScope,
+            reason: "approved in review; extension setting allowed", persistExactAction,
+          });
           const outcome = await approveWithExtensionAllow(
             {
               ...defaultExtensionAllowDeps,
               resolve: async (proof) => {
                 await onResolve({
-                  ...buildDecisionPayload({
-                    item,
-                    action: "allow",
-                    scope: allowScope,
-                    reason: "approved in review; extension setting allowed",
-                    persistExactAction: false,
-                  }),
+                  ...decisionPayload,
                   ...(approvalGateRequiredForResolution(approvalGate, "allow", allowScope) ? proof : {}),
                 });
               },
@@ -102,7 +104,7 @@ export function ApprovalExtensionRecommendationCard(props: {
         }
       })();
     },
-    [allowScope, approvalGate, copy, item, onApproved, onResolve, recommendation],
+    [allowScope, approvalGate, copy, item, onApproved, onResolve, recommendation, persistExactAction],
   );
 
   if (!recommendation || !copy || !primary) return null;
@@ -147,6 +149,11 @@ export function ApprovalExtensionRecommendationCard(props: {
               Protection settings need attention before Guard can change them from here.
             </p>
           )}
+          {!resolutionAvailable && (
+            <p className="mt-2 text-sm text-brand-dark/80">
+              Inspect this permission in Extensions. Approving this request once is unavailable.
+            </p>
+          )}
           {savedMessage && (
             <p className="mt-2 text-sm font-medium text-brand-green-text" role="status">
               {savedMessage}
@@ -158,7 +165,7 @@ export function ApprovalExtensionRecommendationCard(props: {
             </p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            {!authorityUnavailable && savedMessage === null && gateReady && (
+            {resolutionAvailable && !authorityUnavailable && savedMessage === null && gateReady && (
               <ActionButton
                 variant={caution ? "outline" : "primary"}
                 onClick={openConfirm}
@@ -167,7 +174,7 @@ export function ApprovalExtensionRecommendationCard(props: {
                 {copy.primaryLabel}
               </ActionButton>
             )}
-            {!authorityUnavailable && savedMessage === null && !gateReady && (
+            {resolutionAvailable && !authorityUnavailable && savedMessage === null && !gateReady && (
               <ActionButton href="/settings?section=approval" variant="outline">
                 Set up approval password
               </ActionButton>

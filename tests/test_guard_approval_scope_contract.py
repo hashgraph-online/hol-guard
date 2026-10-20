@@ -126,11 +126,11 @@ def test_scope_contract_is_action_aware(policy_action: GuardAction, expected_all
         assert contract.recommended_allow_scope is None
 
 
-def test_guard_control_cannot_be_browser_allowed() -> None:
+def test_guard_control_review_offers_allow_like_every_review() -> None:
     contract = request_scope_contract(_request("guard-control", action_type="guard_control").to_dict())
 
-    assert contract.allow_scopes == ()
-    assert "current_action_not_overridable" in contract.restrictions
+    assert "artifact" in contract.allow_scopes
+    assert "current_action_not_overridable" not in contract.restrictions
 
 
 @pytest.mark.parametrize("policy_action", ["block", "sandbox-required"])

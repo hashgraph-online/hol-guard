@@ -180,7 +180,7 @@ fn expand_user_windows(path: &Path, text: &str) -> std::path::PathBuf {
 // `\\?\` prefix is preserved — realpath never strips a prefix the input
 // already carried.
 #[cfg(any(windows, test))]
-fn strip_generated_extended_prefix(original: &str, mut resolved: String) -> String {
+pub(crate) fn strip_generated_extended_prefix(original: &str, mut resolved: String) -> String {
     if original.starts_with("\\\\?\\") {
         return resolved;
     }

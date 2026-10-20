@@ -1,3 +1,4 @@
+use guard_policy_snapshot::PolicySnapshotV3;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
@@ -56,18 +57,31 @@ pub(super) fn request_payload_identity(
     ] {
         identity.remove(key);
     }
-    // Pi retries create a new transport call ID for the unchanged action.
-    // Keep nested tool arguments and session identity in the commitment.
-    if matches!(harness, "pi" | "omp")
-        && event == "PreToolUse"
+    // A retry of an unchanged action mints a new transport call ID: Pi's
+    // `tool_call_id`, and the `tool_use_id` Claude Code and Codex stamp on each
+    // tool-use block the model emits. Dropping it lets an Allow once approval
+    // reach the agent's own retry. Nested tool arguments and session identity
+    // stay in the commitment, and a request without a session keeps the ID.
+    if event == "PreToolUse"
         && identity
             .get("session_id")
             .and_then(Value::as_str)
             .is_some_and(|s| !s.is_empty())
     {
-        identity.remove("tool_call_id");
+        for key in transport_call_id_keys(harness) {
+            identity.remove(*key);
+        }
     }
     Ok(Value::Object(identity))
+}
+
+/// The root payload keys a harness's retry replaces for the same action.
+fn transport_call_id_keys(harness: &str) -> &'static [&'static str] {
+    match harness {
+        "pi" | "omp" => &["tool_call_id"],
+        "claude-code" | "codex" => &["tool_use_id"],
+        _ => &[],
+    }
 }
 
 /// True when the snapshot's own `generation` agrees with the claimed one.
@@ -75,33 +89,93 @@ pub(crate) fn policy_generation_matches(snapshot: &Value, generation: u64) -> bo
     generation != 0 && snapshot.get("generation").and_then(Value::as_u64) == Some(generation)
 }
 
-pub(crate) fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
-    let object = snapshot.as_object();
-    let runtime_identity = object
-        .and_then(|value| value.get("runtime_identity"))
+fn claimed_field(snapshot: &Value, key: &str) -> Value {
+    snapshot
+        .as_object()
+        .and_then(|value| value.get(key))
         .cloned()
-        .unwrap_or(Value::Null);
-    let policy_digest = object
-        .and_then(|value| value.get("policy_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let rule_digest = object
-        .and_then(|value| value.get("rule_digest"))
-        .cloned()
-        .unwrap_or(Value::Null);
-    let scope_digest = object
+        .unwrap_or(Value::Null)
+}
+
+fn claimed_scope_digest(snapshot: &Value) -> Value {
+    snapshot
+        .as_object()
         .and_then(|value| value.get("scope_contract"))
         .and_then(Value::as_object)
         .and_then(|scope| scope.get("scope_digest"))
         .cloned()
-        .unwrap_or(Value::Null);
+        .unwrap_or(Value::Null)
+}
+
+pub(crate) fn stable_policy_identity(snapshot: &Value, generation: u64) -> Value {
     serde_json::json!({
         "generation": generation,
-        "policy_digest": policy_digest,
-        "rule_digest": rule_digest,
-        "runtime_identity": runtime_identity,
-        "scope_digest": scope_digest,
+        "policy_digest": claimed_field(snapshot, "policy_digest"),
+        "rule_digest": claimed_field(snapshot, "rule_digest"),
+        "runtime_identity": claimed_field(snapshot, "runtime_identity"),
+        "scope_digest": claimed_scope_digest(snapshot),
     })
+}
+
+/// Effective-policy entries the publisher merges from what the agent has been
+/// observed doing rather than from configuration. They accumulate while the
+/// agent works, so they republish the snapshot on their own, and the publisher
+/// merges them with a stricter-wins rule: they can only tighten an action, and
+/// a tightening that matters is already applied by the fresh evaluation that
+/// precedes any approval lookup.
+const OBSERVED_POLICY_KEYS: [&str; 3] = [
+    "mcp_provider_actions",
+    "mcp_provider_catalog_hash",
+    "mcp_tool_actions",
+];
+
+const ANCHOR_DIGEST_FAILED: &str = "native_hook_review_anchor_digest_failed";
+
+/// The part of a policy snapshot that can decide a verdict, without the
+/// snapshot bookkeeping that moves on its own. `request_identity` keeps the
+/// whole snapshot identity; only a one-time review approval is anchored to
+/// this narrower identity, so an identical retry still matches after a
+/// republish that changed nothing a verdict depends on.
+pub(crate) fn verdict_policy_identity(
+    snapshot: Option<&PolicySnapshotV3>,
+    claimed: &Value,
+) -> Result<Value, String> {
+    let Some(snapshot) = snapshot else {
+        // Nothing authenticated to read: keep the whole published identity
+        // rather than widen what a retry may be matched against.
+        return Ok(serde_json::json!({
+            "authority": "claimed",
+            "policy_digest": claimed_field(claimed, "policy_digest"),
+            "rule_digest": claimed_field(claimed, "rule_digest"),
+            "runtime_identity": claimed_field(claimed, "runtime_identity"),
+            "scope_digest": claimed_scope_digest(claimed),
+        }));
+    };
+    let mut configured_policy = serde_json::to_value(&snapshot.effective_policy)
+        .map_err(|_| ANCHOR_DIGEST_FAILED.to_owned())?;
+    let entries = configured_policy
+        .as_object_mut()
+        .ok_or_else(|| ANCHOR_DIGEST_FAILED.to_owned())?;
+    for key in OBSERVED_POLICY_KEYS {
+        entries.remove(key);
+    }
+    let business_policy = serde_json::to_value(&snapshot.business_policy)
+        .map_err(|_| ANCHOR_DIGEST_FAILED.to_owned())?;
+    Ok(serde_json::json!({
+        "authority": "snapshot",
+        "business_policy": business_policy,
+        // The extension set's own content digest, not its revision counters:
+        // the counters move when the set is republished unchanged.
+        "command_extensions": snapshot
+            .command_extensions
+            .as_ref()
+            .map(|binding| binding.effective_digest.as_str()),
+        "configured_policy": configured_policy,
+        "mode": snapshot.mode,
+        "rule_digest": snapshot.rule_digest,
+        "runtime_identity": snapshot.runtime_identity,
+        "scope_digest": snapshot.scope_contract.scope_digest,
+    }))
 }
 
 pub(super) fn canonical_identity_digest(value: &Value, error_code: &str) -> Result<String, String> {

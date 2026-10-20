@@ -124,7 +124,68 @@ pub(super) fn sibling_project_root(
         })
 }
 
-#[cfg(not(unix))]
+/// Whether the verified cd `target` lies in the canonical `root`. Windows
+/// reports the target in the harness's drive spelling, which the directory
+/// proof checked exactly; compare its canonical (`\\?\`) form there.
+fn within(target: &std::path::Path, root: &std::path::Path) -> bool {
+    if cfg!(windows) {
+        return std::fs::canonicalize(target).is_ok_and(|target| target.starts_with(root));
+    }
+    target.starts_with(root)
+}
+
+/// Whether the sink peels a relative leading `cd` into the workspace: only on
+/// Windows, and only when `&&` joins it to the next command
+/// (`peel_contained_wrapper`).
+fn relative_inside_peeled(model: &CanonicalCommandV1, segments: &[CommandSegmentV1]) -> bool {
+    cfg!(windows)
+        && matches!(segments, [cd, next, ..]
+            if text(model, cd.span.end, next.span.start).as_deref() == Some("&&"))
+}
+
+/// [`sibling_project_root`] on Windows, where the same containment question is
+/// asked of the owner SID rather than the owning uid.
+///
+/// Home is the only base here. The per-user temporary directory is inside the
+/// profile, so it needs no base of its own, and `std::env::temp_dir` reads
+/// `TMP`/`TEMP` from the environment the agent hands us: a base taken from
+/// there would be the caller's to choose. A checkout in a temporary directory
+/// outside the profile keeps its review instead.
+///
+/// The target is reported in the harness's drive spelling while `canonicalize`
+/// answers in the `\\?\` form, so containment is decided on canonical paths
+/// and the root comes back in the spelling the caller passed in.
+#[cfg(windows)]
+pub(super) fn sibling_project_root(
+    target: &std::path::Path,
+    home: &str,
+) -> Option<std::path::PathBuf> {
+    use guard_runtime_windows_process::owned_by_current_user;
+    let resolved = std::fs::canonicalize(target).ok()?;
+    let base = std::fs::canonicalize(home).ok()?;
+    if !resolved.starts_with(&base) || resolved == base {
+        return None;
+    }
+    target
+        .ancestors()
+        .take_while(|directory| {
+            // Containment is decided on canonical paths while the walk climbs
+            // the spelling the caller passed, so an ancestor can leave the
+            // profile without ever equalling `base`: `C:/outside/link/sub`,
+            // where `C:\outside\link` is a junction into the profile,
+            // resolves inside home but climbs to `C:\outside`. Stopping only
+            // at `base` would keep walking there and could return a
+            // user-created `.git` root outside the profile. Stop as soon as an
+            // ancestor is no longer strictly inside it.
+            std::fs::canonicalize(directory)
+                .is_ok_and(|directory| directory.starts_with(&base) && directory != base)
+        })
+        .find(|directory| directory.join(".git").symlink_metadata().is_ok())
+        .filter(|root| owned_by_current_user(root))
+        .map(std::path::Path::to_path_buf)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub(super) fn sibling_project_root(
     _target: &std::path::Path,
     _home: &str,
@@ -132,7 +193,44 @@ pub(super) fn sibling_project_root(
     None
 }
 
-/// Peel a verified `cd <workspace or sibling repository dir> &&` prefix, a
+/// Whether the execution sink can peel the leading `cd` of a command that
+/// `contained_core` accepted. The sink resolves a relative operand only when it
+/// names a sibling repository root outside the workspace, and runs a
+/// `;`-sequenced `cd` only into a sibling root, so a relative or sequenced cd
+/// inside the workspace classifies but cannot be peeled there.
+pub(super) fn sink_peels_leading_cd(
+    model: &CanonicalCommandV1,
+    context: super::PathContext<'_>,
+) -> bool {
+    let Some(first) = model.segments.first() else {
+        return true;
+    };
+    if first.executable.as_deref() != Some("cd") {
+        return true;
+    }
+    let (Some(target), Some(cwd), Some(home)) = (
+        super::segment_proof::verified_cwd_compound_context(model, context),
+        context.cwd.and_then(|cwd| std::fs::canonicalize(cwd).ok()),
+        context.home_dir,
+    ) else {
+        return false;
+    };
+    let target = std::path::PathBuf::from(target);
+    let inside = within(&target, &cwd);
+    let operand = first.arguments.first().map_or("", String::as_str);
+    let relative = !operand.starts_with(['/', '~']);
+    let sequenced = model.segments.get(1).is_some_and(|next| {
+        text(model, first.span.end, next.span.start).is_some_and(|between| between == ";")
+    });
+    if inside {
+        return (!relative || relative_inside_peeled(model, &model.segments)) && !sequenced;
+    }
+    let sibling = sibling_project_root(&target, home).is_some_and(|root| root == target);
+    !relative || sibling
+}
+
+/// Peel a verified `cd <workspace or sibling repository dir> &&` prefix
+/// spelled as the sink peels it, a
 /// trailing `2>&1`, a chain of bounded `| tail -N`/`| head -N` and
 /// standard-input `| grep` filters and a final `; echo "<label>$?"`,
 /// returning the sole core invocation.
@@ -155,9 +253,23 @@ pub(super) fn contained_core(
         let target = super::segment_proof::verified_cwd_compound_context(model, context)?;
         let workspace = std::fs::canonicalize(context.cwd?).ok()?;
         let target = std::path::Path::new(&target);
-        if !target.starts_with(&workspace)
-            && sibling_project_root(target, context.home_dir?).is_none()
-        {
+        let inside = within(target, &workspace);
+        let sibling = sibling_project_root(target, context.home_dir?);
+        if !inside && sibling.is_none() {
+            return None;
+        }
+        // The sink peels a relative target only when it names a sibling
+        // repository root outside the workspace (`peel_contained_wrapper`).
+        // Any other relative target is left to the workspace sandbox, which
+        // runs the text whole, instead of a receipt the sink cannot redeem.
+        // Windows has no workspace sandbox, so there the sink also peels an
+        // `&&`-joined relative cd into the workspace.
+        let [spelled] = segments[0].arguments.as_slice() else {
+            return None;
+        };
+        let anchored = spelled.starts_with('~') || std::path::Path::new(spelled).is_absolute();
+        let peeled_inside = inside && relative_inside_peeled(model, segments);
+        if !anchored && !peeled_inside && (inside || sibling.as_deref() != Some(target)) {
             return None;
         }
         start = 1;

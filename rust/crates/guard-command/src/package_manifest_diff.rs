@@ -102,6 +102,25 @@ enum ParseFailure {
 
 type ParseResult<T> = Result<T, ParseFailure>;
 
+/// Python compiles its patterns at import, so they are compiled before any
+/// clock starts and a budget covers parsing only. Callers that start their own
+/// clock before reaching this module call this first.
+pub fn compile_patterns() {
+    for pattern in [
+        &GRADLE_DEP_RE,
+        &GEMFILE_RE,
+        &GO_REQUIRE_RE,
+        &YARN_CLASSIC_VERSION_RE,
+        &YARN_BERRY_VERSION_RE,
+        &GEMFILE_LOCK_HEADER_RE,
+        &GEMFILE_LOCK_SPEC_RE,
+        &REQ_COMMENT_RE,
+        &REQ_HASH_RE,
+    ] {
+        LazyLock::force(pattern);
+    }
+}
+
 struct Deadline {
     instant: Instant,
 }
@@ -109,6 +128,7 @@ struct Deadline {
 impl Deadline {
     /// `deadline = time.monotonic() + (deadline_ms / 1000)` (:49, :73).
     fn from_ms(deadline_ms: u64) -> Self {
+        compile_patterns();
         Self {
             instant: Instant::now() + Duration::from_millis(deadline_ms),
         }

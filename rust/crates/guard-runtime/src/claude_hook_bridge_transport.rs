@@ -22,7 +22,8 @@ const CHALLENGE_LABEL: &str = "daemon identity challenge";
 const HOOK_DEADLINE: &str = "daemon hook response exceeded the hook deadline";
 const INTEGER_LIMIT: &str = "Exceeds the limit (4300 digits) for integer string conversion";
 const RECURSION_LIMIT: &str = "maximum recursion depth exceeded while decoding a JSON document";
-const OVERLOAD_MARKERS: [&str; 5] = ["capacity", "overload", "too_many", "too many", "busy"];
+pub(crate) const OVERLOAD_MARKERS: [&str; 5] =
+    ["capacity", "overload", "too_many", "too many", "busy"];
 
 /// A daemon exchange failure, in the three shapes the Python bridge
 /// classifies: an HTTP status, a `ValueError` (the daemon or its state
@@ -199,6 +200,31 @@ pub(crate) fn hook_event_name(data: &str) -> Result<String, BridgeError> {
         ));
     }
     Ok(name.to_owned())
+}
+
+/// Whether the daemon `state_path` names is up and proves its identity,
+/// without sending it a hook: what the bridge waits on after starting the
+/// daemon, so a hook is still delivered at most once to the new daemon.
+pub(crate) fn daemon_proves_identity(
+    state_path: &Path,
+    data: &str,
+    timeout: Duration,
+) -> Result<(), BridgeError> {
+    let deadline = Instant::now() + timeout;
+    let state = authenticated_state(state_path).map_err(BridgeError::Transport)?;
+    let hook_event = hook_event_name(data)?;
+    let nonce = new_nonce()?;
+    let mut connection = LoopbackConnection::new(state.text("host"), state.port());
+    let challenge = request_identity_challenge(
+        &mut connection,
+        state.text("state_id"),
+        &nonce,
+        &hook_event,
+        deadline,
+    )?;
+    verify_challenge_response(&challenge, &state, &nonce, &hook_event)
+        .map(|_| ())
+        .map_err(BridgeError::Value)
 }
 
 pub(crate) fn new_nonce() -> Result<String, BridgeError> {

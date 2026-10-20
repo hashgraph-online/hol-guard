@@ -346,11 +346,17 @@ def _batch_chunk(
         payload=resident,
         deadline_monotonic=deadline,
     )
+    del resident
     if output is None:
         native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_unavailable")
         return None
     try:
-        envelope = json.loads(output)
+        # Transfer bytes to text before parsing, so the request, response bytes
+        # and parsed response do not remain live together for a large batch.
+        text = output.decode(json.detect_encoding(output), "surrogatepass")
+        del output
+        envelope = json.loads(text)
+        del text
     except (UnicodeDecodeError, json.JSONDecodeError):
         native_record_resident_failure(identity.sha256, guard_home, reason="native_command_effect_decode_failed")
         raise NativeCommandEffectMalformedError("command_effect batch result is not valid JSON") from None

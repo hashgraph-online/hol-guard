@@ -151,6 +151,21 @@ def test_resident_context_digest_validation_cases(managed_runtime: tuple[Path, P
         assert result.get("validation_reason") == case["reason"], case["id"]
 
 
+def test_resident_context_digest_token_well_formed_cases(managed_runtime: tuple[Path, Path]) -> None:
+    runtime, guard_home = managed_runtime
+    provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    cases = _cases()["token_cases"]
+    assert isinstance(cases, list) and cases
+    for case in cases:
+        result = _op(
+            runtime,
+            guard_home,
+            {"kind": "approval_context_token_well_formed", "token": case["token"]},
+        )
+        assert result["status"] == "ok", case["id"]
+        assert result["approval_context_token_well_formed"] is (case.get("parsed") is not None), case["id"]
+
+
 def test_resident_context_digest_rejects_unknown_fields(managed_runtime: tuple[Path, Path]) -> None:
     runtime, guard_home = managed_runtime
     provision_native_policy_verifier_key(guard_home, b"\x07" * 32)

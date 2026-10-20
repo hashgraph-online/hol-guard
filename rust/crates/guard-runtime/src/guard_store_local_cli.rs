@@ -6,13 +6,18 @@
 //! Instants follow `parse_utc_timestamp`: stripped, a trailing `Z` read as
 //! UTC, naive values read as UTC, and every comparison made on UTC instants.
 
+use std::collections::BTreeSet;
+
 use rusqlite::Connection;
 use serde_json::Value;
 
 use crate::guard_store_args::Args;
-use crate::guard_store_db::{exec, query_all, query_one, runtime_error, value_error, StoreResult};
+use crate::guard_store_db::{
+    exec, query_all, query_one, runtime_error, text, value_error, StoreError, StoreResult,
+};
 use crate::guard_store_json::{py_str, py_strip};
 use crate::guard_store_observed_mcp::is_local_cli_id;
+use crate::local_mcp_grant_identity::is_command_id;
 use crate::policy_bundle_time::{from_isoformat, micros_to_utc_isoformat};
 
 pub(crate) const RETENTION_DAYS: i64 = 30;
@@ -292,6 +297,7 @@ pub(crate) fn record_observation(connection: &Connection, args: &Args) -> StoreR
         }
         return Ok(Value::Null);
     }
+    clear_cause_of_other_identity(connection, cli_id, identity_hash)?;
     let mut params = vec![Value::from(identity_hash)];
     params.extend(shared);
     params.push(Value::from(seen_at));
@@ -318,6 +324,31 @@ pub(crate) fn record_observation(connection: &Connection, args: &Args) -> StoreR
         true,
     )?;
     Ok(Value::Null)
+}
+
+/// A blocked cause belongs to the identity whose run hit it, so a changed
+/// identity starts without one. Stores that predate the column keep none.
+fn clear_cause_of_other_identity(
+    connection: &Connection,
+    cli_id: &str,
+    identity_hash: &str,
+) -> StoreResult<()> {
+    let has_cause = query_one(
+        connection,
+        "select 1 from pragma_table_info('local_cli_observation') \
+         where name = 'first_blocked_cause'",
+        &[],
+    )?
+    .is_some();
+    if has_cause {
+        exec(
+            connection,
+            "update local_cli_observation set first_blocked_cause = null \
+             where cli_id = ? and identity_hash <> ?",
+            &[Value::from(cli_id), Value::from(identity_hash)],
+        )?;
+    }
+    Ok(())
 }
 
 /// Delete one un-enrolled record and its inventory rows, refusing with the
@@ -384,4 +415,72 @@ pub(crate) fn prune_inactive(connection: &Connection, args: &Args) -> StoreResul
         args.flag("throttle")?,
     )?;
     Ok(Value::from(pruned))
+}
+
+/// Replace one CLI's command catalog, in order, and drop command grants the
+/// new catalog no longer names. Text columns keep the Python owner's
+/// character limits.
+pub(crate) fn replace_commands(connection: &Connection, args: &Args) -> StoreResult<Value> {
+    let cli_id = args.str("cli_id")?;
+    if !is_local_cli_id(cli_id) {
+        return value_error("invalid local CLI id");
+    }
+    let commands = args
+        .raw("commands")
+        .and_then(Value::as_array)
+        .ok_or(StoreError::Invalid("native_guard_store_args_invalid"))?;
+    exec(
+        connection,
+        "delete from local_cli_command where cli_id = ?",
+        &[Value::from(cli_id)],
+    )?;
+    let mut known = BTreeSet::new();
+    for (index, command) in commands.iter().enumerate() {
+        let command = Args(
+            command
+                .as_object()
+                .ok_or(StoreError::Invalid("native_guard_store_args_invalid"))?,
+        );
+        let command_id = command.str("command_id")?;
+        if !is_command_id(command_id) {
+            return value_error("invalid local CLI command id");
+        }
+        let truncated = |key: &str, limit: usize| -> StoreResult<Value> {
+            Ok(Value::from(
+                command.str(key)?.chars().take(limit).collect::<String>(),
+            ))
+        };
+        exec(
+            connection,
+            "insert into local_cli_command ( \
+                 cli_id, command_id, name, usage, description, parent_id, sort_index \
+             ) values (?, ?, ?, ?, ?, ?, ?)",
+            &[
+                Value::from(cli_id),
+                Value::from(command_id),
+                truncated("name", 120)?,
+                truncated("usage", 160)?,
+                truncated("description", 240)?,
+                opt(&command, "parent_id")?,
+                Value::from(index as i64),
+            ],
+        )?;
+        known.insert(command_id.to_owned());
+    }
+    let existing = query_all(
+        connection,
+        "select command_id from local_cli_command_grant where cli_id = ?",
+        &[Value::from(cli_id)],
+    )?;
+    for row in &existing {
+        let command_id = text(row, "command_id");
+        if !known.contains(command_id) {
+            exec(
+                connection,
+                "delete from local_cli_command_grant where cli_id = ? and command_id = ?",
+                &[Value::from(cli_id), Value::from(command_id)],
+            )?;
+        }
+    }
+    Ok(Value::Null)
 }

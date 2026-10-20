@@ -15,7 +15,10 @@ services:
       PYTHONUNBUFFERED: "1"
     read_only: true
     tmpfs:
-      - /tmp:size=64m,mode=1777
+      # The installed source compiler is materialized under /tmp and executed
+      # there, so this mount needs exec (Docker tmpfs defaults to noexec) and
+      # room for the native binary.
+      - /tmp:size=256m,mode=1777,exec
       - /workspace:size=32m,mode=0755,uid=10001,gid=10001
     volumes:
       - guard-state:/guard-home

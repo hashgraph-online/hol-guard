@@ -8,6 +8,9 @@ type Reason = &'static str;
 const PARAMETER: Reason = "powershell_cmdlet_parameter_unsupported";
 const ARGUMENTS: Reason = "powershell_static_method_arguments_unsupported";
 
+#[path = "powershell_effects/benign.rs"]
+mod benign;
+
 #[derive(Clone, Copy, PartialEq)]
 enum Kind {
     Read,
@@ -34,6 +37,12 @@ fn cmdlet_kind(name: &str) -> Option<Kind> {
         "start-process" | "saps" | "start" => Kind::Launch,
         _ => return None,
     })
+}
+
+/// True for read-only cmdlet names that POSIX parses as an unknown word.
+pub(crate) fn is_powershell_benign(name: &str) -> bool {
+    let lowered = name.to_ascii_lowercase();
+    lowered != "echo" && benign::benign_kind(&lowered).is_some()
 }
 
 /// True for names that only PowerShell resolves to a modeled effect, so a
@@ -116,6 +125,31 @@ fn path_slot(slot: Option<String>) -> Result<String, Reason> {
     slot.filter(|path| !path.is_empty()).ok_or(PARAMETER)
 }
 
+/// Rejects provider paths (`Env:`, `Variable:`, `HKCU:`), alternate data
+/// streams and drive-relative paths. Quoting hides their colon from the parser,
+/// and none of them names the file a POSIX tool would open.
+fn file_path(path: &str) -> Result<String, Reason> {
+    // `\\?\C:\...` names the same drive path without Win32 normalization.
+    let body = ["\\\\?\\", "//?/"]
+        .iter()
+        .find_map(|prefix| path.strip_prefix(prefix))
+        .unwrap_or(path);
+    let bytes = body.as_bytes();
+    let drive = bytes.len() >= 3
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && matches!(bytes[2], b'/' | b'\\');
+    let rest = if drive { &body[2..] } else { body };
+    if path.is_empty() || rest.contains(':') {
+        return Err("powershell_provider_path_not_supported");
+    }
+    Ok(path.to_owned())
+}
+
+fn file_paths(paths: Vec<String>) -> Result<Vec<String>, Reason> {
+    paths.iter().map(|path| file_path(path)).collect()
+}
+
 pub(crate) fn canonicalize(call: &PsCall) -> Result<Vec<String>, Reason> {
     match call {
         PsCall::Command { name, args } => canonicalize_command(name, args),
@@ -138,6 +172,13 @@ fn recursive_force(recurse: bool, force: bool) -> Option<String> {
 }
 
 fn canonicalize_command(name: &str, args: &[PsArg]) -> Result<Vec<String>, Reason> {
+    if let Some(benign) = benign::benign_kind(&name.to_ascii_lowercase()) {
+        return Ok(benign::benign_tokens(benign, args).unwrap_or_else(|_| {
+            let mut tokens = vec![name.to_owned()];
+            tokens.extend(args.iter().map(|arg| arg.value.clone()));
+            tokens
+        }));
+    }
     let kind = cmdlet_kind(&name.to_ascii_lowercase());
     let path_names: &[&str] = &["path", "literalpath"];
     let mut tokens = Vec::new();
@@ -167,7 +208,7 @@ fn canonicalize_command(name: &str, args: &[PsArg]) -> Result<Vec<String>, Reaso
                 return Err(PARAMETER);
             }
             tokens.push("cat".to_owned());
-            tokens.extend(paths);
+            tokens.extend(file_paths(paths)?);
         }
         Some(Kind::Write | Kind::Append | Kind::OutFile) => {
             let out_file = kind == Some(Kind::OutFile);
@@ -189,7 +230,7 @@ fn canonicalize_command(name: &str, args: &[PsArg]) -> Result<Vec<String>, Reaso
             } else {
                 &[&["path", "literalpath"], &["value"]]
             };
-            let path = path_slot(fill(&bound, slots)?.remove(0))?;
+            let path = file_path(&path_slot(fill(&bound, slots)?.remove(0))?)?;
             tokens.push("tee".to_owned());
             if kind == Some(Kind::Append) || bound.has("append") {
                 tokens.push("-a".to_owned());
@@ -210,7 +251,7 @@ fn canonicalize_command(name: &str, args: &[PsArg]) -> Result<Vec<String>, Reaso
             }
             tokens.push("rm".to_owned());
             tokens.extend(recursive_force(bound.has("recurse"), bound.has("force")));
-            tokens.extend(paths);
+            tokens.extend(file_paths(paths)?);
         }
         Some(Kind::Copy | Kind::Move) => {
             let bound = bind(
@@ -219,8 +260,8 @@ fn canonicalize_command(name: &str, args: &[PsArg]) -> Result<Vec<String>, Reaso
                 &["recurse", "force"],
             )?;
             let mut slots = fill(&bound, &[&["path", "literalpath"], &["destination"]])?;
-            let destination = path_slot(slots.remove(1))?;
-            let source = path_slot(slots.remove(0))?;
+            let destination = file_path(&path_slot(slots.remove(1))?)?;
+            let source = file_path(&path_slot(slots.remove(0))?)?;
             let copy = kind == Some(Kind::Copy);
             tokens.push(if copy { "cp" } else { "mv" }.to_owned());
             let recurse = copy && bound.has("recurse");

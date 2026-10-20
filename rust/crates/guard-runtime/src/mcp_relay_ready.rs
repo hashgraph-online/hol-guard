@@ -1,13 +1,14 @@
 //! Whether the direct lane is ready for a native MCP relay session.
 //!
-//! The relay asks once, before it reads the host's input or starts the MCP
-//! server, and launches the Python proxy instead when the lane is not ready:
-//! otherwise every `tools/call` of the session would defer and be refused.
-//! A lane is ready only when the resident can decide the session's calls at
-//! all (`mcp_relay_decide_session.rs`): a config that prompts or observes,
-//! or a store holding remote policy, hands the session to the proxy too, and
-//! so does a server whose catalog the resident has no report of or whose
-//! catalog offers a tool the proxy decides (`mcp_relay_servers.rs`).
+//! The relay asks before it reads the host's input or starts the MCP server,
+//! and again while the session's first call waits for a lane that was not
+//! ready yet. A lane is ready only when the resident can decide the
+//! session's calls at all (`mcp_relay_decide_session.rs`): a config that
+//! prompts (in either mode, observe included) or a store holding remote
+//! policy sends the session to the Python proxy, and so does a server whose
+//! catalog offers a tool the proxy decides (`mcp_relay_servers.rs`). A
+//! server whose catalog the resident has no report of is not ready either,
+//! but its session stays native and reports the catalog it relays.
 //! The answer is only `ready` or `not_ready` with the lane's defer code. It
 //! carries no verdict, no binding state and no key, and it never stands in
 //! for a decision: each call is still admitted by `mcp_relay_decide`, which
@@ -57,7 +58,7 @@ fn readiness(
     }
     let workspace = settled_directory(&request.workspace)?;
     let (_snapshot, binding) = policy_store
-        .admit_direct_hook(&workspace)
+        .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(|defer| defer.code())?;
     if binding.evidence_drain != Some(true) {
         return Err(EVIDENCE_UNDRAINED);

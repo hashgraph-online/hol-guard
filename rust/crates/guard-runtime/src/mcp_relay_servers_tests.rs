@@ -60,24 +60,32 @@ fn a_server_past_the_bound_stays_unknown() {
 }
 
 #[test]
-fn shell_composio_command_and_nameless_tools_are_decided_by_the_proxy() {
+fn composio_and_nameless_tools_are_decided_by_the_proxy() {
     for tool in [
-        json!({"name": "bash"}),
-        json!({"name": " Run_Command "}),
-        json!({"name": "\u{1c}shell"}),
         json!({"name": "COMPOSIO_SEARCH_TOOLS"}),
         json!({"name": "github__composio_execute"}),
-        json!({"name": "exec", "inputSchema": {"properties": {"cmd": {"type": "string"}}}}),
-        json!({"name": "exec", "input_schema": {"properties": {"shellCommand": {}}}}),
         json!({"description": "no name"}),
         json!({"name": 7}),
     ] {
         assert!(proxy_tool(&tool), "{tool}");
     }
+}
+
+#[test]
+fn a_shell_or_command_tool_no_longer_holds_its_server_back() {
+    // The resident decides a package call itself, and a package call it
+    // cannot settle marks the server on its way to the fail-closed answer.
     for tool in [
+        json!({"name": "bash"}),
+        json!({"name": " Run_Command "}),
+        json!({"name": "\u{1c}shell"}),
+        json!({"name": "exec", "inputSchema": {"properties": {"cmd": {"type": "string"}}}}),
+        json!({"name": "exec", "input_schema": {"properties": {"shellCommand": {}}}}),
+        json!({"name": "run", "inputSchema": {"$ref": "#/$defs/Run"}}),
+        json!({"name": "run", "inputSchema": {"allOf": [{"properties": {"command": {}}}]}}),
+        json!({"name": "run", "inputSchema": {"patternProperties": {"^comm": {}}}}),
         json!({"name": "read_file", "inputSchema": {"properties": {"path": {}}}}),
-        json!({"name": "bash_history_search"}),
-        json!({"name": "commands", "inputSchema": {"properties": {"commands": {}}}}),
+        json!({"name": "read_file", "inputSchema": "object"}),
     ] {
         assert!(!proxy_tool(&tool), "{tool}");
     }
@@ -95,7 +103,10 @@ fn a_report_records_whether_any_tool_is_decided_by_the_proxy() {
     assert_eq!(answer, json!({"schema": REPORT_SCHEMA, "recorded": true}));
     assert_eq!(servers.relayable(&server("docs")), Ok(()));
     let request = McpRelayServerReportRequestV1 {
-        tools: vec![json!({"name": "read_file"}), json!({"name": "terminal"})],
+        tools: vec![
+            json!({"name": "read_file"}),
+            json!({"name": "COMPOSIO_EXECUTE"}),
+        ],
         ..request
     };
     report(&request, &servers).unwrap();

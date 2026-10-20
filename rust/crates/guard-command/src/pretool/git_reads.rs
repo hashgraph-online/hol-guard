@@ -1,9 +1,9 @@
 //! Read-only `git` invocations proven without a review.
 //!
 //! Status, diff, log, show, grep, rev-parse, merge-base, ls-files, `remote -v`, `worktree list`,
-//! branch listings, `hash-object`, `config`, `ls-tree` and `cat-file` reads. Diff-style reads that can run a
-//! configured helper need the helper-context probe or both `--no-ext-diff`
-//! and `--no-textconv`.
+//! branch listings, `show-ref`, `for-each-ref`, `rev-list` commit walks, `hash-object`, `config`,
+//! `ls-tree` and `cat-file` reads. Diff-style reads that can run a configured helper need the
+//! helper-context probe or both `--no-ext-diff` and `--no-textconv`.
 
 #[path = "git_log_names.rs"]
 mod log_names;
@@ -32,6 +32,10 @@ pub(super) fn safe_git_arguments(
         match inspected.split_first() {
             Some((subcommand, rest)) if subcommand == "branch" => {
                 return leading_safe && super::git_branch_listing::is_listing(rest);
+            }
+            // Tag patterns are ref names too, and a listing prints names only.
+            Some((subcommand, rest)) if subcommand == "tag" => {
+                return leading_safe && super::git_tag_listing::is_listing(rest);
             }
             // The pattern is search text, not a path: only the revisions and
             // pathspecs pass the path screen. Grep pages by default, so the
@@ -100,10 +104,62 @@ pub(super) fn safe_git_arguments(
         return allow_helper_context
             && super::git_object_reads::read_form(subcommand, &arguments[1..]);
     }
+    if matches!(subcommand, "blame" | "describe" | "reflog") {
+        // History reads page (pager.blame, pager.reflog, core.pager) and
+        // blame converts blobs, so the configuration probe clears them first.
+        return allow_helper_context
+            && super::git_history_reads::read_form(subcommand, &arguments[1..]);
+    }
+    if matches!(subcommand, "shortlog" | "check-ignore") {
+        // A shortlog pages (pager.shortlog) and both run under the
+        // repository's configuration, so the probe clears them first.
+        return allow_helper_context
+            && super::git_listing_reads::read_form(subcommand, &arguments[1..]);
+    }
+    if matches!(subcommand, "show-ref" | "for-each-ref") {
+        return allow_helper_context
+            && super::git_ref_listings::read_form(subcommand, &arguments[1..]);
+    }
+    if subcommand == "stash" {
+        // A stash listing is a log over `refs/stash` and `stash show` runs
+        // the diff machinery, so both page and can convert blobs; the
+        // configuration probe has to clear those helpers first. Every stash
+        // spelling that moves work keeps its own review.
+        return allow_helper_context && super::git_stash_reads::read_form(&arguments[1..]);
+    }
+    if subcommand == "rev-list" {
+        // A commit walk honors pager.rev-list and can fetch from a partial
+        // clone's promisor, so the configuration probe has to clear it first.
+        return allow_helper_context && super::git_rev_list::read_form(&arguments[1..]);
+    }
     if subcommand == "config" {
         // Only the configuration probe can prove what the read prints.
         return allow_helper_context
             && super::git_config_reads::read_form(&arguments[1..]).is_some();
+    }
+    if subcommand == "clean" {
+        // A dry run prints the untracked paths it would remove and removes
+        // nothing, but reading the index to find them can start a configured
+        // `core.fsmonitor`, so the configuration probe clears it first.
+        return allow_helper_context && super::git_clean_preview::is_dry_run(&arguments[1..]);
+    }
+    if subcommand == "apply" {
+        // `--check` reports whether the patch would apply and writes nothing,
+        // but reading the files it names can start a configured
+        // `core.fsmonitor`, so the configuration probe clears it first. Git
+        // quotes the line it could not read, so each named patch goes through
+        // the ordinary read screen: a workspace name that is a link to a
+        // private file is not a patch this proof read.
+        return allow_helper_context
+            && super::git_apply_check::patch_targets(&arguments[1..]).is_some_and(|patches| {
+                patches.iter().all(|patch| {
+                    super::read_paths::bounded_file_read_target(
+                        patch,
+                        context.home_dir,
+                        context.cwd,
+                    )
+                })
+            });
     }
     if !matches!(
         subcommand,
@@ -116,6 +172,21 @@ pub(super) fn safe_git_arguments(
         .position(|argument| argument == "--")
         .unwrap_or(arguments.len());
     let active_options = &arguments[1..option_end];
+    if subcommand == "remote"
+        && arguments
+            .get(1)
+            .is_some_and(|argument| argument == "get-url")
+    {
+        // `get-url` prints the configured URL of one remote, which `-v`
+        // already prints for every remote.
+        let Some((name, options)) = arguments[2..].split_last() else {
+            return false;
+        };
+        return !name.starts_with('-')
+            && options
+                .iter()
+                .all(|option| matches!(option.as_str(), "--push" | "--all"));
+    }
     if subcommand == "remote" {
         let has_arguments_after_options = option_end + 1 < arguments.len();
         return !active_options.is_empty()
@@ -161,7 +232,7 @@ pub(super) fn inspection_writes_nothing(
     };
     if !matches!(
         subcommand.as_str(),
-        "status" | "diff" | "log" | "show" | "grep" | "merge-base"
+        "status" | "diff" | "log" | "show" | "grep" | "merge-base" | "stash"
     ) {
         return false;
     }

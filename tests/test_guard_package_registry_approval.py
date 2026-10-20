@@ -20,6 +20,7 @@ from tests.manifest_install_fixtures import (
     _write_linked_git_worktrees,
     _write_pnpm_workspace,
 )
+from tests.package_review_settings import review_package_signals
 
 
 def test_private_registry_package_approval_never_lowers_current_gate_or_registry_change(
@@ -27,6 +28,9 @@ def test_private_registry_package_approval_never_lowers_current_gate_or_registry
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(
+        tmp_path / "guard-home", "package_unknown", "package_lockfile_drift", "package_custom_registry"
+    )
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     _write_linked_git_worktrees(workspace_dir, tmp_path / "unused-linked")
@@ -92,15 +96,11 @@ def test_private_registry_package_approval_never_lowers_current_gate_or_registry
         unsafe_raw_output=False,
         timeout_seconds=30,
     )
-    assert same_registry_rc == 2
-    assert same_registry_payload["verdict"]["action"] == "require-reapproval"
+    assert same_registry_rc == 0
+    assert same_registry_payload["verdict"]["action"] == "allow"
     same_evaluation = same_registry_payload["supply_chain_evaluation"]
     assert isinstance(same_evaluation, dict)
     assert any(
-        isinstance(reason, dict) and reason.get("code") == "approval_reuse_reapproval_required"
-        for reason in same_evaluation.get("reasons", [])
-    )
-    assert not any(
         isinstance(reason, dict) and reason.get("code") == "saved_package_approval"
         for reason in same_evaluation.get("reasons", [])
     )
@@ -135,6 +135,9 @@ def test_workspace_package_approval_still_reprompts_when_worktree_lockfile_chang
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(
+        tmp_path / "guard-home", "package_unknown", "package_lockfile_drift", "package_custom_registry"
+    )
     workspace_dir = tmp_path / "workspace"
     worktree_dir = tmp_path / "workspace-worktree"
     workspace_dir.mkdir()
@@ -222,6 +225,9 @@ def test_build_package_protect_payload_saved_hashless_block_clear_command_omits_
     tmp_path: Path,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(
+        tmp_path / "guard-home", "package_unknown", "package_lockfile_drift", "package_custom_registry"
+    )
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     command = ["pnpm", "add", "left-pad"]

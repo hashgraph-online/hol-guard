@@ -40,14 +40,14 @@ from ._env import _build_scrubbed_env
 from .stdio_sensitive_read import evaluate_sensitive_read
 
 if TYPE_CHECKING:
-    from .runtime_mcp import _NativeChildProcess
+    from .native_mcp_child_io import _NativeChildProcess
 
 _DEFAULT_PROXY_RESPONSE_TIMEOUT_SECONDS = 30.0
 _PROXY_TERMINATION_TIMEOUT_SECONDS = 1.0
 _GUARD_PROXY_TIMEOUT_ERROR_CODE = -32800
 
 
-def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: dict[str, object]) -> str:
+def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
     if approval_flow.get("tier") != "approval-center":
         return "notify-only"
     if approval_flow.get("auto_open_browser") is False:
@@ -408,7 +408,7 @@ class StdioGuardProxy:
                     raise ProxyLaunchIdentityChangedError(
                         "Guard stdio proxy launch identity changed while starting the MCP server."
                     )
-                from .runtime_mcp import _NativeChildProcess
+                from .native_mcp_child_io import _NativeChildProcess
 
                 return _NativeChildProcess(native_session_id, native_guard_home)
             # The native open was not attempted or the session feature is
@@ -544,7 +544,7 @@ class StdioGuardProxy:
         while True:
             timeout_seconds = self._response_timeout_seconds()
             try:
-                from .runtime_mcp import _NativeMcpChildIo
+                from .native_mcp_child_io import _NativeMcpChildIo
 
                 if isinstance(process.stdout, _NativeMcpChildIo):
                     # Native session (RTM-024): the resident already frames

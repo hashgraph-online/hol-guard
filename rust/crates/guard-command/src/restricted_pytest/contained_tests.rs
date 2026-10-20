@@ -388,6 +388,37 @@ fn root_test_modules_mark_a_project_but_not_a_home_or_a_link() {
 }
 
 #[test]
+fn pytest_prepare_honors_the_explicit_caller_home() {
+    let fixture = fixture("guard-pytest-caller-home");
+    let workspace = fixture.0.join("project");
+    let caller_home = workspace.join("caller-home");
+    let python = workspace.join("python3");
+    fs::create_dir_all(&caller_home).unwrap();
+    fs::write(workspace.join("pyproject.toml"), "").unwrap();
+    fs::write(&python, b"#!/bin/sh\nexit 0\n").unwrap();
+    fs::set_permissions(&python, fs::Permissions::from_mode(0o755)).unwrap();
+
+    let result = evaluate(
+        "prepare",
+        &json!({
+            "command": [python, "-m", "pytest"],
+            "workspace": workspace,
+            "cwd": workspace,
+            "home": caller_home,
+            "platform": "darwin",
+            "backend_executable": "/usr/bin/true",
+            "search_path": "",
+            "read_only_workspace": true,
+        }),
+    );
+
+    assert_eq!(
+        result["reason_code"], PYTEST_INVALID_WORKSPACE_REASON_CODE,
+        "{result}"
+    );
+}
+
+#[test]
 fn bun_inline_eval_uses_the_node_eval_profile_with_an_installer_image() {
     let fixture = fixture("guard-bun-eval");
     let home = fixture.0.join("caller-home");

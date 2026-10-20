@@ -85,7 +85,10 @@ fn shell(home: &Path, command: &str) -> String {
                 cdpath_unset: false,
                 rustup_override_absent: false,
                 npm_config_inert: false,
+                pip_config_inert: false,
                 shell_home_matches: false,
+                ripgrep_config_absent: false,
+                psql_environment: Default::default(),
             },
             Some(&environment),
         )
@@ -143,6 +146,23 @@ fn unproven_size_and_comparison_reads_still_ask() {
 }
 
 #[test]
+fn a_comparison_that_reads_through_a_link_still_asks() {
+    let home = home();
+    write(home.join("outside/notes.md"), "# Outside\n");
+    std::os::unix::fs::symlink(
+        home.join("outside/notes.md"),
+        home.join("project/src/linked.md"),
+    )
+    .unwrap();
+    // `diff -r` opens what the link points at, so the target needs proof of
+    // its own and the comparison keeps asking.
+    assert!(!shell(&home, "diff -ru src old").contains("allow"));
+    // A recursive search lists the same link without reading through it, so
+    // the walk is proven by what it would actually open.
+    assert_eq!(shell(&home, "grep -rn export src"), "allow");
+}
+
+#[test]
 fn configuration_reads_proceed() {
     let home = home();
     for command in [
@@ -155,6 +175,29 @@ fn configuration_reads_proceed() {
     ] {
         assert_eq!(shell(&home, command), "allow", "{command}");
     }
+}
+
+/// A long-lived clone records a remote and merge ref for every branch it ever
+/// tracked; the listing then runs well past a quarter megabyte.
+#[test]
+fn configuration_reads_proceed_in_a_long_lived_clone() {
+    let home = home();
+    let config = home.join("project/.git/config");
+    let mut text = std::fs::read_to_string(&config).unwrap();
+    for branch in 0..8_000 {
+        text.push_str(&format!(
+            "[branch \"feature/b{branch}\"]\n\tremote = origin\n\tmerge = refs/heads/feature/b{branch}\n"
+        ));
+    }
+    std::fs::write(&config, &text).unwrap();
+    assert!(text.len() > 512 * 1024);
+    for command in ["git config --get user.email", "git config --list"] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+    text.push_str("[github]\n\ttoken = synthetic\n");
+    std::fs::write(&config, text).unwrap();
+    assert!(!shell(&home, "git config --list").contains("allow"));
+    assert_eq!(shell(&home, "git config --get user.email"), "allow");
 }
 
 #[test]
@@ -208,5 +251,39 @@ fn summaries_still_proceed_beside_hidden_directories() {
     write(home.join("project/src/.env"), "SYNTHETIC=1\n");
     for command in ["du -sh src", "du -h --max-depth=0 src", "du -s -d 0 src"] {
         assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+}
+
+#[test]
+fn file_type_probes_proceed_but_magic_loads_and_secrets_ask() {
+    let home = home();
+    write(home.join(".ssh/id_rsa"), "synthetic\n");
+    write(home.join("project/src/.env"), "SYNTHETIC=1\n");
+    for command in [
+        "file /bin/ls",
+        "file -b --mime-type src/one.ts",
+        "file -L README.md src",
+        "file -- src/one.ts missing.bin",
+        "file README.md | head -1",
+    ] {
+        assert_eq!(shell(&home, command), "allow", "{command}");
+    }
+    for command in [
+        "file",
+        "file ~/.ssh/id_rsa",
+        "file ~/.ssh/missing",
+        "file src/.env",
+        "file -m ../magic README.md",
+        "file --magic-file=../magic README.md",
+        "file -f list.txt",
+        "file --files-from list.txt",
+        "file -C -m magic",
+        "file -z README.md",
+        "file -s /dev/sda",
+        "file -p README.md",
+        "file -",
+        "file /etc/passwd",
+    ] {
+        assert!(!shell(&home, command).contains("allow"), "{command}");
     }
 }

@@ -27,12 +27,6 @@ class _WindowsUnicodeString(ctypes.Structure):
     ]
 
 
-def native_windows_process_inventory_available() -> bool:
-    """Return whether the native process APIs can be loaded on this host."""
-
-    return _load_process_apis() is not None
-
-
 def _load_process_apis() -> tuple[Any, Any, Any, Any, Any] | None:
     if os.name != "nt":
         return None
@@ -288,7 +282,6 @@ def windows_process_command_line_inventory(
 
 
 __all__ = [
-    "native_windows_process_inventory_available",
     "windows_process_command_line",
     "windows_process_command_line_inventory",
 ]

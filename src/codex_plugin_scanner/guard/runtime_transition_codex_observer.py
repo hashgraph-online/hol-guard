@@ -37,7 +37,12 @@ from .runtime_transition_admission import (
     NativeProtectionAdmission,
     _seal_verified_admission,
 )
-from .runtime_transition_hook_probe import PROBE_FIELD, PROBE_SCHEMA, transition_hook_observation
+from .runtime_transition_hook_probe import (
+    OBSERVATION_SCHEMA,
+    PROBE_FIELD,
+    PROBE_SCHEMA,
+    transition_hook_observation,
+)
 from .runtime_transition_legacy_receipt import read_legacy_codex_probe_receipt
 
 if TYPE_CHECKING:
@@ -47,6 +52,29 @@ if TYPE_CHECKING:
 def _digest(value: object) -> str:
     encoded = json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def _probe_observation(stderr: str) -> dict[str, object]:
+    """The observation line the hook wrote among the runtime's own diagnostics.
+
+    The native bridge shares the hook's stderr with the runtime's resident
+    phase tracing, so the observation is one line among others rather than the
+    whole stream. Naming the line by its schema only finds it; the caller still
+    rebuilds it from the probe and the receipt it carries, so a line that merely
+    looks like one proves nothing.
+    """
+
+    for line in reversed(stderr.splitlines()):
+        candidate = line.strip()
+        if not candidate.startswith("{") or OBSERVATION_SCHEMA not in candidate:
+            continue
+        try:
+            parsed = json.loads(candidate)
+        except ValueError:
+            continue
+        if isinstance(parsed, dict) and parsed.get("schema") == OBSERVATION_SCHEMA:
+            return parsed
+    raise ValueError("observation missing")
 
 
 def _desktop_hook_proxy_context() -> dict[str, str]:
@@ -261,9 +289,7 @@ def _observe_configured_codex_hook(
             if not isinstance(output, dict):
                 raise ValueError("non-object observation")
             if modern_channel:
-                observation = json.loads(result.stderr)
-                if not isinstance(observation, dict):
-                    raise ValueError("non-object observation")
+                observation = _probe_observation(result.stderr)
                 checked = transition_hook_observation(payload, observation.get("native_receipt"))
                 if checked is None or checked != observation:
                     raise ValueError("observation mismatch")

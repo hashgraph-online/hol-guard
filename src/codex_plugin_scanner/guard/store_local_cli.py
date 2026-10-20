@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from collections.abc import Mapping, Sequence
 from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from .local_cli_errors import LocalCliCatalogLimitError
 from .runtime.local_cli_commands import (
@@ -17,8 +17,10 @@ from .runtime.local_cli_commands import (
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
 from .runtime.local_mcp_stdio import McpCatalogResult
-from .runtime.mcp_classification import classify_mcp_action
+from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
 from .store_custom_extension_continuity import _write_local_cli_grant
+from .store_local_cli_capabilities import LocalCliCapabilityState, capability_map, load_local_cli_capabilities
+from .store_local_cli_context import implied_capabilities, note_capability_cause
 from .store_local_cli_retention import mark_shared_enrolled_servers, utc_now_iso
 from .store_local_cli_rows import (
     _grant_from_row,
@@ -33,6 +35,9 @@ from .store_local_cli_rows import (
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_catalog import load_mcp_catalogs, review_catalog_changes, write_mcp_catalog
 from .store_mcp_provider_catalog import load_provider_catalog_summaries
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 class StoreLocalCliMixin:
@@ -87,7 +92,8 @@ class StoreLocalCliMixin:
                 """
                 select cli_id, identity_hash, kind, name, interpreter_name, example_label,
                        observed_count, last_seen_at, source_path, help_status, surface,
-                       server_identity_hash, source_label, server_command
+                       server_identity_hash, source_label, server_command,
+                       remote_origin, declared_sources_json
                 from local_cli_observation
                 order by last_seen_at desc, cli_id asc
                 """
@@ -99,6 +105,8 @@ class StoreLocalCliMixin:
             command_map = _load_commands_by_cli(connection)
             catalog_map = load_mcp_catalogs(connection)
             provider_map = load_provider_catalog_summaries(connection)
+            capability_rows = load_local_cli_capabilities(connection)
+            implied = implied_capabilities(connection)
         grants = {_row_text(row, 0): _grant_from_row(row) for row in grant_rows}
         items: list[dict[str, object]] = []
         seen: set[str] = set()
@@ -132,11 +140,19 @@ class StoreLocalCliMixin:
                 }
             )
         _with_suggestions(items)
+        undescribed: list[tuple[dict[str, object], Mapping[str, object]]] = []
         mark_shared_enrolled_servers(items, grants)
         authority_revision = 0 if revision_row is None else _row_int(revision_row[0])
         for item in items:
             item["authority_revision"] = authority_revision
             item["commands"] = command_map.get(str(item["cli_id"]), [])
+            # Capabilities exist only for a CLI connector; absent reads as off.
+            item["capabilities"] = (
+                capability_map(capability_rows.get(str(item["cli_id"]))) if item.get("surface") == "cli" else {}
+            )
+            suggested = _suggested_capability(item, implied.get(str(item["cli_id"])))
+            if suggested is not None:
+                item["suggested_capability"] = suggested
             catalog = catalog_map.get(str(item["cli_id"]))
             if catalog is not None and item.get("surface") == "mcp" and catalog[0] == item.get("identity_hash"):
                 item["mcp_catalog"] = catalog[1]
@@ -153,14 +169,52 @@ class StoreLocalCliMixin:
                 for command in command_map.get(str(item["cli_id"]), []):
                     definition = by_name.get(command.get("usage"))
                     if definition is not None:
-                        command["classification"] = classify_mcp_action(
-                            str(definition["name"]),
-                            definition.get("inputSchema"),
-                            annotations=definition.get("annotations"),
-                        )
+                        undescribed.append((command, definition))
             if str(item["cli_id"]) in provider_map:
                 item["provider_catalog"] = provider_map[str(item["cli_id"])]
+        try:
+            described = classify_mcp_actions(
+                [
+                    {
+                        "name": str(definition["name"]),
+                        "schema": definition.get("inputSchema"),
+                        "annotations": definition.get("annotations"),
+                    }
+                    for _, definition in undescribed
+                ],
+                guard_home=cast("GuardStore", self).guard_home,
+            )
+        except McpClassificationUnavailableError:
+            # The classification is advisory display evidence. Without the
+            # resident it is simply absent: listing a CLI, its identity and its
+            # grant state never depended on it.
+            return items
+        for (command, _), classification in zip(undescribed, described, strict=True):
+            if classification is not None:
+                command["classification"] = classification
         return items
+
+    def read_local_cli_surface(self, cli_id: str) -> str | None:
+        """The observed surface of ``cli_id``, or ``None`` when never observed."""
+
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            row = connection.execute("select surface from local_cli_observation where cli_id = ?", (cli_id,)).fetchone()
+        return None if row is None or not isinstance(row[0], str) else row[0]
+
+    def note_local_cli_capability_cause(self, *, cli_id: str, identity_hash: str, cause: str) -> int:
+        """Keep the capability cause a contained run of an allowed CLI was denied."""
+
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return note_capability_cause(connection, cli_id=cli_id, identity_hash=identity_hash, cause=cause)
+
+    def read_local_cli_capabilities(self, cli_id: str) -> dict[str, LocalCliCapabilityState]:
+        """The full ``{name: on|off}`` map stored for ``cli_id``."""
+
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection)
+            return capability_map(load_local_cli_capabilities(connection).get(cli_id))
 
     def read_local_cli_grant(self, cli_id: str) -> dict[str, object] | None:
         grant = self._native_store_call("read_local_cli_grant", {"cli_id": cli_id})
@@ -172,11 +226,6 @@ class StoreLocalCliMixin:
         with self._connect() as connection:
             ensure_local_cli_schema(connection)
             return local_cli_rules_exist(connection, blocks_only=True)
-
-    def has_local_cli_grant_rules(self) -> bool:
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            return local_cli_rules_exist(connection, blocks_only=False)
 
     def read_local_cli_revision(self) -> int:
         with self._connect() as connection:
@@ -427,3 +476,16 @@ def _load_commands_by_cli(connection: sqlite3.Connection) -> dict[str, list[dict
             }
         )
     return grouped
+
+
+def _suggested_capability(item: Mapping[str, object], implied: tuple[str, str] | None) -> str | None:
+    """The capability an allowed CLI's recorded cause points at while it is still off."""
+
+    if implied is None or item.get("state") != "allowed" or item.get("stale") is True:
+        return None
+    identity_hash, capability = implied
+    if identity_hash != item.get("identity_hash"):
+        return None
+    capabilities = item.get("capabilities")
+    on = isinstance(capabilities, Mapping) and capabilities.get(capability) == "on"
+    return None if on else capability

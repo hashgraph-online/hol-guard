@@ -9,9 +9,10 @@
 
 use guard_contracts::GuardAction;
 
+use crate::blocked_request_mode::is_unlinked_connector_setup_reason;
 use crate::bounded_hook_bridge_hermes::hermes_bridge_response;
 use crate::claude_hook_bridge_render::py_strip;
-use crate::hook_env_stamp::{dumps, set_member};
+use crate::hook_env_stamp::{backslash_surrogates, dumps, set_member};
 use crate::pyjson::PyVal;
 
 /// The harnesses whose Python bridge the native bridge answers for. Grok
@@ -296,10 +297,21 @@ pub(crate) fn failure_payload(harness: &str, event_name: &str, reason: &str) -> 
 }
 
 /// `_emit_failure` output: compact JSON and a newline, plus the exit code.
-pub(crate) fn failure_output(harness: &str, event_name: &str) -> (String, i32) {
-    let (payload, code) = failure_payload(harness, event_name, FAILURE_REASON);
+/// `unmap` writes a mapped lone surrogate back as its `\udXXX` escape.
+pub(crate) fn failure_output(harness: &str, event_name: &str, unmap: bool) -> (String, i32) {
+    failure_output_for(harness, event_name, FAILURE_REASON, unmap)
+}
+
+/// `_emit_failure(..., reason=reason)` output.
+pub(crate) fn failure_output_for(
+    harness: &str,
+    event_name: &str,
+    reason: &str,
+    unmap: bool,
+) -> (String, i32) {
+    let (payload, code) = failure_payload(harness, event_name, reason);
     let mut rendered = String::new();
-    dumps(&payload, true, false, &mut rendered);
+    dumps(&payload, true, unmap, &mut rendered);
     rendered.push('\n');
     (rendered, code)
 }
@@ -553,9 +565,21 @@ pub(crate) struct Rendered {
     pub(crate) exit_code: i32,
 }
 
-pub(crate) fn rendered(payload: &[(String, PyVal)], stderr: String, exit_code: i32) -> Rendered {
+/// `unmap` writes a mapped lone surrogate back as Python does: its
+/// `\udXXX` escape in the JSON, and in stderr as `backslashreplace` writes it.
+pub(crate) fn rendered(
+    payload: &[(String, PyVal)],
+    stderr: String,
+    exit_code: i32,
+    unmap: bool,
+) -> Rendered {
     let mut stdout = String::new();
-    dumps(&PyVal::Dict(payload.to_vec()), true, false, &mut stdout);
+    dumps(&PyVal::Dict(payload.to_vec()), true, unmap, &mut stdout);
+    let stderr = if unmap {
+        backslash_surrogates(&stderr)
+    } else {
+        stderr
+    };
     Rendered {
         stdout,
         stderr,
@@ -569,9 +593,10 @@ pub(crate) fn daemon_response_to_native(
     daemon_response: &[(String, PyVal)],
     harness: &str,
     event_name: &str,
+    unmap: bool,
 ) -> Option<Rendered> {
     if harness == "hermes" {
-        return Some(hermes_bridge_response(daemon_response));
+        return Some(hermes_bridge_response(daemon_response, unmap));
     }
     let event_name = canonical_event_token(event_name).unwrap_or_else(|| event_name.to_owned());
     let event_name = event_name.as_str();
@@ -607,7 +632,12 @@ pub(crate) fn daemon_response_to_native(
                 set_member(&mut response, "reason", text(&stderr));
             }
         }
-        return Some(rendered(&response, stderr, if blocks { 2 } else { 0 }));
+        return Some(rendered(
+            &response,
+            stderr,
+            if blocks { 2 } else { 0 },
+            unmap,
+        ));
     }
 
     let action = policy_action_from_daemon(daemon_response, event_name);
@@ -646,9 +676,12 @@ pub(crate) fn daemon_response_to_native(
             if decision != "allow" && !reason.is_empty() {
                 payload.push(("reason".to_owned(), text(&reason)));
             }
+            // A default-mode connector setup reason carries no approval link.
+            let unlinked = is_unlinked_connector_setup_reason(&reason);
             for key in COPIED_APPROVAL_KEYS {
                 match member(daemon_response, key) {
                     None | Some(PyVal::Null) => {}
+                    Some(_) if unlinked && key != "reason_code" => {}
                     Some(value) => set_member(&mut payload, key, value.clone()),
                 }
             }
@@ -678,5 +711,10 @@ pub(crate) fn daemon_response_to_native(
     } else {
         String::new()
     };
-    Some(rendered(&payload, stderr, if blocks { 2 } else { 0 }))
+    Some(rendered(
+        &payload,
+        stderr,
+        if blocks { 2 } else { 0 },
+        unmap,
+    ))
 }

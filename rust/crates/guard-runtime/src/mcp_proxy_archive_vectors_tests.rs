@@ -4,6 +4,7 @@
 use guard_contracts::McpProxyQueryV1;
 use serde_json::{json, Value};
 
+use crate::mcp_proxy_archive::bind_replacements;
 use crate::mcp_proxy_decision_op::decide;
 
 const VECTORS: &str =
@@ -33,6 +34,18 @@ fn apply(params: &Value, edits: &[Value]) -> Value {
     bound
 }
 
+/// The recorded vectors carry already-verified `(source url, local path)` pairs;
+/// file verification itself is covered by `mcp_proxy_archive_verify_tests`.
+fn bind_vector(request: &Value) -> Value {
+    let replacements: Vec<(String, String)> =
+        serde_json::from_value(request["replacements"].clone()).unwrap();
+    bind_replacements(
+        &request["params"],
+        &replacements,
+        request["requires_binding"].as_bool().unwrap(),
+    )
+}
+
 fn platform_key() -> &'static str {
     if cfg!(windows) {
         "windows"
@@ -50,7 +63,7 @@ fn archive_binding_matches_every_recorded_vector() {
             continue;
         }
         let expected = &vector["expected"][platform_key()];
-        let actual = decide(&query(request));
+        let actual = bind_vector(request);
         assert_eq!(actual["kind"], expected["kind"], "vector {}", vector["id"]);
         if expected["kind"] == "bound" {
             let edits = actual["edits"].as_array().unwrap();
@@ -83,10 +96,38 @@ fn reason_signals_match_every_recorded_vector() {
 #[test]
 fn unmatched_archive_fails_closed() {
     let request = json!({
-        "check": "external_archive_bind",
         "params": {"url": "https://example.com/a.tgz"},
         "replacements": [["https://example.com/a.tgz", "/a"], ["https://example.com/b.tgz", "/b"]],
         "requires_binding": false,
     });
+    assert_eq!(bind_vector(&request)["kind"], "unbound");
+}
+
+#[test]
+fn missing_download_fails_closed_through_the_op() {
+    let request = json!({
+        "check": "external_archive_bind",
+        "params": {"url": "https://example.com/a.tgz"},
+        "downloads": [{
+            "source_url": "https://example.com/a.tgz",
+            "path": "/nonexistent/guard-archive/a.tgz",
+            "size": 1,
+            "sha256": "00",
+        }],
+        "requires_binding": false,
+    });
     assert_eq!(decide(&query(&request))["kind"], "unbound");
+}
+
+#[test]
+fn no_download_is_unchanged_unless_a_binding_is_required() {
+    for (requires_binding, kind) in [(false, "unchanged"), (true, "unbound")] {
+        let request = json!({
+            "check": "external_archive_bind",
+            "params": ["pip", "install", "x"],
+            "downloads": [],
+            "requires_binding": requires_binding,
+        });
+        assert_eq!(decide(&query(&request))["kind"], kind);
+    }
 }

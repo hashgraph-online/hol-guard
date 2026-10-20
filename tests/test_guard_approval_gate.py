@@ -1935,7 +1935,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     _enable_gate(store)
     prompt_calls = 0
 
-    def _approval_gate_input(_guard_home: Path) -> ApprovalGateInput:
+    def _approval_gate_input(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         nonlocal prompt_calls
         prompt_calls += 1
         return ApprovalGateInput(password=PASSWORD)

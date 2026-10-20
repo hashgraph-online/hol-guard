@@ -5,7 +5,7 @@ import {
   addDialogSubmitLabel,
   dialogIntro,
   enrollConfirmCopy,
-  filterCountCopy,
+  isObservedMcpItem,
   listToolsAgainLabel,
   mcpCatalogHasTools,
   mcpListingBusyCopy,
@@ -13,6 +13,7 @@ import {
   mcpListingRetryFailedCopy,
   suggestionSummary,
 } from "./add-custom-extension-support";
+import { projectFolderLabel, projectMetaLine } from "./add-custom-extension-project";
 
 const packageItem: LocalCliItem = {
   cli_id: "local-cli.pkg-demo-abcdef12",
@@ -56,13 +57,16 @@ const mcpItem: LocalCliItem = {
   commands: [],
 };
 
-assert.match(dialogIntro(true, "package-scripts"), /Allow these scripts/);
+assert.match(dialogIntro(true, "package-scripts"), /allows its scripts/);
 assert.match(dialogIntro(false, "mcp"), /Allow all/);
 assert.match(dialogIntro(false, "mcp", false, false), /List tools again/);
 assert.match(dialogIntro(false, null, true), /Looking for project scripts/);
 assert.match(dialogIntro(true, null, true), /Looking for project scripts/);
-assert.match(filterCountCopy(1, 8), /1 of 8 scripts match/);
 assert.match(suggestionSummary(packageItem), /1 script from ads-app/);
+assert.equal(projectFolderLabel(packageItem), "ads-app");
+assert.equal(projectFolderLabel({ ...packageItem, source_label: "demo-app" }), null);
+assert.equal(projectMetaLine(packageItem), "ads-app · 1 script");
+assert.equal(projectMetaLine({ ...packageItem, source_label: null }), "1 script");
 assert.equal(listToolsAgainLabel(), "List tools again");
 assert.match(mcpListingBusyCopy("chrome-devtools"), /This can take a few seconds/);
 assert.match(mcpListingRetryFailedCopy(), /still could not list tools/);
@@ -92,3 +96,16 @@ assert.doesNotMatch(enrollConfirmCopy("package-scripts", false, true, false), /a
 assert.match(enrollConfirmCopy("mcp", false, false, null), /approval password/);
 
 console.log("add-custom-extension-support.test.ts: all assertions passed");
+
+{
+  const remote: LocalCliItem = {
+    ...packageItem,
+    surface: "mcp",
+    example_label: "mcp__echo_mcp__",
+    source_label: "Codex · configured server",
+  };
+  assert.equal(isObservedMcpItem(remote), true);
+  assert.equal(isObservedMcpItem({ ...remote, source_label: "Codex · observed tools" }), true);
+  assert.equal(isObservedMcpItem({ ...remote, source_label: "Codex" }), false);
+  assert.equal(isObservedMcpItem({ ...remote, surface: "cli" }), false);
+}

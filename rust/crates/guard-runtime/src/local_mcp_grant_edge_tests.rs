@@ -125,8 +125,13 @@ fn unbound_environments_and_missing_pieces_match_nothing() {
 
 #[test]
 fn missing_store_and_missing_tables_match_nothing() {
-    let rig = Rig::new();
+    let mut rig = Rig::new();
     let server = hash('a');
+    // Windows refuses to delete a file a connection still holds open.
+    drop(std::mem::replace(
+        &mut rig.connection,
+        Connection::open_in_memory().unwrap(),
+    ));
     fs::remove_file(rig.home.join("guard.db")).unwrap();
     assert_eq!(state(&rig.request(&server, TOOL, "review")), "none");
     Connection::open(rig.home.join("guard.db"))
@@ -161,8 +166,8 @@ fn damaged_schema_marker_fails_instead_of_authorizing() {
 fn newer_and_outdated_schemas_fail_instead_of_guessing() {
     let (rig, server) = allowed_rig(Some("allow"));
     for (version, code) in [
-        (12, "native_local_mcp_grant_schema_unsupported"),
-        (10, "native_local_mcp_grant_schema_outdated"),
+        (15, "native_local_mcp_grant_schema_unsupported"),
+        (13, "native_local_mcp_grant_schema_outdated"),
     ] {
         rig.connection
             .execute(

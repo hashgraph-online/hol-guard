@@ -33,7 +33,7 @@ PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
 PYTEST_INVALID_WORKSPACE_REASON_CODE = "pytest_restricted_invalid_workspace"
 PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE = "pytest_restricted_external_pythonpath"
 
-RestrictedPytestBackend = Literal["macos-seatbelt", "linux-bubblewrap"]
+RestrictedPytestBackend = Literal["macos-seatbelt", "linux-bubblewrap", "windows-appcontainer"]
 
 _DEFAULT_TIMEOUT_SECONDS = 30 * 60
 _DEFAULT_CPU_SECONDS = 20 * 60

@@ -464,7 +464,8 @@ fn prepare_inline(input: &Input) -> Result<Value, RestrictedPytestError> {
             "prepare",
             &json!({"command":[argv[0],"-m","pytest"],
             "workspace":input.workspace,"cwd":input.cwd,"platform":input.platform,
-            "backend_executable":input.backend_executable,"search_path":input.search_path,"read_only_workspace":true}),
+            "home":input.home,"backend_executable":input.backend_executable,
+            "search_path":input.search_path,"read_only_workspace":true}),
         );
         if let Some(value) = response.get("value") {
             value.clone()

@@ -374,7 +374,7 @@ export function isReadOnlyQueueGroup(group: QueueGroup): boolean {
  * NOT in this set: they are dangerous but not trust-breaking, so they are
  * bulk-approvable at the highest risk tier with a typed confirmation.
  */
-const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+export const BULK_BLOCKED_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "secret_exfiltration",
   "credential_output",
   "secret_file_read",
@@ -401,7 +401,7 @@ const BULK_LOW_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
  * and require a typed confirmation, since approving many at once can cause
  * irreversible data loss.
  */
-const BULK_HIGH_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
+export const BULK_HIGH_CATEGORY_IDS: ReadonlySet<QueueCategoryId> = new Set([
   "destructive_shell",
   "file_delete_cleanup",
 ]);

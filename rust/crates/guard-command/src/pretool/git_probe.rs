@@ -45,7 +45,7 @@ thread_local! {
 }
 
 /// Git processes this thread started, for tests that count probe spawns.
-#[cfg(test)]
+#[cfg(all(test, unix))]
 pub(super) fn spawns() -> usize {
     SPAWNS.with(std::cell::Cell::get)
 }

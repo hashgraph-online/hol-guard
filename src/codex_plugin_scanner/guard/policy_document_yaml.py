@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import copy
+import difflib
 import json
 import re
 from dataclasses import dataclass
@@ -15,15 +16,20 @@ from typing import TypeAlias, cast
 
 import yaml
 from jsonschema import Draft202012Validator
+from jsonschema.exceptions import ValidationError
 from yaml.nodes import MappingNode, Node, SequenceNode
 
+from .native_command_expression_validation import (
+    CommandExpressionValidationUnavailableError,
+    native_command_expression_validation,
+)
 from .native_policy_document import NativePolicyDocumentError, bounds_claim, policy_query
 from .policy_document import GuardPolicyDocument
 from .policy_document_business_bounds import oversized_business_selector_path
 from .runtime.command_expression import (
+    CommandExpression,
     CommandExpressionError,
     command_expression_from_mapping,
-    validate_command_expression,
 )
 
 MAX_POLICY_BYTES = 1_048_576
@@ -54,6 +60,8 @@ class PolicyDiagnostic:
     path: JsonPath = ()
     line: int | None = None
     column: int | None = None
+    expected: object | None = None
+    suggestion: str | None = None
 
 
 class PolicyDocumentError(ValueError):
@@ -61,10 +69,12 @@ class PolicyDocumentError(ValueError):
 
     diagnostics: tuple[PolicyDiagnostic, ...]
 
-    def __init__(self, diagnostics: tuple[PolicyDiagnostic, ...]):
-        self.diagnostics = diagnostics[:MAX_DIAGNOSTICS]
+    def __init__(self, diagnostics: tuple[PolicyDiagnostic, ...], *, limit: int | None = MAX_DIAGNOSTICS):
+        # The cap bounds the exception text. Callers that print structured JSON pass ``limit=None``.
+        self.diagnostics = diagnostics if limit is None else diagnostics[:limit]
         summary = "; ".join(
-            f"{item.code}@{_format_path(item.path)}:{item.line or 0}:{item.column or 0}" for item in self.diagnostics
+            f"{item.code}@{_format_path(item.path)}:{item.line or 0}:{item.column or 0}"
+            for item in self.diagnostics[:MAX_DIAGNOSTICS]
         )
         super().__init__((summary or "invalid_policy_document")[:4_096])
 
@@ -289,7 +299,47 @@ def _node_for_path(node: Node | None, path: JsonPath) -> Node | None:
     return current
 
 
-def _schema_diagnostics(text: str, value: object) -> tuple[PolicyDiagnostic, ...]:
+def _schema_expectation(error: ValidationError) -> tuple[object | None, str | None]:
+    """Describe what the schema wanted, using only schema-sourced values and key names."""
+
+    validator = error.validator
+    instance = error.instance
+    schema = error.schema if isinstance(error.schema, dict) else {}
+    if validator == "additionalProperties" and isinstance(instance, dict):
+        allowed = sorted(schema.get("properties", {})) if isinstance(schema.get("properties"), dict) else []
+        patterns = schema.get("patternProperties")
+        extension_patterns = [str(pattern) for pattern in patterns] if isinstance(patterns, dict) else []
+        unknown = sorted(
+            str(key)
+            for key in instance
+            if key not in allowed and not any(re.search(pattern, str(key)) for pattern in extension_patterns)
+        )
+        hints = []
+        for key in unknown[:3]:
+            close = difflib.get_close_matches(key, allowed, n=1)
+            hints.append(f'Rename "{key}" to "{close[0]}".' if close else f'Remove "{key}", or prefix it with "x-".')
+        return allowed or None, " ".join(hints) or None
+    if validator == "required" and isinstance(instance, dict) and isinstance(error.validator_value, list):
+        missing = [name for name in error.validator_value if name not in instance]
+        return missing or None, (f"Add the required field(s): {', '.join(missing)}." if missing else None)
+    if validator == "enum" and isinstance(error.validator_value, list):
+        return list(error.validator_value), None
+    if validator in {
+        "type",
+        "const",
+        "pattern",
+        "minItems",
+        "maxItems",
+        "minLength",
+        "maxLength",
+        "minimum",
+        "maximum",
+    }:
+        return error.validator_value, None
+    return None, None
+
+
+def _schema_diagnostics(text: str, value: object, limit: int | None = MAX_DIAGNOSTICS) -> tuple[PolicyDiagnostic, ...]:
     try:
         source_node = yaml.compose(text, Loader=_PolicyLoader)
     except yaml.YAMLError:
@@ -299,15 +349,18 @@ def _schema_diagnostics(text: str, value: object) -> tuple[PolicyDiagnostic, ...
         _policy_document_validator().iter_errors(cast(JsonSchemaValue, value)),
         key=lambda item: tuple(str(part) for part in item.path),
     )
-    for error in errors[:MAX_DIAGNOSTICS]:
+    for error in errors if limit is None else errors[:limit]:
         path: JsonPath = tuple(error.absolute_path)
         node = _node_for_path(source_node, path)
+        expected, suggestion = _schema_expectation(error)
         diagnostics.append(
             PolicyDiagnostic(
                 f"schema_{error.validator}",
                 path,
                 line=node.start_mark.line + 1 if node is not None else None,
                 column=node.start_mark.column + 1 if node is not None else None,
+                expected=expected,
+                suggestion=suggestion,
             )
         )
     return tuple(diagnostics)
@@ -353,13 +406,36 @@ def _validate_native_metadata(value: object, query: str) -> None:
         raise PolicyDocumentError((PolicyDiagnostic(result["code"], cast(JsonPath, tuple(result["path"]))),))
 
 
+def _command_expression_wire(expression: CommandExpression) -> dict[str, object]:
+    return {
+        "combinator": expression.combinator,
+        "conditions": [
+            {
+                "operator": condition.operator,
+                "value": condition.value,
+                "case_sensitive": condition.case_sensitive,
+            }
+            for condition in expression.conditions
+        ],
+    }
+
+
 def _validate_command_expressions(value: dict[str, object]) -> None:
+    """Compile every command pattern the document carries, in the runtime.
+
+    The dialect's shape is Python's to parse; whether a glob or a regex
+    compiles belongs to the engine that will match it, so the expressions go
+    to the runtime together and the first one it refuses names its own rule.
+    """
+
     spec = value.get("spec")
     if not isinstance(spec, dict):
         return
     rules = spec.get("rules")
     if not isinstance(rules, list):
         return
+    paths: list[JsonPath] = []
+    expressions: list[dict[str, object]] = []
     for index, rule in enumerate(rules):
         if not isinstance(rule, dict):
             continue
@@ -369,13 +445,33 @@ def _validate_command_expressions(value: dict[str, object]) -> None:
         path: JsonPath = ("spec", "rules", index, "match", "commands")
         try:
             expression = command_expression_from_mapping(match["commands"])
-            validate_command_expression(expression)
         except CommandExpressionError as error:
             raise PolicyDocumentError((PolicyDiagnostic(str(error), path),)) from error
+        paths.append(path)
+        expressions.append(_command_expression_wire(expression))
+    if not expressions:
+        return
+    try:
+        refused = native_command_expression_validation(expressions)
+    except CommandExpressionValidationUnavailableError as error:
+        raise NativePolicyDocumentError(error.code) from error
+    if refused is None:
+        return
+    index, code = refused
+    if index >= len(paths):
+        raise NativePolicyDocumentError("native_command_expression_validation_unavailable")
+    raise PolicyDocumentError((PolicyDiagnostic(code, paths[index]),))
 
 
-def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
-    """Parse and validate one strict GuardPolicy YAML document."""
+def parse_policy_document_yaml(
+    source: str | bytes,
+    *,
+    diagnostic_limit: int | None = MAX_DIAGNOSTICS,
+) -> GuardPolicyDocument:
+    """Parse and validate one strict GuardPolicy YAML document.
+
+    ``diagnostic_limit`` caps schema diagnostics; ``None`` reports every one (structured JSON output).
+    """
 
     try:
         encoded = source.encode("utf-8") if isinstance(source, str) else source
@@ -389,9 +485,9 @@ def parse_policy_document_yaml(source: str | bytes) -> GuardPolicyDocument:
         raise PolicyDocumentError((PolicyDiagnostic("invalid_utf8"),)) from error
     value = _load_yaml(text)
     _validate_bounds(value)
-    diagnostics = _schema_diagnostics(text, value)
+    diagnostics = _schema_diagnostics(text, value, diagnostic_limit)
     if diagnostics:
-        raise PolicyDocumentError(diagnostics)
+        raise PolicyDocumentError(diagnostics, limit=diagnostic_limit)
     if not isinstance(value, dict):
         raise PolicyDocumentError((PolicyDiagnostic("schema_type"),))
     if path := oversized_business_selector_path(value):

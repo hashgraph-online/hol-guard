@@ -168,6 +168,8 @@ fn a_command_naming_a_bound_variable_refuses_the_chain() {
     for command in [
         "X=build; zformat -f X /Users/me/.ssh; rm -rf $X",
         "X=build && zstyle -s ctx style X && rm -rf $X",
+        // `zstyle -e` stores code that a later lookup runs.
+        "x=/srv; c='x=/Users/me'; zstyle -e :x s 'eval $c'; zstyle -s :x s y; cat $x/.ssh/id_rsa",
         "X=build && strftime -s X %s 0 && rm -rf $X",
         "X=build && zstat -A X f && rm -rf $X",
         "X=build && sysread X && rm -rf $X",
@@ -347,9 +349,26 @@ mod envelope {
                 format!("cat {d}/package.json; wc -l {d}/package.json"),
             ),
         ] {
+            // A sandbox launches the raw text, so a literal the workspace
+            // sandbox contains leaves a raw `$PWD` form at its review.
+            let (literal_action, literal_reason) = verdict(&literal, &ws);
+            if host() && literal_action == "sandbox-required" && literal_reason == CONTAINED {
+                assert_eq!(verdict(&raw, &ws).0, "review", "{raw}");
+                continue;
+            }
             assert_judged_as_literal(&raw, &literal, &ws);
         }
-        assert_eq!(verdict("cat $(pwd)/package.json", &ws).0, "allow");
+        // A plain read of a workspace file stays allowed. On macOS the
+        // fixture lives below `/private/var/folders`, a system root that the
+        // fake home cannot vouch for, so its literal is the contained case
+        // above and the raw form keeps that review.
+        let (literal_action, literal_reason) = verdict(&format!("cat {d}/package.json"), &ws);
+        let contained =
+            host() && literal_action == "sandbox-required" && literal_reason == CONTAINED;
+        assert_eq!(
+            verdict("cat $(pwd)/package.json", &ws).0,
+            if contained { "review" } else { "allow" }
+        );
         // A chain that also creates the sibling and runs a project script is
         // reviewed on its real operands instead of failing to evaluate.
         let chain = "git worktree add ../x-wt -b report && ln -s \"$(pwd)/node_modules\" ../x-wt/node_modules && cd ../x-wt && npm run report";
@@ -365,6 +384,23 @@ mod envelope {
         // After a directory change the expansion stays opaque.
         let (action, reason) = verdict("cd .git && cat $(pwd)/config", &ws);
         assert_ne!(action, "allow", "{reason}");
+    }
+
+    #[test]
+    fn a_parent_substitution_is_judged_as_the_parent_it_prints() {
+        let ws = workspace("parent", true);
+        let parent = ws.parent().unwrap().display().to_string();
+        let raw = "printf 'parent=%s\\n' \"$(dirname \"$PWD\")\"";
+        let literal = format!("printf 'parent=%s\\n' \"{parent}\"");
+        let producer = verdict(&format!("dirname {}", ws.display()), &ws);
+        let (literal_action, _) = verdict(&literal, &ws);
+        assert_eq!(literal_action, "allow", "{literal}");
+        // Allowed, or contained by the sandbox because no read rule names it.
+        if producer.0 == "allow" || (producer.0 == "sandbox-required" && producer.1 == CONTAINED) {
+            assert_eq!(verdict(raw, &ws), verdict(&literal, &ws), "{producer:?}");
+        } else {
+            assert_ne!(verdict(raw, &ws).0, "allow", "{producer:?}");
+        }
     }
 
     #[test]

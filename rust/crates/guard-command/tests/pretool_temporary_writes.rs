@@ -125,3 +125,51 @@ fn configured_darwin_temp_root_keeps_owned_leaf_and_overwrite_proofs() {
         "allow"
     );
 }
+
+fn apply_patch(fixture: &Fixture, header: &str, target: &Path) -> PreToolResultV1 {
+    let patch = format!(
+        "*** Begin Patch\n*** {header} File: {}\n+hello\n*** End Patch",
+        target.display()
+    );
+    evaluate_pre_tool_envelope_with_context(
+        "codex",
+        "PreToolUse",
+        &json!({"hook_event_name": "PreToolUse", "tool_name": "apply_patch", "tool_input": {"command": patch}}),
+        None,
+        None,
+        fixture.home.to_str(),
+        fixture.workspace.to_str(),
+    )
+}
+
+/// Codex's `apply_patch` gets the same private temporary scope as the host
+/// Write tool, and the same link, permission, hook and agent-file screens.
+#[test]
+fn codex_apply_patch_matches_write_in_owned_temporary_directory() {
+    let fixture = fixture("patch");
+    let added = apply_patch(&fixture, "Add", &fixture.scratch.join("hello.txt"));
+    assert_eq!(added.minimum_action, "allow", "{added:?}");
+    assert_eq!(added.reason_code, "native_exact_safe_file_write");
+
+    // A link into the workspace is just a workspace write; a link to another
+    // temporary file is the case the leaf-link screen refuses.
+    let real = fixture.scratch.join("real.txt");
+    std::fs::write(&real, "x").unwrap();
+    let link = fixture.scratch.join("link.txt");
+    std::os::unix::fs::symlink(&real, &link).unwrap();
+    let shared = fixture.scratch.join("shared");
+    std::fs::create_dir(&shared).unwrap();
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777)).unwrap();
+    std::fs::create_dir_all(fixture.scratch.join("repo/.git/hooks")).unwrap();
+    for target in [
+        link,
+        shared.join("notes.txt"),
+        fixture.scratch.join("repo/.git/hooks/pre-commit"),
+        fixture.scratch.join("AGENTS.md"),
+        fixture.scratch.join(".codex/config.toml"),
+        fixture.scratch.join("missing/notes.txt"),
+    ] {
+        let result = apply_patch(&fixture, "Add", &target);
+        assert_ne!(result.minimum_action, "allow", "{}", target.display());
+    }
+}

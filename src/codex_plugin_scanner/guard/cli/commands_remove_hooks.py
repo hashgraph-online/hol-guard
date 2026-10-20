@@ -13,7 +13,7 @@ from ..hook_removal import format_removal_summary, plan_hook_removal, remove_all
 from ..hook_removal_presence import removal_gate_enabled, require_typed_presence
 from .approval_gate_prompt import print_approval_gate_error
 from .commands_lifecycle_gate import LifecycleGateRequirement, lifecycle_authority_home
-from .commands_parser_helpers import _add_guard_common_args
+from .commands_parser_hooks import configure_guard_hooks_parser as configure_guard_hooks_parser
 
 if TYPE_CHECKING:
     from ..adapters.base import HarnessContext
@@ -21,30 +21,6 @@ if TYPE_CHECKING:
     from ..store import GuardStore
 
 HOOKS_REMOVE_ACTION = "hooks.remove"
-
-
-def configure_guard_hooks_parser(
-    guard_subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
-) -> None:
-    hooks_parser = guard_subparsers.add_parser("hooks", help="Manage Guard hooks in harness configs")
-    hooks_subparsers = hooks_parser.add_subparsers(dest="hooks_command", required=True)
-    remove_parser = hooks_subparsers.add_parser(
-        "remove",
-        help="Remove every Guard hook from every known harness config (requires step-up)",
-    )
-    remove_parser.add_argument(
-        "--all",
-        action="store_true",
-        help="Accepted for clarity; removal always covers every known harness",
-    )
-    remove_parser.add_argument(
-        "--stop-daemon",
-        action="store_true",
-        help="Also stop the local Guard daemon after the hooks are removed",
-    )
-    remove_parser.add_argument("--dry-run", action="store_true", help="List what would be removed and change nothing")
-    _add_guard_common_args(remove_parser)
-    remove_parser.add_argument("--json", action="store_true")
 
 
 def run_hook_removal(

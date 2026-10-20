@@ -18,7 +18,8 @@ pub(crate) struct Session {
     _cleanup: FixtureCleanup,
 }
 
-fn default_controls() -> guard_command::native_command_controls::CompiledNativeCommandControls {
+pub(crate) fn default_controls(
+) -> guard_command::native_command_controls::CompiledNativeCommandControls {
     let program = guard_command::native_command_program::packaged_command_program().unwrap();
     let mut binding: guard_contracts::NativeCommandControlBindingV1 =
         serde_json::from_value(json!({
@@ -145,7 +146,7 @@ pub(crate) fn session(label: &str) -> Session {
 }
 
 impl Session {
-    fn evaluate(&self, command: &str) -> guard_contracts::PreToolResultV1 {
+    pub(crate) fn evaluate(&self, command: &str) -> guard_contracts::PreToolResultV1 {
         self.evaluate_at(command, &self.org)
     }
 
@@ -165,7 +166,7 @@ impl Session {
         )
     }
 
-    fn assert_allow(&self, command: &str, reason_code: &str) {
+    pub(crate) fn assert_allow(&self, command: &str, reason_code: &str) {
         let result = self.evaluate(command);
         assert_eq!(
             (result.minimum_action.as_str(), result.reason_code.as_str()),
@@ -174,7 +175,7 @@ impl Session {
         );
     }
 
-    fn assert_not_allow(&self, command: &str) {
+    pub(crate) fn assert_not_allow(&self, command: &str) {
         let result = self.evaluate(command);
         assert_ne!(
             result.minimum_action, "allow",
@@ -197,7 +198,7 @@ pub(crate) fn executable_hook(path: &Path) {
 }
 
 #[test]
-fn origin_refresh_is_quiet_only_for_a_proven_github_https_origin() {
+fn origin_refresh_is_quiet_only_for_a_proven_github_origin() {
     let session = session("fetch");
     let primary = session.primary.display();
     let fetch = format!("git -C {primary} fetch origin");
@@ -241,9 +242,12 @@ fn origin_refresh_is_quiet_only_for_a_proven_github_https_origin() {
         session.config(&["--unset-all", key]);
     }
     for url in [
-        "git@github.com:example-org/app-portal.git",
         "https://token@github.com/example-org/app-portal.git",
         "https://github.com.evil.example/example-org/app-portal.git",
+        "git@evil.example:example-org/app-portal.git",
+        "git@github.com.evil.example:example-org/app-portal.git",
+        "ssh://git@github.com:2222/example-org/app-portal.git",
+        "ssh://evil@github.com/example-org/app-portal.git",
         "ext::sh -c id",
     ] {
         session.config(&["remote.origin.url", url]);
@@ -258,6 +262,9 @@ fn origin_refresh_is_quiet_only_for_a_proven_github_https_origin() {
     session.assert_not_allow(&fetch);
 }
 
+/// A developer's own checkout: the remote spelled for SSH, `fetch.prune` in
+/// the global configuration and a hook manager's hooks directory in the
+/// repository. The chain is the one agents send to look at a repository.
 #[test]
 fn fast_forward_pull_is_quiet_only_without_merge_or_checkout_programs() {
     const REFRESH: &str = "native_exact_safe_git_origin_refresh";
@@ -461,7 +468,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         "git rm -f tracked.txt",
         "git commit",
         "git commit -e -m x",
-        "git commit -S -m x",
         "git -c core.hooksPath=/tmp/hooks commit -m x",
         "git add notes.md && rm -rf build",
         "git switch main",
@@ -472,7 +478,6 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
     for (key, value) in [
         ("filter.strip.clean", "sed -e s/x//"),
         ("core.fsmonitor", "/tmp/monitor"),
-        ("commit.gpgSign", "true"),
         ("hook.pre-commit.command", "id"),
         ("diff.text.textconv", "cat"),
         ("submodule.recurse", "true"),
@@ -481,6 +486,17 @@ fn local_writes_in_a_linked_worktree_are_quiet_only_without_programs() {
         assert!(allowed("git add -A && git commit -m x").is_err(), "{key}");
         session.config(&["--unset-all", key]);
     }
+    // Signing by default asks of a commit what `-S` asks, and of nothing else.
+    let explicit = allowed("git add -A && git commit -S -m x").is_ok();
+    session.config(&["commit.gpgSign", "true"]);
+    allowed("git add -A").unwrap();
+    allowed("git switch -c feat/signed").unwrap();
+    assert_eq!(allowed("git add -A && git commit -m x").is_ok(), explicit);
+    session.config(&["gpg.program", "/tmp/gpg"]);
+    allowed("git add -A").unwrap();
+    assert!(allowed("git add -A && git commit -m x").is_err());
+    session.config(&["--unset-all", "gpg.program"]);
+    session.config(&["--unset-all", "commit.gpgSign"]);
     // Each form answers only for the hooks it runs.
     let hook = session.primary.join(".git/hooks/pre-commit");
     executable_hook(&hook);

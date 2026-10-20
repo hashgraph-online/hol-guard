@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Allow a stable dispatch to finish a published release whose GitHub files are missing.
+"""Allow a stable dispatch to finish a published release that never completed.
 
 The next registry version remains the normal path. A dispatch of the latest
 PyPI version is accepted only when that version's GitHub release cannot yet
-supply the Desktop updater: the pure wheel, the macOS arm64 wheel, or the
-publish provenance bundle is absent. A complete release is not republished.
+supply the Desktop updater (the pure wheel, the macOS arm64 wheel, or the
+publish provenance bundle is absent), or when no workflow run ever recorded
+the publication as complete. A recorded, complete release is not republished.
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ import argparse
 from collections.abc import Iterable
 from pathlib import Path
 
-# Keep aligned with verify_native_runtime_release.EXPECTED_TARGETS. Stable
+# Keep aligned with verify_native_runtime_release.EXPECTED_TARGETS, except for
+# Windows ARM64: releases before it shipped are complete without that wheel. Stable
 # versions are canonical X.Y.Z; wheel tags still use PEP 427's dash-to-underscore
 # normalization so a pre-release form cannot miss its filename.
 _NATIVE_PLATFORM_TAGS = (
@@ -48,6 +50,7 @@ def stable_dispatch_is_allowed(
     asset_names: Iterable[str] = (),
     release_missing: bool = False,
     deferred_pypi: bool = False,
+    publication_unrecorded: bool = False,
 ) -> bool:
     if requested == expected_next:
         return True
@@ -55,7 +58,7 @@ def stable_dispatch_is_allowed(
         return not release_missing and not github_release_needs_asset_repair(requested, asset_names)
     if not latest_pypi or requested != latest_pypi:
         return False
-    if release_missing:
+    if release_missing or publication_unrecorded:
         return True
     return github_release_needs_asset_repair(requested, asset_names)
 
@@ -78,6 +81,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Allow recovery of a complete GitHub release that is still absent from PyPI",
     )
+    parser.add_argument(
+        "--publication-unrecorded",
+        action="store_true",
+        help="Allow finishing the latest PyPI version when no run recorded its publication as complete",
+    )
     args = parser.parse_args(argv)
     allowed = stable_dispatch_is_allowed(
         requested=args.requested,
@@ -86,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
         asset_names=_asset_names(args.asset_names_file),
         release_missing=bool(args.release_missing),
         deferred_pypi=bool(args.deferred_pypi),
+        publication_unrecorded=bool(args.publication_unrecorded),
     )
     return 0 if allowed else 1
 

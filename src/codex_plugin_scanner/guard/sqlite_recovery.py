@@ -336,6 +336,7 @@ _LOCAL_CLI_SALVAGE_TABLES = (
     "local_cli_grant",
     "local_cli_command",
     "local_cli_command_grant",
+    "local_cli_grant_capability",
 )
 _REQUIRED_LOCAL_CLI_SALVAGE_TABLES = (
     "local_cli_grant",
@@ -347,6 +348,8 @@ _PARTIAL_COPY_OK_TABLES = frozenset(
         "local_cli_authority",
         "local_cli_observation",
         "local_cli_grant",
+        # Losing a capability row only narrows an allowed grant.
+        "local_cli_grant_capability",
     }
 )
 
@@ -379,6 +382,16 @@ def salvage_local_cli_state(*, source: Path, destination: Path) -> bool:
             if not all(copied.get(table) for table in _REQUIRED_LOCAL_CLI_SALVAGE_TABLES):
                 dst.rollback()
                 return False
+            # A capability row rides along only with an allowed grant and a
+            # restored cli-surface observation, the same two facts the apply
+            # required to write it. An observation that failed to copy leaves
+            # the row an orphan, so it goes.
+            _ = dst.execute(
+                "delete from local_cli_grant_capability where cli_id not in "
+                "(select grant_row.cli_id from local_cli_grant as grant_row "
+                "join local_cli_observation as observed on observed.cli_id = grant_row.cli_id "
+                "where grant_row.state = 'allowed' and observed.surface = 'cli')"
+            )
             dst.commit()
             return True
     except sqlite3.Error:

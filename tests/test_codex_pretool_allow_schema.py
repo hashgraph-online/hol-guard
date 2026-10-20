@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 
 
 def test_codex_pre_tool_response_omits_unsupported_allow() -> None:
-    allowed = bridge._codex_hook_response(
+    allowed = codex_hook_response(
         {
             "continue": True,
             "policy_action": "allow",
@@ -16,7 +16,7 @@ def test_codex_pre_tool_response_omits_unsupported_allow() -> None:
         },
         event_name="PreToolUse",
     )
-    denied = bridge._codex_hook_response(
+    denied = codex_hook_response(
         {
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
@@ -38,7 +38,7 @@ def test_codex_pre_tool_response_omits_unsupported_allow() -> None:
 
 
 def test_codex_pre_tool_warn_preserves_reason_as_system_message() -> None:
-    warned = bridge._codex_hook_response(
+    warned = codex_hook_response(
         {
             "continue": True,
             "policy_action": "warn",
@@ -60,7 +60,7 @@ def test_codex_pre_tool_warn_preserves_reason_as_system_message() -> None:
 
 
 def test_codex_pre_tool_response_drops_invalid_permission_fields() -> None:
-    payload = bridge._codex_hook_response(
+    payload = codex_hook_response(
         {
             "hookSpecificOutput": {
                 "hookEventName": "SessionStart",

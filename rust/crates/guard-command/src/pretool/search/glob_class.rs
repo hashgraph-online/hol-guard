@@ -1,7 +1,6 @@
 /// The literal-name fallback must refuse this operand. A bracket class can
-/// name a leading dot under `dotglob` (a literal `.` or a range such as
-/// `[,-0]`), or it uses `]`, `!`, or a POSIX class that this matcher closes
-/// at the first `]`.
+/// name a leading dot under `dotglob`, it can hold a range, or it uses `]`,
+/// `!`, or a POSIX class that this matcher closes at the first `]`.
 pub(super) fn bracket_fallback_unsafe(value: &str) -> bool {
     let bytes = value.as_bytes();
     let mut index = 0;
@@ -10,49 +9,44 @@ pub(super) fn bracket_fallback_unsafe(value: &str) -> bool {
             index += 1;
             continue;
         }
-        let Some((unsafe_class, next)) = one_bracket_class(bytes, index) else {
+        let Some(next) = one_bracket_class(bytes, index) else {
             return true;
         };
-        if unsafe_class {
-            return true;
-        }
         index = next;
     }
     false
 }
 
-/// `(unsafe, index after the closing bracket)`. `None` when the class never
-/// closes. An unsafe class returns immediately, so its end index is unused.
-fn one_bracket_class(bytes: &[u8], open: usize) -> Option<(bool, usize)> {
+/// The index after the closing bracket, or `None` when the class never closes
+/// or could stand for a name other than the one it is spelled with.
+fn one_bracket_class(bytes: &[u8], open: usize) -> Option<usize> {
     let mut cursor = open + 1;
     if cursor < bytes.len() && matches!(bytes[cursor], b'!' | b'^') {
-        return Some((true, cursor));
+        return None;
     }
-    let mut unsafe_class = false;
     let mut first = true;
     while cursor < bytes.len() {
         if !first && bytes[cursor] == b']' {
-            return Some((unsafe_class, cursor + 1));
+            return Some(cursor + 1);
         }
         let nested = bytes[cursor] == b'['
             && cursor + 1 < bytes.len()
             && matches!(bytes[cursor + 1], b':' | b'.' | b'=');
         if nested || (first && bytes[cursor] == b']') {
-            return Some((true, cursor));
+            return None;
         }
         first = false;
-        if cursor + 2 < bytes.len() && bytes[cursor + 1] == b'-' && bytes[cursor + 2] != b']' {
-            let (start, end) = (bytes[cursor], bytes[cursor + 2]);
-            let (lo, hi) = if start <= end {
-                (start, end)
-            } else {
-                (end, start)
-            };
-            unsafe_class |= (lo..=hi).contains(&b'.');
-            cursor += 3;
-            continue;
+        // A range is expanded in the locale's collating sequence unless
+        // `globasciiranges` is set, so the byte comparison this matcher makes
+        // is no proof of what the shell matched: `[a-d]` reaches `B` where the
+        // locale sorts the cases together, and a locale this matcher does not
+        // model can place more between the two ends. A leading dot would name
+        // a hidden entry under `dotglob`.
+        if (cursor + 2 < bytes.len() && bytes[cursor + 1] == b'-' && bytes[cursor + 2] != b']')
+            || bytes[cursor] == b'.'
+        {
+            return None;
         }
-        unsafe_class |= bytes[cursor] == b'.';
         cursor += 1;
     }
     None

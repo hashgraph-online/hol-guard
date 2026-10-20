@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -213,7 +214,14 @@ def test_hermes_daemon_response_uses_harness_native_translation(monkeypatch: pyt
     from codex_plugin_scanner.guard.adapters import hermes_runtime_hooks
 
     expected = ('{"decision":"allow"}', "", 0)
-    monkeypatch.setattr(hermes_runtime_hooks, "hermes_bridge_response", lambda *_args, **_kwargs: expected)
+    deadlines: list[object] = []
+
+    def bridge(*_args: object, **kwargs: object) -> tuple[str, str, int]:
+        deadlines.append(kwargs.get("deadline"))
+        return expected
+
+    monkeypatch.setattr(hermes_runtime_hooks, "hermes_bridge_response", bridge)
+    started = time.monotonic()
     result = daemon.try_daemon_hook(
         guard_home=Path("/private/unused"),
         harness="hermes",
@@ -224,6 +232,10 @@ def test_hermes_daemon_response_uses_harness_native_translation(monkeypatch: pyt
         _opener_builder=lambda: cast(Any, _Opener(_Response(body=b'{"x":1}'))),
     )
     assert result == expected
+    # The render inherits the hook's absolute deadline rather than a fresh timeout.
+    assert len(deadlines) == 1
+    assert isinstance(deadlines[0], float)
+    assert started < deadlines[0] <= time.monotonic() + 2
 
 
 def test_native_response_edge_contracts() -> None:

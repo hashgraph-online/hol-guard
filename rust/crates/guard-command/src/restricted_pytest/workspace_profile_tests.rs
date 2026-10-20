@@ -152,6 +152,31 @@ fn composed_profile_orders_denials_last_and_covers_credentials() {
 }
 
 #[test]
+fn only_the_user_database_mach_service_is_reachable() {
+    let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
+    let lookups: Vec<&str> = profile
+        .lines()
+        .filter(|line| line.contains("mach-lookup") || line.contains("global-name"))
+        .collect();
+    assert_eq!(
+        lookups,
+        ["(allow mach-lookup (global-name \"com.apple.system.opendirectoryd.libinfo\"))"]
+    );
+    for service in [
+        "opendirectoryd.api",
+        "SecurityServer",
+        "securityd",
+        "secd",
+        "keychain",
+        "authd",
+        "(allow mach-lookup)",
+        "global-name-prefix",
+    ] {
+        assert!(!profile.contains(service), "{service}");
+    }
+}
+
+#[test]
 fn privileged_binaries_are_denied_execution() {
     let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
     assert!(profile.contains("(deny process-exec (literal \"/usr/bin/sudo\")"));
@@ -298,6 +323,24 @@ fn reopened_reflog_cannot_become_a_bare_repository() {
 }
 
 #[test]
+fn directories_above_the_workspace_can_be_listed_but_not_read() {
+    let profile = workspace_profile::compose(&input("/w/team/proj"), &[], &[]).unwrap();
+    let listing = profile
+        .lines()
+        .find(|line| line.starts_with("(allow file-read-data"))
+        .unwrap();
+    assert_eq!(
+        listing,
+        "(allow file-read-data (literal \"/w/team\") (literal \"/w\") (literal \"/\"))"
+    );
+    assert!(!profile.contains("(subpath \"/w/team\")"));
+    assert!(!profile.contains("(subpath \"/w\")"));
+    // The credential denials still come after the listing grant.
+    let at = |needle: &str| profile.find(needle).unwrap();
+    assert!(at("(allow file-read-data") < at("(deny file-read* file-write* (regex"));
+}
+
+#[test]
 fn system_links_and_toolchain_config_stay_readable() {
     let profile = workspace_profile::compose(&input("/w/proj"), &[], &[]).unwrap();
     let metadata = profile
@@ -339,6 +382,11 @@ fn a_linked_worktree_writes_only_shared_stores_and_its_admin_entry() {
             .any(|line| line.starts_with(prefix) && line.contains(needle))
     };
     assert!(line("(allow process-exec", "(subpath \"/w/main\")"));
+    // A linked binary the run just built lives in its private directory.
+    assert!(line(
+        "(allow process-exec",
+        &format!("(subpath \"{}\")", value.private_root.display())
+    ));
     assert!(line("(allow file-read*", "(subpath \"/w/main\")"));
     for tree in ["objects", "refs", "logs"] {
         let needle = format!("(subpath \"/w/main/.git/{tree}\")");
@@ -416,4 +464,28 @@ fn longest_literal(profile: &str) -> usize {
     }
     assert!(!quoted);
     longest
+}
+
+#[test]
+fn a_read_grant_is_one_regular_file_and_nothing_else() {
+    let directory = std::env::temp_dir().join(format!("guard-read-grant-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let directory = directory.canonicalize().unwrap();
+    let script = directory.join("check.py");
+    std::fs::write(&script, "print(1)\n").unwrap();
+    let link = directory.join("link.py");
+    std::os::unix::fs::symlink(&script, &link).unwrap();
+    let granted = |roots: Vec<PathBuf>| {
+        let mut value = input("/w/proj");
+        value.read_only_roots = roots;
+        workspace_profile::compose(&value, &[], &[])
+    };
+    let profile = granted(vec![script.clone()]).unwrap();
+    assert!(profile.contains(&script.to_string_lossy().into_owned()));
+    assert!(granted(vec![directory.clone()]).is_err());
+    assert!(granted(vec![link]).is_err());
+    assert!(granted(vec![PathBuf::from("check.py")]).is_err());
+    assert!(granted(vec![PathBuf::from("/w/proj/check.py")]).is_err());
+    assert!(granted(vec![directory.join("missing.py")]).is_err());
+    let _ = std::fs::remove_dir_all(&directory);
 }

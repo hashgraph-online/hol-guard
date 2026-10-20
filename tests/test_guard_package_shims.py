@@ -42,6 +42,7 @@ from codex_plugin_scanner.guard.shim_probe import SHIM_PROBE_ENV_VALUE, SHIM_PRO
 from codex_plugin_scanner.guard.shims import install_package_shims, package_shim_status
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.cloud_exception_bundle_fixtures import build_cloud_exception_policy_bundle
+from tests.package_review_settings import review_package_signals
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
 from tests.shim_execution_helpers import build_shim_content_hash, write_fake_manager_script
 from tests.test_guard_protect import _seed_bundle_cache_only, _SyncAndEvaluateHandler
@@ -554,6 +555,7 @@ def test_guard_protect_does_not_prime_policy_integrity_or_hold_sqlite_writer(
     home_dir = tmp_path / "guard-home"
     workspace_dir = tmp_path / "workspace"
     home_dir.mkdir(parents=True, exist_ok=True)
+    review_package_signals(home_dir)
     workspace_dir.mkdir(parents=True, exist_ok=True)
     refresh_started_event = Event()
     slow_results: Queue = Queue()
@@ -638,6 +640,7 @@ def test_package_manager_shim_uses_trusted_guard_import_path(tmp_path: Path, cap
     home_dir = tmp_path / "guard-home"
     home_dir.mkdir()
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    review_package_signals(home_dir)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     malicious_package = workspace_dir / "codex_plugin_scanner"
@@ -700,6 +703,7 @@ def test_guard_protect_requires_reapproval_for_untrusted_package_sources_without
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     payload, exit_code = build_protect_payload(
         command=command,
@@ -805,6 +809,7 @@ def test_package_manager_shim_waits_out_transient_store_writer_lock(tmp_path: Pa
     home_dir = tmp_path / "guard-home"
     home_dir.mkdir()
     (home_dir / "config.toml").write_text("approval_wait_timeout_seconds = 0\n", encoding="utf-8")
+    review_package_signals(home_dir)
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True, exist_ok=True)
     fake_bin = tmp_path / "fake-bin"

@@ -42,6 +42,7 @@ def _vectors() -> dict[str, Any]:
 def _wire_decision(**fields: object) -> dict[str, object]:
     return {
         "action": "review",
+        "policy_action": "review",
         "source": "policy",
         "signals": ["MCP tool call deletes files.", "Target path looks sensitive."],
         "summary": "summary",

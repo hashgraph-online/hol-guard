@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import threading
 import time
 
@@ -12,43 +11,6 @@ from codex_plugin_scanner.guard import codex_hook_file_integrity as files
 from codex_plugin_scanner.guard import codex_hook_integrity as manifests
 from codex_plugin_scanner.guard import codex_hook_launch_runtime as launches
 from codex_plugin_scanner.guard import codex_hook_runtime_trust as trust
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as flow
-
-
-def test_fallback_validation_receives_original_deadline_and_never_launches_after_expiry(monkeypatch):
-    deadline = time.monotonic() + 1
-    captured = []
-
-    def failed_rpc(**kwargs):
-        raise OSError("fixture transport failure")
-
-    def expired_validation(**kwargs):
-        captured.append(kwargs.get("deadline_monotonic"))
-        raise files.CodexHookIntegrityError("codex_hook_validation_deadline_expired", "Validation expired.")
-
-    def forbidden(*args, **kwargs):
-        raise AssertionError("expired validation reached child execution")
-
-    monkeypatch.setattr(flow, "_daemon_response", failed_rpc)
-    monkeypatch.setattr(flow, "trusted_hook_launch", expired_validation)
-    monkeypatch.setattr(flow, "_run_local_fallback", forbidden)
-    monkeypatch.setattr(flow, "_run_daemon_start", forbidden)
-    causes = []
-    response, overloaded, invalid = flow.bridge_review_response(
-        state_path="/isolated/guard/daemon.json",
-        fallback_command=("fixture",),
-        start_command=("fixture",),
-        query="",
-        data="{}",
-        deadline=deadline,
-        manifest_path="/isolated/manifest.json",
-        config_json="{}",
-        failure_causes=causes,
-    )
-    assert response is None and not overloaded and invalid
-    assert captured == [deadline]
-    assert causes[-1]["reason_code"] == "codex_hook_validation_deadline_expired"
 
 
 def test_expired_validation_reads_no_authority_or_executable(monkeypatch):
@@ -222,37 +184,3 @@ def test_phase_cap_remains_shorter_than_original_deadline(tmp_path, monkeypatch)
     context = trust.TrustedCodexHookLaunch(tmp_path, {}, deadline_monotonic=10)
     assert context.run_start(("fixture",), timeout_seconds=2)
     assert captured == [7]
-
-
-def test_bridge_timeout_denies_without_claiming_authority_needs_repair(monkeypatch, capsys):
-    monkeypatch.setattr(
-        bridge,
-        "_bound_hook_input",
-        lambda *_args, capture_guard_home=None: ("PreToolUse", "{}", 1, bridge.time.monotonic()),
-    )
-
-    def timed_out_review(**kwargs):
-        kwargs["failure_causes"].append(
-            {"stage": "launcher_validation", "reason_code": "codex_hook_validation_deadline_expired"}
-        )
-        return None, False, True
-
-    monkeypatch.setattr(bridge, "bridge_review_response", timed_out_review)
-    assert (
-        bridge.main(
-            state_path="/isolated/guard/daemon.json",
-            fallback_command=("fixture",),
-            start_command=("fixture",),
-            query="",
-            hook_timeouts={"PreToolUse": 1},
-            manifest_path="/isolated/manifest.json",
-            config_json="{}",
-        )
-        == 0
-    )
-    captured = capsys.readouterr()
-    output, diagnostic = json.loads(captured.out), json.loads(captured.err)
-    assert output["hookSpecificOutput"]["permissionDecision"] == "deny"
-    reason = output["hookSpecificOutput"]["permissionDecisionReason"]
-    assert "deadline" in reason and "repair" not in reason.lower()
-    assert diagnostic["causes"][-1]["reason_code"] == "codex_hook_validation_deadline_expired"

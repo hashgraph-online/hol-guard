@@ -52,11 +52,64 @@ fn decode_key(encoded: Option<&str>) -> Option<Vec<u8>> {
 }
 
 fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, String> {
+    evaluate_with_clock(request, false)
+}
+
+/// A launch owner must use the store's current clock, never the earlier
+/// preview timestamp carried by the transport. This still uses the same
+/// authenticated rows and atomic claim transaction.
+#[cfg(target_os = "macos")]
+pub(crate) fn claim_now_then<T>(
+    request: &ClaimApprovalReuseDecisionsRequestV1,
+    connection: &rusqlite::Connection,
+    after: &mut dyn FnMut(&rusqlite::Connection) -> rusqlite::Result<Option<T>>,
+) -> Result<Option<T>, String> {
+    if request.schema != CLAIM_APPROVAL_REUSE_REQUEST_SCHEMA || request.decisions.is_empty() {
+        return Err("native_claim_approval_reuse_schema_mismatch".to_owned());
+    }
+    let integrity_key = decode_key(request.integrity_key_b64.as_deref());
+    let local_once_key = decode_key(request.local_once_integrity_key_b64.as_deref());
+    let evidence = crate::claim_reuse::ClaimEvidence {
+        integrity_state: request.integrity_state.as_ref(),
+        integrity_key: integrity_key.as_deref(),
+        integrity_key_id: request.integrity_key_id.as_deref(),
+        local_once_key: local_once_key.as_deref(),
+        local_once_key_id: request.local_once_integrity_key_id.as_deref(),
+        policy_bundle_identities: request.policy_bundle_decision_identities.as_deref(),
+    };
+    crate::claim_reuse::claim_approval_reuse_decisions_now_then(
+        connection,
+        &request.decisions,
+        &evidence,
+        &|connection, members| {
+            crate::claim_reuse_binding::evidence_is_bound(
+                connection,
+                members,
+                &evidence,
+                request.evidence_binding.as_ref(),
+            )
+        },
+        true,
+        after,
+    )
+    .map_err(|_| "native_claim_approval_reuse_store_error".to_owned())
+}
+
+fn evaluate_with_clock(
+    request: &ClaimApprovalReuseDecisionsRequestV1,
+    native_clock: bool,
+) -> Result<Value, String> {
     if request.schema != CLAIM_APPROVAL_REUSE_REQUEST_SCHEMA {
         return Err("native_claim_approval_reuse_schema_mismatch".to_owned());
     }
-    let now = guard_contracts::canonical_utc_timestamp(&request.now)
-        .ok_or_else(|| "native_claim_approval_reuse_invalid".to_owned())?;
+    let supplied_now = if native_clock {
+        None
+    } else {
+        Some(
+            guard_contracts::canonical_utc_timestamp(&request.now)
+                .ok_or_else(|| "native_claim_approval_reuse_invalid".to_owned())?,
+        )
+    };
     let connection = rusqlite::Connection::open_with_flags(
         &request.store_path,
         rusqlite::OpenFlags::SQLITE_OPEN_READ_WRITE,
@@ -75,21 +128,32 @@ fn evaluate(request: &ClaimApprovalReuseDecisionsRequestV1) -> Result<Value, Str
         local_once_key_id: request.local_once_integrity_key_id.as_deref(),
         policy_bundle_identities: request.policy_bundle_decision_identities.as_deref(),
     };
-    let claimed = crate::claim_reuse::claim_approval_reuse_decisions_with(
-        &connection,
-        &request.decisions,
-        &now,
-        &evidence,
-        &|connection, members| {
-            crate::claim_reuse_binding::evidence_is_bound(
-                connection,
-                members,
-                &evidence,
-                request.evidence_binding.as_ref(),
-            )
-        },
-        request.consume_local_once,
-    )
+    let bound = |connection: &rusqlite::Connection, members: &[crate::claim_reuse::Member<'_>]| {
+        crate::claim_reuse_binding::evidence_is_bound(
+            connection,
+            members,
+            &evidence,
+            request.evidence_binding.as_ref(),
+        )
+    };
+    let claimed = if let Some(now) = supplied_now {
+        crate::claim_reuse::claim_approval_reuse_decisions_with(
+            &connection,
+            &request.decisions,
+            &now,
+            &evidence,
+            &bound,
+            request.consume_local_once,
+        )
+    } else {
+        crate::claim_reuse::claim_approval_reuse_decisions_now(
+            &connection,
+            &request.decisions,
+            &evidence,
+            &bound,
+            request.consume_local_once,
+        )
+    }
     .map_err(|_| "native_claim_approval_reuse_store_error".to_owned())?;
     Ok(serde_json::json!({ "claimed": claimed }))
 }

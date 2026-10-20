@@ -21,8 +21,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_file_read_request_artifact,
-    extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
@@ -65,14 +64,15 @@ def _record_generic_once_allow(
 
 
 def _sensitive_read_artifact(workspace: Path, *, publisher: str | None = None) -> GuardArtifact:
-    request = extract_sensitive_file_read_request("read_file", {"path": ".env"}, cwd=workspace)
-    assert request is not None
-    artifact = build_file_read_request_artifact(
+    _request, artifact = extract_sensitive_file_read_request_artifact(
+        "read_file",
+        {"path": ".env"},
+        cwd=workspace,
         harness="codex",
-        request=request,
         config_path=str(workspace / ".mcp.json"),
         source_scope="project",
     )
+    assert artifact is not None
     return replace(artifact, publisher=publisher) if publisher is not None else artifact
 
 

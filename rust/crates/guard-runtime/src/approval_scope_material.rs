@@ -78,6 +78,14 @@ fn action_envelope_material(view: &View<'_>) -> Value {
     if let Some(Value::Object(raw_payload)) = envelope.get("raw_payload_redacted") {
         material.insert("permission_mode".to_owned(), permission_mode(raw_payload));
     }
+    if view.item.artifact_type.as_ref().and_then(Value::as_str)
+        == Some(guard_contracts::NATIVE_BASH_REVIEW_ARTIFACT_TYPE)
+    {
+        material.insert(
+            "native_bash".into(),
+            envelope.get("native_bash").cloned().unwrap_or(Value::Null),
+        );
+    }
     Value::Object(material)
 }
 

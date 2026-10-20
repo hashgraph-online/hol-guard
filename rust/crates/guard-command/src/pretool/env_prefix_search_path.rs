@@ -52,16 +52,17 @@ pub(super) fn admits(required: &[&'static [&'static str]], executable: &str) -> 
 /// Record a setting that is not inert for the reviewed projection; `None`
 /// when no program may run with it unreviewed by the extension controls.
 pub(super) fn review(
-    setting: Option<&mut Option<String>>,
+    setting: Option<&mut super::reviewed::Reviewed>,
     required: &mut Vec<&'static [&'static str]>,
     name: &str,
     value: &str,
     context: super::PathContext<'_>,
 ) -> Option<()> {
-    let first = setting?;
-    if !super::reviewable_assignment(name, value, context) {
+    let reviewed = setting?;
+    let search_path = !super::reviewable_assignment(name, value, context);
+    if search_path {
         required.push(programs(name, value)?);
     }
-    first.get_or_insert_with(|| name.to_owned());
+    super::reviewed::record(reviewed, name, value, search_path);
     Some(())
 }

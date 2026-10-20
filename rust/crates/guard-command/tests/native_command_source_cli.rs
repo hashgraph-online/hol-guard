@@ -23,9 +23,11 @@ fn request() -> Vec<u8> {
         "/trust-class-map.v1.json"
     )))
     .unwrap();
+    let built: Value = serde_json::from_slice(&invoke(&["export-built"], &[]).stdout).unwrap();
     serde_json::to_vec(&json!({
         "schema":"guard.command-extension-build.v1",
-        "sources":[source], "trust":trust, "base":"packaged"
+        "sources":[source], "trust":trust, "base":"packaged",
+        "validation_base":{"catalog":built["catalog"], "programs":[]}
     }))
     .unwrap()
 }
@@ -36,15 +38,54 @@ fn offline_cli_exports_build_derived_trust_without_stdin() {
     assert!(output.status.success());
     let trust: Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(trust["schemaVersion"], "guard.extension-trust-class-map.v1");
-    assert!(trust["classes"]["external"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("command.noodle")));
+    assert!(trust["classes"]["external"].as_array().unwrap().is_empty());
     assert!(trust["classes"]["first-party"]
         .as_array()
         .unwrap()
         .contains(&json!("command.git")));
     assert!(!invoke(&["export-trust", "arbitrary-file.json"], &[])
+        .status
+        .success());
+}
+
+#[test]
+fn bundle_metadata_dispatch_rejects_unknown_compatibility_family_without_fetch() {
+    let mut input = serde_json::to_vec(
+        &json!({"family":"arbitrary","source_sha":"a".repeat(40),"max_bytes":536870912}),
+    )
+    .unwrap();
+    input.push(b'\n');
+    let output = invoke(&["bundle-compatibility"], &input);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["code"],
+        "unknown compatibility metadata family"
+    );
+}
+
+#[test]
+fn offline_cli_bounds_each_stream_frame_and_rejects_extra_arguments() {
+    let mut input = b"HGCS\x01".to_vec();
+    input.extend_from_slice(&(8 * 1024 * 1024 + 1u32).to_be_bytes());
+    let output = invoke(&["compile-stream"], &input);
+    assert_eq!(output.status.code(), Some(2));
+    assert_eq!(
+        serde_json::from_slice::<Value>(&output.stdout).unwrap()["code"],
+        "command_source_bytes_invalid"
+    );
+    assert!(!invoke(&["compile-stream", "extra"], &[]).status.success());
+}
+
+#[test]
+fn offline_pack_cli_bounds_frames_without_emitting_a_partial_root() {
+    let mut input = b"HGPS\x01".to_vec();
+    input.extend_from_slice(&(8 * 1024 * 1024 + 1u32).to_be_bytes());
+    let output = invoke(&["compile-packs"], &input);
+    assert_eq!(output.status.code(), Some(2));
+    let failure: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(failure["code"], "command_source_bytes_invalid");
+    assert!(failure.get("index").is_none());
+    assert!(!invoke(&["compile-packs", "arbitrary-file.json"], &[])
         .status
         .success());
 }

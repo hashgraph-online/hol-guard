@@ -15,12 +15,14 @@ use crate::guard_store_json::py_strip;
 use crate::policy_bundle_time::micros_to_utc_isoformat;
 
 pub(crate) const APPROVAL_CENTER_SURFACE: &str = "approval-center";
+/// `PROTECTION_REPAIR_DASHBOARD_SURFACE` (`local_dashboard_session.py`).
+const PROTECTION_REPAIR_SURFACE: &str = "protection-repair";
 const SESSION_PREFIX: &str = "gld1";
 const SESSION_AUDIENCE: &str = "guard-local-daemon";
 const SESSION_VERSION: &str = "guard-local-daemon-session.v1";
 const SESSION_TTL_MICROS: i64 = 12 * 60 * 60 * 1_000_000;
 pub(crate) const OPEN_GUARD: &str = "Open HOL Guard to approve or keep this blocked:";
-const SIGNED_LINK_UNAVAILABLE: &str =
+pub(crate) const SIGNED_LINK_UNAVAILABLE: &str =
     "HOL Guard could not create a signed approval link; open Inbox from Guard on this device, then retry.";
 const LOOPBACK_HOSTS: [&str; 3] = ["127.0.0.1", "::1", "localhost"];
 /// `auth_token_path(guard_home)` (`daemon/auth_token.py`).
@@ -100,11 +102,16 @@ fn port_suffix(text: &str) -> bool {
     text.is_empty() || text.strip_prefix(':').is_some_and(port_digits)
 }
 
-/// `build_approval_browser_url(url, auth_token=...)` for a link without a
-/// fragment: the session token goes in a new `guard-token` fragment. The
-/// token's alphabet is one `urlencode` leaves as is.
-fn browser_url(link: &ApprovalLink<'_>, auth_token: &str, now_micros: i64) -> Option<String> {
-    let token = session_token(auth_token, APPROVAL_CENTER_SURFACE, now_micros)?;
+/// `build_approval_browser_url(url, auth_token=..., surface=...)` for a link
+/// without a fragment: the session token goes in a new `guard-token`
+/// fragment. The token's alphabet is one `urlencode` leaves as is.
+fn browser_url(
+    link: &ApprovalLink<'_>,
+    auth_token: &str,
+    surface: &str,
+    now_micros: i64,
+) -> Option<String> {
+    let token = session_token(auth_token, surface, now_micros)?;
     Some(format!("{}#guard-token={token}", link.url))
 }
 
@@ -158,7 +165,9 @@ fn with_review_url(
 ) -> Option<String> {
     let review_url = link.url;
     let live_url = match auth_token {
-        Some(token) if link.loopback => browser_url(link, token, now_micros)?,
+        Some(token) if link.loopback => {
+            browser_url(link, token, APPROVAL_CENTER_SURFACE, now_micros)?
+        }
         _ => review_url.to_owned(),
     };
     if live_url != review_url && stripped.contains(review_url) {
@@ -186,6 +195,107 @@ pub(crate) fn review_url_stays_unsigned(url: &str, guard_home: &std::path::Path)
     )
 }
 
+/// Whether `is_loopback_approval_url` may accept `url`: `urlparse`'s
+/// hostname read conservatively, so a doubtful link counts as loopback.
+fn maybe_loopback(url: &str) -> bool {
+    if url.contains(['\t', '\r', '\n']) {
+        return true;
+    }
+    // `urlsplit` drops leading C0 controls and spaces before it parses.
+    let url = url.trim_start_matches(|character: char| character <= ' ');
+    let Some((scheme, rest)) = url.split_once(':') else {
+        return false;
+    };
+    let web = scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https");
+    let Some(rest) = rest.strip_prefix("//").filter(|_| web) else {
+        return false;
+    };
+    let netloc = &rest[..rest.find(['/', '?', '#']).unwrap_or(rest.len())];
+    let host = netloc.rsplit_once('@').map_or(netloc, |(_, host)| host);
+    let host = match host.strip_prefix('[') {
+        Some(bracketed) => bracketed
+            .split_once(']')
+            .map_or(bracketed, |(host, _)| host),
+        None => host.split_once(':').map_or(host, |(host, _)| host),
+    };
+    LOOPBACK_HOSTS.contains(&host.to_ascii_lowercase().as_str())
+}
+
+/// `live_approval_review_url(url, guard_home=...)` with `auth_token` what
+/// `load_guard_daemon_auth_token` read: a loopback link this module
+/// reproduces, signed; any other link, or a link without a token,
+/// unchanged. `None` for a loopback link the client would sign that this
+/// module does not reproduce, so the caller never shows it unsigned.
+pub(crate) fn live_review_url(
+    url: &str,
+    auth_token: Option<&str>,
+    now_micros: i64,
+) -> Option<String> {
+    match (approval_link(url), auth_token) {
+        (Some(link), Some(token)) if link.loopback => {
+            browser_url(&link, token, APPROVAL_CENTER_SURFACE, now_micros)
+        }
+        (None, Some(_)) if maybe_loopback(url) => None,
+        _ => Some(url.to_owned()),
+    }
+}
+
+/// `authenticated_approval_review_url(url, guard_home=..., surface=...)` for
+/// a link this module reproduces: an external link unchanged, a loopback link
+/// signed for `surface`, and `None` when no safe link can be made (no token,
+/// or a link shape this module does not reproduce).
+pub(crate) fn approval_browser_url(
+    url: &str,
+    auth_token: impl FnOnce() -> Option<String>,
+    surface: &str,
+    now_micros: i64,
+) -> Option<String> {
+    let link = approval_link(url)?;
+    if !link.loopback {
+        return Some(url.to_owned());
+    }
+    browser_url(&link, &auth_token()?, surface, now_micros)
+}
+
+/// What `command_policy_repair_page_url` can answer for a repair page.
+pub(crate) enum RepairPage {
+    /// A loopback page this module reproduces, signed for the repair surface.
+    Signed(String),
+    /// No safe link: the page is not loopback, or no daemon auth token exists.
+    Absent,
+    /// A loopback page the client would sign whose shape this module does not
+    /// reproduce, so the caller must leave the answer to the daemon.
+    Unreproducible,
+}
+
+/// `command_policy_repair_page_url` from the page the locator's daemon URL
+/// names, with `auth_token` what `load_guard_daemon_auth_token` would read.
+/// Both of Python's `is_loopback_approval_url` checks fall out of the link
+/// shape: signing leaves the host alone, so a loopback page stays loopback.
+pub(crate) fn repair_page_url(
+    page: &str,
+    auth_token: impl FnOnce() -> Option<String>,
+    now_micros: i64,
+) -> RepairPage {
+    let Some(link) = approval_link(page) else {
+        return if maybe_loopback(page) {
+            RepairPage::Unreproducible
+        } else {
+            RepairPage::Absent
+        };
+    };
+    if !link.loopback {
+        return RepairPage::Absent;
+    }
+    let Some(token) = auth_token() else {
+        return RepairPage::Absent;
+    };
+    match browser_url(&link, &token, PROTECTION_REPAIR_SURFACE, now_micros) {
+        Some(url) => RepairPage::Signed(url),
+        None => RepairPage::Unreproducible,
+    }
+}
+
 /// `native_review_reason(canonical_harness, reason, approval_url, guard_home=...)`
 /// for a stripped, non-empty `approval_url`.
 pub(crate) fn native_review_reason(
@@ -204,7 +314,7 @@ pub(crate) fn native_review_reason(
         let without = without_raw_url(stripped, approval_url);
         return Some(py_strip(&format!("{without} {SIGNED_LINK_UNAVAILABLE}")).to_owned());
     };
-    let signed_url = browser_url(&link, token, now_micros)?;
+    let signed_url = browser_url(&link, token, APPROVAL_CENTER_SURFACE, now_micros)?;
     if stripped.contains(&signed_url) {
         return Some(stripped.to_owned());
     }

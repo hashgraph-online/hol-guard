@@ -85,7 +85,7 @@ def test_extension_control_authority_blocks_only_downgrades_after_enrollment(
 ) -> None:
     class FakeStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(health, 0, registry.catalog_digest, ())
 
@@ -121,7 +121,7 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
 
     class ProtectedAuthorityStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ())
 
@@ -938,17 +938,15 @@ def test_update_preserves_requested_wheel_during_broken_pipx_recovery(
         "-m",
         "pip",
         "install",
-        "--force-reinstall",
         str(wheel),
     ]
     assert commands == [
-        ["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)],
+        ["pipx", "runpip", "hol-guard", "install", str(wheel)],
         [
             "/opt/guard/bin/python",
             "-m",
             "pip",
             "install",
-            "--force-reinstall",
             str(wheel),
         ],
     ]
@@ -1281,7 +1279,7 @@ def test_update_requested_local_wheel_bypasses_python_incompatible_latest_releas
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["status"] == "updated"
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
@@ -1512,7 +1510,7 @@ def test_update_installs_requested_local_wheel_with_pipx(monkeypatch: pytest.Mon
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
     assert payload["resulting_version"] == "2.0.345"
@@ -1595,7 +1593,7 @@ def test_update_installs_requested_local_wheel_from_editable_install(
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
 
 
@@ -1623,7 +1621,6 @@ def test_update_resolves_requested_wheel_from_directory(monkeypatch: pytest.Monk
         "runpip",
         "hol-guard",
         "install",
-        "--force-reinstall",
         str(newer_wheel),
     ]
     assert payload["message"] == "Review the planned local wheel install command before updating."
@@ -2430,6 +2427,7 @@ def test_current_update_does_not_repair_artifacts_owned_by_newer_desktop_runtime
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
     monkeypatch.setattr(update_commands, "_verified_newer_guard_daemon", lambda *_args, **_kwargs: retained)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: False)
     monkeypatch.setattr(
         update_commands,
         "_refresh_package_shims_after_update",

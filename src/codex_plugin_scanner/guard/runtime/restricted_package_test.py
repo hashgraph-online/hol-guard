@@ -18,7 +18,7 @@ PACKAGE_TEST_PROFILE = "package-test-readonly-v1"
 def is_package_test(command: Sequence[str]) -> bool:
     return (
         bool(command)
-        and Path(command[0]).name in {"npm", "pnpm", "bun"}
+        and Path(command[0]).name in {"npm", "pnpm", "bun", "yarn"}
         and (
             (len(command) >= 2 and command[1] == "test" and Path(command[0]).name != "bun")
             or (len(command) >= 3 and tuple(command[1:3]) == ("run", "test"))

@@ -7,16 +7,16 @@ from pathlib import Path
 
 from ..codex_hook_windows_job import windows_system_executable_path
 from ..daemon.manager import GUARD_DAEMON_COMPATIBILITY_VERSION
-from .pi_extension_previous_source_body import build_previous_source_body
-from .pi_extension_previous_source_header import build_previous_source_header
-from .pi_extension_previous_source_tail import build_previous_source_tail
-from .pi_extension_runtime_ownership import resolve_pi_extension_runtime_ownership
-from .pi_extension_source_runtime import (
+from ._modules.pi.pi_extension_previous_source_body import build_previous_source_body
+from ._modules.pi.pi_extension_previous_source_header import build_previous_source_header
+from ._modules.pi.pi_extension_previous_source_tail import build_previous_source_tail
+from ._modules.pi.pi_extension_source_runtime import (
     ExtensionSourceVariantV1,
     build_lifecycle_abort_event_source_v1,
     build_tool_approval_continuation_source_v1,
     render_extension_source_variant_v1,
 )
+from .pi_extension_runtime_ownership import resolve_pi_extension_runtime_ownership
 
 # Pi terminates extension hooks at roughly 4.5 seconds. Keep Guard's daemon and
 # recovery/fallback paths below that host deadline so a fail-safe result returns.

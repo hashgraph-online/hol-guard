@@ -13,9 +13,10 @@ id = "aws-access-token"
 description = "Audited synthetic scanner or cryptographic interoperability test vector"
 condition = "AND"
 regexTarget = "line"
-paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''']
+paths = ['''(?:^|/)rust/crates/guard\-scanner/src/staged_scanner\.rs$''', '''(?:^|/)rust/crates/guard\-command/tests/pretool_omp_tracked_search\.rs$''']
 regexes = [
   '''^[\t\r\n ]*std::fs::write\(dir\.join\("\.env"\), "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\.unwrap\(\);[\t\r\n ]*$''',
+  '''^[\t\r\n ]*&\[\("\.env", "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7REALKEY\\n"\)\],[\t\r\n ]*$''',
 ]
 
 [[rules]]
@@ -61,6 +62,18 @@ regexTarget = "line"
 paths = ['''(?:^|/)rust/crates/guard\-runtime/testdata/binding_capture/vectors\.json$''']
 regexes = [
   '''^[\t\r\n ]*"capture_key_b64": "(?:AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=?|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2tra2tr|a2tra2tra2tra2tra2tra2tra2tra2tra2tra2traw==|\-_v7(?:\-_v7){9}\-_s=|\+/v7(?:\+/v7){9}\+/s=)",?[\t\r\n ]*$''',
+]
+
+[[rules.allowlists]]
+description = "Synthetic API key in the approval-queue redaction parity vectors, not a credential"
+condition = "AND"
+regexTarget = "secret"
+paths = [
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/approval_queue_vectors\.json$''',
+  '''(?:^|/)rust/crates/guard\-runtime/testdata/guard_store/record_approval_queue_vectors\.py$''',
+]
+regexes = [
+  '''^sk\-abcdefghijklmnopqrstuvwxyz0123$''',
 ]
 
 [[rules.allowlists]]

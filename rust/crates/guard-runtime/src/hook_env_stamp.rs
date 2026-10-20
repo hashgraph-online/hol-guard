@@ -380,6 +380,20 @@ fn push_unit(out: &mut String, unit: u32) {
     out.push_str(&format!("\\u{unit:04x}"));
 }
 
+/// `text` as CPython writes it to stderr (`errors="backslashreplace"`):
+/// each mapped lone surrogate as its `\udXXX` escape, the rest as is.
+pub(crate) fn backslash_surrogates(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for character in text.chars() {
+        if in_surrogate_plane(character) {
+            push_unit(&mut out, character as u32 - SURROGATE_PLANE_BASE + 0xd800);
+        } else {
+            out.push(character);
+        }
+    }
+    out
+}
+
 /// `json.dumps(text, ensure_ascii=...)` for one string.
 pub(crate) fn json_string(text: &str, ensure_ascii: bool, unmap: bool) -> String {
     let mut out = String::new();

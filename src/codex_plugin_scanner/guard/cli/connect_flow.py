@@ -37,6 +37,8 @@ from ..portable_command import portable_command_payload
 from ..runtime.runner import prepare_guard_cloud_connect_authorization
 from ..store import GuardStore
 from ..store_connect import build_connect_state_response
+from .commands_parser_constants import DEFAULT_GUARD_CONNECT_URL
+from .commands_parser_constants import DEFAULT_GUARD_SYNC_URL as DEFAULT_GUARD_SYNC_URL
 from .oauth_client import (
     GuardDpopKeyMaterial,
     GuardOAuthClientConfig,
@@ -48,8 +50,6 @@ from .oauth_client import (
 )
 from .oauth_credential_persistence import OAuthCredentialUpdateParams, persist_oauth_local_credentials
 
-DEFAULT_GUARD_SYNC_URL = "https://hol.org/api/guard/receipts/sync"
-DEFAULT_GUARD_CONNECT_URL = "https://hol.org/guard/connect"
 DEFAULT_GUARD_DEVICE_SCOPES = (
     "guard:runtime.sync",
     "guard:receipt.write",

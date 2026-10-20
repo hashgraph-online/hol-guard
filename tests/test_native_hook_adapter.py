@@ -99,6 +99,37 @@ def test_unsupported_harness_maps_to_value_error(monkeypatch: pytest.MonkeyPatch
         normalize_harness_payload("nope", "PreToolUse", {})
 
 
+def test_unsupported_harness_is_distinguishable_from_other_bad_arguments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The hook path skips the envelope on this rejection alone, so it needs its own type."""
+
+    reply = {"status": "error", "code": "native_hook_adapter_unsupported_harness", "payload": {"harness": "nope"}}
+    _resident_returning(monkeypatch, lambda request: _good(request, **reply))
+    with pytest.raises(adapter.UnsupportedHarnessError):
+        normalize_harness_payload("nope", "PreToolUse", {})
+
+
+def test_hook_action_envelope_skips_a_harness_the_adapter_does_not_know(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No second harness list in the CLI: the adapter's rejection is the gate."""
+
+    from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _hook_action_envelope
+
+    reply = {"status": "error", "code": "native_hook_adapter_unsupported_harness", "payload": {"harness": "nope"}}
+    _resident_returning(monkeypatch, lambda request: _good(request, **reply))
+    assert (
+        _hook_action_envelope(
+            harness="nope",
+            payload={"event": "PreToolUse", "tool_name": "Bash"},
+            home_dir=Path("/tmp"),
+            workspace=None,
+        )
+        is None
+    )
+
+
 def test_unrepresentable_payload_fails_before_the_resident(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(adapter, "_resident_request", lambda **_kwargs: pytest.fail("must not reach the resident"))
     with pytest.raises(adapter.NativeHookAdapterError) as error:
@@ -342,7 +373,8 @@ def test_one_hook_invocation_asks_each_query_once(monkeypatch: pytest.MonkeyPatc
 
 
 def test_failures_are_not_memoized(monkeypatch: pytest.MonkeyPatch) -> None:
-    answers = iter([None, "echo hi"])
+    # One dropped round trip is retried, so the first call misses twice.
+    answers = iter([None, None, "echo hi"])
 
     def reply(request: dict[str, object]) -> dict[str, object] | None:
         answer = next(answers)
@@ -378,3 +410,30 @@ def test_hook_scope_binds_the_hook_guard_home_for_ambient_calls(
         assert native_context._BOUND_GUARD_HOME.get() is None
     finally:
         native_context._BOUND_GUARD_HOME.reset(baseline)
+
+
+def test_one_dropped_round_trip_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    replies = iter([None])
+    seen: list[str] = []
+
+    def reply(request: dict[str, object]) -> dict[str, object] | None:
+        seen.append(str(request["request_id"]))
+        return next(replies, _good(request))
+
+    _resident_returning(monkeypatch, reply)
+    assert adapter.native_command_detail("echo hi", home_dir=None) == "echo hi"
+    assert len(seen) == 2 and seen[0] != seen[1]
+
+
+def test_timed_out_round_trip_is_not_retried(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[int] = []
+
+    def reply(_request: dict[str, object]) -> None:
+        calls.append(1)
+        adapter.record_native_resident_client_failure_code("native_client_timed_out")
+
+    _resident_returning(monkeypatch, reply)
+    with pytest.raises(adapter.NativeHookAdapterError) as error:
+        adapter.native_command_detail("echo hi", home_dir=None)
+    assert error.value.code == "native_hook_adapter_unavailable"
+    assert calls == [1]

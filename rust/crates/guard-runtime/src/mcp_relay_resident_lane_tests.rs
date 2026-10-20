@@ -28,6 +28,10 @@ fn kicked(answer: Kick) -> (ResidentRelayAuthority, std::rc::Rc<std::cell::Cell<
         resident: None,
         commits: Commits::default(),
         kick: None,
+        warming: false,
+        report: None,
+        inline_available: false,
+        inline_answer: None,
     }
     .with_kick(Box::new(FakeKick {
         answer,
@@ -60,7 +64,7 @@ fn other_answers_are_refused_without_a_retry() {
     assert!(!authority.rekick(Some(deferred("direct_lane_unsupported").as_slice())));
     assert!(!authority.rekick(Some(&b"not json"[..])));
     assert_eq!(kicks.get(), 0);
-    for answer in [Kick::Refused, Kick::DaemonUnreachable] {
+    for answer in [Kick::Refused, Kick::DaemonUnreachable, Kick::Skipped] {
         let (mut authority, kicks) = kicked(answer);
         assert!(!authority.rekick(Some(deferred("direct_lane_unbound").as_slice())));
         assert_eq!(kicks.get(), 1);
@@ -75,12 +79,75 @@ fn without_a_kick_a_deferral_is_never_retried() {
 }
 
 #[test]
+fn only_the_first_call_of_a_warming_session_waits_for_the_lane() {
+    let (mut authority, kicks) = kicked(Kick::Requested);
+    authority.warm_up_within(Duration::from_millis(150));
+    assert_eq!(kicks.get(), 0, "a session that started ready never waits");
+    let mut authority = authority.warming(true);
+    let started = Instant::now();
+    authority.warm_up_within(Duration::from_millis(150));
+    assert!(started.elapsed() >= Duration::from_millis(150));
+    assert!(kicks.get() >= 1);
+    assert!(!authority.warming);
+    let asked = kicks.get();
+    authority.warm_up_within(Duration::from_millis(150));
+    assert_eq!(kicks.get(), asked);
+}
+
+#[test]
+fn a_refusing_daemon_ends_the_warm_up_but_a_skipped_kick_does_not() {
+    let (authority, kicks) = kicked(Kick::Refused);
+    let mut authority = authority.warming(true);
+    let started = Instant::now();
+    authority.warm_up_within(Duration::from_secs(5));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert_eq!(kicks.get(), 1);
+    let (authority, kicks) = kicked(Kick::Skipped);
+    let mut authority = authority.warming(true);
+    let started = Instant::now();
+    authority.warm_up_within(Duration::from_millis(150));
+    assert!(started.elapsed() >= Duration::from_millis(150));
+    assert!(kicks.get() >= 1);
+}
+
+#[test]
+fn a_catalog_report_is_pending_until_the_resident_records_it() {
+    let (mut authority, _) = kicked(Kick::Requested);
+    let started = Instant::now();
+    authority.report_server(&[json!({"name": "read"})]);
+    assert!(
+        started.elapsed() < Duration::from_millis(250),
+        "the report never blocks the relay loop"
+    );
+    assert!(authority.report.is_some(), "no resident recorded it yet");
+    authority.facts = None;
+    authority.report = None;
+    authority.report_server(&[json!({"name": "read"})]);
+    assert!(authority.report.is_none(), "without facts nothing is sent");
+}
+
+#[test]
+fn a_lane_no_wait_can_clear_ends_the_warm_up_at_once() {
+    let (mut authority, kicks) = kicked(Kick::Requested);
+    authority.facts = None;
+    let mut authority = authority.warming(true);
+    let started = Instant::now();
+    authority.warm_up_within(Duration::from_secs(5));
+    assert!(started.elapsed() < Duration::from_secs(1));
+    assert_eq!(kicks.get(), 0);
+}
+
+#[test]
 fn the_probe_names_why_it_could_not_ask() {
     let mut unbound = ResidentRelayAuthority {
         facts: None,
         resident: None,
         commits: Commits::default(),
         kick: None,
+        warming: false,
+        report: None,
+        inline_available: false,
+        inline_answer: None,
     };
     let deadline = Instant::now() + Duration::from_millis(200);
     assert_eq!(

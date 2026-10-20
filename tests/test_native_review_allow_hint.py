@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.native_review_allow_hint import hint_for_reviewed_command
+from codex_plugin_scanner.guard.hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from codex_plugin_scanner.guard.runtime.extension_allow_hint import validated_extension_allow_hint
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
@@ -12,6 +13,8 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     ExtensionControlAuthorityView,
 )
 from tests.native_command_test_support import project_native_review_fixture, real_native_review_fixture
+
+_UNSTAMPED = object()
 
 
 def _hint(command: str, tmp_path: Path, *, controls=(), native_result_override: dict[str, object] | None = None):
@@ -96,7 +99,14 @@ class _Store:
         )
 
 
-def _queue_hint(monkeypatch, tmp_path: Path, *, tool_input: dict[str, object], deadline: float | None = None):
+def _queue_hint(
+    monkeypatch,
+    tmp_path: Path,
+    *,
+    tool_input: dict[str, object],
+    deadline: float | None = None,
+    stamp: object = _UNSTAMPED,
+):
     import time
 
     from codex_plugin_scanner.guard.daemon import native_review_allow_hint as module
@@ -115,10 +125,13 @@ def _queue_hint(monkeypatch, tmp_path: Path, *, tool_input: dict[str, object], d
     monkeypatch.setattr(
         module.ExtensionControlRuntimeSnapshot, "from_authority_view", staticmethod(lambda _view: fixture.snapshot)
     )
+    payload: dict[str, object] = {"tool_name": "Bash", "tool_input": tool_input}
+    if stamp is not _UNSTAMPED:
+        payload[HOOK_EXECUTION_ENVIRONMENT_KEY] = stamp
     record_native_hook_route("native_resident")
     hint = module.native_review_extension_allow_hint(
         _Store(tmp_path),
-        payload={"tool_name": "Bash", "tool_input": tool_input},
+        payload=payload,
         native_result=fixture.payload,
         workspace=tmp_path,
         home_dir=tmp_path,
@@ -155,3 +168,21 @@ def test_queue_hint_skips_when_the_hook_deadline_is_near(monkeypatch, tmp_path: 
 
     assert hint is None
     assert calls == []
+
+
+def test_queue_hint_reviews_with_the_shell_the_hook_was_stamped_from(monkeypatch, tmp_path: Path) -> None:
+    stamp = {"environment_names": ["PATH"], "home": str(tmp_path)}
+    _hint_value, calls, _route = _queue_hint(
+        monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
+    )
+
+    assert calls[0]["execution_environment"] == stamp
+
+
+def test_queue_hint_reviews_without_an_environment_a_worker_could_not_stamp(monkeypatch, tmp_path: Path) -> None:
+    for stamp in (None, "not-a-mapping"):
+        _hint_value, calls, _route = _queue_hint(
+            monkeypatch, tmp_path, tool_input={"command": "git fetch origin main"}, stamp=stamp
+        )
+
+        assert calls[0]["execution_environment"] is None, stamp

@@ -15,15 +15,18 @@ fn rows<'a>(program: &'a Value, field: &str, key: &str) -> BTreeMap<&'a str, &'a
         .collect()
 }
 
-pub(super) fn compile_fixture_addition(
+pub(super) fn compile_fixture_with_base(
     sources: &[&[u8]],
     mcp_sources: &[&[u8]],
     trust: &[u8],
+    baseline: Option<Value>,
 ) -> Result<CompiledSourceCatalog, &'static str> {
-    let mut output = catalog::lower_catalog(sources, mcp_sources, trust)?;
+    let mut output = catalog::lower_catalog_inner(sources, mcp_sources, trust, baseline.is_none())?;
     NativeCommandProgram::from_packaged_bytes(packaged_command_program_bytes())?;
-    let base: Value = serde_json::from_slice(packaged_command_program_bytes())
+    let packaged: Value = serde_json::from_slice(packaged_command_program_bytes())
         .map_err(|_| "command_source_packaged_base_invalid")?;
+    let base_digest = packaged["program_digest"].clone();
+    let base = baseline.unwrap_or(packaged);
     let supplied: BTreeSet<String> = rows(&output.program, "extensions", "extension_id")
         .keys()
         .map(|id| (*id).to_owned())
@@ -33,7 +36,7 @@ pub(super) fn compile_fixture_addition(
         .iter()
         .all(|id| !existing.contains_key(id.as_str()))
     {
-        return catalog::compile_addition_with_mcp(sources, mcp_sources, trust);
+        return catalog::addition::compile_with_base(sources, mcp_sources, trust, Some(base));
     }
     // Preserve the existing refusal for mixed replacement/addition requests.
     if supplied
@@ -73,7 +76,7 @@ pub(super) fn compile_fixture_addition(
     {
         return Err(MISMATCH);
     }
-    output.base_program_digest = base["program_digest"].as_str().map(str::to_owned);
+    output.base_program_digest = base_digest.as_str().map(str::to_owned);
     output.catalog_projection_kind = "offline-fixture-existing".to_owned();
     output.program = base;
     Ok(output)
@@ -94,9 +97,32 @@ mod tests {
             "/trust-class-map.v1.json"
         )))
         .unwrap();
+        let ids = BTreeSet::from(["command.noodle".to_owned()]);
+        let permissions = source["extension"]["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|entry| entry["permission_id"].as_str().unwrap().to_owned())
+            .collect();
+        let pack = catalog::compile_pack(
+            &[&serde_json::to_vec(&source).unwrap()],
+            &[],
+            &serde_json::to_vec(&trust).unwrap(),
+            (&ids, &permissions),
+        )
+        .unwrap();
+        let mut catalog = serde_json::from_slice::<Value>(
+            crate::native_command_catalog::embedded_catalog_bytes(),
+        )
+        .unwrap()["catalog"]
+            .as_array()
+            .unwrap()
+            .clone();
+        catalog.extend(pack.catalog.as_array().unwrap().iter().cloned());
         serde_json::json!({
             "schema":"guard.command-extension-build.v1", "base":"packaged",
-            "sources":[source], "mcp_sources":[], "trust":trust
+            "sources":[source], "mcp_sources":[], "trust":trust,
+            "validation_base":{"catalog":catalog, "programs":[pack.program]},
         })
     }
 

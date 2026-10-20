@@ -32,8 +32,111 @@ pub fn executable_name(value: Option<&str>) -> Option<String> {
     )
 }
 
+/// Unquoted backslashes stay literal in a Windows command so a Git Bash line
+/// can name `C:\Users\dev` without escaping every separator. A backslash in
+/// front of one of these operators is the one place that reading can be wrong:
+/// no path component starts with `;`, `&`, `|`, `<`, `>`, `(` or `)`, so the
+/// author may mean the POSIX escape. `find … -exec grep -l pattern {} \;` ends
+/// every `-exec` body that way, and reading the `;` as a separator throws the
+/// `find` arguments away and leaves a command no parser can model.
+/// `escapes_shell_operator` decides when that reading is safe to take.
+pub(crate) const SHELL_OPERATORS: &[char] = &[';', '&', '|', '<', '>', '(', ')'];
+
+/// How many characters of `rest` are one redirection, such as `2>/dev/null`,
+/// `>out.txt`, `>> log` or `2>&1`, or `None` when `rest` does not start one.
+/// A redirection names no program, so no reading of the text can run a command
+/// through it. A target that starts with a shell operator, the way bash's
+/// `>(cat)` starts a process substitution, is not read as one.
+fn redirection_length(rest: &[char]) -> Option<usize> {
+    let mut index = usize::from(rest.first().is_some_and(char::is_ascii_digit));
+    let arrow = *rest.get(index)?;
+    if arrow != '>' && arrow != '<' {
+        return None;
+    }
+    index += 1;
+    if rest.get(index) == Some(&arrow) {
+        index += 1;
+    }
+    if rest.get(index) == Some(&'&') {
+        index += 1;
+        let digits = rest[index..]
+            .iter()
+            .take_while(|value| value.is_ascii_digit())
+            .count();
+        return (digits > 0).then_some(index + digits);
+    }
+    while matches!(rest.get(index), Some(' ' | '\t')) {
+        index += 1;
+    }
+    let target = rest[index..]
+        .iter()
+        .take_while(|value| !value.is_whitespace() && !SHELL_OPERATORS.contains(*value))
+        .count();
+    // A quote, backtick or `$` lets a shell read an operator inside the target,
+    // so the scan above could stop short of where the shell does.
+    if rest[index..index + target]
+        .iter()
+        .any(|value| matches!(value, '"' | '\'' | '`' | '$'))
+    {
+        return None;
+    }
+    (target > 0).then_some(index + target)
+}
+
+/// Whether an unquoted `\` escapes the operator that starts `rest` while
+/// backslashes are otherwise kept literal. `false` keeps the backslash literal
+/// and lets the operator act as one.
+///
+/// A Windows agent may run this text in PowerShell or cmd, where `\` is never
+/// an escape: `echo hi \; Remove-Item C:\Users\dev` runs `Remove-Item` there.
+/// The escape is read only where both readings name the same programs, which is
+/// when no command word follows the operator: the text ends, a real `;`, `|`,
+/// `&` or newline starts the next command, or only redirections such as
+/// `2>/dev/null` separate the operator from one of those. Anything else,
+/// including a bare carriage return PowerShell may read as a line break, keeps
+/// the literal reading, so the operator still splits the line and every word
+/// after it is reviewed as a command.
+pub(crate) fn escapes_shell_operator(rest: &[char]) -> bool {
+    let Some((operator, after)) = rest.split_first() else {
+        return false;
+    };
+    if !SHELL_OPERATORS.contains(operator) {
+        return false;
+    }
+    let mut rest = after;
+    loop {
+        let blanks = rest
+            .iter()
+            .take_while(|value| matches!(value, ' ' | '\t'))
+            .count();
+        rest = &rest[blanks..];
+        match rest.first() {
+            None => return true,
+            Some(';' | '|' | '&' | '\n') => return true,
+            _ => {}
+        }
+        let Some(length) = redirection_length(rest) else {
+            return false;
+        };
+        rest = &rest[length..];
+    }
+}
+
+/// Whether the unquoted `\` at `backslash` in `chars` escapes the operator
+/// after it. Bash pairs a run of backslashes off from the left, so only the
+/// backslash that ends an odd-length run escapes anything: in `job \\&` the
+/// pair is one literal backslash and the `&` still backgrounds the command.
+pub(crate) fn backslash_escapes_operator(chars: &[char], backslash: usize) -> bool {
+    let run = chars[..backslash]
+        .iter()
+        .rev()
+        .take_while(|value| **value == '\\')
+        .count();
+    run % 2 == 0 && escapes_shell_operator(&chars[backslash + 1..])
+}
+
 /// `_windows_shell_tokens` (:36-92). Quoted POSIX escapes preserved; unquoted
-/// path separators kept literal.
+/// path separators kept literal, apart from the escaped shell operators above.
 #[allow(dead_code)]
 pub fn windows_shell_tokens(command: &str) -> (Vec<String>, bool) {
     let mut tokens: Vec<String> = Vec::new();
@@ -41,7 +144,11 @@ pub fn windows_shell_tokens(command: &str) -> (Vec<String>, bool) {
     let mut started = false;
     let mut quote = '\0';
     let mut escaped = false;
-    for current in command.chars() {
+    let chars: Vec<char> = command.chars().collect();
+    let mut index = 0usize;
+    while index < chars.len() {
+        let current = chars[index];
+        index += 1;
         if escaped {
             if quote == '"' && !['"', '\\', '$', '`'].contains(&current) {
                 token.push('\\');
@@ -79,7 +186,12 @@ pub fn windows_shell_tokens(command: &str) -> (Vec<String>, bool) {
             quote = '"';
             started = true;
         } else if current == '\\' {
-            token.push('\\');
+            if backslash_escapes_operator(&chars, index - 1) {
+                token.push(chars[index]);
+                index += 1;
+            } else {
+                token.push('\\');
+            }
             started = true;
         } else if " \t\r\n".contains(current) {
             if started {

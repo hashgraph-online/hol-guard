@@ -115,6 +115,24 @@ fn dispatch(request: &ShimAdminRequestV2) -> Result<Value, Failure> {
         "record_audit" => {
             shims::record_package_shim_audit_result(&context, request.generated_at.as_deref())
         }
+        "digest_binding_sink" => {
+            let manager = request.manager.as_deref().ok_or(Failure {
+                code: INVALID_REQUEST,
+                detail: Some("digest_binding_sink requires manager".to_owned()),
+            })?;
+            let executable = request.executable.as_deref().ok_or(Failure {
+                code: INVALID_REQUEST,
+                detail: Some("digest_binding_sink requires executable".to_owned()),
+            })?;
+            shims::package_shim_digest_binding_sink(
+                &context,
+                manager,
+                executable,
+                request.command.as_deref(),
+                path_env,
+            )
+            .map(|bound| json!({"bound": bound}))
+        }
         "supported_managers" => Ok(json!(shims::package_shim_supported_managers())),
         "ensure_package_shim_profile" => shims::ensure_package_shim_path_in_shell_profile(&context),
         "remove_guard_profile_blocks" => shims::remove_guard_profile_blocks(&context),
@@ -225,6 +243,8 @@ mod tests {
             managers: None,
             path_env: None,
             manager: None,
+            executable: None,
+            command: None,
             repair: None,
             allow_inactive_path: None,
             project_shell_profile: None,
@@ -252,6 +272,32 @@ mod tests {
     fn decode(request: &ShimAdminRequestV2) -> ShimAdminResultV2 {
         let bytes = evaluate_shim_admin(request).expect("encoded");
         serde_json::from_slice(&bytes).expect("result")
+    }
+
+    #[test]
+    fn the_digest_binding_sink_refuses_a_request_that_names_no_shim() {
+        let mut without_manager = request("digest_binding_sink");
+        without_manager.executable = Some("/shims/uv".to_owned());
+        without_manager.command = Some("/shims/uv run tool".to_owned());
+        assert_eq!(decode(&without_manager).code, INVALID_REQUEST);
+
+        let mut without_executable = request("digest_binding_sink");
+        without_executable.manager = Some("uv".to_owned());
+        without_executable.command = Some("/shims/uv run tool".to_owned());
+        assert_eq!(decode(&without_executable).code, INVALID_REQUEST);
+    }
+
+    /// A complete request answers; an uninstalled shim owns no approval.
+    #[test]
+    fn the_digest_binding_sink_answers_no_when_no_shim_is_installed() {
+        let mut asked = request("digest_binding_sink");
+        asked.manager = Some("uv".to_owned());
+        asked.executable = Some("/shims/uv".to_owned());
+        asked.command = Some("/shims/uv run tool".to_owned());
+        asked.path_env = Some(String::new());
+        let result = decode(&asked);
+        assert_eq!(result.status, "ok", "{:?}", result.detail);
+        assert_eq!(result.result, Some(serde_json::json!({"bound": false})));
     }
 
     #[test]

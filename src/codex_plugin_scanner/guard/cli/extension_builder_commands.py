@@ -11,6 +11,7 @@ from typing import TextIO
 
 from ..extension_builder.errors import BuilderError
 from ..extension_builder.io import canonical_json, object_value, read_json
+from .inventory_list_commands import configure_inventory_list_parser
 
 _METADATA_FLAGS = (
     "slug",
@@ -31,6 +32,8 @@ def configure_extension_builder_parser(subparsers: argparse._SubParsersAction[ar
         "extensions", help="Generate and review extension contributions from offline metadata"
     )
     commands = parser.add_subparsers(dest="extension_builder_command", required=True)
+    list_parser = commands.add_parser("list", help="List the plugins and extensions in the local Guard inventory")
+    configure_inventory_list_parser(list_parser)
     generate = commands.add_parser("generate", help="Compile an offline inventory into a new contribution kit")
     generate.add_argument(
         "--from", dest="source_adapter", required=True, choices=("cli", "help", "click", "oclif", "mcp", "snapshot")

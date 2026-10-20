@@ -24,6 +24,8 @@ const SENSITIVE_PATHS: [&str; 9] = [
 /// A credential location named anywhere in the value, even inside prose.
 fn sensitive_path(value: &str) -> bool {
     let value = value.to_ascii_lowercase().replace('\\', "/");
+    // A dotted read of a port variable (`process.env.PORT`) names no `.env` file.
+    let value = crate::environment_secret_dump::without_node_port_reads(&value);
     SENSITIVE_PATHS.iter().any(|needle| value.contains(needle))
 }
 
@@ -41,6 +43,14 @@ fn sensitive(value: &str) -> bool {
         ]
         .iter()
         .any(|needle| lowered.contains(needle))
+}
+
+/// A harness or Guard configuration location named anywhere in the value.
+fn names_managed_config(value: &str) -> bool {
+    let value = value.to_ascii_lowercase().replace('\\', "/");
+    [".hol-guard", ".codex/", ".claude/", "hol-guard/config"]
+        .iter()
+        .any(|path| value.contains(path))
 }
 
 fn option(arguments: &[String], names: &[&str]) -> bool {
@@ -250,10 +260,11 @@ pub(super) fn observe(
 ) {
     let executable = basename(segment);
     let arguments = &segment.arguments;
-    // A proven container or image listing changes nothing and prints no
-    // container environment, credential or Compose project data.
+    // A proven container or image listing, or a start of an existing
+    // container, grants no new host access and prints no container
+    // environment, credential or Compose project data.
     if executable == "docker"
-        && !crate::pretool::docker_reads::proven_read_segment(command, segment, context)
+        && !crate::pretool::docker_reads::proven_segment(command, segment, context)
     {
         docker(segment, index, output);
     }
@@ -362,22 +373,25 @@ pub(super) fn observe(
             );
         }
     }
-    let write_command = matches!(
-        executable.as_str(),
-        "cp" | "mv"
-            | "tee"
-            | "dd"
-            | "install"
-            | "touch"
-            | "truncate"
-            | "sed"
-            | "awk"
-            | "gawk"
-            | "ln"
-            | "chmod"
-            | "chown"
-            | "chgrp"
-    );
+    // A proven `sed` print or stdout substitution writes no file.
+    let write_command = (executable == "sed"
+        && !crate::pretool::sed_edits::proven_read_segment(command, segment, context))
+        || (executable == "dd"
+            && !crate::pretool::dd_reads::proven_read_segment(command, segment, context))
+        || matches!(
+            executable.as_str(),
+            "cp" | "mv"
+                | "tee"
+                | "install"
+                | "touch"
+                | "truncate"
+                | "awk"
+                | "gawk"
+                | "ln"
+                | "chmod"
+                | "chown"
+                | "chgrp"
+        );
     // A quoted `>` in a POSIX argument (a Markdown placeholder or arrow in a
     // comment body) writes nothing; interpreter code keeps the raw check.
     let redirect = if interpreter || command.dialect != "posix" {
@@ -390,9 +404,22 @@ pub(super) fn observe(
         redirects::posix_redirect(&segment.text)
     };
     if write_command || redirect != Redirect::None || interpreter {
-        if [".hol-guard", ".codex/", ".claude/", "hol-guard/config"]
-            .iter()
-            .any(|path| normalized.contains(path))
+        // Filing a Markdown note in a plan folder (a plain `cp` or `touch`)
+        // changes no harness configuration, though the folder sits inside the
+        // harness directory.
+        let plan_note_write = matches!(executable.as_str(), "cp" | "touch")
+            && redirect == Redirect::None
+            && command.wrapper_chain.is_empty()
+            && !command.path_overridden
+            && crate::pretool::safe_reads::plan_note_write_sources(&executable, arguments, context)
+                .is_some_and(|sources| !sources.iter().any(|source| names_managed_config(source)));
+        // A stderr merge or discard (`2>/dev/null`) changes no file, so naming a
+        // harness directory beside it is a read, not a managed-config write.
+        // Reads of logins and secret-bearing config there stay with the native
+        // read proof, which refuses them whatever redirect follows.
+        if (write_command || redirect == Redirect::Output || interpreter)
+            && names_managed_config(&normalized)
+            && !plan_note_write
         {
             output.rule("command.shell-mutations.managed-config-write", index, true);
         }
@@ -463,15 +490,16 @@ pub(super) fn observe(
                 | "poweroff"
                 | "halt"
                 | "diskutil"
-                | "dd"
                 | "truncate"
-        ) || (executable == "find"
-            && !is_contained_compile_check_arguments(arguments)
-            && crate::read_only_fanout::find_exec(arguments).is_none()
-            && option(
-                arguments,
-                &["-delete", "-exec", "-execdir", "-ok", "-okdir"],
-            ))
+        ) || (executable == "dd"
+            && !crate::pretool::dd_reads::proven_read_segment(command, segment, context))
+            || (executable == "find"
+                && !is_contained_compile_check_arguments(arguments)
+                && crate::read_only_fanout::find_exec(arguments).is_none()
+                && option(
+                    arguments,
+                    &["-delete", "-exec", "-execdir", "-ok", "-okdir"],
+                ))
             || (matches!(executable.as_str(), "sed" | "perl")
                 && arguments.iter().any(|value| value.starts_with("-i"))))
     {

@@ -61,7 +61,7 @@ fn subject() -> McpToolPolicySubjectV1 {
     serde_json::from_value(subject).expect("subject parses")
 }
 
-fn input(store: &std::path::Path, ids: &[&str]) -> McpPolicyLookupInputV1 {
+fn input(store: &std::path::Path) -> McpPolicyLookupInputV1 {
     McpPolicyLookupInputV1 {
         store_path: store.to_string_lossy().into_owned(),
         guard_home: store
@@ -70,7 +70,6 @@ fn input(store: &std::path::Path, ids: &[&str]) -> McpPolicyLookupInputV1 {
             .to_string_lossy()
             .into_owned(),
         now: "2030-01-01T00:00:00+00:00".to_owned(),
-        candidate_artifact_ids: ids.iter().map(|id| (*id).to_owned()).collect(),
         portable_workspace: None,
         integrity_state: Some(json!({
             "backend": "encrypted-file",
@@ -89,6 +88,11 @@ fn input(store: &std::path::Path, ids: &[&str]) -> McpPolicyLookupInputV1 {
     }
 }
 
+fn lookup_ids(lookup: &McpPolicyLookupInputV1, ids: &[&str]) -> Result<Value, Stop> {
+    let ids: Vec<String> = ids.iter().map(|id| (*id).to_owned()).collect();
+    policy_lookup_candidates(lookup, &subject(), &ids, None)
+}
+
 fn insert_remote_row(store: &std::path::Path, artifact_id: &str, action: &str, id: i64) {
     let conn = rusqlite::Connection::open(store).expect("open");
     conn.execute(
@@ -105,14 +109,15 @@ fn insert_remote_row(store: &std::path::Path, artifact_id: &str, action: &str, i
 fn an_empty_store_reads_as_no_decision_and_asks_for_a_diagnostic_only_when_empty() {
     let store = tmp_store("mcp-lookup-empty");
     seed_store(&store);
-    let mut lookup = input(&store, &["npm:lodash", "exact:codex:abc"]);
-    let observed = policy_lookup(&lookup, &subject(), None).expect("lookup");
+    let mut lookup = input(&store);
+    let ids = ["npm:lodash", "exact:codex:abc"];
+    let observed = lookup_ids(&lookup, &ids).expect("lookup");
     assert_eq!(
         observed,
         json!({"decision": null, "ignored_local_integrity": false})
     );
     lookup.diagnostic_empty = true;
-    let observed = policy_lookup(&lookup, &subject(), None).expect("lookup");
+    let observed = lookup_ids(&lookup, &ids).expect("lookup");
     assert_eq!(observed["reuse_diagnostic"], json!({"reason": null}));
 }
 
@@ -122,8 +127,8 @@ fn the_most_restrictive_candidate_wins_in_one_pass() {
     seed_store(&store);
     insert_remote_row(&store, "npm:lodash", "allow", 1);
     insert_remote_row(&store, "memory:codex:shell:abc", "block", 2);
-    let lookup = input(&store, &["npm:lodash", "memory:codex:shell:abc"]);
-    let observed = policy_lookup(&lookup, &subject(), None).expect("lookup");
+    let lookup = input(&store);
+    let observed = lookup_ids(&lookup, &["npm:lodash", "memory:codex:shell:abc"]).expect("lookup");
     assert_eq!(observed["decision"]["action"], "block");
     assert_eq!(
         observed["decision"]["artifact_id"],
@@ -138,7 +143,7 @@ fn the_most_restrictive_candidate_wins_in_one_pass() {
 fn a_degraded_home_reads_nothing_and_never_opens_the_store() {
     let store = tmp_store("mcp-lookup-degraded");
     // No store file exists: a degraded probe must not need one.
-    let mut lookup = input(&store, &["npm:lodash"]);
+    let mut lookup = input(&store);
     lookup.degraded_trust_status = Some(json!({"status": "degraded"}));
     let observed = policy_lookup(&lookup, &subject(), None).expect("lookup");
     assert_eq!(
@@ -156,9 +161,9 @@ fn candidate_lists_must_lead_with_the_subject_and_stay_bounded() {
         vec!["other:artifact"],
         vec!["npm:lodash"; MAX_CANDIDATES + 1],
     ] {
-        let lookup = input(&store, &ids);
+        let lookup = input(&store);
         assert!(matches!(
-            policy_lookup(&lookup, &subject(), None),
+            lookup_ids(&lookup, &ids),
             Err(Stop::Fail(ERR_LOOKUP))
         ));
     }
@@ -168,10 +173,28 @@ fn candidate_lists_must_lead_with_the_subject_and_stay_bounded() {
 fn a_store_outside_the_guard_home_is_refused() {
     let store = tmp_store("mcp-lookup-outside");
     seed_store(&store);
-    let mut lookup = input(&store, &["npm:lodash"]);
+    let mut lookup = input(&store);
     lookup.guard_home = "/nonexistent-guard-home".to_owned();
     assert!(matches!(
         policy_lookup(&lookup, &subject(), None),
         Err(Stop::Fail(ERR_LOOKUP))
     ));
+}
+
+#[test]
+fn candidates_lead_with_the_subject_then_its_remembered_ids() {
+    let mut subject = subject();
+    subject.artifact.command = Some("git status".to_owned());
+    let remembered = memory_pattern::verdict(&MemoryRequest {
+        command: Some("git status"),
+        artifact_type: Some(&subject.artifact_type),
+        artifact_id: Some("npm:lodash"),
+        artifact_name: Some(&subject.artifact.name),
+        harness: Some("codex"),
+    });
+    let mut expected = vec!["npm:lodash".to_owned()];
+    expected.extend(remembered.exact_artifact_ids);
+    expected.extend(remembered.memory_artifact_id);
+    assert_eq!(candidate_ids(&subject), expected);
+    assert!(candidate_ids(&subject).len() <= MAX_CANDIDATES);
 }

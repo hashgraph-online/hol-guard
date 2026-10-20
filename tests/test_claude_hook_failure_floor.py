@@ -1,8 +1,6 @@
 """A bridge failure must not authorize an unreviewed tool action."""
 
 import json
-import sys
-import time
 
 import pytest
 
@@ -19,18 +17,3 @@ def test_unreviewed_tool_failure_denies(event, reason):
     else:
         assert output["permissionDecision"] == "deny"
     assert "without native review" not in json.dumps(payload)
-
-
-def test_fallback_deadline_exhaustion_denies_without_running_command(tmp_path):
-    marker = tmp_path / "executed"
-    command = (sys.executable, "-c", f"from pathlib import Path;Path({str(marker)!r}).touch()")
-    payload = json.loads(
-        bridge._run_local_fallback(
-            "daemon unavailable",
-            json.dumps({"hook_event_name": "PreToolUse"}),
-            command,
-            deadline=time.monotonic() - 1,
-        )
-    )
-    assert payload["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert not marker.exists()

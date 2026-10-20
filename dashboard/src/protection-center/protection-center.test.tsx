@@ -3,6 +3,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import { assertSimpleCopySafe, localSettingChoiceLabel, PROTECTION_TERMS, protectionCenterLoadError, simpleCopyViolations } from "./copy/protection-copy";
+import { ExtensionsLoadError } from "./protection-workspace-states";
 import { CatalogFilterBar, CatalogFilterTrigger } from "./components/catalog-filter-bar";
 import { ProtectionModuleRow, ProtectionStatusHero, TechnicalDetails } from "./components/protection-primitives";
 import {
@@ -94,11 +95,56 @@ assert.doesNotThrow(() => assertSimpleCopySafe("Guard is protecting source contr
 assert.throws(() => assertSimpleCopySafe("The semantic blast radius changed."), /semantic blast radius/);
 
 assert.equal(protectionCenterLoadError("unauthorized").title, "This view needs a signed local session");
-assert.match(protectionCenterLoadError("unauthorized").detail, /Local protection is still running/);
+assert.match(protectionCenterLoadError("unauthorized").detail, /Open Extensions from the local Guard dashboard/);
 assert.doesNotMatch(protectionCenterLoadError("unauthorized").detail, /^unauthorized$/);
 assert.equal(protectionCenterLoadError("HTTP 401").title, "This view needs a signed local session");
 assert.equal(protectionCenterLoadError("catalog 1401 mismatch").title, "Extensions unavailable");
 assert.match(protectionCenterLoadError("catalog mismatch").detail, /catalog mismatch/);
+
+// A reason code is a record, not a sentence: it never becomes the message the
+// operator reads, and the copy for a permanent failure names the step that
+// clears it rather than offering only a retry that cannot succeed.
+const modelUnavailable = protectionCenterLoadError("catalog_read_model_unavailable");
+assert.doesNotMatch(modelUnavailable.detail, /catalog_read_model_unavailable/);
+assert.doesNotMatch(modelUnavailable.title, /catalog_read_model_unavailable/);
+assert.match(modelUnavailable.detail, /Quit HOL Guard and open it again/);
+assert.equal(modelUnavailable.reference, "catalog_read_model_unavailable");
+
+// A mismatched daemon and runtime cannot be repaired by restarting the same
+// install, and an expired snapshot renders no partial list: the workspace
+// replaces the whole page with this card. Neither detail may claim otherwise.
+const mismatch = protectionCenterLoadError("catalog_snapshot_mismatch");
+assert.doesNotMatch(mismatch.detail, /catalog_snapshot_mismatch/);
+assert.doesNotMatch(mismatch.detail, /open it again|[Tt]ry again/);
+assert.match(mismatch.detail, /Install the latest version/);
+assert.equal(mismatch.reference, "catalog_snapshot_mismatch");
+
+const expired = protectionCenterLoadError("catalog_snapshot_expired");
+assert.doesNotMatch(expired.detail, /partial/);
+assert.match(expired.detail, /Load it again/);
+assert.equal(expired.reference, "catalog_snapshot_expired");
+
+const unknownCode = protectionCenterLoadError("catalog_read_went_sideways");
+assert.doesNotMatch(unknownCode.detail, /catalog_read_went_sideways/);
+assert.equal(unknownCode.reference, "catalog_read_went_sideways");
+assert.equal(protectionCenterLoadError("catalog mismatch").reference, undefined);
+
+// The card already states that local protection continues, so the detail must
+// not repeat it.
+for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog_snapshot_mismatch", "catalog mismatch"]) {
+  assert.doesNotMatch(protectionCenterLoadError(message).detail, /[Ll]ocal protection/);
+}
+
+const errorCard = renderToStaticMarkup(createElement(ExtensionsLoadError, {
+  ...protectionCenterLoadError("catalog_read_model_unavailable"),
+  onRetry: () => {},
+}));
+assert.match(errorCard, /Guard cannot open your extension list/);
+assert.match(errorCard, /Reference: <span[^>]*>catalog_read_model_unavailable<\/span>/);
+assert.doesNotMatch(renderToStaticMarkup(createElement(ExtensionsLoadError, {
+  ...protectionCenterLoadError("catalog mismatch"),
+  onRetry: () => {},
+})), /Reference:/);
 
 const hero = renderToStaticMarkup(createElement(ProtectionStatusHero, { status: deriveProtectionStatus(PROTECTION_AUTHORITY_FIXTURES.protected) }));
 assert.match(hero, /Local protection/);
