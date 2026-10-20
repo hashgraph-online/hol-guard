@@ -289,7 +289,7 @@ export function PolicyRememberedRulesTab({
       />
       <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
       <div className="min-w-0 space-y-4">
-        <div aria-hidden="true">
+        <div>
           <div className="guard-posture-bar" role="img" aria-label={`${counts.allow} allow rules, ${counts.block} block rules`}>
             {counts.allow > 0 ? <span className="guard-posture-segment" data-state="Allowed" style={{ flexGrow: counts.allow }} /> : null}
             {counts.block > 0 ? <span className="guard-posture-segment" data-state="Lockdown" style={{ flexGrow: counts.block }} /> : null}

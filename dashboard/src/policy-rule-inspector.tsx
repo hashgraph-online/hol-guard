@@ -24,7 +24,7 @@ export function PolicyRuleInspector(props: {
   onClear?: (policy: GuardPolicyDecision) => void | Promise<void>;
   onNavigate?: (pathname: string) => void;
 }) {
-  const { policy } = props;
+  const { policy, onClose } = props;
   const dialogRef = useRef<HTMLDivElement>(null);
   const display = resolvePolicyDisplay(policy);
   const title = resolvePolicyRowTitle(policy, display);
@@ -41,7 +41,7 @@ export function PolicyRuleInspector(props: {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        props.onClose();
+        onClose();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -63,7 +63,10 @@ export function PolicyRuleInspector(props: {
       document.removeEventListener("keydown", handleKeyDown);
       previouslyFocused?.focus?.();
     };
-  }, [props]);
+    // Mount-only: depending on the whole props object would re-run on every
+    // parent render and steal focus from wherever the user has tabbed to.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBackdropClick = useCallback(() => props.onClose(), [props]);
   const handleClear = useCallback(async () => {

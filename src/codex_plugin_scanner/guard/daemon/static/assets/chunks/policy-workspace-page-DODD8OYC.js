@@ -4148,7 +4148,7 @@ function PolicyRulesSpotlight(props) {
   ] });
 }
 function PolicyRuleInspector(props) {
-  const { policy } = props;
+  const { policy, onClose } = props;
   const dialogRef = reactExports.useRef(null);
   const display = resolvePolicyDisplay(policy);
   const title = resolvePolicyRowTitle(policy, display);
@@ -4164,7 +4164,7 @@ function PolicyRuleInspector(props) {
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        props.onClose();
+        onClose();
         return;
       }
       if (event.key !== "Tab" || !dialog) return;
@@ -4185,7 +4185,7 @@ function PolicyRuleInspector(props) {
       document.removeEventListener("keydown", handleKeyDown);
       previouslyFocused?.focus?.();
     };
-  }, [props]);
+  }, []);
   const handleBackdropClick = reactExports.useCallback(() => props.onClose(), [props]);
   const handleClear = reactExports.useCallback(async () => {
     await props.onClear?.(policy);
@@ -4545,7 +4545,7 @@ function PolicyRememberedRulesTab({
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { "aria-hidden": "true", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-posture-bar", role: "img", "aria-label": `${counts.allow} allow rules, ${counts.block} block rules`, children: [
             counts.allow > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-posture-segment", "data-state": "Allowed", style: { flexGrow: counts.allow } }) : null,
             counts.block > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-posture-segment", "data-state": "Lockdown", style: { flexGrow: counts.block } }) : null,
