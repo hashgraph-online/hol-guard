@@ -41,8 +41,20 @@
       "state": "block"
     },
     {
+      "name": "askjev_act",
+      "state": "block"
+    },
+    {
+      "name": "askjev_type",
+      "state": "block"
+    },
+    {
+      "name": "askjev_do",
+      "state": "block"
+    },
+    {
       "name": "other",
-      "state": "inherit"
+      "state": "review"
     }
   ],
   "referenceUrls": [
