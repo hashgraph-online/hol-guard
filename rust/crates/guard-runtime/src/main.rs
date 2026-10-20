@@ -2,8 +2,10 @@
 #![recursion_limit = "512"]
 
 mod active_pack_security;
+#[path = "adapters/adapter_inventory.rs"]
 mod adapter_inventory;
 #[cfg(all(test, unix))]
+#[path = "adapters/adapter_vectors_tests.rs"]
 mod adapter_vectors_tests;
 mod aibom_artifact;
 mod aibom_discovery;
@@ -16,6 +18,7 @@ mod aibom_skill_rules;
 mod aibom_skills;
 #[cfg(all(test, unix))]
 mod aibom_vectors_tests;
+#[path = "adapters/detection/antigravity_detect.rs"]
 mod antigravity_detect;
 mod approval;
 mod approval_bulk_eligibility_op;
@@ -92,6 +95,7 @@ mod claim_reuse_then_tests;
 #[cfg(test)]
 mod claim_reuse_vectors_tests;
 mod claude_code_config;
+#[path = "adapters/detection/claude_code_detect.rs"]
 mod claude_code_detect;
 #[cfg(all(test, unix))]
 mod claude_code_vectors_tests;
@@ -124,6 +128,7 @@ mod cloud_request_text;
 mod cloud_request_vectors_tests;
 mod cloud_sync_privacy;
 mod codex_app_server_socket;
+#[path = "adapters/detection/codex_detect.rs"]
 mod codex_detect;
 mod codex_hook_artifacts;
 mod codex_hook_bridge;
@@ -197,10 +202,12 @@ mod continuation_store;
 #[cfg(test)]
 mod contributed_mcp_catalog_test_support;
 mod contributed_mcp_decision_op;
+#[path = "adapters/detection/copilot_detect.rs"]
 mod copilot_detect;
 #[cfg(all(test, unix))]
 mod copilot_vectors_tests;
 mod critical_floor_op;
+#[path = "adapters/detection/cursor_detect.rs"]
 mod cursor_detect;
 mod cursor_hook_bridge;
 mod cursor_hook_bridge_response;
@@ -238,6 +245,7 @@ mod decision_authority_op;
 mod decision_authority_vectors_tests;
 mod developer_inspection_authority_op;
 mod developer_inspection_host;
+#[path = "adapters/detection/devin_detect.rs"]
 mod devin_detect;
 mod direct_tool_context_op;
 #[cfg(test)]
@@ -248,6 +256,7 @@ mod discovery_placement_op;
 mod edge;
 mod edge_git_push;
 mod encrypted_secret_store;
+#[path = "adapters/detection/gemini_detect.rs"]
 mod gemini_detect;
 mod git_execution_safety_binary;
 mod git_execution_safety_checks;
@@ -261,6 +270,7 @@ mod git_execution_safety_tests;
 mod github_cli_classify_op;
 mod github_workflow_context_io;
 mod github_workflow_prepare_op;
+#[path = "adapters/detection/grok_detect.rs"]
 mod grok_detect;
 mod guard_config_coerce;
 mod guard_config_harness;
@@ -398,6 +408,7 @@ mod guard_store_wfcap_wire;
 mod guard_store_workflow_capability_vectors_tests;
 mod guard_store_write_cache;
 mod hardening;
+#[path = "adapters/detection/hermes_detect.rs"]
 mod hermes_detect;
 mod hermes_inspect;
 mod hermes_printable;
@@ -408,6 +419,7 @@ mod hermes_vectors_tests;
 mod hermes_yaml;
 mod hermes_yaml_construct;
 mod hermes_yaml_resolve;
+#[path = "adapters/hook_adapter_op.rs"]
 mod hook_adapter_op;
 mod hook_approval_context;
 mod hook_artifact_compose_op;
@@ -455,6 +467,7 @@ mod hook_path_rules;
 mod hook_policy_config;
 mod hook_process_spawn;
 mod hook_render_op;
+#[path = "adapters/detection/kimi_detect.rs"]
 mod kimi_detect;
 mod local_cli_grant_op;
 mod local_cli_hook_contained;
@@ -554,11 +567,14 @@ mod oci_bundle_vectors_tests;
 mod oci_path;
 mod omp_yield_input_scan;
 mod oneshot;
+#[path = "adapters/detection/openclaw_detect.rs"]
 mod openclaw_detect;
 #[cfg(all(test, unix))]
+#[path = "adapters/detection/openclaw_detect_tests.rs"]
 mod openclaw_detect_tests;
 mod openclaw_mcp;
 mod openclaw_skills;
+#[path = "adapters/detection/opencode_detect.rs"]
 mod opencode_detect;
 mod package_approval_hash_op;
 mod package_audit_projection_op;
@@ -571,6 +587,7 @@ mod package_posture_op;
 mod package_protect_finalize_op;
 mod package_protect_projection_op;
 mod persistence_action_class;
+#[path = "adapters/detection/pi_detect.rs"]
 mod pi_detect;
 mod pi_glob;
 mod pi_hook_bridge;
@@ -702,6 +719,7 @@ mod workspace_inventory_files;
 mod workspace_inventory_op;
 mod workspace_scan_targets;
 mod zcode_artifacts;
+#[path = "adapters/detection/zcode_detect.rs"]
 mod zcode_detect;
 #[cfg(all(test, unix))]
 mod zcode_vectors_tests;

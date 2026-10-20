@@ -7,7 +7,7 @@ use crate::hook_adapter_paths::PathEnv;
 use crate::hook_adapter_prepare::{prepare_payload, AdapterError};
 use crate::hook_adapter_value::{parse_python_json, OMap, OValue};
 
-const VECTORS: &str = include_str!("../testdata/hook_adapter_vectors.json");
+const VECTORS: &str = include_str!("../../../testdata/hook_adapter_vectors.json");
 
 fn vectors() -> OMap {
     match parse_python_json(VECTORS) {

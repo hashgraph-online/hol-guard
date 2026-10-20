@@ -10,13 +10,13 @@ use crate::guard_store_cmd_vectors_tests::temp_home;
 use crate::pi_vectors_tests::{materialize, release, substitute};
 use crate::runner_authority_op::KindResult;
 
-const GEMINI: &str = include_str!("../testdata/gemini/vectors.json");
-const ANTIGRAVITY: &str = include_str!("../testdata/antigravity/vectors.json");
-const DEVIN: &str = include_str!("../testdata/devin/vectors.json");
-const GROK: &str = include_str!("../testdata/grok/vectors.json");
-const KIMI: &str = include_str!("../testdata/kimi/vectors.json");
-const OPENCODE: &str = include_str!("../testdata/opencode/vectors.json");
-const CURSOR: &str = include_str!("../testdata/cursor/vectors.json");
+const GEMINI: &str = include_str!("../../testdata/gemini/vectors.json");
+const ANTIGRAVITY: &str = include_str!("../../testdata/antigravity/vectors.json");
+const DEVIN: &str = include_str!("../../testdata/devin/vectors.json");
+const GROK: &str = include_str!("../../testdata/grok/vectors.json");
+const KIMI: &str = include_str!("../../testdata/kimi/vectors.json");
+const OPENCODE: &str = include_str!("../../testdata/opencode/vectors.json");
+const CURSOR: &str = include_str!("../../testdata/cursor/vectors.json");
 
 fn check(case: &Value, name: &str, root_text: &str, result: KindResult) -> Result<(), String> {
     if case["refused"] == true {

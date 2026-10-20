@@ -15,7 +15,7 @@ use crate::openclaw_detect::detect;
 use crate::pi_vectors_tests::{materialize, release, substitute};
 use crate::runner_authority_op::KindResult;
 
-const VECTORS: &str = include_str!("../testdata/openclaw/vectors.json");
+const VECTORS: &str = include_str!("../../../testdata/openclaw/vectors.json");
 
 /// Swaps each `<DIGEST path>` token for the digest of `path` under the
 /// canonical fixture root.
