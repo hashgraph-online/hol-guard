@@ -13,6 +13,7 @@
  ],
  "scope_globs": [
   "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+  "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
   "src/codex_plugin_scanner/guard/daemon/hook_*.py",
@@ -32,6 +33,7 @@
    "class": "required_control_plane",
    "patterns": [
     "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+    "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",

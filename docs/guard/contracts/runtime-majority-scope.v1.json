@@ -463,11 +463,16 @@
         "reason": "Python string templates that emit TypeScript/JS/shell harness hook assets at install time; generated artifacts, not Python executed on the request path. The current Pi extension emitters (pi_extension_source*.py: header, body, tail, shared-v1 and runtime variants, rendered by managed_extension_source for install, update and drift comparison) and pi_extension_runtime_ownership.py (which only resolves the Guard CLI command and recovery arguments embedded in that generated TypeScript) are the same kind of module as the previous-extension emitters already listed here; their only importers are the Pi adapter, its support shim and the update command (extension install, drift check and update), plus the emitters themselves.",
         "path": [
           "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_*_source*.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template_*.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
+          "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/grok_hook_*_template.py"
         ]
       },
       {
@@ -554,6 +559,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
           "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
@@ -879,16 +885,22 @@
     "generated": {
       "path": [
         "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_*_source*.py",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
         "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template_*.py",
         "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
-        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
+        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/grok_hook_*_template.py"
       ]
     },
     "adapters": {
       "path": [
-        "src/codex_plugin_scanner/guard/adapters/*.py"
+        "src/codex_plugin_scanner/guard/adapters/*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py"
       ]
     },
     "vendored": {
