@@ -131,9 +131,16 @@ def scratch_checkout(fixture_root: Path) -> Path:
 
     On Windows the temporary root is the fixture user's ``%TEMP%``, which Git Bash
     mounts as ``/tmp``; a bare ``/tmp`` there is a drive-relative path no shell uses.
+
+    The name binds to the fixture root's path, device and inode only. Every call
+    during a case has to agree: the case seeds files into the stage directory,
+    renders its path into the prompt, redacts it out of the evidence and removes
+    it afterwards. Changing metadata such as the root's status-change time would
+    give each of those a different directory, so the agent would be told to read
+    a path nothing ever created and the seeded one would be left behind.
     """
     info = fixture_root.stat(follow_symlinks=False)
-    seed = f"{fixture_root}:{info.st_dev}:{info.st_ino}:{info.st_ctime_ns}".encode()
+    seed = f"{fixture_root}:{info.st_dev}:{info.st_ino}".encode()
     root = fixture_root / "home" / "AppData" / "Local" / "Temp" if os.name == "nt" else Path("/tmp")
     return root / f"hg-gauntlet-{hashlib.sha256(seed).hexdigest()[:16]}"
 
