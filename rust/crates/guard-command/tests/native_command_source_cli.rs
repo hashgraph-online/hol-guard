@@ -1,9 +1,20 @@
 use serde_json::{json, Value};
+use std::ffi::OsString;
 use std::io::Write;
 use std::process::{Command, Output, Stdio};
 
+fn source_compiler_binary() -> OsString {
+    [
+        "NEXTEST_BIN_EXE_guard-command-source",
+        "NEXTEST_BIN_EXE_guard_command_source",
+    ]
+    .into_iter()
+    .find_map(std::env::var_os)
+    .unwrap_or_else(|| env!("CARGO_BIN_EXE_guard-command-source").into())
+}
+
 fn invoke(arguments: &[&str], input: &[u8]) -> Output {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_guard-command-source"))
+    let mut child = Command::new(source_compiler_binary())
         .args(arguments)
         .env_clear()
         .stdin(Stdio::piped())

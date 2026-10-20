@@ -147,6 +147,7 @@ def _resident_request(
         "contained_typescript_execute": "guard-contained-typescript-execute-result.v1",
         "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
         "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
+        "containment_health_probe": "guard-containment-health-probe-result.v1",
     }.get(operation)
     if operation == "cloud_catalog":
         # Producer/completion replies use a strict payload/error union, with
@@ -404,6 +405,43 @@ def contained_workspace_write_execute_native(
         return _contained_workspace_write_result(result)
     except (KeyError, TypeError, ValueError):
         return None
+
+
+# ---------------------------------------------------------------------------
+# Containment health probe op
+# ---------------------------------------------------------------------------
+
+# The resident runs a real contained process under a five second timeout and
+# may spend another five seconds reaping it, on top of resident start-up and
+# sandbox setup. This matches the resident's own ceiling for the operation
+# (CONTAINMENT_HEALTH_PROBE_TIMEOUT_CEILING_MS), which clamps anything larger.
+_CONTAINMENT_HEALTH_PROBE_SECONDS = 15.0
+
+
+def containment_health_probe_native(
+    *,
+    daemon_fingerprint: str,
+    guard_home: Path,
+) -> dict[str, object] | None:
+    """Ask the resident for current containment health evidence."""
+
+    request: dict[str, object] = {
+        "schema": "guard-containment-health-probe-request.v1",
+        "request_id": _request_id("containment_health_probe"),
+        "daemon_fingerprint": daemon_fingerprint,
+        "guard_home": str(guard_home),
+    }
+    decoded = _resident_request(
+        operation="containment_health_probe",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=_CONTAINMENT_HEALTH_PROBE_SECONDS,
+        required_feature=_CONTAINED_EXECUTION_FEATURE,
+    )
+    if decoded is None:
+        return None
+    result = decoded.get("result")
+    return result if isinstance(result, dict) else None
 
 
 # ---------------------------------------------------------------------------

@@ -17,11 +17,14 @@ use super::{NativeEvidenceStore, PolicyBarrierApi};
 use crate::guard_store_cmd_vectors_tests::{
     assert_rows, build_database, dump, run_step, temp_home,
 };
+use crate::guard_store_db::StoreError;
 use crate::hook_evidence_store_gate::{hold_storage_gate, STORAGE_GATE_FILE_NAME};
 use crate::hook_evidence_store_timeout::{
     internal_hook_timeout_ms, sqlite_timeout_ms, NativeSqliteTimeout,
 };
-use crate::hook_evidence_store_wire::{python_title, python_truthy, validated_invocation_preview};
+use crate::hook_evidence_store_wire::{
+    python_title, python_truthy, store_failure, validated_invocation_preview,
+};
 use crate::local_store_read::STORE_FILE_NAME;
 
 const VECTORS: &str = include_str!("../testdata/guard_store/command_activity_vectors.json");
@@ -354,4 +357,25 @@ fn a_refused_argument_is_not_a_fatal_failure() {
 
     assert!(store.transition_command_activity(&Map::new()).is_err());
     assert_eq!(store.fatal().peek(), Value::Null);
+}
+
+/// The writer waits out a busy store and gives up on other refusals, so a
+/// lock has to reach it as a timeout and nothing else may.
+#[test]
+fn only_a_busy_store_fails_as_a_timeout() {
+    let sqlite = |code| {
+        StoreError::Sqlite(rusqlite::Error::SqliteFailure(
+            rusqlite::ffi::Error::new(code),
+            None,
+        ))
+    };
+    for code in [rusqlite::ffi::SQLITE_BUSY, rusqlite::ffi::SQLITE_LOCKED] {
+        let failure = store_failure("record_native_decision_receipt", &sqlite(code));
+        assert_eq!(failure.kind(), std::io::ErrorKind::TimedOut);
+    }
+    let failure = store_failure(
+        "record_native_decision_receipt",
+        &sqlite(rusqlite::ffi::SQLITE_CONSTRAINT),
+    );
+    assert_eq!(failure.kind(), std::io::ErrorKind::Other);
 }

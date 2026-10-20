@@ -23,10 +23,73 @@ pub(super) fn git_helper_context_required(
     })
 }
 
+/// Whether this segment's one `-C` route lands where Git discovers no
+/// repository.
+///
+/// Only the leading option block is read, so a `-C` that belongs to a
+/// subcommand (`git diff -C`, where it asks for copy detection) is never
+/// mistaken for a route, and a segment carrying more than one `-C` keeps the
+/// helper screen: the second is resolved against the first, which this does
+/// not model.
+///
+/// The route only says Git finds no repository. Git still reads its global
+/// and system configuration, and an inline `-c` adds to it, so the segment
+/// counts only when it carries no `-c` and its operation is one the
+/// inspection proof admits without a repository: `diff` on paths, `grep`,
+/// `apply` and `hash-object` keep running there and open files.
+pub(super) fn routes_to_no_repository(
+    segment: &crate::CommandSegmentV1,
+    context: PathContext<'_>,
+) -> bool {
+    segment
+        .executable
+        .as_deref()
+        .is_some_and(|executable| executable_basename(executable) == "git")
+        && arguments_route_to_no_repository(&segment.arguments, context)
+}
+
+/// [`routes_to_no_repository`] for a segment's arguments alone, for the
+/// proofs that already know the segment runs Git and hold its arguments.
+pub(super) fn arguments_route_to_no_repository(
+    arguments: &[String],
+    context: PathContext<'_>,
+) -> bool {
+    let mut index = 0;
+    let mut route = None;
+    while let Some(argument) = arguments.get(index) {
+        if argument == "-C" {
+            if route.is_some() {
+                return false;
+            }
+            let Some(target) = arguments.get(index + 1) else {
+                return false;
+            };
+            route = Some(target.as_str());
+            index += 2;
+            continue;
+        }
+        if argument == "-c" {
+            return false;
+        }
+        if !argument.starts_with('-') {
+            break;
+        }
+        index += 1;
+    }
+    route.is_some_and(|target| super::git_routes::git_route_without_repository(target, context))
+        && crate::command_compatibility::git_inspection_arguments(arguments, context).is_some()
+}
+
 /// Whether a Git segment's operation can start a configured helper.
 fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext<'_>) -> bool {
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
+    if routes_to_no_repository(segment, context) {
+        // Git's setup dies on a `-C` target that holds no repository, before
+        // it reads a pager, textconv, diff or filter setting, so there is no
+        // configuration to probe and nothing a helper could run in.
+        return false;
+    }
     segment.executable.as_deref().is_some_and(|executable| {
         executable_basename(executable) == "git"
             // Leading `-C`/`-P` options precede the subcommand.

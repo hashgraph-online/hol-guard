@@ -103,7 +103,14 @@ test('contained runtime boundaries', async () => {
         include_inputs=True,
     )
     fingerprint = current_guard_daemon_runtime_fingerprint()
-    health = probe_containment_health(daemon_fingerprint=fingerprint)
+    # The resident creates its state directory inside the Guard home, not the
+    # home itself.
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700, exist_ok=True)
+    health = probe_containment_health(
+        daemon_fingerprint=fingerprint,
+        guard_home=guard_home,
+    )
     assert health.probe_enforced, health.to_dict()
     try:
         result = execute_contained(request, timeout_seconds=90)

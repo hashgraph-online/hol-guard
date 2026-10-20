@@ -128,6 +128,7 @@ fn a_directory_the_shell_would_rewrite_is_never_substituted() {
 }
 
 /// A worktree root at `name` whose `.git` directory has the layout Git needs.
+#[cfg(unix)]
 fn repository(name: &str) -> PathBuf {
     let root = directory(name);
     let git = root.join(".git");
@@ -138,6 +139,7 @@ fn repository(name: &str) -> PathBuf {
     root
 }
 
+#[cfg(unix)]
 const TOPLEVEL_STATUS: &str = "cd \"$(git rev-parse --show-toplevel)\" && git status --short";
 
 #[test]

@@ -1,6 +1,6 @@
 //! One authenticated, full-duplex request/response connection.
 use std::io::{self, Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::TcpStream;
 #[cfg(unix)]
 use std::os::unix::net::UnixStream;
 use std::time::Duration;
@@ -56,12 +56,22 @@ impl ResidentStream for TcpStream {
         reader.set_read_timeout(Some(Duration::from_millis(20)))?;
         Ok(DisconnectInput {
             reader: Box::new(reader),
-            interrupt: Box::new(move || {
-                let _ = interrupt.shutdown(Shutdown::Read);
-            }),
+            interrupt: Box::new(move || shutdown_read(&interrupt)),
         })
     }
 }
+
+/// Wakes the watch reader by closing the read half.
+#[cfg(not(windows))]
+fn shutdown_read(stream: &TcpStream) {
+    let _ = stream.shutdown(std::net::Shutdown::Read);
+}
+
+/// Winsock resets the whole connection when the read half is shut down with
+/// input still queued, which would drop the reply. The reader's short timeout
+/// already bounds how long the watch takes to stop, so nothing is shut down.
+#[cfg(windows)]
+fn shutdown_read(_stream: &TcpStream) {}
 
 #[cfg(unix)]
 impl ResidentStream for UnixStream {
@@ -87,7 +97,7 @@ impl ResidentStream for UnixStream {
         Ok(DisconnectInput {
             reader: Box::new(reader),
             interrupt: Box::new(move || {
-                let _ = interrupt.shutdown(Shutdown::Read);
+                let _ = interrupt.shutdown(std::net::Shutdown::Read);
             }),
         })
     }

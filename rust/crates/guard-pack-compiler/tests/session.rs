@@ -1,11 +1,22 @@
 use serde_json::Value;
 use std::{
+    ffi::OsString,
     io::Write,
     process::{Command, Stdio},
 };
 
+fn pack_compiler_binary() -> OsString {
+    [
+        "NEXTEST_BIN_EXE_guard-pack-compiler",
+        "NEXTEST_BIN_EXE_guard_pack_compiler",
+    ]
+    .into_iter()
+    .find_map(std::env::var_os)
+    .unwrap_or_else(|| env!("CARGO_BIN_EXE_guard-pack-compiler").into())
+}
+
 fn run(operation: &str, bytes: &[u8]) -> (i32, Value) {
-    let mut process = Command::new(env!("CARGO_BIN_EXE_guard-pack-compiler"))
+    let mut process = Command::new(pack_compiler_binary())
         .arg(operation)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

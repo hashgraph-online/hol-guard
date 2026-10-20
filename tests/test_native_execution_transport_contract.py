@@ -271,6 +271,20 @@ def test_contained_runner_replies_are_accepted_without_outer_status(transport, t
     transport.succeeded.assert_called_once_with("a" * 64, tmp_path)
 
 
+def test_containment_health_probe_reply_reaches_the_caller(transport, tmp_path):
+    """The resident answers with a status-free versioned reply, as the contained runners do."""
+    result = {"enforced": True}
+    reply = {"schema": "guard-containment-health-probe-result.v1", "result": result}
+    transport.client.return_value = json.dumps(reply).encode()
+    assert bridge.containment_health_probe_native(daemon_fingerprint="f" * 64, guard_home=tmp_path) == result
+    envelope = json.loads(transport.client.call_args.kwargs["payload"])
+    # The resident clamps this operation to 15 seconds; asking for less leaves
+    # the worst-case probe and reap with almost no room for start-up.
+    assert envelope["deadline_budget_ms"] == 15_000
+    transport.client.return_value = json.dumps({**reply, "status": "ok"}).encode()
+    assert bridge.containment_health_probe_native(daemon_fingerprint="f" * 64, guard_home=tmp_path) is None
+
+
 def test_contained_runner_transport_budget_covers_resident_overhead(transport, tmp_path):
     transport.client.return_value = b'{"schema":"guard-contained-node-execute-result.v1","result":null}'
     bridge._contained_runner_request(

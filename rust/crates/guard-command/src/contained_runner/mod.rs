@@ -86,3 +86,14 @@ pub fn bun_script_evidence_complete(argv: &[String], workspace: &Path) -> bool {
         Ok(Some(evidence)) if evidence.complete
     )
 }
+
+/// Current containment health for this resident process, as privacy-safe
+/// evidence bound to `daemon_fingerprint`.
+///
+/// `probe_containment_health` (`runtime/containment_health.py`) answered this
+/// by selecting a backend and running its own enforcement self-probe in the
+/// daemon. The daemon now asks the resident, so one port owns backend
+/// selection, the probe and the evidence that proofs bind to.
+pub fn containment_health_evidence(daemon_fingerprint: &str) -> Result<Value, String> {
+    Ok(health::probe_containment_health(daemon_fingerprint)?.to_value())
+}

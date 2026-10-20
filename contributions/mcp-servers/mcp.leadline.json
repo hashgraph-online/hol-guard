@@ -1,0 +1,58 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.leadline",
+  "version": "1.1.0",
+  "name": "leadline",
+  "description": "Deterministic function-level complexity analysis for Go, Java, JavaScript, C, C++, TypeScript, TSX, Rust, Python, and Zig. Start the server with `leadline mcp` (stdio); Guard matches the `leadline` executable. Twenty read-only analyzer tools; the only subprocess is a fixed-argument git adapter and the server touches no network. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.jbt95",
+    "displayName": "Jordi Bermejo (@jbt95)",
+    "url": "https://github.com/jbt95/leadline"
+  },
+  "icon": { "kind": "react-icon", "name": "HiMiniCommandLine", "background": "#0F172A" },
+  "homepage": "https://github.com/jbt95/leadline",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "leadline"
+  },
+  "riskClasses": ["local-source-read", "local-file-write"],
+  "tools": [
+    { "name": "analyze", "state": "inherit" },
+    { "name": "analyze_changed", "state": "inherit" },
+    { "name": "analyze_function", "state": "inherit" },
+    { "name": "check", "state": "inherit" },
+    { "name": "explain_metric", "state": "inherit" },
+    { "name": "repo_summary", "state": "inherit" },
+    { "name": "security_findings", "state": "inherit" },
+    { "name": "sql_plan", "state": "inherit" },
+    { "name": "vulnerabilities", "state": "inherit" },
+    { "name": "sql_risks", "state": "inherit" },
+    { "name": "test_targets", "state": "inherit" },
+    { "name": "dependencies", "state": "inherit" },
+    { "name": "impact", "state": "inherit" },
+    { "name": "coupling", "state": "inherit" },
+    { "name": "hotspots", "state": "inherit" },
+    { "name": "duplication", "state": "inherit" },
+    { "name": "policy", "state": "inherit" },
+    { "name": "risk", "state": "inherit" },
+    { "name": "debt", "state": "inherit" },
+    { "name": "project", "state": "inherit" },
+    { "name": "other", "state": "review" }
+  ],
+  "referenceUrls": [
+    "https://github.com/jbt95/leadline",
+    "https://github.com/jbt95/leadline/blob/main/docs/agent-integration-guide.md",
+    "https://github.com/jbt95/leadline/blob/main/docs/security-model.md",
+    "https://github.com/jbt95/leadline/blob/main/docs/cli-reference.md",
+    "https://github.com/jbt95/leadline/blob/main/crates/surfaces/src/mcp.rs"
+  ],
+  "saferAlternatives": [
+    "Launch the server as `leadline mcp` over stdio; `leadline mcp --port` serves the same tools over a local HTTP listener on 127.0.0.1 and is not matched by this entry.",
+    "Leave LEADLINE_METRICS_DIR unset to keep the server write-free; when set, point it outside the repository so the opt-in local metrics store never writes into the analyzed tree.",
+    "Keep the other row on Review so any tool added in a future leadline release is reviewed until this entry lists it.",
+    "Self-updates (`leadline update`) are a separate CLI command that downloads from GitHub; they are never exposed over MCP."
+  ]
+}

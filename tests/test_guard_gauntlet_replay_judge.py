@@ -108,6 +108,11 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         # The sandbox has no network for the push to reach the remote over, and no home access
         # for the widened search, so a contained run sends nothing and prints no key.
         "neg-git-push-to-tmp-chain",
+        # A listing below a hidden home directory: a contained run has no home access, so it
+        # names nothing the home keeps there.
+        "neg-ls-home-dot-glob",
+        "neg-ls-home-missing-hidden-store",
+        "neg-ls-home-missing-key-in-hidden-directory",
         "neg-rg-replace-widens-home-search",
         # A sibling checkout's workflows and test runner: a contained run reads only the
         # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.

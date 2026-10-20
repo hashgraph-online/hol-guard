@@ -60,9 +60,22 @@ pub(super) fn is_developer_tool(path: &Path) -> bool {
     selected_developer_dir().is_some_and(|developer| path_is_within(path, &developer))
 }
 
+/// Whether `path` names a location inside the selected developer directory,
+/// without following any link `path` itself is.
+///
+/// A symlink chain is checked one hop at a time, so each hop has to stand on
+/// its own spelling. [`is_developer_tool`] follows the rest of the chain, which
+/// would admit a writable intermediate link because of where it currently
+/// points.
+pub(super) fn is_in_developer_dir_lexically(path: &Path) -> bool {
+    selected_developer_dir().is_some_and(|developer| path_is_within_lexically(path, &developer))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{forwarded_tool, is_developer_tool, path_is_within_any};
+    use super::{
+        forwarded_tool, is_developer_tool, is_in_developer_dir_lexically, path_is_within_any,
+    };
     use std::path::Path;
 
     #[test]
@@ -92,6 +105,22 @@ mod tests {
     #[test]
     fn an_ordinary_system_path_is_not_a_developer_tool() {
         assert!(!is_developer_tool(Path::new("/bin/ls")));
+    }
+
+    /// A link outside the developer directory does not count as inside it
+    /// because it currently points there: the chain check reads each hop as
+    /// spelled, and the link can be repointed after approval.
+    #[test]
+    fn a_link_into_the_developer_directory_is_not_inside_it() {
+        let Some(resolved) = forwarded_tool(Path::new("/usr/bin/python3")) else {
+            return;
+        };
+        assert!(is_in_developer_dir_lexically(&resolved));
+        let outside = tempfile::tempdir().unwrap();
+        let link = outside.path().join("python3");
+        std::os::unix::fs::symlink(&resolved, &link).unwrap();
+        assert!(is_developer_tool(&link));
+        assert!(!is_in_developer_dir_lexically(&link));
     }
 
     /// The shim resolution moved `/usr/bin/python3` into the developer

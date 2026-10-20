@@ -176,8 +176,10 @@ jobs:
           echo "CARGO_PROFILE_TEST_DEBUG=line-tables-only" >> "$GITHUB_ENV"
       - name: Restore exact runtime test executables
         id: runtime-archive
-        if: startsWith(matrix.check, 'test-runtime-')
+        if: matrix.check != 'clippy'
         uses: ./.github/actions/restore-runtime-tests
+        with:
+          partition: ${{ matrix.check == 'test-command' && 'command' || (matrix.check == 'test-core' && 'core' || 'runtime') }}
       - uses: ./.github/actions/setup-rust
         with:
           cache-key: ci-workspace-${{ matrix.check }}
@@ -221,13 +223,22 @@ jobs:
         if: matrix.check != 'clippy'
       - name: Archive the complete runtime test build
         if: >-
-          matrix.check == 'test-runtime-1' &&
+          matrix.check != 'clippy' &&
+          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          CARGO_CHECK: ${{ matrix.check }}
         run: |
+          case "$CARGO_CHECK" in
+            test-core) archive_packages=(--locked --workspace --exclude guard-command --exclude hol-guard-runtime --all-targets) ;;
+            test-command) archive_packages=(--locked --package guard-command --all-targets) ;;
+            test-runtime-1) archive_packages=(--locked --package hol-guard-runtime --all-targets) ;;
+            *) echo "Unsupported archive check" >&2; exit 64 ;;
+          esac
           nextest_bin="$(python3 scripts/ci/install_nextest.py)"
           PATH="$nextest_bin:$PATH" cargo nextest archive --manifest-path rust/Cargo.toml \
-            --locked --package hol-guard-runtime --all-targets \
+            "${archive_packages[@]}" \
             --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" --zstd-level 1
       - name: Validate the locked Rust workspace
         env:
@@ -262,7 +273,8 @@ jobs:
                   ;;
               esac
               nextest_bin="$(python3 scripts/ci/install_nextest.py)"
-              if [[ "$CARGO_CHECK" == test-runtime-* && "${RUNTIME_ARCHIVE_HIT:-false}" == true ]]; then
+              if [[ "${RUNTIME_ARCHIVE_HIT:-false}" == true ]]; then
+                mkdir -p "$GITHUB_WORKSPACE/rust/target"
                 PATH="$nextest_bin:$PATH" cargo nextest run \
                   --archive-file "$RUNNER_TEMP/runtime-test-archive.tar.zst" \
                   --workspace-remap "$GITHUB_WORKSPACE/rust" "${nextest_args[@]}" \
@@ -277,7 +289,8 @@ jobs:
           esac
       - name: Save successful runtime test compilation
         if: >-
-          matrix.check == 'test-runtime-1' &&
+          matrix.check != 'clippy' &&
+          matrix.check != 'test-runtime-2' &&
           steps.runtime-archive.outputs.cache-hit != 'true' &&
           github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830

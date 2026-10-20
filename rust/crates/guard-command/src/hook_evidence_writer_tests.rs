@@ -6,9 +6,12 @@
 //! unpaired. These cover both branches of the drain loop and the pairing rules
 //! in `cli/commands_support_command_activity.py:208-246`.
 
+use std::collections::VecDeque;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use serde_json::{json, Map, Value};
 
@@ -16,7 +19,7 @@ use crate::hook_evidence_writer::{
     ComposioActionSchema, ComposioWorkflowProposal, CorrelationApi, CorrelationHandle,
     EvidenceJournalApi, EvidenceRecord, EvidenceStoreApi, EvidenceWriterDeps,
     InstallationCorrelationKey, ObservedMcpTool, ReceiptValidationApi, RuntimeHookEvidenceWriter,
-    SqliteTimeoutApi,
+    RuntimeHookEvidenceWriterStats, SqliteTimeoutApi,
 };
 
 /// The correlation digest every fixture starts from, before a prevented
@@ -57,8 +60,23 @@ enum ReceiptBehaviour {
     /// Park the worker thread here until the test releases the gate, so a
     /// test can read the queue while a store write is still outstanding.
     Park(Arc<Gate>),
-    /// Fail every write, the way a locked SQLite file does.
-    Fail,
+    /// Refuse the first `failures` writes the way a store another writer
+    /// holds locked does, entering `failed` on each, then enter `written`
+    /// and accept.
+    Contended {
+        failures: Mutex<u32>,
+        failed: Arc<Gate>,
+        written: Arc<Gate>,
+    },
+    /// Fail each write with the next error kind in the list, then enter
+    /// `written` and accept.
+    Sequence {
+        refusals: Mutex<VecDeque<io::ErrorKind>>,
+        written: Arc<Gate>,
+    },
+    /// Refuse every write of the receipt with this decision id, the way a
+    /// store refuses a row it can never take, and accept every other one.
+    Refuse(String),
 }
 
 impl StubStore {
@@ -79,9 +97,22 @@ impl StubStore {
         Self::with_receipts(guard_home, ReceiptBehaviour::Park(gate))
     }
 
-    /// A store whose receipt write always fails.
-    fn failing_receipts(guard_home: PathBuf) -> Arc<Self> {
-        Self::with_receipts(guard_home, ReceiptBehaviour::Fail)
+    /// A store that refuses its first `failures` receipt writes. `failed` is
+    /// entered on each refusal and `written` by the write that gets through.
+    fn contended(
+        guard_home: PathBuf,
+        failures: u32,
+        failed: Arc<Gate>,
+        written: Arc<Gate>,
+    ) -> Arc<Self> {
+        Self::with_receipts(
+            guard_home,
+            ReceiptBehaviour::Contended {
+                failures: Mutex::new(failures),
+                failed,
+                written,
+            },
+        )
     }
 
     fn with_receipts(guard_home: PathBuf, receipt_behaviour: ReceiptBehaviour) -> Arc<Self> {
@@ -146,7 +177,7 @@ impl EvidenceStoreApi for StubStore {
 
     fn record_native_decision_receipt(
         &self,
-        _receipt: &Map<String, Value>,
+        receipt: &Map<String, Value>,
     ) -> Result<bool, io::Error> {
         match &self.receipt_behaviour {
             ReceiptBehaviour::Accept => Ok(true),
@@ -154,7 +185,45 @@ impl EvidenceStoreApi for StubStore {
                 gate.enter();
                 Ok(true)
             }
-            ReceiptBehaviour::Fail => Err(io::Error::other("database is locked")),
+            ReceiptBehaviour::Contended {
+                failures,
+                failed,
+                written,
+            } => {
+                let refused = {
+                    let mut remaining = failures.lock().unwrap_or_else(|err| err.into_inner());
+                    let refused = *remaining > 0;
+                    *remaining = remaining.saturating_sub(1);
+                    refused
+                };
+                if refused {
+                    failed.enter();
+                    return Err(io::Error::new(
+                        io::ErrorKind::TimedOut,
+                        "native_guard_store_busy (database is locked)",
+                    ));
+                }
+                written.enter();
+                Ok(true)
+            }
+            ReceiptBehaviour::Sequence { refusals, written } => {
+                let refusal = refusals
+                    .lock()
+                    .unwrap_or_else(|err| err.into_inner())
+                    .pop_front();
+                if let Some(kind) = refusal {
+                    return Err(io::Error::new(kind, "refused"));
+                }
+                written.enter();
+                Ok(true)
+            }
+            ReceiptBehaviour::Refuse(decision_id) => {
+                if receipt.get("decision_id").and_then(Value::as_str) == Some(decision_id.as_str())
+                {
+                    return Err(io::Error::other("constraint failed"));
+                }
+                Ok(true)
+            }
         }
     }
 
@@ -1001,25 +1070,188 @@ fn a_receipt_left_in_the_journal_is_recovered_by_the_next_writer() {
     assert!(journal.records().is_empty());
 }
 
+/// A gate that never parks: entering it only records that it was entered.
+fn signal() -> Arc<Gate> {
+    let gate = Gate::new();
+    gate.release();
+    gate
+}
+
+/// Another writer can hold the store past the writer's short lock budget more
+/// than once in a row. The receipt is already in the journal by then, so a
+/// run of refusals delays it rather than losing it.
 #[test]
-fn a_store_that_keeps_failing_drops_a_receipt_after_bounded_retries() {
+fn a_receipt_outlasts_a_briefly_locked_store() {
+    let written = Gate::new();
     let journal = RecordingJournal::new();
-    let store = StubStore::failing_receipts(queue_home());
+    let store = StubStore::contended(queue_home(), 3, signal(), Arc::clone(&written));
     let writer = queue_writer(store, Arc::clone(&journal), 64);
 
     assert!(writer.submit_native_decision_receipt(&receipt("decision-1")));
-    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+    written.wait_for_entry();
+    let contended = writer.stats();
+    assert_eq!(contended.receipt_failures, 3);
+    assert_eq!(contended.receipt_dropped, 0);
+    assert_eq!(contended.receipt_durable_pending, 1);
+    assert_eq!(journal.records().len(), 1, "still journaled while it waits");
 
-    // A store that never recovers must not keep the record forever: the
-    // retries are bounded, and the journal is cleared with the queue.
+    written.release();
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+    let drained = writer.stats();
+    assert_eq!(drained.receipt_processed, 1);
+    assert_eq!(drained.receipt_dropped, 0);
+    assert_eq!(drained.dropped, 0);
+    assert_eq!(drained.receipt_durable_pending, 0);
+    assert!(journal.records().is_empty());
+}
+
+/// A lock outlasting the attempts a refused write gets is still only a lock:
+/// the receipt is written once the store frees up, never dropped.
+#[test]
+fn a_receipt_waits_out_a_store_locked_past_the_attempt_cap() {
+    let written = Gate::new();
+    let journal = RecordingJournal::new();
+    let store = StubStore::contended(queue_home(), 9, signal(), Arc::clone(&written));
+    let writer = queue_writer(store, Arc::clone(&journal), 64);
+
+    assert!(writer.submit_native_decision_receipt(&receipt("decision-1")));
+    written.wait_for_entry();
+    let contended = writer.stats();
+    assert_eq!(contended.receipt_failures, 9);
+    assert_eq!(contended.receipt_dropped, 0);
+    assert_eq!(journal.records().len(), 1, "still journaled while it waits");
+
+    written.release();
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+    let drained = writer.stats();
+    assert_eq!(drained.receipt_processed, 1);
+    assert_eq!(drained.receipt_dropped, 0);
+    assert!(journal.records().is_empty());
+}
+
+/// Waiting out a long lock spends none of the attempts a receipt gets for
+/// other refusals, so one such refusal after the lock does not drop it.
+#[test]
+fn a_long_lock_spends_none_of_the_attempts_other_refusals_get() {
+    let written = Gate::new();
+    let mut refusals = VecDeque::from(vec![io::ErrorKind::TimedOut; 8]);
+    refusals.push_back(io::ErrorKind::Other);
+    let store = StubStore::with_receipts(
+        queue_home(),
+        ReceiptBehaviour::Sequence {
+            refusals: Mutex::new(refusals),
+            written: Arc::clone(&written),
+        },
+    );
+    let journal = RecordingJournal::new();
+    let writer = queue_writer(store, Arc::clone(&journal), 64);
+
+    assert!(writer.submit_native_decision_receipt(&receipt("decision-1")));
+    written.wait_for_entry();
+    let refused = writer.stats();
+    assert_eq!(refused.receipt_failures, 9);
+    assert_eq!(refused.receipt_dropped, 0);
+    assert_eq!(journal.records().len(), 1);
+
+    written.release();
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
+    let drained = writer.stats();
+    assert_eq!(drained.receipt_processed, 1);
+    assert!(journal.records().is_empty());
+}
+
+/// A store that stays locked past the drain budget keeps the receipt in the
+/// journal, and the next writer over that journal writes it once.
+#[test]
+fn a_receipt_the_store_keeps_refusing_stays_journaled_for_the_next_writer() {
+    let failed = signal();
+    let journal = RecordingJournal::new();
+    let store = StubStore::contended(queue_home(), u32::MAX, Arc::clone(&failed), signal());
+    let writer = queue_writer(store, Arc::clone(&journal), 64);
+
+    assert!(writer.submit_native_decision_receipt(&receipt("decision-1")));
+    failed.wait_for_entry();
+    // No drain time: the worker leaves the receipt as soon as it sees the
+    // stop, however late a loaded host lets it see it.
+    while !writer.stop(0.0) {}
+
     let stats = writer.stats();
     assert_eq!(stats.receipt_processed, 0);
-    assert_eq!(stats.receipt_dropped, 1);
-    assert_eq!(stats.receipt_failures, 1);
-    assert_eq!(stats.dropped, 1);
+    assert!(stats.receipt_failures >= 1);
+    assert_eq!(stats.receipt_dropped, 0);
+    assert_eq!(stats.dropped, 0);
     assert!(stats.degraded);
-    assert_eq!(stats.receipt_durable_pending, 0);
+    assert_eq!(stats.receipt_durable_pending, 1);
+    assert_eq!(journal.records().len(), 1);
+
+    let store = StubStore::with_receipts(queue_home(), ReceiptBehaviour::Accept);
+    let next = queue_writer(store, Arc::clone(&journal), 64);
+    assert!(next.stop(DRAIN_BUDGET_SECONDS));
+    let replayed = next.stats();
+    assert_eq!(replayed.recovered, 1);
+    assert_eq!(replayed.receipt_processed, 1);
+    assert_eq!(replayed.receipt_durable_pending, 0);
     assert!(journal.records().is_empty());
+}
+
+/// Wait until the writer's counters satisfy `done`, for at most ten seconds.
+fn wait_for_stats(
+    writer: &RuntimeHookEvidenceWriter,
+    done: impl Fn(&RuntimeHookEvidenceWriterStats) -> bool,
+) -> RuntimeHookEvidenceWriterStats {
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let stats = writer.stats();
+        if done(&stats) || Instant::now() >= deadline {
+            return stats;
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// A receipt waiting out its backoff keeps its place in the queue without
+/// holding the worker: one submitted behind it is written before the waiting
+/// receipt gets another attempt.
+#[test]
+fn a_refused_receipt_does_not_hold_up_the_receipts_behind_it() {
+    let store = StubStore::with_receipts(queue_home(), ReceiptBehaviour::Refuse("stuck".into()));
+    let journal = RecordingJournal::new();
+    let writer = queue_writer(store, Arc::clone(&journal), 64);
+
+    assert!(writer.submit_native_decision_receipt(&receipt("stuck")));
+    // Five refusals put the next attempt 800 ms away.
+    let waiting = wait_for_stats(&writer, |stats| stats.receipt_failures >= 5);
+    assert_eq!(waiting.receipt_failures, 5);
+    assert!(writer.submit_native_decision_receipt(&receipt("decision-2")));
+    let moved_on = wait_for_stats(&writer, |stats| stats.receipt_processed >= 1);
+    assert_eq!(moved_on.receipt_processed, 1);
+    assert_eq!(
+        moved_on.receipt_failures, 5,
+        "written before the next retry"
+    );
+    assert_eq!(moved_on.receipt_durable_pending, 1);
+
+    while !writer.stop(0.0) {}
+}
+
+/// A receipt the store can never take is retried a bounded number of times,
+/// then dropped and cleared from the journal so it neither spins the worker
+/// nor grows the journal for every later writer to replay.
+#[test]
+fn a_receipt_the_store_never_takes_is_dropped_after_its_last_attempt() {
+    let store = StubStore::with_receipts(queue_home(), ReceiptBehaviour::Refuse("stuck".into()));
+    let journal = RecordingJournal::new();
+    let writer = queue_writer(store, Arc::clone(&journal), 64);
+
+    assert!(writer.submit_native_decision_receipt(&receipt("stuck")));
+    let dropped = wait_for_stats(&writer, |stats| stats.receipt_dropped >= 1);
+    assert_eq!(dropped.receipt_dropped, 1);
+    assert_eq!(dropped.receipt_failures, 8);
+    assert_eq!(dropped.receipt_durable_pending, 0);
+    assert!(dropped.degraded);
+    assert!(journal.records().is_empty());
+
+    assert!(writer.stop(DRAIN_BUDGET_SECONDS));
 }
 
 /// A journal whose rewrite always reports invalid lines it dropped.

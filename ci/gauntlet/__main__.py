@@ -66,6 +66,13 @@ def main(argv: list[str] | None = None) -> int:
         "never exercised, a dead provider round or a host-tool failure is recorded and the run continues",
     )
     run.add_argument(
+        "--case-retries",
+        type=int,
+        default=0,
+        help="Re-run a case this many times when the model never exercised it, the provider round died "
+        "or a host tool failed; a false positive or false negative is never re-run",
+    )
+    run.add_argument(
         "--host-slots",
         type=int,
         default=os.environ.get("GUARD_GAUNTLET_HOST_SLOTS"),
@@ -184,6 +191,12 @@ def main(argv: list[str] | None = None) -> int:
         type=int,
         default=qualification_jobs(),
         help="Concurrent isolated cases (default: half the host CPUs, bounded to 1-8)",
+    )
+    qualify.add_argument(
+        "--case-retries",
+        type=int,
+        default=2,
+        help="Per-case re-runs each attempt spends on a case the model never exercised (0 disables)",
     )
     qualify.add_argument(
         "--host-slots",
@@ -341,9 +354,14 @@ def main(argv: list[str] | None = None) -> int:
         # argparse does not apply choices to an environment-supplied default.
         if args.reasoning_effort is not None and args.reasoning_effort not in REASONING_EFFORTS:
             raise ValueError("unsupported reasoning effort; use " + ", ".join(REASONING_EFFORTS))
+        from .case_retry import MAX_CASE_RETRIES
         from .parallel import MAX_SLOTS, validate_jobs
 
         validate_jobs(args.jobs)
+        if isinstance(args.case_retries, bool) or not 0 <= args.case_retries <= MAX_CASE_RETRIES:
+            raise ValueError(f"--case-retries must be an integer from 0 to {MAX_CASE_RETRIES}")
+        if args.profile != "core" and args.case_retries:
+            raise ValueError("--case-retries is only supported by the core profile")
         if args.profile not in ("core", "full-tasks") and args.jobs != 1:
             raise ValueError("--jobs is only supported by the core and full-tasks profiles")
         if args.profile != "full-tasks" and args.full_task_mode != "enforce":
@@ -439,6 +457,7 @@ def main(argv: list[str] | None = None) -> int:
                     candidate_sha=args.candidate_sha,
                     jobs=args.jobs,
                     fail_fast=args.fail_fast,
+                    case_retries=args.case_retries,
                     route_health=route_health,
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
@@ -476,8 +495,16 @@ def _run_harness(args: argparse.Namespace) -> int:
         or args.omp
     ):
         raise ValueError("--harness uses the CLI's own login and model; omit provider, Luna and omp options")
-    if args.fail_fast or args.host_slots is not None or args.slot_dir is not None or args.max_load is not None:
-        raise ValueError("--fail-fast, --host-slots and --max-load are only supported by the omp harness")
+    if (
+        args.fail_fast
+        or args.host_slots is not None
+        or args.slot_dir is not None
+        or args.max_load is not None
+        or args.case_retries
+    ):
+        raise ValueError(
+            "--fail-fast, --case-retries, --host-slots and --max-load are only supported by the omp harness"
+        )
     if args.profile not in {"core", "full-tasks", "approval-retry", "connector-setup"}:
         raise ValueError("--harness supports only the core, full-tasks, approval-retry and connector-setup profiles")
     if args.profile != "full-tasks" and args.full_task_mode != "enforce":
