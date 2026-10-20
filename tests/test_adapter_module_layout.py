@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from fnmatch import fnmatchcase
 from importlib import import_module, util
 from pathlib import Path
@@ -11,6 +10,7 @@ import pytest
 
 from codex_plugin_scanner.guard import adapters
 from codex_plugin_scanner.guard.adapters.contracts import HARNESS_CONTRACTS
+from scripts.ci.hook_data_plane_ownership_contract import load_manifest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = Path(adapters.__file__).parent
@@ -46,8 +46,9 @@ def test_public_adapter_registry_and_aliases_remain_unchanged() -> None:
             assert adapters.get_adapter(alias) is adapter
 
 
-def test_grouped_adapter_sources_remain_in_native_ownership_contract() -> None:
-    manifest = json.loads((ROOT / "docs/guard/contracts/hook-data-plane-ownership.v2.json").read_text())
+def test_grouped_adapter_sources_remain_in_native_ownership_contract(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.chdir(ROOT)
+    manifest = load_manifest(ROOT / "docs/guard/contracts/hook-data-plane-ownership.v2.json")
     owner_globs = [pattern for node in manifest["nodes"] for pattern in node.get("paths", [])]
     protected_globs = manifest["protected_change_globs"]
     for module_file in sorted((PACKAGE / "_modules").rglob("*.py")):

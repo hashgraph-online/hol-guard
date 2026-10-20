@@ -526,6 +526,15 @@
     "reviewed_runtime": [
       {
         "path": [
+          "src/codex_plugin_scanner/guard/adapters/_modules/cline/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/devin/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/pi/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
+        ],
+        "reason": "Reviewed adapter family package initializers introduced by the source-layout refactor. Each contains only its package docstring; these modules are reached through lazy hook imports and remain counted in runtime scope. No runtime behavior is excluded."
+      },
+      {
+        "path": [
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_completion.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_pages.py"
         ],

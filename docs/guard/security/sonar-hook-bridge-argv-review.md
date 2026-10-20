@@ -1,6 +1,15 @@
 # Claude daemon hook bridge argv review
 
-Reviewed source: `8de2fb9c3c9e25b69e95c283fdad4ed4c638cc0f`.
+Original reviewed source: `8de2fb9c3c9e25b69e95c283fdad4ed4c638cc0f`.
+
+Re-reviewed after adapter reorganization at
+`586daf1f094ed5f0c7c1818a026b88f298296e3a`. The bridge differs from the
+original reviewed source only in its import of `state_path_for_query`, now
+from `adapters._modules.claude.claude_daemon_state`. Its executable selection,
+argument construction, subprocess call, and failure behavior are unchanged.
+The other two pinned sources are byte-for-byte unchanged. The manifest records
+the resulting source digest; the verifier still requires both the local and
+analyzed sources to match before any Sonar disposition can be applied.
 
 | Finding | Rule | Component |
 | --- | --- | --- |
