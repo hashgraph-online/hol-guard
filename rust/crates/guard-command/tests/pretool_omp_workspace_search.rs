@@ -104,18 +104,19 @@ fn grep_honors_the_gitignore_the_host_honors() {
         assert!(allowed(&result), "{input}: {}", result.reason_code);
         assert_eq!(result.reason_code, "native_bounded_search_scope");
     }
-    // The host then searches every file, so the `.env` is in reach.
+    // The host then searches every file, so the `.env` is in reach. The
+    // pattern is one its content holds, so the search would print from it.
     assert!(!allowed(&omp(
         &f,
         "app",
         "grep",
-        json!({"pattern": "deploy", "path": ".", "gitignore": false})
+        json!({"pattern": "fixture", "path": ".", "gitignore": false})
     )));
     // A `glob` or `type` override can re-include the gitignored `.env`.
     for input in [
-        json!({"pattern": "KEY", "path": ".", "glob": ".env"}),
-        json!({"pattern": "KEY", "path": ".", "glob": "*.sh"}),
-        json!({"pattern": "KEY", "type": "sh"}),
+        json!({"pattern": "fixture", "path": ".", "glob": ".env"}),
+        json!({"pattern": "fixture", "path": ".", "glob": "*.sh"}),
+        json!({"pattern": "fixture", "type": "sh"}),
     ] {
         assert!(!allowed(&omp(&f, "app", "grep", input.clone())), "{input}");
     }
@@ -126,7 +127,7 @@ fn grep_honors_the_gitignore_the_host_honors() {
     }
     // A tracked `.env`, or a `.ignore` that can re-include one, is in reach.
     for cwd in ["tracked", "custom"] {
-        let input = json!({"pattern": "deploy", "path": "."});
+        let input = json!({"pattern": "fixture", "path": "."});
         assert!(!allowed(&omp(&f, cwd, "grep", input)), "{cwd}");
     }
 }

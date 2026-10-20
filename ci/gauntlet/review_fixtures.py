@@ -11,8 +11,14 @@ from .realism_fixtures import write_windows_launcher
 
 GITHUB_REVIEW_CASE = "github-review-work-enabled-permissions"
 GITHUB_DELETE_CASE = "explicit-disabled-github-delete-permission"
-GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE})
+# The Oh My Pi `github` tool runs `gh api` underneath, so its lookups reach the same stand-in.
+GITHUB_LOOKUP_CASE = "omp-native-github-search-prs"
+GITHUB_LOOKUP_REPO = "example-org/example-repo"
+GITHUB_LOOKUP_QUERY = "is:pr metrics OR analytics"
+GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LOOKUP_CASE})
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
+# Writes into a harness plan folder pass; the hooks file beside it stays reviewed.
+PLAN_NOTE_PROTECTION_CASE = "plan-note-protection-codex-hooks"
 # Not prefixed by the workspace name, so redaction cannot fold it into {{workspace}}.
 WORKTREE_NAME = "review-worktree"
 GITHUB_EXTENSION_ID = "command.github"
@@ -51,6 +57,7 @@ def gh_stub_script(log: Path) -> str:
         'case "$*" in\n'
         '*graphql*) printf \'%s\\n\' \'{"data":{"resolveReviewThread":{"thread":{"isResolved":true}}}}\' ;;\n'
         '*/replies*) printf \'%s\\n\' \'{"id":456,"body":"reply recorded"}\' ;;\n'
+        '*search/issues*) printf \'%s\n\' \'{"total_count":1,"incomplete_results":false,"items":[{"number":12,"title":"Add metrics","state":"open","html_url":"https://github.com/example-org/example-repo/pull/12","pull_request":{}}]}\' ;;\n'
         '*) printf \'%s\\n\' \'[{"id":123,"user":{"login":"reviewer"},"body":"Please rename the helper"}]\' ;;\n'
         "esac\n"
         "exit 0\n"
@@ -69,6 +76,8 @@ def gh_stub_python(log: Path) -> str:
         "    out = '{\"data\":{\"resolveReviewThread\":{\"thread\":{\"isResolved\":true}}}}'\n"
         "elif '/replies' in joined:\n"
         "    out = '{\"id\":456,\"body\":\"reply recorded\"}'\n"
+        "elif 'search/issues' in joined:\n"
+        "    out = '{\"total_count\":1,\"incomplete_results\":false,\"items\":[{\"number\":12,\"title\":\"Add metrics\",\"state\":\"open\",\"html_url\":\"https://github.com/example-org/example-repo/pull/12\",\"pull_request\":{}}]}'\n"
         "else:\n"
         "    out = '[{\"id\":123,\"user\":{\"login\":\"reviewer\"},\"body\":\"Please rename the helper\"}]'\n"
         "sys.stdout.buffer.write(out.encode() + b'\\n')\n"
@@ -92,9 +101,23 @@ def recorded_gh_calls(workspace: Path) -> list[tuple[str, ...]] | None:
     return [tuple(line.split(SEPARATOR)[:-1]) for line in text.splitlines()]
 
 
+def _is_lookup_call(call: tuple[str, ...]) -> bool:
+    """One `gh api` issue-search request carrying the case's query, scoped to its repository."""
+    queries = [arg for arg in call if arg.startswith("q=")]
+    return (
+        call[:1] == ("api",)
+        and "/search/issues" in call
+        and len(queries) == 1
+        and queries == [f"q={GITHUB_LOOKUP_QUERY} repo:{GITHUB_LOOKUP_REPO} is:pr"]
+    )
+
+
 def github_checks(workspace: Path, scenario_id: str) -> dict[str, bool]:
     if scenario_id == GITHUB_REVIEW_CASE:
         return {"github-stub-calls-exact": recorded_gh_calls(workspace) == list(EXPECTED_GH_CALLS)}
+    if scenario_id == GITHUB_LOOKUP_CASE:
+        calls = recorded_gh_calls(workspace)
+        return {"github-lookup-ran-once": calls is not None and len(calls) == 1 and _is_lookup_call(calls[0])}
     return {}
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
 
@@ -47,7 +48,10 @@ def _embedded_inputs() -> list[str]:
             continue
         if source.stem.endswith("_tests") or source.stem == "tests":
             continue
-        for match in re.finditer(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"', source.read_text(encoding="utf-8")):
+        text = source.read_text(encoding="utf-8")
+        # Inline trailing test modules are absent from the release runtime too.
+        text = re.sub(r"#\[cfg\(test\)\]\s*mod tests\s*\{.*\}\s*\Z", "", text, flags=re.DOTALL)
+        for match in re.finditer(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"', text):
             resolved = (source.parent / match.group(1)).resolve()
             try:
                 resolved = resolved.relative_to(ROOT).as_posix()
@@ -59,28 +63,26 @@ def _embedded_inputs() -> list[str]:
 
 
 def _build_script_inputs() -> list[str]:
-    """Collect directories every build.rs hands to sources(root, ...)."""
-    directories = []
-    for script in sorted(ROOT.glob("rust/**/build.rs")):
-        if "target" in script.relative_to(ROOT).parts:
-            continue
-        text = script.read_text(encoding="utf-8")
-        bindings = dict(re.findall(r'let\s+(\w+)\s*=\s*"([^"]+)"', text))
-        for match in re.finditer(r'sources\(root,\s*(?:"([^"]+)"|(\w+))', text):
-            directories.append(match.group(1) or bindings[match.group(2)])
-    return directories
+    """Collect the manifest and explicit source/trust records embedded by build.rs."""
+    manifest = "contracts/extensions/core-defaults.v1.json"
+    entries = json.loads((ROOT / manifest).read_text(encoding="utf-8"))["entries"]
+    script = (ROOT / "rust/crates/guard-command/build.rs").read_text(encoding="utf-8")
+    assert manifest in script
+    assert "sources(root, &entries, true)" in script
+    assert "sources(root, &entries, false)" in script
+    assert "trust_map(root, &entries)" in script
+    return [manifest, *(entry[field] for entry in entries for field in ("source", "trust"))]
 
 
 def test_runtime_cache_key_covers_every_build_input_outside_rust() -> None:
     """Assert the runtime cache key hashes every non-rust build input."""
     globs = _cache_key_globs()
     embedded = _embedded_inputs()
-    directories = _build_script_inputs()
-    assert {"contributions/command-sources", "contributions/mcp-servers", "contracts/extensions/trust"} <= set(
-        directories
-    )
+    selected = _build_script_inputs()
+    assert any(path.startswith("contributions/command-sources/") for path in selected)
+    assert any(path.startswith("contracts/extensions/trust/") for path in selected)
     assert any(path.startswith("spec/") for path in embedded)
-    for path in embedded + directories:
+    for path in embedded + selected:
         assert _covered(path, globs), f"{path} is a build input missing from the runtime cache key"
 
 
@@ -216,7 +218,11 @@ def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> Non
 def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
     prefix = "cargo test --manifest-path rust/Cargo.toml --locked -p "
     expected = {
-        "vectors": ["guard-command --test shim_admin_vectors"],
+        "vectors": [
+            "guard-command --test shim_admin_vectors",
+            "guard-command --test pretool_windows_drive_path_writes",
+            "guard-command --test pretool_windows_sibling_repository_writes",
+        ],
         "native-op": [
             "hol-guard-runtime --bin hol-guard-runtime shim_op",
             "hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests",
@@ -245,7 +251,7 @@ def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
         ]
         assert selected[gate] == commands
     flattened = [command for commands in selected.values() for command in commands]
-    assert len(flattened) == len(set(flattened)) == 10
+    assert len(flattened) == len(set(flattened)) == 12
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

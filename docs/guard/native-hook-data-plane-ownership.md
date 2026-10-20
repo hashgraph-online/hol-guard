@@ -115,7 +115,19 @@ tests, language-neutral parity fixtures, and package content.
 
 `scripts/ci/rust_io_ownership_gate.py` builds an AST inventory of synchronous
 Python filesystem, hash, decode, and archive operations and walks supported
-hook entrypoints. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
+hook entrypoints. The walk starts at the CLI hook command, so harness
+resolution and payload loading are inside the gate rather than ahead of it.
+
+The inventory covers the whole Guard package, not just the decision path, so
+most of its operations are unclassified by design: they belong to the Python
+control plane the native runtime never consults. The report's
+`control_plane_remainder` block records that remainder with its
+`reachable_count`, which is zero whenever the gate passes -- the gate refuses
+to pass while any unclassified operation is reachable from a root. Read the
+unclassified category totals through that block; on their own they look like a
+classification backlog, and they are not one. An operation only becomes gate
+work when a new root makes it reachable, which is also the point at which it
+has to be classified. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
 metrics, journal, and enrichment serializers and dynamically probes raw source,
 command, secret, and private-path payloads. Both gates emit versioned,
 aggregate-only JSON evidence.

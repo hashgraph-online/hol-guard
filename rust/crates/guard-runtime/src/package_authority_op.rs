@@ -44,8 +44,9 @@ use guard_command::supply_chain_package_identity;
 use guard_contracts::{
     ApplyStoredPackagePolicyRequestV1, ApplyStoredPackagePolicyResultV1,
     PackageAuthorityDecideRequestV1, PackageAuthorityDecideResultV1, PackageIntentParseRequestV1,
-    PackageIntentParseResultV1, PolicyDecisionLookupRequestV1, SupplyChainEvalRequestV1,
-    SupplyChainEvalResultV1, PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
+    PackageIntentParseResultV1, PackageRequestArtifactRequestV1, PackageRequestArtifactResultV1,
+    PolicyDecisionLookupRequestV1, SupplyChainEvalRequestV1, SupplyChainEvalResultV1,
+    PACKAGE_AUTHORITY_REQUEST_SCHEMA, PACKAGE_AUTHORITY_RESULT_SCHEMA,
     POLICY_DECISION_LOOKUP_REQUEST_SCHEMA,
 };
 use rusqlite::Connection;
@@ -2596,6 +2597,58 @@ pub(crate) fn evaluate_package_intent_parse(
 }
 
 // ---------------------------------------------------------------------------
+// PackageRequestArtifact — `build_package_request_artifact` resident op.
+// ---------------------------------------------------------------------------
+
+/// Name the review a package intent earns.
+///
+/// The host already holds the intent — the resident parsed it — so nothing is
+/// re-parsed here; the exact intent comes back over the same private channel
+/// its targets went out on, and the runtime decides the artifact id the saved
+/// approval is keyed under.
+///
+/// An intent that will not decode is refused rather than named from whatever
+/// decoded: a partially rebuilt intent would fingerprint to an id no earlier
+/// approval was stored under, which reads to the user as an approval that
+/// stopped working.
+pub(crate) fn evaluate_package_request_artifact_request(
+    request: &PackageRequestArtifactRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "schema_mismatch",
+        ))
+        .map_err(|e| e.to_string());
+    }
+    let Some(intent) = PackageIntent::from_exact_dict(&request.intent) else {
+        return serde_json::to_vec(&err_result(
+            &request.request_id,
+            &request_sha256,
+            "invalid_package_intent",
+        ))
+        .map_err(|e| e.to_string());
+    };
+    let artifact = build_package_request_artifact(
+        &request.harness,
+        &intent,
+        &request.config_path,
+        &request.source_scope,
+    );
+    let result = PackageRequestArtifactResultV1 {
+        schema: PACKAGE_AUTHORITY_RESULT_SCHEMA.to_owned(),
+        request_id: request.request_id.clone(),
+        request_sha256,
+        status: "ok".to_owned(),
+        code: "ok".to_owned(),
+        payload: Some(artifact.to_wire()),
+    };
+    crate::encode_response(&result)
+}
+
+// ---------------------------------------------------------------------------
 // ApplyStoredPackagePolicy — `_apply_stored_package_policy_override` resident
 // op. The override reads only `store` + `approval_context_api` live; the other
 // seam params are parity placeholders carried through the ported signature.
@@ -3167,3 +3220,7 @@ mod apply_stored_package_policy_tests;
 #[cfg(test)]
 #[path = "supply_chain_eval_seam_tests.rs"]
 mod supply_chain_eval_seam_tests;
+
+#[cfg(test)]
+#[path = "package_request_artifact_op_tests.rs"]
+mod package_request_artifact_op_tests;

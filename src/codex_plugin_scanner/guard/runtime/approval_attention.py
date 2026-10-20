@@ -6,10 +6,11 @@ import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import final
 
 from ..config import GuardConfig, load_guard_config
-from ..directory_path_authority import trusted_guard_directory_roots, validate_guard_directory_path
+from ..native_directory_trust import NativeDirectoryTrustError, native_directory_trust
 from ..store import GuardStore
 from .surface_server import GuardSurfaceRuntime
 
@@ -61,8 +62,13 @@ class ApprovalAttentionCoordinator:
         opener: Callable[[str], object],
         clock: Callable[[], float] = time.monotonic,
         cooldown_seconds: float = _BROWSER_OPEN_COOLDOWN_SECONDS,
+        home_dir: Path | None = None,
     ) -> None:
         self._store = store
+        # The home the daemon serves, which the runtime expands `~` against and
+        # trusts as a root. Without it the settlement falls back to the home of
+        # whichever account this process runs as.
+        self._home_dir = home_dir
         self._runtime = runtime
         self._opener = opener
         self._clock = clock
@@ -110,7 +116,14 @@ class ApprovalAttentionCoordinator:
         )
         if not request_ids:
             return
-        config = self._config_for_requests(requests)
+        try:
+            config = self._config_for_requests(requests)
+        except ValueError:
+            # A workspace this process may not name, or that the runtime
+            # cannot settle, is one it must not open a browser for. The
+            # operation this attention would have followed is already queued
+            # and still gets its own answer, so the failure stops here.
+            return
         if config.approval_surface_policy != "attention-aware":
             return
         urgent = should_open_immediately(requests, config.approval_browser_immediate_severity)
@@ -210,18 +223,30 @@ class ApprovalAttentionCoordinator:
             for candidate in self._store.list_guard_operations(session_id=session_id)
         )
 
+    def _trusted_workspace(self, value: str | None) -> Path | None:
+        """Ask the native owner whether this request may name `value`.
+
+        The runtime owns the answer, so a runtime that cannot give one refuses
+        the workspace rather than leaving the loop to work it out. Either way
+        the caller sees a `ValueError`, which is what the attention loop
+        already treats as a workspace it must not open.
+        """
+
+        if value is None:
+            return None
+        verdict = native_directory_trust(
+            [("workspace", value)],
+            guard_home=self._store.guard_home,
+            home_dir=self._home_dir,
+        )[0]
+        if verdict.path is None:
+            raise NativeDirectoryTrustError(verdict.reason or "unexpected_root")
+        return Path(verdict.path)
+
     def _config_for_requests(self, requests: list[dict[str, object]]) -> GuardConfig:
         workspace_value = next(
             (value for request in requests if isinstance((value := request.get("workspace")), str)),
             None,
         )
-        workspace = (
-            validate_guard_directory_path(
-                workspace_value,
-                trusted_guard_directory_roots(self._store.guard_home),
-                allow_owned_temporary=True,
-            )
-            if workspace_value is not None
-            else None
-        )
+        workspace = self._trusted_workspace(workspace_value)
         return load_guard_config(self._store.guard_home, workspace, require_canonical_workspace=True)

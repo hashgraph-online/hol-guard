@@ -20,9 +20,11 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
-from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
 from tests.benign_fp_gate_connectors import connector_setup_failure
-from tests.native_gate_retry import UNAVAILABLE_REASON
+from tests.native_gate_retry import BUDGET_MISS_REASONS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -104,7 +106,8 @@ def expand() -> list[ReplayCase]:
         # a case that depends on an inherited variable.
         if entry.get("environment"):
             continue
-        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS
+        # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
+        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
         # A setup case keeps its expectation: a generic review there is a regression, not a block.
         expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
@@ -190,8 +193,9 @@ def failure_reasons(case: ReplayCase, result: dict[str, object], approvals: list
 
 def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> str | None:
     """None when the case behaves as expected, otherwise a one-line failure."""
-    if result.get("reason_code") == UNAVAILABLE_REASON:
-        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case.
+    if result.get("reason_code") in BUDGET_MISS_REASONS:
+        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case,
+        # under either of the reason codes a missed budget is reported with.
         return "native review unavailable after retry"
     found = interruptions(case, result, approvals)
     allowed = not any(e["kind"] == "decision" for e in found)

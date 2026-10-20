@@ -43,6 +43,21 @@ fn component_hash(component: &str, value: &Value) -> Result<String, &'static str
     component_hash_with(component, |out| write_canonical_json(value, out))
 }
 
+pub(crate) fn component_matches(token: &str, component: &str, value: &Value) -> bool {
+    let Some(token) = parse_context_token(&Value::String(token.to_owned())) else {
+        return false;
+    };
+    let actual = match component {
+        "identity" => token.identity,
+        "content" => token.content,
+        "capabilities" => token.capabilities,
+        "policy" => token.policy,
+        "sandbox" => token.sandbox,
+        _ => return false,
+    };
+    component_hash(component, value).is_ok_and(|expected| expected == actual)
+}
+
 fn component_hash_with(
     component: &str,
     write_value: impl FnOnce(&mut Vec<u8>) -> Result<(), &'static str>,
@@ -439,6 +454,9 @@ fn evaluate_request(
         } => {
             result.validation_reason = validate_context_tokens(saved_token, current_token);
         }
+        ContextDigestKindV1::ApprovalContextTokenWellFormed { token } => {
+            result.approval_context_token_well_formed = Some(parse_context_token(token).is_some());
+        }
         ContextDigestKindV1::ConfiguredEnvironmentHash {
             values,
             configured_keys,
@@ -490,6 +508,15 @@ fn evaluate_request(
             result.mcp_redacted_value = Some(
                 guard_command::mcp_arguments::redact_json(material).map_err(|_| ERR_ARGUMENTS)?,
             );
+        }
+        ContextDigestKindV1::NativeBashReplyValidation {
+            reply_kind,
+            material,
+            request,
+        } => {
+            result.native_bash_reply_valid = Some(crate::native_bash_reply_validation::validate(
+                reply_kind, material, request,
+            ));
         }
         ContextDigestKindV1::McpLaunchEnvironment {
             inherited,
@@ -817,12 +844,14 @@ fn evaluate_context_digest_request_inner(
         token: None,
         digest: None,
         validation_reason: None,
+        approval_context_token_well_formed: None,
         mcp_launch_environment: None,
         package_context: None,
         mcp_server_identity: None,
         mcp_tool_identity: None,
         browser_mcp: None,
         mcp_redacted_value: None,
+        native_bash_reply_valid: None,
         runtime_identity: None,
         runtime_identity_match: None,
         runtime_identity_reusable: None,

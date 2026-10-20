@@ -75,10 +75,13 @@ pub(in crate::pretool) fn fresh_destination(
         return None;
     }
     let destination = canonical_parent.join(leaf);
+    // Windows canonical paths carry a `\\?\` prefix, which the write check
+    // refuses as a wildcard, so it sees the drive path the prefix stands for.
+    let spelled = crate::runtime_read_paths::strip_verbatim_prefix(destination.clone());
     if protected_worktree_destination(&destination)
         || !(temporary
             || super::super::safe_writes::bounded_native_file_write_target(
-                destination.to_str()?,
+                spelled.to_str()?,
                 context.home_dir,
                 context.cwd,
             ))

@@ -17,7 +17,7 @@ def transport(monkeypatch, tmp_path):
         available=True,
         compatible=True,
         identity=SimpleNamespace(path=tmp_path / "native-runtime", sha256="a" * 64),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "contained-execution-v1", "prompt-analyze-v1")),
+        capabilities=SimpleNamespace(features=("resident-protocol-v2", "contained-execution-v1", "prompt-analyze-v2")),
     )
     client = Mock(return_value=b'{"status":"ok","result":{"decision":"block"}}')
     failed = Mock()
@@ -109,7 +109,7 @@ def test_native_transport_keeps_executable_home_environment_and_payload_bound(tr
 def test_prompt_versioned_reply_preserves_native_false_and_empty_results(transport, tmp_path, result):
     reply = {"schema": "guard-prompt-analyze-result.v1", "result": result}
     transport.client.return_value = json.dumps(reply).encode()
-    assert _request(tmp_path, operation="prompt_analyze", feature="prompt-analyze-v1") == reply
+    assert _request(tmp_path, operation="prompt_analyze", feature="prompt-analyze-v2") == reply
     transport.succeeded.assert_called_once_with("a" * 64, tmp_path)
 
 
@@ -123,7 +123,7 @@ def test_prompt_versioned_reply_preserves_native_false_and_empty_results(transpo
 )
 def test_prompt_reply_requires_the_exact_versioned_envelope(transport, tmp_path, reply):
     transport.client.return_value = json.dumps(reply).encode()
-    assert _request(tmp_path, operation="prompt_analyze", feature="prompt-analyze-v1") is None
+    assert _request(tmp_path, operation="prompt_analyze", feature="prompt-analyze-v2") is None
     transport.succeeded.assert_not_called()
 
 

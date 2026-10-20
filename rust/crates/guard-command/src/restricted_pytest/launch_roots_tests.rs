@@ -229,3 +229,30 @@ fn a_linked_worktree_runs_programs_from_its_main_checkout() {
     ));
     let _ = fs::remove_dir_all(root);
 }
+
+/// The sealed system directories beside `/usr/bin` hold the tools a session
+/// reads its own machine with. `/usr` cannot be taken whole on macOS because
+/// `/usr/local` is writable by an admin user, so each one is named; leaving
+/// `/usr/sbin` and `/sbin` out made `sysctl -n hw.ncpu` unreachable and sent
+/// a command that only reports the CPU count to review. Linux executes all of
+/// `/usr` and `/sbin`, and the sandbox PATH keeps those entries there too.
+#[test]
+fn the_sealed_system_program_directories_are_reachable() {
+    let root = scratch();
+    for program in ["sysctl", "ifconfig", "ping", "netstat"] {
+        if Path::new("/usr/sbin").join(program).exists()
+            || Path::new("/sbin").join(program).exists()
+        {
+            assert!(
+                !outside(&root, program, "/usr/bin:/bin:/usr/sbin:/sbin"),
+                "{program}"
+            );
+        }
+    }
+    // `/usr/local` is not a program root: an admin user writes there, so a
+    // command could run something it had just placed in it.
+    tool(&root.join("tools").join("planted"), "#!/bin/sh\nexit 0\n");
+    let tools = root.join("tools");
+    assert!(outside(&root, "planted", tools.to_str().unwrap()));
+    let _ = fs::remove_dir_all(&root);
+}

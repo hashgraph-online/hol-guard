@@ -135,18 +135,27 @@ fn links_into_a_sibling_worktree_by_relative_parent_proceed() {
     let home = home();
     let h = home.display();
     for harness in ["omp", "zcode", "claude-code", "codex"] {
-        let command = format!("ln -s {h}/main/dashboard/node_modules ../linked/node_modules");
-        assert_eq!(
-            action(&home, harness, &command),
-            "allow",
-            "{harness}: {command}"
-        );
+        for command in [
+            format!("ln -s {h}/main/dashboard/node_modules ../linked/node_modules"),
+            // A directory already standing at the link path takes the link
+            // inside it, under the target's own base name, which is the same
+            // write as naming `../linked/dashboard/node_modules` outright.
+            format!("ln -s {h}/main/dashboard/node_modules ../linked/dashboard"),
+        ] {
+            assert_eq!(
+                action(&home, harness, &command),
+                "allow",
+                "{harness}: {command}"
+            );
+        }
     }
     for command in [
         // Another repository, the home itself, or a name that is not fresh.
         format!("ln -s {h}/main/dashboard/node_modules ../other/node_modules"),
         format!("ln -s {h}/main/dashboard/node_modules ../modules-link"),
-        format!("ln -s {h}/main/dashboard/node_modules ../linked/dashboard"),
+        // `../linked/dashboard/src` already exists, so the deeper name the
+        // link would take is not free either.
+        format!("ln -s {h}/main/src ../linked/dashboard"),
         // The leaf must be a plain, visible name.
         format!("ln -s {h}/main/dashboard/node_modules ../linked/.modules"),
         format!("ln -s {h}/main/dashboard/node_modules ../linked/.."),

@@ -8,6 +8,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sqlite3
 import sys
 from typing import TYPE_CHECKING
 
@@ -118,6 +119,7 @@ def _run_guard_execute_contained_test_command(
     store: GuardStore | None = None,
     **_kwargs: object,
 ) -> int:
+    from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
     from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, collect_hook_execution_environment
     from ..runtime.contained_test_hook import read_contained_test_request, run_authorized_contained_test
     from ..runtime.restricted_pytest import RestrictedPytestError
@@ -143,6 +145,12 @@ def _run_guard_execute_contained_test_command(
             Path(args.request_file), str(args.request_sha256), workspace=workspace,
         )
         request_validated = True
+        # A CLI that Desktop has replaced cannot reach the resident that
+        # follows the new Core. Say so now instead of after every
+        # acknowledgement window has run out.
+        superseded = superseded_desktop_core()
+        if superseded is not None:
+            raise RestrictedPytestError(OUT_OF_SYNC_REASON, superseded.message())
         # The workspace sandbox asks this store for the grant it is widened by.
         with grant_store(store):
             return run_authorized_contained_test(
@@ -175,6 +183,71 @@ def _run_guard_execute_contained_test_command(
                 request_file = Path(args.request_file)
                 request_file.unlink(missing_ok=True)
                 request_file.parent.rmdir()
+
+def _run_guard_ack_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_ack import acknowledge
+    from ..native_bash_protocol import NativeBashError
+
+    if guard_home is None or workspace is None or store is None:
+        return 126
+    try:
+        recorded = acknowledge(
+            guard_home=guard_home, store_path=store.path, project=workspace,
+            base_id=str(args.operation_id), harness=str(args.harness),
+            tool_call_id=str(args.tool_call_id), exit_code=args.exit_code,
+        )
+        if recorded:
+            return 0
+        print("native_bash_ack_not_recorded", file=sys.stderr)
+        return 125
+    except (NativeBashError, OSError, RuntimeError, ValueError, sqlite3.Error):
+        print("native_bash_ack_unavailable", file=sys.stderr)
+        return 125
+
+
+def _run_guard_execute_bound_bash_command(
+    args: argparse.Namespace, *, guard_home: Path | None = None,
+    workspace: Path | None = None, context: HarnessContext | None = None,
+    store: GuardStore | None = None, **_kwargs: object,
+) -> int:
+    from ..native_bash_protocol import NativeBashError
+    from ..runtime.bound_bash_sink import run_bound_bash
+    from ..runtime.contained_test_hook import read_contained_test_request
+    from ..runtime.restricted_pytest import RestrictedPytestError
+
+    if guard_home is None or workspace is None or context is None or store is None:
+        return 126
+    validated = False
+    try:
+        payload = read_contained_test_request(Path(args.request_file), str(args.request_sha256), workspace=workspace)
+        validated = True
+        return run_bound_bash(
+            payload, store=store, workspace=workspace, harness=str(args.harness),
+            operation_id=str(args.operation_id), timeout_seconds=args.timeout_seconds,
+            host_owner_pid=getattr(args, "host_owner_pid", None),
+            tool_call_id=getattr(args, "tool_call_id", None),
+        )
+    except NativeBashError as error:
+        print(error.code, file=sys.stderr)
+        return 125
+    except RestrictedPytestError as error:
+        print(error.reason_code, file=sys.stderr)
+        return error.exit_code
+    except (OSError, RuntimeError, ValueError, sqlite3.Error):
+        # A missing policy/store answer cannot select an alternate executor.
+        # Do not expose request contents or integrity-provider diagnostics.
+        print("native_bash_sink_unavailable", file=sys.stderr)
+        return 125
+    finally:
+        if validated:
+            with suppress(OSError):
+                request_file = Path(args.request_file)
+                request_file.unlink(missing_ok=True)
+                request_file.parent.rmdir()
+
 
 def _run_guard_command_inspection_command(
     args: argparse.Namespace,
@@ -748,11 +821,13 @@ def _run_guard_mcp_command(
 
 
 __all__ = [
+    "_run_guard_ack_bound_bash_command",
     "_run_guard_apps_command",
     "_run_guard_bootstrap_command",
     "_run_guard_command_inspection_command",
     "_run_guard_dashboard_command",
     "_run_guard_detect_command",
+    "_run_guard_execute_bound_bash_command",
     "_run_guard_execute_contained_test_command",
     "_run_guard_init_command",
     "_run_guard_install_command",

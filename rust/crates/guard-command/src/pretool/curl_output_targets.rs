@@ -61,8 +61,18 @@ pub(in crate::pretool) fn scratch_output_target(
         )
 }
 
-/// An existing regular file with an execute bit. Truncating it replaces a
-/// program that a later step may run.
+/// Extensions Windows runs a file by. A fixed list, not the caller's PATHEXT,
+/// which the agent's environment controls. `.js` and `.psm1` are left out:
+/// in a workspace they are source a tool loads, like a `.py` file, not a
+/// program run by name, and POSIX hosts treat them the same way.
+#[cfg(windows)]
+const WINDOWS_PROGRAM_EXTENSIONS: &[&str] = &[
+    "bat", "cmd", "com", "cpl", "exe", "jse", "msc", "msi", "ps1", "scr", "vbe", "vbs", "wsf",
+    "wsh",
+];
+
+/// An existing regular file with an execute bit, or on Windows a program
+/// extension. Truncating it replaces a program that a later step may run.
 pub(in crate::pretool) fn existing_executable(target: &str, cwd: Option<&str>) -> bool {
     let path = Path::new(target);
     let path = match cwd {
@@ -76,7 +86,20 @@ pub(in crate::pretool) fn existing_executable(target: &str, cwd: Option<&str>) -
         std::fs::metadata(&path)
             .is_ok_and(|metadata| metadata.is_file() && metadata.permissions().mode() & 0o111 != 0)
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        // Windows drops trailing dots and spaces when it opens a name, so
+        // `tool.exe.` is `tool.exe`.
+        let extension = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.trim_end_matches(['.', ' ']))
+            .and_then(|name| name.rsplit_once('.'))
+            .map(|(_, extension)| extension.to_ascii_lowercase());
+        extension.is_some_and(|extension| WINDOWS_PROGRAM_EXTENSIONS.contains(&extension.as_str()))
+            && std::fs::metadata(&path).is_ok_and(|metadata| metadata.is_file())
+    }
+    #[cfg(all(not(unix), not(windows)))]
     {
         let _ = path;
         false

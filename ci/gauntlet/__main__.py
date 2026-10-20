@@ -9,6 +9,7 @@ import math
 import os
 import signal
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .catalog import CATALOG, CONNECTOR_CATALOG, load_catalog
@@ -61,7 +62,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument(
         "--fail-fast",
         action="store_true",
-        help="Stop scheduling new cases after the first non-pass outcome; in-flight cases finish normally",
+        help="Stop scheduling new cases after the first false positive or false negative; a case the model "
+        "never exercised, a dead provider round or a host-tool failure is recorded and the run continues",
     )
     run.add_argument(
         "--host-slots",
@@ -174,7 +176,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     qualify.add_argument("--sha", required=True, help="Full commit of the tested source or test merge")
     qualify.add_argument("--candidate-sha", help="PR head when qualifying its exact two-parent test merge")
-    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-3)")
+    # The ceiling is spelled here rather than imported so the parser stays cheap to build;
+    # `test_attempt_budget` pins it to `qualify.ATTEMPT_LIMIT`, which does the rejecting.
+    qualify.add_argument("--attempts", type=int, default=2, help="Bounded fresh runs (1-10)")
     qualify.add_argument(
         "--jobs",
         type=int,
@@ -200,6 +204,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Total seconds to wait on host load before proceeding anyway",
     )
     qualify.add_argument("--effort", choices=("medium", "high", "low"), default="medium")
+    qualify.add_argument("--native-route", help="Explicit pinned native OMP backend (default: Luna)")
     qualify.add_argument("--cache-root", type=Path, default=Path.home() / ".cache" / "hol-guard-gauntlet")
     qualify.add_argument(
         "--run-root",
@@ -213,6 +218,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     qualify.add_argument(
         "--wheel", type=Path, help="Prebuilt native wheel; required on hosts other than macOS and Linux x86_64"
+    )
+    qualify.add_argument(
+        "--wheel-release-assets",
+        type=Path,
+        help="Directory of command packs that --wheel's build exported, served to the extension-control cases",
     )
     qualify.add_argument(
         "--release-profile-wheel",
@@ -238,10 +248,12 @@ def main(argv: list[str] | None = None) -> int:
             print(json.dumps(rows, indent=2))
             return 0
         if args.command == "installed":
+            from .harness_case import require_account_database
             from .installed_lane import run_lane
 
             if not 1 <= args.repeat <= 100:
                 raise ValueError("--repeat is supported from 1 through 100")
+            require_account_database()
             evidence = run_lane(
                 runtime_path=args.runtime,
                 harnesses=list(args.harness),
@@ -300,7 +312,7 @@ def main(argv: list[str] | None = None) -> int:
 
             return qualify_main(args)
         full_task_cli.validate(args)
-        if args.profile in {"approval-retry", "connector-setup"} and args.harness == "omp":
+        if args.profile == "connector-setup" and args.harness == "omp":
             raise ValueError(f"--profile {args.profile} runs through an installed harness CLI, not the omp lane")
         if args.harness != "omp":
             return _run_harness(args)
@@ -370,6 +382,7 @@ def main(argv: list[str] | None = None) -> int:
         from .contained import run_contained_profile
         from .runner import run_suite
 
+        route_health: Callable[[], str | None] | None = None
         with contextlib.ExitStack() as stack:
             if args.native_luna_route:
                 from .luna_route import NativeLunaRoute
@@ -389,6 +402,7 @@ def main(argv: list[str] | None = None) -> int:
                     )
                 )
                 provider = route.provider(max_rounds=args.max_inference_rounds, timeout=min(args.timeout, 120))
+                route_health = route.health
             else:
                 provider = {
                     "base_url": args.provider_url,
@@ -425,10 +439,12 @@ def main(argv: list[str] | None = None) -> int:
                     candidate_sha=args.candidate_sha,
                     jobs=args.jobs,
                     fail_fast=args.fail_fast,
+                    route_health=route_health,
                     host_slots=args.host_slots,
                     slot_dir=args.slot_dir,
                     max_load=args.max_load,
                     max_load_wait=args.max_load_wait if args.max_load_wait is not None else 180.0,
+                    profile=args.profile,
                 )
         print(
             json.dumps(
@@ -468,6 +484,11 @@ def _run_harness(args: argparse.Namespace) -> int:
         raise ValueError("--full-task-mode requires --profile full-tasks")
     if not 30 <= args.timeout <= 1800:
         raise ValueError("host timeout is outside supported bounds")
+    from .harness_case import require_account_database
+
+    # All managed installs, including Cursor, acquire the lifecycle lock.
+    # Fail before setting up a lane if the OS account cannot be resolved.
+    require_account_database()
     if args.profile == "full-tasks":
         from .full_task_cli import run_harness_profile
 

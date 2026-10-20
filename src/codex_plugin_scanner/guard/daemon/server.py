@@ -17,7 +17,7 @@ import tempfile
 import threading
 import time
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
@@ -34,15 +34,11 @@ from ..approval_gate import (
 )
 from ..approval_gate import input_from_mapping as approval_gate_input_from_mapping
 from ..browser_opener import open_browser_url
+from ..catalog_delivery import lifecycle
 from ..codex_live_decision import complete_codex_live_decision, resolve_codex_live_allow_authority
 from ..codex_live_decision_revalidation import revalidate_codex_live_allow
 from ..config import (
     load_guard_config,
-)
-from ..directory_path_authority import (
-    DirectoryPathTrustError,
-    trusted_guard_directory_roots,
-    validate_guard_directory_path,
 )
 from ..fork_safety import forget_in_child
 from ..json_transport import escape_json_for_html
@@ -70,22 +66,31 @@ from ..native_daemon_route import (
     native_session_authorize,
     native_strict_loopback_origin,
 )
+from ..native_directory_trust import (
+    UNAVAILABLE_REASON as _DIRECTORY_TRUST_UNAVAILABLE,
+)
+from ..native_directory_trust import (
+    DirectoryTrustCandidate,
+    DirectoryTrustVerdict,
+    NativeDirectoryTrustError,
+    native_directory_trust,
+)
 from ..native_guard_store import NativeGuardStoreUnavailable
 from ..native_hook_evidence_writer import NativeHookEvidenceWriter, unreachable_writer_stats
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_resident_revival import native_route_unavailable_body
 from ..native_resident_watchdog import start_native_resident_watchdog
 from ..native_runtime_request_scope import scoped_hook_post
 from ..package_firewall_action_rate_limit import PackageFirewallActionRateLimiter
-from ..path_resolution_cache import cached_realpath
 from ..runtime.approval_attention import ApprovalAttentionCoordinator
 from ..runtime.cloud_review_sync import CloudReviewSyncWorker, start_cloud_sync_sync_worker, stop_cloud_sync_sync_worker
-from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY, CommandSafetyExtensionRegistry
+from ..runtime.extension_control_authority import ExtensionControlAuthorityView
 from ..runtime.extension_control_runtime import (
     ExtensionControlRuntime,
     ExtensionControlRuntimeSnapshot,
 )
 from ..runtime.isolation_provider import load_managed_provider_registry
-from ..runtime.local_temp_paths import trusted_temporary_root_for_path
 from ..runtime.network_status import project_network_supervisor_health
 from ..runtime.network_supervisor import NetworkSupervisor
 from ..runtime.runner import (
@@ -214,6 +219,10 @@ _DEFAULT_HEADLESS_CLOUD_SYNC_INTERVAL_SECONDS = 30.0
 _DEFAULT_HEADLESS_CLOUD_SYNC_BACKOFF_SECONDS = 10.0
 
 
+class _InstalledAuthorityMigrationError(Exception):
+    """The installed release's command-pack authority is not migrated yet."""
+
+
 class _HookPathValidationError(ValueError):
     def __init__(self, parameter: str, reason: str) -> None:
         self.parameter = parameter
@@ -222,6 +231,50 @@ class _HookPathValidationError(ValueError):
         super().__init__(f"invalid_hook_{parameter_slug}_path")
         self.code = f"invalid_hook_{parameter_slug}_path"
 
+
+# One request spells the same directory several ways -- the query string, the
+# payload, the exec command's own working directory -- and each spelling is
+# labelled apart so their verdicts cannot collide. A caller still sees the
+# parameter the route has always reported, whichever spelling was refused.
+_REPORTED_HOOK_PARAMETER = {
+    "exec-workdir": "workspace",
+    "workspace-payload": "workspace",
+    "workspace-query": "workspace",
+}
+
+
+def _reported_hook_parameter(parameter: str) -> str:
+    """The name a rejection of this candidate is reported under."""
+
+    return _REPORTED_HOOK_PARAMETER.get(parameter, parameter)
+
+
+class _HookDirectories:
+    """The directories one hook request named, as the native owner settled them.
+
+    Every candidate is asked for in a single call, so the handler reads its
+    verdicts back in whatever order the route needs without paying for a
+    round trip per path. A parameter the request did not carry has no verdict
+    and reads as `None`, which is what an absent directory meant before.
+    """
+
+    def __init__(self, verdicts: Sequence[DirectoryTrustVerdict]) -> None:
+        self._verdicts = {verdict.parameter: verdict for verdict in verdicts}
+
+    def require(self, parameter: str) -> str | None:
+        """The settled path for one candidate, or `None` where it named none."""
+
+        verdict = self._verdicts.get(parameter)
+        if verdict is None:
+            return None
+        if verdict.reason is not None:
+            raise _HookPathValidationError(_reported_hook_parameter(parameter), verdict.reason)
+        return verdict.path
+
+
+# A fail-safe hook answer stands in for a runtime that has just failed, so it
+# waits only this long for the directories it reports.
+_FAIL_SAFE_DIRECTORY_TRUST_SECONDS = 0.5
 
 _MAX_CONCURRENT_DAEMON_REQUESTS = 32
 _MAX_CONCURRENT_DAEMON_CONTROL_REQUESTS = 8
@@ -299,6 +352,11 @@ _PEER_DISCONNECT_ERRORS = (BrokenPipeError, ConnectionResetError, ConnectionAbor
 
 class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
     request_queue_size = _MAX_CONCURRENT_DAEMON_CONNECTIONS
+    # Set while the installed release's authority still awaits migration.
+    _installed_authority_pending: bool = False
+    # Set while the control API serves the core registry because startup could
+    # not read the installed authority.
+    _extension_control_on_core_registry: bool = False
     store: GuardStore
     runtime: GuardSurfaceRuntime
     auth_token: str
@@ -542,12 +600,27 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 capture_writer=self.codex_binding_capture_writer,
             )
             bind_hook_counter_sink(self.hook_worker, getattr(self, "diagnostics", None))
-            self.extension_control_runtime = ExtensionControlRuntime(
-                self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-            )
+            from ..catalog_delivery.projection import capture
+
+            try:
+                self._migrate_installed_authority()
+                _, control_registry, _ = capture(self.store)
+                startup_view = self._startup_extension_control_view(control_registry)
+            except (_InstalledAuthorityMigrationError, NativePolicySnapshotError):
+                # An activation record this build cannot authenticate, such as
+                # one written under a newer schema, or an installed release whose
+                # authority could not be migrated, activates nothing. Start on
+                # the core registry with a tampered authority so every hook
+                # fails closed, rather than taking hook protection down with
+                # the daemon. The refresh loop keeps this snapshot until the
+                # record reads again.
+                control_registry = BUILT_IN_COMMAND_EXTENSION_REGISTRY
+                startup_view = self.store._tampered_view(control_registry.catalog_digest)
+                self._extension_control_on_core_registry = True
+            self.extension_control_runtime = ExtensionControlRuntime(startup_view)
             self.extension_control_api = ExtensionControlApiService(
                 store=self.store,
-                registry=BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+                registry=control_registry,
                 runtime=self.extension_control_runtime,
             )
             self.local_cli_api = LocalCliApiService(store=self.store)
@@ -555,6 +628,7 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 store=self.store,
                 runtime=self.runtime,
                 opener=open_browser_url,
+                home_dir=self.home_dir,
             )
             self.general_request_executor = _BoundedRequestExecutor(
                 name="general",
@@ -583,19 +657,100 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 self.codex_binding_capture_writer.stop_capture()
             raise
 
-    def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
-        from ..native_command_control_authority_io import NativeCommandControlMutationRequiredError
+    def _migrate_installed_authority(self) -> None:
+        """Admit the installed release, or report why it cannot be admitted yet.
+
+        A failure leaves the migration pending. The daemon then starts on a
+        tampered authority, so every hook fails closed instead of the daemon
+        exiting, and each refresh retries it before reading anything newer.
+        """
 
         try:
-            view = self.store.read_extension_control_authority_for_registry(
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY, read_only=True
+            self.store.migrate_installed_command_pack_authority()
+        except Exception as error:
+            self._installed_authority_pending = True
+            _LOGGER.warning("Installed command-pack authority could not be migrated: %s", error, exc_info=True)
+            raise _InstalledAuthorityMigrationError from error
+        self._installed_authority_pending = False
+
+    def _startup_extension_control_view(
+        self, registry: CommandSafetyExtensionRegistry
+    ) -> ExtensionControlAuthorityView:
+        """Read the authority for startup without letting a busy lease stop the daemon.
+
+        A lease timeout reports that the authority was not read, never that it
+        is unhealthy, so this falls back to the shared lease that a reader can
+        always join. Only if that is unobtainable too does the daemon start on
+        a view with no layers, which the next refresh replaces. Refusing to
+        start would take the hook worker down with it, and a daemon that is not
+        there protects nothing.
+
+        Both attempts take the same exclusive entry gate, so they share one
+        acquisition budget rather than waiting it twice in sequence. The
+        exclusive attempt gets half of it, which leaves the shared fallback a
+        span to run in instead of arriving after the budget is already spent.
+        """
+
+        from ..native_command_control_authority_io import (
+            AUTHORITY_LOCK_TIMEOUT_SECONDS,
+            NativeCommandControlAuthorityUnavailableError,
+            NativeCommandControlMutationRequiredError,
+        )
+
+        deadline = time.monotonic() + AUTHORITY_LOCK_TIMEOUT_SECONDS
+        with suppress(NativeCommandControlAuthorityUnavailableError):
+            return self.store.read_extension_control_authority_for_registry(
+                registry, lock_timeout_seconds=AUTHORITY_LOCK_TIMEOUT_SECONDS / 2
             )
-        except NativeCommandControlMutationRequiredError:
-            # Release the shared read before a migration takes an exclusive
-            # lease and re-verifies authority. Routine refreshes must coexist
-            # with the native decision's shared mutation fence.
-            view = self.store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-        return self.extension_control_runtime.refresh(view)
+        remaining = deadline - time.monotonic()
+        if remaining > 0.0:
+            with suppress(NativeCommandControlAuthorityUnavailableError, NativeCommandControlMutationRequiredError):
+                return self.store.read_extension_control_authority_for_registry(
+                    registry, read_only=True, lock_timeout_seconds=remaining
+                )
+        return self.store.extension_control_authority_unreadable_view(registry.catalog_digest)
+
+    def refresh_extension_control_runtime(self) -> ExtensionControlRuntimeSnapshot:
+        from ..catalog_delivery.projection import capture, require_current
+        from ..native_command_control_authority_io import (
+            NativeCommandControlAuthorityUnavailableError,
+            NativeCommandControlMutationRequiredError,
+            hold_command_control_authority_lock,
+        )
+        from ..native_command_control_authority_store import _key
+
+        def read(*, shared: bool) -> ExtensionControlRuntimeSnapshot:
+            _, registry, activation_digest = capture(self.store)
+            with hold_command_control_authority_lock(self.store.guard_home, shared=shared):
+                require_current(self.store, _key(self.store), activation_digest)
+                view = self.store.read_extension_control_authority_for_registry(registry, read_only=shared)
+                snapshot = self.extension_control_runtime.refresh(view)
+            if self._extension_control_on_core_registry:
+                # Startup bound the control API to the core registry. Once the
+                # authority reads again, serve the registry it was read for so
+                # previews and mutations stop failing against the core one.
+                self.extension_control_api.rebind_registry(registry)
+                self._extension_control_on_core_registry = False
+            return snapshot
+
+        if self._installed_authority_pending:
+            try:
+                self._migrate_installed_authority()
+            except _InstalledAuthorityMigrationError:
+                # Nothing newer is admitted until the release is migrated.
+                return self.extension_control_runtime.current()
+        try:
+            try:
+                return read(shared=True)
+            except NativeCommandControlMutationRequiredError:
+                # Release the shared lease before migration and recapture the
+                # active projection under the exclusive mutation fence.
+                return read(shared=False)
+        except NativeCommandControlAuthorityUnavailableError:
+            # Nothing was read, so there is nothing to refresh from. Keeping the
+            # snapshot already installed beats replacing a known authority with
+            # the absence of a reading.
+            return self.extension_control_runtime.current()
 
     def process_request(self, request: Any, client_address: Any) -> None:
         request_socket = cast(socket.socket, request)
@@ -1738,21 +1893,22 @@ class _GuardDaemonHandler(
         """
 
         params = parse_qs(query)
-        workspace_candidate = self._normalized_hook_workspace_string(
+        workspace_candidate = self._hook_workspace_spelling(
             params.get("workspace", [None])[-1] or payload.get("workspace") or payload.get("cwd")
         )
         try:
-            _ = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
+            guard_home_candidate = self._optional_string(params.get("guard-home", [None])[-1])
+            _ = self._settled_hook_directories(("guard-home", guard_home_candidate)).require("guard-home")
+            # An unmanaged harness is ready without a workspace, so it is not
+            # held behind settling one it will never use.
             if _hook_harness_is_unmanaged(self._daemon_server(), default_harness):
                 self._write_json(
                     {"ready": True, "native_required": False, "workspace_acknowledged": False, "worker_ready": True},
                     extra_headers={"Cache-Control": "no-store"},
                 )
                 return
-            workspace = self._validated_hook_directory_string(
-                "workspace",
-                workspace_candidate,
-                roots=self._hook_safe_roots(),
+            workspace = self._settled_hook_directories(("workspace", workspace_candidate, "hook-workspace")).require(
+                "workspace"
             )
         except _HookPathValidationError as error:
             self._record_hook_path_rejection(parameter=error.parameter, reason=error.reason)
@@ -1828,26 +1984,60 @@ class _GuardDaemonHandler(
         )
         payload = {key: value for key, value in payload.items() if key != "hook_env"}
         daemon_server = self._daemon_server()
-        paths_validated = False
-        try:
-            home_dir = self._validated_hook_directory_string(
-                "home",
-                self._optional_string(params.get("home", [None])[-1]),
-                roots=self._hook_safe_roots(),
+        # Oh My Pi has no bridge to ask the resident first, so ask it here.
+        # The raw `home` query goes with the raw workspace: the resident
+        # settles both against the lane it bound, and a home it cannot settle
+        # defers to the daemon path below, which refuses and audits it. Asking
+        # the runtime to settle directories first would spend a round trip per
+        # hook on the answer path, where nothing here reads the result.
+        #
+        # A `guard-home` query is the exception, because the lane never sends
+        # it: it answers out of the home it bound, so a request naming another
+        # Guard home would be answered without that claim being refused or
+        # audited. Spelling it the same way as this daemon's own home is the
+        # only claim the lane may answer, and this comparison costs no round
+        # trip. A spelling that merely looks different -- a link, a relative
+        # path -- is not refused here; it goes down the daemon path, which
+        # settles it properly and refuses or admits it there.
+        if self._hook_guard_home_query_is_this_home(params, daemon_server):
+            direct_response = pi_direct_answer(
+                getattr(daemon_server, "hook_worker", None),
+                default_harness=default_harness,
+                params=params,
+                payload=payload,
+                home_dir=self._optional_string(params.get("home", [None])[-1]),
+                deadline=hook_deadline.expires_at,
             )
-            guard_home = self._validated_hook_guard_home(self._optional_string(params.get("guard-home", [None])[-1]))
-            workspace_query = self._normalized_hook_workspace_string(params.get("workspace", [None])[-1])
-            action_workdir_provided, action_workdir = self._runtime_hook_exec_command_workdir(payload)
+            if direct_response is not None:
+                self._write_json(direct_response)
+                return
+
+        try:
+            action_workdir_provided, action_workdir_spelling = self._runtime_hook_exec_command_workdir(payload)
+            # One call settles every directory this request named, including
+            # each spelling of the workspace; the verdicts are still read in
+            # the order the route rejects in, and a spelling the route never
+            # reaches is never held against it.
+            directories = self._settled_hook_directories(
+                ("home", self._optional_string(params.get("home", [None])[-1])),
+                ("guard-home", self._optional_string(params.get("guard-home", [None])[-1])),
+                ("exec-workdir", action_workdir_spelling, "exec-workdir"),
+                ("workspace-payload", self._hook_workspace_spelling(payload.get("cwd")), "hook-workspace"),
+                (
+                    "workspace-query",
+                    self._hook_workspace_spelling(params.get("workspace", [None])[-1]),
+                    "hook-workspace",
+                ),
+                deadline_monotonic=hook_deadline.expires_at,
+            )
+            home_dir = directories.require("home")
+            guard_home = directories.require("guard-home")
+            action_workdir = directories.require("exec-workdir")
             if action_workdir_provided and action_workdir is None:
                 raise _HookPathValidationError("workspace", "invalid_action_workdir")
-            payload_workspace = self._normalized_hook_workspace_string(payload.get("cwd"))
-            workspace_candidate = action_workdir or payload_workspace or workspace_query
-            workspace = self._validated_hook_directory_string(
-                "workspace",
-                workspace_candidate,
-                roots=self._hook_safe_roots(),
+            workspace = (
+                action_workdir or directories.require("workspace-payload") or directories.require("workspace-query")
             )
-            paths_validated = True
         except _HookPathValidationError as error:
             # The Rust edge still receives the complete raw payload. Use
             # daemon-owned metadata when an optional caller context is
@@ -1857,20 +2047,6 @@ class _GuardDaemonHandler(
             home_dir = str(daemon_server.home_dir)
             guard_home = str(daemon_server.store.guard_home)
             workspace = None
-
-        if paths_validated:
-            # Oh My Pi has no bridge to ask the resident first, so ask it here.
-            direct_response = pi_direct_answer(
-                getattr(daemon_server, "hook_worker", None),
-                default_harness=default_harness,
-                params=params,
-                payload=payload,
-                home_dir=home_dir,
-                deadline=hook_deadline.expires_at,
-            )
-            if direct_response is not None:
-                self._write_json(direct_response)
-                return
 
         if not prepare_native_hook_policy(
             self, daemon_server, payload, params, default_harness, workspace, hook_deadline.expires_at
@@ -1882,7 +2058,11 @@ class _GuardDaemonHandler(
             (runtime_harness or default_harness).strip().lower().replace("_", "-")
         )
         try:
-            referenced_payload_bytes = hook_payload_reference_size(payload)
+            referenced_payload_bytes = hook_payload_reference_size(
+                payload,
+                guard_home=daemon_server.store.guard_home,
+                deadline_monotonic=hook_deadline.expires_at,
+            )
             payload_bytes = (
                 referenced_payload_bytes
                 if referenced_payload_bytes is not None
@@ -1900,6 +2080,7 @@ class _GuardDaemonHandler(
                     default_harness=default_harness,
                     reason="HOL Guard could not authenticate the local hook payload.",
                     reason_code="invalid_hook_payload_reference",
+                    hook_deadline=hook_deadline.expires_at,
                 )
             )
             return
@@ -1916,6 +2097,7 @@ class _GuardDaemonHandler(
                     params,
                     default_harness=default_harness,
                     reason_code=reservation_reason,
+                    hook_deadline=hook_deadline.expires_at,
                 )
             )
             return
@@ -2025,6 +2207,7 @@ class _GuardDaemonHandler(
         *,
         default_harness: str,
         reason_code: RuntimeHookAdmissionReason | None = None,
+        hook_deadline: float | None = None,
     ) -> dict[str, object]:
         resolved_reason_code = reason_code or "daemon_hook_queue_capacity"
         if resolved_reason_code == "daemon_hook_deadline_exhausted":
@@ -2037,6 +2220,7 @@ class _GuardDaemonHandler(
             default_harness=default_harness,
             reason=reason,
             reason_code=resolved_reason_code,
+            hook_deadline=hook_deadline,
         )
 
     def _runtime_hook_fail_safe_response(
@@ -2047,12 +2231,13 @@ class _GuardDaemonHandler(
         default_harness: str,
         reason: str,
         reason_code: str,
+        hook_deadline: float | None = None,
     ) -> dict[str, object]:
         runtime_harness = self._optional_string(params.get("runtime-harness", [None])[-1])
         harness = (runtime_harness or default_harness).strip().lower().replace("_", "-")
         event = self._optional_string(payload.get("hook_event_name", payload.get("event"))) or "PreToolUse"
         daemon_server = getattr(self, "server", None)
-        workspace_path, home_path = self._validated_fail_safe_hook_paths(params)
+        workspace_path, home_path = self._validated_fail_safe_hook_paths(params, hook_deadline=hook_deadline)
         guard_home = None if daemon_server is None else cast(_GuardDaemonHttpServer, daemon_server).store.guard_home
         from ..native_policy_snapshot_acked import recording_only_from_acked_snapshot
         from .hook_availability_policy import availability_harness_response
@@ -2073,31 +2258,43 @@ class _GuardDaemonHandler(
     def _validated_fail_safe_hook_paths(
         self,
         params: Mapping[str, list[str]],
+        *,
+        hook_deadline: float | None = None,
     ) -> tuple[Path | None, Path | None]:
-        """Return workspace and home directories that passed hook path validation."""
+        """Return workspace and home directories that passed hook path validation.
 
-        return (
-            self._validated_fail_safe_directory(params, "workspace"),
-            self._validated_fail_safe_directory(params, "home"),
-        )
+        This answer is built when the runtime has just failed or is overloaded,
+        so both directories are settled in one call against a short deadline:
+        a fail-safe response must not wait on the runtime it is standing in for.
+        """
 
-    def _validated_fail_safe_directory(
-        self,
-        params: Mapping[str, list[str]],
-        parameter: str,
-    ) -> Path | None:
-        value = self._optional_string(params.get(parameter, [None])[-1])
-        if not value:
-            return None
+        deadline = time.monotonic() + _FAIL_SAFE_DIRECTORY_TRUST_SECONDS
+        if hook_deadline is not None:
+            deadline = min(deadline, hook_deadline)
+        if time.monotonic() >= deadline:
+            # A fail-safe answer must not start another RPC after the hook
+            # budget expires; omitting unverified paths remains fail closed.
+            return (None, None)
         try:
-            validated = self._validated_hook_directory_string(
-                parameter,
-                value,
-                roots=self._hook_safe_roots(),
+            directories = self._settled_hook_directories(
+                ("workspace", self._optional_string(params.get("workspace", [None])[-1])),
+                ("home", self._optional_string(params.get("home", [None])[-1])),
+                deadline_monotonic=deadline,
             )
         except _HookPathValidationError:
+            return (None, None)
+        return (
+            self._fail_safe_directory(directories, "workspace"),
+            self._fail_safe_directory(directories, "home"),
+        )
+
+    @staticmethod
+    def _fail_safe_directory(directories: _HookDirectories, parameter: str) -> Path | None:
+        try:
+            settled = directories.require(parameter)
+        except _HookPathValidationError:
             return None
-        return Path(validated) if validated else None
+        return Path(settled) if settled else None
 
     def _execute_runtime_hook(
         self,
@@ -2132,6 +2329,7 @@ class _GuardDaemonHandler(
                     default_harness=default_harness,
                     reason="HOL Guard could not complete the native hook decision safely.",
                     reason_code="native_hook_worker_unavailable",
+                    hook_deadline=deadline,
                 )
             # A review that finished late still finished: the answer carries the
             # same decision the native edge would have sent on time, so send it
@@ -2373,6 +2571,29 @@ class _GuardDaemonHandler(
             "daemon.auth.query_token_rejected",
             {"method": self.command, "path": urlparse(self.path).path, "has_query_token": True},
         )
+
+    def _hook_guard_home_query_is_this_home(
+        self,
+        params: Mapping[str, list[str]],
+        daemon_server: object,
+    ) -> bool:
+        """Whether a `guard-home` query, if one was sent, names this daemon's home.
+
+        Answering from the direct lane skips settling directories, so a claim
+        about which Guard home a request belongs to has nothing to check it.
+        Naming no home at all claims nothing and is fine; naming this one is
+        the claim the lane is allowed to answer. Everything else keeps the
+        daemon path, which settles the spelling and records the rejection.
+        """
+        query = self._optional_string(params.get("guard-home", [None])[-1])
+        if query is None:
+            return True
+        try:
+            claimed = os.path.normpath(os.path.expanduser(query))
+            own = os.path.normpath(str(daemon_server.store.guard_home))  # pyright: ignore[reportAttributeAccessIssue]
+        except (AttributeError, TypeError, ValueError):
+            return False
+        return claimed == own
 
     def _record_hook_path_rejection(self, *, parameter: str, reason: str) -> None:
         self._record_bounded_denial_event(
@@ -2811,42 +3032,26 @@ class _GuardDaemonHandler(
             return value.strip()
         return None
 
-    def _validated_hook_directory_string(
-        self,
-        parameter: str,
-        value: str | None,
-        *,
-        roots: tuple[Path, ...] | None = None,
-    ) -> str | None:
-        if value is None:
-            return None
-        return os.fspath(self._validate_hook_directory_path(parameter, value, roots=roots))
-
     @staticmethod
-    def _normalized_hook_workspace_string(value: object) -> str | None:
-        if not isinstance(value, str):
-            return None
-        stripped = value.strip()
-        if not stripped or stripped.lower() in {"none", "null"}:
-            return None
-        # Mirror the CLI hook contract until runtime callers stop emitting `/None`
-        # as the explicit "no workspace" sentinel.
-        candidate = os.path.expanduser(stripped)
-        if os.path.basename(candidate) == "None":
-            candidate = os.path.dirname(candidate)
-            if not candidate.strip():
-                return None
-        candidate = os.path.normpath(candidate)
-        try:
-            temporary_root = trusted_temporary_root_for_path(Path(candidate))
-        except OSError:
-            temporary_root = None
-        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
-            return None
-        return candidate
+    def _hook_workspace_spelling(value: object) -> str | None:
+        """The workspace spelling a hook sent, read out of the request as-is.
+
+        What the spelling means -- a sentinel standing for "no workspace", a
+        `~` to expand, the shared temporary root a workspaceless process runs
+        in -- is the runtime's to settle, under the `hook-workspace` rule.
+        """
+
+        return value if isinstance(value, str) else None
 
     @staticmethod
     def _runtime_hook_exec_command_workdir(payload: dict[str, object]) -> tuple[bool, str | None]:
+        """Whether this call named a working directory, and how it spelled it.
+
+        The flag and the spelling are separate answers: a call that carries a
+        `workdir` Guard cannot use is rejected, while a call that carries none
+        falls through to the workspace the request named elsewhere.
+        """
+
         tool_name = payload.get("tool_name")
         if not isinstance(tool_name, str) or tool_name.strip().casefold() != "exec_command":
             return False, None
@@ -2854,53 +3059,59 @@ class _GuardDaemonHandler(
         if not isinstance(tool_input, dict) or "workdir" not in tool_input:
             return False, None
         value = tool_input.get("workdir")
-        if not isinstance(value, str):
-            return True, None
-        stripped = value.strip()
-        if not stripped or stripped.casefold() in {"none", "null"}:
-            return True, None
-        candidate = os.path.normpath(os.path.expanduser(stripped))
-        try:
-            temporary_root = trusted_temporary_root_for_path(Path(candidate))
-        except OSError:
-            temporary_root = None
-        if temporary_root is not None and cached_realpath(candidate) == cached_realpath(os.fspath(temporary_root)):
-            return True, None
-        return True, candidate
+        return True, value if isinstance(value, str) else None
 
-    def _validate_hook_directory_path(
+    def _settled_hook_directories(
         self,
-        parameter: str,
-        value: str,
-        *,
-        roots: tuple[Path, ...] | None = None,
-    ) -> Path:
+        *candidates: tuple[str, str | None] | tuple[str, str | None, str],
+        deadline_monotonic: float | None = None,
+    ) -> _HookDirectories:
+        """Ask the native owner about every directory this request named.
+
+        The runtime decides which directories a hook may name; this handler
+        only frames the question and reads the answer. A runtime that cannot
+        answer refuses the request rather than letting the daemon work the
+        verdict out for itself, so an unreachable resident never widens what
+        a hook reaches.
+
+        A candidate may carry a third element naming the rule to hold it to,
+        which is how one request asks about several spellings of the same
+        workspace -- the query string, the payload, the call's own working
+        directory -- without their labels colliding.
+
+        A route holding a deadline passes it, so settling paths cannot spend
+        a budget the hook still needs for its own answer.
+        """
+
+        asked: list[DirectoryTrustCandidate] = [
+            (candidate[0], candidate[1], candidate[2]) if len(candidate) == 3 else (candidate[0], candidate[1])
+            for candidate in candidates
+            if candidate[1] is not None
+        ]
+        if not asked:
+            return _HookDirectories(())
         try:
-            return validate_guard_directory_path(
-                value,
-                self._hook_safe_roots() if roots is None else roots,
-                allow_owned_temporary=parameter == "workspace",
+            daemon_server = self._daemon_server()
+            verdicts = native_directory_trust(
+                asked,
+                guard_home=daemon_server.store.guard_home,
+                # The home this daemon was configured with, not whichever home
+                # the process happens to be running as: the runtime expands `~`
+                # against it and treats it as a trusted root, so letting it
+                # fall back to `Path.home()` would settle these paths against a
+                # different home than the one the rest of the route uses.
+                home_dir=daemon_server.home_dir,
+                deadline_monotonic=deadline_monotonic,
             )
-        except DirectoryPathTrustError as error:
-            raise _HookPathValidationError(parameter, error.reason) from error
-
-    def _validated_hook_guard_home(self, value: str | None) -> str | None:
-        if value is None:
-            return None
-        expanded = os.path.expanduser(value)
-        if not os.path.isabs(expanded):
-            raise _HookPathValidationError("guard-home", "relative_path")
-        try:
-            candidate = cached_realpath(expanded)
-        except OSError:
-            raise _HookPathValidationError("guard-home", "path_resolve_failed") from None
-        expected = cached_realpath(os.fspath(self._daemon_server().store.guard_home.expanduser()))
-        if candidate != expected:
-            raise _HookPathValidationError("guard-home", "unexpected_guard_home")
-        return expected
-
-    def _hook_safe_roots(self) -> tuple[Path, ...]:
-        return trusted_guard_directory_roots(self._daemon_server().store.guard_home)
+        except NativeDirectoryTrustError as error:
+            # Nothing was settled, so the request is refused under the first
+            # candidate it named -- reported the same way a verdict against
+            # that candidate would be, not under the label the spellings are
+            # held apart by.
+            raise _HookPathValidationError(
+                _reported_hook_parameter(asked[0][0]), _DIRECTORY_TRUST_UNAVAILABLE
+            ) from error
+        return _HookDirectories(verdicts)
 
     def _write_json(
         self,
@@ -3686,6 +3897,11 @@ class GuardDaemonServer:
             except Exception:
                 contained = False
         contained = self._join_service_background_threads() and contained
+        extension_control_api = getattr(self._server, "extension_control_api", None)
+        if extension_control_api is not None:
+            # Best effort: process exit releases the leases anyway.
+            with suppress(Exception):
+                _ = extension_control_api.release_prepared_cache_leases()
         with suppress(Exception):
             clear_guard_daemon_state_if_current(
                 self._server.store.guard_home,
@@ -3959,11 +4175,34 @@ class GuardDaemonServer:
         self._extension_control_refresh_thread.start()
 
     def _refresh_extension_control_loop(self) -> None:
+        next_security_refresh = 0.0
         while not self._shutdown_started.wait(self._extension_control_refresh_interval_seconds):
+            periodic = time.monotonic() >= next_security_refresh
             try:
-                _ = self._server.refresh_extension_control_runtime()
+                with lifecycle.session():
+                    if periodic:
+                        from ..catalog_delivery.active_security import observe
+                        from ..catalog_delivery.discovery import request_refresh
+
+                        next_security_refresh = time.monotonic() + 300.0
+                        # Security observation must not wait for complete discovery
+                        # traversal. The latter has its own bounded background slot.
+                        try:
+                            observe(self._server.store)
+                        finally:
+                            request_refresh(self._server.store.guard_home, store=self._server.store)
+                    _ = self._server.refresh_extension_control_runtime()
             except Exception:
                 _LOGGER.exception("Failed to refresh resident extension-control authority")
+            if periodic:
+                try:
+                    from ..catalog_delivery.cache_io import cleanup
+
+                    with lifecycle.session():
+                        self._server.extension_control_api.expire_prepared_cache_leases()
+                        cleanup(self._server.store)
+                except Exception:
+                    _LOGGER.exception("Failed to clean the command-pack cache")
 
     def _start_aibom_inventory_refresh(self) -> None:
         if self._aibom_refresh_interval_seconds is None or self._aibom_refresh_interval_seconds <= 0:

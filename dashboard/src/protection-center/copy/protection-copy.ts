@@ -69,15 +69,60 @@ function looksLikeUnauthorizedSession(message: string): boolean {
   return /(^|[^0-9])401([^0-9]|$)/.test(lower);
 }
 
-export function protectionCenterLoadError(message: string): { title: string; detail: string } {
-  if (looksLikeUnauthorizedSession(message)) {
+export type ProtectionCenterLoadError = {
+  title: string;
+  detail: string;
+  /** The daemon's own reason code, kept for support and never used as the message. */
+  reference?: string;
+};
+
+// The daemon answers failures with a reason code. A code is an accurate record
+// and a useless sentence, so each one the page can actually receive gets copy
+// that names what failed and the step that recovers it.
+const LOAD_ERROR_COPY: Record<string, { title: string; detail: string }> = {
+  catalog_read_model_unavailable: {
+    title: "Guard cannot open your extension list",
+    detail: "Guard is running on this device but could not open the extension list it keeps locally. Quit HOL Guard and open it again. If the page still cannot load, install the latest version.",
+  },
+  catalog_read_transport_failed: {
+    title: "Guard stopped answering while the list loaded",
+    detail: "The connection to Guard on this device ended before the extension list finished loading.",
+  },
+  catalog_snapshot_expired: {
+    title: "The extension list changed while it loaded",
+    detail: "Guard rebuilt the extension list while this page was reading it, so this page never finished loading. Load it again to read the rebuilt list.",
+  },
+  catalog_snapshot_mismatch: {
+    title: "Guard's parts are on different versions",
+    detail: "The background service and the protection runtime on this device come from different versions of Guard, so neither can answer for the other's extension list. Install the latest version of HOL Guard to put them back in step.",
+  },
+};
+
+// Reason codes arrive as lower snake_case. Anything with a space is a sentence
+// someone wrote for an operator, so it reaches the card unchanged.
+function looksLikeReasonCode(message: string): boolean {
+  return /^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(message);
+}
+
+export function protectionCenterLoadError(message: string): ProtectionCenterLoadError {
+  const trimmed = message.trim();
+  if (looksLikeUnauthorizedSession(trimmed)) {
     return {
       title: "This view needs a signed local session",
-      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session.",
+      detail: "Open Extensions from the local Guard dashboard and try again after Guard signs this session.",
+    };
+  }
+  const known = LOAD_ERROR_COPY[trimmed];
+  if (known) return { ...known, reference: trimmed };
+  if (looksLikeReasonCode(trimmed)) {
+    return {
+      title: "Extensions unavailable",
+      detail: "Guard could not load your extension settings on this device. If trying again does not help, quit HOL Guard and open it again.",
+      reference: trimmed,
     };
   }
   return {
     title: "Extensions unavailable",
-    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again.",
+    detail: trimmed || "Guard could not load your extension settings on this device.",
   };
 }

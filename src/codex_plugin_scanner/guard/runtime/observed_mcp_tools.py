@@ -30,6 +30,10 @@ MAX_OBSERVED_MCP_RECEIPTS = 2000
 MAX_OBSERVED_MCP_SERVERS = 40
 MAX_OBSERVED_MCP_TOOLS = min(128, MAX_LOCAL_CLI_COMMANDS - 1)
 _TOKEN = re.compile(r"[A-Za-z0-9_.-]{1,120}\Z")
+# Oh My Pi joins server and tool with one underscore after turning the
+# server's dashes into underscores, so the boundary is only recoverable from
+# the servers the harness is configured with.
+_FLATTENED_NAME_HARNESSES = frozenset({"omp"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +70,17 @@ class ObservedMcpTool:
         )
 
 
-def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | None:
-    """Parse a fully qualified MCP name; retain the connector boundary."""
+def observed_mcp_tool(
+    harness: object,
+    tool_name: object,
+    configured_servers: Sequence[str] = (),
+) -> ObservedMcpTool | None:
+    """Parse a fully qualified MCP name; retain the connector boundary.
+
+    ``configured_servers`` names the servers configured on ``harness``. Only a
+    harness that flattens ``mcp__<server>_<tool>`` consults it, and a name that
+    matches none of them is parsed as any other, never guessed at.
+    """
 
     if not isinstance(harness, str) or not isinstance(tool_name, str):
         return None
@@ -78,6 +91,12 @@ def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | N
     if canonical_harness is None:
         return None
     harness = canonical_harness
+    # A `__` after the server is the boundary every harness marks itself, so it
+    # keeps its established parse; only an unmarked name needs the servers.
+    if harness in _FLATTENED_NAME_HARNESSES and "__" not in tool_name[5:]:
+        flattened = _flattened_tool(harness, tool_name, configured_servers)
+        if flattened is not None:
+            return flattened
     parts = tool_name[5:].split("__")
     if len(parts) < 2 or any(not _TOKEN.fullmatch(part) for part in parts):
         return None
@@ -101,32 +120,73 @@ def observed_mcp_tool(harness: object, tool_name: object) -> ObservedMcpTool | N
     )
 
 
-def _receipt_tools(receipts: Sequence[Mapping[str, object]]) -> Iterator[tuple[ObservedMcpTool, Mapping[str, object]]]:
+def _flattened_tool(harness: str, tool_name: str, configured_servers: Sequence[str]) -> ObservedMcpTool | None:
+    rest = tool_name[5:]
+    owners: dict[str, set[str]] = {}
+    for name in configured_servers:
+        if _TOKEN.fullmatch(name):
+            owners.setdefault(name.replace("-", "_"), set()).add(name)
+    # Names that flatten alike (`foo-bar`, `foo_bar`) cannot be told apart from
+    # a call, so neither owns it.
+    candidates = sorted(
+        ((flat, next(iter(names))) for flat, names in owners.items() if len(names) == 1 and not flat.endswith("_")),
+        key=lambda pair: (-len(pair[0]), pair[0]),
+    )
+    for flat, name in candidates:
+        name_part = rest[len(flat) + 1 :]
+        # An empty or underscore-led remainder is not a tool name here.
+        if not rest.startswith(flat + "_") or not name_part or name_part.startswith("_"):
+            continue
+        # The namespace keeps the configured spelling, as a configured remote
+        # server's does, so both resolve to one connector.
+        namespace = "mcp__" + name + "__"
+        if len(name_part) > 120 or len(namespace) > 155 or not _TOKEN.fullmatch(name_part):
+            continue
+        return ObservedMcpTool(
+            harness=harness,
+            namespace=namespace,
+            name=name_part,
+            qualified_name=tool_name,
+            server_name=name,
+        )
+    return None
+
+
+def _receipt_tools(
+    receipts: Sequence[Mapping[str, object]],
+    configured_servers: Mapping[str, Sequence[str]],
+) -> Iterator[tuple[ObservedMcpTool, Mapping[str, object]]]:
     for receipt in receipts[:MAX_OBSERVED_MCP_RECEIPTS]:
         label = receipt.get("raw_command_text")
         label = label[5:] if isinstance(label, str) and label.startswith("tool:") else receipt.get("artifact_name")
-        tool = observed_mcp_tool(receipt.get("harness"), label)
+        harness = receipt.get("harness")
+        canonical = _normalized_harness_selector_v3(harness.strip().lower()) if isinstance(harness, str) else None
+        tool = observed_mcp_tool(harness, label, configured_servers.get(canonical or "", ()))
         if tool is not None:
             yield tool, receipt
 
 
-def tools_from_receipts(receipts: Sequence[Mapping[str, object]]) -> tuple[ObservedMcpTool, ...]:
+def tools_from_receipts(
+    receipts: Sequence[Mapping[str, object]],
+    configured_servers: Mapping[str, Sequence[str]] | None = None,
+) -> tuple[ObservedMcpTool, ...]:
     """Read only the tool label and harness from a bounded receipt batch."""
 
     tools: dict[tuple[str, str], ObservedMcpTool] = {}
-    for tool, _receipt in _receipt_tools(receipts):
+    for tool, _receipt in _receipt_tools(receipts, configured_servers or {}):
         tools[(tool.harness, tool.qualified_name)] = tool
     return tuple(tools.values())
 
 
 def _latest_seen_by_connector(
     batches: Sequence[tuple[Sequence[Mapping[str, object]], tuple[str, ...]]],
+    configured_servers: Mapping[str, Sequence[str]],
 ) -> dict[tuple[str, str], str]:
     """Return the newest history timestamp for each harness connector."""
 
     latest: dict[tuple[str, str], str] = {}
     for records, time_keys in batches:
-        for tool, record in _receipt_tools(records):
+        for tool, record in _receipt_tools(records, configured_servers):
             # A retried request refreshes last_seen_at, not created_at.
             stamp = next((value for key in time_keys if (value := record.get(key))), None)
             if isinstance(stamp, str) and parse_utc_timestamp(stamp) is not None:
@@ -135,19 +195,31 @@ def _latest_seen_by_connector(
     return latest
 
 
-def discover_observed_mcp_tools(store: GuardStore, *, seen_at: str) -> int:
-    """Backfill connector suggestions. Existing grants and tool states survive."""
+def discover_observed_mcp_tools(
+    store: GuardStore,
+    *,
+    seen_at: str,
+    configured_servers: Mapping[str, Sequence[str]] | None = None,
+) -> int:
+    """Backfill connector suggestions. Existing grants and tool states survive.
 
+    ``configured_servers`` maps a harness to the server names it is configured
+    with, for harnesses whose tool names do not mark where the server ends.
+    """
+
+    configured = configured_servers or {}
     groups: dict[tuple[str, str], list[ObservedMcpTool]] = {}
     # Native receipts deliberately omit tool names. Paused native requests
     # retain the display label, so they are also a discovery source; resolving
     # a request must not make its connector disappear from the picker.
     records = store.list_approval_requests(status=None, limit=MAX_OBSERVED_MCP_RECEIPTS)
     receipts = store.list_receipts(limit=MAX_OBSERVED_MCP_RECEIPTS)
-    observed = tools_from_receipts(records) + tools_from_receipts(receipts)
+    observed = tools_from_receipts(records, configured) + tools_from_receipts(receipts, configured)
     # Replay records each connector at its own history time, so it can age
     # out and stays forgotten until the harness uses it again.
-    latest_seen = _latest_seen_by_connector(((records, ("last_seen_at", "created_at")), (receipts, ("timestamp",))))
+    latest_seen = _latest_seen_by_connector(
+        ((records, ("last_seen_at", "created_at")), (receipts, ("timestamp",))), configured
+    )
     for tool in observed:
         key = (tool.harness, tool.namespace)
         if key not in groups and len(groups) >= MAX_OBSERVED_MCP_SERVERS:

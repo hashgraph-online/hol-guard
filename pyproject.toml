@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hol-guard"
-version = "3.49.0"
+version = "3.50.0"
 description = "Open-source antivirus and runtime protection for AI agents, tools, MCP servers, plugins, skills, and package installs."
 readme = "README.md"
 license = "Apache-2.0"
@@ -97,7 +97,7 @@ dev = [
 
 [tool.uv]
 override-dependencies = [
-    "aiohttp==3.14.3",
+    "aiohttp==3.14.4",
     "anyio==4.14.2",
     "click==8.4.1",
     "cisco-ai-skill-scanner==2.0.12",
@@ -150,6 +150,7 @@ only-include = [
     "rust",
     "contracts",
     "contributions",
+    "tests/fixtures",
     "docs/guard/contracts/guard-cloud-review.md",
     "README.md",
     "LICENSE",
@@ -190,6 +191,9 @@ exclude = [
     "src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json",
     "src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/contributions/**",
+    "src/codex_plugin_scanner/guard/contracts/data/extensions/command-sources/**",
+    "src/codex_plugin_scanner/guard/contracts/data/mcp_servers/contributions/**",
     ".guard-live/**",
     ".guard-package-venv/**",
     ".guard-e2e/**",
@@ -239,6 +243,9 @@ markers = [
 
 [tool.coverage.run]
 source_pkgs = ["codex_plugin_scanner"]
+# Test fixtures compiled into a package-named scope are traced as package code.
+# They are inputs to the suite, not shipped source, so keep them out of the report.
+omit = ["tests/fixtures/*", "*/tests/fixtures/*"]
 branch = true
 # SonarQube Cloud requires repo-relative paths so CI-generated reports match checked-out sources.
 relative_files = true

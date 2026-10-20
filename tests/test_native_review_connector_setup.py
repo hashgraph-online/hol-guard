@@ -43,18 +43,20 @@ def _pause(
     ask: bool,
     connector: SetupConnector | None,
     binding: str | None = "binding",
+    token: str | None = None,
+    queue_fails: bool = False,
 ) -> tuple[str, list[dict[str, object]]]:
     queued: list[dict[str, object]] = []
 
-    def queue(*_args: object, **kwargs: object) -> dict[str, object]:
+    def queue(*_args: object, **kwargs: object) -> dict[str, object] | None:
         queued.append(kwargs)
-        return {"request_id": "abc", "approval_url": _URL}
+        return None if queue_fails else {"request_id": "abc", "approval_url": _URL}
 
     for name, value in {
         "native_review_policy_binding": lambda **_k: None,
         "native_review_binding": lambda *_a, **_k: binding,
         "native_local_cli_grant_response": lambda *_a, **_k: None,
-        "native_exact_action": lambda **_k: (None, None),
+        "native_exact_action": lambda **_k: (token, None),
         "native_saved_review_response": lambda *_a, **_k: None,
         "native_review_matching_block": lambda *_a, **_k: False,
         "native_review_matching_allow": lambda *_a, **_k: False,
@@ -86,28 +88,71 @@ def _pause(
     return json.dumps(response), queued
 
 
-def test_default_mode_says_setup_with_no_link_or_ask(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_default_mode_waits_for_the_users_approval_with_the_link(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR)
 
     assert "HOL Guard has not been set up for `lanectl` (local CLI) on this device." in text
-    assert SAFE_ALTERNATIVE_GUIDANCE in text
-    assert _URL not in text
-    assert "inbox" not in text.lower()
+    assert "Allow once or Always allow" in text
+    assert "waiting for the user to approve it" in text
+    assert SAFE_ALTERNATIVE_GUIDANCE not in text
+    assert "seek permission" not in text
+    assert _URL in text
     assert queued[0]["connector"] == _CONNECTOR
+
+
+def test_a_setup_review_that_could_not_be_queued_never_says_it_is_waiting(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR, queue_fails=True)
+
+    assert queued
+    assert "waiting for the user to approve it" not in text
+    assert "Allow once or Always allow" not in text
+    assert _URL not in text
 
 
 def test_ask_mode_waits_in_the_inbox_with_the_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     text, queued = _pause(tmp_path, monkeypatch, ask=True, connector=_CONNECTOR)
 
     assert "has not been set up for `lanectl`" in text
-    assert "not an approval of this action" in text
+    assert "Allow once or Always allow" in text
+    assert "not an approval of this action" not in text
     assert _URL in text
     assert queued[0]["connector"] == _CONNECTOR
 
 
-def test_ask_mode_gives_no_link_to_a_row_approval_cannot_release(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_an_mcp_setup_review_keeps_the_silent_default_text(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mcp = replace(_CONNECTOR, name="echo-mcp", surface="mcp")
+    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=mcp)
+
+    assert "has not been set up for `echo-mcp` (MCP server)" in text
+    assert SAFE_ALTERNATIVE_GUIDANCE in text
+    assert _URL not in text
+    assert queued[0]["connector"] == mcp
+
+
+def test_a_package_script_is_labelled_as_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    scripts = replace(_CONNECTOR, name="build", surface="package-scripts")
+    text, _queued = _pause(tmp_path, monkeypatch, ask=False, connector=scripts)
+
+    assert "has not been set up for `build` (package script)" in text
+    assert "Allow once or Always allow" in text
+    assert _URL in text
+
+
+def test_a_row_only_always_allow_can_release_says_so(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    text, queued = _pause(tmp_path, monkeypatch, ask=False, connector=_CONNECTOR, binding=None, token="exact-token")
+
+    assert "just once will not" in text
+    assert "Always allow exact action" in text
+    assert "Allow once or Always allow" not in text
+    assert _URL in text
+    assert queued[0]["connector"] == _CONNECTOR
+
+
+def test_a_row_approval_cannot_release_gets_no_link(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     text, queued = _pause(tmp_path, monkeypatch, ask=True, connector=_CONNECTOR, binding=None)
 
     assert "has not been set up for `lanectl`" in text
@@ -233,12 +278,15 @@ def test_agent_text_shows_only_plain_names(name: str, shown: str) -> None:
     assert native_review_connector.connector_display_name(connector) == shown
 
 
-def test_setup_text_is_distinct_from_an_approval() -> None:
-    default = connector_setup_reason("lanectl", "package-scripts", ask=False)
-    ask = connector_setup_reason("lanectl", "cli", ask=True)
+def test_a_local_tool_setup_text_is_an_approval_wait_and_an_mcp_one_is_not() -> None:
+    local = connector_setup_reason("lanectl", "package-scripts", ask=False)
+    mcp = connector_setup_reason("echo-mcp", "mcp", ask=False)
+    mcp_ask = connector_setup_reason("echo-mcp", "mcp", ask=True)
 
-    assert default.startswith("HOL Guard has not been set up for `lanectl` (package script) on this device.")
-    assert default.endswith(SAFE_ALTERNATIVE_GUIDANCE)
-    assert "approve" not in default.lower()
-    assert "one-time decision" in ask
-    assert SAFE_ALTERNATIVE_GUIDANCE not in ask
+    assert local.startswith("HOL Guard has not been set up for `lanectl` (package script) on this device.")
+    assert "Allow once or Always allow" in local
+    assert SAFE_ALTERNATIVE_GUIDANCE not in local
+    assert mcp.endswith(SAFE_ALTERNATIVE_GUIDANCE)
+    assert "approve" not in mcp.lower()
+    assert "one-time decision" in mcp_ask
+    assert SAFE_ALTERNATIVE_GUIDANCE not in mcp_ask

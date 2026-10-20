@@ -23,25 +23,29 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.github-token }}
         TELEMETRY_BRANCH: ${{ inputs.telemetry-branch }}
+      # The manifest candidate exists only when every coverage shard passed and
+      # reported, so it is trusted without requiring the whole run to be green.
+      # A red main must not pin planning to timings older than the suite.
       run: |
-        run_id=$(
+        # Walk this branch's own push runs newest first. Pull request runs
+        # upload an artifact with the same name, so a repository-wide artifact
+        # page can be filled by them and hide the newest main manifest.
+        run_ids=$(
           gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
-            -f branch="$TELEMETRY_BRANCH" -f event=push -f status=success -f per_page=1 \
-            --jq '.workflow_runs[0].id // empty'
+            -f branch="$TELEMETRY_BRANCH" -f event=push -f per_page=30 \
+            --jq '.workflow_runs[] | select(.event == "push" and .head_branch == env.TELEMETRY_BRANCH
+              and .path == ".github/workflows/ci.yml") | .id'
         )
-        test -n "$run_id"
-        read -r event conclusion branch workflow_path < <(
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}" \
-            --jq '[.event, .conclusion, .head_branch, .path] | @tsv'
-        )
-        test "$event" = "push"
-        test "$conclusion" = "success"
-        test "$branch" = "$TELEMETRY_BRANCH"
-        test "$workflow_path" = ".github/workflows/ci.yml"
-        artifact_id=$(
-          gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts?name=pytest-duration-manifest-candidate&per_page=100" \
-            --jq '.artifacts | map(select(.expired == false and .name == "pytest-duration-manifest-candidate")) | .[0].id // empty'
-        )
+        artifact_id=
+        for run_id in $run_ids; do
+          artifact_id=$(
+            gh api --method GET "/repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}/artifacts" \
+              -f name=pytest-duration-manifest-candidate \
+              --jq '[.artifacts[] | select(.expired == false
+                and .name == "pytest-duration-manifest-candidate")][0].id // empty'
+          )
+          test -z "$artifact_id" || break
+        done
         test -n "$artifact_id"
         gh api "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" > /tmp/duration-manifest.zip
         unzip -p /tmp/duration-manifest.zip pytest-duration-manifest-candidate.json.gz \

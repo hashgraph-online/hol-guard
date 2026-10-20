@@ -19,5 +19,8 @@ sha2.workspace = true
 [target.'cfg(unix)'.dependencies]
 nix.workspace = true
 
+[dev-dependencies]
+base64ct.workspace = true
+
 [lints]
 workspace = true

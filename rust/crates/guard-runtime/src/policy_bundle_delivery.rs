@@ -78,8 +78,16 @@ fn runtime_matches(value: &Obj, summary: &Obj, device_id: &str) -> bool {
 }
 
 fn runtime_rest_matches(value: &Obj, summary: &Obj) -> bool {
+    let v2 = summary
+        .get("managedControlsCapabilities")
+        .and_then(Value::as_array)
+        .is_some_and(|caps| caps.iter().any(|cap| cap == "extension-catalog.v2"));
     py_eq_opt(
-        summary.get("extensionCatalogDigest"),
+        summary.get(if v2 {
+            "extensionCatalogEnforcementDigest"
+        } else {
+            "extensionCatalogDigest"
+        }),
         value.get("catalogDigest"),
     ) && py_eq_opt(
         summary.get("extensionAuthorityRevision"),

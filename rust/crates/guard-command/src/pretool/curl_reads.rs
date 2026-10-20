@@ -23,10 +23,13 @@
 //! credential shape, a JWT or a long opaque token stays reviewed, since the
 //! request line itself can carry data to the host.
 
+#[path = "curl_reads_bound.rs"]
+mod bound;
 #[path = "curl_output_targets.rs"]
 pub(in crate::pretool) mod output_targets;
 #[path = "url_secrets.rs"]
 pub(super) mod url_secrets;
+pub use bound::bound_curl_read_destinations;
 
 pub(crate) const NETWORK_READ_REASON: &str = "native_exact_safe_network_read";
 
@@ -111,15 +114,23 @@ pub(super) fn safe_curl_segment(
     if model.dialect != "posix" || segment.pipeline_index != 0 {
         return false;
     }
-    let arguments = &segment.arguments;
+    read_urls(&segment.arguments, context).is_some()
+}
+
+fn read_urls<'a>(arguments: &'a [String], context: super::PathContext<'_>) -> Option<Vec<&'a str>> {
     if arguments.iter().any(|argument| expands(argument)) {
-        return false;
+        return None;
     }
-    let mut urls = 0usize;
+    let mut urls = Vec::new();
     let mut options = true;
     let mut index = 0;
     while index < arguments.len() {
         let argument = arguments[index].as_str();
+        // curl disables default configuration only in this exact position.
+        if index == 0 && matches!(argument, "-q" | "--disable") {
+            index += 1;
+            continue;
+        }
         if options && argument == "--" {
             options = false;
             index += 1;
@@ -127,24 +138,22 @@ pub(super) fn safe_curl_segment(
         }
         if !options || !argument.starts_with('-') || argument == "-" {
             if !readable_url(argument, context) {
-                return false;
+                return None;
             }
-            urls += 1;
+            urls.push(argument);
             index += 1;
             continue;
         }
-        let Some(consumed) = option_consumed(arguments, index, context) else {
-            return false;
-        };
+        let consumed = option_consumed(arguments, index, context)?;
         if let Some(url) = url_option(arguments, index) {
             if !readable_url(url, context) {
-                return false;
+                return None;
             }
-            urls += 1;
+            urls.push(url);
         }
         index += consumed;
     }
-    urls > 0
+    (!urls.is_empty()).then_some(urls)
 }
 
 /// A whole `curl` segment, generic checks included, that the native proof

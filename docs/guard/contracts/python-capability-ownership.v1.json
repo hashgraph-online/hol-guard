@@ -13,6 +13,7 @@
  ],
  "scope_globs": [
   "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+  "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
   "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
   "src/codex_plugin_scanner/guard/daemon/hook_*.py",
@@ -32,6 +33,7 @@
    "class": "required_control_plane",
    "patterns": [
     "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+    "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_github_workflow.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_*.py",
@@ -52,6 +54,7 @@
     "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
     "src/codex_plugin_scanner/guard/native_runtime_durable.py",
     "src/codex_plugin_scanner/guard/native_runtime_detectors.py",
+    "src/codex_plugin_scanner/guard/native_runtime_artifact_identity.py",
     "src/codex_plugin_scanner/guard/native_mode.py",
     "src/codex_plugin_scanner/guard/runtime/hook_review_types.py"
    ],
@@ -1122,12 +1125,82 @@
     "rust/crates/guard-command/src/native_command_catalog.rs",
     "rust/crates/guard-command/src/native_command_program_evaluation.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge_flow.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_hook_bridge_flow",
+   "source_sha256": "26f6d12bf74e285aa84d2ace291d6ef3f156c947521f34f213d6e9918352fb22",
+   "forbidden_symbols": [
+    "BridgeFailureCause",
+    "bridge_review_response",
+    "_daemon_response",
+    "_transient_overload",
+    "_retry_transient_overload",
+    "_trusted_launch_for_fallback",
+    "_daemon_start_succeeded",
+    "_fallback_response",
+    "_run_daemon_start",
+    "_authenticated_daemon_overload",
+    "_daemon_process_failed",
+    "_launcher_failure_reason",
+    "_LAUNCHER_INTEGRITY_REASONS",
+    "_DAEMON_START_TIMEOUT_SECONDS",
+    "_DAEMON_RPC_TIMEOUT_SECONDS",
+    "_DAEMON_PROMPT_RPC_TIMEOUT_SECONDS",
+    "_OVERLOAD_RESERVE_MS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_bridge_failure_reason.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_bridge_failure_reason",
+   "source_sha256": "df13b00ef675394e29cf7a835acfda2c0509df5e48cecc243b7d176186754269",
+   "forbidden_symbols": [
+    "daemon_failure_reason",
+    "AUTHENTICATION_FAILED_REASON",
+    "DAEMON_UNAVAILABLE_REASON",
+    "DAEMON_DEAD_REASON",
+    "OVERLOAD_REASON",
+    "UNANSWERED_DAEMON_CODES"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py",
+   "module": "codex_plugin_scanner.guard.adapters.codex_daemon_start_wait",
+   "source_sha256": "76c04a90d449f2d12720a13909d6c90f2fc9afbf980b4a51edfa15aea7550b8c",
+   "forbidden_symbols": [
+    "await_started_daemon",
+    "_keep_waiting",
+    "FIRST_POLL_SECONDS",
+    "MAX_POLL_SECONDS",
+    "RETRYABLE_REASONS"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
   }
  ],
  "retired_test_paths": [
   "ci/native_runtime/test_guard_native_runtime_resident.py",
   "ci/native_runtime/test_guard_native_runtime_resident_cross_process.py",
   "ci/native_runtime/test_guard_native_runtime_windows_resident.py",
+  "tests/test_claude_daemon_hook_bridge_budget.py",
+  "tests/test_claude_hook_completion_contract.py",
+  "tests/test_claude_hook_exit_paths.py",
   "tests/test_cli_hook_source_ref.py",
   "tests/test_codex_event_trace.py",
   "tests/test_guard_codex_apply_patch_policy.py",
@@ -1144,7 +1217,10 @@
   "tests/test_hook_security_regressions.py",
   "tests/test_hook_source_read_fast_path.py",
   "tests/test_native_approval_bridge.py",
-  "tests/test_structured_data_sensitivity.py"
+  "tests/test_structured_data_sensitivity.py",
+  "tests/test_codex_managed_fallback_authentication.py",
+  "tests/test_codex_daemon_start_wait.py",
+  "tests/test_codex_daemon_bridge_failure_reason.py"
  ],
  "retired_bodies": [
   {
@@ -1380,6 +1456,52 @@
    "native_replacements": [
     "rust/crates/guard-command/src/shell_request_authority.rs",
     "rust/crates/guard-runtime/src/shell_request_authority_op.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge.py",
+   "source_sha256": "9f9c3aab117cce72e7cce4e7a062985ae77e22e4204d3ad843f02017b376a512",
+   "forbidden_symbols": [
+    "_FAIL_CLOSED_REASON",
+    "_LAUNCH_INTEGRITY_REASON",
+    "_write_transition_observation",
+    "_unavailable_response",
+    "_write_failure_causes",
+    "_launcher_integrity_response",
+    "_installed_hook_home",
+    "_bridge_output"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+   "source_sha256": "16e0ba714c2f2989e8b0b25711e61d77ae922991545dead5e69deeb32a9bf60a",
+   "forbidden_symbols": [
+    "_build_loopback_opener",
+    "_assert_loopback_http_url",
+    "_LoopbackOnlyRedirectHandler",
+    "_remaining_seconds",
+    "_post_to_loopback_daemon",
+    "_blocking_post_to_loopback_daemon",
+    "_read_bounded_response",
+    "_daemon_url",
+    "_run_local_fallback",
+    "_daemon_failure_reason",
+    "_daemon_failure_is_recoverable",
+    "_daemon_failure_is_authenticated_overload",
+    "_daemon_failure_kind",
+    "_recover_retry_or_fallback",
+    "_run_recovery_command"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
    ]
   }
  ]

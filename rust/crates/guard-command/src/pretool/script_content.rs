@@ -13,10 +13,13 @@ use std::sync::LazyLock;
 
 use regex::Regex;
 
+mod argv;
 mod launch;
 mod loopback;
 mod loopback_bases;
 pub(in crate::pretool) mod read_only;
+
+pub(crate) use argv::{argv_script, ArgvScript};
 
 use super::{read_paths, PathContext};
 use crate::CanonicalCommandV1;
@@ -531,6 +534,23 @@ fn first_operand<'a>(
         }
     }
     None
+}
+
+/// The canonical path and text of a virtualenv activation script a command
+/// names, or `None` when the name does not resolve to one. The marker file
+/// PEP 405 writes beside `bin` is what distinguishes a real environment from
+/// a directory dressed as one, and the path is canonical, so no link can
+/// dress another file as an activation script.
+pub(crate) fn activation_script_text(
+    script: &str,
+    context: PathContext<'_>,
+) -> Option<(PathBuf, String)> {
+    let path = resolve(script, context)?;
+    if !read_paths::virtualenv_activation_script(&path) {
+        return None;
+    }
+    let text = read_text(&path)?;
+    Some((path, text))
 }
 
 fn resolve(script: &str, context: PathContext<'_>) -> Option<PathBuf> {

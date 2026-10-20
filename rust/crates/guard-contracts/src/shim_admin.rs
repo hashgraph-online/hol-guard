@@ -16,7 +16,7 @@ pub const SHIM_ADMIN_REQUEST_SCHEMA: &str = "guard-shim-admin-request.v2";
 /// Schema discriminator for the result.
 pub const SHIM_ADMIN_RESULT_SCHEMA: &str = "guard-shim-admin-result.v2";
 /// Capability advertised by the runtime when this operation is available.
-pub const SHIM_ADMIN_FEATURE: &str = "shim-admin-v3";
+pub const SHIM_ADMIN_FEATURE: &str = "shim-admin-v4";
 /// Largest canonical request serialization the op will accept.
 pub const SHIM_ADMIN_MAX_BYTES: usize = 512 * 1024;
 
@@ -70,7 +70,8 @@ pub struct ShimAdminRequestV2 {
     /// `status` | `dashboard_status` | `cloud_coverage` | `path_order` |
     /// `install` | `activate` | `repair` | `uninstall` | `probe_intercepts` |
     /// `supported_managers` | `ensure_package_shim_profile` |
-    /// `remove_guard_profile_blocks` | `record_audit`.
+    /// `remove_guard_profile_blocks` | `record_audit` |
+    /// `digest_binding_sink`.
     pub subop: String,
     pub guard_home: String,
     /// `HarnessContext.home_dir`.
@@ -85,9 +86,15 @@ pub struct ShimAdminRequestV2 {
     /// PATH override (None = `facts.environ["PATH"]`).
     #[serde(default)]
     pub path_env: Option<String>,
-    /// `path_order`: the manager to inspect.
+    /// `path_order` and `digest_binding_sink`: the manager to inspect.
     #[serde(default)]
     pub manager: Option<String>,
+    /// `digest_binding_sink`: the package executable the artifact names.
+    #[serde(default)]
+    pub executable: Option<String>,
+    /// `digest_binding_sink`: the raw command the harness is about to run.
+    #[serde(default)]
+    pub command: Option<String>,
     /// `activate`: repair instead of install.
     #[serde(default)]
     pub repair: Option<bool>,

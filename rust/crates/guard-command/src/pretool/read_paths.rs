@@ -4,6 +4,8 @@ pub(super) use allowances::{
     agent_skill_listing_directory, agent_state_tree_holds_only_documents, inside_agent_state_tree,
     project_skill_listing_directory, skill_link_resolves_over_home,
 };
+#[path = "read_feature_directories.rs"]
+pub(super) mod feature_directories;
 #[path = "read_path_harness_notes.rs"]
 pub(super) mod harness_notes;
 #[path = "hidden_listing.rs"]
@@ -265,7 +267,27 @@ pub(super) fn resolved_path_allowed_for_operation(
     verified_temporary: bool,
     read_only: bool,
 ) -> bool {
-    if !resolved_location_allowed(canonical, home_dir, cwd, verified_temporary)
+    path_gate(canonical, home_dir, cwd, verified_temporary, read_only, true)
+        // A directory named for a login feature inside a repository is code,
+        // not a credential store; every other screen still runs on the path.
+        || (read_only
+            && feature_directories::feature_only_credential_name(canonical, home_dir)
+            && path_gate(canonical, home_dir, cwd, verified_temporary, read_only, false))
+}
+
+fn path_gate(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    read_only: bool,
+    credential_names: bool,
+) -> bool {
+    // Reading a scratch file in the private temporary directory is routine.
+    let temporary = verified_temporary
+        || (read_only
+            && private_temporary::inside_private_temporary_directory(canonical, home_dir));
+    if !location_allowed(canonical, home_dir, cwd, temporary, credential_names)
         || !(guard_secure_fs::hidden_read_parts_allowed(canonical)
             || (read_only && guard_secure_fs::hidden_empty_work_tree_file(canonical))
             || (read_only && project_dotfile_read(canonical, home_dir))
@@ -280,6 +302,7 @@ pub(super) fn resolved_path_allowed_for_operation(
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)
                     || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                    || scratch::private_temporary_scratch_read(canonical, home_dir)
                     || virtualenv_activation_script(canonical)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {
@@ -322,7 +345,7 @@ pub(super) fn resolved_read_target_allowed(
 /// called `.venv` with no marker beside it stays refused, and a marked
 /// environment under any other name reads. The path is already canonical, so
 /// no link can dress another file as an activation script.
-fn virtualenv_activation_script(canonical: &std::path::Path) -> bool {
+pub(super) fn virtualenv_activation_script(canonical: &std::path::Path) -> bool {
     const ACTIVATION_SCRIPTS: [&str; 5] = [
         "activate",
         "activate.csh",
@@ -367,6 +390,16 @@ pub(super) fn resolved_location_allowed(
     cwd: Option<&str>,
     verified_temporary: bool,
 ) -> bool {
+    location_allowed(canonical, home_dir, cwd, verified_temporary, true)
+}
+
+fn location_allowed(
+    canonical: &std::path::Path,
+    home_dir: Option<&str>,
+    cwd: Option<&str>,
+    verified_temporary: bool,
+    credential_names: bool,
+) -> bool {
     let rendered = canonical.to_string_lossy().replace('\\', "/");
     let lowered = rendered.to_ascii_lowercase();
     const ROOTS: [&str; 7] = [
@@ -385,7 +418,7 @@ pub(super) fn resolved_location_allowed(
             .any(|prefix| lowered == *prefix || lowered.starts_with(&format!("{prefix}/"))))
         || foreign_user_home(canonical, home_dir, cwd)
         || guard_secure_fs::sensitive_path_family(canonical).is_some()
-        || guard_secure_fs::credential_named_path(canonical))
+        || (credential_names && guard_secure_fs::credential_named_path(canonical)))
 }
 
 pub(super) fn foreign_user_home(

@@ -439,6 +439,60 @@ fn a_silent_review_links_its_row_only_when_approval_can_unblock_it() {
 
 #[cfg(unix)]
 #[test]
+fn an_omp_silent_review_hands_the_extension_a_resume_only_when_its_retry_is_bound() {
+    // The OMP extension waits for the queued row and then asks the agent to
+    // run the identical call again; an unbound row, or another harness, gets
+    // no handle because approving it cannot let that retry run.
+    for (tag, harness, retry_reuses_approval, exact_action_allowable, resumes) in [
+        ("omp-bound", "omp", true, false, true),
+        ("omp-always-only", "omp", false, true, false),
+        ("omp-cannot-unblock", "omp", false, false, false),
+        ("claude-bound", "claude-code", true, false, false),
+    ] {
+        let home = store_home(&format!("review-queue-resume-{tag}"), SILENT_VECTORS);
+        let guard_home = home.to_string_lossy().into_owned();
+        let payload = Map::new();
+        let mut binding = ask_binding();
+        binding.review.blocked_request_mode = Some("safe-alternative".to_owned());
+        let context = Context {
+            harness,
+            payload: &payload,
+            recorded_payload: &payload,
+            workspace: "/work/space",
+            home_dir: "/home/user",
+            guard_home: &guard_home,
+            binding: &binding,
+        };
+        let vectors: Value = serde_json::from_str(SILENT_VECTORS).unwrap();
+        let request = vectors["scenarios"][1]["request"].clone();
+        let result = json!({
+            "decision": "review",
+            "minimum_action": "require-reapproval",
+            "reason": "Deletes files.",
+            "reason_code": "native_review",
+        });
+        let response = silent(
+            &context,
+            result.as_object().unwrap(),
+            "default",
+            request,
+            retry_reuses_approval,
+            exact_action_allowable,
+        )
+        .unwrap();
+        let expected =
+            resumes.then(|| json!({"request_id": "r-new", "poll_path": "/v1/requests/r-new"}));
+        assert_eq!(response.get("approval_resume").cloned(), expected, "{tag}");
+        assert_eq!(
+            response["blocked_request_mode"], "safe-alternative",
+            "{tag}"
+        );
+        std::fs::remove_dir_all(home).ok();
+    }
+}
+
+#[cfg(unix)]
+#[test]
 fn ask_without_any_reusable_identity_records_without_starting_a_wait() {
     for (tag, command) in [
         ("ask-python", "python3 script.py"),

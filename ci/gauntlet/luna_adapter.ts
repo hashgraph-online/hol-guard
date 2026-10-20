@@ -15,13 +15,14 @@ export const BACKEND_MODEL = 'gpt-6-luna';
 // Only the Responses lane streams SSE argument bytes; Devin's agent API is protobuf.
 export const BACKENDS: Record<string, string[]> = {
   [`${BACKEND_PROVIDER}/${BACKEND_MODEL}`]: THINKING_LEVELS,
+  'openai-codex/gpt-6.1-sol': THINKING_LEVELS,
   'devin/swe-2': ['medium', 'high'],
 };
 export function nativeBackend(value: string | undefined) {
   const name = value || `${BACKEND_PROVIDER}/${BACKEND_MODEL}`;
   if (!BACKENDS[name]) throw new Error('Unsupported native backend');
   const [provider, id] = name.split('/');
-  return { name, provider, id, levels: BACKENDS[name], sse: name === `${BACKEND_PROVIDER}/${BACKEND_MODEL}` };
+  return { name, provider, id, levels: BACKENDS[name], sse: provider === 'openai-codex' };
 }
 let model: any;
 export function setModel(value: any) { model = value; }

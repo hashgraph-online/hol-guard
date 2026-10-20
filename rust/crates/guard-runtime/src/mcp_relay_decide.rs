@@ -108,6 +108,12 @@ pub(crate) struct McpRelayDecideRequestV1 {
     /// relay performs and sends with the second decide of the same call.
     #[serde(default)]
     pub(crate) package_evaluation: Option<Map<String, Value>>,
+    /// Set by the relay when it has no evaluation to send: the rounds did not
+    /// settle on one, or the decide carrying one asked for another. The lane
+    /// decides nothing without it, so this decide is the refusal rather than a
+    /// second request for an evaluation that is not coming.
+    #[serde(default)]
+    pub(crate) package_evaluation_unsettled: bool,
     pub(crate) catalog_state: String,
     /// The `tools/call` params, which the daemon projects into evidence.
     pub(crate) params: Value,
@@ -371,18 +377,44 @@ fn encode(answer: Result<Answer, &'static str>) -> Result<Vec<u8>, String> {
     serde_json::to_vec(&body).map_err(|_| "mcp_relay_decide_result_encoding_failed".to_owned())
 }
 
+/// The evaluation leg of a package call, when this decide is one.
+///
+/// The package lane decides from an evaluation whose archive and registry
+/// rounds the relay performs, which no single round trip can hold. So the
+/// first decide of a package call asks for it, and the relay decides the same
+/// call again with the evaluation attached. A relay whose rounds did not
+/// settle says so instead, and that decide is the refusal: asking again for an
+/// evaluation that is not coming would refuse the call in every later session
+/// too, where the refusal hands the server to the proxy.
+fn evaluation_leg(
+    request: &McpRelayDecideRequestV1,
+    is_package: bool,
+) -> Option<Result<Answer, &'static str>> {
+    if !is_package || request.package_evaluation.is_some() {
+        return None;
+    }
+    if request.package_evaluation_unsettled {
+        return Some(Err(package_leg::EVALUATION_ABSENT));
+    }
+    Some(Ok(Answer::Evaluate { ticket: None }))
+}
+
 fn decide(
     request: &McpRelayDecideRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Answer, &'static str> {
+    policy_store
+        .require_guard_home(&request.guard_home)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let admitted = admit(request, policy_store)?;
+    // Keep authority fixed through routing and evidence finalization, not
+    // only while the tool policy is evaluated.
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let intent = package::package_gate(request)?;
-    // The package lane decides from an evaluation whose archive and registry
-    // rounds the relay performs, which no single round trip can hold. So the
-    // first decide of a package call asks for it, and the relay decides the
-    // same call again with the evaluation attached.
-    if intent.is_some() && request.package_evaluation.is_none() {
-        return Ok(Answer::Evaluate { ticket: None });
+    if let Some(answer) = evaluation_leg(request, intent.is_some()) {
+        return answer;
     }
     let connection = store::open(Path::new(&request.guard_home))?;
     // One read snapshot for the store checks and every lookup they gate, so a
@@ -397,6 +429,7 @@ fn decide(
         &admitted,
         connection.as_deref(),
         intent.as_ref().map(PackageLeg::Decide),
+        policy_store,
     )?;
     drop(snapshot);
     // A package call is answered by its own lane, under the package policy and
@@ -567,7 +600,14 @@ fn resolve(
     admitted: &Admitted,
     connection: Option<&Connection>,
     leg: Option<PackageLeg<'_>>,
+    policy_store: &PolicySnapshotStore,
 ) -> Result<(Resolved, Option<Legged>), &'static str> {
+    policy_store
+        .require_guard_home(&request.guard_home)
+        .map_err(|_| BINDING_INCOMPLETE)?;
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| BINDING_INCOMPLETE)?;
     let binding = &admitted.binding;
     let control_digest = binding
         .exact_action_control_digest
@@ -585,7 +625,11 @@ fn resolve(
     };
     let identity = identity(request, &view, control_digest.clone())?;
     let subject = subject::subject(request, &identity, &view)?;
-    let decision = run_policy(&subject, saved.as_ref(), connection)?;
+    let catalog = crate::contributed_mcp_decision_op::Catalog {
+        guard_home: &request.guard_home,
+        controls: admitted.snapshot.command_extensions.as_ref(),
+    };
+    let decision = run_policy(&subject, saved.as_ref(), connection, &catalog)?;
     let packaged = match leg {
         Some(PackageLeg::Decide(intent)) => {
             let inputs = package_leg::package_inputs(
@@ -601,6 +645,7 @@ fn resolve(
                 request,
                 inputs,
                 &subject,
+                &catalog,
                 // The queue route of the package lane is answered by the same
                 // bound mode and redaction level the tool lane's queue route is.
                 package_lane::QueueBinding {

@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 
 
-def native_hook_bridge_executable(feature: str, *, guard_home: Path | None = None) -> Path | None:
+def native_hook_bridge_executable(
+    feature: str, *, guard_home: Path | None = None, deadline_monotonic: float | None = None
+) -> Path | None:
     """The validated native runtime when it advertises ``feature``.
 
     A native hook bridge lets the harness start the compiled runtime instead
@@ -21,7 +23,7 @@ def native_hook_bridge_executable(feature: str, *, guard_home: Path | None = Non
         return None
     from ..native_runtime import native_runtime_status
 
-    status = native_runtime_status()
+    status = native_runtime_status(deadline_monotonic=deadline_monotonic)
     if (
         not status.available
         or not status.compatible

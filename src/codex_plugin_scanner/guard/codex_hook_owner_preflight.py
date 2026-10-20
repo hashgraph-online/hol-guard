@@ -16,4 +16,9 @@ def require_codex_inventory_owners(inventories: Sequence[CodexHookInventory]) ->
     for inventory in inventories:
         for record in inventory.records:
             if record.active and record.command is not None:
-                require_codex_hook_owner(record.command, ownership=record.ownership)
+                require_codex_hook_owner(
+                    record.command,
+                    ownership=record.ownership,
+                    coordinate=record.coordinate,
+                    source_path=record.source_path,
+                )

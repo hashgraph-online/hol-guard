@@ -1,4 +1,5 @@
 use super::super::authority::runtime_roots;
+use super::super::developer_shim::forwarded_tool;
 use super::*;
 use std::collections::BTreeMap;
 use std::os::unix::fs::{symlink, PermissionsExt};
@@ -84,6 +85,8 @@ fn executable(path: &Path) {
 }
 
 /// `<root>/workspace` plus `<root>/venv` whose `bin/python3 -> python -> base`.
+/// On macOS `/usr/bin/python3` is a shim, and a venv made from it links to the
+/// tool the shim forwards to, so the fixture does the same.
 fn layout(root: &Path, base: &Path, home: &str) -> (PathBuf, PathBuf) {
     let workspace = root.join("workspace");
     fs::create_dir(&workspace).unwrap();
@@ -97,7 +100,8 @@ fn layout(root: &Path, base: &Path, home: &str) -> (PathBuf, PathBuf) {
         format!("home = {home}\ninclude-system-site-packages = false\n"),
     )
     .unwrap();
-    symlink(base, venv.join("bin/python")).unwrap();
+    let image = forwarded_tool(base).unwrap_or_else(|| base.to_path_buf());
+    symlink(image, venv.join("bin/python")).unwrap();
     symlink("python", venv.join("bin/python3")).unwrap();
     (workspace, venv)
 }
@@ -128,7 +132,9 @@ fn external_venv_of_a_trusted_interpreter_is_admitted_with_a_venv_only_grant() {
     let (workspace, venv) = layout(&fixture.0, &base, &home);
     let allowed = admit("python3", &workspace, &venv).unwrap();
     assert!(allowed.contains(&venv.join("bin/python3")), "{allowed:?}");
-    assert!(allowed.contains(&base), "{allowed:?}");
+    // The plan runs the tool a `/usr/bin` shim forwards to, not the shim.
+    let image = forwarded_tool(&base).unwrap_or_else(|| base.clone());
+    assert!(allowed.contains(&image), "{allowed:?}");
     let roots = runtime_roots(&allowed, &workspace, None);
     assert!(roots.contains(&venv), "{roots:?}");
     assert!(
@@ -138,6 +144,13 @@ fn external_venv_of_a_trusted_interpreter_is_admitted_with_a_venv_only_grant() {
     // A launcher that links straight to the base still grants its venv.
     let direct = admit("python", &workspace, &venv).unwrap();
     assert!(runtime_roots(&direct, &workspace, None).contains(&venv));
+    // A launcher that still links to the shim would exec the shim inside
+    // containment, so that venv is not admitted.
+    if image != base {
+        fs::remove_file(venv.join("bin/python")).unwrap();
+        symlink(&base, venv.join("bin/python")).unwrap();
+        assert!(admit("python3", &workspace, &venv).is_err());
+    }
 }
 
 #[test]
@@ -210,7 +223,9 @@ fn protected_or_workspace_holding_venvs_and_venv_pytest_scripts_are_rejected() {
     assert!(launcher_root(&venv.join("bin/python3")).is_some());
     let inner = venv.join("share/project");
     fs::create_dir_all(&inner).unwrap();
-    assert!(external_root(&venv.join("bin/python3"), &base, &inner).is_none());
+    // The image the launcher really reaches, so the workspace rule is what refuses.
+    let image = forwarded_tool(&base).unwrap_or_else(|| base.clone());
+    assert!(external_root(&venv.join("bin/python3"), &image, &inner).is_none());
     assert!(admit("python3", &inner, &venv).is_err());
     let workspace = fixture.0.join("workspace");
     let script = venv.join("bin/pytest");

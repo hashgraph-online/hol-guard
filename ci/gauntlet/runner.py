@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import time
+from collections.abc import Callable, Container, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -18,20 +19,22 @@ from ci.native_runtime import probe_installed_pi_output as probe
 
 from .agent_configuration import write_agent_configuration
 from .agent_prompt import fixture_authorization
+from .approval_retry_omp import OmpReview
+from .approval_retry_omp import enabled as approval_retry_enabled
 from .approval_rows import approval_rows
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, bind_business_snapshot, install_business_policy
 from .case_helpers import (
-    FIXTURE_SYSTEM_CONTEXT,
     _fixture_replacements,
     _mixed_read_approval_targets,
     _scenario_prompt,
     _scenario_tools,
     _watch_binding,
+    fixture_system_context,
     read_case_logs,
     ready_watch_binding,
 )
 from .case_worker import SubprocessCaseWorker
-from .catalog import WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
+from .catalog import CATALOG, WATCH_COMMAND, WATCH_PROMPT, Scenario, catalog_digest, load_catalog
 from .cleanup import cleanup_case_resources
 from .contained_core import request_proofs
 from .evidence import assess_case, sha256_bytes
@@ -45,6 +48,7 @@ from .fixtures import (
     remove_scratch_checkout,
     scenario_fixture_name,
     scratch_checkout,
+    stage_directory,
 )
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import (
@@ -54,18 +58,57 @@ from .input_evidence import (
 from .interruptions import KNOWN_GAPS, load_known_gaps, report_sections, stale_gaps
 from .latency import summarize_hook_latency
 from .native_routes import await_native_routes
-from .native_tools import cleanup_private_temp
+from .native_tools import CREDENTIAL_REPORT_CASE, TASK_SCHEMA_CASE, cleanup_private_temp
 from .observed_extension import generate_observed_extension
 from .parallel import HostSlots, Lease, LoadGate, run_scheduled, validate_jobs
 from .provider import InferenceRelay, LoopbackCollector
 from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, WORKTREE_CASE, configure_github_review_controls
 from .script_cases import stage_script_cases
+from .session_folder import seed_session_folder, session_cwd
 from .source_identity import source_identity
 from .summary import inference_usage, render_summary_markdown
 from .supply_chain import stage_supply_chain
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
+# The outcomes a fresh attempt cannot clear. The first two say Guard itself did
+# the wrong thing: it stopped ordinary work, or it let a protected operation
+# through. `task-incomplete` says the scenario's own required effects are missing
+# after Guard allowed the work, which `qualify.retryable` also refuses to retry;
+# continuing past one spends the rest of the catalog on an attempt that can
+# neither pass nor be run again.
+PRODUCT_FAILURES = frozenset({"false-positive", "false-negative", "task-incomplete"})
+
+
+def disqualifying(result: dict[str, Any]) -> bool:
+    """True when this case ended the attempt's chance of passing, so the rest proves nothing.
+
+    A case the model never exercised, a provider round that died, or a host tool
+    that failed with no Guard deny behind it says nothing about Guard. Ending the
+    attempt on one of those spends the whole remaining catalog to learn that the
+    model was uncooperative, and the cases that never run are the ones scheduled
+    last: the protection cases that carry every false-negative proof.
+    """
+    return result["assessment"]["outcome"] in PRODUCT_FAILURES
+
+
+def case_coverage(
+    selected: Sequence[Scenario], catalog: Sequence[Scenario], executed: Container[str]
+) -> dict[str, Any]:
+    """How much of the catalog this run actually executed.
+
+    A run that stopped early used to report only the outcomes of the cases it
+    reached, so a sweep truncated a third of the way through read as a clean
+    record rather than as a truncated one. The ids that never ran are listed
+    here so that gap cannot pass unread.
+    """
+    missing = [scenario.id for scenario in selected if scenario.id not in executed]
+    return {
+        "catalog_cases": len(catalog),
+        "selected_cases": len(selected),
+        "executed_cases": len(selected) - len(missing),
+        "unexecuted_cases": missing,
+    }
 
 
 def run_case(
@@ -90,6 +133,8 @@ def run_case(
     )
     stage_supply_chain(fixture.workspace, scenario.id)
     stage_script_cases(fixture.workspace, scenario.id, fixture.home, fixture.canary)
+    seed_session_folder(fixture.home, stage_directory(fixture.root), scenario.id)
+    session = session_cwd(fixture.home, fixture.workspace, scenario.id)
     private = fixture.root / "private-evidence"
     private.mkdir(mode=0o700)
     raw_log, error_log = private / "omp.jsonl", private / "stderr.txt"
@@ -110,6 +155,9 @@ def run_case(
         "timed_out": False,
         "cleanup_ok": False,
     }
+    review = None
+    if approval_retry_enabled(scenario):
+        case["profile"] = "approval-retry"
     daemon = None
     extension_receipt_ids: set[str] | None = None
     extension_receipt_writer: Any | None = None
@@ -118,6 +166,8 @@ def run_case(
     started = time.monotonic()
     replacements = _fixture_replacements(fixture)
     try:
+        if approval_retry_enabled(scenario):
+            review = OmpReview(scenario, fixture, case)
         with LoopbackCollector() as collector, InferenceRelay(canary=fixture.canary, **provider) as relay:
             replacements[collector.url] = "{{collector_url}}"
             rendered = scenario.render(
@@ -126,12 +176,13 @@ def run_case(
                     "workspace": str(fixture.workspace),
                     "root": str(fixture.root),
                     "scratch": str(scratch_checkout(fixture.root)),
+                    "stage": str(stage_directory(fixture.root)),
                     "collector_url": collector.url,
                 }
             )
             prompt = _scenario_prompt(rendered)
             authorization = fixture_authorization(fixture, collector.url, rendered) + (
-                "" if first_contact else "\n" + FIXTURE_SYSTEM_CONTEXT
+                "" if first_contact else "\n" + fixture_system_context(scenario)
             )
             case["prompt_sha256"] = sha256_bytes(prompt.encode())
             case["agent_context_sha256"] = sha256_bytes(authorization.encode())
@@ -139,8 +190,11 @@ def run_case(
             write_agent_configuration(
                 agent_dir,
                 relay,
-                wait_for_tasks=scenario.id == "omp-native-task-readonly-lookup",
+                wait_for_tasks=scenario.id
+            in {"omp-native-task-readonly-lookup", TASK_SCHEMA_CASE, CREDENTIAL_REPORT_CASE},
                 memory_bank="learn" in scenario.required_tools,
+                github_tool="github" in scenario.required_tools,
+                structured_tasks=scenario.id == TASK_SCHEMA_CASE,
             )
             if scenario.oracle == "watch-command":
                 if scenario.commands != (WATCH_COMMAND,) or scenario.prompt != WATCH_PROMPT:
@@ -234,7 +288,7 @@ def run_case(
                 "--model",
                 "gauntlet-live/agent",
                 "--cwd",
-                str(fixture.workspace),
+                str(session),
                 "--no-extensions",
                 "--extension",
                 str(HERE / "observer.ts"),
@@ -260,15 +314,19 @@ def run_case(
                 position = command.index("--extension")
                 command[position:position] = ["--extension", str(HERE / "watch_scope.ts")]
                 case["watch_binding_before"] = ready_watch_binding(worker)
-            case["returncode"], case["timed_out"] = run_process(
-                command,
-                cwd=fixture.workspace,
-                env=environment,
-                output=raw_log,
-                error_output=error_log,
-                timeout=timeout + 15,
-            )
+            approver = review.approver(worker) if review is not None else None
+            with approver or contextlib.nullcontext():
+                case["returncode"], case["timed_out"] = run_process(
+                    command,
+                    cwd=session,
+                    env=environment,
+                    output=raw_log,
+                    error_output=error_log,
+                    timeout=timeout + 15,
+                )
             time.sleep(0.1)
+            if review is not None and approver is not None:
+                review.collect(case, worker, approver, replacements)
             if scenario.oracle == "watch-command":
                 case["watch_binding_after"] = _watch_binding(worker.store)
             case["approval_delta"] = worker.store.count_approval_requests(status=None) - before
@@ -350,6 +408,28 @@ def run_case(
     return case
 
 
+def record_route_failure(report: dict[str, Any], route_health: Callable[[], str | None] | None) -> bool:
+    """Record a provider route that has died, once, and say whether it has.
+
+    A dead route makes every remaining case a harness error with no tool calls,
+    which is zero coverage rather than a result. Stopping on the first case that
+    sees it keeps the failure cheap, and the recorded message carries the
+    adapter's exit code and stderr, so the cause is legible without a second run.
+    The line is printed as well as recorded because the run's own summary is
+    written on the machine under test, while the driver reads only this stream.
+    """
+    if route_health is None:
+        return False
+    if "provider_route_failure" in report:
+        return True
+    failure = route_health()
+    if failure is None:
+        return False
+    report["provider_route_failure"] = failure
+    print(json.dumps({"provider_route_failure": failure}), flush=True)
+    return True
+
+
 def run_suite(
     *,
     expected_source_sha: str,
@@ -366,10 +446,16 @@ def run_suite(
     slot_dir: Path | None = None,
     max_load: float | None = None,
     max_load_wait: float = 180.0,
+    profile: str = "core",
+    route_health: Callable[[], str | None] | None = None,
 ) -> dict[str, Any]:
     """Run the complete profile or explicitly label a targeted exploratory run."""
     if re.fullmatch(r"[0-9a-f]{40}", expected_source_sha) is None:
         raise ValueError("expected source SHA must be a full Git commit")
+    if profile not in {"core", "approval-retry"}:
+        raise ValueError("OMP session runner supports core and approval-retry profiles")
+    if profile == "approval-retry" and jobs != 1:
+        raise ValueError("approval-retry runs serially")
     jobs = validate_jobs(jobs)
     if KNOWN_GAPS.is_file():
         load_known_gaps()  # a malformed gap file aborts before any case runs
@@ -389,7 +475,10 @@ def run_suite(
     expected_version = package["dependencies"]["@oh-my-pi/pi-coding-agent"]
     if version != "omp/" + expected_version:
         raise RuntimeError("Oh My Pi version differs from the repository-pinned SDK")
-    catalog = load_catalog()
+    from .approval_retry import CATALOG as APPROVAL_RETRY_CATALOG
+
+    catalog_path = APPROVAL_RETRY_CATALOG if profile == "approval-retry" else CATALOG
+    catalog = load_catalog(catalog_path)
     if selected_ids and (set(selected_ids) - {scenario.id for scenario in catalog}):
         raise ValueError("unknown scenario selection")
     selected = tuple(s for s in catalog if not selected_ids or s.id in selected_ids)
@@ -403,6 +492,7 @@ def run_suite(
         "started_at": datetime.now(timezone.utc).isoformat(),
         "schema": "hol.guard-gauntlet.evidence.v1",
         "name": "Guard Gauntlet",
+        "profile": profile,
         **binding,
         "installed_source_sha": capabilities.build_sha,
         "native_binary_sha256": identity.sha256,
@@ -410,7 +500,7 @@ def run_suite(
         "guard_version": capabilities.runtime_version,
         "omp_version": version,
         "platform": platform.system().lower(),
-        "catalog_sha256": catalog_digest(),
+        "catalog_sha256": catalog_digest(catalog_path),
         "runner_files": {p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()},
         "sdk_lock_sha256": digest_file(REPO / "ci/pi-exact-continuation/package-lock.json"),
         "source_dirty": dirty,
@@ -432,6 +522,9 @@ def run_suite(
     gate = LoadGate(max_load, max_wait=max_load_wait) if max_load is not None else None
     completed: dict[str, dict[str, Any]] = {}
 
+    def route_failed() -> bool:
+        return record_route_failure(report, route_health)
+
     def record(scenario: Scenario, case: dict[str, Any]) -> None:
         """Publish progress in catalog order, whatever order cases finish in."""
         completed[scenario.id] = {"id": scenario.id, **case}
@@ -448,6 +541,7 @@ def run_suite(
         report["inference_usage"] = inference_usage(
             output / "cases", [scenario.id for scenario in selected if scenario.id in completed]
         )
+        report["case_coverage"] = case_coverage(selected, catalog, completed)
         print(json.dumps({"scenario": scenario.id, **case["assessment"]}), flush=True)
         (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
 
@@ -466,7 +560,9 @@ def run_suite(
                     timeout=model_timeout,
                 )
             record(scenario, case)
-            if fail_fast and case["assessment"]["outcome"] != "pass":
+            if route_failed():
+                break
+            if fail_fast and disqualifying(case):
                 break
     else:
         workdir = root / "workers"
@@ -501,26 +597,37 @@ def run_suite(
             spawn=spawn,
             on_complete=lambda index, result: record(selected[index], result),
             order=order,
-            should_stop=((lambda _index, result: result["assessment"]["outcome"] != "pass") if fail_fast else None),
+            should_stop=(
+                (lambda _index, result: route_failed() or (fail_fast and disqualifying(result)))
+                if fail_fast or route_health is not None
+                else None
+            ),
             admit=gate,
             slots=slot_pool,
         )
+    # A route that died after the last case still explains that case's failure.
+    route_failed()
     report["finished_at"] = datetime.now(timezone.utc).isoformat()
     report.setdefault("inference_usage", inference_usage(output / "cases", ()))
+    report["case_coverage"] = case_coverage(selected, catalog, completed)
     report["stopped_early"] = len(report["cases"]) < len(selected)
     report.update(report_sections(report["cases"]))
     report["pass"] = (
         report["full_profile"]
         and len(report["cases"]) == len(selected)
         and all(c["outcome"] == "pass" for c in report["cases"])
-        and not report["interruptions"]["benign_interruptions"]
+        and (profile == "approval-retry" or not report["interruptions"]["benign_interruptions"])
         and not stale_gaps(report["known_gaps"])
     )
     report["source_unchanged"] = source_identity(REPO, candidate_sha) == binding and report["runner_files"] == {
         p.name: digest_file(p) for p in sorted(HERE.iterdir()) if p.is_file()
     }
     report["merge_qualified"] = (
-        report["pass"] and not dirty and report["source_unchanged"] and source_sha == capabilities.build_sha
+        profile == "core"
+        and report["pass"]
+        and not dirty
+        and report["source_unchanged"]
+        and source_sha == capabilities.build_sha
     )
     (output / "summary.json").write_text(json.dumps(report, indent=2) + "\n")
     (output / "summary.md").write_text(render_summary_markdown(report, binding, capabilities.build_sha, version))

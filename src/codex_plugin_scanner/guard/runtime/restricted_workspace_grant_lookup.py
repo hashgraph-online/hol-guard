@@ -67,7 +67,8 @@ def decided_grant(command: str, *, workspace: Path, home: Path) -> ContainedGran
         return None
     if decision is None:
         return None
-    action, grant = decision
+    # The route this lookup's caller is already inside; only the grant is read here.
+    action, grant, _route = decision
     if action == "block":
         raise RestrictedPytestError("contained_test_authorization_failed", GRANT_BLOCKED)
     return grant if action == ALLOW_CONTAINED_WITH_GRANT else None

@@ -81,6 +81,18 @@ def _resolve_native_binary(environment_name: str, filename: str) -> Path | None:
     if configured:
         configured_path = Path(configured)
         return configured_path if configured_path.is_file() else None
+    if filename == "guard-command-source" and os.environ.get("HOL_GUARD_TEST_USE_INSTALLED") == "1":
+        # The installed wheel refuses a compiler override, so read its own
+        # verified compiler instead of exporting one.
+        from codex_plugin_scanner.guard.extension_builder.native_source_compiler import (
+            NativeSourceCompilerError,
+            find_packaged_source_compiler,
+        )
+
+        try:
+            return find_packaged_source_compiler()
+        except NativeSourceCompilerError:
+            return None
     for profile in ("release", "debug"):
         candidate = ROOT / "rust" / "target" / profile / filename
         if candidate.is_file():

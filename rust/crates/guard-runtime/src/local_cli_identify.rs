@@ -79,7 +79,11 @@ pub(crate) struct Request<'a> {
 type Outcome<T> = Result<T, &'static str>;
 
 pub(crate) fn identify(request: &Request<'_>) -> Outcome<Vec<UnlistedCliV1>> {
-    identify_with(request, &ResidentEngines, owned_executables()?)
+    identify_with(
+        request,
+        &ResidentEngines { guard_home: None },
+        owned_executables()?,
+    )
 }
 
 fn identify_with(

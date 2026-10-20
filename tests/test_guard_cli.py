@@ -532,6 +532,8 @@ def test_guard_settings_set_encoded_payloads(tmp_path, capsys):
         ("mcp", "ask-all", "mcp_dangerous_tool", "require-reapproval"),
         ("skills", "ask-dangerous", "malicious_skill", "require-reapproval"),
         ("packages", "ask-lifecycle", "package_script", "require-reapproval"),
+        ("packages", "ask-lifecycle", "package_install", "allow"),
+        ("packages", "ask-all", "package_install", "require-reapproval"),
         ("output-scanning", "ask", "encoded_exfiltration", "require-reapproval"),
     ],
 )

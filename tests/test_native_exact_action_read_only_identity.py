@@ -244,8 +244,26 @@ def test_read_outside_the_workspace_and_grep_regex_scope(
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     outside = tmp_path / "elsewhere.txt"
     outside.write_text("x\n")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / "note.txt").write_text("x\n")
     for tool in ("read", "read_file", "view"):
+        # One named file outside the workspace is a scope an approval can
+        # answer for, and what the allow covers stays that one file.
+        assert _tool_proven(tool, {"path": str(outside)}, workspace)
+        # A directory stands for everything below it, so it keeps its review.
+        assert not _tool_proven(tool, {"path": str(elsewhere)}, workspace)
+    # A search tool is given a directory to walk, so a path of its own outside
+    # the workspace keeps the review even when nothing is there today.
+    for tool in ("ls", "list_dir", "glob", "grep"):
         assert not _tool_proven(tool, {"path": str(outside)}, workspace)
+        assert not _tool_proven(tool, {"path": str(tmp_path / "absent" / "x")}, workspace)
+    # A write outside the workspace is the one case where naming only the path
+    # would widen the allow: the bytes are not part of the identity, so an
+    # `Always allow` on one edit would answer for every later edit of that
+    # file. A shell profile, a launch agent and a crontab all live out here.
+    for tool in ("write", "write_file", "edit", "edit_file"):
+        assert not _tool_proven(tool, {"path": str(outside), "content": "x\n"}, workspace)
     assert _tool_decision("read", {"path": str(workspace / "a.txt")}, workspace)[0] is not None
     # A content regex that looks like an absolute path is not a path scope.
     assert _tool_decision("grep", {"pattern": "/api/v1", "path": "src"}, workspace)[0] is not None
@@ -359,6 +377,72 @@ def test_sensitive_broad_and_code_tools_bind_only_the_call(
     # ``reason`` is why Guard cannot prove the call; the approval binds the call itself.
     workspace = _wrangler_workspace(tmp_path, monkeypatch)
     assert not _tool_proven(tool, tool_input, workspace), reason
+
+
+def test_a_write_approval_names_the_file_not_the_bytes_going_into_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # Binding the edit text ends the approval at the next edit of the same file,
+    # which is the capability the user already allowed. The path binds it instead.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    (workspace / "app.ts").write_text("one\n")
+    first, reason = _tool_decision(
+        "edit", {"file_path": "app.ts", "old_string": "one", "new_string": "two"}, workspace
+    )
+    assert first is not None and reason is None
+    assert (
+        first
+        == _tool_decision(
+            "edit", {"file_path": "app.ts", "old_string": "two", "new_string": "three"}, workspace
+        )[0]
+    )
+    assert first != _tool_decision(
+        "edit", {"file_path": "other.ts", "old_string": "two", "new_string": "three"}, workspace
+    )[0]
+    assert first != _tool_decision("write", {"file_path": "app.ts", "content": "two"}, workspace)[0]
+    assert _tool_proven("write", {"file_path": "app.ts", "content": "two"}, workspace)
+    assert _tool_proven("delete", {"path": "app.ts"}, workspace)
+
+
+def test_apply_patch_keeps_the_command_hash(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # Its target paths live inside the patch text, so a target identity would be
+    # dropping the very field that says which files the call touches.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    patch = "*** Begin Patch\n*** Update File: app.ts\n*** End Patch\n"
+    assert not _tool_proven("apply_patch", {"input": patch}, workspace)
+
+
+def test_paging_options_do_not_end_a_read_approval(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # Reading further into a file the user allowed is the same capability.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    (workspace / "log.txt").write_text("x\n" * 400)
+    first = _tool_decision("read", {"path": "log.txt", "offset": 0, "limit": 100}, workspace)[0]
+    assert first is not None
+    assert first == _tool_decision("read", {"path": "log.txt", "offset": 300, "limit": 100}, workspace)[0]
+    assert first == _tool_decision("read", {"path": "log.txt"}, workspace)[0]
+
+
+def test_one_file_outside_the_workspace_is_a_scope_an_approval_can_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, native_context_digest: Path
+) -> None:
+    # A checkout beside the workspace is a file the user can answer for once,
+    # as long as answering for it again changes nothing: a read names the file
+    # they were shown. A write out there keeps broad_scope, because the next
+    # write of that name carries different bytes. A directory stands for
+    # everything under it, so it stays once-only either way.
+    workspace = _wrangler_workspace(tmp_path, monkeypatch)
+    sibling = workspace.parent / "sibling"
+    (sibling / "src").mkdir(parents=True)
+    (sibling / "src" / "main.rs").write_text("fn main() {}\n")
+    assert _tool_proven("read", {"path": str(sibling / "src" / "main.rs")}, workspace)
+    assert not _tool_proven("write", {"file_path": str(sibling / "src" / "new.rs"), "content": "x"}, workspace)
+    assert not _tool_proven("read", {"path": str(sibling / "src")}, workspace)
+    assert not _tool_proven("ls", {"path": str(sibling)}, workspace)
+    assert not _tool_proven("write", {"file_path": str(sibling / "gone" / "new.rs"), "content": "x"}, workspace)
 
 
 def test_only_a_terminal_verdict_has_no_approval_token(

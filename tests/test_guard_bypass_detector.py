@@ -1,4 +1,4 @@
-"""Tests for the native Guard bypass detector and composition_rules."""
+"""Tests for the native Guard bypass detector."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import pytest
 
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope
-from codex_plugin_scanner.guard.runtime.composition_rules import compose_action_from_signals
 from codex_plugin_scanner.guard.runtime.detectors import DetectorContext
 from codex_plugin_scanner.guard.runtime.signals import RiskSignalV2
 from tests.native_detector_support import NativeDetector
@@ -144,78 +143,3 @@ class TestGuardBypassDetector:
     def test_npm_uninstall_hol_guard(self, tmp_path: Path) -> None:
         signals = self._detect("npm uninstall -g hol-guard", tmp_path)
         assert any(s.signal_id == "bypass:guard-uninstall" for s in signals)
-
-
-class TestComposeActionFromSignals:
-    """Tests for composition_rules.compose_action_from_signals."""
-
-    def test_no_signals_returns_base_action(self) -> None:
-        result = compose_action_from_signals((), "allow")
-        assert result.action == "allow"
-        assert not result.upgraded
-        assert not result.downgraded
-
-    def test_no_signals_block_base(self) -> None:
-        result = compose_action_from_signals((), "block")
-        assert result.action == "block"
-
-    def test_bypass_signal_upgrades_to_block(self) -> None:
-        signal = _make_signal(
-            signal_id="bypass:guard-uninstall", category="bypass", severity="critical", confidence="strong"
-        )
-        result = compose_action_from_signals((signal,), "allow")
-        assert result.action == "block"
-        assert result.upgraded
-
-    def test_persistence_signal_upgrades_to_review(self) -> None:
-        signal = _make_signal(signal_id="persist:cron", category="persistence", severity="high", confidence="strong")
-        result = compose_action_from_signals((signal,), "allow")
-        assert result.action in ("review", "block")
-        assert result.upgraded
-
-    def test_critical_risk_signal_upgrades_to_block(self) -> None:
-        signal = _make_signal(signal_id="risk:critical", category="data_flow", severity="critical", confidence="strong")
-        result = compose_action_from_signals((signal,), "allow")
-        assert result.action == "block"
-        assert result.upgraded
-
-    def test_strong_fp_with_no_risk_downgrades_block_to_review(self) -> None:
-        fp = _make_signal(
-            signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="strong"
-        )
-        result = compose_action_from_signals((fp,), "block")
-        assert result.action == "review"
-        assert result.downgraded
-
-    def test_strong_fp_source_search_downgrades_review_to_warn(self) -> None:
-        fp = _make_signal(
-            signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="strong"
-        )
-        result = compose_action_from_signals((fp,), "review")
-        assert result.action == "warn"
-        assert result.downgraded
-
-    def test_bypass_beats_fp_downgrade(self) -> None:
-        bypass = _make_signal(
-            signal_id="bypass:guard-uninstall", category="bypass", severity="critical", confidence="strong"
-        )
-        fp = _make_signal(
-            signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="strong"
-        )
-        result = compose_action_from_signals((bypass, fp), "allow")
-        assert result.action == "block"
-        assert result.upgraded
-        assert not result.downgraded
-
-    def test_fp_weak_confidence_does_not_downgrade(self) -> None:
-        fp = _make_signal(
-            signal_id="fp:source-search:grep", category="false_positive", severity="info", confidence="weak"
-        )
-        result = compose_action_from_signals((fp,), "block")
-        assert result.action == "block"
-        assert not result.downgraded
-
-    def test_composition_result_is_frozen(self) -> None:
-        result = compose_action_from_signals((), "allow")
-        with pytest.raises((AttributeError, TypeError)):
-            result.action = "block"  # type: ignore[misc]

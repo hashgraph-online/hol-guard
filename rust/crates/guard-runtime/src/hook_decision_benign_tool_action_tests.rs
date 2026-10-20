@@ -5,6 +5,8 @@
 //! inputs fail closed.
 
 use std::collections::BTreeMap;
+use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use guard_contracts::{
     CodexToolOutputFactsV1, HookCompositionInputsV1, HookControlSnapshotV1, HookNativeRequestV1,
@@ -12,7 +14,20 @@ use guard_contracts::{
 use serde_json::{json, Value};
 
 use crate::hook_decision_compose::compose;
+use crate::hook_decision_native_facts::{
+    verdict_handoff, verdict_is_recorded, verdict_is_recorded_after, VerdictHandoff,
+};
 use crate::sfrs_support::{replay_vectors, ReplayVector};
+
+/// The verdict handoff is one slot for the process, so a test that asserts
+/// what it holds runs alone among the tests that fill it.
+static VERDICT_TABLE: Mutex<()> = Mutex::new(());
+
+fn verdict_table() -> MutexGuard<'static, ()> {
+    VERDICT_TABLE
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
 
 const ENTRY: &str = "is_explicitly_benign_tool_action_request";
 const ENTRIES: &[(&str, &[u8])] = &[(
@@ -34,7 +49,7 @@ fn inputs(native_request: Option<HookNativeRequestV1>, event: &str) -> HookCompo
         "runtime_artifact_checked": false,
         "prompt_nonblank": false,
         "has_command_text": true,
-        "facts": {"verified_apply_patch": false},
+        "facts": {},
     });
     value["native_request"] = serde_json::to_value(native_request).unwrap();
     serde_json::from_value(value).unwrap()
@@ -81,6 +96,7 @@ fn verified_benign(inputs: &HookCompositionInputsV1) -> bool {
 
 #[test]
 fn compose_is_never_more_permissive_than_recorded_python_vectors() {
+    let _table = verdict_table();
     let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
     let (mut compared, mut expected_benign, mut agreed) = (0, 0, 0);
     let mut looser = Vec::new();
@@ -110,6 +126,7 @@ fn compose_is_never_more_permissive_than_recorded_python_vectors() {
 
 #[test]
 fn only_pre_tool_use_is_verified_benign() {
+    let _table = verdict_table();
     let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
     let vector = vectors
         .iter()
@@ -125,11 +142,13 @@ fn only_pre_tool_use_is_verified_benign() {
 
 #[test]
 fn missing_request_is_not_benign() {
+    let _table = verdict_table();
     assert!(!verified_benign(&inputs(None, "PreToolUse")));
 }
 
 #[test]
 fn unknown_control_health_is_not_benign() {
+    let _table = verdict_table();
     let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
     let vector = vectors
         .iter()
@@ -145,6 +164,7 @@ fn unknown_control_health_is_not_benign() {
 
 #[test]
 fn oversized_host_facts_are_not_benign() {
+    let _table = verdict_table();
     let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
     let vector = vectors
         .iter()
@@ -156,4 +176,86 @@ fn oversized_host_facts_are_not_benign() {
         .environment
         .extend((0..200).map(|index| (format!("K{index}"), "v".to_owned())));
     assert!(!verified_benign(&inputs(Some(request), "PreToolUse")));
+}
+
+#[test]
+fn a_composition_hands_its_verdict_to_the_finalize_that_follows() {
+    let _table = verdict_table();
+    let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
+    let vector = vectors
+        .iter()
+        .find(|vector| !vector.host_dependent)
+        .expect("a vector");
+    let mut request = call(vector);
+    request.cwd = Some("/nonexistent/hol-guard-verdict-handoff/first".to_owned());
+    let first = inputs(Some(request.clone()), "PreToolUse");
+    request.cwd = Some("/nonexistent/hol-guard-verdict-handoff/second".to_owned());
+    let second = inputs(Some(request), "PreToolUse");
+
+    let verdict = {
+        let _mode = verdict_handoff(VerdictHandoff::Record);
+        verified_benign(&first)
+    };
+    assert!(verdict_is_recorded(&first));
+    // Another directory composes to another verdict and can never take this one.
+    assert!(!verdict_is_recorded(&second));
+    // The window bounds the handoff to the hook that opened it.
+    assert!(!verdict_is_recorded_after(&first, Duration::from_secs(3)));
+
+    let taken = {
+        let _mode = verdict_handoff(VerdictHandoff::Take);
+        verified_benign(&first)
+    };
+    assert_eq!(verdict, taken);
+    // Taking empties the slot, so no verdict is ever read twice.
+    assert!(!verdict_is_recorded(&first));
+}
+
+#[test]
+fn a_later_composition_displaces_the_verdict_an_earlier_one_left() {
+    let _table = verdict_table();
+    let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
+    let vector = vectors
+        .iter()
+        .find(|vector| !vector.host_dependent)
+        .expect("a vector");
+    let mut request = call(vector);
+    request.cwd = Some("/nonexistent/hol-guard-verdict-displaced/first".to_owned());
+    let first = inputs(Some(request.clone()), "PreToolUse");
+    request.cwd = Some("/nonexistent/hol-guard-verdict-displaced/second".to_owned());
+    let second = inputs(Some(request), "PreToolUse");
+
+    let _mode = verdict_handoff(VerdictHandoff::Record);
+    let _ = verified_benign(&first);
+    assert!(verdict_is_recorded(&first));
+    // A later hook composes before it finalizes, so the slot never carries a
+    // verdict across the command that ran in between.
+    let _ = verified_benign(&second);
+    assert!(!verdict_is_recorded(&first));
+    assert!(verdict_is_recorded(&second));
+}
+
+#[test]
+fn a_composition_outside_the_two_queries_records_nothing() {
+    let _table = verdict_table();
+    let (vectors, _root) = replay_vectors(ENTRIES, ENTRY);
+    let vector = vectors
+        .iter()
+        .find(|vector| !vector.host_dependent)
+        .expect("a vector");
+    let mut request = call(vector);
+    request.cwd = Some("/nonexistent/hol-guard-verdict-off/only".to_owned());
+    let composed = inputs(Some(request.clone()), "PreToolUse");
+    // The default mode: any other caller of `compose` leaves nothing behind.
+    let _ = verified_benign(&composed);
+    assert!(!verdict_is_recorded(&composed));
+}
+
+#[test]
+fn a_request_free_composition_records_no_verdict() {
+    let _table = verdict_table();
+    let _mode = verdict_handoff(VerdictHandoff::Record);
+    let composed = inputs(None, "PreToolUse");
+    assert!(!verified_benign(&composed));
+    assert!(!verdict_is_recorded(&composed));
 }

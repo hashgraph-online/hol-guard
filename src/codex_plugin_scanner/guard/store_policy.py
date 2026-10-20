@@ -28,6 +28,7 @@ from .policy_bundle_activation import (
     encoded_delivery_acknowledgement,
     managed_delivery_matches_base,
     published_managed_authority,
+    revalidate_cloud_policy,
 )
 from .runtime.extension_control_authority import (
     AuthorityHealth,
@@ -45,11 +46,12 @@ from .store_policy_activation_preflight import (
 
 if TYPE_CHECKING:
     from .managed_controls_policy_fields import ParsedManagedControlsPolicy
+    from .store import GuardStore
 
 # ruff: noqa: F403,F405
-from .action_lattice import guard_action_severity
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
+from .native_hook_artifact_compose import native_hook_compose
 from .native_memory_pattern import memory_pattern_verdict
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
@@ -58,7 +60,7 @@ from .native_store_policy import (
     ApprovalReuseDiagnosticUnavailableError,
     claim_evidence_binding,
     encode_key,
-    native_approval_reuse_diagnostic,
+    native_approval_reuse_miss,
     native_claim_approval_reuse_decisions,
 )
 from .store_base import *
@@ -165,39 +167,35 @@ def memory_lookup_candidates(
 
 def _most_restrictive_policy_lookup(
     lookups: Sequence[PolicyDecisionLookupResult],
+    *,
+    guard_home: Path | None,
 ) -> PolicyDecisionLookupResult:
-    """Compose non-consuming direct, exact-command, and memory matches."""
+    """Compose non-consuming direct, exact-command, and memory matches.
+
+    The resident selects, with the selector the MCP tool lane already uses: it
+    reads the action lattice, so a lookup whose saved action it cannot read is
+    the most restrictive one, not a weaker one. An unavailable resident raises,
+    which the caller's fail-closed handling turns into an availability response
+    rather than a locally recomposed verdict.
+    """
 
     if not lookups:
         raise ValueError("at least one policy lookup is required")
-    selected_lookup = lookups[0]
-    selected_decision = selected_lookup["decision"]
-    ignored_integrity = selected_lookup.get("ignored_local_integrity")
-    revisions = {lookup["authority_revision"] for lookup in lookups}
-    authority_revision = next(iter(revisions)) if len(revisions) == 1 else -1
-    for lookup in lookups[1:]:
-        decision = lookup["decision"]
-        if ignored_integrity is None and lookup.get("ignored_local_integrity") is not None:
-            ignored_integrity = lookup["ignored_local_integrity"]
-        if decision is None:
-            continue
-        if selected_decision is None or guard_action_severity(
-            decision.get("action"),
-            unknown_action="block",
-        ) > guard_action_severity(selected_decision.get("action"), unknown_action="block"):
-            selected_lookup = lookup
-            selected_decision = decision
-    if selected_decision is not None:
-        selected_decision = {
-            **selected_decision,
-            "_approval_authority_revision": authority_revision,
-        }
-    return {
-        "decision": selected_decision,
-        "ignored_local_integrity": ignored_integrity,
-        "trust_status": selected_lookup["trust_status"],
-        "authority_revision": authority_revision,
-    }
+    if len(lookups) == 1 and lookups[0]["decision"] is None:
+        # One lookup that matched nothing is already the answer: there is no
+        # saved decision to rank, no second revision to reconcile, and the
+        # selector would hand back the same row.  The hook path reaches this
+        # on every request without a saved approval, so it must not spend a
+        # resident round trip to be told so.
+        return lookups[0]
+    composed = native_hook_compose(
+        "policy_lookup_select",
+        {"lookups": [dict(lookup) for lookup in lookups]},
+        guard_home=guard_home,
+    )
+    # The resident owns the selection; this only reads its row back under the
+    # name the callers use, so the cast goes through ``object``.
+    return cast("PolicyDecisionLookupResult", cast("object", composed))
 
 
 def _approval_authority_revision(connection: sqlite3.Connection) -> int:
@@ -508,13 +506,21 @@ class StorePolicyMixin:
         )
         if payload_rejection is not None:
             return reject(payload_rejection)
-        from .runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+        from .catalog_delivery.projection import capture, require_current
+        from .native_command_control_authority_store import _key
+
+        _, registry, activation_digest = capture(self)
+        current_manifest = self._catalog_target_manifest(registry)
+        # Resolve any activation migration before opening the policy write
+        # transaction. The protected header is rechecked under its lease below.
+        self.read_extension_control_authority_for_registry(registry)
 
         with self._extension_control_authority_lock(), self._connect() as connection:
+            require_current(self, _key(cast("GuardStore", self)), activation_digest)
             self._invalidate_native_extension_control_policy()
             connection.execute("begin immediate")
             managed_base_authority = self._read_extension_control_authority_locked(
-                BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+                registry.catalog_digest,
             )
             continuity_rejection = continuity_activation_rejection(
                 custom_extension_continuity,
@@ -537,6 +543,8 @@ class StorePolicyMixin:
             managed_authority_key: bytes | None = None
             managed_revision = 0
             if managed_controls_policy is not None:
+                if managed_controls_policy.cloud_projection_digest is not None and managed_controls_delivery is None:
+                    return reject("missing_policy_bundle_delivery", connection)
                 if managed_base_authority.health is not AuthorityHealth.PROTECTED:
                     return reject("managed_controls_authority_unprotected", connection)
                 if managed_base_snapshot is None:
@@ -583,9 +591,17 @@ class StorePolicyMixin:
                     previous_active = json.loads(str(active_row["payload_json"]))
                     active_managed_layers, active_revision = managed_controls_layers_from_activation_state(
                         previous_active,
-                        catalog_digest=managed_base_authority.catalog_digest,
+                        catalog_digest=previous_active.get("catalogDigest"),
                         authority_key=managed_authority_key,
                     )
+                    if previous_active.get("catalogDigest") != managed_base_authority.catalog_digest:
+                        composed = self._with_managed_controls_activation(
+                            managed_base_authority,
+                            current_manifest=current_manifest,
+                        )
+                        active_managed_layers = tuple(
+                            layer for layer in composed.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
+                        )
                 except (json.JSONDecodeError, ExtensionControlAuthorityError):
                     return reject("managed_controls_activation_state_invalid", connection)
                 if revision_row is not None and active_revision != previous_revision:
@@ -595,6 +611,21 @@ class StorePolicyMixin:
             if managed_controls_delivery is not None:
                 if managed_controls_policy is None or managed_base_authority is None:
                     return reject("managed_controls_delivery_policy_missing", connection)
+                try:
+                    cloud_valid = revalidate_cloud_policy(
+                        connection,
+                        policy=managed_controls_policy,
+                        policy_bundle=policy_bundle,
+                        guard_home=self.guard_home,
+                        registry=registry,
+                        capabilities=managed_controls_negotiated_capabilities,
+                        verdicts=verdicts,
+                    )
+                except ResidentVerdictRequiredError:
+                    connection.rollback()
+                    raise
+                if not cloud_valid:
+                    return reject("policy_local_view_invalid", connection)
                 current_authority = composed_managed_authority(
                     managed_base_authority,
                     managed_layers=active_managed_layers,
@@ -1013,7 +1044,7 @@ class StorePolicyMixin:
             ):
                 return exact_command_lookup
         if memory_artifact_id is None:
-            return _most_restrictive_policy_lookup(candidate_lookups)
+            return _most_restrictive_policy_lookup(candidate_lookups, guard_home=Path(self.guard_home))
         memory_lookup = self.resolve_policy_decision_lookup(
             harness,
             memory_artifact_id,
@@ -1031,7 +1062,7 @@ class StorePolicyMixin:
                 if (memory_lookup["decision"] is not None or memory_lookup.get("ignored_local_integrity") is not None)
                 else direct_lookup
             )
-        return _most_restrictive_policy_lookup(candidate_lookups)
+        return _most_restrictive_policy_lookup(candidate_lookups, guard_home=Path(self.guard_home))
 
     def peek_local_once_approval(
         self,
@@ -1560,6 +1591,38 @@ class StorePolicyMixin:
         Returns ``(reason, stored_artifact_hash)``.  The stored hash is needed
         by emit layers that must distinguish a rejected approval bound to the
         current context-token contract from stale pre-token (legacy) evidence.
+        """
+
+        reason, stored_hash, _reuse = self.approval_reuse_miss(
+            harness,
+            artifact_id,
+            artifact_hash,
+            workspace,
+            publisher,
+            current_action=None,
+            now=now,
+        )
+        return reason, stored_hash
+
+    def approval_reuse_miss(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        current_action: str | None = None,
+        now: str | None = None,
+    ) -> tuple[str | None, str | None, Mapping[str, object] | None]:
+        """Diagnose a saved-allow miss and, optionally, compose what it means.
+
+        Returns ``(reason, stored_artifact_hash, reuse)``.  Naming
+        ``current_action`` asks the resident to compose the reuse decision for
+        the miss in the same round trip, including whether the rejected
+        approval was ever bound to the context-token contract; ``reuse`` is
+        ``None`` whenever the resident did not compose one, either because the
+        caller did not ask or because there was no resident answer to compose
+        from.
 
         The resident runs the bounded probes and picks the reason. This wrapper
         only procures integrity evidence when the resident asks for it. A store
@@ -1572,7 +1635,7 @@ class StorePolicyMixin:
         """
 
         if artifact_id is None:
-            return None, None
+            return None, None, None
         current_time = _canonical_utc_timestamp(now or _now())
         with self._connect() as connection:
             has_rows = (
@@ -1583,7 +1646,7 @@ class StorePolicyMixin:
                 is not None
             )
         if not has_rows:
-            return None, None
+            return None, None, None
         self._provision_resident_verifier()
 
         def evidence_provider(policy: bool, local_once: bool) -> dict[str, object]:
@@ -1604,7 +1667,7 @@ class StorePolicyMixin:
             return evidence
 
         try:
-            return native_approval_reuse_diagnostic(
+            return native_approval_reuse_miss(
                 store_path=self.path,
                 guard_home=Path(self.guard_home),
                 harness=harness,
@@ -1614,6 +1677,7 @@ class StorePolicyMixin:
                 publisher=publisher,
                 now=current_time,
                 evidence_provider=evidence_provider,
+                current_action=current_action,
             )
         except ApprovalReuseDiagnosticUnavailableError as error:
             _LOGGER.warning(
@@ -1622,7 +1686,7 @@ class StorePolicyMixin:
                 error,
                 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
             )
-            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None, None
 
     def _provision_resident_verifier(self) -> None:
         """Establish the verifier key the resident requires before it serves.

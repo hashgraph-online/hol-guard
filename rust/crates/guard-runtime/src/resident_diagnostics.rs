@@ -1,5 +1,6 @@
 //! Opt-in, payload-free phase evidence for native response-wait failures.
 
+use std::collections::HashMap;
 use std::fs::{File, Metadata};
 use std::io::{Cursor, Seek, Write};
 use std::path::Path;
@@ -235,6 +236,7 @@ pub(crate) enum Phase {
     ResidentEvaluate,
     ResidentResponseWrite,
     ContextDigest,
+    DirectoryTrust,
     ContextRuntimeExecutableIdentity,
     ContextRuntimeLaunchIdentity,
     ContextRuntimeLaunchIdentityMatches,
@@ -265,6 +267,7 @@ impl Phase {
             Self::ResidentEvaluate => "resident_evaluate",
             Self::ResidentResponseWrite => "resident_response_write",
             Self::ContextDigest => "context_digest",
+            Self::DirectoryTrust => "directory_trust",
             Self::ContextRuntimeExecutableIdentity => "context_runtime_executable_identity",
             Self::ContextRuntimeLaunchIdentity => "context_runtime_launch_identity",
             Self::ContextRuntimeLaunchIdentityMatches => "context_runtime_launch_identity_matches",
@@ -301,20 +304,45 @@ pub(crate) fn enabled() -> bool {
 }
 
 fn emit(phase: Phase, status: Status, elapsed: Duration) {
-    // A broken diagnostic sink must not change native wire/error results.
-    // Render only finite phase/status labels and elapsed time into a bounded
-    // stack buffer. Helper stderr and the shared resident sink stay separate.
-    let mut line = [0u8; PHASE_LINE_BYTES];
-    let mut output = Cursor::new(line.as_mut_slice());
-    if writeln!(
-        output,
+    emit_line(format_args!(
         "native_resident_phase phase={} status={} elapsed_ms={}",
         phase.label(),
         status.label(),
         elapsed.as_millis()
-    )
-    .is_ok()
-    {
+    ));
+}
+
+static LAST_NOTES: LazyLock<Mutex<HashMap<&'static str, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Records a finite count next to the phase lines, such as how many resident
+/// states one discovery pass returned. Only fixed names and numbers are
+/// written, never paths or request data. A spawn wait polls discovery every
+/// few milliseconds, so a note is written only when its value changes;
+/// otherwise repeats would push the phase lines out of the bounded tail.
+pub(crate) fn note(name: &'static str, value: usize) {
+    if !enabled() {
+        return;
+    }
+    let changed = LAST_NOTES
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .insert(name, value)
+        != Some(value);
+    if changed {
+        emit_line(format_args!(
+            "native_resident_note name={name} value={value}"
+        ));
+    }
+}
+
+fn emit_line(arguments: std::fmt::Arguments<'_>) {
+    // A broken diagnostic sink must not change native wire/error results.
+    // Render only finite labels and numbers into a bounded stack buffer.
+    // Helper stderr and the shared resident sink stay separate.
+    let mut line = [0u8; PHASE_LINE_BYTES];
+    let mut output = Cursor::new(line.as_mut_slice());
+    if writeln!(output, "{arguments}").is_ok() {
         let length = output.position() as usize;
         let mut sink = PHASE_OUTPUT
             .lock()

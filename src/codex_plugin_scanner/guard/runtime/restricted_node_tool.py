@@ -37,14 +37,13 @@ _ENTRIES: dict[str, tuple[str, ...]] = {
 # Prettier reports in these two modes and rewrites files in every other one.
 _PRETTIER_CHECKS = {"--check", "-c", "--list-different", "-l"}
 
-# How much longer than the build's own deadline this waits for the native
-# runner. The runner counts that deadline against the build alone: staging a
-# private copy of the workspace and publishing the output roots both happen
-# outside it. Killing the runner on the same number would land in the middle of
-# publishing, with the previous output already removed and the new one half
-# written, and would leave the staged copy behind. The runner stops the build
-# itself, so this only has to outlast the copying around it.
-_WINDOWS_BUILD_GRACE_SECONDS = 120
+# How much longer than the run's own deadline this waits for the native
+# runner. The runner counts that deadline against the tool alone: staging a
+# private copy of the workspace and publishing a build's output roots both
+# happen outside it. Killing the runner on the same number would land in the
+# middle of publishing, with the previous output already removed and the new
+# one half written, and would leave the staged copy behind.
+_WINDOWS_STAGING_GRACE_SECONDS = 120
 
 
 def _program_name(argument: str) -> str:
@@ -328,7 +327,7 @@ def _vite_output(args: Sequence[str], *, workspace: Path, cwd: Path) -> Path:
     return output
 
 
-def _prepare_windows_build(
+def _prepare_windows_tool(
     name: str,
     args: Sequence[str],
     runtime_args: Sequence[str],
@@ -337,32 +336,35 @@ def _prepare_windows_build(
     workspace: Path,
     cwd: Path,
 ) -> RestrictedPytestPlan:
-    """Windows stages the build in an AppContainer; the resident resolves Node and Vite.
+    """Windows stages the run in an AppContainer; the resident resolves Node and the tool.
 
     The private copy is writable, so Vite bundles its config in place and no
-    config loader or bundle directory is added.
+    config loader or bundle directory is added, and ESLint, TypeScript and
+    Prettier write their caches where they expect them. Only a build names an
+    output root; a reporting run declares none and its copy is discarded whole.
     """
-    if name != "vite":
-        raise RestrictedPytestError(
-            PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE, "Only Vite builds run contained on Windows."
-        )
+    build = name == "vite"
     result = restricted_native(
         "prepare_node_build",
         {
             "workspace": workspace,
             "cwd": cwd,
+            "tool": name,
             "runtime_arguments": list(runtime_args),
             "arguments": list(args),
             "expected_entry": None if expected_entry is None else expected_entry.as_posix(),
         },
         dict,
     )
-    plan = decode_native_plan(result, (NODE_BUILD_OUTPUT_PROFILE_VERSION,))
+    profile = NODE_BUILD_OUTPUT_PROFILE_VERSION if build else NODE_TOOL_READ_ONLY_PROFILE_VERSION
+    plan = decode_native_plan(result, (profile,))
+    if not build:
+        return plan
     return replace(plan, output_roots=(_vite_output(args, workspace=plan.workspace, cwd=plan.cwd),))
 
 
 def prepare_restricted_node_tool(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
     name, args = _program_name(argv[0]), argv[1:]
@@ -460,10 +462,10 @@ def prepare_restricted_node_tool(
     ):
         raise RestrictedPytestError("node_tool_invalid_command", "The lint/typecheck input has write or shell effects.")
     if sys.platform == "win32":
-        return _prepare_windows_build(
+        return _prepare_windows_tool(
             name, args, runtime_args, expected_entry, workspace=workspace, cwd=cwd or workspace
         )
-    base = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd)
+    base = prepare_restricted_node_test(["node", "--test"], workspace=workspace, cwd=cwd, home_dir=home_dir)
     output_roots = ()
     if name == "vite":
         output_roots = (_vite_output(args, workspace=base.workspace, cwd=base.cwd),)
@@ -507,7 +509,7 @@ def run_restricted_node_tool(
     merge_stderr: bool = False,
 ) -> int:
     if plan.backend == "windows-appcontainer":
-        return _run_windows_node_build(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
+        return _run_windows_node_tool(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
     for root in plan.output_roots:
         # Vite creates this directory itself; a sandbox grant needs it first.
         if root.name == ".vite-temp":
@@ -520,21 +522,26 @@ def run_restricted_node_tool(
     )
 
 
-def _run_windows_node_build(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
-    """The native runner stages the build and publishes only the output roots."""
+def _run_windows_node_tool(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
+    """The native runner stages the run and publishes only the output roots.
+
+    A build names those roots; a reporting run names none, so its staged copy
+    leaves no trace in the workspace at all.
+    """
+    build = plan.profile_version == NODE_BUILD_OUTPUT_PROFILE_VERSION
     if (
         sys.platform != "win32"
-        or plan.profile_version != NODE_BUILD_OUTPUT_PROFILE_VERSION
-        or not plan.output_roots
+        or plan.profile_version not in {NODE_BUILD_OUTPUT_PROFILE_VERSION, NODE_TOOL_READ_ONLY_PROFILE_VERSION}
+        or bool(plan.output_roots) != build
         or not 0 < timeout_seconds <= 86400
     ):
-        raise RestrictedPytestError("node_tool_invalid_command", "Unexpected protected build plan.")
+        raise RestrictedPytestError("node_tool_invalid_command", "Unexpected protected run plan.")
     outputs = [option for root in plan.output_roots for option in ("--output", str(root))]
     argv = [
         str(plan.backend_executable),
         "contained-readonly-windows",
         "--profile",
-        NODE_BUILD_OUTPUT_PROFILE_VERSION,
+        plan.profile_version,
         "--workspace",
         str(plan.workspace),
         "--cwd",
@@ -548,7 +555,7 @@ def _run_windows_node_build(plan: RestrictedPytestPlan, *, timeout_seconds: int,
     return _run_backend_process(
         argv,
         env=os.environ,
-        timeout_seconds=timeout_seconds + _WINDOWS_BUILD_GRACE_SECONDS,
+        timeout_seconds=timeout_seconds + _WINDOWS_STAGING_GRACE_SECONDS,
         cwd=plan.cwd,
         merge_stderr=merge_stderr,
     )

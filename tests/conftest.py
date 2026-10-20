@@ -24,6 +24,7 @@ pytest_plugins = [
     "tests.approval_reuse_fixtures",
     "tests.native_runtime_fixtures",
     "tests.native_resident_teardown",
+    "tests.optional_command_catalog_fixtures",
 ]
 
 SRC_PATH = Path(__file__).resolve().parents[1] / "src"
@@ -34,6 +35,13 @@ if not use_installed_package and str(SRC_PATH) not in sys.path:
     sys.path.insert(0, str(SRC_PATH))
 if str(SUPPORT_PATH) not in sys.path:
     sys.path.insert(0, str(SUPPORT_PATH))
+
+
+# The runtime refuses to compile an uninstalled bundle unless a caller that owns
+# a checkout stages it. The suite runs against this checkout, so it registers one.
+from tests.development_authoring_staging import register_checkout_staging  # noqa: E402
+
+register_checkout_staging()
 
 existing_pythonpath = os.environ.get("PYTHONPATH", "")
 pythonpath_entries = [entry for entry in existing_pythonpath.split(os.pathsep) if entry]
@@ -74,6 +82,25 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
         monkeypatch.setenv("HOL_GUARD_NATIVE", "force" if regression else "auto")
         return not regression
     return False
+
+
+@pytest.fixture(autouse=True)
+def _fresh_verified_runtime_copy() -> Iterator[None]:
+    """Start each test without the process's reused runtime copy."""
+    from codex_plugin_scanner.guard.extension_builder import native_executable_root
+
+    native_executable_root.release_copies()
+    yield
+    native_executable_root.release_copies()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep reused native answers from crossing tests that stub native replies."""
+    from codex_plugin_scanner.guard.catalog_delivery import active_security, installed_bundle
+
+    monkeypatch.setattr(installed_bundle, "_ANSWERS", {})
+    monkeypatch.setattr(active_security, "_ANSWERS", type(active_security._ANSWERS)())
 
 
 @pytest.fixture(autouse=True)

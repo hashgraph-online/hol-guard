@@ -48,9 +48,8 @@ def archive(tmp_path):
     (tmp_path / "contributions/mcp-servers").mkdir()
     (tmp_path / "rust/build_support").mkdir()
     (tmp_path / "scripts").mkdir()
-    shutil.copyfile(
-        root / "scripts/build_native_command_program.py", tmp_path / "scripts/build_native_command_program.py"
-    )
+    for name in ("build_native_command_program.py", "core_command_build_inputs.py"):
+        shutil.copyfile(root / "scripts" / name, tmp_path / "scripts" / name)
     module.write_projection_manifest(tmp_path)
     return module, tmp_path
 

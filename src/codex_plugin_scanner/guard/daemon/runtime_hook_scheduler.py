@@ -396,8 +396,16 @@ class RuntimeHookScheduler:
         recent = [value for timestamp, value in self._service_time_by_lane[lane] if now - timestamp <= 60.0]
         if len(recent) < _MIN_PREDICTION_SAMPLES:
             return _DEFAULT_SERVICE_SECONDS
-        estimate = self._percentile(deque(recent), 0.95)
-        return min(_MAX_SERVICE_SECONDS, max(_MIN_SERVICE_SECONDS, estimate))
+        estimate = min(_MAX_SERVICE_SECONDS, max(_MIN_SERVICE_SECONDS, self._percentile(deque(recent), 0.95)))
+        if self._active == 0:
+            # Nothing is in flight, so the slow samples describe a stall that
+            # already ended. A rejection leaves no sample of its own, so acting
+            # on them would refuse every hook that spent a moment in policy
+            # readiness and keep the stall's estimate alive for the whole
+            # window. Admit on the cold-start estimate: a review that really
+            # cannot finish still fails safe at its own deadline.
+            return min(estimate, _DEFAULT_SERVICE_SECONDS)
+        return estimate
 
     def _has_competing_client(self, client_key: str) -> bool:
         return any(

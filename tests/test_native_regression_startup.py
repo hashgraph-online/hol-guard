@@ -55,12 +55,15 @@ def test_startup_resolves_both_installed_binaries_in_the_execution_process(monke
     calls = _native_probes(monkeypatch, SimpleNamespace(path=binary), compiler)
     monkeypatch.setenv("HOL_GUARD_NATIVE_BINARY", "untrusted-override")
     monkeypatch.setenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", "untrusted-compiler")
+    monkeypatch.setenv("HOL_GUARD_NATIVE_SOURCE_COMPILER", "untrusted-compiler")
 
     shard._configure_installed_native()
 
     assert calls == ["runtime", "compiler"]
     assert os.environ["HOL_GUARD_NATIVE_BINARY"] == str(binary)
-    assert os.environ["HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER"] == str(compiler)
+    # The installed wheel refuses a compiler override, so none stays exported.
+    assert "HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER" not in os.environ
+    assert "HOL_GUARD_NATIVE_SOURCE_COMPILER" not in os.environ
 
 
 @pytest.mark.parametrize("missing", ["runtime", "compiler"])

@@ -210,6 +210,7 @@ impl Saved<'_> {
             publisher: probe.publisher.map(str::to_owned),
             now: self.now.clone(),
             evidence: None,
+            current_action: None,
         };
         let diagnose = |request: &ApprovalReuseDiagnosticRequestV1| {
             crate::approval_reuse_diagnostic_op::diagnose(

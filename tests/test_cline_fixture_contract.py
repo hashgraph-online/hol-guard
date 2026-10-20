@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.cline_hook_payload import prepare_cline_hook_payload
+from codex_plugin_scanner.guard.adapters._modules.cline.cline_hook_payload import prepare_cline_hook_payload
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "cline"
 

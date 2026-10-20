@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, update_settings
+from codex_plugin_scanner.guard.approval_gate import update_settings
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_command_control_authority import AUTHORITY_FILE_NAME
@@ -38,7 +38,7 @@ from codex_plugin_scanner.guard.native_resident_client import (
 )
 from codex_plugin_scanner.guard.native_runtime import native_runtime_status
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth
+from codex_plugin_scanner.guard.runtime.extension_control_authority import AuthorityHealth, layers_to_json
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
@@ -47,10 +47,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ExtensionControl,
     ExtensionControlLayer,
-)
-from codex_plugin_scanner.guard.runtime.extension_control_proof import (
-    ExtensionControlMutation,
-    issue_extension_control_proof,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_base import EncryptedFileSecretStore
@@ -78,14 +74,17 @@ def close_native_residents_with_retry(home: Path) -> bool:
         time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, remaining))
 
 
-def installed_native_case_runner():
-    spec = importlib.util.spec_from_file_location(
-        "installed_native_extension_case", Path(__file__).with_name("installed_native_extension_case.py")
-    )
-    require(spec is not None and spec.loader is not None, "case_runner_missing")
+def _sibling(name: str, code: str):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{name}.py"))
+    require(spec is not None and spec.loader is not None, code)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def installed_native_case_runner():
+    module = _sibling("installed_native_extension_case", "case_runner_missing")
     require(callable(getattr(module, "run_case", None)), "case_runner_missing")
     return module.run_case
 
@@ -93,18 +92,7 @@ def installed_native_case_runner():
 run_case = installed_native_case_runner()
 
 
-def installed_probe_support():
-    spec = importlib.util.spec_from_file_location(
-        "installed_extension_probe_support", Path(__file__).with_name("installed_extension_probe_support.py")
-    )
-    require(spec is not None and spec.loader is not None, "support_missing")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_support = installed_probe_support()
+_support = _sibling("installed_extension_probe_support", "support_missing")
 prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
 persisted_native_receipt_ids = _support.persisted_native_receipt_ids
 receipt_processed_count = _support.receipt_processed_count
@@ -113,17 +101,11 @@ receipt_binding_diagnostic = _support.receipt_binding_diagnostic
 policy_readiness_diagnostic = _support.policy_readiness_diagnostic
 policy_request_phase_diagnostic = _support.policy_request_phase_diagnostic
 require_native_http_admission = _support.require_native_http_admission
+serve_release_assets = _support.serve_release_assets
 
 
 def installed_client():
-    spec = importlib.util.spec_from_file_location(
-        "native_extension_installed_client", Path(__file__).with_name("installed_hook_client.py")
-    )
-    require(spec is not None and spec.loader is not None, "client_missing")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.installed_hook_request
+    return _sibling("installed_hook_client", "client_missing").installed_hook_request
 
 
 def provision(store: GuardStore) -> None:
@@ -137,10 +119,11 @@ def provision(store: GuardStore) -> None:
         require(after.health is AuthorityHealth.PROTECTED and after.revision == 0 and not after.layers, "bootstrap")
 
 
-def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionControl, ...]) -> int:
-    catalog = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
-    before = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(before.health is AuthorityHealth.PROTECTED, "mutation_not_protected")
+def commit_controls(service, password: str, controls: tuple[ExtensionControl, ...]) -> int:
+    # Preview prepares optional native packs before the authenticated commit.
+    # A direct store mutation cannot exercise the normal installed enable path.
+    catalog = service.catalog_digest
+    before = service._runtime.current().revision
     layers = (
         ExtensionControlLayer(
             schema_version=CONTROL_SCHEMA_VERSION,
@@ -151,29 +134,19 @@ def commit_controls(store: GuardStore, password: str, controls: tuple[ExtensionC
         ),
     )
     nonce = secrets.token_hex(16)
-    mutation = ExtensionControlMutation(
-        previous_revision=before.revision,
+    payload = dict(
+        previous_revision=before,
         catalog_digest=catalog,
-        layers=layers,
+        layers=json.loads(layers_to_json(layers)),
         actor_id="isolated-installed-probe",
         idempotency_key=nonce,
         nonce=nonce,
     )
-    proof = issue_extension_control_proof(
-        store.guard_home, mutation, approval_gate_input=ApprovalGateInput(password=password), session_nonce=nonce
-    )
-    store.commit_extension_control_layers(
-        layers,
-        catalog_digest=catalog,
-        actor_id=mutation.actor_id,
-        expected_revision=before.revision,
-        idempotency_key=nonce,
-        nonce=nonce,
-        proof=proof,
-    )
-    after = store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
-    require(after.health is AuthorityHealth.PROTECTED and after.revision == before.revision + 1, "mutation_commit")
-    return after.revision
+    approved = service.preview({**payload, "session_nonce": nonce, "approval_password": password})
+    service.apply({**payload, "proof_id": approved["proof_id"]})
+    after = service._runtime.current().revision
+    require(after == before + 1, "mutation_commit")
+    return after
 
 
 def control(kind: ControlTargetKind, target: str, state: ControlState) -> ExtensionControl:
@@ -253,6 +226,9 @@ def exercise(root: Path) -> dict[str, object]:
     all_receipts: list[str] = []
     previous_publisher: object | None = None
 
+    def commit(controls):
+        return commit_controls(daemon._server.extension_control_api, password, controls)
+
     def case(
         label: str,
         command: str,
@@ -290,7 +266,9 @@ def exercise(root: Path) -> dict[str, object]:
             policy_request_phase_diagnostic=policy_request_phase_diagnostic,
             require_native_http_admission=require_native_http_admission,
             require=require,
-            permission_for_rule_id=BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id,
+            permission_for_rule_id=lambda rule: daemon._server.extension_control_api._registry.permission_for_rule_id(
+                rule
+            ),
             minimum=minimum,
             minimum_at_least=minimum_at_least,
             tool_payload=tool_payload,
@@ -303,7 +281,7 @@ def exercise(root: Path) -> dict[str, object]:
         daemon.start()
         case("external-off", "ollama rm example-model", 0, matched=None)
         enabled = control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-enabled", "ollama rm example-model", revision, matched="command.ollama.rm")
         safe = case("owned-help", "ollama rm --help", revision, matched="command.ollama.rm")
         owned = next(row for row in safe["observations"] if row["rule_id"] == "command.ollama.rm")
@@ -315,24 +293,17 @@ def exercise(root: Path) -> dict[str, object]:
             matched="command.ollama.rm",
             minimum="block",
         )
-        permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.ollama.rm")
+        permission = daemon._server.extension_control_api._registry.permission_for_rule_id("command.ollama.rm")
         require(permission is not None, "permission_missing")
-        revision = commit_controls(
-            store,
-            password,
+        revision = commit(
             (enabled, control(ControlTargetKind.PERMISSION, permission.permission_id, ControlState.DISABLED)),
         )
         case("permission-disabled", "ollama rm example-model", revision, matched="command.ollama.rm", minimum="block")
         worktree_permission = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permission_for_rule_id("command.git.worktree")
         require(worktree_permission is not None, "worktree_permission_missing")
         worktree_target = workspace / "native-worktree-target"
-        revision = commit_controls(
-            store,
-            password,
-            (
-                control(ControlTargetKind.EXTENSION, "command.git", ControlState.ENABLED),
-                control(ControlTargetKind.PERMISSION, worktree_permission.permission_id, ControlState.DISABLED),
-            ),
+        revision = commit(
+            (control(ControlTargetKind.PERMISSION, worktree_permission.permission_id, ControlState.DISABLED),),
         )
         worktree_command = (
             f"sleep 0.01; cd {workspace} && git worktree add {worktree_target} "
@@ -352,11 +323,9 @@ def exercise(root: Path) -> dict[str, object]:
         # permission, reason, and persisted-receipt evidence prove denial;
         # these checks only prove the synthetic fixture did not materialize.
         require(not worktree_target.exists(), "worktree_target_executed")
-        revision = commit_controls(
-            store, password, (control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),)
-        )
+        revision = commit((control(ControlTargetKind.EXTENSION, "command.ollama", ControlState.DISABLED),))
         case("external-disabled", "ollama rm example-model", revision, matched=None)
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case("external-reenabled", "ollama push example-model", revision, matched="command.ollama.push")
         previous_publisher = daemon._server.hook_worker.policy_snapshot_publisher
         daemon.stop()
@@ -377,7 +346,7 @@ def exercise(root: Path) -> dict[str, object]:
             )
             for extension in delegated
         )
-        revision = commit_controls(store, password, (enabled, *delegated_controls))
+        revision = commit((enabled, *delegated_controls))
         for extension in delegated:
             permission_id = extension.permissions[0].permission_id
             case(
@@ -389,7 +358,7 @@ def exercise(root: Path) -> dict[str, object]:
                 permission_id=permission_id,
             )
         mcp_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-filesystem", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, mcp_enabled))
+        revision = commit((enabled, mcp_enabled))
         mcp_permission = "command.mcp-filesystem.permission.mcp-filesystem-tool"
         case(
             "mcp-write-blocked",
@@ -412,7 +381,7 @@ def exercise(root: Path) -> dict[str, object]:
             tool_payload={"tool_name": "mcp__filesystem__read_file", "tool_input": {"path": "fixture.txt"}},
         )
         instapods_enabled = control(ControlTargetKind.EXTENSION, "command.mcp-instapods", ControlState.ENABLED)
-        revision = commit_controls(store, password, (enabled, instapods_enabled))
+        revision = commit((enabled, instapods_enabled))
         instapods_permission = "command.mcp-instapods.permission.mcp-instapods-tool"
         case(
             "mcp-instapods-delete-review",
@@ -440,7 +409,7 @@ def exercise(root: Path) -> dict[str, object]:
             permission_id=instapods_permission,
             tool_payload={"tool_name": "mcp__instapods__manage_pod", "tool_input": {"operation": "status"}},
         )
-        revision = commit_controls(store, password, (enabled,))
+        revision = commit((enabled,))
         case(
             "mcp-off",
             "",
@@ -499,7 +468,10 @@ def exercise(root: Path) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, required=True)
+    parser.add_argument("--release-assets", type=Path, help="pack assets exported by this unreleased build")
     args = parser.parse_args()
+    if args.release_assets is not None:
+        serve_release_assets(args.release_assets.resolve(strict=True))
     package = Path(codex_plugin_scanner.__file__).resolve()
     require("site-packages" in package.parts, "not_installed_package")
     status = native_runtime_status()
@@ -510,11 +482,12 @@ def main() -> int:
     )
     authoring = prove_installed_data_only_authoring(package)
     with tempfile.TemporaryDirectory(prefix="hge-", dir=Path.home() if os.name == "nt" else "/tmp") as temporary:
-        report = exercise(Path(temporary))
+        report = exercise(Path(temporary).resolve())
     report["data_only_authoring"] = authoring
     report["data_only_authoring_receipts_authenticated"] = False
     report["source_sha"] = status.capabilities.build_sha
     report["rule_digest"] = status.capabilities.rule_digest
+    report["pack_release_source"] = "build-export" if args.release_assets is not None else "published-release"
     args.json.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
     return 0

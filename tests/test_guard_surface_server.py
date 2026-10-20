@@ -8,7 +8,6 @@ import json
 import os
 import socket
 import sqlite3
-import sys
 import tempfile
 import time
 import urllib.error
@@ -20,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from codex_plugin_scanner.guard import native_directory_trust as native_directory_trust_module
 from codex_plugin_scanner.guard.adapters import get_adapter
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -29,7 +29,6 @@ from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_h
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import load_authenticated_daemon_state
 from codex_plugin_scanner.guard.desktop_notifications import DesktopNotificationSetupResult
-from codex_plugin_scanner.guard.directory_path_authority import validated_owned_temporary_workspace
 from codex_plugin_scanner.guard.local_dashboard_session import (
     LOCAL_DASHBOARD_SESSION_AUDIENCE,
     LOCAL_DASHBOARD_SESSION_VERSION,
@@ -105,10 +104,6 @@ def _decode_dashboard_session_claims(token: str) -> dict[str, object]:
     _prefix, encoded_payload, _signature = token.split(".")
     padding = "=" * (-len(encoded_payload) % 4)
     return json.loads(base64.urlsafe_b64decode(f"{encoded_payload}{padding}").decode("utf-8"))
-
-
-def _owned_temporary_workspace_accepted(candidate: str) -> bool:
-    return validated_owned_temporary_workspace(candidate) is not None
 
 
 class TestGuardSurfaceServer:
@@ -1444,11 +1439,6 @@ class TestGuardSurfaceServer:
         home_dir.mkdir()
         workspace_dir.mkdir()
         store = GuardStore(tmp_path / "guard-home")
-        monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_hook_safe_roots",
-            lambda _self: (home_dir.resolve(),),
-        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
 
         captured: dict[str, object] = {}
@@ -1511,11 +1501,6 @@ class TestGuardSurfaceServer:
         home_dir = tmp_path / "home"
         home_dir.mkdir()
         store = GuardStore(tmp_path / "guard-home")
-        monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_hook_safe_roots",
-            lambda _self: (home_dir.resolve(),),
-        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
 
         captured: dict[str, object] = {}
@@ -1576,11 +1561,6 @@ class TestGuardSurfaceServer:
         home_dir.mkdir()
         workspace_dir.mkdir()
         store = GuardStore(tmp_path / "guard-home")
-        monkeypatch.setattr(
-            daemon_server_module._GuardDaemonHandler,
-            "_hook_safe_roots",
-            lambda _self: (home_dir.resolve(),),
-        )
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
 
         # Run past the deadline the review was handed rather than past a wall
@@ -1685,44 +1665,6 @@ class TestGuardSurfaceServer:
         assert responses[0]["decision"] == "deny"
         assert elapsed < 0.4, f"expired rendering restarted the storage wait: {elapsed:.3f}s"
         assert sqlite_operation_deadline_monotonic() == inherited_deadline
-
-    @pytest.mark.skipif(os.name != "posix", reason="POSIX /tmp ownership contract")
-    def test_guard_daemon_accepts_owned_posix_tmp_workspace(self) -> None:
-
-        with daemon_server_module.tempfile.TemporaryDirectory(
-            prefix="hol-guard-owned-workspace-",
-            dir="/tmp",
-        ) as workspace:
-            resolved_workspace = os.path.realpath(workspace)
-            assert resolved_workspace.startswith(f"{os.path.realpath('/tmp')}{os.sep}")
-            assert _owned_temporary_workspace_accepted(resolved_workspace)
-
-    def test_guard_daemon_accepts_acl_scoped_primary_temp_without_getuid(
-        self,
-        tmp_path,
-        monkeypatch,
-    ) -> None:
-        monkeypatch.delattr(daemon_server_module.os, "getuid", raising=False)
-        current_home = tmp_path / "home"
-        user_temp = current_home / "temp"
-        workspace = user_temp / "workspace"
-        workspace.mkdir(parents=True, exist_ok=True)
-        monkeypatch.setattr(daemon_server_module.Path, "home", lambda: current_home)
-        monkeypatch.setattr(daemon_server_module.tempfile, "gettempdir", lambda: str(user_temp))
-
-        assert _owned_temporary_workspace_accepted(str(workspace))
-        monkeypatch.setattr(daemon_server_module.tempfile, "gettempdir", lambda: str(tmp_path))
-        assert not _owned_temporary_workspace_accepted(str(tmp_path))
-
-    @pytest.mark.skipif(sys.platform != "darwin", reason="Darwin user temp root contract")
-    def test_guard_daemon_accepts_darwin_workspace_after_sanitized_restart(
-        self,
-        monkeypatch,
-    ) -> None:
-        with daemon_server_module.tempfile.TemporaryDirectory(prefix="hol-guard-owned-workspace-") as workspace:
-            monkeypatch.setattr(tempfile, "gettempdir", lambda: "/tmp")
-
-            assert _owned_temporary_workspace_accepted(os.path.realpath(workspace))
 
     def test_guard_daemon_hook_queue_bytes_fail_closed_and_reports_health(
         self,
@@ -1960,6 +1902,25 @@ class TestGuardSurfaceServer:
                 seen_payload.update(payload)
                 return {"decision": "allow"}
 
+            def settled_reference(candidates, **_kwargs):
+                """Stand in for the runtime that settles the reference path.
+
+                The dispatch above is already a double, so this daemon never
+                reaches a resident. Whether the path is Guard-owned is the
+                runtime's verdict and has its own tests; what this test watches
+                is that the referenced payload stays opaque on the way through.
+                """
+
+                return [
+                    native_directory_trust_module.DirectoryTrustVerdict(
+                        parameter=parameter,
+                        path=value,
+                        reason=None,
+                    )
+                    for parameter, value in candidates
+                ]
+
+            monkeypatch.setattr(native_directory_trust_module, "native_directory_trust", settled_reference)
             monkeypatch.setattr(daemon_server_module, "prepare_native_hook_policy", lambda *_args, **_kwargs: True)
             monkeypatch.setattr(daemon_server_module._GuardDaemonHandler, "_handle_runtime_hook_fast", native_dispatch)
             daemon.start()

@@ -23,7 +23,15 @@ const COMMAND_HASH_VERSION: &str = "native-command-hash-v1";
 /// A review raised for one of these signals is a risk finding, not a first-seen
 /// prompt: it never gets the proven token, so an approval of it binds only the
 /// exact command (`command_hash`).
-const RISK_REASON_MARKERS: [&str; 11] = [
+///
+/// `persist` is here because a file tool's proven identity names the file
+/// rather than the bytes written into it. That is what an approval for an
+/// ordinary source edit should cover, but a review raised over a boot or login
+/// mechanism is about the bytes: the file is `~/.zshrc` or a launch agent
+/// every time, and what changes between the allowed write and the next one is
+/// exactly what the review was raised for. Binding those to the command keeps
+/// both choices on the review and asks again when the content changes.
+const RISK_REASON_MARKERS: [&str; 12] = [
     "secret",
     "sensitive",
     "credential",
@@ -35,6 +43,7 @@ const RISK_REASON_MARKERS: [&str; 11] = [
     "encoded",
     "poison",
     "dangerous",
+    "persist",
 ];
 
 fn is_review_action(action: Option<&str>) -> bool {
@@ -69,23 +78,51 @@ pub(super) fn launch_cwd(payload_cwd: Option<&str>, workspace: Option<&str>) -> 
     fs_path::is_dir(&resolved).then_some(resolved)
 }
 
-/// `_exact_action_token`: the token, or the reason the action stays one-time.
+/// Context token or refusal. Script observations without an execution owner
+/// cannot become permission for either approval duration.
 pub(super) fn exact_action(
     query: &NativeExactActionQueryV1,
     deadline: Instant,
     engines: &dyn Engines,
 ) -> Proof<String> {
+    if let NativeExactActionQueryV1::ExactAction { facts, .. } = query {
+        check_facts(facts)?;
+    }
+    if super::launch_evidence::names_script_runtime(query) {
+        return Err(super::reasons::SCRIPT_DELIVERY);
+    }
     let components = exact_action_components(query, deadline, engines)?;
+    if super::launch_evidence::requires_owner(&components.identity["launch"]) {
+        return Err(super::reasons::SCRIPT_DELIVERY);
+    }
     let token = build_context_token(&components).map_err(|_| UNPROVEN_LAUNCH)?;
     parse_context_token(&Value::String(token.clone())).ok_or(UNPROVEN_LAUNCH)?;
     Ok(token)
 }
 
+fn check_facts(facts: &NativeReviewFactsV1) -> Proof<()> {
+    if !is_overridable(facts) {
+        return Err(non_overridable_reason(facts));
+    }
+    let reason_code = facts.reason_code.as_deref().unwrap_or("").to_lowercase();
+    if RISK_REASON_MARKERS
+        .iter()
+        .any(|marker| reason_code.contains(marker))
+    {
+        return Err(NON_OVERRIDABLE);
+    }
+    Ok(())
+}
+
 /// The token an approval of `query` is saved and matched under: the proven
 /// exact-action token when Guard can prove what the command runs, else the
 /// hash of the command itself (`command_hash`). Every review the user can
-/// answer gets one, so every review offers Always allow
-/// (`docs/guard/approval-invariant.md`).
+/// answer gets one, script launches included: `docs/guard/approval-invariant.md`
+/// requires Allow once and Always allow on every paused review, and taking the
+/// token away is not what holds a script to the bytes the user saw. The
+/// execution owner does that at its launch barrier, where a saved decision is
+/// matched against the captured artifact hash before any effect, so edited
+/// script bytes ask again instead of reusing the grant.
 pub(super) fn approval_token(
     query: &NativeExactActionQueryV1,
     deadline: Instant,
@@ -185,16 +222,7 @@ pub(super) fn exact_action_components(
     else {
         return Err(UNPROVEN_LAUNCH);
     };
-    if !is_overridable(facts) {
-        return Err(non_overridable_reason(facts));
-    }
-    let reason_code = facts.reason_code.as_deref().unwrap_or("").to_lowercase();
-    if RISK_REASON_MARKERS
-        .iter()
-        .any(|marker| reason_code.contains(marker))
-    {
-        return Err(NON_OVERRIDABLE);
-    }
+    check_facts(facts)?;
     let has_command = command
         .as_deref()
         .is_some_and(|text| !text.trim().is_empty());

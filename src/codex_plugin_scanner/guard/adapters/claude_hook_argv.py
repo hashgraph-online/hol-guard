@@ -9,8 +9,8 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from ..runtime.harness_attribution import cursor_hook_query_extras
+from ._modules.claude.claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
 from .base import HarnessContext
-from .claude_frozen_hook import FROZEN_CLAUDE_HOOK_COMMAND
 from .claude_hook_config import (
     CLAUDE_GUARD_DAEMON_HOOK_MARKER,
     CLAUDE_GUARD_SESSION_START_CONTEXT,

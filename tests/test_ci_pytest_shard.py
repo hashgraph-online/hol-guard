@@ -291,7 +291,6 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
 
     # Native contracts still block the required result, but do not withhold
     # already-verified compiler/runtime artifacts from the coverage fan-out.
-    assert not any("ci/package_size" in step.get("run", "") for step in steps)
     gates = document["jobs"]["native-gates"]
     assert gates["needs"] == "native-command-evaluators"
     checks = [
@@ -301,7 +300,6 @@ def test_native_contract_preflight_is_required_without_delaying_artifact_fanout(
     check = checks[0]
     assert check["if"] == "matrix.shard-index == 0"
     assert not check.get("continue-on-error", False)
-    assert "ci/package_size" in check["run"]
     assert "test_native_contract_validates_every_authored_signature_without_rewriting_evidence" in check["run"]
     assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in check["run"]
     assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in check["run"]

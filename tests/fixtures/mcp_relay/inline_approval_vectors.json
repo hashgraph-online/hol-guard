@@ -1,5 +1,5 @@
 {
-  "description": "The inline approval prompt the MCP proxy raises on an elicitation-capable client (_inline_approval_request), the reply kinds it classifies (_approval_payload then _inline_approval_kind) and the blocks a denied or invalid reply produces (_inline_approval_deny_result). The relay raises the same prompt and classifies the same replies, and its resident routes the result.",
+  "description": "The inline approval prompt the MCP proxy raises on an elicitation-capable client (_inline_approval_request), the payload each reply reduces to (_approval_payload), the kind the resident classifies that payload into and the blocks it composes for a denied or invalid reply. The relay raises the same prompt and classifies the same replies.",
   "prompt": {
     "server": "workspace-files",
     "tool": "delete_secret_file",
@@ -74,6 +74,12 @@
           }
         }
       },
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "approve"
+        }
+      },
       "reply": "allow",
       "kind": "allow"
     },
@@ -88,6 +94,13 @@
             "decision": "approve",
             "note": "fine"
           }
+        }
+      },
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "approve",
+          "note": "fine"
         }
       },
       "reply": "allow",
@@ -105,6 +118,12 @@
           }
         }
       },
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "deny"
+        }
+      },
       "reply": "denied",
       "kind": "denied"
     },
@@ -118,6 +137,12 @@
           "content": {
             "decision": "maybe"
           }
+        }
+      },
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": "maybe"
         }
       },
       "reply": "invalid",
@@ -135,6 +160,12 @@
           }
         }
       },
+      "payload": {
+        "action": "accept",
+        "content": {
+          "decision": true
+        }
+      },
       "reply": "invalid",
       "kind": "denied"
     },
@@ -147,6 +178,10 @@
           "action": "accept",
           "content": {}
         }
+      },
+      "payload": {
+        "action": "accept",
+        "content": {}
       },
       "reply": "invalid",
       "kind": "denied"
@@ -161,6 +196,10 @@
           "content": "approve"
         }
       },
+      "payload": {
+        "action": "accept",
+        "content": "approve"
+      },
       "reply": "invalid",
       "kind": "denied"
     },
@@ -173,6 +212,9 @@
           "action": "accept"
         }
       },
+      "payload": {
+        "action": "accept"
+      },
       "reply": "invalid",
       "kind": "denied"
     },
@@ -184,6 +226,9 @@
         "result": {
           "action": "cancel"
         }
+      },
+      "payload": {
+        "action": "cancel"
       },
       "reply": "fallthrough",
       "kind": "fallthrough"
@@ -200,6 +245,12 @@
           }
         }
       },
+      "payload": {
+        "action": "decline",
+        "content": {
+          "decision": "deny"
+        }
+      },
       "reply": "fallthrough",
       "kind": "fallthrough"
     },
@@ -213,6 +264,10 @@
           "reason": "timeout"
         }
       },
+      "payload": {
+        "action": "cancel",
+        "reason": "timeout"
+      },
       "reply": "fallthrough",
       "kind": "fallthrough"
     },
@@ -223,6 +278,9 @@
         "id": "guard-elicitation-1",
         "result": "accept"
       },
+      "payload": {
+        "action": "cancel"
+      },
       "reply": "fallthrough",
       "kind": "fallthrough"
     },
@@ -232,6 +290,9 @@
         "jsonrpc": "2.0",
         "id": "guard-elicitation-1",
         "result": null
+      },
+      "payload": {
+        "action": "cancel"
       },
       "reply": "fallthrough",
       "kind": "fallthrough"
@@ -246,6 +307,9 @@
           "message": "elicitation/create not supported"
         }
       },
+      "payload": {
+        "action": "cancel"
+      },
       "reply": "fallthrough",
       "kind": "fallthrough"
     },
@@ -254,6 +318,9 @@
       "response": {
         "jsonrpc": "2.0",
         "id": "guard-elicitation-1"
+      },
+      "payload": {
+        "action": "cancel"
       },
       "reply": "fallthrough",
       "kind": "fallthrough"

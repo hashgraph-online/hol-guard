@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
 from ..native_policy_snapshot_harness_postures import recording_only_for_binding
 from ..native_resident_client import native_resident_client_failure_code
-from .hook_native_review_fence import native_review_fence
+from .hook_native_review_fence import native_review_fence, published_binding_token
 from .hook_policy_fence_window import (
     POLICY_UPDATE_PENDING_REASON_CODE,
     PolicySourceFenceBusyError,
@@ -217,6 +217,7 @@ def _review_native_edge_once(
     # unavailable route and cannot establish recording-only authority.
     recording_only = recording_only_for_binding(policy_snapshot, harness)
     fenced: bool | None = None
+    unleased_binding: tuple[object, ...] | None = None
     capture_receipts: list[Mapping[str, object]] = []
     try:
         with native_review_fence(
@@ -226,6 +227,8 @@ def _review_native_edge_once(
             guard_home=guard_home,
             deadline=deadline,
         ) as fenced:
+            if fenced is None:
+                unleased_binding = published_binding_token(worker.policy_snapshot_publisher)
             response, native_used = worker._review_native_edge_with_snapshot(
                 payload=payload,
                 harness=harness,
@@ -242,14 +245,34 @@ def _review_native_edge_once(
                 claimed_approval_request_id=claimed_approval_request_id,
                 capture_receipts=capture_receipts,
             )
-            if (
-                fenced
-                and native_used
-                and response.get("policy_action") == "allow"
-                and deadline is not None
-                and time.monotonic() >= deadline
-            ):
-                raise TimeoutError("native_review_fence_deadline")
+            # A deadline that passed while this decision was being reached
+            # says the host was busy, not that the answer is stale, and
+            # discarding it turns ordinary work into an approval row. The
+            # fence's own entry check still refuses to start a review that is
+            # already out of time.
+        if fenced is None and (
+            unleased_binding is None or published_binding_token(worker.policy_snapshot_publisher) != unleased_binding
+        ):
+            # Reached without the lease, and a control mutation published
+            # across it. Honouring this response could allow a command, or
+            # claim a saved approval, against the policy being replaced.
+            return worker._apply_structured_unavailable_overlay(
+                _record_unavailable_native(
+                    worker,
+                    payload,
+                    harness=harness,
+                    event_name=event_name,
+                    reason_code="native_command_control_fence_unavailable",
+                    workspace=workspace,
+                    home_dir=home_dir,
+                    guard_home=guard_home,
+                    recording_only=recording_only,
+                ),
+                harness=harness,
+                event_name=event_name,
+                guard_home=guard_home,
+                workspace=workspace,
+            )
         if capture_receipts and worker.capture_writer is not None:
             with suppress(Exception):
                 _ = worker.capture_writer.submit_native_capture(

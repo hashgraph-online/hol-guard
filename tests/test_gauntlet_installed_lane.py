@@ -404,11 +404,19 @@ def test_a_real_gate_refusal_names_what_the_install_printed(tmp_path: Path) -> N
         )
 
 
-def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path) -> None:
+def test_the_lane_never_touches_the_operators_own_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sdk = str(tmp_path / "host-python-sdk")
+    monkeypatch.setenv("LD_LIBRARY_PATH", sdk)
     runtime = _stub(tmp_path / "hol-guard", register=True, verdicts=["allow"])
+    runtime.write_text(
+        runtime.read_text().replace(
+            "import json, os, sys", "import json, os, sys\nassert 'LD_LIBRARY_PATH' not in os.environ"
+        )
+    )
     before = os.environ.get("HOME")
     _run(tmp_path, runtime, repeat=1)
     assert os.environ.get("HOME") == before
+    assert os.environ["LD_LIBRARY_PATH"] == sdk
     for relative in (".claude/settings.json", ".codex/config.toml"):
         assert not (tmp_path / "work" / relative).exists()
 

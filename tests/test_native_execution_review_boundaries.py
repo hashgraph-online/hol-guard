@@ -100,6 +100,25 @@ def test_malformed_approval_classes_do_not_reach_resident(monkeypatch, tmp_path,
     assert native_execution.prompt_analyze_native("extract", guard_home=tmp_path, approved_classes=classes) is None
 
 
+@pytest.mark.parametrize("artifacts", [[{}, None], ["bad"], "bad", {}, 7])
+def test_malformed_prompt_artifacts_do_not_reach_resident(monkeypatch, tmp_path, artifacts):
+    monkeypatch.setattr(native_execution, "_resident_request", lambda **_: pytest.fail("transport called"))
+    assert native_execution.prompt_analyze_native("merge_artifacts", guard_home=tmp_path, artifacts=artifacts) is None
+
+
+def test_prompt_artifacts_reach_the_resident_unredacted(monkeypatch, tmp_path):
+    captured = {}
+
+    def resident(**kwargs):
+        captured.update(kwargs)
+        return {"result": None}
+
+    monkeypatch.setattr(native_execution, "_resident_request", resident)
+    artifacts = [{"artifact_id": "codex:a", "metadata": {"prompt_matched_text": ".env"}}]
+    native_execution.prompt_analyze_native("merge_artifacts", guard_home=tmp_path, artifacts=artifacts)
+    assert captured["request"]["artifacts"] == artifacts
+
+
 def test_valid_prompt_requests_keep_their_fields(monkeypatch, tmp_path):
     captured = {}
 

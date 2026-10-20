@@ -210,8 +210,10 @@ mod contained;
 #[cfg(test)]
 mod contained_tests;
 mod credentials;
+mod developer_shim;
 mod environment;
 mod executables;
+mod framework_grants;
 mod launch_roots;
 mod launch_shebang;
 mod mapping;

@@ -8,10 +8,12 @@ from pathlib import Path
 
 import pytest
 
-from tests.support.ci_workflow import composite_action_steps
+from tests.support.ci_workflow import composite_action_steps, load_ci_workflow
 
 MISS = "steps.evaluator-cache.outputs.cache-hit != 'true'"
 WRITE = f"{MISS} && github.event_name == 'push' && github.ref == 'refs/heads/main'"
+PREVIOUS_MISS = "steps.previous-cache.outputs.cache-hit != 'true'"
+PREVIOUS_WRITE = f"{PREVIOUS_MISS} && github.event_name == 'push' && github.ref == 'refs/heads/main'"
 
 
 def test_linux_cache_skips_only_compilation_and_always_verifies_current_sources() -> None:
@@ -102,3 +104,47 @@ def test_platform_cache_tracks_compiler_inputs_not_unrelated_workflow_edits(plat
         assert required in key
     assert ".github/workflows/ci.yml" not in key
     assert "restore-keys" not in restore["with"]
+
+
+def test_native_offline_previous_caches_pinned_artifacts_and_verifies_executables() -> None:
+    steps = load_ci_workflow()["jobs"]["native-offline-previous"]["steps"]
+    identify = next(step for step in steps if step.get("id") == "previous-platform")
+    restore = next(step for step in steps if step.get("id") == "previous-cache")
+    build = next(
+        step for step in steps if step.get("name") == "Build the real prior native pair and matching projections"
+    )
+    require = next(step for step in steps if step.get("name") == "Require pinned prior native command evaluators")
+    save = next(step for step in steps if step.get("name") == "Save pinned prior native evaluators and projections")
+    assert "scripts.ci.native_cache_environment" in identify["run"]
+    assert (
+        restore["with"]["path"].splitlines()
+        == save["with"]["path"].splitlines()
+        == [
+            "rust/target/previous-client/release/guard-command-source",
+            "rust/target/previous-client/release/hol-guard-runtime",
+            "previous-client/contracts/extensions/",
+            "previous-client/src/codex_plugin_scanner/guard/contracts/data/extensions/",
+        ]
+    )
+    key = restore["with"]["key"]
+    for required in (
+        "native-offline-previous-v1-",
+        "runner.arch",
+        "steps.previous-platform.outputs.image",
+        "steps.previous-platform.outputs.compiler-env",
+        "env.CARGO_PROFILE_RELEASE_LTO",
+        "env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
+        "env.NATIVE_OFFLINE_PREVIOUS_SHA",
+        "'previous-client/rust/Cargo.toml'",
+        "'previous-client/rust/Cargo.lock'",
+    ):
+        assert required in key
+    assert "restore-keys" not in restore["with"]
+    assert build["if"] == PREVIOUS_MISS
+    assert build["env"]["RUSTC_WORKSPACE_WRAPPER"] == "sccache"
+    assert "if" not in require
+    assert "test -x rust/target/previous-client/release/guard-command-source" in require["run"]
+    assert "test -x rust/target/previous-client/release/hol-guard-runtime" in require["run"]
+    assert save["if"] == PREVIOUS_WRITE
+    assert save["with"]["key"] == "${{ steps.previous-cache.outputs.cache-primary-key }}"
+    assert steps.index(identify) < steps.index(restore) < steps.index(build) < steps.index(require) < steps.index(save)

@@ -150,6 +150,7 @@ fn read_only_kubectl_queries_are_allowed() {
         format!("kubectl --kubeconfig {home}/kubeconfig.yaml -n web logs web-0 -c app --since 1h | tail -50"),
         "kubectl logs -n web -l app=web --all-containers --prefix --tail 100".to_owned(),
         format!("KUBECONFIG={home}/kubeconfig.yaml kubectl get pods -A -o wide"),
+        "KUBECONFIG=$HOME/kubeconfig.yaml kubectl get pods".to_owned(),
         format!("KUBECONFIG='{home}/kubeconfig.yaml' kubectl -n web logs web-0 --tail 50 2>&1 | head -20"),
     ] {
         let result = decide(&space, &command);
@@ -187,7 +188,6 @@ fn secret_reads_mutations_and_untrusted_configs_stay_reviewed() {
         "KUBECONFIG=./kubeconfig.yaml kubectl get pods".to_owned(),
         format!("KUBECONFIG={checkout}/kubeconfig.yaml kubectl get pods"),
         format!("KUBECONFIG={home}/kubeconfig.yaml:{home}/kubeconfig.yaml kubectl get pods"),
-        "KUBECONFIG=$HOME/kubeconfig.yaml kubectl get pods".to_owned(),
         format!("KUBECONFIG={home}/kubeconfig.yaml kubectl get secrets -A"),
         format!("KUBECONFIG={home}/kubeconfig.yaml kubectl delete pod web-0"),
         format!("KUBECONFIG={home}/kubeconfig.yaml GIT_SSH_COMMAND=./x kubectl get pods"),

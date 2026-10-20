@@ -163,8 +163,10 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     // Hidden benign names, route brackets and source files that merely name a
     // credential word are admitted by the walk; non-source credential data,
     // key containers and dot-directories are not.
+    // The fixture files all read `synthetic`, so that pattern would print
+    // from a sensitive file and keeps the review.
     for command in [
-        "grep -rn needle bad",
+        "grep -rn synthetic bad",
         "grep -rn needle keys",
         "grep -rn needle docs",
         "grep -rn needle .",
@@ -175,6 +177,8 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     ] {
         assert!(!allowed_in(&fixture, ws, command), "{command}");
     }
+    // A plain pattern that cannot occur in `bad/.env` prints nothing from it.
+    assert!(allowed_in(&fixture, ws, "grep -rn needle bad"));
     // The benign hidden entries and credential-named source directories pass
     // when they are the only difficulty in the tree.
     let tree = std::path::Path::new(&fixture.workspace).join("walk");
@@ -196,7 +200,8 @@ fn grep_tree_walk_matches_what_the_walk_can_emit() {
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
     std::fs::remove_dir_all(tree.join("prod-secrets")).unwrap();
     write(&tree, ".env");
-    assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));
+    assert!(!allowed_in(&fixture, ws, "grep -rln synthetic walk"));
+    assert!(allowed_in(&fixture, ws, "grep -rln needle walk"));
     std::fs::remove_file(tree.join(".env")).unwrap();
     write(&tree, "id_rsa");
     assert!(!allowed_in(&fixture, ws, "grep -rln needle walk"));

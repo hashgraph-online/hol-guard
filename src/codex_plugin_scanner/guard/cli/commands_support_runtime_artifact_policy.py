@@ -1,7 +1,8 @@
 """Runtime artifact policy facts for the native configured-policy action.
 
-The resident owns the verdict; this module projects the guard config and the
-per-artifact facts it reads, and records the protection events it returns.
+The resident owns the verdict. This module projects the guard config, ships
+the artifact for the resident to read its own facts from, and records the
+protection events the answer returns.
 """
 
 from __future__ import annotations
@@ -15,9 +16,8 @@ from ..config import GuardConfig
 from ..harness_posture import harness_posture_override
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
+from ..native_hook_artifact_facts import native_hook_artifact_facts
 from ..protection_events import record_protection_event
-from ..protection_posture import is_high_confidence
-from .commands_support_prompts import _prompt_requires_hard_block
 from .commands_support_runtime_resolution import _canonical_harness_name
 
 
@@ -81,39 +81,50 @@ def runtime_policy_config_facts(config: GuardConfig, harness: str) -> dict[str, 
     }
 
 
-def runtime_policy_artifact_facts(config: GuardConfig, artifact: GuardArtifact, harness: str) -> dict[str, object]:
-    from .commands_support_runtime_policy import (
-        _artifact_action_class,
-        _artifact_risk_confidence,
-        _artifact_skill_is_known_bad,
-        _artifact_writes_launch_agent,
-        _runtime_artifact_risk_classes,
-    )
+def runtime_policy_artifact_facts(
+    config: GuardConfig,
+    artifact: GuardArtifact,
+    harness: str,
+    *,
+    guard_home: Path | None = None,
+) -> dict[str, object]:
+    """Return the resident's facts for ``artifact``."""
 
-    metadata = artifact.metadata
-    default_action = metadata.get("guard_default_action")
-    confidence = _artifact_risk_confidence(artifact)
-    return {
-        "hard_block": _prompt_requires_hard_block(artifact),
-        "configured_override": _typed_text(
-            config.resolve_action_override(_canonical_harness_name(harness), artifact.artifact_id, artifact.publisher)
-        ),
-        "command_action_floor": _runtime_artifact_command_action_floor(artifact),
-        "explicit_permission_allow": _runtime_artifact_has_explicit_permission_allow(artifact),
-        "risk_classes": _runtime_artifact_risk_classes(artifact),
-        "pytest_restricted_sandbox": (
-            metadata.get("action_class") == "pytest repository-code execution"
-            and metadata.get("reason_code") == "pytest_restricted_profile_required"
-            and isinstance(metadata.get("restricted_profile_version"), str)
-        ),
-        "shell_local_script_review": metadata.get("reason_code") == "shell_local_script_execution_review",
-        "guard_default_action": _typed_text(default_action),
-        "confidence_text": str(confidence or ""),
-        "confidence_strong": is_high_confidence(confidence),
-        "writes_launch_agent": _artifact_writes_launch_agent(artifact),
-        "action_class": _artifact_action_class(artifact),
-        "skill_is_known_bad": _artifact_skill_is_known_bad(artifact),
-    }
+    return runtime_policy_artifact_facts_batch(config, ((artifact, harness),), guard_home=guard_home)[0]
+
+
+def runtime_policy_artifact_facts_batch(
+    config: GuardConfig,
+    artifacts: Sequence[tuple[GuardArtifact, str]],
+    *,
+    guard_home: Path | None = None,
+) -> list[dict[str, object]]:
+    """Return the resident's facts for each ``(artifact, harness)`` pair.
+
+    Only the configured override is still read here: it is a settings lookup
+    for this artifact, publisher and harness, not a reading of the artifact.
+    Everything the verdict turns on comes from the resident, so an unavailable
+    one raises instead of letting this side describe the artifact.
+
+    One evaluation's artifacts are asked for together, so reading facts costs
+    the hook a single resident round trip however many artifacts it holds.
+    """
+
+    return native_hook_artifact_facts(
+        [
+            {
+                "artifact_type": artifact.artifact_type,
+                "metadata": artifact.metadata,
+                "configured_override": _typed_text(
+                    config.resolve_action_override(
+                        _canonical_harness_name(harness), artifact.artifact_id, artifact.publisher
+                    )
+                ),
+            }
+            for artifact, harness in artifacts
+        ],
+        guard_home=guard_home if guard_home is not None else config.guard_home,
+    )
 
 
 def record_policy_auto_stops(config: GuardConfig, events: object) -> None:
@@ -132,7 +143,7 @@ def _runtime_artifact_policy_action(
         "config_action",
         {
             "policy_config": runtime_policy_config_facts(config, harness),
-            "artifact": runtime_policy_artifact_facts(config, artifact, harness),
+            "artifact": runtime_policy_artifact_facts(config, artifact, harness, guard_home=guard_home),
         },
         guard_home=guard_home,
     )

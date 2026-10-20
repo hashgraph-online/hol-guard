@@ -20,7 +20,7 @@ mod advisory;
 mod package;
 mod registration;
 
-pub use advisory::evaluate_protect_request;
+pub use advisory::{evaluate_protect_request, evaluate_protect_request_in};
 use package::*;
 use registration::*;
 

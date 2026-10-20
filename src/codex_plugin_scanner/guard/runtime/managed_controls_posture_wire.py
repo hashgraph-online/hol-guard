@@ -19,7 +19,7 @@ MANAGED_CONTROLS_RUNTIME_CAPABILITIES = (
 
 
 class ManagedControlsRuntimePostureWire(TypedDict):
-    extensionCatalogDigest: str
+    extensionCatalogDigest: str | None
     extensionControlSchemaVersions: list[str]
     extensionAuthorityRevision: int | None
     managedExtensionAuthorityRevision: NotRequired[int]
@@ -29,7 +29,7 @@ class ManagedControlsRuntimePostureWire(TypedDict):
 
 def build_managed_controls_runtime_posture(
     *,
-    catalog_digest: str,
+    catalog_digest: str | None,
     extension_authority_revision: int | None = None,
     managed_extension_authority_revision: int | None = None,
     effective_projection_digest: str | None = None,
@@ -37,7 +37,7 @@ def build_managed_controls_runtime_posture(
 ) -> ManagedControlsRuntimePostureWire:
     """Keep observed local and managed counters independent; omit unknown state."""
 
-    if re.fullmatch(r"[0-9a-f]{64}", catalog_digest) is None:
+    if catalog_digest is not None and re.fullmatch(r"[0-9a-f]{64}", catalog_digest) is None:
         raise ValueError("catalog_digest must be a lowercase SHA-256 digest")
     if extension_authority_revision is not None and extension_authority_revision < 0:
         raise ValueError("extension_authority_revision cannot be negative")
@@ -58,7 +58,9 @@ def build_managed_controls_runtime_posture(
         "extensionAuthorityRevision": extension_authority_revision,
         "effectiveProjectionDigest": effective_projection_digest,
         "managedControlsCapabilities": [
-            capability for capability in MANAGED_CONTROLS_RUNTIME_CAPABILITIES if capability in requested
+            capability
+            for capability in MANAGED_CONTROLS_RUNTIME_CAPABILITIES
+            if capability in requested and (catalog_digest is not None or capability != "extension-catalog.v1")
         ],
     }
     if managed_extension_authority_revision is not None:

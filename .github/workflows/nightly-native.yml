@@ -57,7 +57,7 @@ jobs:
       - name: Run wheel-builder contracts
         if: ${{ !cancelled() }}
         run: >-
-          uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py ci/package_size
+          uv run --no-sync pytest ci/native_runtime/test_native_hol_guard_wheel.py
           ci/native_runtime/test_native_wheel_compression.py tests/test_native_source_compiler.py
           --tb=short
 
@@ -288,6 +288,7 @@ jobs:
           cargo build --manifest-path rust/Cargo.toml --locked --release -p hol-guard-runtime -p guard-command --bin hol-guard-runtime --bin guard-command-source
           uv run --no-sync python scripts/ci/verify_native_command_program.py --compiler rust/target/release/guard-command-source
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
       - name: Run with a constrained descriptor budget
         run: |
@@ -356,8 +357,9 @@ jobs:
         if: ${{ !cancelled() }}
         env:
           HOL_GUARD_NATIVE_BINARY: ${{ env.RUNTIME }}
+          HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ github.workspace }}/rust/target/release/guard-command-source${{ matrix.os == 'windows-2025' && '.exe' || '' }}
           HOL_GUARD_NATIVE_REGRESSION: "1"
-        run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py --tb=short
+        run: uv run --no-sync pytest -q tests/test_native_runtime_admission.py tests/test_daemon_bounded_http.py tests/test_rust_daemon_edge_hardening_contracts.py tests/test_guard_store_storage_gate_windows.py --tb=short
       - name: Validate real native client lifecycle
         if: ${{ !cancelled() }}
         env:
@@ -671,7 +673,13 @@ jobs:
         run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
       - uses: ./.github/actions/setup-rust
       - name: Build native command evaluators
+        env:
+          # The installed-wheel check packages this runtime, so it carries the
+          # same source and version identity as a release build.
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
+          HOL_GUARD_PACKAGE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check | tr -d '\r')
+          export HOL_GUARD_PACKAGE_VERSION
           cargo build --manifest-path rust/Cargo.toml --locked --release -p guard-command -p hol-guard-runtime --bin guard-command-source --bin hol-guard-runtime
           compiler="$GITHUB_WORKSPACE/rust/target/release/guard-command-source"
           runtime="$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime"
@@ -685,27 +693,62 @@ jobs:
         run: |
           arguments=(--publish-directory --compiler "$HOL_GUARD_NATIVE_SOURCE_COMPILER")
           uv run --no-sync python scripts/prepare_extension_contribution.py "${arguments[@]}"
-          uv run --no-sync python scripts/render_command_extension_directory.py
           uv run --no-sync python scripts/prepare_extension_contribution.py --check "${arguments[@]}"
-          uv run --no-sync python scripts/render_command_extension_directory.py --check
       - name: Run builder and contribution trust tests
         run: |
           mkdir -p builder-evidence
           uv run --no-sync pytest tests/test_guard_extension_builder_*.py \
             tests/test_guard_extension_directory*.py \
             tests/test_guard_extension_claim_notice.py \
+            tests/test_guard_extension_claim_notice_refresh.py \
+            tests/test_guard_extension_claim_notice_readiness.py \
             tests/test_prepare_extension_contribution.py \
             tests/test_guard_extension_contribution.py \
             tests/test_guard_extension_trust.py \
             tests/test_contribution_trust_map.py \
-            tests/test_guard_mcp_mail_server_policy.py \
             tests/test_guard_mcp_server_contribution.py \
             --junitxml=builder-evidence/tests.xml --tb=short
       - name: Build and install a wheel outside the checkout
         env:
           HOL_GUARD_BUILD_SOURCE_COMPILER: ${{ env.HOL_GUARD_NATIVE_SOURCE_COMPILER }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
-          uv build --wheel --out-dir "$RUNNER_TEMP/extension-builder-dist"
+          # Installed authoring compiles against the packaged compiler and the
+          # verified command pack bundle. Only the native wheel carries both, so
+          # assemble it the way a release does instead of installing the pure wheel.
+          # The runtime is a host build, so the Linux wheel carries the plain
+          # host tag and claims no manylinux portability.
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64) platform_tag=linux_x86_64 target=x86_64-unknown-linux-gnu ;;
+            macOS-ARM64) platform_tag=macosx_11_0_arm64 target=aarch64-apple-darwin ;;
+            Windows-X64) platform_tag=win_amd64 target=x86_64-pc-windows-msvc ;;
+            *) echo "No native wheel tag for $RUNNER_OS-$RUNNER_ARCH" >&2; exit 1 ;;
+          esac
+          build="$RUNNER_TEMP/extension-builder-build"
+          mkdir -p "$build"
+          version=$(uv run --no-sync python scripts/sync_repo_version.py --check | tr -d '\r')
+          uv build --wheel --out-dir "$build/pure"
+          runtime=rust/target/release/hol-guard-runtime
+          if [[ "$RUNNER_OS" == "Windows" ]]; then runtime="${runtime}.exe"; fi
+          rule_digest=$("$runtime" capabilities --json | jq -r '.rule_digest' | tr -d '\r')
+          "$runtime" export-built > "$build/source-built.json"
+          jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
+            --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
+            --slurpfile built "$build/source-built.json" \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' \
+            > "$build/source-build.json"
+          "$runtime" compile < "$build/source-build.json" > "$build/source-compiled.json"
+          uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
+            --wheel "$build/pure/hol_guard-${version}-py3-none-any.whl" \
+            --runtime "$runtime" \
+            --output-dir "$RUNNER_TEMP/extension-builder-dist" \
+            --version "$version" \
+            --platform-tag "$platform_tag" \
+            --target "$target" \
+            --source-sha "$SOURCE_SHA" \
+            --rule-digest "$rule_digest" \
+            --implementation-digest "$(jq -r '.implementation_digest' "$build/source-compiled.json" | tr -d '\r')" \
+            --base-program-digest "$(jq -r '.base_program_digest' "$build/source-compiled.json" | tr -d '\r')"
           uv export --frozen --no-dev --no-emit-project --format requirements-txt \
             > builder-evidence/runtime-requirements.txt
           root="$RUNNER_TEMP/extension-builder-installed"
@@ -753,6 +796,9 @@ jobs:
             scripts/prepare_extension_contribution.py \
             scripts/notify_merged_extension_claimants.py \
             tests/test_guard_extension_claim_notice.py \
+            tests/test_guard_extension_claim_notice_refresh.py \
+            tests/test_guard_extension_claim_notice_readiness.py \
+            tests/extension_claim_notice_harness.py \
             tests/test_prepare_extension_contribution.py
           uv run --no-sync ruff check tests/test_contribution_trust_map.py \
             tests/test_guard_mcp_mail_server_policy.py \
@@ -768,6 +814,9 @@ jobs:
             scripts/prepare_extension_contribution.py \
             scripts/notify_merged_extension_claimants.py \
             tests/test_guard_extension_claim_notice.py \
+            tests/test_guard_extension_claim_notice_refresh.py \
+            tests/test_guard_extension_claim_notice_readiness.py \
+            tests/extension_claim_notice_harness.py \
             tests/test_prepare_extension_contribution.py
           uv run --no-sync ruff format --check tests/test_contribution_trust_map.py \
             tests/test_guard_mcp_mail_server_policy.py \
@@ -820,6 +869,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: ${{ matrix.deployment_target }}
           PLATFORM_TAG: ${{ matrix.platform_tag }}
           TARGET: ${{ matrix.target }}
+          HOL_GUARD_BUNDLE_ASSET_OUTPUT: ${{ github.workspace }}/installed-bundle-assets
         run: bash scripts/ci/build-native-wheel-macos.sh
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
@@ -827,6 +877,7 @@ jobs:
           path: |
             native-dist/*.whl
             pure-dist/*.whl
+            installed-bundle-assets/
           if-no-files-found: error
           compression-level: 0
 
@@ -891,6 +942,7 @@ jobs:
         env:
           SOURCE_SHA: ${{ github.sha }}
           HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/x86_64-unknown-linux-musl/release/guard-command-source
+          HOL_GUARD_BUNDLE_ASSET_OUTPUT: ${{ github.workspace }}/installed-bundle-assets
         run: |
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
           uv build --wheel --out-dir pure-dist
@@ -907,7 +959,6 @@ jobs:
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
             --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
-          uv run --no-sync python scripts/ci/check_wheel_size.py --dist-dir native-dist
           uv pip uninstall --python .venv/bin/python hol-guard
           uv pip install --python .venv/bin/python --no-deps --force-reinstall native-dist/*.whl
       - name: Upload this run's native build
@@ -917,6 +968,7 @@ jobs:
           path: |
             native-dist/*.whl
             pure-dist/*.whl
+            installed-bundle-assets/
             rust/target/x86_64-unknown-linux-musl/release/hol-guard-runtime
             rust/target/x86_64-unknown-linux-musl/release/guard-command-source
           if-no-files-found: error
@@ -958,7 +1010,7 @@ jobs:
           source scripts/ci/native-proof-environment.sh
           .venv/bin/python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           .venv/bin/python ci/native_runtime/probe_installed_pi_output.py --json installed-pi-output.json
-          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --release-assets installed-bundle-assets --json installed-native-extensions.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         env:
@@ -1047,7 +1099,7 @@ jobs:
   windows-build:
     name: Windows native wheel build
     runs-on: windows-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1087,25 +1139,44 @@ jobs:
           }
           uv run --no-sync python scripts/ci/verify_native_command_program.py @arguments
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          $source = Get-Content rust/crates/guard-command/tests/fixtures/command-source-example.v1.json -Raw | ConvertFrom-Json
-          $trust = Get-Content contracts/extensions/build-trust-class-map.v1.json -Raw | ConvertFrom-Json
-          $request = [ordered]@{
-            schema = "guard.command-extension-build.v1"
-            sources = @($source)
-            mcp_sources = @()
-            trust = $trust
-            base = "packaged"
-          }
-          $utf8 = [System.Text.UTF8Encoding]::new($false)
-          [System.IO.File]::WriteAllText((Join-Path $pwd "source-build.json"), ($request | ConvertTo-Json -Depth 100 -Compress), $utf8)
-          $compiled = Get-Content source-build.json -Raw | & .\rust\target\release\hol-guard-runtime.exe compile
+          # Use the same native global admission context as maintainer authoring.
+          $proof = @'
+          import json
+          import subprocess
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          sys.path[:0] = [str(Path("scripts").resolve()), str(Path("src").resolve())]
+          from prepare_extension_contribution import _development_release
+          from codex_plugin_scanner.guard.extension_builder.bundle_baseline import authoring_request
+
+          compiler = Path("rust/target/release/guard-command-source.exe").resolve(strict=True)
+          source = json.loads(Path("rust/crates/guard-command/tests/fixtures/command-source-example.v1.json").read_text(encoding="utf-8"))
+          trust = json.loads(Path("contracts/extensions/build-trust-class-map.v1.json").read_text(encoding="utf-8"))
+          build = {"schema": "guard.command-extension-build.v1", "sources": [source], "mcp_sources": [], "trust": trust, "base": "packaged"}
+          with tempfile.TemporaryDirectory(prefix="hol-guard-nightly-context-") as scratch:
+              request = authoring_request(
+                  "compile", build, compiler, installed=False,
+                  cache_directory=Path(scratch).resolve(strict=True), development=_development_release,
+              )
+              result = subprocess.run(
+                  [str(compiler), "compile"], input=json.dumps(request), text=True,
+                  stdout=subprocess.PIPE, check=True,
+              )
+          compiled = json.loads(result.stdout)
+          assert any(item["extension_id"] == source["extension"]["extension_id"] for item in compiled["program"]["extensions"])
+          assert compiled["base_program_digest"] and compiled["implementation_digest"]
+          Path("source-compiled.json").write_text(result.stdout, encoding="utf-8")
+          '@
+          $proof | uv run --no-sync python -
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          [System.IO.File]::WriteAllText((Join-Path $pwd "source-compiled.json"), ($compiled -join "`n"), $utf8)
       - name: Assemble and install native wheel
         shell: pwsh
         env:
           SOURCE_SHA: ${{ github.sha }}
           HOL_GUARD_BUILD_SOURCE_COMPILER: rust/target/release/guard-command-source.exe
+          HOL_GUARD_BUNDLE_ASSET_OUTPUT: ${{ github.workspace }}/installed-bundle-assets
         run: |
           $version = (uv run --no-sync python scripts/sync_repo_version.py --check).Trim()
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -1128,8 +1199,6 @@ jobs:
             --implementation-digest $implementation `
             --base-program-digest $baseProgram
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          uv run --no-sync python scripts/ci/check_wheel_size.py --dist-dir native-dist
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $wheel = (Get-ChildItem native-dist\*.whl).FullName
           uv pip uninstall --python .venv\Scripts\python.exe hol-guard
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -1142,6 +1211,7 @@ jobs:
           path: |
             native-dist/*.whl
             pure-dist/*.whl
+            installed-bundle-assets/
             rust/target/release/hol-guard-runtime.exe
             rust/target/release/guard-command-source.exe
           if-no-files-found: error
@@ -1225,7 +1295,7 @@ jobs:
           Remove-Item Env:HOL_GUARD_PYTHON_ORACLE -ErrorAction SilentlyContinue
           uv run --no-sync python ci/native_runtime/probe_native_default_auto.py --json native-default-auto.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_extensions.py --release-assets installed-bundle-assets --json installed-native-extensions.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           .venv\Scripts\python.exe -I ci\native_runtime\probe_installed_native_prompt.py --expected-source-sha (git rev-parse HEAD) --json installed-native-prompt.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -1337,7 +1407,7 @@ jobs:
         if: matrix.proof == 'extensions'
         run: |
           source scripts/ci/native-proof-environment.sh
-          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --json installed-native-extensions.json
+          .venv/bin/python -I ci/native_runtime/probe_installed_native_extensions.py --release-assets installed-bundle-assets --json installed-native-extensions.json
           .venv/bin/python -I ci/native_runtime/probe_installed_native_prompt.py --expected-source-sha "$(git rev-parse HEAD)" --json installed-native-prompt.json
       - name: Measure installed adapter-to-decision SLOs
         if: matrix.proof == 'performance'

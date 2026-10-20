@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ..native_hook_artifact_compose import native_hook_compose
 from .commands_support import *
 
 if TYPE_CHECKING:
@@ -81,7 +82,12 @@ def run_native_claude_permission_request(
         if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
             _emit_claude_permission_request_passthrough(output_stream=output_stream)
             return 0
-        native_reason = _runtime_artifact_native_reason(runtime_artifact, reason_stub)
+        native_reason = _runtime_artifact_native_reason(
+            runtime_artifact,
+            reason_stub,
+            composer=native_hook_compose,
+            guard_home=store.guard_home,
+        )
     else:
         _emit_claude_permission_request_passthrough(output_stream=output_stream)
         return 0

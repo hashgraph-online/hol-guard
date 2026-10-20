@@ -16,10 +16,10 @@ from ..blocked_request_mode import is_unlinked_connector_setup_reason
 from ..daemon.auth_token import load_guard_daemon_auth_token as _read_daemon_auth_token
 from ..daemon.hook_availability_policy import hook_event_pauses_when_unavailable, hook_reason_continues_session
 from ..private_file_io import read_private_regular_text
+from ._modules.zcode.zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 from .bounded_cli_hook_envelope import _canonical_event_token, _event_name, _json_object
 from .bounded_cli_hook_failure import grok_observe_event
 from .bounded_hook_http import post_hook_json, prepare_grok_prompt
-from .zcode_hooks import zcode_authority_block_reason, zcode_hook_process_exit
 
 _MAX_HOOK_RESPONSE_BYTES = 1_000_000
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
@@ -432,7 +432,8 @@ def try_daemon_hook(
     if harness.strip().lower().replace("_", "-") == "hermes":
         from .hermes_runtime_hooks import hermes_bridge_response
 
-        return hermes_bridge_response(parsed, event_name=event_name)
+        # Render within what is left of the hook's own budget, not a fresh timeout.
+        return hermes_bridge_response(parsed, event_name=event_name, guard_home=guard_home, deadline=deadline)
     return _daemon_response_to_native(parsed, harness=harness, event_name=event_name)
 
 

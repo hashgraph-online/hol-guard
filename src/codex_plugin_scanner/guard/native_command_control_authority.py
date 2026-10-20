@@ -12,12 +12,17 @@ from .native_policy_snapshot_constants import NativePolicySnapshotError
 
 AUTHORITY_SCHEMA = "guard.native-command-control-authority.v1"
 PACK_AUTHORITY_SCHEMA = "guard.native-command-control-authority.v2"
+SECURITY_AUTHORITY_SCHEMA = "guard.native-command-control-authority.v3"
 RECOVERY_SCHEMA = "guard.native-command-control-recovery.v1"
 AUTHORITY_FILE_NAME = "command-control-authority.v1.json"
 AUTHORITY_LOCK_NAME = "extension-control-authority.lock"
+# Entry turnstile for the lease above. Acquirers hold it only while they take
+# their own lease, so a writer can close the door on later readers.
+AUTHORITY_GATE_NAME = "extension-control-authority.gate"
 AUTHORITY_MAX_BYTES = 4096
 AUTHORITY_DOMAIN = b"hol-guard.native-command-control-authority.v1\0"
 PACK_AUTHORITY_DOMAIN = b"hol-guard.native-command-control-authority.v2\0"
+SECURITY_AUTHORITY_DOMAIN = b"hol-guard.native-command-control-authority.v3\0"
 AUTHORITY_KEY_DOMAIN = b"hol-guard.native-command-control-authority-key.v1\0"
 FLOOR_LINK_DOMAIN = b"hol-guard.native-command-control-floor-link.v1\0"
 ZERO_DIGEST = "0" * 64
@@ -90,13 +95,20 @@ def floor_link_digest(floor: object) -> str:
 
 
 def _validate_record(value: object) -> Mapping[str, object]:
-    pack_mode = isinstance(value, Mapping) and value.get("schema") == PACK_AUTHORITY_SCHEMA
-    record = _mapping(value, _RECORD_FIELDS | {"pack_program_digest"} if pack_mode else _RECORD_FIELDS)
+    security_mode = isinstance(value, Mapping) and value.get("schema") == SECURITY_AUTHORITY_SCHEMA
+    pack_mode = isinstance(value, Mapping) and value.get("schema") in (PACK_AUTHORITY_SCHEMA, SECURITY_AUTHORITY_SCHEMA)
+    fields = _RECORD_FIELDS | {"pack_program_digest"} if pack_mode else _RECORD_FIELDS
+    record = _mapping(value, fields | {"active_security_digest"} if security_mode else fields)
+    if security_mode and not _valid_digest_v3(record["active_security_digest"]):
+        raise _invalid()
     if pack_mode and not _valid_digest_v3(record["pack_program_digest"]):
         raise _invalid()
     validate_authority_binding(authority_binding(record))
     phase = record["phase"]
-    if record["schema"] not in (AUTHORITY_SCHEMA, PACK_AUTHORITY_SCHEMA) or phase not in ("closed", "committed"):
+    if record["schema"] not in (AUTHORITY_SCHEMA, PACK_AUTHORITY_SCHEMA, SECURITY_AUTHORITY_SCHEMA) or phase not in (
+        "closed",
+        "committed",
+    ):
         raise _invalid()
     if phase == "closed":
         if record["effective_digest"] is not None:
@@ -112,7 +124,11 @@ def _record_mac(record: Mapping[str, object], verifier_key: bytes) -> str:
     if not isinstance(verifier_key, bytes) or len(verifier_key) != 32:
         raise _invalid()
     body = {name: value for name, value in record.items() if name != "mac"}
-    domain = PACK_AUTHORITY_DOMAIN if record["schema"] == PACK_AUTHORITY_SCHEMA else AUTHORITY_DOMAIN
+    domain = (
+        SECURITY_AUTHORITY_DOMAIN
+        if record["schema"] == SECURITY_AUTHORITY_SCHEMA
+        else (PACK_AUTHORITY_DOMAIN if record["schema"] == PACK_AUTHORITY_SCHEMA else AUTHORITY_DOMAIN)
+    )
     return hmac.new(verifier_key, domain + _canonical_json_bytes_v3(body), hashlib.sha256).hexdigest()
 
 
@@ -145,6 +161,10 @@ def validate_control_floor(value: object) -> Mapping[str, object]:
         fields |= {"authority"}
     if "previous_floor_digest" in value:
         fields |= {"previous_floor_digest"}
+    if "control_digest" in value:
+        fields |= {"control_digest"}
+        if not _valid_digest_v3(value["control_digest"]):
+            raise _invalid()
     floor = _mapping(value, fields)
     _revision(floor["revision"], minimum=0)
     _revision(floor["managed_revision"], minimum=0)

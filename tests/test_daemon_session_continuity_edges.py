@@ -192,7 +192,7 @@ def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path
 
 
 def test_cursor_maps_cannot_finish_block_to_allow() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import (
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import (
         cursor_hook_response_from_guard,
         prepare_cursor_hook_payload,
     )
@@ -216,7 +216,7 @@ def test_cursor_maps_cannot_finish_block_to_allow() -> None:
 
 
 def test_cursor_completed_block_ignores_stale_allow_permission() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import cursor_hook_response_from_guard
 
     response = cursor_hook_response_from_guard(
         policy_action="block",
@@ -353,7 +353,7 @@ def test_bounded_cli_cannot_finish_without_policy_action_denies_write() -> None:
 def test_codex_unavailable_permission_request_denies_without_review() -> None:
     from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 
-    permission = bridge._unavailable_response("PermissionRequest", "review failed")
+    permission = bridge._fail_closed("PermissionRequest", "review failed")
     assert permission["hookSpecificOutput"]["decision"] == {
         "behavior": "deny",
         "message": "review failed",
@@ -366,6 +366,12 @@ def test_claude_oversized_forged_notification_still_denies(
 ) -> None:
     from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as claude
 
+    # With a runtime installed the native command reads the body itself, and the
+    # bound it holds the oversized call to is covered by
+    # `rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs`. What is left
+    # here is the launcher's own answer when no runtime can be resolved: it
+    # still has to refuse a forged body too large to read.
+    monkeypatch.setattr(claude, "_native_bridge_executable", lambda _home: None)
     body = '{"hook_event_name":"Notification","prompt":"' + ("x" * claude._MAX_HOOK_INPUT_BYTES)
     monkeypatch.setattr("sys.stdin", io.StringIO(body))
     result = claude.main(

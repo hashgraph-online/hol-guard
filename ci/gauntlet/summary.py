@@ -46,6 +46,15 @@ def render_summary_markdown(report: dict[str, Any], binding: dict[str, Any], bui
         f"Merge-qualified: {report['merge_qualified']}",
         *(
             [
+                f"Cases executed: {coverage['executed_cases']} of {coverage['selected_cases']} selected "
+                f"({coverage['catalog_cases']} in catalog)"
+            ]
+            + ([f"Never executed: {', '.join(coverage['unexecuted_cases'])}"] if coverage["unexecuted_cases"] else [])
+            if (coverage := report.get("case_coverage"))
+            else []
+        ),
+        *(
+            [
                 f"Inference tokens: input {usage['prompt_tokens']} (cached {usage['cached_tokens']}), "
                 f"output {usage['completion_tokens']} over {usage['rounds']} rounds"
             ]

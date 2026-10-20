@@ -28,7 +28,15 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 from codex_plugin_scanner.guard.runtime.extension_control_proof import ExtensionControlProof
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_guard_extension_control_api import _mutation_payload, _service
+
+
+@pytest.fixture(autouse=True)
+def legacy_pack_authority(monkeypatch):
+    # This store double models the legacy control transaction, without a pack
+    # database. Prepared candidates have their own integration tests.
+    monkeypatch.setattr(extension_control_api_module, "prepare_candidate", lambda *args, **kwargs: None)
 
 
 @dataclass

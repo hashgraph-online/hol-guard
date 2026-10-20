@@ -202,7 +202,11 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
                         let name = part.to_string_lossy();
                         // `.git` is the one marker agents probe for. A missing
                         // leaf prints only an error and reveals no content.
-                        !name.starts_with('.') || (index == 0 && name == ".git")
+                        // `.github` holds a project's workflows, never a
+                        // credential, so a probe for them may name it anywhere.
+                        !name.starts_with('.')
+                            || (index == 0 && name == ".git")
+                            || name == ".github"
                     })
                     && listable_ancestor(ancestor, context);
             }

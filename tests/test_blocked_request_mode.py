@@ -10,6 +10,12 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, up
 from codex_plugin_scanner.guard.models import GuardArtifact
 
 
+def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+    """Fail when a reason the CLI still composes locally reaches the resident."""
+
+    raise AssertionError("the resident must not be asked for this reason")
+
+
 def test_prompt_mode_defaults_and_round_trip(tmp_path: Path) -> None:
     assert GuardConfig(guard_home=tmp_path, workspace=None).blocked_request_mode == "safe-alternative"
     assert load_guard_config(tmp_path).blocked_request_mode == "safe-alternative"
@@ -52,6 +58,8 @@ def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
             "blocked_request_guidance": guidance,
             "decision_v2_json": {"harness_message": "Wait for approval."},
         },
+        composer=_composer_never_called,
+        guard_home=None,
     )
     assert reason == guidance
     assert "Wait for approval" not in reason
@@ -191,3 +199,19 @@ def test_build_review_leaves_out_the_install_hint() -> None:
         approval_queued=True,
     )
     assert "--ignore-scripts" in install
+
+
+def test_direct_read_review_leaves_out_the_search_advice() -> None:
+    read = (
+        "HOL Guard requires review before this file read can execute. `src/lib/auth` "
+        "is named like a credential store, so Guard holds a read of it."
+    )
+    text = safe_alternative_reason(read, reason_code="native_file_read_review", approval_queued=True)
+    assert text.startswith(read)
+    assert "A search is checked" not in text
+    search = safe_alternative_reason(
+        "HOL Guard requires review before this file action can execute.",
+        reason_code="native_file_read_review",
+        approval_queued=True,
+    )
+    assert "A search is checked" in search

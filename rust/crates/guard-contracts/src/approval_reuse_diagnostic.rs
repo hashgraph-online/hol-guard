@@ -18,6 +18,10 @@ pub const APPROVAL_REUSE_DIAGNOSTIC_RESULT_SCHEMA: &str =
     "guard-approval-reuse-diagnostic-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const APPROVAL_REUSE_DIAGNOSTIC_FEATURE: &str = "approval-reuse-diagnostic-v1";
+/// Capability advertised when the request may name a `current_action` and the
+/// reply carries the composed `reuse` decision. The request denies unknown
+/// fields, so a runtime that does not advertise this is never sent one.
+pub const APPROVAL_REUSE_DIAGNOSTIC_REUSE_FEATURE: &str = "approval-reuse-diagnostic-reuse-v1";
 
 /// Integrity evidence procured by the caller; each part is shipped only when
 /// the resident named it in a `need` reply.
@@ -60,6 +64,12 @@ pub struct ApprovalReuseDiagnosticRequestV1 {
     pub now: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<ApprovalReuseDiagnosticEvidenceV1>,
+    /// The action the caller recomputed for this request. When it is present
+    /// the resident also composes what the miss means for reuse, so the caller
+    /// never has to decide that for itself; when it is absent the result keeps
+    /// its original two fields.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_action: Option<Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -73,7 +83,8 @@ pub struct ApprovalReuseDiagnosticResultV1 {
     pub status: String,
     /// `ok`, or one of the `native_approval_reuse_diagnostic_*` failure codes.
     pub code: String,
-    /// `{"reason": str|null, "stored_hash": str|null}` or
+    /// `{"reason": str|null, "stored_hash": str|null}` (with a `reuse`
+    /// decision alongside them when the request named a `current_action`) or
     /// `{"need": "integrity_evidence", "policy": bool, "local_once": bool}`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub payload: Option<Value>,

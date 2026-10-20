@@ -74,7 +74,7 @@ use crate::guard_store_storage_maintenance as storage_maintenance;
 use crate::guard_store_tool_call_evidence as tool_call_evidence;
 use crate::guard_store_wfcap_wire as wfcap;
 
-const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
+pub(crate) const MAX_BUSY_TIMEOUT_MS: u64 = 600_000;
 const CACHE_SIZE_KIB: i64 = 256 * 1024;
 const MMAP_SIZE_BYTES: i64 = 1024 * 1024 * 1024;
 
@@ -86,11 +86,23 @@ fn request_digest(request: &GuardStoreRequestV1) -> Result<String, &'static str>
     Ok(format!("sha256:{}", digest_bytes(&bytes)))
 }
 
+#[cfg(test)]
 pub(crate) fn evaluate_guard_store_request(
     request: &GuardStoreRequestV1,
 ) -> Result<Vec<u8>, String> {
+    evaluate_guard_store_request_with_owner(request, None)
+}
+
+pub(crate) fn evaluate_guard_store_request_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> Result<Vec<u8>, String> {
     let request_sha256 = request_digest(request).map_err(str::to_owned)?;
-    let (status, code, payload, generation) = match evaluate(request) {
+    let outcome = match owner {
+        Some(owner) => evaluate_with_owner(request, Some(owner)),
+        None => evaluate(request),
+    };
+    let (status, code, payload, generation) = match outcome {
         Ok((payload, generation)) => ("ok".to_owned(), "ok".to_owned(), Some(payload), generation),
         Err(error) => {
             let payload = Some(json!({ "message": error.message() }));
@@ -109,6 +121,13 @@ pub(crate) fn evaluate_guard_store_request(
 }
 
 pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Option<i64>)> {
+    evaluate_with_owner(request, None)
+}
+
+fn evaluate_with_owner(
+    request: &GuardStoreRequestV1,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
+) -> StoreResult<(Value, Option<i64>)> {
     let invalid = |code| Err(StoreError::Invalid(code));
     if request.schema != GUARD_STORE_REQUEST_SCHEMA {
         return invalid("native_guard_store_schema_mismatch");
@@ -157,6 +176,7 @@ pub(crate) fn evaluate(request: &GuardStoreRequestV1) -> StoreResult<(Value, Opt
         &request.guard_home,
         &request.method,
         &args,
+        owner,
     );
     let payload = match outcome {
         Ok(payload) => payload,
@@ -409,6 +429,7 @@ fn dispatch(
     guard_home: &str,
     method: &str,
     args: &Args,
+    owner: Option<&crate::policy_store::PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     match method {
         "review_event_outbox_status" => queries::status(connection, source, args),
@@ -584,17 +605,17 @@ fn dispatch(
         "latest_receipt_rowid" => receipt_reads::latest_rowid(connection, args),
         "get_receipt" => receipt_reads::get_receipt(connection, args),
         "get_approval_request" => {
-            approval_reads::get_approval_request(connection, guard_home, args)
+            approval_reads::get_approval_request(connection, guard_home, args, owner)
         }
         "list_approval_requests" => {
-            approval_reads::list_approval_requests(connection, guard_home, args)
+            approval_reads::list_approval_requests(connection, guard_home, args, owner)
         }
         "list_approval_request_page" => {
             approval_pages::list_approval_request_page(connection, guard_home, args)
         }
         "count_approval_requests" => approval_pages::count_approval_requests(connection, args),
         "get_next_pending_request" => {
-            approval_pages::get_next_pending_request(connection, guard_home, args)
+            approval_pages::get_next_pending_request(connection, guard_home, args, owner)
         }
         "get_approval_extension_allow_hint" => {
             approval_metadata::get_approval_extension_allow_hint(connection, args)
@@ -614,10 +635,12 @@ fn dispatch(
             resolve_harness_native_approval_request(connection, guard_home, args)
         }
         "resolve_request_with_queue_result" => {
-            queue_result::resolve_request_with_queue_result(connection, guard_home, args)
+            queue_result::resolve_request_with_queue_result(connection, guard_home, args, owner)
         }
         "resolve_native_workspace_review_request" => {
-            queue_result::resolve_native_workspace_review_request(connection, guard_home, args)
+            queue_result::resolve_native_workspace_review_request(
+                connection, guard_home, args, owner,
+            )
         }
         "resolve_matching_duplicate_requests" => {
             resolve_matching_duplicate_requests(connection, source, guard_home, args)

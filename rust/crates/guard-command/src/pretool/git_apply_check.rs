@@ -1,9 +1,10 @@
 //! Closed grammar for a `git apply` invocation that only reports whether a
-//! patch would apply.
+//! patch would apply, or what it would change.
 //!
 //! `--check` stops Git before it touches the worktree, the index or any file
 //! the caller named: it reads the patch, reads the files it mentions and
-//! prints what would go wrong. The options that write something anyway, such
+//! prints what would go wrong. `--stat`, `--numstat` and `--summary` turn
+//! applying off the same way and only print what the patch holds. The options that write something anyway, such
 //! as `--build-fake-ancestor`, `--output`, `--reject` and `--whitespace=fix`,
 //! and the ones that reach beyond the patch, such as `--directory`,
 //! `--unsafe-paths` and the three-way merge, keep the review.
@@ -32,7 +33,9 @@ pub(crate) fn patch_targets(arguments: &[String]) -> Option<Vec<&str>> {
         }
         match argument.as_str() {
             "--" => patches_only = true,
-            "--check" => checking = true,
+            // Each of these turns `--apply` off, and `--apply` itself stays
+            // outside the grammar, so none of them can write.
+            "--check" | "--stat" | "--numstat" | "--summary" => checking = true,
             "-v"
             | "--verbose"
             | "-q"
@@ -45,10 +48,7 @@ pub(crate) fn patch_targets(arguments: &[String]) -> Option<Vec<&str>> {
             | "--binary"
             | "--allow-empty"
             | "--ignore-space-change"
-            | "--ignore-whitespace"
-            | "--stat"
-            | "--numstat"
-            | "--summary" => {}
+            | "--ignore-whitespace" => {}
             "--exclude" | "--include" => {
                 if !arguments
                     .get(index)
@@ -83,22 +83,45 @@ pub(crate) fn patch_targets(arguments: &[String]) -> Option<Vec<&str>> {
     (checking && !patches.is_empty()).then_some(patches)
 }
 
-/// A patch the caller names inside the workspace. Git quotes the offending
-/// line of whatever it was handed, so an absolute path or a `..` segment —
-/// a file the workspace proof never read — is not one, and neither is an
-/// option this grammar does not know, including a bare `-` for standard
+/// A patch the caller names as a plain file path. Git quotes the offending
+/// line of whatever it was handed, so a `..` segment is not one, and neither
+/// is an option this grammar does not know, including a bare `-` for standard
 /// input. A glob is not one either: the shell hands Git whatever the pattern
 /// happened to match, which is not the file this spelling names.
+///
+/// An absolute path is a plain spelling too, since agents keep a patch in the
+/// temporary directory. Whether the file it names may be read is not decided
+/// here: the caller sends every target through the ordinary read screen,
+/// which resolves the path and refuses a link to a private file.
 fn patch_target(value: &str) -> bool {
+    let relative = value
+        .strip_prefix('/')
+        .or_else(|| drive_root(value))
+        .unwrap_or(value);
     !value.is_empty()
         && value.len() <= 4096
-        && !value.starts_with(['-', '/', '\\'])
-        && value
+        && !value.starts_with(['-', '\\'])
+        && relative
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
-        && value
+        && relative
             .split('/')
             .all(|part| !matches!(part, "" | "." | ".."))
+}
+
+/// The rest of a `C:/...` path, which Git for Windows reads as absolute.
+/// Only the drive letter and its colon are set aside; the rest keeps the
+/// plain-path grammar, so a stream selector or another colon is still refused.
+#[cfg(windows)]
+fn drive_root(value: &str) -> Option<&str> {
+    let bytes = value.as_bytes();
+    (bytes.len() > 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/')
+        .then(|| &value[3..])
+}
+
+#[cfg(not(windows))]
+fn drive_root(_value: &str) -> Option<&str> {
+    None
 }
 
 /// A path the caller keeps out of, or holds the patch to. Git reads it as a
@@ -151,6 +174,16 @@ mod tests {
             "--check --include src/app.py feature.patch",
             "--check -R feature.patch",
             "--check -- patches/one.diff patches/two.diff",
+            // A report that prints what the patch holds turns applying off too.
+            "--stat feature.patch",
+            "--numstat feature.patch",
+            "--summary -p1 feature.patch",
+            "--stat --numstat --summary feature.patch",
+            // An absolute spelling is plain; the read screen decides the file.
+            "--check /tmp/fix.patch",
+            "--check /tmp/fix.patch /work/repo/src/lib/x.ts",
+            "--check --verbose -- /tmp/one.diff /tmp/two.diff",
+            "--stat /tmp/fix.patch",
         ] {
             assert!(check(command), "{command}");
         }
@@ -161,7 +194,10 @@ mod tests {
         for command in [
             "",
             "feature.patch",
-            "--stat feature.patch",
+            "--stat",
+            "--stat -",
+            "--stat --apply feature.patch",
+            "--numstat --index feature.patch",
             "--check --index feature.patch",
             "--check --cached feature.patch",
             "--check -3 feature.patch",
@@ -180,8 +216,13 @@ mod tests {
             "--check -",
             "--check $(id)",
             "--check -- ;id",
-            "--check /etc/shadow",
             "--check ../../outside.patch",
+            "--check /tmp/../etc/passwd",
+            "--check //tmp/fix.patch",
+            "--check /",
+            "--check /tmp/",
+            "--check /tmp/*.patch",
+            "--check /tmp/fix.patch --output=/tmp/out",
             "--check ~/secret.patch",
             "--check -- patches/../../outside.patch",
             // Named with no patch, Git reads the standard input it was handed.

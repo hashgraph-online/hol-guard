@@ -72,6 +72,29 @@ fn daemon_answer_is_forwarded_with_its_proof() {
     assert_eq!(body["tool_name"], "Bash");
 }
 
+/// Claude writes the hook body as UTF-8 whatever the console code page is,
+/// so the bridge reads bytes and hands them on as bytes. A path with accents
+/// has to reach the daemon spelled the way the harness sent it.
+#[test]
+fn a_non_ascii_payload_reaches_the_daemon_unchanged() {
+    const PATH: &str = "C:/Users/zo\u{eb}/caf\u{e9}.txt";
+    let input = serde_json::json!({
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Read",
+        "tool_input": {"file_path": PATH},
+    })
+    .to_string();
+    let (home, daemon) = home_with_daemon("utf8", vec![Exchange::Hook(200, ALLOW.to_owned())]);
+    let config = config_for(&home, fallback_exiting(3), Vec::new());
+    assert_eq!(respond(&config, &input), ALLOW);
+    let hooks = daemon.join().unwrap();
+    let [hook] = hooks.as_slice() else {
+        panic!("one hook request, got {hooks:?}");
+    };
+    let body: serde_json::Value = serde_json::from_slice(&hook.body).unwrap();
+    assert_eq!(body["tool_input"]["file_path"], PATH);
+}
+
 #[test]
 fn refused_authentication_denies_without_fallback() {
     let (home, daemon) = home_with_daemon(
@@ -382,4 +405,28 @@ fn fallback_daemon_url_must_be_loopback_http() {
 fn endpoint_query_drops_controls_and_fragment() {
     assert_eq!(endpoint_query("a=1\t&b=2\n#frag"), "a=1&b=2");
     assert_eq!(endpoint_query("guard-home=%2Fh"), "guard-home=%2Fh");
+}
+
+/// Claude gives a hook command ten seconds before it gives up on it, and a
+/// hook that misses that window leaves the harness with no verdict at all.
+/// Every timeout the bridge can spend has to fit inside one hook call, and
+/// a daemon request that spends its whole budget still has to leave a
+/// recovery window worth starting.
+#[test]
+fn timeouts_stay_under_the_harness_budget() {
+    const HARNESS_BUDGET: Duration = Duration::from_secs(10);
+
+    assert!(HOOK_DEADLINE < HARNESS_BUDGET);
+    assert!(DAEMON_IO_TIMEOUT <= HOOK_DEADLINE);
+    assert!(RECOVERY_TIMEOUT <= HOOK_DEADLINE);
+    assert!(MINIMUM_RECOVERY > Duration::ZERO);
+    assert!(MINIMUM_RECOVERY <= RECOVERY_TIMEOUT);
+    // `recover_and_retry` only starts a recovery when the window left is at
+    // least `MINIMUM_RECOVERY`, so a first request that times out must not
+    // have eaten the whole deadline.
+    assert!(DAEMON_IO_TIMEOUT + MINIMUM_RECOVERY <= HOOK_DEADLINE);
+    // Each stage caps its own timeout against the absolute deadline, so the
+    // stages do not add up past it: the retry after a recovery gets what is
+    // left of the hook deadline, not another full IO timeout.
+    assert!(capped(Instant::now() + MINIMUM_RECOVERY, DAEMON_IO_TIMEOUT) <= MINIMUM_RECOVERY);
 }

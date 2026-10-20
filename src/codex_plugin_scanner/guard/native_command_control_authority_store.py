@@ -51,8 +51,8 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 
-def _key(store: GuardStore) -> bytes:
-    material = store._policy_integrity_secret_material(create=True)
+def _key(store: GuardStore, *, create: bool = True) -> bytes:
+    material = store._policy_integrity_secret_material(create=create)
     if material is None or not isinstance(material[0], bytes):
         raise NativePolicySnapshotError("native_command_control_authority_key_unavailable")
     return derive_native_policy_verifier_key(material[0])
@@ -64,6 +64,9 @@ def read_command_control_authority(store: GuardStore, verifier_key: bytes) -> di
 
 
 def _write(store: GuardStore, record: Mapping[str, object], verifier_key: bytes) -> dict[str, object]:
+    from .catalog_delivery.active_security import marker
+
+    record = marker(store, record)
     content = encode_authority(record, verifier_key)
     write_private_state(store.guard_home, AUTHORITY_FILE_NAME, content, AUTHORITY_MAX_BYTES)
     observed = read_private_state(store.guard_home, AUTHORITY_FILE_NAME, AUTHORITY_MAX_BYTES)
@@ -249,7 +252,7 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
     # recovery evidence never authorizes another key change in that epoch.
     if key_id != current["authority_key_id"] and current["authority_key_id"] != ZERO_DIGEST:
         raise NativePolicySnapshotError("native_command_control_authority_key_changed")
-    if program is None and current["schema"] == PACK_AUTHORITY_SCHEMA:
+    if program is None and current["schema"] in (PACK_AUTHORITY_SCHEMA, "guard.native-command-control-authority.v3"):
         raise NativePolicySnapshotError("native_command_pack_activation_missing")
     candidate = {
         **current,
@@ -285,7 +288,15 @@ def read_committed_projection_authority(store: GuardStore, binding: Mapping[str,
         or current["effective_digest"] != binding["effective_digest"]
         or current["authority_key_id"] != authority_key_id(store._authority_key(required=False))
         or current.get("pack_program_digest") != program
-        or current["schema"] != (AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA)
+        or current["schema"]
+        != (
+            "guard.native-command-control-authority.v3"
+            if binding.get("active_security_digest") is not None
+            else AUTHORITY_SCHEMA
+            if program is None
+            else PACK_AUTHORITY_SCHEMA
+        )
+        or current.get("active_security_digest") != binding.get("active_security_digest")
     ):
         raise NativeCommandControlMutationRequiredError()
     return authority_binding(current)

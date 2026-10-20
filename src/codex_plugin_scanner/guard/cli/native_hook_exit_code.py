@@ -40,7 +40,7 @@ def native_hook_verdict_exit_code(
 
         return grok_hook_process_exit(policy_action)
     if harness == "zcode":
-        from ..adapters.zcode_hooks import zcode_hook_process_exit
+        from ..adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
 
         return zcode_hook_process_exit(policy_action=policy_action, event_name=event_name)
     if harness in _RC_BLOCK_IS_TWO:

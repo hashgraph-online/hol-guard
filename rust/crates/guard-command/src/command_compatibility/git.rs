@@ -82,7 +82,10 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     // caller spelled. This admits their capability attribution only; patch
     // read and workspace proofs remain the responsibility of the ordinary
     // command decision, not this classifier.
-    command == "apply" && crate::pretool::git_apply_check::is_check_only(rest)
+    (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A stash listing and a `show` of one entry print; every other
+        // stash spelling moves work and keeps its workspace attribution.
+        || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -192,6 +195,9 @@ pub(super) fn inspection_arguments<'a>(
         Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
         Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
         Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // `stash` reaches the worktree in every spelling but the two that
+        // print: a listing and a `show` of one entry.
+        Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
         _ => false,
     };
     admitted.then_some(remaining)

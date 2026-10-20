@@ -46,6 +46,8 @@ impl Resolver for HostResolver {
         Ok(Executable::Native {
             resolved_path: path.into(),
             content_sha256: image.executable_digest.clone(),
+            openssl_config: None,
+            delivery: NativeDelivery::ReadonlySystem,
         })
     }
 }

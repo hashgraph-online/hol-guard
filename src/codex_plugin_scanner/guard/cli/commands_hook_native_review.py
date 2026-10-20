@@ -4,7 +4,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from .commands_support import *
 
@@ -52,11 +52,12 @@ if TYPE_CHECKING:
     )
 
 
-from ..action_lattice import is_guard_action, most_restrictive_guard_action
+from ..action_lattice import is_guard_action
 from ..adapters.cursor_hooks import cursor_hook_requires_approval_center_queue
 from ..daemon.client import GuardSurfaceDaemonClient, load_guard_surface_daemon_client
 from ..harness_posture import harness_is_recording_only
 from ..models import GuardAction
+from ..native_hook_artifact_compose import native_hook_compose
 from ..retry_lineage import capture_retry_lineage
 from ._commands_shared import *
 from .commands_hook_native_state import (
@@ -79,19 +80,25 @@ _OBSERVE_EXECUTION_SOURCE_FIELDS = (
 
 
 def _observe_mode_executable_action(state: NativeArtifactHookState) -> GuardAction:
-    """Recompose sources that remain executable after observe-only gates are removed."""
+    """Ask the resident which composed sources still execute in observe mode.
 
-    candidates: list[GuardAction] = ["allow"]
+    Python gathers the sources and sends them; which of them survive observe
+    mode, and which one names the action, is the resident's answer. A call the
+    resident cannot serve raises, and the hook's fail-closed handling turns it
+    into an availability response rather than a recorded guess.
+    """
+
     composition = state.response_payload.get("policy_composition")
-    if isinstance(composition, Mapping):
-        for key in _OBSERVE_EXECUTION_SOURCE_FIELDS:
-            source_action = composition.get(key)
-            if is_guard_action(source_action) and source_action in {"allow", "warn"}:
-                candidates.append(source_action)
-    package_action = getattr(state.package_evaluation, "policy_action", None)
-    if is_guard_action(package_action) and package_action in {"allow", "warn"}:
-        candidates.append(package_action)
-    return most_restrictive_guard_action(*candidates)
+    sources = composition if isinstance(composition, Mapping) else {}
+    answer = native_hook_compose(
+        "observe_executable_action",
+        {
+            **{key: sources.get(key) for key in _OBSERVE_EXECUTION_SOURCE_FIELDS},
+            "package_evaluation_action": getattr(state.package_evaluation, "policy_action", None),
+        },
+        guard_home=state.guard_home,
+    )
+    return cast(GuardAction, answer["executable_action"])
 
 
 def _browser_wait_binding(
@@ -234,12 +241,16 @@ def review_native_artifact_hook(
         if observe_mode:
             response_payload["approval_requests"] = []
             observed_policy_action = policy_action
+            # One answer serves both the queued record and the final action:
+            # the sources do not change between them, so asking twice would
+            # only spend a second round trip on the same question.
+            executable_action = _observe_mode_executable_action(state)
             queue_observe_mode_request(
                 action_envelope=action_envelope,
                 artifact=runtime_artifact,
                 artifact_hash=runtime_artifact_hash,
                 changed_fields=changed_capabilities,
-                executable_action=_observe_mode_executable_action(state),
+                executable_action=executable_action,
                 observed_policy_action=observed_policy_action,
                 redaction_level=config.receipt_redaction_level,
                 risk_summary=risk_summary,
@@ -248,7 +259,7 @@ def review_native_artifact_hook(
             )
             set_native_artifact_hook_final_action(
                 state,
-                _observe_mode_executable_action(state),
+                executable_action,
                 observed_policy_action=observed_policy_action,
             )
             action_envelope = state.action_envelope
@@ -256,7 +267,12 @@ def review_native_artifact_hook(
             response_payload = state.response_payload
             state.browser_approval_daemon_client = None
             return None
-        native_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+        native_reason = _runtime_artifact_native_reason(
+            runtime_artifact,
+            response_payload,
+            composer=native_hook_compose,
+            guard_home=state.guard_home,
+        )
         additional_context = _claude_prompt_additional_context(
             harness=args.harness,
             event_name=event_name,
@@ -309,7 +325,7 @@ def review_native_artifact_hook(
                     event_name=event_name,
                     policy_action=policy_action,
                     artifact=runtime_artifact,
-                    native_reason=native_reason,
+                    native_reason=lambda: native_reason,
                 )
             _emit_native_hook_response(
                 harness=args.harness,

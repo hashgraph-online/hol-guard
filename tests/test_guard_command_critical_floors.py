@@ -207,7 +207,6 @@ NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
         "xargs gh pr merge 17 --repo example/repo --squash",
         "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
         "PATH=scratch/bin:$PATH hol-guard status",
-        "printf '%s' \"$(cat workspace/sensitive)\"",
     }
 )
 

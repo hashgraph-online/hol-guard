@@ -200,6 +200,59 @@ fn artifact_references_are_allowed_only_in_exact_form() {
 }
 
 #[test]
+fn proc_references_are_reads_of_the_sessions_own_jobs() {
+    let f = fixture();
+    for path in [
+        "proc://",
+        "proc://bg_1",
+        "proc://bg_12",
+        "proc://build-42",
+        "proc://web",
+        "proc://bg_1:1-40",
+        "proc://bg_1:raw",
+        "proc://bg_1:1-40:raw",
+        "proc://Reviewer.2",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert!(allowed(&result), "{path}: {}", result.reason_code);
+        assert_eq!(result.reason_code, "native_omp_proc_read", "{path}");
+    }
+    for path in [
+        "proc://bg_1/kill",
+        "proc://bg_1/mode",
+        "proc://bg_1/",
+        "proc:///etc/passwd",
+        "proc://../bg_1",
+        "proc://.hidden",
+        "proc://bg_1:5",
+        "proc://bg_1:a-b",
+        "proc://bg_1:raw:raw",
+        "proc://bg_1:1-2:3-4",
+        "proc://bg_1:conflicts",
+        "proc://bg 1",
+        "proc://bg_1%2fkill",
+        "proc://bg_1?x=1",
+        "proc://bg_1#frag",
+        "proc://:1-5",
+        "proc://~",
+        "PROC://bg_1",
+    ] {
+        let result = omp(&f, "read", json!({"path": path}));
+        assert_ne!(result.reason_code, "native_omp_proc_read", "{path}");
+    }
+    // Only the read tool serves a job's output; a write to the same selector
+    // sends stdin or cancels, and other harnesses have no such scheme.
+    for tool in ["write", "edit"] {
+        let result = omp(&f, tool, json!({"path": "proc://bg_1", "content": "x"}));
+        assert_ne!(result.reason_code, "native_omp_proc_read", "{tool}");
+    }
+    assert_ne!(
+        run(&f, "codex", "read", json!({"path": "proc://bg_1"})).reason_code,
+        "native_omp_proc_read"
+    );
+}
+
+#[test]
 fn skill_and_note_documents_are_readable_in_bounds() {
     let f = fixture();
     for path in [
@@ -434,7 +487,8 @@ fn glob_path_selectors_prove_the_fixed_directory_without_allowing_escape() {
     ] {
         assert!(!allowed(&omp(&f, "glob", json!({"path": path}))), "{path}");
     }
-    for tool in ["find", "ls", "read", "grep"] {
+    // `grep` proves the folder before a glob; see pretool_omp_grep_glob_paths.
+    for tool in ["find", "ls", "read"] {
         assert!(
             !allowed(&omp(&f, tool, json!({"path": "src/**/*.ts"}))),
             "{tool}"
@@ -615,7 +669,6 @@ fn semicolon_path_lists_prove_every_entry() {
         "calc.py; ~/.codex/auth.json",
         "calc.py; ~/secret-dir/.env",
         "calc.py; missing.py",
-        "calc.py; src/*.rs",
     ] {
         let result = omp(&f, "grep", json!({"pattern": "x", "path": path}));
         assert!(!allowed(&result), "{path}: {}", result.reason_code);
@@ -681,6 +734,7 @@ fn grep_lists_naming_a_missing_file_say_so_instead_of_asking() {
         "app-fix/src/report.ts;app-fix/src/projector.ts",
         "src/main.rs; app-fix/src/report.ts",
         "missing.py; ~/missing-directory",
+        "missing.py; src/*.rs",
     ] {
         let result = omp(
             &f,
@@ -695,7 +749,6 @@ fn grep_lists_naming_a_missing_file_say_so_instead_of_asking() {
     for path in [
         "missing.py; ~/.ssh/id_rsa",
         "missing.py; ~/secret-dir/.env",
-        "missing.py; src/*.rs",
         "missing.py; ~/.ssh",
         "missing.py; missing/.env",
     ] {

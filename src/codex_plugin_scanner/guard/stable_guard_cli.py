@@ -1,7 +1,8 @@
 """Stable Guard CLI resolution for Desktop-managed frozen runtimes.
 
-Desktop Core lives under ``versions/<release>/`` or ``bundled/<release>/`` and
-those directories can be replaced on update. Hooks and package-manager shims
+Desktop Core lives under ``versions/<release>/`` (launcher at
+``<release>/hol-guard`` or ``<release>/bundle/hol-guard``) or
+``bundled/<release>/`` and those directories can be replaced on update. Hooks and package-manager shims
 must not bake either ephemeral path.
 """
 
@@ -96,7 +97,7 @@ def _desktop_core_root(executable: Path) -> Path | None:
             relative_parts = executable.relative_to(ancestor).parts
         except ValueError:
             continue
-        if ancestor_name == "versions" and len(relative_parts) == 2:
+        if ancestor_name == "versions" and _versioned_launcher(relative_parts):
             return ancestor.parent
         if ancestor_name != "bundled":
             continue
@@ -105,6 +106,43 @@ def _desktop_core_root(executable: Path) -> Path | None:
         if len(relative_parts) == 4 and relative_parts[1:3] == ("lib", "hol-guard-core"):
             return ancestor.parent
     return None
+
+
+def desktop_core_root_for_executable(executable: Path) -> tuple[Path, str] | None:
+    """Return the Core root and release name of a launcher below ``versions/<release>/``.
+
+    ``bundled/`` layouts are part of the app and carry no release of their own
+    to compare against ``current.json``, so they answer None.
+    """
+
+    if executable.name.lower() not in {"hol-guard", "hol-guard.exe"}:
+        return None
+    for ancestor in executable.parents:
+        if ancestor.name.lower() != "versions":
+            continue
+        relative_parts = executable.relative_to(ancestor).parts
+        if _versioned_launcher(relative_parts):
+            return ancestor.parent, relative_parts[0]
+    return None
+
+
+def versioned_launcher_release(relative_parts: tuple[str, ...]) -> str | None:
+    """Return the release a path below ``versions/`` names when it is a Core launcher."""
+
+    if not relative_parts or relative_parts[-1].lower() not in {"hol-guard", "hol-guard.exe"}:
+        return None
+    return relative_parts[0] if _versioned_launcher(relative_parts) else None
+
+
+def _versioned_launcher(relative_parts: tuple[str, ...]) -> bool:
+    """Whether a path below ``versions/`` is a Core launcher.
+
+    Core installed by this CLI keeps its launcher at ``<release>/hol-guard``.
+    Desktop unpacks the release tree below ``bundle/``, so its launcher sits at
+    ``<release>/bundle/hol-guard``. Anything deeper is a file inside the tree.
+    """
+
+    return len(relative_parts) == 2 or (len(relative_parts) == 3 and relative_parts[1] == "bundle")
 
 
 def frozen_cli_path_is_runnable(path: Path) -> bool:
@@ -226,4 +264,5 @@ __all__ = [
     "resolved_guard_cli",
     "trusted_frozen_guard_cli_paths",
     "uses_top_level_hook_command",
+    "versioned_launcher_release",
 ]

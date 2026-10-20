@@ -8,20 +8,21 @@ from typing import Any
 
 from ..native_codex_tool_output import codex_tool_output_native
 from ..native_context import bound_context_digest_home
+from ..native_data_flow import DataFlowArtifactNaming
 from ..native_path_anchor import anchor_to_process_directory
+from ..native_prompt import merge_prompt_artifacts
 from ..native_rich_command_model import NativeCommandModelError
+from ..native_runtime_artifact_identity import NativeRuntimeArtifactIdentityError
 from ..native_sensitive_request import (
     NativeSensitiveRequestError,
     native_compound_artifact,
     native_unmodeled_shell_artifact,
 )
+from ..native_tool_action_identity import NativeToolActionIdentityError
 from ..runtime.command_decision_adapter import effect_decision_to_dict
 from ..runtime.direct_vitest import direct_local_typescript_execution_context
 from ..runtime.extension_allow_hint import compute_extension_allow_hint
-from ..runtime.jsonc import loads_jsonc
 from ..runtime.native_command_evaluation import NativeCommandEvaluation, review_command_native
-from ..runtime.node_semver import node_semver_spec_matches as _routine_semver_spec_matches
-from ..runtime.package_intent_common import PackageExecutionFileEvidence, PackageIntent
 from ._commands_shared import *
 from .commands_parser_helpers import *
 from .commands_support_codex_commands import _codex_post_tool_command_texts
@@ -35,7 +36,6 @@ from .commands_support_codex_paths import (
 )
 from .commands_support_codex_prompt_attachments import _codex_prompt_attachment_artifact
 from .commands_support_hook_payload import _coalesce_string
-from .commands_support_runtime_policy import _runtime_data_flow_summary
 from .commands_support_runtime_resolution import _canonical_harness_name, _runtime_policy_path
 
 
@@ -101,146 +101,18 @@ def _runtime_hook_raw_command_text(
     return action_envelope.command if action_envelope is not None else None
 
 
-def _merged_prompt_runtime_artifact(harness: str, artifacts: list[GuardArtifact]) -> GuardArtifact:
+def _merged_prompt_runtime_artifact(
+    harness: str, artifacts: list[GuardArtifact], *, guard_home: Path | None = None
+) -> GuardArtifact:
+    """The one review a prompt's guarded requests are held under.
+
+    A single request is its own review and needs no identity derived for it.
+    Two or more are folded by the resident, which owns the merged artifact id
+    the saved approval is keyed by.
+    """
     if len(artifacts) == 1:
         return artifacts[0]
-    prompt_signals: list[str] = []
-    prompt_matched_texts: list[str] = []
-    prompt_request_classes: list[str] = []
-    prompt_display_texts: list[str] = []
-    request_identity = "|".join(sorted(artifact.artifact_id for artifact in artifacts))
-    for artifact in artifacts:
-        metadata = artifact.metadata
-        prompt_signals.extend(_string_list(metadata.get("prompt_signals")))
-        matched_text = metadata.get("prompt_matched_text")
-        if isinstance(matched_text, str) and matched_text.strip():
-            prompt_matched_texts.append(matched_text.strip())
-        display_text = metadata.get("prompt_display_text")
-        if isinstance(display_text, str) and display_text.strip():
-            prompt_display_texts.append(display_text.strip())
-        request_class = metadata.get("prompt_request_class")
-        if isinstance(request_class, str) and request_class.strip():
-            prompt_request_classes.append(request_class.strip())
-    deduped_signals = list(dict.fromkeys(prompt_signals))
-    deduped_matches = list(dict.fromkeys(prompt_matched_texts))
-    deduped_classes = list(dict.fromkeys(prompt_request_classes))
-    deduped_display = list(dict.fromkeys(prompt_display_texts))
-    request_summary = (
-        deduped_display[0] if len(deduped_display) == 1 else "Prompt matches multiple guarded request classes."
-    )
-    return GuardArtifact(
-        artifact_id=f"{harness}:session:prompt:multi:{hashlib.sha256(request_identity.encode('utf-8')).hexdigest()[:24]}",
-        name="prompt multi-signal request",
-        harness=harness,
-        artifact_type="prompt_request",
-        source_scope=artifacts[0].source_scope,
-        config_path=artifacts[0].config_path,
-        metadata={
-            "prompt_signals": deduped_signals,
-            "prompt_summary": "Prompt matches multiple guarded request classes.",
-            "prompt_matched_texts": deduped_matches,
-            "prompt_display_text": request_summary,
-            "prompt_request_classes": deduped_classes,
-            "request_summary": request_summary,
-            "runtime_request_summary": request_summary,
-        },
-    )
-
-
-def _routine_local_runner_has_complete_evidence(intent: PackageIntent) -> bool:
-    """Return whether a routine JS runner is already bound to local project state."""
-
-    if intent.package_manager not in {"bunx", "npx"} or len(intent.local_executions) != 1:
-        return False
-    execution = intent.local_executions[0]
-    if execution.package_name not in {"eslint", "jest", "tsc", "vitest"}:
-        return False
-    if len(intent.targets) != 1:
-        return False
-    target = intent.targets[0]
-    if target.raw_spec != execution.package_name or target.requested_specifier is not None:
-        return False
-    if target.source_kind is not None or target.source_url is not None:
-        return False
-    if "--package" in intent.command_tokens or any(token.startswith("--package=") for token in intent.command_tokens):
-        return False
-    if execution.package_name != execution.executable_name or execution.declared_version is None:
-        return False
-    if execution.declared_version.lower().startswith(("file:", "git+", "git://", "github:", "http:", "https:")):
-        return False
-    evidence_files = (execution.manager, execution.local_executable, *execution.manifests, *execution.lockfiles)
-    if not execution.manifests or not execution.lockfiles:
-        return False
-    if any(
-        evidence is None
-        or evidence.status != "available"
-        or evidence.resolved_path is None
-        or evidence.file_identity is None
-        or evidence.content_hash is None
-        for evidence in evidence_files
-    ):
-        return False
-    executable = execution.local_executable
-    if executable is None or executable.resolved_path is None:
-        return False
-    try:
-        workspace = Path(execution.effective_cwd).resolve(strict=True)
-        node_modules = (workspace / "node_modules").resolve(strict=True)
-        package_root = (node_modules / execution.package_name).resolve(strict=True)
-        package_root.relative_to(node_modules)
-        Path(executable.resolved_path).resolve(strict=True).relative_to(package_root)
-    except (OSError, RuntimeError, ValueError):
-        return False
-    return not intent.execution_context_reason_codes and _routine_local_runner_versions_match(
-        workspace,
-        execution.package_name,
-        execution.declared_version,
-        execution.lockfiles,
-    )
-
-
-def _routine_local_runner_versions_match(
-    workspace: Path,
-    package_name: str,
-    declared_version: str,
-    lockfiles: tuple[PackageExecutionFileEvidence, ...],
-) -> bool:
-    try:
-        manifest = json.loads((workspace / "package.json").read_text(encoding="utf-8"))
-        installed = json.loads((workspace / "node_modules" / package_name / "package.json").read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    if not isinstance(manifest, dict) or not isinstance(installed, dict):
-        return False
-    dependency_groups = (manifest.get("dependencies"), manifest.get("devDependencies"))
-    if not any(isinstance(group, dict) and group.get(package_name) == declared_version for group in dependency_groups):
-        return False
-    installed_version = installed.get("version")
-    if installed.get("name") != package_name or not isinstance(installed_version, str):
-        return False
-    locked_versions: set[str] = set()
-    for evidence in lockfiles:
-        if evidence.resolved_path is None:
-            continue
-        try:
-            lock_text = Path(evidence.resolved_path).read_text(encoding="utf-8")
-            lock = loads_jsonc(lock_text) if Path(evidence.resolved_path).name == "bun.lock" else json.loads(lock_text)
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return False
-        if not isinstance(lock, dict):
-            return False
-        packages = lock.get("packages")
-        if not isinstance(packages, dict):
-            return False
-        package_lock_entry = packages.get(f"node_modules/{package_name}")
-        if isinstance(package_lock_entry, dict) and isinstance(package_lock_entry.get("version"), str):
-            locked_versions.add(package_lock_entry["version"])
-        bun_entry = packages.get(package_name)
-        if isinstance(bun_entry, list) and bun_entry and isinstance(bun_entry[0], str):
-            prefix = f"{package_name}@"
-            if bun_entry[0].startswith(prefix):
-                locked_versions.add(bun_entry[0][len(prefix) :])
-    return locked_versions == {installed_version} and _routine_semver_spec_matches(declared_version, installed_version)
+    return merge_prompt_artifacts(harness, artifacts, guard_home=guard_home)
 
 
 def _unmodeled_shell_runtime_artifact(
@@ -296,7 +168,12 @@ def _hook_runtime_artifact(**kwargs: Any) -> GuardArtifact | None:
     try:
         with bound_context_digest_home(kwargs.get("guard_home")):
             return _hook_runtime_artifact_with_native(**kwargs)
-    except (NativeCommandModelError, NativeSensitiveRequestError):
+    except (
+        NativeCommandModelError,
+        NativeRuntimeArtifactIdentityError,
+        NativeSensitiveRequestError,
+        NativeToolActionIdentityError,
+    ):
         harness = _canonical_harness_name(kwargs["harness"])
         return GuardArtifact(
             artifact_id=f"{harness}:native-command-unavailable",
@@ -321,6 +198,7 @@ def _hook_runtime_artifact_with_native(
     payload: dict[str, object],
     action_envelope: GuardActionEnvelope | None,
     data_flow_signals: tuple[RiskSignalV2, ...] = (),
+    data_flow_artifact: GuardArtifact | None = None,
     home_dir: Path,
     guard_home: Path,
     workspace: Path | None,
@@ -369,7 +247,7 @@ def _hook_runtime_artifact_with_native(
                             _with_codex_prompt_display_metadata(artifact, prompt_text=prompt_text)
                             for artifact in prompt_artifacts
                         ]
-                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts)
+                    return _merged_prompt_runtime_artifact(harness, prompt_artifacts, guard_home=guard_home)
             prompt_file_artifact = _codex_prompt_credential_file_artifact(
                 prompt_text=prompt_text,
                 cwd=workspace,
@@ -382,35 +260,32 @@ def _hook_runtime_artifact_with_native(
                     prompt_text=prompt_text,
                     home_dir=home_dir,
                     config_path=config_path,
-                    guard_home=guard_home,
                 )
                 if attachment_artifact is not None:
                     return attachment_artifact
     tool_name = _runtime_hook_tool_name(payload)
     tool_arguments = _runtime_hook_tool_arguments(payload)
     raw_command_text = _runtime_hook_raw_command_text(payload, action_envelope)
-    request = extract_sensitive_file_read_request(
+    source_scope = _coalesce_string(payload.get("source_scope"), "project")
+    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
+    naming = {"harness": harness, "config_path": config_path, "source_scope": source_scope}
+    _read_request, read_artifact = extract_sensitive_file_read_request_artifact(
         tool_name,
         tool_arguments,
         cwd=workspace,
         home_dir=home_dir,
+        **naming,
     )
-    if request is None:
-        request = (
-            extract_sensitive_file_read_request_from_action(action_envelope, cwd=workspace, home_dir=home_dir)
-            if action_envelope is not None
-            else None
+    if read_artifact is None and action_envelope is not None:
+        _read_request, read_artifact = extract_sensitive_file_read_request_artifact_from_action(
+            action_envelope,
+            cwd=workspace,
+            home_dir=home_dir,
+            **naming,
         )
-    source_scope = _coalesce_string(payload.get("source_scope"), "project")
-    config_path = str(_runtime_policy_path(harness, home_dir, workspace, payload=payload))
-    if request is not None:
-        return build_file_read_request_artifact(
-            harness=harness,
-            request=request,
-            config_path=config_path,
-            source_scope=source_scope,
-        )
-    file_write_request = extract_sensitive_file_write_request(
+    if read_artifact is not None:
+        return read_artifact
+    _write_request, write_artifact = extract_sensitive_file_write_request_artifact(
         tool_name,
         tool_arguments,
         cwd=workspace,
@@ -420,14 +295,10 @@ def _hook_runtime_artifact_with_native(
             home_dir=home_dir,
             workspace=workspace,
         ),
+        **naming,
     )
-    if file_write_request is not None:
-        return build_file_write_request_artifact(
-            harness=harness,
-            request=file_write_request,
-            config_path=config_path,
-            source_scope=source_scope,
-        )
+    if write_artifact is not None:
+        return write_artifact
     package_intent = None
     if not _post_tool_package_request_was_already_evaluated(payload=payload, action_envelope=action_envelope):
         package_intent = extract_package_intent_request(
@@ -462,7 +333,7 @@ def _hook_runtime_artifact_with_native(
         # Test and lint runners execute repository-controlled code. Local
         # identity is evidence, not authority to omit their package review.
         and not (
-            _routine_local_runner_has_complete_evidence(package_intent)
+            package_intent.routine_local_runner
             and all(item.package_name == "tsc" for item in package_intent.local_executions)
         )
     ):
@@ -472,6 +343,7 @@ def _hook_runtime_artifact_with_native(
                 intent=package_intent,
                 config_path=config_path,
                 source_scope=source_scope,
+                guard_home=guard_home,
             )
         )
     tool_request = extract_sensitive_tool_action_request(
@@ -517,16 +389,8 @@ def _hook_runtime_artifact_with_native(
         )
         if unmodeled_artifact is not None:
             runtime_artifacts.append(unmodeled_artifact)
-    if action_envelope is not None and data_flow_signals:
-        runtime_artifacts.append(
-            _runtime_data_flow_artifact(
-                harness=harness,
-                action_envelope=action_envelope,
-                data_flow_signals=data_flow_signals,
-                config_path=config_path,
-                source_scope=source_scope,
-            )
-        )
+    if data_flow_artifact is not None:
+        runtime_artifacts.append(data_flow_artifact)
     return _compound_runtime_artifact(
         artifacts=runtime_artifacts,
         command_text=raw_command_text,
@@ -552,45 +416,30 @@ def _runtime_protected_file_write_paths(
     return protected_paths
 
 
-def _runtime_data_flow_artifact(
+def _runtime_data_flow_naming(
     *,
     harness: str,
-    action_envelope: GuardActionEnvelope,
-    data_flow_signals: tuple[RiskSignalV2, ...],
-    config_path: str,
-    source_scope: str,
-) -> GuardArtifact:
-    command_text = action_envelope.command or action_envelope.tool_name or action_envelope.action_type
-    signal_ids = tuple(signal.signal_id for signal in data_flow_signals)
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "command_text": command_text,
-                "signal_ids": signal_ids,
-                "source_scope": source_scope,
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:data-flow:{fingerprint}",
-        name=f"{action_envelope.tool_name or 'runtime'} data-flow exfiltration",
-        harness=harness,
-        artifact_type="tool_action_request",
-        source_scope=source_scope,
-        config_path=config_path,
-        metadata={
-            "action_class": "credential exfiltration shell command",
-            "command_text": command_text,
-            "guard_default_action": "require-reapproval",
-            "risk_classes": ["data_flow_exfiltration"],
-            "request_summary": _runtime_data_flow_summary(data_flow_signals),
-            "runtime_request_signals": [signal.plain_reason for signal in data_flow_signals],
-            "runtime_request_summary": _runtime_data_flow_summary(data_flow_signals),
-            "runtime_request_reason": (
-                "Guard detected local-secret data flow in the runtime action before the command could send it away."
-            ),
-        },
+    payload: dict[str, object],
+    action_envelope: GuardActionEnvelope | None,
+    home_dir: Path,
+    workspace: Path | None,
+) -> DataFlowArtifactNaming | None:
+    """How the resident should name the artifact for this action's data flow.
+
+    The naming is this side's to supply because only this side knows which
+    policy file a review would cite and whether the scope is the project or the
+    global install. An event that carries no action gets none: there is nothing
+    to review, so the resident is asked for the signals alone.
+    """
+
+    if action_envelope is None:
+        return None
+    canonical_harness = _canonical_harness_name(harness)
+    return DataFlowArtifactNaming(
+        harness=canonical_harness,
+        config_path=str(_runtime_policy_path(canonical_harness, home_dir, workspace, payload=payload)),
+        source_scope=_coalesce_string(payload.get("source_scope"), "project"),
+        tool_name=action_envelope.tool_name,
     )
 
 
@@ -683,6 +532,6 @@ __all__ = [
     "_hook_runtime_artifact",
     "_merged_prompt_runtime_artifact",
     "_optional_string",
-    "_runtime_data_flow_artifact",
+    "_runtime_data_flow_naming",
     "_string_list",
 ]

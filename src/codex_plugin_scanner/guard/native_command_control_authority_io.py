@@ -11,15 +11,38 @@ from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager, suppress
 from pathlib import Path
 
-from .native_command_control_authority import AUTHORITY_LOCK_NAME
+from .native_command_control_authority import AUTHORITY_GATE_NAME, AUTHORITY_LOCK_NAME
 from .native_policy_snapshot_constants import NativePolicySnapshotError
 
+# One acquisition budget covers the entry gate and the lease behind it, so a
+# caller that chains reads can divide this span instead of paying it twice.
+AUTHORITY_LOCK_TIMEOUT_SECONDS = 30.0
+
 _LOCKS = threading.local()
+_LEASE_POLL_SECONDS = 0.01
+# The first retries are short so an acquirer that only missed a turnstile
+# held for microseconds does not pay a full poll interval for it.
+_LEASE_POLL_MIN_SECONDS = 0.0002
 
 
 class NativeCommandControlMutationRequiredError(NativePolicySnapshotError):
     def __init__(self) -> None:
         super().__init__("native_command_control_authority_mutation_required")
+
+
+class NativeCommandControlAuthorityUnavailableError(TimeoutError):
+    """The authority lease was not obtainable before the deadline.
+
+    Availability is not a verdict. A caller reports that it could not read the
+    authority; it never reports a health state it did not observe, because an
+    outage must not read as a loss of protection.
+    """
+
+    code = "native_command_control_authority_lock_unavailable"
+
+    def __init__(self, *, shared: bool) -> None:
+        super().__init__("Timed out waiting for the extension control authority lock.")
+        self.shared = shared
 
 
 def require_command_control_mutation_lease(guard_home: Path) -> None:
@@ -166,9 +189,95 @@ def write_private_state(guard_home: Path, name: str, payload: bytes, maximum_byt
                 os.unlink(temporary, dir_fd=directory)
 
 
+def _try_lease(descriptor: int, *, shared: bool) -> None:
+    if os.name == "nt":
+        from .native_command_control_windows_lock import try_lock_authority_file
+
+        try_lock_authority_file(descriptor, shared=shared)
+    else:
+        import fcntl
+
+        fcntl.flock(descriptor, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
+
+
+def _release_lease(descriptor: int) -> None:
+    if os.name == "nt":
+        from .native_command_control_windows_lock import unlock_authority_file
+
+        unlock_authority_file(descriptor)
+    else:
+        import fcntl
+
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+
+
+def _await_lease(descriptor: int, *, shared: bool, deadline: float) -> None:
+    """Poll for one lease until the deadline, then report it as unavailable."""
+
+    interval = _LEASE_POLL_MIN_SECONDS
+    while True:
+        try:
+            _try_lease(descriptor, shared=shared)
+            return
+        except OSError as error:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise NativeCommandControlAuthorityUnavailableError(shared=shared) from error
+            time.sleep(min(interval, remaining))
+            interval = min(_LEASE_POLL_SECONDS, interval * 2)
+
+
+def _open_authority_file(guard_home: Path, name: str, resources: ExitStack) -> tuple[int, int | None, os.stat_result]:
+    """Open one owner-private, handle-bound lock file directly under the guard home."""
+
+    directory: int | None = None
+    if os.name == "nt":
+        from .native_policy_snapshot import _windows_open_private_fd, _windows_private_directory_binding
+
+        binding = resources.enter_context(_windows_private_directory_binding(guard_home))
+        descriptor = _windows_open_private_fd(binding.path / name, maximum_bytes=1)
+    else:
+        directory = resources.enter_context(_unix_directory(guard_home, private=False))
+        descriptor = os.open(
+            name,
+            os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
+            0o600,
+            dir_fd=directory,
+        )
+    resources.callback(os.close, descriptor)
+    metadata = _validate_file(descriptor, maximum_bytes=1, repair_mode=True)
+    if metadata.st_size == 0:
+        os.write(descriptor, b"0")
+        os.fsync(descriptor)
+    return descriptor, directory, metadata
+
+
+@contextmanager
+def _authority_entry_gate(guard_home: Path, *, deadline: float) -> Iterator[None]:
+    """Order entry so a stream of overlapping readers cannot starve a writer.
+
+    A nonblocking exclusive request never joins the kernel's wait queue, so a
+    publisher that keeps re-taking the shared lease can hold a mutation out
+    until its deadline. Every acquirer therefore passes this turnstile first,
+    and every one of them takes it exclusively: a shared turnstile would let
+    overlapping readers hold it continuously and reproduce the same starvation
+    one level down. A reader holds it only for the moment it needs to take its
+    own shared lease, so it is free again within microseconds, while a writer
+    holds it for its whole wait. Readers that arrive after the writer therefore
+    queue here while the readers already inside drain. Nobody holds it across
+    the critical section, so it cannot deadlock against the lease itself.
+    """
+
+    with ExitStack() as resources:
+        descriptor, _, _ = _open_authority_file(guard_home, AUTHORITY_GATE_NAME, resources)
+        _await_lease(descriptor, shared=False, deadline=deadline)
+        resources.callback(_release_lease, descriptor)
+        yield
+
+
 @contextmanager
 def hold_command_control_authority_lock(
-    guard_home: Path, *, timeout_seconds: float = 30.0, shared: bool = False
+    guard_home: Path, *, timeout_seconds: float = AUTHORITY_LOCK_TIMEOUT_SECONDS, shared: bool = False
 ) -> Iterator[None]:
     """Retain one exclusive inode; native readers take an overlapping shared lease.
 
@@ -191,42 +300,10 @@ def hold_command_control_authority_lock(
         yield
         return
     with ExitStack() as resources:
-        directory: int | None = None
-        if os.name == "nt":
-            from .native_policy_snapshot import _windows_open_private_fd, _windows_private_directory_binding
-
-            binding = resources.enter_context(_windows_private_directory_binding(guard_home))
-            descriptor = _windows_open_private_fd(binding.path / AUTHORITY_LOCK_NAME, maximum_bytes=1)
-        else:
-            directory = resources.enter_context(_unix_directory(guard_home, private=False))
-            descriptor = os.open(
-                AUTHORITY_LOCK_NAME,
-                os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK | getattr(os, "O_CLOEXEC", 0),
-                0o600,
-                dir_fd=directory,
-            )
-        resources.callback(os.close, descriptor)
-        metadata = _validate_file(descriptor, maximum_bytes=1, repair_mode=True)
-        if metadata.st_size == 0:
-            os.write(descriptor, b"0")
-            os.fsync(descriptor)
+        descriptor, directory, metadata = _open_authority_file(guard_home, AUTHORITY_LOCK_NAME, resources)
         deadline = time.monotonic() + max(0.0, timeout_seconds)
-        while True:
-            try:
-                if os.name == "nt":
-                    from .native_command_control_windows_lock import try_lock_authority_file
-
-                    try_lock_authority_file(descriptor, shared=shared)
-                else:
-                    import fcntl
-
-                    fcntl.flock(descriptor, (fcntl.LOCK_SH if shared else fcntl.LOCK_EX) | fcntl.LOCK_NB)
-                break
-            except OSError as error:
-                remaining = deadline - time.monotonic()
-                if remaining <= 0:
-                    raise TimeoutError("Timed out waiting for the extension control authority lock.") from error
-                time.sleep(min(0.01, remaining))
+        with _authority_entry_gate(guard_home, deadline=deadline):
+            _await_lease(descriptor, shared=shared, deadline=deadline)
         if directory is not None and not _same_file(
             metadata, os.stat(AUTHORITY_LOCK_NAME, dir_fd=directory, follow_symlinks=False)
         ):
@@ -241,14 +318,7 @@ def hold_command_control_authority_lock(
         finally:
             if os.getpid() == process_id:
                 _LOCKS.active = active
-                if os.name == "nt":
-                    from .native_command_control_windows_lock import unlock_authority_file
-
-                    unlock_authority_file(descriptor)
-                else:
-                    import fcntl
-
-                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+                _release_lease(descriptor)
             # After fork, closing only the child's inherited descriptor keeps
             # the parent's open-file-description lock intact. An explicit
             # LOCK_UN in that child would revoke the parent's live lease.

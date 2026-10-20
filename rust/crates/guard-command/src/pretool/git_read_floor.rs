@@ -399,6 +399,7 @@ fn may_inspect(arguments: &[String]) -> bool {
                         | "show-ref"
                         | "for-each-ref"
                         | "rev-list"
+                        | "stash"
                 )
             }
         }

@@ -8,13 +8,15 @@ import importlib.util
 import json
 import os
 import runpy
+import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
-from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import load_generated_command_catalog_bytes
+from scripts import native_directory_inventory
 
 ROOT = Path(__file__).resolve().parents[1]
 PROGRAM_DOMAIN = b"hol-guard.native-command-program.v1\0"
@@ -68,7 +70,15 @@ def compile_request(compiler: Path, request: object) -> dict:
 @pytest.fixture(scope="module")
 def build() -> dict:
     generator = runpy.run_path(str(ROOT / "scripts/build_native_command_program.py"))
-    return generator["build_request"]()
+    # Legacy compiler contracts use the bounded resident selection. Complete
+    # product coverage below walks native packs instead of one aggregate.
+    return generator["build_request"](core_only=True)
+
+
+@pytest.fixture(scope="module")
+def canonical_packs(compiler: Path):
+    with native_directory_inventory.compiled_inventory(compiler) as (_, reader, release):
+        yield reader, release
 
 
 @pytest.fixture(scope="module")
@@ -76,38 +86,30 @@ def compiled(compiler: Path, build: dict) -> dict:
     return compile_request(compiler, build)
 
 
-def test_extension_directory_renders_all_canonical_sources(
-    build: dict, compiled: dict, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_extension_directory_renders_all_canonical_sources(canonical_packs, monkeypatch: pytest.MonkeyPatch) -> None:
     """Pending sources must render even when the committed directory awaits regeneration."""
-    program = compiled["program"]
-    catalog = {
-        "schema": "guard.command-catalog.v1",
-        "catalog": compiled["catalog"],
-        "catalog_digest": program["catalog_digest"],
-        "program_digest": program["program_digest"],
-        "source_digest": compiled["source_digest"],
-        "implementation_digest": compiled["implementation_digest"],
-    }
-    registry = load_generated_command_catalog_bytes(canonical(catalog), canonical(program))
+    from codex_plugin_scanner.guard.runtime.generated_command_catalog_loader import _extension
+    from scripts.native_directory_inventory import catalog_rows
+
+    reader, release = canonical_packs
+    catalog = [row for _, _, row in catalog_rows(reader, release)]
     spec = importlib.util.spec_from_file_location(
         "render_pending_extension_directory", ROOT / "scripts/render_command_extension_directory.py"
     )
     assert spec is not None and spec.loader is not None
     renderer = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(renderer)
-    monkeypatch.setattr(renderer, "BUILT_IN_COMMAND_EXTENSION_REGISTRY", registry)
+    monkeypatch.setattr(renderer, "native_extensions", lambda: tuple(_extension(row) for row in catalog))
     current = (ROOT / "docs/guard/extensions/README.md").read_text(encoding="utf-8")
     rendered = renderer.render_document(current)
     assert renderer.render_document(rendered) == rendered
     # Canonical trust classes are required schema fields; missing metadata must fail.
-    for source in build["sources"]:
-        extension = source["extension"]
+    for extension in catalog:
         identity = extension["extension_id"]
         description = renderer._escape_cell(extension["description"])
         assert rendered.count(f"`{identity}`") == 1
         assert f"| `{identity}` | {description} | {len(extension['rules'])} |" in rendered
-        if identity in build["trust"]["classes"]["external"]:
+        if extension["trust_class"] == "external":
             assert f"| `{identity}` | {description} | {len(extension['rules'])} | External opt-in |" in rendered
     # Exactly one marker pair is part of the directory contract.
     assert rendered.count(renderer.START_MARKER) == rendered.count(renderer.END_MARKER) == 1
@@ -124,10 +126,18 @@ def example(compiler: Path, build: dict) -> dict:
     return request
 
 
-def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: dict) -> None:
-    """Verify checked in program matches native authoring."""
+def test_checked_in_program_matches_native_authoring(compiler: Path, canonical_packs) -> None:
+    """Bind the resident artifact and embedded compiler to the reviewed core selection."""
+    generator = runpy.run_path(str(ROOT / "scripts/build_native_command_program.py"))
+    core = compile_request(compiler, generator["build_request"](core_only=True))
+    core_ids = {entry["extension_id"] for entry in generator["core_entries"]()}
+    assert {entry["extension_id"] for entry in core["catalog"]} == core_ids
+    from scripts.native_directory_inventory import catalog_rows
+
+    reader, release = canonical_packs
+    assert core_ids <= {identity for identity, _, _ in catalog_rows(reader, release)}
     checked_in = json.loads((ROOT / "contracts/extensions/native-command-program.v1.json").read_bytes())
-    assert checked_in == compiled["program"], (
+    assert checked_in == core["program"], (
         "Stage current projections before testing: python scripts/ci/verify_native_command_program.py "
         "--compiler rust/target/release/guard-command-source"
     )
@@ -157,8 +167,30 @@ def test_checked_in_program_matches_native_authoring(compiler: Path, compiled: d
     assert binding["catalog_digest"] == checked_in["catalog_digest"]
 
 
-def test_full_catalog_identity_coverage_and_node_closure(compiler: Path, build: dict, compiled: dict) -> None:
+def test_full_catalog_identity_coverage_and_node_closure(
+    compiler: Path, build: dict, compiled: dict, canonical_packs
+) -> None:
     assert compiled == compile_request(compiler, build)
+    from scripts.native_directory_inventory import catalog_rows
+
+    reader, release = canonical_packs
+    identities = set()
+    for identity, manifest, row in catalog_rows(reader, release):
+        identities.add(identity)
+        program = reader.json(manifest["program"])
+        program["nodes"] = {key: reader.json(reference) for key, reference in program["nodes"].items()}
+        assert_program_closure({"program": program, "catalog": [row]})
+    expected = {path.stem for path in (ROOT / "contributions/command-sources").glob("command.*.json")}
+    expected.update(
+        "command.mcp-" + path.stem.removeprefix("mcp.")
+        for path in (ROOT / "contributions/mcp-servers").glob("mcp.*.json")
+    )
+    assert identities == expected
+    assert len(identities) == release["extensions"]
+    assert_program_closure(compiled)
+
+
+def assert_program_closure(compiled: dict) -> None:
     program = compiled["program"]
     payload = dict(program)
     digest = payload.pop("program_digest")
@@ -296,3 +328,83 @@ def test_reordered_catalog_inputs_keep_identity(compiler: Path, build: dict, com
     reordered["sources"].reverse()
     reordered["mcp_sources"].reverse()
     assert compile_request(compiler, reordered) == compiled
+
+
+def test_native_directory_preparation_above_legacy_limit(compiler: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Real native packs and public metadata remain complete at the 513th source."""
+    # The script imports its siblings by bare name, as it does when run directly.
+    monkeypatch.syspath_prepend(str(ROOT / "scripts"))
+    import prepare_extension_directory as directory
+
+    from codex_plugin_scanner.guard.extension_builder.errors import BuilderError
+    from scripts.native_directory_inventory import catalog_rows, compiled_inventory
+
+    template = (ROOT / "rust/crates/guard-command/tests/fixtures/command-source-example.v1.json").read_text()
+    # Stay under this checkout so the local build marker binds its actual Git
+    # revision. These synthetic sources never enter the checkout's inventory.
+    with tempfile.TemporaryDirectory(prefix=".directory-scale-", dir=ROOT) as scratch:
+        root = Path(scratch)
+        # Preserve the real compatibility inventory and global relationships.
+        # Added sources exercise growth without replacing any canonical input.
+        for relative in (
+            "contributions/command-sources",
+            "contributions/mcp-servers",
+            "contributions/extensions",
+            "contributions/extension-listings",
+            "contracts/extensions/trust",
+        ):
+            shutil.copytree(ROOT / relative, root / relative)
+        (root / "docs/guard/extensions").mkdir(parents=True)
+        identities = {path.stem for path in (root / "contributions/command-sources").glob("command.*.json")}
+        identities.update(
+            "command.mcp-" + path.stem.removeprefix("mcp.")
+            for path in (root / "contributions/mcp-servers").glob("mcp.*.json")
+        )
+        additions = {f"command.scale-{index:04}" for index in range(513 - len(identities))}
+        identities.update(additions)
+        for identity in sorted(additions):
+            source = template.replace("command.example-cli", identity)
+            (root / "contributions/command-sources" / f"{identity}.json").write_text(source)
+            (root / "contracts/extensions/trust" / f"{identity}.v1.json").write_bytes(
+                canonical(
+                    {
+                        "schemaVersion": "guard.extension-trust-binding.v1",
+                        "extension": identity,
+                        "trustClass": "external",
+                    }
+                )
+            )
+        with compiled_inventory(compiler, root=root) as (_, reader, release):
+            assert release["extensions"] == len(identities)
+            for identity, manifest, _ in catalog_rows(reader, release):
+                descriptors = reader.json(manifest["descriptors"])
+                if identity in additions:
+                    assert len(descriptors) == 1 and descriptors[0]["id"] == identity
+                for descriptor in descriptors:
+                    path = root / "contributions/extensions" / f"{descriptor['id']}.json"
+                    path.write_bytes(canonical(descriptor))
+        markdown = root / "docs/guard/extensions/README.md"
+        markdown.write_text(f"intro\n{directory.markdown.START_MARKER}\nold\n{directory.markdown.END_MARKER}\nend\n")
+        expected = {"extensions": 513, "legacy": "extension-count"}
+        assert directory.prepare(compiler, root=root) == expected
+        assert directory.prepare(compiler, root=root, check=True) == expected
+        assert all(markdown.read_text().count(f"`{identity}`") == 1 for identity in identities)
+        marker = root / "docs/guard/extensions" / directory.UNAVAILABLE
+        source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        assert json.loads(marker.read_bytes()) == directory.unavailable_marker(source_sha, "extension-count")
+        before = marker.read_bytes()
+        marker.write_bytes(before.replace(b"extension-count", b"directory-bytes"))
+        with pytest.raises(ValueError, match="marker differs"):
+            directory.prepare(compiler, root=root, check=True)
+        marker.write_bytes(before)
+        descriptor = root / "contributions/extensions/command.scale-0000.json"
+        original = descriptor.read_bytes()
+        descriptor.unlink()
+        with pytest.raises((BuilderError, OSError, ValueError)):
+            directory.prepare(compiler, root=root, check=True)
+        descriptor.write_bytes(original)
+        listing = root / "contributions/extension-listings/command.scale-0000.json"
+        listing.parent.mkdir(exist_ok=True)
+        listing.write_text('{"schemaVersion":"invalid"}')
+        with pytest.raises((BuilderError, ValueError)):
+            directory.prepare(compiler, root=root, check=True)

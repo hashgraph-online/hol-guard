@@ -159,10 +159,18 @@ fn accept_entry(entry: &Path, home: Option<&Path>, workspace: &Path) -> Option<V
     user_tool()
 }
 
-/// The Xcode or CommandLineTools root `/usr/bin` shims forward into. Inside
-/// an app bundle the whole bundle is granted, because the developer
-/// directory loads frameworks and `Info.plist` from beside it.
-fn developer_dir() -> Option<PathBuf> {
+/// The developer directory a `/usr/bin` shim forwards into: the one
+/// `xcode-select` recorded, or the default the shims fall back to when none
+/// was recorded. Sealed, so a directory someone else may write cannot decide
+/// which binary a contained run executes.
+pub(super) fn selected_developer_dir() -> Option<PathBuf> {
+    // Every contained launch resolves its executable, and the answer is a
+    // property of the host rather than of the run, so it is read once.
+    static SELECTED: LazyLock<Option<PathBuf>> = LazyLock::new(read_selected_developer_dir);
+    SELECTED.clone()
+}
+
+fn read_selected_developer_dir() -> Option<PathBuf> {
     let selected = DEVELOPER_LINKS
         .iter()
         .find_map(|link| fs::read_link(link).ok());
@@ -174,6 +182,14 @@ fn developer_dir() -> Option<PathBuf> {
             .find(|candidate| candidate.is_dir())?,
     };
     let resolved = target.canonicalize().ok()?;
+    owned_and_sealed(&resolved).then_some(resolved)
+}
+
+/// The Xcode or CommandLineTools root `/usr/bin` shims forward into. Inside
+/// an app bundle the whole bundle is granted, because the developer
+/// directory loads frameworks and `Info.plist` from beside it.
+fn developer_dir() -> Option<PathBuf> {
+    let resolved = selected_developer_dir()?;
     let root = developer_root(&resolved)?;
     owned_and_sealed(&root).then_some(root)
 }
@@ -260,6 +276,9 @@ pub(super) fn workspace_exec_roots(
             continue;
         }
         let Some(accepted) = accept_entry(path, home, workspace) else {
+            if let Some(system) = super::launch_roots::system_program_directory(path) {
+                keep_entry(&mut entries, &system);
+            }
             continue;
         };
         if let Ok(canonical) = path.canonicalize() {

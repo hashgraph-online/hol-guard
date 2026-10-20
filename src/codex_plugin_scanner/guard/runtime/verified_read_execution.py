@@ -10,28 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, Final, cast
 
-from .effect_contract import (
-    ContainmentRequirement,
-    DecisionBasis,
-    EffectAssessment,
-    EffectBlastRadius,
-    EffectConfidence,
-    EffectEvidenceSource,
-    EffectKind,
-    EffectReversibility,
-    EffectTargetScope,
-    ProofRequirement,
-    ProofRoute,
-)
-from .effect_decision import (
-    DecisionFactor,
-    DecisionFactorSource,
-    EffectDecision,
-    EffectDecisionRequest,
-    FinalDisposition,
-    PositiveProof,
-    evaluate_effect_decision,
-)
+from ..native_verified_read_decision import NativeVerifiedReadDecisionError, workspace_read_decision
+from .effect_contract import ProofRequirement, ProofRoute
+from .effect_decision import EffectDecision, FinalDisposition, PositiveProof
 from .secret_sensitivity import classify_secret_path
 from .verified_read_common import verified_read_digest
 
@@ -94,7 +75,7 @@ def try_execute_verified_local_read(argv: tuple[str, ...]) -> VerifiedReadResult
             return None
         proof = _proof(context, argv=argv, output=output, source_digest=source_digest)
         decision = _decision(proof, operation_id=output.operation_id)
-    except (OSError, TypeError, UnicodeError, ValueError):
+    except (NativeVerifiedReadDecisionError, OSError, TypeError, UnicodeError, ValueError):
         return None
     if decision.disposition is not FinalDisposition.SILENT_VERIFIED:
         return None
@@ -415,26 +396,15 @@ def _proof(
 
 
 def _decision(proof: PositiveProof, *, operation_id: str) -> EffectDecision:
-    factor = DecisionFactor(
-        source=DecisionFactorSource.EFFECT,
-        reason_code="verified-workspace-read",
-        basis=DecisionBasis("allow", ProofRoute.VERIFIED),
-        operation_ref=f"operation:{operation_id}",
-        producer_ref="executor:verified-read-v1",
-        evidence_digest=proof.binding_digest,
-        assessment=EffectAssessment(
-            EffectKind.WORKSPACE_OR_PUBLIC_READ,
-            EffectTargetScope.WORKSPACE,
-            EffectReversibility.TRIVIALLY_RECOVERABLE,
-            EffectBlastRadius.WORKSPACE,
-            EffectEvidenceSource.RUNTIME,
-            EffectConfidence.EXACT,
-            ContainmentRequirement.NONE,
-            _REQUIREMENTS,
-        ),
-        proof=proof,
-    )
-    return evaluate_effect_decision(EffectDecisionRequest(factors=(factor,)))
+    """Ask the resident whether this proven read may run silently.
+
+    The factor's shape is fixed by the executor that produced the proof, so
+    the only thing this side contributes is the proof's binding digest and the
+    operation the read belongs to. Composing the decision here as well would
+    be a second place a verified read can be declared allowed.
+    """
+
+    return workspace_read_decision(operation_id=operation_id, binding_digest=proof.binding_digest)
 
 
 def _path_identity(metadata: os.stat_result) -> dict[str, int]:

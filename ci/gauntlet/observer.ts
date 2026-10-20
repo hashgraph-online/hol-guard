@@ -287,13 +287,19 @@ const CONTAINED_WRAPPER = new RegExp(
   `^${QUOTED}(?: '-I' '-c' ${QUOTED} 'guard')? 'execute-contained-test' '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
     `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}'(?: '--home' ${QUOTED})?$`,
 );
+const BASH_OWNER_WRAPPER = new RegExp(
+  `^${QUOTED} 'execute-bound-bash' '--harness' 'omp' '--operation-id' 'bash-operation:[0-9a-f]{64}' ` +
+    `'--host-owner-pid' '[0-9]+' '--tool-call-id' ${QUOTED} '--guard-home' ${QUOTED} '--workspace' ${QUOTED} ` +
+    `'--request-file' (${QUOTED}) '--request-sha256' '[0-9a-f]{64}' '--timeout-seconds' '[0-9]+' '--home' ${QUOTED}$`,
+);
 
 // Guard's adapter deletes its contained-test request once the wrapper runs. Read only the exact
 // owner-only file the executing wrapper names, before it runs; the judge binds the bytes by digest.
 function containedRequest(event: JsonRecord): JsonRecord | undefined {
   const command = (event.args as JsonRecord | undefined)?.command;
   if (event.toolName !== "bash" || typeof command !== "string") return undefined;
-  const path = CONTAINED_WRAPPER.exec(command)?.[1]?.slice(1, -1).replaceAll("'\\''", "'");
+  const match = CONTAINED_WRAPPER.exec(command) ?? BASH_OWNER_WRAPPER.exec(command);
+  const path = match?.[1]?.slice(1, -1).replaceAll("'\\''", "'");
   if (!path || basename(path) !== "request.json" || !basename(dirname(path)).startsWith("hol-guard-contained-test-")) {
     return undefined;
   }

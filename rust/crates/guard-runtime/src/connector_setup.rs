@@ -8,7 +8,7 @@
 //! (`dedupe_count`); distinct actions, or the same command from another
 //! directory, keep their own rows, so grouping reduces cards, not evidence.
 
-use guard_contracts::LocalCliHookRequestV1;
+use guard_contracts::{LocalCliHookRequestV1, LocalCliIdentitySourceV1};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
@@ -74,7 +74,7 @@ pub(crate) fn for_launch(request: &LocalCliHookRequestV1, launch: &Launch) -> Op
             &launch.cli_id,
             &launch.identity_hash,
             &launch.name,
-            &launch.kind,
+            &launch.source,
             &request.cwd,
             &request.command,
         )
@@ -98,25 +98,30 @@ pub(crate) fn action_group_id(marker: &str, default_group: &str) -> String {
     format!("{marker}:{}", &action[..ACTION_DIGEST_HEX])
 }
 
+/// The surface a connector's setup review names: only a `package.json`
+/// script is a package script. A script file or executable the agent runs is
+/// a local CLI, whatever its extension.
+fn surface(source: &LocalCliIdentitySourceV1) -> &'static str {
+    match source {
+        LocalCliIdentitySourceV1::PackageJson { .. } => "package-scripts",
+        _ => "cli",
+    }
+}
+
 /// The connector a hook review is waiting on, as `LocalCliHook` returns it.
 pub(crate) fn payload(
     cli_id: &str,
     identity_hash: &str,
     name: &str,
-    kind: &str,
+    source: &LocalCliIdentitySourceV1,
     cwd: &str,
     command: &str,
 ) -> Value {
-    let surface = if kind == "script" {
-        "package-scripts"
-    } else {
-        "cli"
-    };
     json!({
         "cli_id": cli_id,
         "identity_hash": identity_hash,
         "name": name,
-        "surface": surface,
+        "surface": surface(source),
         "queue_group_id": queue_group_id(identity_hash, cwd, command),
     })
 }
@@ -198,20 +203,47 @@ mod tests {
     }
 
     #[test]
-    fn package_scripts_keep_their_surface() {
-        let value = payload(
-            "local-cli.x",
-            "b",
-            "build",
-            "script",
-            "/work",
-            "npm run build",
-        );
-        assert_eq!(value["surface"], "package-scripts");
-        assert_eq!(
-            payload("local-cli.y", "c", "lanectl", "binary", "/work", "lanectl")["surface"],
-            "cli"
-        );
+    fn only_a_package_json_script_is_a_package_script() {
+        let manifest = LocalCliIdentitySourceV1::PackageJson {
+            manifest_path: "/work/package.json".to_owned(),
+            content_sha256: "a".repeat(64),
+            package_name: "app".to_owned(),
+        };
+        let surface_of = |source: &LocalCliIdentitySourceV1| {
+            payload(
+                "local-cli.x",
+                "b",
+                "build",
+                source,
+                "/work",
+                "npm run build",
+            )["surface"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        };
+        assert_eq!(surface_of(&manifest), "package-scripts");
+        // A script file the agent wrote and ran (`node /tmp/d/index.js`) is not one.
+        let script = LocalCliIdentitySourceV1::Script {
+            entrypoint: json!({"kind": "direct-script", "path": "/tmp/d/index.js"}),
+        };
+        assert_eq!(surface_of(&script), "cli");
+        let executable = LocalCliIdentitySourceV1::Executable {
+            executable: Value::Null,
+            name: "lanectl".to_owned(),
+        };
+        assert_eq!(surface_of(&executable), "cli");
+        let local_bin = LocalCliIdentitySourceV1::RunnerLocalBin {
+            name: "tsc".to_owned(),
+            package_name: "typescript".to_owned(),
+            local_bin: Value::Null,
+        };
+        assert_eq!(surface_of(&local_bin), "cli");
+        let registry = LocalCliIdentitySourceV1::RegistryPackage {
+            name: "wrangler".to_owned(),
+            package_name: "wrangler".to_owned(),
+        };
+        assert_eq!(surface_of(&registry), "cli");
     }
 }
 

@@ -312,6 +312,25 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 self._condition.notify_all()
             raise
 
+    def _committed_control_authority(self) -> dict[str, object] | None:
+        """Read the committed control marker without compiling the projection.
+
+        The marker is written under the mutation lease on every control
+        projection, so it moves when another process commits one. Reading it
+        costs one authenticated private-state read and takes no lease, which
+        is what lets the review fence compare committed control state inside a
+        hook budget. It never creates key material: a store with none has no
+        marker to authenticate.
+        """
+
+        from .native_command_control_authority_store import read_command_control_authority
+        from .native_policy_snapshot_codec import derive_native_policy_verifier_key
+
+        material = self.store._policy_integrity_secret_material(create=False)
+        if material is None or not isinstance(material[0], bytes):
+            return None
+        return read_command_control_authority(self.store, derive_native_policy_verifier_key(material[0]))
+
     def _compiled_business_source(self):
         from .business_policy_document_import import read_business_source_for_store
 

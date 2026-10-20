@@ -54,6 +54,9 @@ def effective_controls_payload(
     payload: dict[str, object] = {
         "schema_version": "guard.daemon.extension-controls.v1",
         "health": snapshot.health.value,
+        # The authority behind this snapshot was never read. Clients render it
+        # as a reading still pending, not as protection that was lost.
+        "authority_unread": snapshot.unread,
         "revision": snapshot.revision,
         "catalog_digest": snapshot.catalog_digest,
         "global_lockdown": composed.global_lockdown,

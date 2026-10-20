@@ -47,6 +47,17 @@ pub(super) fn execution_free_paging(
 ) -> Option<bool> {
     let remaining = crate::command_compatibility::git_inspection_arguments(arguments, context)?;
     let operation = remaining.first()?.as_str();
+    if operation == "stash" && pager_operation.is_none() {
+        return stash_execution_free(
+            executable,
+            arguments,
+            remaining,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        );
+    }
     if !matches!(
         operation,
         "status"
@@ -136,6 +147,55 @@ pub(super) fn execution_free_paging(
             .unwrap_or(false),
         )
     })
+}
+
+/// A printing `git stash` form, proved as the read Git runs for it. `list`
+/// runs `git log -g refs/stash` and `show` prints the entry's diff, so each is
+/// held to that read's configuration proof twice: once under `pager.stash`,
+/// which decides whether the stash command pages at all, and once under the
+/// inner read's own pager key, which Git consults where `pager.stash` left
+/// the choice open. Every other stash spelling moves work and stays reviewed.
+fn stash_execution_free(
+    executable: &str,
+    arguments: &[String],
+    remaining: &[String],
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    stdout_piped: bool,
+) -> Option<bool> {
+    let rest: Vec<&str> = remaining[1..].iter().map(String::as_str).collect();
+    let inner: Vec<&str> = match rest.split_first() {
+        Some((&"list", options)) if super::git_stash_reads::list(options) => {
+            vec!["log", "-g", "--first-parent", "refs/stash"]
+        }
+        // The options are the diff options `show` passes through; the entry
+        // name is not a diff argument.
+        Some((&"show", options)) if super::git_stash_reads::show(options) => {
+            std::iter::once("diff")
+                .chain(options.iter().copied().filter(|word| word.starts_with('-')))
+                .collect()
+        }
+        _ => return None,
+    };
+    let leading = &arguments[..arguments.len().checked_sub(remaining.len())?];
+    let translated: Vec<String> = leading
+        .iter()
+        .cloned()
+        .chain(inner.into_iter().map(str::to_owned))
+        .collect();
+    let prove = |pager: Option<&str>| {
+        execution_free_paging(
+            executable,
+            &translated,
+            pager,
+            context,
+            deadline,
+            execution_environment,
+            stdout_piped,
+        )
+    };
+    Some(prove(Some("stash"))? && prove(None)?)
 }
 
 /// How the read would page: the configuration key the pager is proved under,

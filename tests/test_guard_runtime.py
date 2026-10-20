@@ -63,6 +63,7 @@ from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_ackn
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
+    policy_bundle_rejection_message,
     validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -171,6 +172,17 @@ def _native_runtime_package_context(package_intent_native, native_mcp_probe, mon
 def _isolate_codex_runtime_marker(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CODEX_MANAGED_BY_BUN", raising=False)
     monkeypatch.delenv("CODEX_HOME", raising=False)
+
+
+def _claude_pending_permission_state_key(session_id: str, artifact_id: str) -> str:
+    """The key the resident derives for a Claude pending permission.
+
+    Spelled out here so the legacy-row tests below can seed the exact row the
+    resident will look up for an artifact.
+    """
+
+    fingerprint = hashlib.sha256(artifact_id.encode("utf-8")).hexdigest()[:24]
+    return f"claude_pending_permission:{session_id}:{fingerprint}"
 
 
 def _write_json(path: Path, payload: dict[str, object]) -> None:
@@ -1091,7 +1103,7 @@ clearer UX and an implementation plan with technical references.
             },
             "stdout": (
                 "guard/server.py:42:def handle_post(self):\n"
-                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:43:    daemon_auth_token = 'dev-token-123'\n"
             ),
             "source_scope": "project",
         }
@@ -1115,6 +1127,49 @@ clearer UX and an implementation plan with technical references.
         assert rc == 1
         assert output["continue"] is True
         assert output["approval_reuse"]["action"] == "require-reapproval"
+
+    def test_pi_post_tool_use_does_not_review_native_grep_of_token_handling_code(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "codex_plugin_scanner_full"
+        external_source_dir.mkdir(parents=True)
+        _build_guard_fixture(home_dir, workspace_dir)
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "grep",
+            "tool_input": {"pattern": "handle_post|token", "path": str(external_source_dir)},
+            "stdout": (
+                "guard/server.py:42:def handle_post(self):\n"
+                "guard/server.py:43:    daemon_auth_token = self.headers.get('X-Guard-Token')\n"
+                "guard/server.py:44:    signed_token = await sign_token(user.id)\n"
+            ),
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+        assert output.get("approval_reuse", {}).get("action") != "require-reapproval"
 
     def test_pi_post_tool_use_blocks_private_key_from_external_source_tree(
         self,
@@ -1144,6 +1199,110 @@ clearer UX and an implementation plan with technical references.
             "tool_name": "grep",
             "tool_input": {"pattern": "PRIVATE KEY", "path": str(external_source_dir)},
             "stdout": private_key_pem,
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 1
+        assert output["approval_requests"]
+        assert "tool output contains credential-looking material" in output["risk_signals"]
+
+    def test_pi_post_tool_use_passes_native_read_of_token_handling_source(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        external_source_dir = tmp_path / "app-portal"
+        (external_source_dir / "src").mkdir(parents=True)
+        source = (
+            "export function connectAs(session, cfg) {\n"
+            "  const client = connect({ token: session.token, user: session.user });\n"
+            "  const database = {\n"
+            "    host: cfg.host,\n"
+            "    password: cfg.password, // database\n"
+            "  };\n"
+            "  return { client, database };\n"
+            "}\n"
+        )
+        source_file = external_source_dir / "src" / "session.ts"
+        source_file.write_text(source, encoding="utf-8")
+        _build_guard_fixture(home_dir, workspace_dir)
+        # The harness's own read tool sends no command line, so the only proof
+        # that nothing left the host is the target it names.
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": f"{source_file}:1-8"},
+            "tool_response": {"content": source},
+            "source_scope": "project",
+        }
+        monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
+
+        rc = main(
+            [
+                "guard",
+                "hook",
+                "--home",
+                str(home_dir),
+                "--workspace",
+                str(workspace_dir),
+                "--harness",
+                "pi",
+                "--json",
+            ]
+        )
+        output = json.loads(capsys.readouterr().out)
+
+        assert rc == 0
+        assert output["continue"] is True
+
+    def test_pi_post_tool_use_blocks_native_read_of_private_key(
+        self,
+        monkeypatch,
+        tmp_path,
+        capsys,
+    ) -> None:
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        home_dir = tmp_path / "home"
+        workspace_dir = home_dir / "workspace"
+        _build_guard_fixture(home_dir, workspace_dir)
+        private_key_pem = (
+            ec.generate_private_key(ec.SECP256R1())
+            .private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            )
+            .decode("ascii")
+        )
+        key_file = home_dir / ".ssh" / "id_rsa"
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(private_key_pem, encoding="utf-8")
+        event = {
+            "event": "PostToolUse",
+            "tool_name": "read",
+            "tool_input": {"path": str(key_file)},
+            "tool_response": {"content": private_key_pem},
             "source_scope": "project",
         }
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(event)))
@@ -9884,7 +10043,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_legacy_pending_state_canno
     session_id = "session-claude-legacy-pending"
     artifact_id = "claude-code:runtime:file-read:.env"
     now = "2026-04-24T00:00:00+00:00"
-    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     store.set_sync_payload(
         pending_key,
         {
@@ -9957,7 +10116,7 @@ def test_guard_hook_claude_ask_user_question_unsigned_bound_pending_cannot_persi
     now = "2026-04-24T00:00:00+00:00"
     approval_code = "abc123abc123"
     approval_question = guard_commands_module._claude_guard_approval_question_text(approval_code)
-    pending_key = guard_commands_module._claude_pending_permission_state_key(session_id, artifact_id)
+    pending_key = _claude_pending_permission_state_key(session_id, artifact_id)
     store.set_sync_payload(
         pending_key,
         {
@@ -10484,14 +10643,26 @@ def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_
         workspace=workspace_dir,
     )
     assert action is not None
-    data_flow_signals = guard_commands_module._runtime_action_data_flow_signals(action, workspace=workspace_dir)
+    data_flow_signals, data_flow_artifact = guard_commands_module._runtime_action_data_flow_signals(
+        action,
+        workspace=workspace_dir,
+        naming=guard_commands_module._runtime_data_flow_naming(
+            harness="codex",
+            payload=payload,
+            action_envelope=action,
+            home_dir=home_dir,
+            workspace=workspace_dir,
+        ),
+    )
     assert data_flow_signals
+    assert data_flow_artifact is not None
 
     artifact = guard_commands_module._hook_runtime_artifact(
         harness="codex",
         payload=payload,
         action_envelope=action,
         data_flow_signals=data_flow_signals,
+        data_flow_artifact=data_flow_artifact,
         home_dir=home_dir,
         guard_home=home_dir,
         workspace=workspace_dir,
@@ -11000,6 +11171,12 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     assert "approve it in hol guard, then retry." not in reason
 
 
+def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+    """Fail when a reason the CLI still composes locally reaches the resident."""
+
+    raise AssertionError("the resident must not be asked for this reason")
+
+
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     artifact = GuardArtifact(
         artifact_id="claude-code:project:tool-action:test",
@@ -11015,6 +11192,8 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     reason = guard_commands_module._runtime_artifact_native_reason(
         artifact,
         {"risk_summary": long_summary},
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason.startswith("HOL Guard flagged this request: ")
@@ -11041,6 +11220,8 @@ def test_runtime_artifact_native_reason_prefers_decision_v2_harness_message() ->
             },
             "risk_summary": "Generic fallback summary.",
         },
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason == "HOL Guard stopped this exact shell command before it touched secrets."
@@ -22595,9 +22776,21 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert "Reconnect Guard" in str(last_error["message"])
 
 
+@pytest.mark.parametrize(
+    ("spec_extra", "reason", "rule_id"),
+    [
+        ({}, "canonical_compile_unsupported_policy_match", "rule.unsupported-operation"),
+        # Budgets are refused before any rule is read, and the compiler names
+        # the policy in place of a rule, so that rejection carries no rule id.
+        ({"budgets": {"daily": 1}}, "canonical_compile_unsupported_policy_budgets", None),
+    ],
+)
 def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failure(
     tmp_path,
     monkeypatch,
+    spec_extra,
+    reason,
+    rule_id,
 ):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -22652,6 +22845,7 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
                         },
                     }
                 ],
+                **spec_extra,
             },
         },
     }
@@ -22704,13 +22898,18 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
 
     assert store.get_sync_payload("policy_bundle") == last_good
     assert store.get_sync_payload("policy_bundle_last_good") == last_good
-    assert store.get_sync_payload("policy_bundle_last_error") == {
-        "reason": "canonical_compile_unsupported_policy_match"
-    }
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert last_error["reason"] == reason
+    # The rejection names the rule that refused to compile and what Guard can
+    # enforce instead; the bare code alone left an administrator with a
+    # published policy that never applied and nothing to act on.
+    assert last_error.get("ruleId") == rule_id
+    assert last_error["message"] == policy_bundle_rejection_message(reason)
+    assert "keeps the policy it already had" in last_error["message"]
     assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
     rollback_events = store.list_events(event_name="policy_bundle/rollback")
     assert rollback_events[-1]["payload"] == {
-        "reason": "canonical_compile_unsupported_policy_match",
+        "reason": reason,
         "restored": "policy_bundle_last_good",
     }
 

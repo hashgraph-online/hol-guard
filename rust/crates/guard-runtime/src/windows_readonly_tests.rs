@@ -227,6 +227,23 @@ fn launch_requires_known_options() {
             "--",
             "node",
         ],
+        // A reporting tool publishes nothing, so naming an output is not a
+        // form of this run: it would write into the live workspace.
+        vec![
+            COMMAND,
+            "--profile",
+            "node-tool-readonly-v1",
+            "--workspace",
+            ".",
+            "--cwd",
+            ".",
+            "--timeout-seconds",
+            "5",
+            "--output",
+            "dist",
+            "--",
+            "node",
+        ],
         vec![
             COMMAND,
             "--workspace",

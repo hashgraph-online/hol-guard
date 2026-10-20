@@ -6,6 +6,35 @@ use guard_contracts::{NativeBashCaptureV1, NativeBashSubjectV1};
 #[path = "bash_capture_macos.rs"]
 mod platform;
 
+#[cfg(target_os = "macos")]
+pub(crate) use platform::CapturedBash;
+
+/// Upper bound on one analysis's wall-clock budget. Test builds run thousands
+/// of tests at once on small CI runners, so the same bounded work gets more
+/// time there; release builds keep one second.
+#[cfg(target_os = "macos")]
+const ANALYSIS_BUDGET_CAP_MS: u64 = if cfg!(test) { 10_000 } else { 1000 };
+
+#[cfg(target_os = "macos")]
+pub(crate) fn capture_for_launch(
+    request: &NativeBashCaptureV1,
+    snapshot: &crate::policy_enforcement::AdmittedPolicySnapshot,
+) -> std::result::Result<CapturedBash, String> {
+    let mut captured = platform::capture(request, true).map_err(str::to_owned)?;
+    let assessment = super::bash_policy::assess(
+        &captured.graph,
+        request,
+        snapshot,
+        std::time::Instant::now()
+            + std::time::Duration::from_millis(request.budget_ms.min(ANALYSIS_BUDGET_CAP_MS)),
+    )?;
+    if assessment.has_hard_deny() {
+        return Err("bash_current_policy_denied".into());
+    }
+    captured.policy = Some(assessment);
+    Ok(captured)
+}
+
 pub(super) fn inspect(request: &NativeBashCaptureV1) -> Result<NativeBashSubjectV1, &'static str> {
     #[cfg(target_os = "macos")]
     return platform::inspect(request);

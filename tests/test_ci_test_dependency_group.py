@@ -76,7 +76,7 @@ def test_staged_evaluator_compiler_uses_a_fast_non_shipping_profile() -> None:
     verification = next(step for step in job["steps"] if step.get("name", "").startswith("Verify installed"))
     assert "-I scripts/ci/check_evaluation_wheel.py" in verification["run"]
     assert not verification.get("continue-on-error", False)
-    # The distribution profile and its independent size gate remain authoritative.
+    # The distribution profile remains authoritative.
     release = (ROOT / "rust/Cargo.toml").read_text().split("[profile.release]", 1)[1].split("[", 1)[0]
     assert 'opt-level = "s"' in release
     assert 'lto = "fat"' in release

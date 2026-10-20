@@ -61,10 +61,11 @@ def test_classifier_outage_blocks_the_call_instead_of_escaping(tmp_path: Path, m
     def unavailable(*_args: object, **_kwargs: object) -> None:
         raise NativeSensitiveRequestError("native_sensitive_request_unavailable")
 
-    monkeypatch.setattr(sensitive_read_module, "extract_sensitive_file_read_request", unavailable)
+    monkeypatch.setattr(sensitive_read_module, "extract_sensitive_file_read_request_artifact", unavailable)
     event: dict[str, object] = {}
     proxy = StdioGuardProxy.__new__(StdioGuardProxy)
     proxy.cwd = tmp_path
+    proxy.harness = "codex"
 
     result = sensitive_read_module.evaluate_sensitive_read(
         proxy,

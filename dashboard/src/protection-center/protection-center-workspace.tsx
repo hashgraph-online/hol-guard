@@ -360,7 +360,12 @@ export function ProtectionCenterWorkspace(props: {
     <div className="w-full" data-testid="extensions-workspace">
       {state.kind === "loading" ? <ExtensionsLoadingState label="Loading Extensions" /> : null}
       {state.kind === "error" && loadError ? (
-        <ExtensionsLoadError title={loadError.title} detail={loadError.detail} onRetry={retryLoad} />
+        <ExtensionsLoadError
+          title={loadError.title}
+          detail={loadError.detail}
+          reference={loadError.reference}
+          onRetry={retryLoad}
+        />
       ) : null}
       {state.kind === "ready" && healthBroken ? (
         <ProtectionAuthorityNotice

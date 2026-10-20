@@ -41,10 +41,10 @@ from codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_stati
     _script_has_aliased_risky_import,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_file_read_request_artifact,
     build_tool_action_request_artifact,
     classify_sensitive_path,
     extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
     extract_sensitive_file_read_request_from_action,
     extract_sensitive_tool_action_request,
     is_file_read_tool_name,
@@ -739,35 +739,36 @@ def test_file_read_request_classifier_covers_planned_secret_paths(tmp_path, path
 
 
 def test_file_read_request_artifact_hash_is_exact_to_tool_and_path():
-    first_request = extract_sensitive_file_read_request("read_file", {"path": ".env"})
-    same_request = extract_sensitive_file_read_request("read_file", {"path": ".env"})
-    different_request = extract_sensitive_file_read_request("read_file", {"path": ".env.local"})
+    def artifact_for(path: str):
+        _request, artifact = extract_sensitive_file_read_request_artifact(
+            "read_file",
+            {"path": path},
+            harness="claude-code",
+            config_path="/workspace/.claude/settings.local.json",
+            source_scope="project",
+        )
+        assert artifact is not None
+        return artifact
 
-    assert first_request is not None
-    assert same_request is not None
-    assert different_request is not None
-
-    first_artifact = build_file_read_request_artifact(
-        harness="claude-code",
-        request=first_request,
-        config_path="/workspace/.claude/settings.local.json",
-        source_scope="project",
-    )
-    same_artifact = build_file_read_request_artifact(
-        harness="claude-code",
-        request=same_request,
-        config_path="/workspace/.claude/settings.local.json",
-        source_scope="project",
-    )
-    different_artifact = build_file_read_request_artifact(
-        harness="claude-code",
-        request=different_request,
-        config_path="/workspace/.claude/settings.local.json",
-        source_scope="project",
-    )
+    first_artifact = artifact_for(".env")
+    same_artifact = artifact_for(".env")
+    different_artifact = artifact_for(".env.local")
 
     assert artifact_hash(first_artifact) == artifact_hash(same_artifact)
     assert artifact_hash(first_artifact) != artifact_hash(different_artifact)
+
+
+def test_an_ordinary_read_earns_no_request_artifact():
+    request, artifact = extract_sensitive_file_read_request_artifact(
+        "read_file",
+        {"path": "src/app.py"},
+        harness="claude-code",
+        config_path="/workspace/.claude/settings.local.json",
+        source_scope="project",
+    )
+
+    assert request is None
+    assert artifact is None
 
 
 def test_tool_action_request_classifier_skips_read_only_shell_pipeline_to_dev_null():

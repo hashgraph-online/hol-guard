@@ -36,6 +36,8 @@ on:
       - scripts/build_extension_delivery.py
       - scripts/extension_delivery_*.py
       - scripts/extension_pack_*.py
+      - scripts/native_directory_inventory.py
+      - scripts/prepare_extension_directory.py
       - scripts/publish_extension_delivery.py
       - scripts/reconcile_extension_delivery_claims.py
       - pyproject.toml

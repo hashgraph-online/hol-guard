@@ -105,7 +105,7 @@ def _rows_to_payloads(rows: list[sqlite3.Row], *, guard_home: Path | None = None
     drafts = [_row_to_draft(row, projection) for row, projection in zip(rows, projections, strict=True)]
     if not drafts:
         return []
-    contracts = request_scope_contract_payloads([draft for draft, _error in drafts])
+    contracts = request_scope_contract_payloads([draft for draft, _error in drafts], guard_home=guard_home)
     payloads: list[dict[str, object]] = []
     for (payload, contract_error), contract in zip(drafts, contracts, strict=True):
         payload.update(contract)

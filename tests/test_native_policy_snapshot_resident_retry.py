@@ -60,6 +60,61 @@ def test_resident_fingerprint_mismatch_enters_bounded_retry_backoff(
         publisher.close()
 
 
+@pytest.mark.parametrize(
+    "error",
+    [
+        "native_policy_snapshot_resident_changed",
+        "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
+        "native_business_source_binding_changed",
+        "native_local_cli_revision_changed",
+        "native_provider_catalog_changed",
+    ],
+)
+def test_concurrent_change_retries_stay_inside_a_hook_deadline(
+    tmp_path: Path,
+    error: str,
+) -> None:
+    clock = _DeterministicClock()
+    publisher = NativePolicySnapshotPublisher(
+        store=GuardStore(tmp_path / "guard-home"),
+        client_request=lambda **_kwargs: b"unused",
+        poll_interval_seconds=0.25,
+        wall_clock=clock.wall_time,
+        monotonic_clock=clock.monotonic_time,
+    )
+    try:
+        for _attempt in range(8):
+            publisher._record_error(error)
+            retry_at = publisher._retry_not_before_monotonic
+            assert retry_at is not None
+            # The cap plus its 0.1 s jitter leaves several attempts inside a 3 s hook deadline.
+            assert retry_at - clock.monotonic <= 0.5 + 0.1
+    finally:
+        publisher.close()
+
+
+def test_other_publication_failures_keep_the_exponential_backoff(
+    tmp_path: Path,
+) -> None:
+    clock = _DeterministicClock()
+    publisher = NativePolicySnapshotPublisher(
+        store=GuardStore(tmp_path / "guard-home"),
+        client_request=lambda **_kwargs: b"unused",
+        poll_interval_seconds=0.25,
+        wall_clock=clock.wall_time,
+        monotonic_clock=clock.monotonic_time,
+    )
+    try:
+        for _attempt in range(8):
+            publisher._record_error("native_policy_snapshot_runtime_unavailable")
+        retry_at = publisher._retry_not_before_monotonic
+        assert retry_at is not None
+        assert retry_at - clock.monotonic >= 4.0
+    finally:
+        publisher.close()
+
+
 def test_run_loop_backs_off_after_resident_mismatch_at_expired_deadline(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

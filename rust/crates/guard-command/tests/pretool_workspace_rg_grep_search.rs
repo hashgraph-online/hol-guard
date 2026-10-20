@@ -154,15 +154,16 @@ fn searches_that_can_reach_secrets_stay_reviewed() {
         "grep -r foo .env",
         "grep -r foo ~/.ssh",
         "grep -r foo ..",
-        "grep -R foo .",
+        "grep -R main .",
     ] {
         check(&f, "app", c, false);
     }
     // grep walks hidden files and ignores .gitignore, so `.env` is in reach.
+    // The pattern is one that file holds, so the search would print from it.
     for c in [
-        "grep -r foo .",
-        "grep -rn foo config",
-        "grep -rn foo . --include='*.rs'",
+        "grep -r main .",
+        "grep -rn main config",
+        "grep -rn main . --include='*.rs'",
     ] {
         check(&f, "app", c, false);
     }

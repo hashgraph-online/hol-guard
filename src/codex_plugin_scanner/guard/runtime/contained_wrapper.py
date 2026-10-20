@@ -128,15 +128,21 @@ def _lex(command: str) -> tuple[list[tuple[str, bool]], bool]:
 def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
     """The repository holding a cd target outside the hook workspace, as native authority finds it.
 
-    The nearest ancestor with a `.git` entry, strictly below home or the system
-    temporary directory and owned by this user. The sink rebases its approved
-    root there, so the run is contained to that repository exactly as it would
+    The nearest ancestor with a `.git` entry, strictly below home - or the
+    system temporary directory, on POSIX - and owned by this user. The sink
+    rebases its approved root there, so the run is contained to that repository exactly as it would
     be from a session started in it.
     """
     if home is None:
         return None
     directory = directory.resolve(strict=True)
-    for base in (home, Path("/tmp")):
+    # Native authority's Windows arm bases the search on the profile alone, so a
+    # checkout outside it keeps its review. `Path("/tmp")` resolves to `C:\tmp`
+    # on the current drive, which any authenticated user can create, and the
+    # owner check Python can still make there is the native one - which never
+    # runs for a root native would not return. Keep the bases identical.
+    bases = (home,) if os.name == "nt" else (home, Path("/tmp"))
+    for base in bases:
         try:
             base = base.resolve(strict=True)
         except (OSError, RuntimeError):
@@ -146,10 +152,28 @@ def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
         candidate = directory
         while candidate != base:
             if os.path.lexists(candidate / ".git"):
-                return candidate if candidate.stat().st_uid == getattr(os, "getuid", lambda: -1)() else None
+                return candidate if _owned_by_this_user(candidate) else None
             candidate = candidate.parent
         return None
     return None
+
+
+def _owned_by_this_user(candidate: Path) -> bool:
+    """Whether this user owns `candidate`, as far as this process can ask.
+
+    POSIX compares the owning uid. Windows has no uid: `st_uid` is always 0
+    there and `os.getuid` does not exist, so comparing them rejected every
+    Windows checkout. The owner question is the native runtime's
+    (`owned_by_current_user`, owner SID against the process SID), it is
+    asked before any receipt is issued, and every caller here runs only after
+    `_contained_receipt` accepted that receipt. So on Windows this answers the
+    part Python can still see - the checkout is strictly inside the profile and
+    carries a `.git` - and leaves the owner to the authority that can read it.
+    """
+
+    if os.name == "nt":
+        return True
+    return candidate.stat().st_uid == getattr(os, "getuid", lambda: -1)()
 
 
 def anchored_sibling_root(command: str, *, workspace: Path, cwd: Path, home: Path | None) -> Path | None:
@@ -192,6 +216,17 @@ _SCRIPT_RUNNERS = frozenset({"node", "bun", "deno", "tsx", "ts-node", "ruby", "p
 _PYTHON = re.compile(r"python(?:3(?:\.[0-9]+)?)?")
 
 
+def _node_heap_size(word: str) -> bool:
+    """Whether `word` is the `--max-old-space-size=<megabytes>` Node takes ahead of its script."""
+    value = word.removeprefix("--max-old-space-size=")
+    if value == word or not value.isascii() or not value.isdigit():
+        return False
+    # Past six significant digits the value is out of range anyway; checking
+    # the length first keeps `int` off a string past the conversion limit.
+    significant = value.lstrip("0") or "0"
+    return len(significant) <= 6 and 16 <= int(significant) <= 131072
+
+
 def _executed_path(words: list[str]) -> str | None:
     """The absolute path a command runs: the executable, an interpreter's first operand, or the
     file `python3 -m py_compile` checks, as `workspace_contained_sibling.rs` selects it."""
@@ -200,6 +235,8 @@ def _executed_path(words: list[str]) -> str | None:
         return executable
     name = executable.rsplit("/", 1)[-1]
     python = _PYTHON.fullmatch(name) is not None
+    if name == "node" and arguments and _node_heap_size(arguments[0]):
+        arguments = arguments[1:]
     if python and arguments[:1] == ["-m"] and len(arguments) >= 3 and arguments[1] in {"py_compile", "compileall"}:
         candidate = arguments[2]
     elif (python or name in _SCRIPT_RUNNERS) and arguments:

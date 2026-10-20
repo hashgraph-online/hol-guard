@@ -72,6 +72,14 @@ def test_pretool_response_matches_recorded_documents() -> None:
 
 
 def _resident_returning(monkeypatch: pytest.MonkeyPatch, payloads: list[dict[str, Any]]) -> None:
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=object(),
+        capabilities=SimpleNamespace(features={"resident-protocol-v2", decision.HOOK_DECISION_FEATURE}),
+    )
+    monkeypatch.setattr(shared, "native_runtime_status", lambda: status)
+    monkeypatch.setattr(shared, "record_resident", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/hook-decision-home"))
     monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
 

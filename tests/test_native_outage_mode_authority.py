@@ -68,7 +68,7 @@ def test_outage_mode_requires_authenticated_unexpired_snapshot(
     if failure == "capacity":
         handler = object.__new__(daemon._GuardDaemonHandler)
         handler.server = Mock(store=store)
-        monkeypatch.setattr(handler, "_validated_fail_safe_hook_paths", lambda _params: (None, None))
+        monkeypatch.setattr(handler, "_validated_fail_safe_hook_paths", lambda _params, **_kwargs: (None, None))
         response = handler._runtime_hook_capacity_response(payload, {}, default_harness="codex")
     else:
         worker = Mock()

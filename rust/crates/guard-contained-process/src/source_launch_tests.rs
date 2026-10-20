@@ -50,6 +50,92 @@ fn command(root: &Path) -> PinnedCommand {
 }
 
 #[test]
+fn acknowledged_frame_is_ready_before_claim_and_denial_cannot_run() {
+    for allow in [false, true] {
+        let root = tempfile::tempdir().unwrap();
+        let source = format!("#{}\nprintf executed > result", "x".repeat(300_000));
+        let bootstrap = format!(
+            "IFS= read -r -d '' code || exit 125; [ \"${{#code}}\" -eq {} ] || exit 125; \
+             printf R >&6 || exit 125; IFS= read -r -d '' auth || exit 125; \
+             [ -z \"$auth\" ] || exit 125; printf S >&6 || exit 125; exec 6>&-; eval \"$code\"",
+            source.len()
+        );
+        let command = PinnedCommand::new(
+            Path::new("/bin/bash"),
+            &[
+                OsStr::new("--noprofile"),
+                OsStr::new("--norc"),
+                OsStr::new("-c"),
+                OsStr::new(&bootstrap),
+            ],
+            &std::fs::canonicalize(root.path()).unwrap(),
+            &[("LC_ALL".into(), "C".into())],
+        )
+        .unwrap();
+        let mut gate = Gate {
+            allow,
+            ..Gate::default()
+        };
+        let result = command.capture_acknowledged_source(
+            source.as_bytes(),
+            1024,
+            Instant::now() + Duration::from_secs(5),
+            &AtomicBool::new(false),
+            Isolation::default(),
+            &mut gate,
+        );
+        assert_eq!(gate.commits, 1);
+        assert_eq!(gate.releases, usize::from(allow));
+        assert_eq!(root.path().join("result").exists(), allow);
+        if allow {
+            assert_eq!(result.unwrap().exit_code, Some(0));
+        } else {
+            assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        }
+    }
+}
+
+#[test]
+fn missing_or_invalid_ack_never_claims_and_missing_start_is_not_retried() {
+    for (ready, started, expected_claims) in [("", "S", 0), ("X", "S", 0), ("R", "X", 1)] {
+        let root = tempfile::tempdir().unwrap();
+        let bootstrap = format!(
+            "IFS= read -r -d '' code || exit 125; printf '{ready}' >&6; \
+             IFS= read -r -d '' auth || exit 125; printf '{started}' >&6; \
+             IFS= read -r -d '' never || exit 125"
+        );
+        let command = PinnedCommand::new(
+            Path::new("/bin/bash"),
+            &[
+                OsStr::new("--noprofile"),
+                OsStr::new("--norc"),
+                OsStr::new("-c"),
+                OsStr::new(&bootstrap),
+            ],
+            &std::fs::canonicalize(root.path()).unwrap(),
+            &[],
+        )
+        .unwrap();
+        let mut gate = Gate {
+            allow: true,
+            ..Gate::default()
+        };
+        let result = command.capture_acknowledged_source(
+            b"printf forbidden > result",
+            1024,
+            Instant::now() + Duration::from_millis(300),
+            &AtomicBool::new(false),
+            Isolation::default(),
+            &mut gate,
+        );
+        assert!(result.is_err());
+        assert_eq!(gate.commits, expected_claims);
+        assert_eq!(gate.releases, 0);
+        assert!(!root.path().join("result").exists());
+    }
+}
+
+#[test]
 fn rejected_commit_releases_no_marker_and_has_no_effect() {
     let root = tempfile::tempdir().unwrap();
     let mut gate = Gate::default();
@@ -64,6 +150,44 @@ fn rejected_commit_releases_no_marker_and_has_no_effect() {
     assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
     assert_eq!((gate.commits, gate.releases), (1, 0));
     assert!(!root.path().join("result").exists());
+}
+
+#[test]
+fn child_exit_before_readiness_closes_ack_channel_without_claim() {
+    let root = tempfile::tempdir().unwrap();
+    let command = PinnedCommand::new(
+        Path::new("/bin/bash"),
+        &[
+            OsStr::new("--noprofile"),
+            OsStr::new("--norc"),
+            OsStr::new("-c"),
+            OsStr::new("IFS= read -r -d '' code || exit 125; exit 125"),
+        ],
+        &std::fs::canonicalize(root.path()).unwrap(),
+        &[],
+    )
+    .unwrap();
+    let mut gate = Gate {
+        allow: true,
+        ..Gate::default()
+    };
+    let result = command.capture_acknowledged_source(
+        b"printf forbidden",
+        1024,
+        Instant::now() + Duration::from_secs(5),
+        &AtomicBool::new(false),
+        Isolation::default(),
+        &mut gate,
+    );
+    // The child may exit before or after the owner reaches the acknowledgement
+    // read; both orders leave the frame unacknowledged, so the owner either
+    // reports the closed channel or returns the child's own exit without a
+    // claim. Neither order may claim the launch.
+    match result {
+        Ok(output) => assert_eq!(output.exit_code, Some(125)),
+        Err(error) => assert_eq!(error.kind(), io::ErrorKind::UnexpectedEof),
+    }
+    assert_eq!((gate.commits, gate.releases), (0, 0));
 }
 
 #[test]

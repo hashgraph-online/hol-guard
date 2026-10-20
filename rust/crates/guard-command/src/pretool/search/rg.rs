@@ -92,6 +92,11 @@ const RG_SHORT_VALUE_OPTIONS: [char; 13] = [
     'e', 'f', 'g', 'A', 'B', 'C', 'E', 'j', 'm', 'M', 'r', 't', 'T',
 ];
 
+/// `grep`'s file filters. `rg` has no flag of these names (its own are
+/// `--glob` and `--iglob`), so it rejects the command line before reading.
+const GREP_ONLY_FILTER_FLAGS: [&str; 4] =
+    ["--include", "--exclude", "--exclude-dir", "--include-dir"];
+
 /// Whether `--no-config` is here as an option rather than as the value of
 /// one.
 ///
@@ -221,6 +226,12 @@ fn rg_arguments_pass(
                     | "--hostname-bin"
             ) {
                 return false;
+            }
+            // grep's file filters are not rg flags. rg stops at an
+            // unrecognized flag before it opens anything, so the spelling
+            // reads nothing; the operands are still proven below.
+            if GREP_ONLY_FILTER_FLAGS.contains(&name) {
+                continue;
             }
             let role = options::rg_value_role(name);
             config_disabled |= name == "--no-config";
@@ -356,7 +367,10 @@ fn rg_arguments_pass(
     // every check above. A stdin filter walks no files, so the config's
     // file options have nothing to act on.
     let scope: &[&str] = if roots.is_empty() { &["."] } else { &roots };
-    pending_value.is_none()
+    // An option that takes a value and gets none (`rg PATTERN src -r`) is a
+    // usage error: rg exits before it opens anything. That holds only for the
+    // options whose value never names a pattern, path or glob.
+    pending_value.is_none_or(|role| matches!(role, SearchValueRole::Other))
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
         && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))

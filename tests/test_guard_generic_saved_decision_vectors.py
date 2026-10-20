@@ -74,15 +74,16 @@ def test_generic_saved_decision_ships_recorded_groups(vector, monkeypatch, tmp_p
     diagnosed: list[tuple[object, ...]] = []
     evaluated: list[tuple[object, ...]] = []
 
-    def diagnostic(_store: GuardStore, *args: object) -> tuple[str, None]:
-        diagnosed.append(args)
-        return "approval_reuse_integrity_failure", None
+    def diagnostic(_store: GuardStore, *args: object, **kwargs: object) -> tuple[str, None, None]:
+        diagnosed.append((*args, kwargs))
+        # The resident could not answer, so it composed no reuse decision.
+        return "approval_reuse_integrity_failure", None, None
 
     def evaluate(*args: object, **kwargs: object) -> object:
         evaluated.append((*args, kwargs))
         return _decision_from_native_payload(_REUSE)
 
-    monkeypatch.setattr(GuardStore, "approval_reuse_diagnostic", diagnostic)
+    monkeypatch.setattr(GuardStore, "approval_reuse_miss", diagnostic)
     monkeypatch.setattr(commands_hook_native_generic, "evaluate_approval_reuse", evaluate)
     tokens: list[tuple[str, dict[str, object]]] = []
 
@@ -114,7 +115,16 @@ def test_generic_saved_decision_ships_recorded_groups(vector, monkeypatch, tmp_p
         assert tokens == [("generic_hook_approval_context", inputs)]
         # A degraded home still explains the miss and fails closed on saved rows.
         assert (decision, ignored, saved_present) == (None, None, True)
-        assert diagnosed == [("claude-code", vector["artifact_id"], vector["artifact_hash"], vector["workspace"], None)]
+        assert diagnosed == [
+            (
+                "claude-code",
+                vector["artifact_id"],
+                vector["artifact_hash"],
+                vector["workspace"],
+                None,
+                {"current_action": "review"},
+            )
+        ]
         assert evaluated == [
             (
                 "review",
@@ -199,3 +209,119 @@ def test_a_runtime_without_the_expansion_capability_is_never_sent_unexpanded_gro
             approval_context_inputs={},
         )
     assert requested == [POLICY_LOOKUP_MEMORY_FEATURE]
+
+
+def test_a_diagnosed_miss_carries_the_residents_own_reuse_decision(monkeypatch, tmp_path):
+    """The miss path never names a saved action for the resident.
+
+    A near match that could not authorize the request is evidence, not a
+    grant. The resident composes what the miss means for reuse in the same
+    call that diagnoses it, so nothing here invents an ``allow`` to compose
+    against and no second round trip decides what the first one already knew.
+    """
+
+    composed = {
+        **_REUSE,
+        "status": "rejected",
+        "reason_code": "approval_reuse_content_changed",
+        "saved_action": "allow",
+        "saved_artifact_hash_is_context_token": True,
+    }
+    asked: list[dict[str, object]] = []
+
+    def miss(_store: GuardStore, *args: object, **kwargs: object) -> tuple[str, str, dict[str, object]]:
+        asked.append({"args": args, "kwargs": kwargs})
+        return "approval_reuse_content_changed", "guard-approval-context:v1:x", composed
+
+    def never(*_args: object, **_kwargs: object) -> object:
+        raise AssertionError("the resident already composed the miss")
+
+    monkeypatch.setattr(GuardStore, "peek_saved_decision_groups", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(GuardStore, "approval_reuse_miss", miss)
+    monkeypatch.setattr(commands_hook_native_generic, "evaluate_approval_reuse", never)
+    monkeypatch.setattr(commands_hook_native_generic, "with_saved_artifact_hash_provenance", never)
+    monkeypatch.setattr(
+        commands_hook_native_generic,
+        "native_hook_approval_context_token",
+        lambda _kind, _inputs: "guard-approval-context:v1:current",
+    )
+
+    current_token, decision, ignored, reuse, saved_present = commands_hook_native_generic._generic_hook_saved_decision(
+        approval_context_inputs={"artifact": {"artifact_id": "artifact"}},
+        artifact_id="artifact",
+        artifact_name="Bash",
+        current_action="review",
+        harness="claude-code",
+        legacy_artifact_hash=None,
+        payload={"tool_name": "Bash", "tool_input": {"command": "echo"}},
+        publisher=None,
+        runtime_workspace=Path("/workspace/a"),
+        store=GuardStore(tmp_path / "home"),
+        tool_command="echo",
+    )
+
+    assert (current_token, decision, ignored, saved_present) == (
+        "guard-approval-context:v1:current",
+        None,
+        None,
+        True,
+    )
+    assert reuse == _decision_from_native_payload(composed)
+    # The recomputed action travels with the diagnosis, in one call.
+    assert [entry["kwargs"] for entry in asked] == [{"current_action": "review"}]
+
+
+@pytest.mark.parametrize("supports_reuse", [False, True])
+def test_the_miss_names_the_current_action_only_to_a_resident_that_advertises_it(monkeypatch, tmp_path, supports_reuse):
+    """An older resident denies the unknown ``current_action`` field, so it gets
+    the two-field request and still diagnoses the miss; the caller composes."""
+
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_store_policy
+    from codex_plugin_scanner.guard.native_context import _canonical_request_sha256
+
+    diagnostic = native_store_policy.APPROVAL_REUSE_DIAGNOSTIC_FEATURE
+    composed = native_store_policy.APPROVAL_REUSE_DIAGNOSTIC_REUSE_FEATURE
+    features = (diagnostic, composed) if supports_reuse else (diagnostic,)
+    sent: list[tuple[dict[str, object], str]] = []
+
+    def resident(*, request, required_feature, status, **_kwargs):
+        assert status.capabilities.features == features
+        sent.append((dict(request), required_feature))
+        payload: dict[str, object] = {"reason": "approval_reuse_content_changed", "stored_hash": "sha256:" + "a" * 64}
+        if "current_action" in request:
+            payload["reuse"] = {"action": "review"}
+        return {
+            "request_id": request["request_id"],
+            "request_sha256": "sha256:" + _canonical_request_sha256(request),
+            "status": "ok",
+            "code": "ok",
+            "payload": payload,
+        }
+
+    monkeypatch.setattr(
+        native_store_policy,
+        "native_runtime_status",
+        lambda: SimpleNamespace(identity=None, capabilities=SimpleNamespace(features=features)),
+    )
+    monkeypatch.setattr(native_store_policy, "_resident_request", resident)
+
+    reason, stored_hash, reuse = native_store_policy.native_approval_reuse_miss(
+        store_path=tmp_path / "guard.db",
+        guard_home=tmp_path,
+        harness="codex",
+        artifact_id="codex:artifact",
+        artifact_hash=None,
+        workspace=None,
+        publisher=None,
+        now="2026-10-20T00:00:00Z",
+        evidence_provider=lambda *_args: {},
+        current_action="review",
+    )
+
+    assert (reason, stored_hash) == ("approval_reuse_content_changed", "sha256:" + "a" * 64)
+    assert [("current_action" in request, feature) for request, feature in sent] == [
+        (supports_reuse, composed if supports_reuse else diagnostic)
+    ]
+    assert reuse == ({"action": "review"} if supports_reuse else None)

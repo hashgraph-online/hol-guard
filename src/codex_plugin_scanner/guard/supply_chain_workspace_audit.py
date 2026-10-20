@@ -316,6 +316,7 @@ def _workspace_local_evaluation(
         intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = _lsc.evaluate_package_request_artifact(
         artifact=artifact,
@@ -356,6 +357,7 @@ def build_supply_chain_explain_payload(
         intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = _lsc.evaluate_package_request_artifact(
         artifact=artifact,

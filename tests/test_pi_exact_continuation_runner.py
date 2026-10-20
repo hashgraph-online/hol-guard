@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -260,7 +261,8 @@ def test_installed_omp_runner_contract_is_outer_signal_aware() -> None:
     runner_source = runner_path.read_text(encoding="utf-8")
     types_source = types_path.read_text(encoding="utf-8")
     session_source = session_path.read_text(encoding="utf-8")
-    assert "async emitToolCall(event: ToolCallEvent, signal?: AbortSignal)" in runner_source
+    # 18.11 splits the signature across lines and appends an agent parameter.
+    assert re.search(r"async emitToolCall\(\s*event: ToolCallEvent,\s*signal\?: AbortSignal\s*[,)]", runner_source)
     assert "EXTENSION_HANDLER_ABORTED" in runner_source
     assert "if (signal?.aborted)" in runner_source
     assert "runner.emitToolCall(" in session_source

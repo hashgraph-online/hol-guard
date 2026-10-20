@@ -48,11 +48,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             return prepared
         # Directory preparation needs runtime validation dependencies, available
         # in the coverage environment but not in isolated wheel builds.
-        for script in ("export_extension_directory.py", "render_command_extension_directory.py"):
-            for arguments in ([], ["--check"]):
-                prepared = _prepare([sys.executable, f"scripts/{script}", *arguments])
-                if prepared:
-                    return prepared
+        for arguments in ([], ["--check"]):
+            prepared = _prepare(
+                [sys.executable, "scripts/prepare_extension_directory.py", "--compiler", compiler, *arguments]
+            )
+            if prepared:
+                return prepared
     pytest_args = args.pytest_args
     if pytest_args[:1] == ["--"]:
         pytest_args = pytest_args[1:]

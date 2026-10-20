@@ -44,7 +44,7 @@ pub(super) fn shared_library_part(part: &str) -> bool {
         })
 }
 
-pub(super) fn home_spelling_matches_target(
+pub(in crate::pretool) fn home_spelling_matches_target(
     target: &std::path::Path,
     canonical: &std::path::Path,
     supplied_home: Option<&str>,
@@ -216,4 +216,43 @@ pub(super) fn plain_dot_scratch_target(path: &Path, home_dir: Option<&str>) -> b
         parent.push(component.as_os_str());
     }
     hidden
+}
+
+pub(super) fn home_execution_control_target(
+    path: &std::path::Path,
+    home: &std::path::Path,
+    workspace: &std::path::Path,
+) -> bool {
+    if path.starts_with(workspace) {
+        return false;
+    }
+    let parts: Vec<String> = path
+        .strip_prefix(home)
+        .ok()
+        .into_iter()
+        .flat_map(std::path::Path::components)
+        .filter_map(|component| match component {
+            std::path::Component::Normal(value) => {
+                Some(value.to_string_lossy().to_ascii_lowercase())
+            }
+            _ => None,
+        })
+        .collect();
+    let shared_library = parts.last().is_some_and(|part| shared_library_part(part))
+        || parts.iter().any(|part| part.ends_with(".framework"));
+    parts.iter().any(|part| {
+        matches!(part.as_str(), "bin" | "appdata" | "site-packages" | "dist-packages")
+            || part.ends_with(".pth")
+            || matches!(part.as_str(), "sitecustomize.py" | "usercustomize.py")
+    }) || shared_library
+        || parts.windows(2).any(|pair| {
+        matches!(
+            pair,
+            [first, second]
+                if first == "library"
+                    && matches!(second.as_str(), "application support" | "application scripts" | "python")
+                    || (first == ".local" && second == "bin")
+                    || (first == ".github" && second == "workflows")
+        )
+    })
 }

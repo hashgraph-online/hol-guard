@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
     OBSERVATION_FIELD,
     PROBE_FIELD,
@@ -49,7 +49,7 @@ def test_probe_metadata_is_strict_and_never_a_decision_override(fault):
 
 
 @pytest.mark.parametrize("fault", [None, "request", "event", "harness", "observe", "secret"])
-def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(capsys, fault):
+def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(fault):
     payload = probe_payload()
     request_id = payload[PROBE_FIELD]["request_id"]
     overrides = {"request_id": request_id, "harness": "codex", "event_name": "PreToolUse"}
@@ -66,17 +66,16 @@ def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(capsys,
         receipt["command"] = "private command must not be emitted"
     observation = transition_hook_observation(payload, receipt)
     response = {"policy_action": "allow", "hookSpecificOutput": {"permissionDecision": "allow"}}
-    ordinary = bridge._codex_hook_response(response, event_name="PreToolUse")
+    ordinary = codex_hook_response(response, event_name="PreToolUse")
     if observation is not None:
         response[OBSERVATION_FIELD] = observation
-    bridge._write_transition_observation(json.dumps(payload), response)
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert bridge._codex_hook_response(response, event_name="PreToolUse") == ordinary
+    # The sideband is written by the native bridge; the field it adds must stay
+    # out of the hook response either way.
+    assert codex_hook_response(response, event_name="PreToolUse") == ordinary
     if fault is None:
-        assert json.loads(captured.err) == observation
+        assert observation is not None and "private command must not be emitted" not in json.dumps(observation)
     else:
-        assert observation is None and captured.err == ""
+        assert observation is None
 
 
 def test_omp_receipt_is_bound_to_fresh_probe_id():

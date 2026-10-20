@@ -6,7 +6,10 @@
 
 use crate::CommandModelRequestV1;
 use guard_contracts::PreToolResultV1;
-use targets::{bounded_write, relative_saved_reads, safe_output_target};
+use targets::{
+    bounded_write, plan_note_output_target, relative_saved_reads, safe_output_target,
+    sibling_heredoc_target,
+};
 
 #[path = "redirect_git_chain.rs"]
 pub(super) mod git_chain;
@@ -167,9 +170,14 @@ pub(super) fn project(
     .ok()?;
     // An earlier segment could cd or create a symlink before the shell opens
     // a target, so a chain may only write absolute temp files beside peers.
-    let temporary_chain = temporary_writes && super::super::chain_temporary::peers_only(&model);
+    let temporary_chain =
+        temporary_writes && super::super::chain_temporary::temporary_peers(&model);
     let chain = writes_file && model.segments.len() != 1 && !temporary_chain;
     let leading_write = chain && bounded_writes && !late_write && leading_chain::admits(&model);
+    // Plain peers cannot change directory, rename a file or create a link,
+    // so a write that follows one still opens the file the target check
+    // proved: `cp /tmp/a.ts /tmp/b.ts && cat /tmp/a.ts > src/c.ts`.
+    let peer_write = chain && bounded_writes && super::super::chain_temporary::peers_only(&model);
     scratch_writes &= targets.iter().all(|target| {
         crate::pretool::curl_reads::output_targets::scratch_output_target(target, context)
     });
@@ -180,7 +188,7 @@ pub(super) fn project(
     if model.confidence != "exact"
         || model.uncertainty_reason.is_some()
         || model.segments.is_empty()
-        || (chain && git_chain.is_none() && !leading_write && !init_chain)
+        || (chain && git_chain.is_none() && !leading_write && !init_chain && !peer_write)
     {
         return None;
     }
@@ -194,6 +202,21 @@ pub(super) fn project(
     {
         return None;
     }
+    // A quoted heredoc is literal data, but the bare `cat` that remains reads
+    // standard input, which only the workspace sandbox bounds. A plan note in
+    // the harness home and a repository beside the session's directory lie
+    // outside that sandbox, so the write checked above is all that is left to
+    // prove, and a no-op stands in for the command.
+    let command = if saw_heredoc
+        && bounded_writes
+        && writes_file
+        && targets.iter().all(|target| {
+            plan_note_output_target(target, context) || sibling_heredoc_target(target, context)
+        }) {
+        "true".to_owned()
+    } else {
+        command
+    };
     Some(RedirectProjection {
         command,
         writes_file,

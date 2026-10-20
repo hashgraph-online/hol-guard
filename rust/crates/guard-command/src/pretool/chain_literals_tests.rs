@@ -168,6 +168,8 @@ fn a_command_naming_a_bound_variable_refuses_the_chain() {
     for command in [
         "X=build; zformat -f X /Users/me/.ssh; rm -rf $X",
         "X=build && zstyle -s ctx style X && rm -rf $X",
+        // `zstyle -e` stores code that a later lookup runs.
+        "x=/srv; c='x=/Users/me'; zstyle -e :x s 'eval $c'; zstyle -s :x s y; cat $x/.ssh/id_rsa",
         "X=build && strftime -s X %s 0 && rm -rf $X",
         "X=build && zstat -A X f && rm -rf $X",
         "X=build && sysread X && rm -rf $X",
@@ -382,6 +384,23 @@ mod envelope {
         // After a directory change the expansion stays opaque.
         let (action, reason) = verdict("cd .git && cat $(pwd)/config", &ws);
         assert_ne!(action, "allow", "{reason}");
+    }
+
+    #[test]
+    fn a_parent_substitution_is_judged_as_the_parent_it_prints() {
+        let ws = workspace("parent", true);
+        let parent = ws.parent().unwrap().display().to_string();
+        let raw = "printf 'parent=%s\\n' \"$(dirname \"$PWD\")\"";
+        let literal = format!("printf 'parent=%s\\n' \"{parent}\"");
+        let producer = verdict(&format!("dirname {}", ws.display()), &ws);
+        let (literal_action, _) = verdict(&literal, &ws);
+        assert_eq!(literal_action, "allow", "{literal}");
+        // Allowed, or contained by the sandbox because no read rule names it.
+        if producer.0 == "allow" || (producer.0 == "sandbox-required" && producer.1 == CONTAINED) {
+            assert_eq!(verdict(raw, &ws), verdict(&literal, &ws), "{producer:?}");
+        } else {
+            assert_ne!(verdict(raw, &ws).0, "allow", "{producer:?}");
+        }
     }
 
     #[test]

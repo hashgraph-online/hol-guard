@@ -37,27 +37,42 @@ _NOT_QUEUED = (
     "continue with a permitted alternative or tell the user what is blocked."
 )
 
-# A connector setup review: one decision for the CLI, not an approval of this action.
+# A connector setup review of an MCP server: one decision for the server, not an approval of this action.
 _CONNECTOR_SETUP_WAIT = (
     "Setting it up is a one-time decision for the user in the HOL Guard inbox (`hol-guard approvals`), "
     "not an approval of this action. Do not retry it, in this or another spelling, until it is set up; "
     "continue with other work meanwhile."
 )
+# A local CLI or script Guard has not been set up for is an ordinary review: the user's Allow once or
+# Always allow in the inbox is what lets the agent's retry run (`docs/guard/approval-invariant.md`).
+_CONNECTOR_APPROVAL_WAIT = (
+    "It is waiting for the user to approve it in the HOL Guard inbox (`hol-guard approvals`), where "
+    "Allow once or Always allow lets it run. Do not retry the same action until it is approved; "
+    "continue with other work meanwhile."
+)
 _CONNECTOR_SURFACE_LABELS = {"cli": "local CLI", "package-scripts": "package script", "mcp": "MCP server"}
+# Connector surfaces whose setup review is an ordinary approvable review.
+LOCAL_CONNECTOR_SURFACES = frozenset({"cli", "package-scripts"})
 CONNECTOR_SETUP_REASON_PREFIX = "HOL Guard has not been set up for `"
 
 
-def connector_setup_reason(name: str, surface: str, *, ask: bool, permitted: Sequence[str] = ()) -> str:
+def connector_setup_reason(
+    name: str, surface: str, *, ask: bool, permitted: Sequence[str] = (), approvable: bool = True
+) -> str:
     """Agent text for a review held only because Guard was never set up for the connector.
 
-    The default mode adds the computed redirect (``permitted``: alternatives this
-    device already allows; none are named when there are none) and
-    ``SAFE_ALTERNATIVE_GUIDANCE``, with no link or request to ask the user; ``ask``
-    mode says it waits in the inbox, and the caller adds the link.
+    A local CLI or script whose review ``approvable`` (the inbox row's Allow once or
+    Always allow can let the retry run) says so in either mode, and the caller adds
+    the link. Otherwise, and for an MCP server, the default mode adds the computed
+    redirect (``permitted``: alternatives this device already allows; none are named
+    when there are none) and ``SAFE_ALTERNATIVE_GUIDANCE``, with no link or request to
+    ask the user; ``ask`` mode says it waits in the inbox, and the caller adds the link.
     Mirrored byte-for-byte by `blocked_request_mode::connector_setup_reason` in Rust.
     """
     label = _CONNECTOR_SURFACE_LABELS.get(surface, surface)
     reason = f"{CONNECTOR_SETUP_REASON_PREFIX}{name}` ({label}) on this device."
+    if approvable and surface in LOCAL_CONNECTOR_SURFACES:
+        return f"{reason} {_CONNECTOR_APPROVAL_WAIT}"
     if ask:
         return f"{reason} {_CONNECTOR_SETUP_WAIT}"
     names = ", ".join(f"`{item}`" for item in permitted if item)
@@ -103,6 +118,10 @@ _REASON_CODE_HINTS = {
 # the install advice above does not apply to it.
 _BUILD_REVIEW_PREFIX = "HOL Guard requires review before this build or test command"
 
+# A review of a direct read of one path says why in its own text; the advice for
+# narrowing a search does not apply to it.
+_READ_REVIEW_PREFIX = "HOL Guard requires review before this file read"
+
 
 # The native review text offers inbox approval. When no approval can let the
 # action run, that offer contradicts the note that follows, so it is dropped.
@@ -128,7 +147,8 @@ def safe_alternative_reason(
     """
     if reason_code is None and approval_queued is None:
         return f"{reason.strip()} {SAFE_ALTERNATIVE_GUIDANCE}".strip()
-    hint = "" if reason.lstrip().startswith(_BUILD_REVIEW_PREFIX) else _REASON_CODE_HINTS.get(reason_code or "", "")
+    own_text = reason.lstrip().startswith((_BUILD_REVIEW_PREFIX, _READ_REVIEW_PREFIX))
+    hint = "" if own_text else _REASON_CODE_HINTS.get(reason_code or "", "")
     if not approval_queued:
         wait = _NOT_QUEUED
     elif retry_reuses_approval:

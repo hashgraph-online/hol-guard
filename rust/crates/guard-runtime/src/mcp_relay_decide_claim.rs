@@ -117,6 +117,9 @@ fn spend(
     // republished snapshot or binding (config, integrity state or key) defers
     // before anything is claimed.
     let admitted = admit(&context.request, policy_store)?;
+    let _command_lease = policy_store
+        .command_authority_lease(&admitted.snapshot)
+        .map_err(|_| CLAIM_AUTHORITY_CHANGED)?;
     let held = &context.admitted;
     if !unchanged(
         (&held.workspace, &held.snapshot, &held.binding),
@@ -265,7 +268,13 @@ fn after_claim(
     connection
         .execute_batch("PRAGMA query_only = ON")
         .map_err(|_| STORE_UNREADABLE)?;
-    let fresh = resolve(&context.request, &context.admitted, Some(connection), None);
+    let fresh = resolve(
+        &context.request,
+        &context.admitted,
+        Some(connection),
+        None,
+        policy_store,
+    );
     connection
         .execute_batch("PRAGMA query_only = OFF")
         .map_err(|_| STORE_UNREADABLE)?;

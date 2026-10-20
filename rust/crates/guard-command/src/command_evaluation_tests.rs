@@ -12,7 +12,7 @@ use serde::Deserialize;
 
 use crate::canonical_command::CanonicalCommand;
 use crate::command_evaluation_compose::{evaluate_command, CommandEvaluationInput};
-use crate::native_command_catalog::{packaged_command_catalog, CatalogExtension};
+use crate::native_command_catalog::{CatalogExtension, CommandCatalog};
 use crate::{CanonicalCommandV1, CommandSegmentV1, CommandSpanV1};
 use guard_contracts::NativeCommandControlBindingV1;
 
@@ -169,7 +169,10 @@ fn to_read_factor(row: &ReadFactorRow) -> crate::effect_decision::DecisionFactor
 fn evaluate_command_matches_python_oracle() {
     let raw = include_str!("../testdata/evaluate_command_oracle.json");
     let mut fixture: Fixture = serde_json::from_str(raw).expect("oracle parses");
-    let catalog = packaged_command_catalog().expect("packaged catalog loads");
+    let catalog = CommandCatalog::from_authored_test_bytes(
+        &crate::native_command_program::authored_test_support::catalog_bytes(),
+    )
+    .expect("authored catalog loads");
     // New, unrelated extensions rotate the catalog digest without changing
     // any oracle input. Pin every original extension's typed semantics instead:
     // removed/changed rules, permissions, defaults, aliases and trust still fail.
@@ -215,6 +218,7 @@ fn evaluate_command_matches_python_oracle() {
         effective_digest: fixture.snapshot.effective_digest.clone(),
         layers: Vec::new(),
         authority: None,
+        active_security_digest: None,
     };
 
     let mut mismatches = Vec::new();

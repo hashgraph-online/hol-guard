@@ -9,6 +9,21 @@ from codex_plugin_scanner.guard.daemon import server
 from codex_plugin_scanner.guard.daemon.runtime_hook_deadline import RuntimeHookDeadline
 
 
+class _SettledDirectories:
+    """Stand in for the directories the runtime settles for one request.
+
+    The handler asks for every candidate at once and reads each verdict back
+    by name. Nothing here is a verdict: this test is about the deadline the
+    route carries, so each candidate settles as the string it arrived as.
+    """
+
+    def __init__(self, candidates):
+        self._paths = {candidate[0]: candidate[1] for candidate in candidates}
+
+    def require(self, parameter):
+        return self._paths.get(parameter)
+
+
 @pytest.mark.parametrize(
     ("harness", "event", "expected_cap"),
     [
@@ -63,10 +78,11 @@ def test_server_deadline_includes_elapsed_admission_and_missing_policy_blocks(
         request=object(),
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
-        _validated_hook_directory_string=lambda _kind, value, **kwargs: value,
-        _validated_hook_guard_home=lambda value: value,
-        _hook_safe_roots=lambda: (),
-        _normalized_hook_workspace_string=lambda value: value,
+        _settled_hook_directories=lambda *candidates, **kwargs: _SettledDirectories(candidates),
+        # These tests send no `guard-home`, so the lane's home check is not
+        # what they are about.
+        _hook_guard_home_query_is_this_home=lambda *_args: True,
+        _hook_workspace_spelling=lambda value: value,
         _runtime_hook_exec_command_workdir=lambda payload: (False, None),
         _runtime_hook_fail_safe_response=lambda *args, **kwargs: {
             "decision": "block",

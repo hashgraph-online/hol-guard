@@ -73,6 +73,25 @@ _MAX_ACK_BYTES = 4 * 1024
 _RENEWAL_LEAD_SECONDS = 5 * 60
 _RENEWAL_JITTER_MAX_SECONDS = 30.0
 _PUBLISH_RETRY_MAX_SECONDS = 5.0
+# Another writer or the resident moved while a candidate was in flight, so the
+# next publish usually succeeds. A hook waits for that ACK inside a deadline of
+# a few seconds, so the backoff for these codes stays well under it. Every
+# other failure keeps the exponential delay.
+TRANSIENT_PUBLICATION_ERRORS = frozenset(
+    {
+        "native_policy_snapshot_resident_changed",
+        "native_resident_restart_budget_busy",
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
+        "native_business_source_mutation_in_progress",
+        "native_business_source_binding_changed",
+        "native_local_cli_revision_changed",
+        "native_provider_catalog_changed",
+    }
+)
+_TRANSIENT_PUBLISH_RETRY_MAX_SECONDS = 0.5
 _REQUIRED_PUBLISH_FEATURES = frozenset(
     {
         "policy-snapshot-v3",
@@ -105,6 +124,12 @@ _VALID_RISK_ACTION_KEYS = frozenset(
         "guard_bypass",
         "cloud_advisory",
         "encoded_exfiltration",
+        "package_unknown",
+        "package_lockfile_drift",
+        "package_direct_source",
+        "package_custom_registry",
+        "package_install",
+        "low_trust_artifact",
         "execution",
         "supply_chain",
         "policy_bypass",

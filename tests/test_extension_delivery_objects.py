@@ -171,16 +171,33 @@ def test_corrupt_fetched_metadata_is_not_cached(delivery, tmp_path):
     assert not list(client.directory.iterdir())
 
 
-def test_single_pack_public_entries_match_existing_directory(delivery):
-    import json
-
+def test_single_pack_public_entries_match_existing_directory(delivery, tmp_path, monkeypatch):
     import export_extension_directory
     from extension_pack_directory import public_entry
+    from native_directory_inventory import catalog_rows, compiled_inventory
+
+    from tests.support.extension_directory import bounded_extensions, copy_projected_contribution_sources
 
     root = Path(__file__).resolve().parents[1]
-    current = export_extension_directory.export_directory_v2(root)
+    bounded = tmp_path / "bounded"
+    copy_projected_contribution_sources(root, bounded)
+    listings = bounded / "contributions/extension-listings"
+    listings.mkdir()
+    for extension in bounded_extensions():
+        identity = (
+            "mcp." + extension.extension_id.removeprefix("command.mcp-")
+            if extension.surface == "mcp"
+            else extension.extension_id
+        )
+        source = root / "contributions/extension-listings" / f"{identity}.json"
+        if source.exists():
+            (listings / source.name).write_bytes(source.read_bytes())
+    monkeypatch.setattr(export_extension_directory, "native_extensions", bounded_extensions)
+    current = export_extension_directory.export_directory_v2(bounded)
     expected = {entry["runtimeExtensionId"]: entry for entry in current["entries"]}
-    catalog = json.loads((root / "contracts/extensions/command-catalog.v1.json").read_bytes())["catalog"]
+    with compiled_inventory() as (_, reader, release):
+        catalog = [row for _, _, row in catalog_rows(reader, release) if row["extension_id"] in expected]
+    assert {row["extension_id"] for row in catalog} == set(expected)
     for row in catalog:
         assert public_entry(root, [row]) == expected[row["extension_id"]]
 

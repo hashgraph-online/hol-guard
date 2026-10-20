@@ -177,6 +177,58 @@ fn clean_preview_is_allowed_and_removal_stays_reviewed() {
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn apply_check_reads_a_patch_kept_outside_the_checkout() {
+    let (root, home, repository) = repository_fixture("apply-outside");
+    let _cleanup = FixtureCleanup(root.clone());
+    let patch = root.join("fix.patch");
+    let source = repository.join("x.ts");
+    std::fs::write(&patch, "synthetic patch\n").unwrap();
+    std::fs::write(&source, "export const x = 1;\n").unwrap();
+    let private = home.join(".env");
+    std::fs::write(&private, "TOKEN=synthetic\n").unwrap();
+    std::os::unix::fs::symlink(&private, root.join("linked.patch")).unwrap();
+    let patch = patch.display();
+    let source = source.display();
+    let linked = root.join("linked.patch");
+    let linked = linked.display();
+    let private = private.display();
+    let missing = root.join("missing.patch");
+    let missing = missing.display();
+    for (command, expected) in [
+        (
+            format!("git apply --check {patch} 2>&1 | head -10"),
+            "allow",
+        ),
+        (format!("git apply --check {patch} {source}"), "allow"),
+        (format!("git apply --stat {patch}"), "allow"),
+        (format!("git apply --check --verbose -- {patch}"), "allow"),
+        // A link to a private file, a private file itself, a patch that is not
+        // there and the writing forms keep their review.
+        (format!("git apply --check {linked}"), "review"),
+        (format!("git apply --check {private}"), "review"),
+        (format!("git apply --check {missing}"), "review"),
+        (format!("git apply {patch}"), "review"),
+        (format!("git apply --check --apply {patch}"), "review"),
+        (format!("git apply --check --index {patch}"), "review"),
+        (
+            format!("git apply --check {patch} --output={patch}.out"),
+            "review",
+        ),
+        (format!("git apply --check /tmp/../{patch}"), "review"),
+    ] {
+        for harness in ["omp", "zcode"] {
+            let (decision, reason_code) = decide(harness, &command, &home, &repository);
+            if expected == "review" {
+                assert_ne!(decision, "allow", "{harness}: {command}: {reason_code}");
+            } else {
+                assert_eq!(decision, expected, "{harness}: {command}: {reason_code}");
+            }
+        }
+    }
+}
+
 #[test]
 fn apply_check_is_allowed_and_patching_stays_reviewed() {
     let (root, home, repository) = repository_fixture("apply");
@@ -187,6 +239,12 @@ fn apply_check_is_allowed_and_patching_stays_reviewed() {
         ("", "git apply --check -p1 feature.patch", "allow"),
         ("", "git apply --check --verbose feature.patch", "allow"),
         ("", "git apply --check --stat feature.patch", "allow"),
+        // Each report turns applying off, so none of them writes.
+        ("", "git apply --stat feature.patch", "allow"),
+        ("", "git apply --numstat feature.patch", "allow"),
+        ("", "git apply --summary feature.patch", "allow"),
+        ("", "git apply --stat --apply feature.patch", "review"),
+        ("", "git apply --numstat --index feature.patch", "review"),
         (
             "",
             "git apply --check --whitespace=error feature.patch",
@@ -254,7 +312,6 @@ fn apply_check_is_allowed_and_patching_stays_reviewed() {
         ),
         ("", "git apply --check ../outside.patch", "review"),
         ("", "git apply --check -", "review"),
-        ("", "git apply --stat feature.patch", "review"),
     ] {
         std::fs::write(&config, settings).unwrap();
         for harness in ["omp", "zcode"] {

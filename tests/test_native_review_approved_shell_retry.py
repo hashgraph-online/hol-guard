@@ -13,16 +13,17 @@ Four rounds, each with its own command and its own grant:
   is reused, which is the contract working as intended;
 * the identical command under a fresh ``tool_use_id``, which is what a real
   Claude Code retry sends, since the model emits a new tool-use block:
-  reviewed again. ``request_payload_identity`` drops the transport call id
-  from the review anchor only for the ``pi`` and ``omp`` harnesses, so every
-  other harness anchors its approval to an id its own retry will not repeat;
+  allowed, and the approval is spent. ``request_payload_identity`` drops the
+  transport call id from the review anchor, so the approval reaches the retry
+  the model actually sends and only one of them; a later identical attempt is
+  reviewed again;
 * a reworded command: reviewed again, the approval binds the exact action;
 * an ordinary ``git status`` command whose row has no once-retry contract:
   attempting once approval is rejected without recording consent, and the
   byte-identical retry remains stopped.
 
-The new-id and reworded cases record the current exact-action boundary. An
-unavailable retry must never acquire a misleading saved once decision.
+The reworded case records the exact-action boundary. An unavailable retry must
+never acquire a misleading saved once decision.
 
 Under the default ``blocked_request_mode = "safe-alternative"`` a review is
 rendered to the agent as a plain block with ``prompted`` false, so the queued
@@ -87,6 +88,7 @@ def _approve_then_retry(
     use_id: str,
     retry_command: str | None = None,
     retry_use_id: str | None = None,
+    later_use_id: str | None = None,
 ) -> dict[str, Any]:
     """Review one command, grant that row, and report what its retry got.
 
@@ -118,12 +120,21 @@ def _approve_then_retry(
         **kwargs,
     )
     requeued = _queued(store, seen)
-    return {
+    outcome: dict[str, Any] = {
         "policy_action": retry["policy_action"],
         "reason_code": retry.get("reason_code"),
         "granted_binding": queued[0]["artifact_hash"],
         "requeued_bindings": [row["artifact_hash"] for row in requeued],
     }
+    if later_use_id is not None:
+        later = worker.review_http_payload(
+            payload=_payload(retry_command or command, later_use_id, workspace),
+            deadline=time.monotonic() + WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS,
+            **kwargs,
+        )
+        outcome["later_policy_action"] = later["policy_action"]
+        outcome["later_requeued"] = len(_queued(store, seen))
+    return outcome
 
 
 def test_an_approval_carries_only_the_request_it_was_queued_for(
@@ -161,6 +172,7 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
             command="wc -c notes.txt",
             use_id="toolu_wc_first",
             retry_use_id="toolu_wc_retry",
+            later_use_id="toolu_wc_later",
         )
         reworded = _approve_then_retry(
             worker,
@@ -183,13 +195,14 @@ def test_an_approval_carries_only_the_request_it_was_queued_for(
     assert same_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
     assert same_id["policy_action"] == "allow", outcomes
     assert same_id["requeued_bindings"] == [], outcomes
-    # #3837: the retry the model actually sends carries a new tool-use id, and
-    # the review anchor keeps that id for every harness but pi and omp, so the
-    # approval the operator just gave does not cover it.
+    # The retry the model actually sends carries a new tool-use id, and the
+    # review anchor leaves that transport id out, so the approval the operator
+    # just gave covers it: once, and the next identical attempt is reviewed.
     assert new_id["granted_binding"].startswith(RETRY_CONTRACT), outcomes
-    assert new_id["policy_action"] != "allow", outcomes
-    assert len(new_id["requeued_bindings"]) == 1, outcomes
-    assert new_id["requeued_bindings"] != [new_id["granted_binding"]], outcomes
+    assert new_id["policy_action"] == "allow", outcomes
+    assert new_id["requeued_bindings"] == [], outcomes
+    assert new_id["later_policy_action"] != "allow", outcomes
+    assert new_id["later_requeued"] == 1, outcomes
     # Same intent, the model's own wording: a different action, so a new review.
     assert reworded["policy_action"] != "allow", outcomes
     assert len(reworded["requeued_bindings"]) == 1, outcomes

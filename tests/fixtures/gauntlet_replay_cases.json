@@ -1298,6 +1298,70 @@
       },
       "cwd": "org",
       "expect": "block"
+    },
+    {
+      "id": "u-node-agent-written-script-tmp",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "node ${PRIVATE_TMP}/agent-script/index.js"
+      },
+      "cwd": "worktree",
+      "expect": "always"
+    },
+    {
+      "id": "u-split-tmp-copy-into-chunks",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "split -l 1 ${PRIVATE_TMP}/notes.txt ${PRIVATE_TMP}/chunk-"
+      },
+      "cwd": "worktree",
+      "expect": "always"
+    },
+    {
+      "id": "u-csplit-tmp-copy-at-line",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "csplit ${PRIVATE_TMP}/notes.txt 1"
+      },
+      "cwd": "worktree",
+      "expect": "always"
+    },
+    {
+      "id": "u-job-wrapper-runs-bunx-tsc",
+      "harnesses": [
+        "codex",
+        "zcode",
+        "claude-code",
+        "omp",
+        "cursor"
+      ],
+      "tool": "shell",
+      "tool_input": {
+        "command": "${HOME}/.local/bin/run-queued -- bunx tsc --noEmit"
+      },
+      "cwd": "worktree",
+      "expect": "always"
     }
   ]
 }

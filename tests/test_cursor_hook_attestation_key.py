@@ -89,7 +89,7 @@ def test_attestation_write_does_not_follow_a_symlink(tmp_path: Path) -> None:
 
 
 def test_hook_template_proof_uses_the_same_passes_as_the_signer(tmp_path: Path) -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hook_script_template_tail import (
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_script_template_tail import (
         HOOK_SCRIPT_TEMPLATE_TAIL,
     )
 

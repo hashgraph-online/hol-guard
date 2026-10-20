@@ -1,12 +1,18 @@
-//! Windows backend for the Vite build profile.
+//! Windows backend for the local Node tool profiles.
 //!
-//! The resident plans `node <node_modules>/vite/bin/vite.js build ...` for the
-//! first `node.exe` on the caller's `PATH`, and `contained-readonly-windows
-//! --profile node-build-output-v1` runs it as a build run of the LPAC
-//! snapshot runner. The workspace copy, the `node_modules` directories between
-//! the run directory and the workspace root and the `node.exe` binary are
-//! staged into a writable private copy, and only the declared output
-//! directories are published back after a clean exit.
+//! The resident plans `node <node_modules>/<tool entry> ...` for the first
+//! `node.exe` on the caller's `PATH`, and `contained-readonly-windows` runs it
+//! as a staged run of the LPAC snapshot runner. The workspace copy, the
+//! `node_modules` directories between the run directory and the workspace root
+//! and the `node.exe` binary are staged into a writable private copy.
+//!
+//! A Vite build declares where it writes, and `--profile node-build-output-v1`
+//! publishes those directories back after a clean exit. ESLint, no-emit
+//! TypeScript and Prettier in a checking mode only report, so they run under
+//! `--profile node-tool-readonly-v1`, which declares no output and publishes
+//! nothing: their caches are written inside the private copy and discarded
+//! with it. Staging is the same either way, which is why one planner serves
+//! both.
 //!
 //! Only a flat npm or Yarn classic install is staged. A pnpm store links
 //! packages across directories, and a Plug'n'Play install has no
@@ -18,7 +24,19 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 pub(crate) const PROFILE: &str = "node-build-output-v1";
-const TOOL_ENTRY: &str = "vite/bin/vite.js";
+pub(crate) const TOOL_PROFILE: &str = "node-tool-readonly-v1";
+/// Each tool and the entrypoints its published versions install, in the order
+/// the sink declares them. Prettier 3 moved its executable into `bin/`, and
+/// version 2 remains common enough to name.
+const TOOL_ENTRIES: [(&str, &[&str]); 4] = [
+    ("eslint", &["eslint/bin/eslint.js"]),
+    ("tsc", &["typescript/bin/tsc"]),
+    ("vite", &["vite/bin/vite.js"]),
+    (
+        "prettier",
+        &["prettier/bin/prettier.cjs", "prettier/bin-prettier.js"],
+    ),
+];
 const INVALID: &str = "pytest_restricted_invalid_command";
 const UNAVAILABLE: &str = "pytest_restricted_sandbox_unavailable";
 const PNPM_MARKERS: [&str; 2] = [".modules.yaml", ".pnpm"];
@@ -33,8 +51,79 @@ fn error(reason_code: &str, message: &str) -> RestrictedPytestError {
 fn unavailable() -> RestrictedPytestError {
     error(
         UNAVAILABLE,
-        "The local Vite install cannot be staged for a protected build on Windows.",
+        "The local install cannot be staged for protected execution on Windows.",
     )
+}
+
+/// The one mode of each tool this route admits. Vite builds; the other three
+/// rewrite the files they read in every mode but the reporting one, so the
+/// flag that selects reporting has to be there.
+fn admitted_mode(tool: &str, arguments: &[String]) -> bool {
+    let named = |flags: &[&str]| arguments.iter().any(|a| flags.contains(&a.as_str()));
+    match tool {
+        "eslint" => true,
+        "tsc" => named(&["--noEmit"]),
+        "vite" => arguments.first().map(String::as_str) == Some("build"),
+        "prettier" => named(&["--check", "-c", "--list-different", "-l"]),
+        _ => false,
+    }
+}
+
+/// Options that turn a reporting run into one that rewrites its input. The
+/// sink refuses these before planning; the resident owns the same refusal,
+/// because it is what admits the run into a writable staged copy.
+fn rewrites_input(arguments: &[String]) -> bool {
+    arguments.iter().any(|argument| {
+        matches!(
+            argument.as_str(),
+            "--fix"
+                | "--fix-dry-run"
+                | "--output-file"
+                | "-o"
+                | "--emitDeclarationOnly"
+                | "--write"
+                | "-w"
+        ) || argument.starts_with("--fix=")
+            || argument.starts_with("--output-file=")
+            || argument.starts_with("--write=")
+    })
+}
+
+/// The entrypoint the command's tool runs. A tool may publish its executable
+/// under more than one name across major versions, so every spelling is looked
+/// for from `cwd` up to the workspace root and the nearest install wins: a
+/// package that pins its own major is what the command would run, not a copy
+/// hoisted further up a monorepo.
+fn tool_entry(tool: &str, workspace: &Path, cwd: &Path) -> Result<PathBuf, RestrictedPytestError> {
+    let entries = TOOL_ENTRIES
+        .iter()
+        .find(|(name, _)| *name == tool)
+        .map(|(_, entries)| *entries)
+        .ok_or_else(unavailable)?;
+    let mut installed: Option<(usize, PathBuf)> = None;
+    for relative in entries {
+        // `nearest_project_root`: the closest directory holding the entry.
+        let mut directory = cwd.to_path_buf();
+        while directory != workspace
+            && std::fs::symlink_metadata(directory.join("node_modules").join(relative)).is_err()
+        {
+            directory.pop();
+        }
+        let Some(modules) = canonical(&directory.join("node_modules")) else {
+            continue;
+        };
+        let Some(entry) = canonical(&modules.join(relative))
+            .filter(|entry| entry.is_file() && entry.starts_with(&modules))
+        else {
+            continue;
+        };
+        // Deepest wins, and a tie keeps the order the spellings are declared in.
+        let depth = directory.components().count();
+        if installed.as_ref().is_none_or(|(found, _)| depth > *found) {
+            installed = Some((depth, entry));
+        }
+    }
+    installed.map(|(_, entry)| entry).ok_or_else(unavailable)
 }
 
 /// Below this a `node.exe` is a launcher rather than the runtime. Node links
@@ -199,7 +288,7 @@ pub(crate) fn output_location(output: &Path, workspace: &Path) -> Option<PathBuf
 }
 
 fn plan(input: &Value) -> Result<Value, RestrictedPytestError> {
-    let invalid = || error(INVALID, "Protected builds require direct Vite argv.");
+    let invalid = || error(INVALID, "Protected runs require direct local-tool argv.");
     let strings = |key: &str| -> Result<Vec<String>, RestrictedPytestError> {
         input
             .get(key)
@@ -212,12 +301,27 @@ fn plan(input: &Value) -> Result<Value, RestrictedPytestError> {
     };
     let runtime = strings("runtime_arguments")?;
     let arguments = strings("arguments")?;
+    let tool = input
+        .get("tool")
+        .and_then(Value::as_str)
+        .ok_or_else(invalid)?;
     if runtime.len() > 1
         || !runtime.iter().all(|argument| runtime_option(argument))
-        || arguments.first().map(String::as_str) != Some("build")
+        || !admitted_mode(tool, &arguments)
+        || rewrites_input(&arguments)
     {
         return Err(invalid());
     }
+    // A build declares the directories it writes and has them published back;
+    // every other tool only reports, and its staged copy is discarded whole.
+    // Only a build then reaches the workspace, and only outside its sources.
+    let publishes = tool == "vite";
+    let profile = if publishes { PROFILE } else { TOOL_PROFILE };
+    let workspace_write = if publishes {
+        "workspace-source-write"
+    } else {
+        "workspace-write"
+    };
     let path = |key: &str| input.get(key).and_then(Value::as_str).map(PathBuf::from);
     let (workspace, cwd) = workspace_and_cwd(
         &path("workspace").ok_or_else(invalid)?,
@@ -230,17 +334,7 @@ fn plan(input: &Value) -> Result<Value, RestrictedPytestError> {
     let node = first_on_path(&["node.exe".to_owned()], search_path)
         .ok_or_else(|| error(UNAVAILABLE, "The Node.js runtime could not be resolved."))?;
     let node = node_executable(&node)?;
-    // `nearest_project_root`: the closest directory holding the entry.
-    let mut directory = cwd.clone();
-    while directory != workspace
-        && std::fs::symlink_metadata(directory.join("node_modules").join(TOOL_ENTRY)).is_err()
-    {
-        directory.pop();
-    }
-    let modules = canonical(&directory.join("node_modules")).ok_or_else(unavailable)?;
-    let entry = canonical(&modules.join(TOOL_ENTRY))
-        .filter(|entry| entry.is_file() && entry.starts_with(&modules))
-        .ok_or_else(unavailable)?;
+    let entry = tool_entry(tool, &workspace, &cwd)?;
     if let Some(expected) = path("expected_entry") {
         // A relative entrypoint names a file below the command's directory.
         if canonical(&cwd.join(expected)).as_ref() != Some(&entry) {
@@ -268,7 +362,7 @@ fn plan(input: &Value) -> Result<Value, RestrictedPytestError> {
     command.push(entry.to_string_lossy().replace('\\', "/"));
     command.extend(arguments);
     Ok(json!({
-        "profile_version": PROFILE,
+        "profile_version": profile,
         "backend": BACKEND,
         "backend_executable": backend,
         "workspace": workspace,
@@ -276,11 +370,12 @@ fn plan(input: &Value) -> Result<Value, RestrictedPytestError> {
         "executable": node,
         "command": command,
         "allowed_executables": [node],
-        "denied_capabilities": ["host-home-read","host-secret-environment","network","workspace-source-write","workspace-credential-read","privileged-operation"],
+        "denied_capabilities": ["host-home-read","host-secret-environment","network",workspace_write,"workspace-credential-read","privileged-operation"],
     }))
 }
 
-/// Resident `prepare_node_build` on Windows.
+/// Resident `prepare_node_build` on Windows: one planner for every local
+/// Node tool the read-only and build-output profiles cover.
 pub(crate) fn prepare_node_build(input: &Value) -> Value {
     match plan(input) {
         Ok(plan) => json!({ "value": plan }),

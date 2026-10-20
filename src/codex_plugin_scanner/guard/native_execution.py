@@ -60,7 +60,7 @@ _MCP_SESSION_ACCEPTED_STATUS = {
     "mcp_stdio_session_close": frozenset({"closed", "error"}),
     "mcp_stdio_session_cancel": frozenset({"cancelled", "error"}),
 }
-_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v1"
+_PROMPT_ANALYZE_FEATURE = "prompt-analyze-v2"
 
 
 def _request_id(prefix: str) -> str:
@@ -148,7 +148,24 @@ def _resident_request(
         "contained_package_script_execute": "guard-contained-package-script-execute-result.v1",
         "contained_workspace_write_execute": "guard-contained-workspace-write-execute-result.v1",
     }.get(operation)
-    if result_schema is not None:
+    if operation == "cloud_catalog":
+        # Producer/completion replies use a strict payload/error union, with
+        # no status field. Keep native validation refusals intact.
+        if decoded.get("schema") != "guard-cloud-catalog-result.v2":
+            return None
+        if set(decoded) == {"schema", "payload"}:
+            if not isinstance(decoded["payload"], dict):
+                return None
+        elif set(decoded) == {"schema", "error"}:
+            if not isinstance(decoded["error"], str) or decoded["error"] not in {
+                "catalog_invalid",
+                "catalog_limit",
+                "catalog_unavailable",
+            }:
+                return None
+        else:
+            return None
+    elif result_schema is not None:
         # These versioned Rust replies have no status field. Do not discard
         # valid native results or reinterpret them through a Python fallback.
         if decoded.get("schema") != result_schema or set(decoded) != {"schema", "result"}:
@@ -192,10 +209,13 @@ def _resident_request(
             "command_policy_decide",
             "command_expression_validate",
             "reviewed_invocation_bindings_validate",
+            "tool_action_request_identity",
         }:
             accepted = frozenset({"ok", "error"})
         elif operation == "mcp_tool_policy_decide":
             accepted = frozenset({"ok", "need", "error"})
+        elif operation == "native_bash_prepare":
+            accepted = frozenset({"ok", "error", "denied", "unavailable"})
         accepted_statuses = accepted if accepted is not None else frozenset({"ok"})
         if decoded.get("status") not in accepted_statuses:
             if record_resilience and not record_success:
@@ -600,6 +620,7 @@ def prompt_analyze_native(
     harness: str | None = None,
     config_path: str | None = None,
     requests: Sequence[Mapping[str, object]] | None = None,
+    artifacts: Sequence[Mapping[str, object]] | None = None,
     prior_policy_present: bool | None = None,
     approved_classes: Sequence[str] | None = None,
     timeout_seconds: float = 10.0,
@@ -614,6 +635,12 @@ def prompt_analyze_native(
         not isinstance(requests, Sequence)
         or isinstance(requests, (str, bytes, bytearray))
         or not all(isinstance(item, Mapping) for item in requests)
+    ):
+        return None
+    if artifacts is not None and (
+        not isinstance(artifacts, Sequence)
+        or isinstance(artifacts, (str, bytes, bytearray))
+        or not all(isinstance(item, Mapping) for item in artifacts)
     ):
         return None
     if approved_classes is not None and (
@@ -632,6 +659,7 @@ def prompt_analyze_native(
         "harness": harness,
         "config_path": config_path,
         "requests": [dict(r) for r in requests] if requests is not None else None,
+        "artifacts": [dict(a) for a in artifacts] if artifacts is not None else None,
         "prior_policy_present": prior_policy_present,
         "approved_classes": list(approved_classes) if approved_classes is not None else None,
         "guard_home": str(guard_home),

@@ -7,6 +7,7 @@ import {
   defaultUseApprovalCooldown,
   requiresApprovalPasswordPrompt,
 } from "./approval-gate-utils";
+import { reviewDecisionShortcutAllowed } from "./approval-keyboard";
 import { approvalProofRecentlySatisfied, buildApprovalProofCredentials } from "./approval-proof-inline";
 import { buildDecisionPayload, willPersistExactAction } from "./approval-scopes";
 import { approvalGateRefreshNeeded, resolvedStateForItem, useShownRequestCheck } from "./review-decision-state";
@@ -320,6 +321,7 @@ export function useReviewDecisionResolve(params: ReviewDecisionResolveParams) {
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (
+        !reviewDecisionShortcutAllowed(event.isComposing) ||
         decisionBusy ||
         pendingAction !== null ||
         extensionDialogActive ||
