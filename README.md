@@ -24,7 +24,7 @@ HOL Guard reviews agent actions before they run: shell commands, file access, pa
 
 Run it locally without an account. Use the CLI and local dashboard to manage protection, resolve approvals, and inspect decision history. Optional [Guard Cloud](docs/guard/local-vs-cloud.md) adds shared history, team policy, and fleet management.
 
-[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Development](#development)
+[Get started](#install-hol-guard) · [Supported agents](#supported-ai-agents) · [Plugin scanner](#plugin-scanner) · [Documentation](#documentation) · [Contribute an extension](#contribute-a-new-extension) · [Contribute an adapter](docs/guard/adapter-contributions.md) · [Development](#development)
 
 <!-- hol-sponsors:start -->
 <!-- hol-sponsors:end -->
@@ -382,6 +382,8 @@ For enrollment or stale native authority errors, see [extension-control recovery
 | [Security](SECURITY.md) | Vulnerability reporting and disclosure policy. |
 
 ## Contribute a New Extension
+
+To integrate a new AI coding agent or IDE, use the separate [harness adapter contribution guide](docs/guard/adapter-contributions.md). Harness adapters provide discovery, managed setup, and event integration. The command extensions below add policy coverage for CLI tools and do not install agent hooks.
 
 Command extensions are authored as **declarative JSON compiled and evaluated by Rust**. Add metadata, permissions, matcher trees, and safe variants in `contributions/command-sources/command.<name>.json`, then verify behavior with portable JSON fixtures. Most extensions compose existing native operations; a new Rust operation is needed only when the existing matcher contracts cannot express the behavior.
 
