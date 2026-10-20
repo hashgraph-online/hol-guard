@@ -7,8 +7,8 @@ import os
 import time
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_dead_fastpath as fastpath
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
+from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_dead_fastpath as fastpath
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
 
 _DEAD_PID = 2**22 + 12345
 

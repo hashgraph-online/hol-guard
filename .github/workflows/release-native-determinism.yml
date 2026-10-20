@@ -72,7 +72,12 @@ jobs:
           BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
           RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
           if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
-            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(a[1-9][0-9]*)?$ ]]
+            # Releases accept only canonical alphas; PR canaries only a dev release of the source version.
+            if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(a[1-9][0-9]*)?$ ]] &&
+              ! [[ "${PR_CANARY:-}" == "true" && "$RELEASE_VERSION" =~ ^${BASE_VERSION//./\\.}\.dev[0-9]+$ ]]; then
+              echo "Version $RELEASE_VERSION is neither a canonical alpha nor this PR canary's dev release" >&2
+              exit 1
+            fi
             uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
           fi
           while IFS= read -r changed_path; do

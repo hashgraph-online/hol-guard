@@ -250,7 +250,7 @@ fn capture_native(
     let executable = wide(command.executable_path.as_os_str())?;
     let cwd = wide(command.cwd.path().as_os_str())?;
     let mut argv = Vec::new();
-    quoted(command.executable_path.as_os_str(), &mut argv)?;
+    quoted(command.argument_zero.as_os_str(), &mut argv)?;
     for arg in &command.arguments {
         argv.push(b' ' as u16);
         quoted(arg, &mut argv)?;

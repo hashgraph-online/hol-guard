@@ -53,7 +53,7 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.claude_frozen_hook",
+        "module": "codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook",
         "surface": "hook_http_and_cli_events"
       },
       {
@@ -463,11 +463,16 @@
         "reason": "Python string templates that emit TypeScript/JS/shell harness hook assets at install time; generated artifacts, not Python executed on the request path. The current Pi extension emitters (pi_extension_source*.py: header, body, tail, shared-v1 and runtime variants, rendered by managed_extension_source for install, update and drift comparison) and pi_extension_runtime_ownership.py (which only resolves the Guard CLI command and recovery arguments embedded in that generated TypeScript) are the same kind of module as the previous-extension emitters already listed here; their only importers are the Pi adapter, its support shim and the update command (extension install, drift check and update), plus the emitters themselves.",
         "path": [
           "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_*_source*.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
           "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
           "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template_*.py",
           "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
-          "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
+          "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/grok_hook_*_template.py"
         ]
       },
       {
@@ -521,6 +526,15 @@
     "reviewed_runtime": [
       {
         "path": [
+          "src/codex_plugin_scanner/guard/adapters/_modules/cline/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/devin/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/pi/__init__.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/zcode/__init__.py"
+        ],
+        "reason": "Reviewed adapter family package initializers introduced by the source-layout refactor. Each contains only its package docstring; these modules are reached through lazy hook imports and remain counted in runtime scope. No runtime behavior is excluded."
+      },
+      {
+        "path": [
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_completion.py",
           "src/codex_plugin_scanner/guard/runtime/extension_catalog_pages.py"
         ],
@@ -554,6 +568,7 @@
           "src/codex_plugin_scanner/guard/cli/commands_hook*.py",
           "src/codex_plugin_scanner/guard/cli/commands_support_hook*.py",
           "src/codex_plugin_scanner/guard/adapters/*hook*.py",
+          "src/codex_plugin_scanner/guard/adapters/_modules/*/*hook*.py",
           "src/codex_plugin_scanner/guard/native_*.py",
           "src/codex_plugin_scanner/guard/proxy/*",
           "src/codex_plugin_scanner/guard/runtime/restricted_*.py",
@@ -859,6 +874,14 @@
           "src/codex_plugin_scanner/guard/registry_trust.py"
         ],
         "reason": "Reviewed and retained in runtime scope: consumer/service reaches the low-trust review floor lazily when it decides a first-seen or changed skill, MCP server or plugin. The floor reads a public HOL Registry trust score with a bounded, cached lookup and can only raise an action; native composition still decides the result."
+      },
+      {
+        "path": [
+          "src/codex_plugin_scanner/guard/daemon/native_review_bound_bash.py",
+          "src/codex_plugin_scanner/guard/runtime/bound_bash_review.py",
+          "src/codex_plugin_scanner/guard/runtime/bound_bash_sink.py"
+        ],
+        "reason": "Reviewed and retained in runtime scope: the bound-Bash review path reaches these lazily from hook_native_review_approval and cli/commands_dispatch_local. They carry the IPC transport and the projection of a native decision to the caller; the authorization itself, the content binding and the launch barrier stay in guard-runtime, and the sink refuses to act on a saved decision it cannot read, match or verify. Count these complete Python modules rather than exclude code reached through the native owner's reply boundary."
       }
     ],
     "tests": {
@@ -871,16 +894,22 @@
     "generated": {
       "path": [
         "src/codex_plugin_scanner/guard/adapters/pi_extension_*_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_*_source*.py",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_source*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/pi_extension_source*.py",
         "src/codex_plugin_scanner/guard/adapters/pi_extension_runtime_ownership.py",
         "src/codex_plugin_scanner/guard/adapters/cursor_hook_script_template_*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/cursor_hook_script_template_*.py",
         "src/codex_plugin_scanner/guard/adapters/opencode_*template.py",
-        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py"
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/opencode_*template.py",
+        "src/codex_plugin_scanner/guard/adapters/grok_hook_*_template.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/grok_hook_*_template.py"
       ]
     },
     "adapters": {
       "path": [
-        "src/codex_plugin_scanner/guard/adapters/*.py"
+        "src/codex_plugin_scanner/guard/adapters/*.py",
+        "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py"
       ]
     },
     "vendored": {
@@ -1453,12 +1482,11 @@
         "path": "src/codex_plugin_scanner/guard/package_firewall_entitlement.py",
         "symbols": [
           "build_oauth_package_firewall_entitlement",
-          "reconcile_connect_state_with_oauth_entitlement",
-          "package_firewall_operation_allowed"
+          "reconcile_connect_state_with_oauth_entitlement"
         ],
         "entry_points": [],
-        "evidence": "build_oauth_package_firewall_entitlement and reconcile_connect_state_with_oauth_entitlement are called only from cli/connect_flow.py (install-uninstall-doctor), runtime/runner.py (cloud-sync-transport) and daemon/server_control_connect_flow.py; package_firewall_operation_allowed only from daemon/server_control_supply_chain.py (daemon-control-plane-routes). resolve_package_firewall_entitlement and the action-state helpers stay counted. The report validates this reference closure on every run.",
-        "reason": "Building and reconciling the OAuth package-firewall entitlement during connect and cloud sync, and the control API's operation gate."
+        "evidence": "build_oauth_package_firewall_entitlement and reconcile_connect_state_with_oauth_entitlement are called only from cli/connect_flow.py (install-uninstall-doctor), runtime/runner.py (cloud-sync-transport) and daemon/server_control_connect_flow.py. resolve_package_firewall_entitlement and package_firewall_access, which the CLI and the proxy call too, stay counted. The report validates this reference closure on every run.",
+        "reason": "Building and reconciling the OAuth package-firewall entitlement during connect and cloud sync."
       },
       {
         "id": "adapter-openclaw-setup",

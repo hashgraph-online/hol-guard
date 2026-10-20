@@ -242,6 +242,20 @@ class NativeLunaRoute:
             raise
         return self
 
+    def health(self) -> str | None:
+        """Why the adapter has stopped serving, or ``None`` while it is still alive.
+
+        A relay round that cannot connect records only ``URLError`` and zero bytes,
+        which says nothing about why. The adapter's exit code and its last stderr are
+        the only record of a death inside a run, and nothing else prints them:
+        ``_stderr_tail`` is otherwise reached only from a startup failure, so an
+        adapter that dies after a successful start throws its stderr away.
+        """
+        process = self.process
+        if process is None or process.poll() is None:
+            return None
+        return f"the Luna adapter exited with code {process.returncode} during the run" + self._stderr_tail()
+
     def _stderr_tail(self) -> str:
         """The adapter's last stderr lines, redacted, for a startup failure message."""
         # Give the drain a moment to read what a just-exited adapter wrote.

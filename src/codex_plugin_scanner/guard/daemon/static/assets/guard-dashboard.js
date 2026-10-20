@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-BK6hHlfF.js","assets/chunks/app-detail-workspace-D7AhoD71.js","assets/chunks/policy-workspace-page-BTvusmsE.js","assets/chunks/about-workspace-CMujLmFA.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-BFc8UHjL.js","assets/chunks/app-detail-workspace-D7AhoD71.js","assets/chunks/policy-workspace-page-BTvusmsE.js","assets/chunks/about-workspace-CMujLmFA.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -13245,6 +13245,9 @@ function hasCompleteScopeContractBinding(item) {
   return typeof item.scope_contract_version === "string" && item.scope_contract_version.length > 0 && typeof item.scope_contract_digest === "string" && item.scope_contract_digest.length > 0;
 }
 function declaredScopesForAction(item, action) {
+  if (action === "allow" && item.once_only_reason === "script_execution_binding_unavailable") {
+    return [];
+  }
   if (action === "allow" && item.scope_restrictions?.includes("retry_cannot_reuse_approval") && item.exact_action_persistence_eligible !== true) {
     return [];
   }
@@ -13310,6 +13313,15 @@ function normalizeDecisionScope(item, action, scope) {
 const ONCE_ONLY_REASON_COPY = {
   no_command_identity: "Always allow is unavailable: this tool call has no stable command or file to remember. You can allow it once.",
   mutable_launcher: "Always allow is unavailable: this program can run other code or config, so Guard cannot prove what it will do next time. You can allow it once.",
+  node_package_manifest_unproven: "Guard could not verify an installed package's resolution settings. Repair or reinstall the package before remembering this command.",
+  node_package_entrypoint_unproven: "Guard could not bind the installed package entry point to the code it loads. This command cannot be remembered.",
+  node_package_exports_unproven: "Guard cannot yet verify this package's export conditions or path patterns. This command cannot be remembered.",
+  node_package_native_addon_unproven: "Guard has not bound the compiled dependency this package would load. This command cannot be remembered.",
+  node_runtime_package_mutation_unproven: "Guard has not verified that later package loads are protected from this program's file writes. This command cannot be remembered.",
+  runner_code_closure_unproven: "Guard could not bind all code loaded by this package runner and its command. This command cannot be remembered.",
+  python_runtime_module_unproven: "Guard could not bind the installed Python implementation this program imports. This command cannot be remembered.",
+  python_runtime_bootstrap_unproven: "Guard could not bind this Python runtime's startup code and native libraries. This command cannot be remembered.",
+  script_execution_binding_unavailable: "This app cannot run a verified snapshot of this script through this approval. Keep it blocked until a supported execution route is available.",
   compound_command: "Always allow is unavailable: this command chains steps that Guard cannot verify one by one. You can allow it once.",
   guard_control: "Changes to Guard itself are always reviewed. You can allow this one time.",
   package_action: "Package installs and updates are always reviewed. You can allow this one time.",
@@ -14265,7 +14277,7 @@ function searchQueue(items, term) {
   });
 }
 function retryCannotReuseApproval(item) {
-  return item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
+  return item.once_only_reason === "script_execution_binding_unavailable" || item.scope_restrictions?.includes("retry_cannot_reuse_approval") === true;
 }
 function oneTimeRetryWindowMinutes(item) {
   return item.artifact_id.includes(":native-pretool:") ? 5 : 15;
@@ -14286,9 +14298,15 @@ function legacyRequestNextStep(item, harness) {
   return labels === null ? retry : `${retry} To let ${harness} run commands like this, set ${labels} to Allow in Extensions.`;
 }
 function retryCannotReuseApprovalHint(item, harness) {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return onceOnlyReasonCopy(item.once_only_reason);
+  }
   return `An older version of Guard recorded this request, so Run once cannot reach ${harness}'s retry. ${legacyRequestNextStep(item, harness)}`;
 }
 function retryBlockedApprovalCopy(item, harness) {
+  if (item.once_only_reason === "script_execution_binding_unavailable") {
+    return `Decision recorded. ${onceOnlyReasonCopy(item.once_only_reason)}`;
+  }
   return `Decision recorded. ${legacyRequestNextStep(item, harness)}`;
 }
 function receiptDescribesRequest(item, receipt) {
@@ -14699,6 +14717,9 @@ function isPackageDependencyMutationRequest(request2) {
   );
 }
 function plainEnglishRequestTitle(request2) {
+  if (request2.artifact_type === "native_bash_request") {
+    return "Run this script?";
+  }
   const category = detectCategory({
     ...request2,
     timestamp: request2.created_at,
@@ -20587,6 +20608,12 @@ function TabBar(props) {
     tab.value
   )) });
 }
+function reviewDecisionShortcutAllowed(isComposing) {
+  return !isComposing;
+}
+function shouldSubmitApprovalProof(key, isComposing, submitDisabled) {
+  return key === "Enter" && !isComposing && !submitDisabled;
+}
 function approvalGateLockRemainingSeconds(gate, nowMs = Date.now()) {
   if (gate?.enabled === false) return 0;
   if (!gate?.locked_until) return 0;
@@ -20814,7 +20841,7 @@ function ApprovalProofInline(props) {
   );
   const handleKeyDown = reactExports.useCallback(
     (event) => {
-      if (event.key === "Enter" && !submitDisabled) {
+      if (shouldSubmitApprovalProof(event.key, event.nativeEvent.isComposing, submitDisabled)) {
         event.preventDefault();
         props.onSubmit();
       }
@@ -30284,7 +30311,8 @@ function ReviewScopeControls(props) {
         checked: props.rememberExactAction,
         onChange: props.onRememberExactActionChange,
         oneTimeRetryBlocked: props.oneTimeRetryBlocked === true,
-        retryWindowMinutes: props.retryWindowMinutes ?? 15
+        retryWindowMinutes: props.retryWindowMinutes ?? 15,
+        versionBoundScript: props.versionBoundScript === true
       }
     ),
     props.broaderScopeOptions.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-xl border border-brand-blue/15 bg-brand-blue/[0.03] p-3", children: [
@@ -30350,7 +30378,7 @@ function ExactActionPersistenceChoice(props) {
             className: "sr-only"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "This time" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Run once" : "This time" }),
         /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: `Retry within ${props.retryWindowMinutes} minutes.` })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs("label", { className: exactActionChoiceClassName(props.checked), children: [
@@ -30365,8 +30393,8 @@ function ExactActionPersistenceChoice(props) {
             className: "sr-only"
           }
         ),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: "Always allow exact action" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: "Changed commands still need review." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "block text-sm font-semibold text-brand-dark", children: props.versionBoundScript ? "Always allow this version in this project" : "Always allow exact action" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs text-muted-foreground", children: props.versionBoundScript ? "Guard checks code, arguments, dependencies, and policy before every run. Changes need review." : "Changed commands still need review." })
       ] })
     ] })
   ] });
@@ -30395,8 +30423,11 @@ function ScopeChoiceButton(props) {
     }
   );
 }
-function allowButtonLabel(scope) {
+function allowButtonLabel(scope, versionBoundScript = false, persistExactAction = false) {
   if (scope === "artifact") {
+    if (versionBoundScript) {
+      return persistExactAction ? "Always allow this version in this project" : "Run once";
+    }
     return "Allow just this once";
   }
   if (scope === "workspace") {
@@ -32130,7 +32161,7 @@ function useReviewDecisionResolve(params) {
   }, [handleRequestResolve]);
   reactExports.useEffect(() => {
     function handleKeyDown(event) {
-      if (decisionBusy || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
+      if (!reviewDecisionShortcutAllowed(event.isComposing) || decisionBusy || pendingAction !== null || extensionDialogActive || resolved !== null || resolutionBlockReason !== null) {
         return;
       }
       const target2 = event.target;
@@ -32348,6 +32379,7 @@ function ReviewDecisionCard(props) {
     );
   }
   const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
@@ -32365,10 +32397,10 @@ function ReviewDecisionCard(props) {
   }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
   if (watchOnlyObservation) {
     resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow) {
+  } else if (persistExactAllow && !versionBoundScript) {
     resolvedAllowButtonLabel = "Approve and remember";
   } else if (retryCannotReuseApproval(item)) {
     resolvedAllowButtonLabel = "Choose an available approval duration";
@@ -32475,6 +32507,7 @@ function ReviewDecisionCard(props) {
           hasAllowScope,
           taskCapabilityCopy,
           exactActionPersistenceEligible: item.exact_action_persistence_eligible === true,
+          versionBoundScript,
           rememberExactAction,
           oneTimeRetryBlocked: retryCannotReuseApproval(item),
           retryWindowMinutes: oneTimeRetryWindowMinutes(item),
@@ -35601,7 +35634,7 @@ const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() =
 const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DdhT0dGq.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-BK6hHlfF.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-BFc8UHjL.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
 const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-D7AhoD71.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));

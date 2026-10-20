@@ -48,11 +48,31 @@ fn an_allowed_grant_widens_the_sandbox_and_never_allows() {
             serde_json::from_slice(&evaluate_local_cli_hook_request(&request).unwrap()).unwrap();
         assert_eq!(reply["payload"]["action"], ALLOW_CONTAINED_WITH_GRANT);
         assert_eq!(reply["payload"]["contained_grant"], grant);
+        // The caller composes no part of the sandbox requirement.
+        assert_eq!(
+            reply["payload"]["contained_route"],
+            json!({
+                "decision": "deny",
+                "minimum_action": "sandbox-required",
+                "policy_action": "sandbox-required",
+                "reason_code": "native_workspace_containment_required",
+                "reason": GRANT_REASON,
+            })
+        );
     }
     // A generic review keeps today's refinement.
-    let generic = run_refined(&fixture.request("npm run build", "review", true)).unwrap();
+    let generic_request = fixture.request("npm run build", "review", true);
+    let generic = run_refined(&generic_request).unwrap();
     assert_eq!(generic.action, "allow");
     assert_eq!(generic.contained_grant, None);
+    let reply: Value =
+        serde_json::from_slice(&evaluate_local_cli_hook_request(&generic_request).unwrap())
+            .unwrap();
+    assert_eq!(
+        reply["payload"]["contained_route"],
+        Value::Null,
+        "no route without a grant to widen the sandbox"
+    );
 }
 
 #[test]

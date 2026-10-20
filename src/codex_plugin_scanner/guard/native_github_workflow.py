@@ -61,6 +61,8 @@ class GitHubWorkflowLineage:
     operation_id: str
     session_id: str
     record: GitHubWorkflowApprovalRecord
+    capability_id: str
+    nonce: str
 
 
 def github_workflow_describe_native(
@@ -150,6 +152,8 @@ def github_workflow_validated_lineage(
     operation_id = lineage.get("operation_id")
     session_id = lineage.get("session_id")
     record_payload = lineage.get("record")
+    capability_id = lineage.get("capability_id")
+    nonce = lineage.get("nonce")
     if (
         not isinstance(request_id, str)
         or not request_id
@@ -158,6 +162,10 @@ def github_workflow_validated_lineage(
         or not isinstance(session_id, str)
         or not session_id
         or not isinstance(record_payload, dict)
+        or not isinstance(capability_id, str)
+        or not capability_id
+        or not isinstance(nonce, str)
+        or not nonce
     ):
         return None
     try:
@@ -169,6 +177,8 @@ def github_workflow_validated_lineage(
         operation_id=operation_id,
         session_id=session_id,
         record=record,
+        capability_id=capability_id,
+        nonce=nonce,
     )
 
 

@@ -113,14 +113,28 @@ DOCTL_STUB_PYTHON = (
 
 
 VENV = ".venv"
-PYVENV_CFG = (
-    "home = /usr/local/bin\n"
-    "implementation = CPython\n"
-    "uv = 0.9.26\n"
-    "version_info = 3.12.12\n"
-    "include-system-site-packages = false\n"
-    "prompt = project-feature\n"
-)
+def base_interpreter() -> Path:
+    """The real interpreter a ``uv venv`` links its own ``bin/python`` to.
+
+    A virtualenv is a directory of links and generated scripts around an
+    installed interpreter; the stand-ins below only look like the ones a
+    developer works in if they point at a real one.
+    """
+    base = getattr(sys, "_base_executable", None) or sys.executable
+    return Path(base).resolve()
+
+
+def pyvenv_cfg(base: Path) -> str:
+    """The marker ``uv venv`` writes, naming the interpreter it was built from."""
+    version = ".".join(str(part) for part in sys.version_info[:3])
+    return (
+        f"home = {base.parent}\n"
+        "implementation = CPython\n"
+        "uv = 0.9.26\n"
+        f"version_info = {version}\n"
+        "include-system-site-packages = false\n"
+        "prompt = project-feature\n"
+    )
 # The script a virtualenv generates, in its own shape: a `deactivate` function,
 # a `pydoc` function that runs the interpreter the activation puts on PATH,
 # command substitutions, and `hash -r` so the shell forgets the old lookups.
@@ -200,33 +214,29 @@ pydoc () {
 # The hash command must be called to get it to forget past commands.
 hash -r 2>/dev/null || true
 """
-# The interpreter and the test runner the activation puts on PATH. Each one
-# refuses to run outside the activated environment, so a case that reports a
-# pass proves the sourced script actually took effect.
-VENV_PYTHON_STUB = (
-    "#!/bin/sh\n"
-    "# Synthetic stand-in for the virtualenv interpreter: no network, no writes.\n"
-    "set -eu\n"
-    '[ -n "${VIRTUAL_ENV:-}" ]\n'
-    'case "${1:-}" in\n'
-    "  -V|--version) printf 'Python 3.12.12\\n' ;;\n"
-    "  *) printf 'python stand-in: unsupported invocation\\n' >&2; exit 2 ;;\n"
-    "esac\n"
-)
-VENV_PYTEST_STUB = (
-    "#!/bin/sh\n"
-    "# Synthetic stand-in for the installed pytest: no network, no writes.\n"
-    "set -eu\n"
-    '[ -n "${VIRTUAL_ENV:-}" ]\n'
-    "printf '.....\\n'\n"
-    "printf '5 passed in 0.12s\\n'\n"
-)
+def venv_pytest_stub(venv: Path) -> str:
+    """The console script an installed pytest leaves in a virtualenv's ``bin``.
+
+    Its shebang names the environment's own interpreter, the way every
+    generated entry point does, and it refuses to report a pass unless that
+    interpreter is the one running it. Activating the environment and running
+    the environment's own ``bin/pytest`` are the same work, so a case proves
+    the sourced script took effect either way.
+    """
+    return (
+        f"#!{venv}/bin/python\n"
+        '"""Synthetic stand-in for the installed pytest: no network, no writes."""\n'
+        "import sys\n"
+        "\n"
+        f"if sys.prefix != {str(venv)!r}:\n"
+        '    sys.stderr.write("pytest stand-in: not the virtualenv interpreter\\n")\n'
+        "    raise SystemExit(1)\n"
+        'print(".....")\n'
+        'print("5 passed in 0.12s")\n'
+    )
 
 
 VENV_PYTEST_STUB_PYTHON = (
-    "import os, sys\n"
-    "if not os.environ.get('VIRTUAL_ENV'):\n"
-    "    sys.exit(1)\n"
     "print('.....')\n"
     "print('5 passed in 0.12s')\n"
 )
@@ -301,6 +311,21 @@ def write_windows_launcher(bin_dir: Path, name: str, source: str) -> None:
     (bin_dir / f"{name}.cmd").write_text(launcher, encoding="utf-8", newline="")
 
 
+def _link(path: Path, target: Path) -> None:
+    """Link an environment's ``bin`` entry at the interpreter it was built from.
+
+    Windows virtualenvs copy the interpreter rather than link it, and creating a
+    symlink there needs a privilege an ordinary developer does not run with, so
+    the launchers written beside this carry the environment on that platform.
+    """
+    if os.name == "nt":
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if path.is_symlink() or path.exists():
+        path.unlink()
+    path.symlink_to(target)
+
+
 def _write(path: Path, text: str, mode: int | None = None) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     # The oracles compare exact bytes; Windows text mode would write CRLF.
@@ -357,8 +382,10 @@ def add_worktree_venv(worktree: Path) -> None:
     script never has.
     """
     venv = worktree / VENV
-    _write(venv / "pyvenv.cfg", PYVENV_CFG)
+    base = base_interpreter()
+    _write(venv / "pyvenv.cfg", pyvenv_cfg(base))
     _write(venv / "bin/activate", activate_script(venv))
-    _write(venv / "bin/python", VENV_PYTHON_STUB, 0o755)
-    _write(venv / "bin/pytest", VENV_PYTEST_STUB, 0o755)
+    for name in ("python", "python3"):
+        _link(venv / "bin" / name, base)
+    _write(venv / "bin/pytest", venv_pytest_stub(venv), 0o755)
     write_windows_launcher(venv / "bin", "pytest", VENV_PYTEST_STUB_PYTHON)

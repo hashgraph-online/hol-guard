@@ -3,33 +3,68 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+import os
+import threading
+from contextlib import ExitStack, contextmanager
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any, cast
 
 from ..extension_builder import native_source_compiler as transport
 
-_EXECUTABLE: ContextVar[Path | None] = ContextVar("verified_pack_lifecycle_executable", default=None)
+
+class _Session:
+    """Verifies and copies the executable on first use, then reuses that copy."""
+
+    def __init__(self, stack: ExitStack):
+        self._stack = stack
+        self._lock = threading.Lock()
+        self._executable: Path | None = None
+
+    def executable(self) -> Path:
+        with self._lock:
+            if self._executable is None:
+                manifest = transport._verify_manifest(transport._NATIVE_PACKAGE / transport._MANIFEST_NAME)
+                raw = transport._verify_compiler(transport._NATIVE_PACKAGE / transport._COMPILER_NAME, manifest)
+                self._executable = self._stack.enter_context(transport._verified_executable(raw))
+            return self._executable
+
+
+_SESSION: ContextVar[_Session | None] = ContextVar("verified_pack_lifecycle_session", default=None)
 
 
 @contextmanager
 def session():
-    """Reuse one verified executable for an explicit bounded control operation."""
-    if _EXECUTABLE.get() is not None:
+    """Reuse one verified executable for an explicit bounded control operation.
+
+    Verification is deferred to the first native request, so a session that
+    needs no native answer costs nothing.
+    """
+    if _SESSION.get() is not None:
         yield
         return
     try:
-        manifest = transport._verify_manifest(transport._NATIVE_PACKAGE / transport._MANIFEST_NAME)
-        raw = transport._verify_compiler(transport._NATIVE_PACKAGE / transport._COMPILER_NAME, manifest)
-        with transport._verified_executable(raw) as executable:
-            token = _EXECUTABLE.set(executable)
+        with ExitStack() as stack:
+            token = _SESSION.set(_Session(stack))
             try:
                 yield
             finally:
-                _EXECUTABLE.reset(token)
+                _SESSION.reset(token)
     except transport.NativeSourceCompilerError as exc:
         raise ValueError(f"native_pack_lifecycle_unavailable: {exc}") from exc
+
+
+def runtime_fingerprint() -> tuple[tuple[int, ...], ...]:
+    """Cheap identity of the installed runtime files.
+
+    It changes when either file is replaced or modified and raises when one is
+    missing. It never vouches for the bytes: a native request still verifies them.
+    """
+    files = (transport._NATIVE_PACKAGE / transport._MANIFEST_NAME, transport._NATIVE_PACKAGE / transport._COMPILER_NAME)
+    return tuple(
+        (status.st_dev, status.st_ino, status.st_size, status.st_mtime_ns, status.st_ctime_ns)
+        for status in (os.stat(path) for path in files)
+    )
 
 
 def invoke(kind, **fields) -> dict[str, Any]:
@@ -40,7 +75,7 @@ def _invoke(kind, fields, deadline) -> dict[str, Any]:
     try:
         request = json.dumps({"kind": kind, **fields}, sort_keys=True, separators=(",", ":")).encode()
         with session():
-            executable = _EXECUTABLE.get()
+            executable = cast(_Session, _SESSION.get()).executable()
             code, stdout, stderr = transport._run_bounded(
                 [str(executable), "pack-lifecycle", "--stdin"], request, timeout=deadline
             )

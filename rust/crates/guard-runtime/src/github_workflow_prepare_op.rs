@@ -280,6 +280,8 @@ fn lineage(request: &GithubWorkflowPrepareRequestV1) -> Result<Option<Value>, &'
             "operation_id": lineage.operation_id,
             "session_id": lineage.session_id,
             "record": lineage.record.to_value(),
+            "capability_id": lineage.capability_id,
+            "nonce": lineage.nonce,
         })
     }))
 }

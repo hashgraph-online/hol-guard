@@ -26,6 +26,8 @@ pub const APPROVAL_RESOLUTION_PLAN_MAX_BYTES: usize = 256 * 1024;
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ApprovalResolutionPlanEnvelopeV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_bash: Option<Value>,
     #[serde(default)]
     pub raw_command_text: Option<String>,
     #[serde(default)]

@@ -65,6 +65,8 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
+    CANONICAL_COMPILE_DOCUMENT_CODES,
+    CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -306,12 +308,17 @@ def _validate_cached_policy_bundle(
     return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
     resolved_reason = reason or "invalid_policy_bundle"
     payload: dict[str, object] = {"reason": resolved_reason}
     remediation = policy_bundle_rejection_message(resolved_reason)
     if remediation is not None:
         payload["message"] = remediation
+    # One rule refuses to compile and the whole bundle stays unapplied, so the
+    # rejection names that rule: without it an administrator sees only that a
+    # published policy never arrived.
+    if rule_id:
+        payload["ruleId"] = rule_id[:128]
     return payload
 
 
@@ -649,6 +656,7 @@ def sync_receipts(
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
     if policy_bundle_field_provided:
         policy_bundle_rejection_reason: str | None
+        policy_bundle_rejection_rule_id: str | None = None
         if policy_bundle_field_malformed or policy_bundle_payload is None:
             policy_bundle_rejection_reason = "invalid_policy_bundle"
         else:
@@ -775,7 +783,9 @@ def sync_receipts(
                     )
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+                policy_bundle_rejection_reason = f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}"
+                if error.code not in CANONICAL_COMPILE_DOCUMENT_CODES:
+                    policy_bundle_rejection_rule_id = error.rule_id
             except PolicyBundleNativeError as error:
                 candidate_policy_decisions = []
                 validated_policy_bundle = None
@@ -798,7 +808,10 @@ def sync_receipts(
             # checkpoint. Prefer current so a rejected refresh cannot roll
             # policy authority back to an older signed bundle.
             effective_policy_bundle = existing_policy_bundle or last_good_bundle
-            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
+            activation_last_error = _policy_bundle_rejection_payload(
+                policy_bundle_rejection_reason,
+                policy_bundle_rejection_rule_id,
+            )
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,

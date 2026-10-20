@@ -44,6 +44,17 @@ def framed_digest(purpose: str, payload: object) -> str:
     return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
 
 
+def capability_id(request_id: str) -> str:
+    """The id a workflow capability for ``request_id`` is stored under.
+
+    Spelled out here rather than imported from the runtime, so a drift in the
+    resident's derivation fails a test instead of silently renaming every
+    capability the store already holds.
+    """
+
+    return f"gwc-{framed_digest('github-workflow-capability', request_id)}"
+
+
 def binding(
     *,
     operation: str = "lock-issue",
@@ -116,11 +127,14 @@ def native_lineage_verified(monkeypatch: pytest.MonkeyPatch) -> None:
         record = runtime_module.approval_record_from_approval_request(approval_request)
         if record is None:
             return None
+        request_id = str(approval_request["request_id"])
         return GitHubWorkflowLineage(
-            request_id=str(approval_request["request_id"]),
+            request_id=request_id,
             operation_id=str(operation["operation_id"]),
             session_id=str(session["session_id"]),
             record=record,
+            capability_id=f"gwc-{framed_digest('github-workflow-capability', request_id)}",
+            nonce=framed_digest("github-workflow-nonce", request_id),
         )
 
     monkeypatch.setattr(runtime_module, "github_workflow_validated_lineage", verified)

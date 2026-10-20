@@ -179,7 +179,11 @@ def test_legacy_publication_requires_the_entire_attested_run_to_succeed(monkeypa
         assert publication_ready("hashgraph-online/hol-guard", "123", "a" * 40) is expected
 
 
-def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path):
+@pytest.mark.parametrize(
+    ("canary", "pr_canary", "accepted"),
+    [(False, "false", True), (True, "true", True), (True, "false", False)],
+)
+def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_path, canary, pr_canary, accepted):
     for name in ("pyproject.toml", "uv.lock", "src/codex_plugin_scanner/version.py", "scripts/sync_repo_version.py"):
         destination = tmp_path / name
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -207,22 +211,31 @@ def test_precompilation_stamps_a_requested_version_above_the_source_version(tmp_
         [sys.executable, "scripts/sync_repo_version.py", "--check"], cwd=tmp_path, text=True
     ).strip()
     major, minor, patch = source_version.split(".")
-    requested = f"{major}.{minor}.{int(patch) + 1}"
+    # PR canaries embed the resolved PEP 440 dev release of the source version.
+    requested = f"{source_version}.dev1234567" if canary else f"{major}.{minor}.{int(patch) + 1}"
     job = load_workflow(ROOT / ".github/workflows/release-native-prepare.yml")["jobs"]["compile"]
     identity = next(step for step in job["steps"] if step.get("name") == "Bind exact source and version")
     output = tmp_path / "environment"
-    subprocess.run(
+    completed = subprocess.run(
         ["bash", "-c", identity["run"]],
         cwd=tmp_path,
-        check=True,
+        check=False,
         env={
             **env,
             "PATH": f"{tools}{os.pathsep}{env['PATH']}",
             "SOURCE_SHA": source_sha,
             "VERSION": requested,
+            "PR_CANARY": pr_canary,
             "GITHUB_ENV": str(output),
         },
     )
+    if not accepted:
+        # A dev version outside a PR canary compile is refused before anything is stamped.
+        assert completed.returncode != 0
+        assert not output.exists()
+        assert subprocess.check_output(["git", "diff", "--name-only"], cwd=tmp_path, env=env, text=True) == ""
+        return
+    assert completed.returncode == 0
     recorded = output.read_text()
     assert f"VERSION={requested}\n" in recorded
     assert f"HOL_GUARD_PACKAGE_VERSION={requested}\n" in recorded
@@ -293,15 +306,20 @@ def test_feed_discovery_skips_unfinished_and_ambiguous_releases(tmp_path):
 
 def test_compilation_and_signing_run_beside_packaging_and_registry_verification():
     jobs = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
-    assert jobs["precompile-native"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    resolvers = ["authorize-release", "resolve-alpha-version", "resolve-canary-version"]
+    assert jobs["precompile-native"]["needs"] == resolvers
     assert jobs["resolve-alpha-version"]["needs"] == "authorize-release"
-    # Build + Verify adopts the resolved alpha version so it can never differ from the binaries.
-    assert jobs["build"]["needs"] == ["authorize-release", "resolve-alpha-version"]
+    # Build + Verify adopts the resolved alpha or canary version so it can never differ
+    # from the binaries.
+    assert jobs["build"]["needs"] == resolvers
     assert "needs.authorize-release.result == 'success'" in jobs["build"]["if"]
     assert "!cancelled()" in jobs["build"]["if"]
     version_step = next(step for step in jobs["build"]["steps"] if step.get("id") == "version")
     assert version_step["env"]["RESOLVED_ALPHA_VERSION"] == "${{ needs.resolve-alpha-version.outputs.version }}"
     assert 'RELEASE_VERSION="$RESOLVED_ALPHA_VERSION"' in version_step["run"]
+    assert version_step["env"]["RESOLVED_CANARY_VERSION"] == "${{ needs.resolve-canary-version.outputs.version }}"
+    assert 'VERSION="$RESOLVED_CANARY_VERSION"' in version_step["run"]
+    assert "def pair(" not in version_step["run"]
     assert jobs["build-native-guard-wheels"]["needs"] == ["build", "precompile-native"]
     assert "publish-main-pypi" not in jobs["publish-main-assets"]["needs"]
     assert jobs["wake-main-core-feeds"]["needs"] == ["build", "publish-main-assets"]

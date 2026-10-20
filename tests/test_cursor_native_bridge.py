@@ -15,17 +15,17 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard import codex_hook_command_line
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_command_line import split_cursor_hook_command
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_native import (
+    NATIVE_CURSOR_HOOK_COMMAND,
+    NATIVE_CURSOR_HOOK_FEATURE,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
-from codex_plugin_scanner.guard.adapters.cursor_hook_command_line import split_cursor_hook_command
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
     _is_managed_hook_command,
     _is_structured_managed_cursor_hook_command,
     _live_cursor_hook_script_path,
     _managed_hook_command,
-)
-from codex_plugin_scanner.guard.adapters.cursor_hook_native import (
-    NATIVE_CURSOR_HOOK_COMMAND,
-    NATIVE_CURSOR_HOOK_FEATURE,
 )
 from codex_plugin_scanner.guard.adapters.cursor_hooks import _HOOK_SCRIPT_TEMPLATE, cursor_hook_script_source
 from codex_plugin_scanner.guard.adapters.native_hook_bridge import native_hook_bridge_executable

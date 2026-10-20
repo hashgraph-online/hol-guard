@@ -23,6 +23,8 @@ fn proven_in(command: &str, context: crate::pretool::PathContext<'_>) -> bool {
 fn plain_public_reads_are_proven() {
     for command in [
         "curl https://example.com/api/health",
+        "curl -q -fsS http://127.0.0.1:3001/alpha/list",
+        "curl --disable --url https://example.com/api/health",
         "curl -sS --max-time 20 https://example.com/api/health",
         "curl -s --max-time=15 https://example.com/api/health",
         "curl -fsS https://example.com/install.txt",
@@ -46,6 +48,8 @@ fn plain_public_reads_are_proven() {
 fn bodies_files_credentials_and_routing_stay_reviewed() {
     for command in [
         "curl -L https://example.com/r",
+        "curl -s -q https://example.com/r",
+        "curl --disable --no-disable https://example.com/r",
         "curl -fsSL https://example.com/install.txt",
         "curl --location https://example.com/r",
         "curl -sL -H 'Metadata-Flavor: Google' https://example.com/r",

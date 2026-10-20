@@ -102,9 +102,13 @@ fn worktree_add_then_cd_into_it_is_proved_on_windows() {
         )),
         "allow"
     );
+    // Another directory than the one Git creates, but a checkout of the agent's
+    // own under the profile, which the sibling route now admits on Windows too.
+    assert_eq!(
+        action(&format!("{add} && cd {source} && git log -1")),
+        "allow"
+    );
     for command in [
-        // Another directory than the one Git creates.
-        format!("{add} && cd {source} && git log -1"),
         // A different spelling of the parent stays unproved.
         format!("{add} && cd {} && git log -1", fresh.to_lowercase()),
         format!("{add} && cd {} && git log -1", fresh.replace('/', "\\")),

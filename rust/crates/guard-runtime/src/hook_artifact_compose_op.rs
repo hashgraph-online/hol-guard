@@ -4,17 +4,23 @@
 //! lattice composition (config, trusted CLI action, untrusted payload hint,
 //! native floors, package, data-flow, scanner), local-grant eligibility and
 //! settlement, and the risk copy that accompanies the composed action. The
-//! reuse, override, and copy queries live in `hook_artifact_compose_reuse`.
+//! reuse, override, and copy queries live in `hook_artifact_compose_reuse`,
+//! and the prompt-request reason in `hook_artifact_compose_prompt`.
 //! Every query is pure and fails closed: unknown actions normalize to review.
 
 use guard_contracts::{
-    normalize_guard_action, normalize_guard_action_result, GrantSettleQueryV1, GuardAction,
-    HookArtifactComposeQueryV1, HookArtifactComposeRequestV1, HookArtifactComposeResultV1,
-    HookNativeEdgeV1, NativeEdgeFactsV1, ObserveExecutableActionQueryV1, PolicyStackQueryV1,
+    compose_action_from_signals, normalize_guard_action, normalize_guard_action_result,
+    GrantSettleQueryV1, GuardAction, HookArtifactComposeQueryV1, HookArtifactComposeRequestV1,
+    HookArtifactComposeResultV1, HookNativeEdgeV1, NativeEdgeFactsV1,
+    ObserveExecutableActionQueryV1, PolicyStackQueryV1, RiskSignalV2, SignalCompositionQueryV1,
     HOOK_ARTIFACT_COMPOSE_REQUEST_SCHEMA, HOOK_ARTIFACT_COMPOSE_RESULT_SCHEMA,
 };
 use serde_json::{json, Map, Value};
 
+use crate::hook_artifact_compose_package_firewall as package_firewall;
+use crate::hook_artifact_compose_package_firewall_entitlement as package_firewall_entitlement;
+use crate::hook_artifact_compose_policy_lookup as lookup;
+use crate::hook_artifact_compose_prompt as prompt;
 use crate::hook_artifact_compose_reuse as reuse;
 use crate::hook_decision_compose::{edge_action, edge_floor, is_hard};
 use crate::hook_policy_config::{artifact_policy_action, data_flow_configured_action};
@@ -83,7 +89,45 @@ pub(crate) fn compose(query: &HookArtifactComposeQueryV1) -> Result<Value, Strin
         HookArtifactComposeQueryV1::ClaimedReuse(query) => reuse::claimed_reuse(query),
         HookArtifactComposeQueryV1::DecisionCopy(query) => reuse::decision_copy(query),
         HookArtifactComposeQueryV1::DecisionBuildCopy(query) => reuse::decision_build_copy(query)?,
+        HookArtifactComposeQueryV1::PolicyLookupSelect(query) => {
+            lookup::policy_lookup_select(query)?
+        }
+        HookArtifactComposeQueryV1::PromptRequestReason(query) => {
+            prompt::prompt_request_reason(query)
+        }
+        HookArtifactComposeQueryV1::RememberedRuleReason(query) => {
+            reuse::remembered_rule_reason(query)
+        }
+        HookArtifactComposeQueryV1::PackageReuseSettle(query) => reuse::package_reuse_settle(query),
+        HookArtifactComposeQueryV1::PackageFirewallEntitlement(query) => {
+            package_firewall_entitlement::package_firewall_entitlement(query)?
+        }
+        HookArtifactComposeQueryV1::PackageFirewallAccess(query) => {
+            package_firewall::package_firewall_access(query)?
+        }
+        HookArtifactComposeQueryV1::SignalComposition(query) => signal_composition(query)?,
     })
+}
+
+/// `compose_action_from_signals` over a detector run. The signals decode
+/// strictly: a payload the detector contract rejects refuses the request
+/// rather than composing over a signal this side guessed at.
+fn signal_composition(query: &SignalCompositionQueryV1) -> Result<Value, String> {
+    let mut signals = Vec::with_capacity(query.signals.len());
+    for (index, payload) in query.signals.iter().enumerate() {
+        let signal = RiskSignalV2::decode(payload)
+            .map_err(|error| format!("signals[{index}] is not a risk signal: {}", error.0))?;
+        signals.push(signal);
+    }
+    let composed = compose_action_from_signals(&signals, &query.base_action);
+    Ok(json!({
+        "action": composed.action.as_str(),
+        "reason": composed.reason,
+        "downgraded": composed.downgraded,
+        "upgraded": composed.upgraded,
+        "normalization_reason_code": composed.normalization_reason_code,
+        "original_action": composed.original_action,
+    }))
 }
 
 pub(crate) fn act(value: &Value) -> GuardAction {

@@ -95,3 +95,16 @@ def test_scope_holds_the_model_to_the_one_requested_search() -> None:
     # A denial may stop the run before the search; the call it did make still counts.
     assert native_tools_scope_error(SCENARIO, [_lookup()], {}, guard_denied=True) is None
     assert native_tools_scope_error(SCENARIO, [{"id": "1", "name": "bash", "args": {"command": "ls"}}], {}) is not None
+
+
+def test_the_realistic_fixture_the_runner_builds_still_finds_the_recorded_log(tmp_path: Path) -> None:
+    """The runner moves the agent into a linked worktree after the stub is written.
+
+    The stand-in appends to the checkout it was created with, so a proof that read the
+    post-move workspace looked in a directory the stand-in never writes to and the case
+    could never pass.
+    """
+    fixture = create_fixture(tmp_path / "case", realistic=True, scenario_id=GITHUB_LOOKUP_CASE)
+    assert fixture.workspace != fixture.gh_log_root
+    _search(fixture, GITHUB_LOOKUP_QUERY)
+    assert filesystem_checks(fixture, "native-tools", GITHUB_LOOKUP_CASE)[CHECK] is True

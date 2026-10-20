@@ -466,3 +466,151 @@ fn benign_github_shell_requires_command_text() {
         Err("native_sensitive_request_input_invalid")
     );
 }
+
+/// The artifact queries answer the same question as the plain ones and name
+/// the review in one reply. Both halves have to describe the same request:
+/// asking twice would let the artifact point at a path the caller no longer
+/// acts on.
+#[test]
+fn a_read_artifact_query_returns_the_match_and_its_artifact_together() {
+    let reply = ask(
+        "file_read_artifact",
+        &json!({
+            "tool_name": "Read",
+            "arguments": {"file_path": "~/.ssh/id_rsa"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "project",
+        }),
+    )
+    .expect("answered");
+    let plain = ask(
+        "file_read",
+        &json!({
+            "tool_name": "Read",
+            "arguments": {"file_path": "~/.ssh/id_rsa"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply["match"], plain);
+    let artifact = &reply["artifact"];
+    assert_eq!(artifact["artifact_type"], json!("file_read_request"));
+    assert_eq!(artifact["harness"], json!("claude-code"));
+    assert_eq!(artifact["source_scope"], json!("project"));
+    assert_eq!(
+        artifact["config_path"],
+        json!("/home/user/.claude/settings.json")
+    );
+    let artifact_id = artifact["artifact_id"].as_str().expect("id");
+    assert!(
+        artifact_id.starts_with("claude-code:project:file-read:"),
+        "{artifact_id}"
+    );
+    assert_eq!(
+        artifact["metadata"]["normalized_path"],
+        plain["path_match"]["path"]
+    );
+}
+
+/// No sensitive request is no artifact. The reply still carries both keys so
+/// the caller reads one shape either way.
+#[test]
+fn an_ordinary_path_yields_no_read_artifact() {
+    let reply = ask(
+        "file_read_artifact",
+        &json!({
+            "tool_name": "Read",
+            "arguments": {"file_path": "/work/src/main.rs"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "project",
+        }),
+    )
+    .expect("answered");
+
+    assert_eq!(reply, json!({"match": null, "artifact": null}));
+}
+
+/// The naming describes the call site, so a reply cannot be built without it.
+/// Guessing a harness or a scope would key the review under a name no saved
+/// approval uses.
+#[test]
+fn an_artifact_query_without_naming_is_rejected() {
+    for input in [
+        json!({"tool_name": "Read", "arguments": {"file_path": "~/.ssh/id_rsa"}}),
+        json!({
+            "tool_name": "Read",
+            "arguments": {"file_path": "~/.ssh/id_rsa"},
+            "harness": "",
+            "config_path": "/c",
+            "source_scope": "project",
+        }),
+    ] {
+        assert_eq!(
+            ask("file_read_artifact", &input),
+            Err("native_sensitive_request_input_invalid"),
+            "{input}"
+        );
+    }
+}
+
+/// A write request is keyed by its action class as well as its path, so the
+/// write artifact has to come from the write builder rather than the read one.
+#[test]
+fn a_write_artifact_query_names_the_action_class() {
+    let reply = ask(
+        "file_write_artifact",
+        &json!({
+            "tool_name": "Write",
+            "arguments": {"file_path": "~/.ssh/id_rsa", "content": "x"},
+            "cwd": "/work",
+            "home_dir": "/home/user",
+            "protected_paths": {},
+            "harness": "claude-code",
+            "config_path": "/home/user/.claude/settings.json",
+            "source_scope": "project",
+        }),
+    )
+    .expect("answered");
+
+    // The path is one `classify_path` flags, so a missing match or artifact
+    // is a regression rather than a case to skip.
+    let artifact = &reply["artifact"];
+    assert!(!reply["match"].is_null(), "expected a write match: {reply}");
+    assert!(!artifact.is_null(), "expected a write artifact: {reply}");
+    assert_eq!(artifact["artifact_type"], json!("tool_action_request"));
+    assert_eq!(
+        artifact["metadata"]["action_class"],
+        reply["match"]["action_class"]
+    );
+    let artifact_id = artifact["artifact_id"].as_str().expect("id");
+    assert!(
+        artifact_id.starts_with("claude-code:project:file-write:"),
+        "{artifact_id}"
+    );
+}
+
+/// A review names the file, not its whole path. Windows paths split on `\`
+/// there, the way `Path(...).name` read them; elsewhere `\` is part of a name.
+#[test]
+fn an_artifact_name_is_the_last_path_component() {
+    use crate::sfrs_requests::artifact_file_name;
+
+    assert_eq!(artifact_file_name("/home/user/.ssh/id_rsa"), "id_rsa");
+    let windows_path = "C:\\Users\\dev\\.ssh\\id_rsa";
+    assert_eq!(
+        artifact_file_name(windows_path),
+        if cfg!(windows) {
+            "id_rsa"
+        } else {
+            windows_path
+        }
+    );
+}

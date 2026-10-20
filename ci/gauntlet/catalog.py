@@ -8,6 +8,13 @@ import shlex
 from dataclasses import dataclass
 from pathlib import Path
 
+from .approval_retry_bash import (
+    BASH_LIFECYCLE_CASES,
+    BASH_LIFECYCLE_ORACLE,
+    DENIAL_CASE,
+    MUTATION_CASE,
+    targets_script,
+)
 from .extension_adapters import extension_adapter
 from .fixtures import digest_file
 from .remote_code import REMOTE_CODE_CASES
@@ -130,6 +137,7 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             "native-tools",
             "full-task",
             "approved-retry",
+            BASH_LIFECYCLE_ORACLE,
             "connector-setup",
             "connector-setup-ask",
             "connector-tool",
@@ -152,6 +160,17 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             scenario.expectation != "allow" or scenario.required_tools != ("bash",) or "core" in scenario.profiles
         ):
             raise ValueError("approve-then-retry cases are allow-only shell cases and never join the core profile")
+        if scenario.oracle == BASH_LIFECYCLE_ORACLE:
+            blocked = scenario.id in {MUTATION_CASE, DENIAL_CASE}
+            if (
+                scenario.id not in BASH_LIFECYCLE_CASES
+                or scenario.expectation != ("block" if blocked else "allow")
+                or len(scenario.commands) != 1
+                or not targets_script(scenario.commands[0])
+                or scenario.required_tools != ("bash",)
+                or scenario.profiles != ("approval-retry",)
+            ):
+                raise ValueError("Bash approval lifecycle case has an invalid id, outcome, command or profile")
         _validate_connector(scenario)
         if scenario.oracle == "blocked-extension":
             extension_adapter(scenario.commands[0])
@@ -169,7 +188,8 @@ def load_catalog_data(data: object) -> tuple[Scenario, ...]:
             raise ValueError("Watch cases require the fixed harmless command and prompt")
         if scenario.oracle == "blocked-read" and not scenario.path:
             raise ValueError("blocked reads require one exact target")
-        if scenario.oracle.startswith("blocked-") != (scenario.expectation == "block"):
+        lifecycle_block = scenario.oracle == BASH_LIFECYCLE_ORACLE and scenario.id in {MUTATION_CASE, DENIAL_CASE}
+        if scenario.oracle.startswith("blocked-") != (scenario.expectation == "block" and not lifecycle_block):
             raise ValueError("oracle and expectation disagree")
         if not scenario.prompt or not scenario.profiles:
             raise ValueError("scenario prompt and profiles are required")

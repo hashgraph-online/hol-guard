@@ -235,7 +235,14 @@ def _evaluate(
         or shlex.split(intent.redacted_command) != tokens
     ):
         return None
-    artifact = build_package_request_artifact(harness, intent, config_path="hol-guard.toml", source_scope="project")
+    artifact = build_package_request_artifact(
+        harness,
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+        guard_home=guard_home,
+        deadline_monotonic=deadline,
+    )
     artifact = replace(artifact, metadata={**artifact.metadata, VERIFIED_NPM_VERSION_KEY: version})
     return evaluate_package_request_artifact(
         artifact=artifact, store=cast("GuardStore", store), workspace_dir=workspace

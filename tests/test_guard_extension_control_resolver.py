@@ -6,14 +6,15 @@ from typing import cast
 
 import pytest
 
+from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
     CommandSafetyExtensionRegistry,
 )
-from codex_plugin_scanner.guard.runtime.effect_decision import EffectDecisionRequest, evaluate_effect_decision
 from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     CONTROL_SCHEMA_VERSION,
     ControlLayerKind,
+    ControlResolution,
     ControlResolverFailure,
     ControlState,
     ControlSurface,
@@ -27,6 +28,12 @@ from codex_plugin_scanner.guard.runtime.extension_control_resolver import (
     compose_control_layers,
     resolve_extension_controls,
 )
+
+
+def _floors(resolution: ControlResolution) -> tuple[GuardAction, ...]:
+    """The action floors the resolver asked for, which the runtime composes."""
+
+    return tuple(factor.basis.action_floor for factor in resolution.factors)
 
 
 def _catalog_subjects() -> tuple[str, str]:
@@ -111,10 +118,10 @@ def test_adding_restrictions_never_reduces_the_resolved_action() -> None:
                 permission_ids=(permission_id,),
                 surface=ControlSurface.COMMAND_EVALUATION,
             )
-            actions[disabled] = evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action
+            actions[disabled] = _floors(resolution)
 
-    assert actions[frozenset()] != "block"
-    assert all(action == "block" for disabled, action in actions.items() if disabled)
+    assert "block" not in actions[frozenset()]
+    assert all("block" in floors for disabled, floors in actions.items() if disabled)
 
 
 def test_global_lockdown_preserves_observations_and_allows_only_typed_local_recovery() -> None:
@@ -215,7 +222,7 @@ def test_disabled_extension_permission_dependency_and_implied_permission_each_bl
             surface=ControlSurface.COMMAND_EVALUATION,
         )
         assert resolution.blocked is True
-        assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
+        assert "block" in _floors(resolution)
         assert resolution.factors[0].reason_code == expected_reason
 
 
@@ -243,7 +250,7 @@ def test_resolver_failures_are_typed_privacy_safe_and_fail_closed() -> None:
         )
         assert resolution.blocked is True
         assert resolution.failures[0].code is expected_code
-        assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
+        assert "block" in _floors(resolution)
         serialized = repr(resolution.factors)
         assert "private-unknown-input" not in serialized
 
@@ -309,7 +316,7 @@ def test_resolver_rejects_alias_targets_instead_of_missing_disabled_control() ->
 
     assert resolution.blocked is True
     assert resolution.failures[0].code is ResolverFailureCode.NON_CANONICAL_TARGET
-    assert evaluate_effect_decision(EffectDecisionRequest(resolution.factors)).action == "block"
+    assert "block" in _floors(resolution)
 
 
 def test_resolver_input_limits_fail_closed_at_boundary() -> None:

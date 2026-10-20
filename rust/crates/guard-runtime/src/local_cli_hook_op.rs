@@ -67,6 +67,7 @@ pub(crate) fn evaluate_local_cli_hook_request(
             }
             if let Some(grant) = refined.contained_grant {
                 payload["contained_grant"] = grant;
+                payload["contained_route"] = crate::local_cli_hook_contained::contained_route();
             }
             ("ok".to_owned(), "ok".to_owned(), Some(payload))
         }

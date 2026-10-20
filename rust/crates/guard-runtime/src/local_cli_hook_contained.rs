@@ -24,6 +24,15 @@ pub(crate) const ALLOW_CONTAINED_WITH_GRANT: &str = "allow-contained-with-grant"
 /// program; `guard_command::pretool::workspace_contained::OUTSIDE_ROOTS_REASON`.
 pub(crate) const OUTSIDE_ROOTS_REASON: &str =
     "native_workspace_containment_executable_outside_roots";
+/// The reason code a sandbox-bound command the grant widens is routed to;
+/// `guard_command::pretool::workspace_contained::WORKSPACE_REASON`.
+pub(crate) const WORKSPACE_REASON: &str = "native_workspace_containment_required";
+/// The sentence that names the grant as the only widening of the sandbox.
+pub(crate) const GRANT_REASON: &str = concat!(
+    "HOL Guard runs this command in a protected workspace sandbox, widened only by the ",
+    "local CLI access you approved on this device."
+);
+
 /// Every capability a grant may turn on, in their canonical order.
 pub(crate) const GRANT_CAPABILITIES: [&str; 3] =
     ["loopback-network", "state-dir-read", "state-dir-write"];
@@ -121,6 +130,21 @@ pub(crate) fn refine(
         },
         _ => Refined::keep(request),
     }
+}
+
+/// The review fields a granted outside-roots command is routed to.
+///
+/// The caller owns no part of this verdict: it narrows the review it holds to
+/// the surfaces this operation reads, and copies the answer back. A caller
+/// that cannot reach the resident keeps its review.
+pub(crate) fn contained_route() -> Value {
+    json!({
+        "decision": "deny",
+        "minimum_action": "sandbox-required",
+        "policy_action": "sandbox-required",
+        "reason_code": WORKSPACE_REASON,
+        "reason": GRANT_REASON,
+    })
 }
 
 /// The decision's capability names: absent is none; anything but a sorted,

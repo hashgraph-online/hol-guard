@@ -200,6 +200,8 @@ def _lineage_reply(request: dict[str, Any], **lineage_overrides: Any) -> dict[st
         "operation_id": "op-1",
         "session_id": "sess-1",
         "record": descriptor().record.to_dict(),
+        "capability_id": "gwc-cap-1",
+        "nonce": "nonce-1",
     }
     lineage.update(lineage_overrides)
     return _reply(request, lineage=lineage)
@@ -208,7 +210,12 @@ def _lineage_reply(request: dict[str, Any], **lineage_overrides: Any) -> dict[st
 def test_lineage_forwards_the_rows_and_decodes_the_resident_verdict(harness: _Harness) -> None:
     harness.reply = _lineage_reply
     assert _lineage() == bridge.GitHubWorkflowLineage(
-        request_id="req-1", operation_id="op-1", session_id="sess-1", record=descriptor().record
+        request_id="req-1",
+        operation_id="op-1",
+        session_id="sess-1",
+        record=descriptor().record,
+        capability_id="gwc-cap-1",
+        nonce="nonce-1",
     )
     request = harness.requests[0]
     assert request["mode"] == "lineage"
@@ -228,6 +235,10 @@ def test_lineage_forwards_the_rows_and_decodes_the_resident_verdict(harness: _Ha
         lambda request: _lineage_reply(request, session_id=7),
         lambda request: _lineage_reply(request, record="record"),
         lambda request: _lineage_reply(request, record={"schema_version": "bad"}),
+        lambda request: _lineage_reply(request, capability_id=""),
+        lambda request: _lineage_reply(request, capability_id=None),
+        lambda request: _lineage_reply(request, nonce=""),
+        lambda request: _lineage_reply(request, nonce=11),
         lambda request: {**_lineage_reply(request), "request_sha256": "sha256:" + "0" * 64},
     ),
 )

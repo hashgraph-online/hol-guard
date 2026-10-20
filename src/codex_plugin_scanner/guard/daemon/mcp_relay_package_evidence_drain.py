@@ -379,4 +379,5 @@ def _package_artifact(
         intent=intent,
         config_path=config_path,
         source_scope=source_scope,
+        guard_home=guard_home,
     )

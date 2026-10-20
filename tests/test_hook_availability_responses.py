@@ -5,6 +5,7 @@ from pathlib import Path
 from codex_plugin_scanner.guard.daemon.hook_availability_policy import (
     availability_harness_response,
     cursor_unparseable_input_permission,
+    hook_event_pauses_when_unavailable,
 )
 
 
@@ -189,3 +190,13 @@ def test_cursor_unparseable_input_denies_actions_and_preserves_known_observation
     empty, empty_code = cursor_unparseable_input_permission("")
     assert empty_code == 2
     assert empty["permission"] == "deny"
+
+
+def test_only_events_that_can_still_protect_pause_the_turn() -> None:
+    # The prompt and anything that gates a tool call pause: Guard can still
+    # keep the action from happening.
+    for event in ("UserPromptSubmit", "user_prompt_submitted", "PreToolUse", "beforeShellExecution"):
+        assert hook_event_pauses_when_unavailable(event) is True
+    # The tool already ran, and lifecycle events never gated one.
+    for event in ("PostToolUse", "post_tool", "afterShellExecution", "SessionStart", "Stop"):
+        assert hook_event_pauses_when_unavailable(event) is False

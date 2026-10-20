@@ -17,7 +17,7 @@ pub const CISCO_PREFLIGHT_REQUEST_SCHEMA: &str = "guard-cisco-preflight-request.
 /// Schema discriminator for the result.
 pub const CISCO_PREFLIGHT_RESULT_SCHEMA: &str = "guard-cisco-preflight-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const CISCO_PREFLIGHT_FEATURE: &str = "cisco-preflight-v1";
+pub const CISCO_PREFLIGHT_FEATURE: &str = "cisco-preflight-v2";
 /// Largest canonical request serialization the op will accept.
 pub const CISCO_PREFLIGHT_MAX_BYTES: usize = 4 * 1024 * 1024;
 /// Most targets, steps or findings one request may carry.
@@ -38,6 +38,11 @@ pub struct CiscoPlanQueryV1 {
     pub home: Option<String>,
     #[serde(default)]
     pub approved_scan_roots: Vec<String>,
+    /// Every proven shell working directory the action's relative targets may
+    /// resolve against. Each is planned as a selected workspace in turn, and
+    /// all of them are approved roots for every one of those plans.
+    #[serde(default)]
+    pub shell_cwds: Vec<String>,
     #[serde(default)]
     pub target_paths: Vec<String>,
     pub sources: Vec<String>,

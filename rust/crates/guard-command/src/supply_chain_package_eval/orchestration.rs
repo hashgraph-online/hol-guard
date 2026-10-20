@@ -1,4 +1,5 @@
-use super::evaluation::{cached_eval_has_reason_code, cached_supply_chain_eval_is_reusable};
+use super::cache_reuse::CacheContext;
+use super::evaluation::cached_supply_chain_eval_is_reusable;
 use super::*;
 
 // ---------------------------------------------------------------------------
@@ -85,6 +86,10 @@ pub(super) fn evaluate_package_request_artifact_uncached(
         deps.bundle
             .load_supply_chain_bundle_response(&bundle_payload)
             .ok()
+            .filter(|response| {
+                response.bundle.get("workspaceId").and_then(Value::as_str)
+                    == workspace_id.as_deref()
+            })
     };
     let bundle_meta_map = bundle_response
         .as_ref()
@@ -95,9 +100,13 @@ pub(super) fn evaluate_package_request_artifact_uncached(
         .map(|id| workspace_fingerprint(deps, id, workspace_dir, artifact, bundle_meta.as_ref()));
     let workspace_fingerprint = workspace_fingerprint.as_deref();
 
-    // Reusable cached evaluation for this bundle and workspace (:543-580). A cached
-    // cloud-validation error is reused only while a saved block policy covers it.
-    if let (Some(id), Some(meta)) = (workspace_id.as_deref(), bundle_meta.as_ref()) {
+    // The cache only identifies reusable material. Current native bundle or
+    // saved-block authority must reconstruct the decision before returning it.
+    if let (Some(id), Some(meta), Some(response)) = (
+        workspace_id.as_deref(),
+        bundle_meta.as_ref(),
+        bundle_response.as_ref(),
+    ) {
         let meta_value = |key: &str| meta.get(key).map(String::as_str).unwrap_or_default();
         let cached = deps.store_extras.get_cached_supply_chain_evaluation(
             id,
@@ -112,35 +121,26 @@ pub(super) fn evaluate_package_request_artifact_uncached(
             if cached_fingerprint.as_deref() == workspace_fingerprint
                 && cached_supply_chain_eval_is_reusable(&cached, now_timestamp)
             {
-                let cached_result = PackageEvalResult::from_cache_dict(
-                    &cached,
-                    &package_intent_hash,
-                    meta_value("policy_hash"),
-                    Some(meta_value("bundle_version")),
-                    workspace_fingerprint,
-                );
-                let reuse = if cached_eval_has_reason_code(&cached, "cloud_validation_error") {
-                    match saved_policy_keeps_cached_error(deps, store, artifact, workspace_dir) {
-                        SavedPolicyOutcome::Keep => true,
-                        SavedPolicyOutcome::Retry => false,
-                        SavedPolicyOutcome::Probe => {
-                            return (
-                                None,
-                                Some(EvalError::SavedPolicyProbeRequired(Box::new(
-                                    match cached_result.to_dict() {
-                                        Value::Object(payload) => payload,
-                                        _ => Map::new(),
-                                    },
-                                ))),
-                            );
-                        }
-                    }
-                } else {
-                    true
+                let context = CacheContext {
+                    deps,
+                    artifact,
+                    store,
+                    workspace_dir,
+                    workspace_id: id,
+                    fingerprint: workspace_fingerprint,
+                    intent_hash: &package_intent_hash,
+                    bundle: response,
+                    meta,
+                    targets: &targets,
+                    now: now_timestamp,
                 };
-                if reuse {
-                    persist_evidence(deps, store, artifact, &cached_result, &now_value);
-                    return (Some(cached_result), None);
+                match context.reuse(&cached) {
+                    Ok(Some(result)) => {
+                        persist_evidence(deps, store, artifact, &result, &now_value);
+                        return (Some(result), None);
+                    }
+                    Ok(None) => {}
+                    Err(error) => return (None, Some(error)),
                 }
             }
         }

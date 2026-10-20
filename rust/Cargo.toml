@@ -24,11 +24,10 @@ resolver = "2"
 opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
-# Whole-program optimization keeps the shipped runtime inside the wheel size
-# budgets (about 20% smaller than per-crate codegen). Unwinding stays enabled:
-# the runtime relies on catch_unwind. Pull request test builds restore the faster
-# per-crate settings through CARGO_PROFILE_RELEASE_* in ci.yml. The
-# native-release-size job unsets those overrides before it measures binaries.
+# Whole-program optimization makes the shipped runtime about 20% smaller than
+# per-crate codegen. Unwinding stays enabled: the runtime relies on catch_unwind.
+# Pull request test builds restore the faster per-crate settings through
+# CARGO_PROFILE_RELEASE_* in ci.yml.
 lto = "fat"
 codegen-units = 1
 

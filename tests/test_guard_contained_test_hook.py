@@ -303,3 +303,41 @@ def test_assignments_without_a_contained_receipt_never_run(
     assert executed == []
     # An unknown name is never peeled, so classification sees it.
     assert all(argv[0] != "python3" for argv in prepared if command.startswith("APP_FLAG"))
+
+
+def test_a_virtualenv_activation_plans_the_command_the_denial_answered_for(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The pre-tool pass answers an activation for the command after it.
+
+    The sink plans the call again from its own snapshot, so it has to project
+    the activation the same way or it refuses work that answer admitted.
+    """
+    venv = tmp_path / ".venv"
+    (venv / "bin").mkdir(parents=True)
+    (venv / "pyvenv.cfg").write_text("home = /usr/bin\nversion = 3.12.0\n")
+    (venv / "bin" / "activate").write_text(
+        f"VIRTUAL_ENV='{venv}'\nexport VIRTUAL_ENV\n"
+        '_OLD_VIRTUAL_PATH="$PATH"\nPATH="$VIRTUAL_ENV/bin:$PATH"\nexport PATH\n'
+    )
+    (venv / "bin" / "pytest").write_text("#!/bin/sh\nexit 0\n")
+    authorized = []
+    executed = []
+    monkeypatch.setattr(sink, "prepare_restricted_pytest", lambda *args, **kwargs: None)
+
+    def authorize(original):
+        authorized.append(original["tool_input"]["command"])
+        return required_profile()
+
+    monkeypatch.setattr(sink, "run_restricted_pytest", lambda command, **kwargs: executed.append(command) or 0)
+    original = payload()
+    original["tool_input"] = {"command": "source .venv/bin/activate && pytest -q"}
+    assert (
+        sink.run_authorized_contained_test(
+            original, workspace=tmp_path, timeout_seconds=20, authorize=authorize, home_dir=tmp_path
+        )
+        == 0
+    )
+    assert authorized == ["source .venv/bin/activate && pytest -q", ".venv/bin/pytest -q"]
+    assert len(executed) == 1
+    assert os.path.basename(executed[0][0]) == "pytest" and executed[0][-1] == "-q"

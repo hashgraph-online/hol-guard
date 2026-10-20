@@ -10,6 +10,7 @@ import hashlib
 import os
 import re
 import sys
+import threading
 import zipfile
 from dataclasses import dataclass
 from functools import lru_cache
@@ -111,12 +112,61 @@ def compatibility_payloads(family: str) -> tuple[dict[str, Any], ...] | None:
     return tuple(cast(list[dict[str, Any]], result["payloads"])) if result["available"] else None
 
 
+_ANSWERS: dict[str, tuple[tuple[object, ...], object]] = {}
+_ANSWERS_LOCK = threading.Lock()
+
+
+def _installed_files(package: Path) -> tuple[object, ...]:
+    """Identify every installed file the presence and identity answers read.
+
+    Replacing or modifying any of them, or adding or removing one, changes this
+    value, so the next call asks native again. Native still verifies the
+    executable bytes before every run.
+    """
+    from ..extension_builder import native_source_compiler
+
+    def identity(path: Path) -> tuple[int, ...] | None:
+        try:
+            st = os.stat(path, follow_symlinks=False)
+        except FileNotFoundError:
+            return None
+        return (st.st_mode, st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+
+    bundle = package / "guard/contracts/data/extensions/command-pack-bundle"
+    paths = [bundle, bundle / MANIFEST]
+    for directory in dict.fromkeys((package / "_native", native_source_compiler._NATIVE_PACKAGE)):
+        paths.append(directory)
+        if directory.is_dir():
+            paths.extend(sorted(directory.iterdir()))
+    return tuple((str(path), identity(path)) for path in paths)
+
+
+def _reused(name: str, answer):  # type: ignore[no-untyped-def]
+    """Reuse a successful answer while the installed files stay the same."""
+    try:
+        files = _installed_files(_package())
+    except OSError:
+        return answer()
+    with _ANSWERS_LOCK:
+        cached = _ANSWERS.get(name)
+    if cached is not None and cached[0] == files:
+        return cached[1]
+    value = answer()
+    with _ANSWERS_LOCK:
+        _ANSWERS[name] = (files, value)
+    return value
+
+
 def advertised() -> bool:
     """Ask the native reader whether this installation carries a bundle.
 
     Only genuine legacy absence skips loading; any other state loads and
     fails closed in the factory.
     """
+    return cast(bool, _reused("advertised", _advertised))
+
+
+def _advertised() -> bool:
     package = _package()
     directory = package / "guard/contracts/data/extensions/command-pack-bundle"
     manifests = []
@@ -193,6 +243,12 @@ class VerifiedInstalledBundle:
 
 
 def load_installed_bundle() -> VerifiedInstalledBundle:
+    # Each answer hashes, copies and starts the 120 MB runtime; preview, apply
+    # and refresh ask several times per change.
+    return cast(VerifiedInstalledBundle, _reused("installed", _load_installed_bundle))
+
+
+def _load_installed_bundle() -> VerifiedInstalledBundle:
     package = _package()
     native = package / "_native"
     runtime = decode(read_bytes(native / "runtime-manifest.json", limit=65536))

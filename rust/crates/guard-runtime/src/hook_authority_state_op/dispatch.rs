@@ -107,46 +107,77 @@ impl Env<'_> {
             })),
             "cursor_store_pending_state" => {
                 let payload = request.payload.as_ref().ok_or(ERROR_INVALID)?;
+                let conversation_id = required(&request.conversation_id)?;
+                let state_key = cursor_target(
+                    conversation_id,
+                    request.command.as_deref(),
+                    request.state_key.as_ref(),
+                    cursor_pending_key,
+                )?;
                 Ok(json!({
-                    "stored": self.store_signed(
-                        required(&request.state_key)?,
-                        payload,
-                        &CURSOR_PENDING,
+                    "stored": self.store_signed(&state_key, payload, &CURSOR_PENDING),
+                    "state_key": state_key,
+                }))
+            }
+            "cursor_load_pending_state" => {
+                let conversation_id = required(&request.conversation_id)?;
+                let command = required(&request.command)?;
+                let expected_key = cursor_target(
+                    conversation_id,
+                    Some(command),
+                    request.expected_key.as_ref(),
+                    cursor_pending_key,
+                )?;
+                let state_key = request.state_key.clone().unwrap_or(expected_key.clone());
+                Ok(json!({
+                    "pending": self.cursor_load_pending_state(
+                        conversation_id,
+                        command,
+                        &state_key,
+                        &expected_key,
                     )
                 }))
             }
-            "cursor_load_pending_state" => Ok(json!({
-                "pending": self.cursor_load_pending_state(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.state_key)?,
-                    required(&request.expected_key)?,
-                )
-            })),
-            "cursor_find_pending" => Ok(json!({
-                "pending": self.cursor_find_pending(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.expected_key)?,
-                )
-            })),
-            "cursor_remove_pending" => {
-                self.cursor_remove_pending(
-                    required(&request.conversation_id)?,
-                    required(&request.pending_key)?,
+            "cursor_find_pending" => {
+                let conversation_id = required(&request.conversation_id)?;
+                let command = required(&request.command)?;
+                let expected_key = cursor_target(
+                    conversation_id,
+                    Some(command),
+                    request.expected_key.as_ref(),
+                    cursor_pending_key,
                 )?;
+                Ok(json!({
+                    "pending": self.cursor_find_pending(conversation_id, command, &expected_key)
+                }))
+            }
+            "cursor_remove_pending" => {
+                let conversation_id = required(&request.conversation_id)?;
+                let pending_key = cursor_target(
+                    conversation_id,
+                    request.command.as_deref(),
+                    request.pending_key.as_ref(),
+                    cursor_pending_key,
+                )?;
+                self.cursor_remove_pending(conversation_id, &pending_key)?;
                 Ok(json!({}))
             }
             "cursor_record_allow" => Ok(json!({
                 "stored": self.cursor_record_allow(request)?
             })),
-            "cursor_load_allowance" => Ok(json!({
-                "allowance": self.cursor_load_allowance(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.state_key)?,
-                )
-            })),
+            "cursor_load_allowance" => {
+                let conversation_id = required(&request.conversation_id)?;
+                let command = required(&request.command)?;
+                let state_key = cursor_target(
+                    conversation_id,
+                    Some(command),
+                    request.state_key.as_ref(),
+                    cursor_allow_key,
+                )?;
+                Ok(json!({
+                    "allowance": self.cursor_load_allowance(conversation_id, command, &state_key)
+                }))
+            }
             _ => Err(ERROR_INVALID),
         }
     }

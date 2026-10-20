@@ -181,6 +181,9 @@ use parser_segments::*;
 pub mod developer_inspection_authority;
 pub mod environment_secret_dump;
 pub mod pretool;
+pub mod runtime_artifact_identity;
+#[cfg(test)]
+mod runtime_artifact_identity_tests;
 mod runtime_read_paths;
 pub mod secret_path_probe;
 pub mod sensitive_request;
@@ -342,6 +345,9 @@ mod shell_secret_read_support;
 pub mod shell_secret_reads;
 mod shell_structure;
 pub mod source_cli;
+pub mod tool_action_identity;
+#[cfg(test)]
+mod tool_action_identity_tests;
 pub mod typescript_launch_evidence;
 mod unmodeled_shell_artifact;
 
@@ -769,6 +775,8 @@ mod local_supply_chain_stale_policy_tests;
 #[cfg(test)]
 mod local_supply_chain_timestamp_tests;
 pub mod package_approval;
+#[cfg(test)]
+mod package_intent_exact_decode_tests;
 pub mod package_policy_override;
 pub mod package_protect_projection;
 mod package_shim_invocation;
@@ -792,6 +800,7 @@ pub mod contained_execution;
 #[cfg(unix)]
 pub mod contained_runner;
 pub mod credential_patterns;
+pub mod data_flow_request_artifact;
 pub mod data_flow_rules;
 pub mod decisions;
 pub mod detectors;
@@ -805,22 +814,37 @@ pub mod egress_proxy_credentials;
 mod egress_spool;
 pub mod false_positive_rules;
 pub mod guard_sync_transport;
+#[path = "adapters/hook/hook_adapter_cline_tables.rs"]
 mod hook_adapter_cline_tables;
+#[path = "adapters/hook/hook_adapter_envelope.rs"]
 pub mod hook_adapter_envelope;
+#[path = "adapters/hook/hook_adapter_envelope_tables.rs"]
 mod hook_adapter_envelope_tables;
+#[path = "adapters/hook/hook_adapter_envelope_text.rs"]
 mod hook_adapter_envelope_text;
 #[cfg(test)]
+#[path = "adapters/hook/hook_adapter_omp_tests.rs"]
 mod hook_adapter_omp_tests;
+#[path = "adapters/hook/hook_adapter_paths.rs"]
 pub mod hook_adapter_paths;
+#[path = "adapters/hook/hook_adapter_prepare.rs"]
 pub mod hook_adapter_prepare;
+#[path = "adapters/hook/hook_adapter_prepare_cline.rs"]
 pub mod hook_adapter_prepare_cline;
+#[path = "adapters/hook/hook_adapter_prepare_cursor.rs"]
 mod hook_adapter_prepare_cursor;
+#[path = "adapters/hook/hook_adapter_pyjson.rs"]
 mod hook_adapter_pyjson;
+#[path = "adapters/hook/hook_adapter_pytext.rs"]
 mod hook_adapter_pytext;
+#[path = "adapters/hook/hook_adapter_redact.rs"]
 mod hook_adapter_redact;
+#[path = "adapters/hook/hook_adapter_secret_path.rs"]
 mod hook_adapter_secret_path;
+#[path = "adapters/hook/hook_adapter_value.rs"]
 pub mod hook_adapter_value;
 #[cfg(all(test, unix))]
+#[path = "adapters/hook/hook_adapter_vector_tests.rs"]
 mod hook_adapter_vector_tests;
 mod hook_evidence_deferred_post;
 pub mod hook_evidence_writer;
@@ -867,3 +891,6 @@ pub mod supply_chain_bundle;
 pub mod supply_chain_package_identity;
 pub mod supply_chain_risk;
 pub mod supply_chain_support;
+pub mod verified_read_decision;
+#[cfg(test)]
+mod verified_read_decision_tests;

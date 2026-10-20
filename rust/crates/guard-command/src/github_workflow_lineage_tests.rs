@@ -112,6 +112,17 @@ fn an_unbroken_lineage_yields_its_three_identities() {
     assert_eq!(lineage.operation_id, OPERATION_ID);
     assert_eq!(lineage.session_id, SESSION_ID);
     assert_eq!(lineage.record.binding.workspace_sha256, workspace_digest());
+    // The two identities Python used to derive for itself, pinned to the bytes
+    // `_capability_id` and `_digest` produced for this request id. A capability
+    // already issued under the Python spelling has to resolve to the same row.
+    assert_eq!(
+        lineage.capability_id,
+        "gwc-04caee1311432ac664fb0049886efc8542650745e0ae8d1f196e9d59e679d2e3"
+    );
+    assert_eq!(
+        lineage.nonce,
+        "8181504e4207c78e7a25469f287b65a4d76ba8efd47133cac27a0335be52ccee"
+    );
 }
 
 #[test]

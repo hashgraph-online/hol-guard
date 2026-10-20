@@ -32,7 +32,7 @@ from ..models import (
     GuardRuntimeRegistration,
 )
 from ..package_firewall_entitlement import (
-    resolve_package_firewall_entitlement,
+    package_firewall_entitlement_or_denied,
 )
 from ..runtime.runner import (
     _requeue_cloud_review_privacy_projection,
@@ -366,7 +366,7 @@ class _RepairSettingsRoutes:
                     approval_gate_grant=approval_gate_grant,
                 )
             config_settings = {key: value for key, value in settings.items() if key != "approval_gate"}
-            entitlement = resolve_package_firewall_entitlement(self.server.store)  # type: ignore[attr-defined]
+            entitlement = package_firewall_entitlement_or_denied(self.server.store)  # type: ignore[attr-defined]
             config = update_guard_settings(
                 guard_home,
                 config_settings,

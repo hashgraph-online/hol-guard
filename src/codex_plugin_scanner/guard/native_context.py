@@ -60,12 +60,14 @@ _RESULT_OPTIONAL_KEYS = {
     "token",
     "digest",
     "validation_reason",
+    "approval_context_token_well_formed",
     "package_context",
     "mcp_server_identity",
     "mcp_tool_identity",
     "browser_mcp",
     "mcp_launch_environment",
     "mcp_redacted_value",
+    "native_bash_reply_valid",
     "runtime_identity",
     "runtime_identity_match",
     "runtime_identity_reusable",
@@ -626,52 +628,22 @@ _UNBOUND_PREFIX = "guard-context-unbound:"
 
 
 def is_unbound_context_digest(value: object) -> bool:
-    """``True`` for degraded digests emitted when the resident is unavailable."""
-    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
+    """``True`` for a digest that names material nothing has bound.
 
+    The runtime emits these for a component it could not digest, and a few
+    Python paths emit one deliberately for material there is no resident
+    question for: the unbound approval-context sentinel, a configured
+    environment with nothing configured, and a shell context the caller
+    could not observe. A sentinel never parses as a token and never
+    authorizes reuse, so recognizing one is how a caller tells an unbound
+    component from a bound digest.
 
-def _unbound_material_digest(material: object) -> str:
-    # Integrity digest over guard material (env values / launch identity / PATH), not a
-    # password hash — parity-pinned to the pre-migration hashlib baseline for byte-identical
-    # persisted approval rows. codeql[py/weak-sensitive-data-hashing] false positive.
-    return hashlib.sha256(_canonical_material_bytes(material)).hexdigest()  # codeql[py/weak-sensitive-data-hashing]
-
-
-def _canonical_material_bytes(material: object) -> bytes:
-    return json.dumps(
-        material,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=True,
-        default=str,
-    ).encode("utf-8")
-
-
-def context_sha256_digest(
-    material: object,
-    *,
-    prefix: str | None = None,
-    guard_home: Path | None = None,
-    unbound_label: str = "canonical-sha256",
-) -> str:
-    """Canonical-JSON SHA-256 via the resident op.
-
-    The resident owns the digest.  Without one, this returns a
-    ``guard-context-unbound:`` value that fails every equality and validation
-    check against a worker-issued digest, so an absent resident can never pass
-    for a bound one.
+    What no Python path does is hand back a *bound*-looking digest when the
+    resident is unreachable: `native_context_digest` either answers from the
+    resident or raises.
     """
 
-    home = _resolve_digest_home(guard_home)
-    result = native_context_digest(
-        "canonical_sha256",
-        {"material": material, "prefix": prefix},
-        guard_home=home,
-    )
-    digest = result.get("digest") if isinstance(result, dict) else None
-    if isinstance(digest, str) and digest:
-        return digest
-    return f"{_UNBOUND_PREFIX}{unbound_label}:{_unbound_material_digest(material)}"
+    return isinstance(value, str) and value.startswith(_UNBOUND_PREFIX)
 
 
 def context_mcp_launch_environment(
@@ -978,7 +950,6 @@ __all__ = [
     "context_runtime_launch_identity",
     "context_runtime_launch_identity_matches",
     "context_runtime_launch_identity_projection",
-    "context_sha256_digest",
     "is_unbound_context_digest",
     "native_context_digest",
     "reset_context_digest_budget",

@@ -425,6 +425,32 @@ impl NativeCommandProgram {
         Some(names)
     }
 
+    /// The names `extension_names` lists, leaving out rules that can match
+    /// without naming a known program instead of giving up on the set.
+    pub(crate) fn extension_known_names(
+        &self,
+        extension_index: usize,
+        compatibility: Option<&[&str]>,
+    ) -> BTreeSet<String> {
+        let mut names: BTreeSet<String> = self.extensions[extension_index]
+            .executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        for rule in self.extension_rules(extension_index) {
+            match rule.matcher {
+                Some(node) => names.extend(self.required_executables(node, 0).unwrap_or_default()),
+                None => names.extend(
+                    compatibility
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|name| (*name).to_owned()),
+                ),
+            }
+        }
+        names
+    }
+
     /// Executables one of which a match of `node` must run. Alternatives need
     /// all of theirs; a conjunction needs any one child's. Matchers without a
     /// declared executable gate have no such set.

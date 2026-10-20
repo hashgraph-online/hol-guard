@@ -38,12 +38,20 @@ const OPERATION_STATES: &[&str] = &["waiting_on_approval", "completed", "resumed
 
 /// The identities a validated lineage yields. The host needs nothing else from
 /// the operation or the session rows, so they stay on this side of the wire.
+///
+/// `capability_id` and `nonce` are derived here rather than by the host because
+/// they name the capability the lineage authorizes: the id is what the host
+/// looks up, issues and claims under, and the nonce binds the issued claim to
+/// this one approval request. Deriving them anywhere else would let a second
+/// implementation decide which capability an approval stands for.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ValidatedWorkflowLineage {
     pub request_id: String,
     pub operation_id: String,
     pub session_id: String,
     pub record: GitHubWorkflowApprovalRecord,
+    pub capability_id: String,
+    pub nonce: String,
 }
 
 /// `_validated_lineage` (:203). The two closures carry the filesystem work the
@@ -141,12 +149,33 @@ pub fn validated_workflow_lineage(
         return Err("invalid GitHub workflow approval type".to_string());
     }
 
+    let capability_id = capability_identity(&request_id)?;
+    let nonce = request_digest("github-workflow-nonce", &request_id)?;
+
     Ok(ValidatedWorkflowLineage {
         request_id,
         operation_id: required_string(operation, "operation_id")?,
         session_id,
         record,
+        capability_id,
+        nonce,
     })
+}
+
+/// `_capability_id` (:241) — the `gwc-` prefix over the framed request digest.
+fn capability_identity(request_id: &str) -> Result<String, String> {
+    Ok(format!(
+        "gwc-{}",
+        request_digest("github-workflow-capability", request_id)?
+    ))
+}
+
+/// `_digest` (:245) over a request id. The framing cannot fail for a string
+/// payload, so the error is unreachable in practice; it is a value rather than
+/// a panic because a lineage that cannot name its capability must yield none.
+fn request_digest(purpose: &str, request_id: &str) -> Result<String, String> {
+    framed_digest(purpose, &Value::String(request_id.to_string()))
+        .ok_or_else(|| "invalid GitHub workflow capability identity".to_string())
 }
 
 /// `approval_record_from_approval_request` (:144): exactly one

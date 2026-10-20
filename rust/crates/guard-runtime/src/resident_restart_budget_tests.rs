@@ -61,7 +61,6 @@ fn temp_scope(label: &str) -> PathBuf {
     std::fs::create_dir(&scope).unwrap();
     scope
 }
-
 fn read_budget(scope: &Path) -> RestartBudget {
     serde_json::from_slice(&std::fs::read(scope.join("restart-budget.json")).unwrap()).unwrap()
 }
@@ -179,6 +178,45 @@ fn clear_reopens_a_tripped_circuit() {
         (0, 0, 0)
     );
     consume(&scope).unwrap();
+    std::fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_held_budget_lock_reads_as_busy_and_a_spawn_waits_it_out() {
+    let scope = temp_scope("held-lock");
+    let held = acquire_budget_lock(&scope).unwrap();
+    // Windows reports this overlap as a lock violation rather than WouldBlock.
+    assert_eq!(
+        acquire_budget_lock(&scope).err().as_deref(),
+        Some("native_resident_restart_budget_busy")
+    );
+    let waiting_scope = scope.clone();
+    let (started, worker_started) = std::sync::mpsc::channel();
+    let spawn = std::thread::spawn(move || {
+        started.send(()).unwrap();
+        consume(&waiting_scope)
+    });
+    worker_started.recv().unwrap();
+    std::thread::sleep(Duration::from_millis(100));
+    // Still waiting on the held lock, not refused with a busy error.
+    assert!(!spawn.is_finished());
+    drop(held);
+    spawn.join().unwrap().unwrap();
+    assert_eq!(read_budget(&scope).attempts, 1);
+    std::fs::remove_dir_all(scope).unwrap();
+}
+
+#[test]
+fn a_spawn_out_of_time_on_a_held_budget_lock_charges_nothing() {
+    let scope = temp_scope("held-lock-deadline");
+    let held = acquire_budget_lock(&scope).unwrap();
+    let deadline = std::time::Instant::now() + Duration::from_millis(60);
+    assert_eq!(
+        consume_before(&scope, Some(deadline)).err().as_deref(),
+        Some("native_client_deadline_exceeded")
+    );
+    drop(held);
+    assert!(!scope.join("restart-budget.json").exists());
     std::fs::remove_dir_all(scope).unwrap();
 }
 

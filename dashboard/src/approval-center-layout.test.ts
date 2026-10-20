@@ -438,6 +438,31 @@ assert(
     && watchOnlyDecisionMarkup.includes("What Protected mode would do"),
   "Watch-only decision card renders its observation state without crashing",
 );
+const nativeScriptDecisionMarkup = renderToStaticMarkup(
+  createElement(ReviewDecisionCard, {
+    detail: {
+      item: {
+        ...BASE_REQUEST,
+        artifact_type: "native_bash_request",
+        artifact_name: "reviewed-script.sh",
+        exact_action_persistence_eligible: true,
+        scope_restrictions: ["reusable_allow_is_action_bound"],
+      },
+      diff: null,
+      receipt: null,
+      policy: [],
+    },
+    onResolve: () => undefined,
+    onGoHome: () => undefined,
+    approvalGate: null,
+  }),
+);
+assert(
+  nativeScriptDecisionMarkup.includes("Run this script?")
+    && nativeScriptDecisionMarkup.includes("Run once")
+    && nativeScriptDecisionMarkup.includes("Always allow this version in this project"),
+  "Native Bash decision cards render the version-bound approval language end to end",
+);
 const approvalGateNudge = "Set an approval password or MFA so only you can approve blocked actions.";
 const approvalGateBase = {
   configured: false,

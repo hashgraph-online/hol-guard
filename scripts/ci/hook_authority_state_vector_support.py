@@ -40,6 +40,27 @@ def claude_pending_key(session_id: str, artifact_id: str) -> str:
     return f"claude_pending_permission:{session_id}:{fingerprint}"
 
 
+def cursor_fingerprint(command: str) -> str:
+    """The digest both Cursor state keys are built from.
+
+    The derivation lives here rather than in the CLI module it was recorded
+    from: the resident names these rows now, and the recorded vectors are the
+    independent account of what the retired Python wrote.
+    """
+
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
+
+
+def cursor_pending_key(conversation_id: str, command: str) -> str:
+    return f"cursor_pending_shell:{conversation_id}:{cursor_fingerprint(command)}"
+
+
+def cursor_allow_key(conversation_id: str, command: str) -> str:
+    return f"cursor_native_shell_allow:{conversation_id}:{cursor_fingerprint(command)}"
+
+
 def pending_keys(session_id: str, *artifact_ids: str) -> list[str]:
     return [claude_pending_key(session_id, artifact_id) for artifact_id in artifact_ids]
 

@@ -49,9 +49,9 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 # ruff: noqa: F403,F405
-from .action_lattice import guard_action_severity
 from .native_approval_proof import approval_reuse_claim_disposition as native_claim_disposition
 from .native_execution import _resident_request
+from .native_hook_artifact_compose import native_hook_compose
 from .native_memory_pattern import memory_pattern_verdict
 from .native_policy_snapshot_constants import NATIVE_POLICY_VERIFIER_KEY_NAME, NativePolicySnapshotError
 from .native_policy_snapshot_windows_key import provision_native_policy_verifier_key
@@ -60,7 +60,7 @@ from .native_store_policy import (
     ApprovalReuseDiagnosticUnavailableError,
     claim_evidence_binding,
     encode_key,
-    native_approval_reuse_diagnostic,
+    native_approval_reuse_miss,
     native_claim_approval_reuse_decisions,
 )
 from .store_base import *
@@ -167,39 +167,35 @@ def memory_lookup_candidates(
 
 def _most_restrictive_policy_lookup(
     lookups: Sequence[PolicyDecisionLookupResult],
+    *,
+    guard_home: Path | None,
 ) -> PolicyDecisionLookupResult:
-    """Compose non-consuming direct, exact-command, and memory matches."""
+    """Compose non-consuming direct, exact-command, and memory matches.
+
+    The resident selects, with the selector the MCP tool lane already uses: it
+    reads the action lattice, so a lookup whose saved action it cannot read is
+    the most restrictive one, not a weaker one. An unavailable resident raises,
+    which the caller's fail-closed handling turns into an availability response
+    rather than a locally recomposed verdict.
+    """
 
     if not lookups:
         raise ValueError("at least one policy lookup is required")
-    selected_lookup = lookups[0]
-    selected_decision = selected_lookup["decision"]
-    ignored_integrity = selected_lookup.get("ignored_local_integrity")
-    revisions = {lookup["authority_revision"] for lookup in lookups}
-    authority_revision = next(iter(revisions)) if len(revisions) == 1 else -1
-    for lookup in lookups[1:]:
-        decision = lookup["decision"]
-        if ignored_integrity is None and lookup.get("ignored_local_integrity") is not None:
-            ignored_integrity = lookup["ignored_local_integrity"]
-        if decision is None:
-            continue
-        if selected_decision is None or guard_action_severity(
-            decision.get("action"),
-            unknown_action="block",
-        ) > guard_action_severity(selected_decision.get("action"), unknown_action="block"):
-            selected_lookup = lookup
-            selected_decision = decision
-    if selected_decision is not None:
-        selected_decision = {
-            **selected_decision,
-            "_approval_authority_revision": authority_revision,
-        }
-    return {
-        "decision": selected_decision,
-        "ignored_local_integrity": ignored_integrity,
-        "trust_status": selected_lookup["trust_status"],
-        "authority_revision": authority_revision,
-    }
+    if len(lookups) == 1 and lookups[0]["decision"] is None:
+        # One lookup that matched nothing is already the answer: there is no
+        # saved decision to rank, no second revision to reconcile, and the
+        # selector would hand back the same row.  The hook path reaches this
+        # on every request without a saved approval, so it must not spend a
+        # resident round trip to be told so.
+        return lookups[0]
+    composed = native_hook_compose(
+        "policy_lookup_select",
+        {"lookups": [dict(lookup) for lookup in lookups]},
+        guard_home=guard_home,
+    )
+    # The resident owns the selection; this only reads its row back under the
+    # name the callers use, so the cast goes through ``object``.
+    return cast("PolicyDecisionLookupResult", cast("object", composed))
 
 
 def _approval_authority_revision(connection: sqlite3.Connection) -> int:
@@ -1048,7 +1044,7 @@ class StorePolicyMixin:
             ):
                 return exact_command_lookup
         if memory_artifact_id is None:
-            return _most_restrictive_policy_lookup(candidate_lookups)
+            return _most_restrictive_policy_lookup(candidate_lookups, guard_home=Path(self.guard_home))
         memory_lookup = self.resolve_policy_decision_lookup(
             harness,
             memory_artifact_id,
@@ -1066,7 +1062,7 @@ class StorePolicyMixin:
                 if (memory_lookup["decision"] is not None or memory_lookup.get("ignored_local_integrity") is not None)
                 else direct_lookup
             )
-        return _most_restrictive_policy_lookup(candidate_lookups)
+        return _most_restrictive_policy_lookup(candidate_lookups, guard_home=Path(self.guard_home))
 
     def peek_local_once_approval(
         self,
@@ -1595,6 +1591,38 @@ class StorePolicyMixin:
         Returns ``(reason, stored_artifact_hash)``.  The stored hash is needed
         by emit layers that must distinguish a rejected approval bound to the
         current context-token contract from stale pre-token (legacy) evidence.
+        """
+
+        reason, stored_hash, _reuse = self.approval_reuse_miss(
+            harness,
+            artifact_id,
+            artifact_hash,
+            workspace,
+            publisher,
+            current_action=None,
+            now=now,
+        )
+        return reason, stored_hash
+
+    def approval_reuse_miss(
+        self,
+        harness: str,
+        artifact_id: str | None,
+        artifact_hash: str | None,
+        workspace: str | None,
+        publisher: str | None,
+        current_action: str | None = None,
+        now: str | None = None,
+    ) -> tuple[str | None, str | None, Mapping[str, object] | None]:
+        """Diagnose a saved-allow miss and, optionally, compose what it means.
+
+        Returns ``(reason, stored_artifact_hash, reuse)``.  Naming
+        ``current_action`` asks the resident to compose the reuse decision for
+        the miss in the same round trip, including whether the rejected
+        approval was ever bound to the context-token contract; ``reuse`` is
+        ``None`` whenever the resident did not compose one, either because the
+        caller did not ask or because there was no resident answer to compose
+        from.
 
         The resident runs the bounded probes and picks the reason. This wrapper
         only procures integrity evidence when the resident asks for it. A store
@@ -1607,7 +1635,7 @@ class StorePolicyMixin:
         """
 
         if artifact_id is None:
-            return None, None
+            return None, None, None
         current_time = _canonical_utc_timestamp(now or _now())
         with self._connect() as connection:
             has_rows = (
@@ -1618,7 +1646,7 @@ class StorePolicyMixin:
                 is not None
             )
         if not has_rows:
-            return None, None
+            return None, None, None
         self._provision_resident_verifier()
 
         def evidence_provider(policy: bool, local_once: bool) -> dict[str, object]:
@@ -1639,7 +1667,7 @@ class StorePolicyMixin:
             return evidence
 
         try:
-            return native_approval_reuse_diagnostic(
+            return native_approval_reuse_miss(
                 store_path=self.path,
                 guard_home=Path(self.guard_home),
                 harness=harness,
@@ -1649,6 +1677,7 @@ class StorePolicyMixin:
                 publisher=publisher,
                 now=current_time,
                 evidence_provider=evidence_provider,
+                current_action=current_action,
             )
         except ApprovalReuseDiagnosticUnavailableError as error:
             _LOGGER.warning(
@@ -1657,7 +1686,7 @@ class StorePolicyMixin:
                 error,
                 APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON,
             )
-            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None
+            return APPROVAL_REUSE_DIAGNOSTIC_UNAVAILABLE_REASON, None, None
 
     def _provision_resident_verifier(self) -> None:
         """Establish the verifier key the resident requires before it serves.

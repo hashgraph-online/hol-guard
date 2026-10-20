@@ -29,6 +29,10 @@ use serde_json::{json, Value};
 
 use super::context::{Engines, EvidenceFile, LocalExecution};
 use super::{decide_with, token, Fallback};
+#[path = "native_exact_action_v2_vectors.rs"]
+mod v2_vectors;
+#[path = "native_exact_action_v4_vectors.rs"]
+mod v4_vectors;
 
 const VECTORS: &[u8] = include_bytes!("../tests/fixtures/native_exact_action_vectors.json.gz");
 
@@ -248,11 +252,12 @@ fn run_case(case: &Value) -> Result<(), String> {
         root,
         intent: concrete["intent"].clone(),
     };
-    let expected = &concrete["expected"];
+    let expected = v2_vectors::expected(&concrete);
     let payload = decide_with(&request, &engines, Fallback::Strict)
         .map_err(|code| format!("error {code}"))?;
     match payload {
-        NativeExactActionPayloadV1::BashSubject { .. } => {
+        NativeExactActionPayloadV1::BashSubject { .. }
+        | NativeExactActionPayloadV1::LaunchEvidence { .. } => {
             Err("legacy identity vector unexpectedly returned a Bash subject".into())
         }
         NativeExactActionPayloadV1::ReviewBinding { binding } => {
@@ -274,23 +279,34 @@ fn run_case(case: &Value) -> Result<(), String> {
             token: minted,
             once_only_reason,
         } => {
-            let want_reason = expected["once_only_reason"].as_str().map(str::to_owned);
-            if once_only_reason != want_reason
-                || minted.is_some() != expected["token_present"].as_bool().unwrap()
-            {
+            let migrated = v4_vectors::migrated(&concrete, &expected);
+            let want_reason = if migrated {
+                Some("script_execution_binding_unavailable".to_owned())
+            } else {
+                expected["once_only_reason"].as_str().map(str::to_owned)
+            };
+            let want_token = !migrated && expected["token_present"].as_bool().unwrap();
+            if once_only_reason != want_reason || minted.is_some() != want_token {
                 return Err(format!(
                     "reason {once_only_reason:?} != {want_reason:?} (token {})",
                     minted.is_some()
                 ));
             }
-            if minted.is_none() {
+            if minted.is_none() && !migrated {
                 return Ok(());
+            }
+            let deadline = Instant::now() + Duration::from_secs(20);
+            let observed = token::exact_action_components(&request.query, deadline, &engines);
+            if migrated && !expected["token_present"].as_bool().unwrap() {
+                return match observed {
+                    Err(reason) if Some(reason) == expected["once_only_reason"].as_str() => Ok(()),
+                    Err(reason) => Err(format!("prior inventory refusal changed: {reason}")),
+                    Ok(_) => Err("prior incomplete inventory unexpectedly became complete".into()),
+                };
             }
             let mut wanted = expected["components"].clone();
             resolve_digests(&mut wanted);
-            let deadline = Instant::now() + Duration::from_secs(20);
-            let components = token::exact_action_components(&request.query, deadline, &engines)
-                .map_err(|reason| reason.to_owned())?;
+            let components = observed.map_err(|reason| reason.to_owned())?;
             for (name, got) in [
                 ("identity", &components.identity),
                 ("content", &components.content),
@@ -317,6 +333,8 @@ fn run_case(case: &Value) -> Result<(), String> {
 #[test]
 fn matches_vectors_recorded_from_python() {
     let cases = load();
+    v2_vectors::validate(&cases);
+    v4_vectors::validate(&cases);
     assert!(cases.len() > 600, "fixture shrank to {}", cases.len());
     let failures: Vec<String> = cases
         .iter()

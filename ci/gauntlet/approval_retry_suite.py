@@ -1,12 +1,14 @@
-"""Run the approve-then-retry catalog through a real harness CLI. Never merge-qualifying.
+"""Run approval-retry and Bash-consent lifecycle cases through a real harness CLI.
 
 The core catalog cannot host these cases. Every core scenario joins the ``core`` profile and
 so runs on every lane, including the omp runner and the installed acceptance lane, which
-would each need the new oracle; adding one also moves ``catalog_sha256`` and
+would each need the new oracles; adding them also moves ``catalog_sha256`` and
 ``expected_scenarios`` in every lane's evidence. Beyond that, each existing judge fails an
 allow-expectation case that is stopped or that creates an approval row, and ``is_benign``
 counts this lane's deliberate review as a benign interruption. The lane therefore carries its
-own catalog file, which ``load_catalog`` already accepts, and its own pass rule.
+own catalog file, which ``load_catalog`` already accepts, and its own pass rules.
+
+This lane is never merge-qualifying.
 """
 
 from __future__ import annotations

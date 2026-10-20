@@ -25,6 +25,7 @@ from typing import BinaryIO
 
 from ..group_write_trust import writable_only_by_owner
 from ..runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
+from .native_executable_root import ExecutableMaterializationError, verified_executable
 
 _MAX_REQUEST_BYTES = 8 * 1024 * 1024
 _MAX_OUTPUT_BYTES = 64 * 1024 * 1024
@@ -270,23 +271,11 @@ def _decode_output(
 @contextmanager
 def _verified_executable(raw: bytes):  # type: ignore[no-untyped-def]
     """Materialize exactly the verified bytes in a private execution directory."""
-    with tempfile.TemporaryDirectory(prefix="hol-guard-source-compiler-", ignore_cleanup_errors=True) as directory:
-        name = "hol-guard-runtime.exe" if os.name == "nt" else "hol-guard-runtime"
-        path = Path(directory) / name
-        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
-        descriptor = os.open(path, flags, 0o700)
-        try:
-            with os.fdopen(descriptor, "wb") as handle:
-                descriptor = -1
-                handle.write(raw)
-                handle.flush()
-                os.fsync(handle.fileno())
-        finally:
-            if descriptor >= 0:
-                os.close(descriptor)
-        if os.name != "nt":
-            path.chmod(0o700)
-        yield path
+    try:
+        with verified_executable(raw) as path:
+            yield path
+    except ExecutableMaterializationError as exc:
+        raise NativeSourceCompilerError("source compiler could not be started") from exc
 
 
 def _run_bounded(

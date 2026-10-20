@@ -226,7 +226,7 @@ fn authoritative_event(envelope: &GuardHookEnvelopeV2) -> Result<String, String>
     Ok(declared)
 }
 
-fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
+pub(crate) fn payload_kind(payload: &Value) -> Result<GuardHookPayloadKindV2, String> {
     let Some(record) = payload.as_object() else {
         return Err("native_hook_payload_invalid".to_owned());
     };
@@ -361,6 +361,11 @@ fn evaluate_validated_envelope(
             } else {
                 native
             };
+            let evaluated = crate::native_exact_action_op::require_bash_owner(
+                &envelope,
+                policy_snapshot,
+                evaluated,
+            );
             let value = serde_json::to_value(evaluated)
                 .map_err(|_| "native_hook_edge_response_invalid".to_owned())?;
             validate_pre_tool_result(&value)?;
@@ -397,11 +402,14 @@ fn evaluate_validated_envelope(
             };
             let native = review_post_tool(&request);
             let mut evaluated = if let Some(snapshot) = policy_snapshot {
-                crate::policy_enforcement::apply_post_tool_policy(
+                let delivery = origin_store
+                    .and_then(|store| crate::bash_post_delivery::verify(&request, store));
+                crate::policy_enforcement::apply_post_tool_policy_with_delivery(
                     snapshot,
                     &request,
                     payload_kind,
                     native,
+                    delivery.as_ref(),
                 )?
             } else {
                 native

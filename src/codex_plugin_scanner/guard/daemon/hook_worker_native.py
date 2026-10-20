@@ -101,7 +101,7 @@ def _claude_native_prompt_brand(
         event_name="UserPromptSubmit",
         policy_action=policy_action,
         artifact=artifact,
-        native_reason=native_reason,
+        native_reason=lambda: native_reason,
     )
     if system_message:
         response["systemMessage"] = system_message

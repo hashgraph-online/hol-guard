@@ -35,7 +35,8 @@ concurrency:
 jobs:
   compile:
     name: Compile release (${{ matrix.target }})
-    if: github.event_name != 'pull_request'
+    # Pull requests reach this job only as a labeled same-repository canary call from
+    # publish.yml. Their caches stay read-only (see save-if and SCCACHE_GHA_RW_MODE).
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     strategy:
@@ -71,12 +72,16 @@ jobs:
       FAST_CODEGEN: ${{ inputs.fast_codegen == true }}
       # Only the Windows alpha builds lower workspace opt-level: they are the
       # slowest targets. Keep level 1 optimization because unoptimized
-      # workspace code exceeds the alpha runtime size ceiling.
+      # workspace code bloats the runtime.
       # Dependencies keep the release profile either way.
       ALPHA_WORKSPACE_OPT_LEVEL: ${{ endsWith(matrix.target, '-pc-windows-msvc') && '1' || '' }}
       RUST_TARGET: ${{ matrix.target }}
       RUSTFLAGS: ${{ matrix.rustflags }}
       CROSS_COMPILED: ${{ matrix.cross == true }}
+      # PR canaries build no Windows ARM64 wheel, so that leg skips its compile. A matrix
+      # exclude cannot remove include-only legs, so the heavy steps check this instead.
+      UNSHIPPED_TARGET: ${{ github.event_name == 'pull_request' && matrix.target == 'aarch64-pc-windows-msvc' }}
+      PR_CANARY: ${{ github.event_name == 'pull_request' }}
       RUNTIME: rust/target/${{ matrix.target }}/release/hol-guard-runtime${{ matrix.suffix }}
       SOURCE_COMPILER: rust/target/${{ matrix.target }}/release/guard-command-source${{ matrix.suffix }}
       HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX: ${{ vars.HOL_GUARD_APPROVAL_ENROLLMENT_ROOT_HEX }}
@@ -101,7 +106,12 @@ jobs:
           BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
           RELEASE_VERSION="${VERSION:-$BASE_VERSION}"
           if [[ "$RELEASE_VERSION" != "$BASE_VERSION" ]]; then
-            [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(a[1-9][0-9]*)?$ ]]
+            # Releases accept only canonical alphas; PR canaries only a dev release of the source version.
+            if ! [[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(a[1-9][0-9]*)?$ ]] &&
+              ! [[ "${PR_CANARY:-}" == "true" && "$RELEASE_VERSION" =~ ^${BASE_VERSION//./\\.}\.dev[0-9]+$ ]]; then
+              echo "Version $RELEASE_VERSION is neither a canonical alpha nor this PR canary's dev release" >&2
+              exit 1
+            fi
             uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --version "$RELEASE_VERSION"
           fi
           while IFS= read -r changed_path; do
@@ -116,6 +126,7 @@ jobs:
       - name: Verify release enrollment root
         run: python scripts/ci/native_approval_contract_gate.py --root . --require-release-root
       - name: Install pinned Rust target
+        if: env.UNSHIPPED_TARGET != 'true'
         shell: bash
         run: |
           rustup toolchain install 1.88.0 --profile minimal
@@ -127,6 +138,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends musl-tools
       - name: Cache trusted release compilation
+        if: env.UNSHIPPED_TARGET != 'true'
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
         with:
           prefix-key: release-native-v1${{ inputs.fast_codegen == true && '-fast' || '' }}
@@ -140,10 +152,12 @@ jobs:
           # main alpha dispatches (never pull requests) may populate.
           save-if: ${{ (github.event_name == 'push' || inputs.fast_codegen == true) && github.ref == 'refs/heads/main' }}
       - name: Install content-addressed compiler cache
+        if: env.UNSHIPPED_TARGET != 'true'
         uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba
         with:
           version: v0.18.0
       - name: Compile canonical release inputs
+        if: env.UNSHIPPED_TARGET != 'true'
         shell: bash
         env:
           # Only workspace members are wrapped; third-party crates come from rust-cache.
@@ -177,7 +191,9 @@ jobs:
           python scripts/release/prepared_native.py pack --directory prepared-native
           "$SCCACHE_PATH" --show-stats
       - name: Upload exact-run binaries
-        if: github.event_name == 'workflow_dispatch'
+        if: >-
+          env.UNSHIPPED_TARGET != 'true' &&
+          (github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request')
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-native-${{ matrix.target }}

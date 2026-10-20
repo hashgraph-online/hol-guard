@@ -19,6 +19,24 @@ mod extract;
 mod omp;
 #[path = "generic_omp_bash_cwd.rs"]
 mod omp_bash_cwd;
+
+/// Resolve the host's tool-level directory for an execution-owner preview.
+/// This is path observation only; the owner must still judge current policy.
+pub fn omp_bash_execution_directory(
+    payload: &serde_json::Value,
+    home_dir: Option<&str>,
+    session: Option<&str>,
+) -> Result<Option<String>, &'static str> {
+    match omp_bash_cwd::resolve(payload, home_dir, session) {
+        omp_bash_cwd::BashCwd::Session => Ok(session.map(str::to_owned)),
+        omp_bash_cwd::BashCwd::Within(path) | omp_bash_cwd::BashCwd::Outside(path) => {
+            Ok(Some(path))
+        }
+        omp_bash_cwd::BashCwd::Missing | omp_bash_cwd::BashCwd::Unresolved => {
+            Err("bash_working_directory_unavailable")
+        }
+    }
+}
 #[cfg(all(test, unix))]
 #[path = "generic_omp_bash_cwd_tests.rs"]
 mod omp_bash_cwd_tests;
@@ -49,6 +67,14 @@ use super::evaluate_pre_tool_with_execution_context;
 use extract::extract_generic_signals;
 use result::{generic_action, generic_error_result, generic_result};
 use std::time::Instant;
+
+/// The command a virtualenv activation hands its verdict to, or `None` when
+/// the activation is not one the scan can read through. The pre-tool pass
+/// answers for the projected command, so a caller that routes that answer
+/// somewhere which plans the call again has to plan the same text.
+pub fn venv_activation_target(command: &str, context: super::PathContext<'_>) -> Option<String> {
+    venv_activation_projection::project(command, context)
+}
 
 /// Bounded caller-supplied context, never authenticated provider facts.
 pub struct UntrustedCommandContext {
@@ -173,11 +199,11 @@ pub fn evaluate_pre_tool_envelope_with_execution_context(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> PreToolResultV1 {
-    let mut context = context;
-    let projected_payload;
+    let mut context =
+        super::PathContext::for_session(context.home_dir, context.cwd, execution_environment);
+    let (projected_payload, cline_payload);
     let mut payload = payload;
     let within;
-    let cline_payload;
     if harness == "cline" {
         if let Some(view) = cline_view::evaluated_view(payload) {
             cline_payload = view;

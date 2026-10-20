@@ -130,7 +130,7 @@ pub struct Builder {
     db: Connection,
     active_count: usize,
     active_bytes: usize,
-    _lease: std::fs::File,
+    lease: std::fs::File,
 }
 impl Builder {
     pub fn new(observation: Observation) -> Result<Self> {
@@ -151,7 +151,7 @@ impl Builder {
             db,
             active_count: 0,
             active_bytes: 0,
-            _lease: lease,
+            lease,
         })
     }
     pub fn append(&mut self, raw: &Value) -> Result<()> {
@@ -254,7 +254,7 @@ impl Builder {
         drop(query);
         drop(self.db);
         std::fs::remove_file(self.spool.path().join("index.sqlite"))?;
-        cache::publish(self.spool, record)
+        cache::publish(self.spool, self.lease, record)
     }
 }
 fn page(entries: &[Value], ordinal: usize, previous: &Value) -> Result<Value> {

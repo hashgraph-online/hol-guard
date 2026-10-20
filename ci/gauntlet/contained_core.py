@@ -26,6 +26,7 @@ _REQUEST_LIMIT = 1_048_576
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 # Mirrors the generated adapter: each containment reason admits exactly one execution profile.
 CONTAINMENT_PROFILES = {
+    "native_bash_owner_required": "native-bash-owner-v1",
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
@@ -273,7 +274,12 @@ def _binding_error(
     if not receipt_is_authoritative(pre, reason, profile):
         return "harness-error", "contained rewrite lacks an authoritative Rust containment receipt"
     wrapper = call.get("args", {}).get("command")
-    argv, wrapper_error = contained_wrapper_argv(wrapper, "{{workspace}}")
+    if reason == "native_bash_owner_required":
+        from .bash_owner_wrapper import normalized_argv
+
+        argv, wrapper_error = normalized_argv(wrapper, call["id"])
+    else:
+        argv, wrapper_error = contained_wrapper_argv(wrapper, "{{workspace}}")
     if wrapper_error or argv is None:
         return "harness-error", wrapper_error or "contained wrapper is unavailable"
     # Only a full task can run in the account's own home, where the adapter omits the binding.
@@ -324,14 +330,14 @@ def _binding_error(
 
 
 def contained_calls(
-    expectation: str, case: dict[str, Any], calls: list[dict[str, Any]]
+    expectation: str, case: dict[str, Any], calls: list[dict[str, Any]], *, approval_retry: bool = False
 ) -> tuple[dict[str, dict[str, Any]], tuple[str, str] | None]:
     """Reviewed inputs of fully bound contained calls, or the outcome for a rewrite that is not bound.
 
     Only a call Guard denied for containment whose host input differs from the reviewed input is a
     contained rewrite; any other deny keeps the ordinary judgement and still counts as interruption.
     """
-    if expectation != "allow":
+    if expectation != "allow" and not approval_retry:
         return {}, None
     observations = [row for row in case.get("guard_observations", []) if isinstance(row, dict)]
     proofs = case.get("contained_request_proofs", [])
@@ -342,6 +348,8 @@ def contained_calls(
         rows = [row for row in observations if row.get("tool_call_id") == call.get("id")]
         pre = [row for row in rows if row.get("event") == "PreToolUse"]
         reviewed = pre[0].get("input") if len(pre) == 1 else None
+        if expectation != "allow" and (not pre or pre[0].get("reason_code") != "native_bash_owner_required"):
+            continue
         if (
             not isinstance(reviewed, dict)
             or pre[0].get("decision") != "deny"
@@ -351,7 +359,13 @@ def contained_calls(
         ):
             continue
         post = [row for row in rows if row.get("event") == "PostToolUse"]
-        error = _binding_error(call, pre[0], post, proofs, own_exit_ok=case.get("full_task_mode") is not None)
+        error = _binding_error(
+            call,
+            pre[0],
+            post,
+            proofs,
+            own_exit_ok=case.get("full_task_mode") is not None or approval_retry,
+        )
         if error:
             return {}, error
         bound[call["id"]] = reviewed

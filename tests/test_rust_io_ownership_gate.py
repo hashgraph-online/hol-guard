@@ -338,3 +338,35 @@ def test_an_absolute_import_of_an_operation_is_still_counted(tmp_path: Path) -> 
     # still the real thing under any spelling the gate can see.
     source = "from hashlib import sha256\n\ndef digest(value):\n    return sha256(value).hexdigest()\n"
     assert _module_observations(tmp_path, source) == [("digest", "sha256")]
+
+
+def test_pending_authority_waivers_all_name_a_reachable_module() -> None:
+    report = MODULE.validate(ROOT)
+    waived = {item["path"] for item in report["inventory"] if item["category"] == "pending_authority_migration"}
+
+    assert waived
+    assert set(MODULE._PENDING_AUTHORITY_PATHS) == waived
+    assert all((ROOT / path).is_file() for path in MODULE._PENDING_AUTHORITY_PATHS)
+
+
+def test_gate_rejects_a_waiver_for_a_module_the_hook_graph_no_longer_reaches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retired = "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py"
+    assert (ROOT / retired).is_file()
+    assert retired not in MODULE._PENDING_AUTHORITY_PATHS
+    monkeypatch.setattr(MODULE, "_PENDING_AUTHORITY_PATHS", MODULE._PENDING_AUTHORITY_PATHS | {retired})
+
+    with pytest.raises(RuntimeError, match=rf"stale pending_authority_migration waiver: {retired}"):
+        MODULE.validate(ROOT)
+
+
+def test_gate_ignores_a_waiver_for_a_module_outside_the_analysed_tree(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    absent = "src/codex_plugin_scanner/guard/runtime/not_in_this_tree.py"
+    _copy_gate_sources(tmp_path)
+    monkeypatch.setattr(MODULE, "_PENDING_AUTHORITY_PATHS", MODULE._PENDING_AUTHORITY_PATHS | {absent})
+
+    assert not (tmp_path / absent).exists()
+    assert MODULE.validate(tmp_path)["status"] == "passed"

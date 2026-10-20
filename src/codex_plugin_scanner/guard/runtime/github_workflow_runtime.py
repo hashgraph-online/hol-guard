@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import secrets
 from collections.abc import Mapping
 from datetime import datetime, timedelta
@@ -19,7 +18,6 @@ from ..native_github_workflow import (
 from ..workflow_capabilities import (
     SignedWorkflowCapability,
     WorkflowCapabilityError,
-    canonical_framed_payload,
     format_utc_timestamp,
 )
 from .github_workflow_approval_record import GitHubWorkflowApprovalRecord
@@ -59,7 +57,7 @@ def issue_resolved_github_workflow_capability(
         lineage = _validated_lineage(store, request)
         if request.get("status") != "resolved" or request.get("resolution_action") != "allow":
             return False
-        capability_id = _capability_id(lineage.request_id)
+        capability_id = lineage.capability_id
         try:
             existing = store.lookup_workflow_capability(capability_id)
         except WorkflowCapabilityError as error:
@@ -80,7 +78,7 @@ def issue_resolved_github_workflow_capability(
             capability_id=capability_id,
             approval_provenance_id=lineage.request_id,
             task_id=lineage.operation_id,
-            nonce=_digest("github-workflow-nonce", lineage.request_id),
+            nonce=lineage.nonce,
             issuer_id=_ISSUER_ID,
             subject_id=lineage.session_id,
             issued_at=format_utc_timestamp(issued_at),
@@ -109,7 +107,7 @@ def claim_resolved_github_workflow_authorization(
         lineage = _validated_lineage(store, request)
         if lineage.record != descriptor.record:
             return None
-        capability_id = _capability_id(request_id)
+        capability_id = lineage.capability_id
         return claim_github_workflow_authorization(
             store,
             capability_id,
@@ -139,7 +137,7 @@ def resolved_github_workflow_capability_preflight(
         lineage = _validated_lineage(store, request)
         if lineage.record != descriptor.record:
             return False
-        signed = store.lookup_workflow_capability(_capability_id(request_id))
+        signed = store.lookup_workflow_capability(lineage.capability_id)
         return signed is not None and _existing_matches(signed, lineage)
     except (KeyError, OSError, TypeError, ValueError, WorkflowCapabilityError):
         return False
@@ -236,14 +234,6 @@ def _existing_matches(signed: SignedWorkflowCapability, lineage: GitHubWorkflowL
         and claim.binding == lineage.record.binding
         and claim.max_uses == _CAPABILITY_MAX_USES
     )
-
-
-def _capability_id(request_id: str) -> str:
-    return f"gwc-{_digest('github-workflow-capability', request_id)}"
-
-
-def _digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
 
 
 def _required_string(payload: Mapping[str, object], key: str) -> str:

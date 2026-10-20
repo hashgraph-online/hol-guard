@@ -2406,10 +2406,9 @@ fn oauth_entitlement(
 /// `_connect_state_entitlement` (:156) — reconnect verdict from the persisted
 /// guard-connect state when it asserts a failed/expired connect.
 fn connect_state_entitlement(
-    store: &dyn SupplyChainStore,
-    now: &Timestamp,
+    facts: &PackageFirewallEntitlementFacts,
 ) -> Option<Map<String, Value>> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let oauth_payload = facts.oauth_payload.clone();
     let oauth_fields = oauth_entitlement_fields_from_sync_payload(oauth_payload.as_ref());
     if let Some(fields) = &oauth_fields {
         if let Some(plan_id) = entitlement_optional_string(fields.get("supply_chain_plan_id")) {
@@ -2418,8 +2417,7 @@ fn connect_state_entitlement(
             }
         }
     }
-    let latest_state = store.get_effective_guard_connect_state(&now.isoformat());
-    let latest_state = latest_state.as_ref()?.as_object()?;
+    let latest_state = facts.connect_state.as_ref()?.as_object()?;
     let status = entitlement_optional_string(latest_state.get("status"));
     let milestone = entitlement_optional_string(latest_state.get("milestone"));
     let missing_oauth_after_success = status.as_deref() == Some("connected")
@@ -2496,10 +2494,9 @@ fn reconnect_required_entitlement(
 }
 
 /// `_connect_required_entitlement` (:214).
-fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+fn connect_required_entitlement(facts: &PackageFirewallEntitlementFacts) -> Map<String, Value> {
     let mut tier = "unknown".to_string();
-    if let Some(Value::Object(p)) = &oauth_payload {
+    if let Some(Value::Object(p)) = &facts.oauth_payload {
         if let Some(plan_id) = entitlement_optional_string(p.get("supply_chain_plan_id")) {
             tier = plan_id.to_lowercase();
         }
@@ -2521,11 +2518,11 @@ fn connect_required_entitlement(store: &dyn SupplyChainStore) -> Map<String, Val
 /// `_requires_guard_cloud_connect` (:229) — whether a fresh Guard Cloud
 /// connect is required before trusting the bundle/OAuth claim.
 fn requires_guard_cloud_connect(
-    store: &dyn SupplyChainStore,
+    facts: &PackageFirewallEntitlementFacts,
     bundle: Option<&Map<String, Value>>,
     _oauth: Option<&Map<String, Value>>,
 ) -> bool {
-    let oauth_health = store.get_oauth_local_credential_health();
+    let oauth_health = facts.oauth_health.clone();
     let oauth_configured = oauth_health
         .as_ref()
         .and_then(|h| h.get("configured"))
@@ -2535,11 +2532,10 @@ fn requires_guard_cloud_connect(
         .as_ref()
         .and_then(|h| h.get("state"))
         .and_then(Value::as_str);
-    let cloud_profile = store.get_cloud_sync_profile();
     if oauth_configured && oauth_state == Some("healthy") {
         return false;
     }
-    if cloud_profile.is_some() {
+    if facts.has_cloud_sync_profile {
         return false;
     }
     if oauth_configured {
@@ -2553,17 +2549,47 @@ fn requires_guard_cloud_connect(
             .unwrap_or(false))
 }
 
+/// Everything the entitlement resolution reads, gathered once.
+///
+/// The resolution itself is a pure function of these facts, so a caller that
+/// already holds the store rows — the resident answering a compose query for a
+/// hook or CLI flow — resolves the same entitlement without a store of its own.
+#[derive(Debug, Clone, Default)]
+pub struct PackageFirewallEntitlementFacts {
+    /// The `supply_chain_bundle_entitlement` sync payload.
+    pub bundle_payload: Option<Value>,
+    /// The `oauth_local_credentials` sync payload.
+    pub oauth_payload: Option<Value>,
+    /// The OAuth local-credential health record.
+    pub oauth_health: Option<Value>,
+    /// The effective Guard connect state as of `now`.
+    pub connect_state: Option<Value>,
+    /// A cloud sync profile exists for this home.
+    pub has_cloud_sync_profile: bool,
+}
+
 /// `resolve_package_firewall_entitlement` (:275) — read-only entitlement
 /// resolution. Ported 1:1 from Python.
 pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map<String, Value> {
     let now = Timestamp::now_utc();
-    let bundle = bundle_entitlement(
-        store
-            .get_sync_payload("supply_chain_bundle_entitlement")
-            .as_ref(),
-    );
-    let oauth_health = store.get_oauth_local_credential_health();
-    let oauth_payload = store.get_sync_payload("oauth_local_credentials");
+    let facts = PackageFirewallEntitlementFacts {
+        bundle_payload: store.get_sync_payload("supply_chain_bundle_entitlement"),
+        oauth_payload: store.get_sync_payload("oauth_local_credentials"),
+        oauth_health: store.get_oauth_local_credential_health().map(Value::Object),
+        connect_state: store.get_effective_guard_connect_state(&now.isoformat()),
+        has_cloud_sync_profile: store.get_cloud_sync_profile().is_some(),
+    };
+    resolve_package_firewall_entitlement_from_facts(&facts, &now)
+}
+
+/// The entitlement these facts resolve to at `now`.
+pub fn resolve_package_firewall_entitlement_from_facts(
+    facts: &PackageFirewallEntitlementFacts,
+    now: &Timestamp,
+) -> Map<String, Value> {
+    let bundle = bundle_entitlement(facts.bundle_payload.as_ref());
+    let oauth_health = facts.oauth_health.clone();
+    let oauth_payload = facts.oauth_payload.clone();
     // Python gates `oauth_fields` on a healthy credential so a degraded secret
     // cannot mint a paid/unpaid claim from stale metadata.
     let oauth_fields = if oauth_health
@@ -2576,8 +2602,8 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     } else {
         None
     };
-    let oauth = oauth_entitlement(oauth_fields.as_ref(), &now);
-    let connect_state = connect_state_entitlement(store, &now);
+    let oauth = oauth_entitlement(oauth_fields.as_ref(), now);
+    let connect_state = connect_state_entitlement(facts);
     let is_healthy_profile = oauth_health
         .as_ref()
         .and_then(|h| h.get("state"))
@@ -2592,7 +2618,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
             return state;
         }
     }
-    if requires_guard_cloud_connect(store, bundle.as_ref(), oauth.as_ref()) {
+    if requires_guard_cloud_connect(facts, bundle.as_ref(), oauth.as_ref()) {
         if bundle
             .as_ref()
             .is_some_and(|b| b.get("allowed").and_then(Value::as_bool).unwrap_or(false))
@@ -2603,7 +2629,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
                 oauth_payload.as_ref(),
             );
         }
-        return connect_required_entitlement(store);
+        return connect_required_entitlement(facts);
     }
     if bundle
         .as_ref()
@@ -2642,7 +2668,7 @@ pub fn resolve_package_firewall_entitlement(store: &dyn SupplyChainStore) -> Map
     if let Some(o) = &oauth {
         return o.clone();
     }
-    connect_required_entitlement(store)
+    connect_required_entitlement(facts)
 }
 
 // ---------------------------------------------------------------------------
@@ -4360,10 +4386,15 @@ pub fn package_evaluation_requires_external_archive_binding(
     evaluation: &PackageRequestEvaluation,
 ) -> bool {
     let source_hashes = evaluation.external_archive_source_hashes();
-    if source_hashes
-        .iter()
-        .any(|h| h.as_str().is_some_and(|s| s.len() == 64))
-    {
+    if source_hashes.iter().any(|h| {
+        // Python measures the hash in characters, and Python is the authority
+        // this lane must agree with. Counting bytes instead moved the trigger
+        // in both directions -- a 64-character hash that encodes to more than
+        // 64 bytes stopped demanding a binding, and a 64-byte string shorter
+        // than 64 characters started demanding one. Neither is the digest this
+        // looks for; matching Python is the contract, not a tighter rule.
+        h.as_str().is_some_and(|s| s.chars().count() == 64)
+    }) {
         return true;
     }
     if evaluation

@@ -30,7 +30,7 @@ fn inputs(native_request: Option<HookNativeRequestV1>) -> HookCompositionInputsV
         "runtime_artifact_checked": false,
         "prompt_nonblank": false,
         "has_command_text": true,
-        "facts": {"verified_apply_patch": false},
+        "facts": {},
     });
     value["native_request"] = serde_json::to_value(native_request).unwrap();
     serde_json::from_value(value).unwrap()

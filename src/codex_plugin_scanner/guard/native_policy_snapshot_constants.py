@@ -84,6 +84,7 @@ TRANSIENT_PUBLICATION_ERRORS = frozenset(
         "native_command_control_mutation_in_progress",
         "native_command_control_authority_not_current",
         "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
         "native_business_source_mutation_in_progress",
         "native_business_source_binding_changed",
         "native_local_cli_revision_changed",

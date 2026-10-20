@@ -63,6 +63,7 @@ from codex_plugin_scanner.guard.policy_bundle_delivery import policy_bundle_ackn
 from codex_plugin_scanner.guard.policy_bundle_parser import (
     computed_policy_bundle_hash,
     payload_hash_for_policy_bundle,
+    policy_bundle_rejection_message,
     validated_policy_bundle_payload,
 )
 from codex_plugin_scanner.guard.proxy import RemoteGuardProxy, StdioGuardProxy
@@ -10642,14 +10643,26 @@ def test_hook_runtime_artifact_combines_package_tool_and_data_flow_findings(tmp_
         workspace=workspace_dir,
     )
     assert action is not None
-    data_flow_signals = guard_commands_module._runtime_action_data_flow_signals(action, workspace=workspace_dir)
+    data_flow_signals, data_flow_artifact = guard_commands_module._runtime_action_data_flow_signals(
+        action,
+        workspace=workspace_dir,
+        naming=guard_commands_module._runtime_data_flow_naming(
+            harness="codex",
+            payload=payload,
+            action_envelope=action,
+            home_dir=home_dir,
+            workspace=workspace_dir,
+        ),
+    )
     assert data_flow_signals
+    assert data_flow_artifact is not None
 
     artifact = guard_commands_module._hook_runtime_artifact(
         harness="codex",
         payload=payload,
         action_envelope=action,
         data_flow_signals=data_flow_signals,
+        data_flow_artifact=data_flow_artifact,
         home_dir=home_dir,
         guard_home=home_dir,
         workspace=workspace_dir,
@@ -11158,6 +11171,12 @@ def test_guard_hook_emits_codex_runtime_denial_with_guard_remediation(tmp_path, 
     assert "approve it in hol guard, then retry." not in reason
 
 
+def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+    """Fail when a reason the CLI still composes locally reaches the resident."""
+
+    raise AssertionError("the resident must not be asked for this reason")
+
+
 def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     artifact = GuardArtifact(
         artifact_id="claude-code:project:tool-action:test",
@@ -11173,6 +11192,8 @@ def test_runtime_artifact_native_reason_truncates_long_risk_summaries() -> None:
     reason = guard_commands_module._runtime_artifact_native_reason(
         artifact,
         {"risk_summary": long_summary},
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason.startswith("HOL Guard flagged this request: ")
@@ -11199,6 +11220,8 @@ def test_runtime_artifact_native_reason_prefers_decision_v2_harness_message() ->
             },
             "risk_summary": "Generic fallback summary.",
         },
+        composer=_composer_never_called,
+        guard_home=None,
     )
 
     assert reason == "HOL Guard stopped this exact shell command before it touched secrets."
@@ -22753,9 +22776,21 @@ def test_sync_receipts_rejects_policy_bundle_for_the_wrong_workspace(tmp_path, m
     assert "Reconnect Guard" in str(last_error["message"])
 
 
+@pytest.mark.parametrize(
+    ("spec_extra", "reason", "rule_id"),
+    [
+        ({}, "canonical_compile_unsupported_policy_match", "rule.unsupported-operation"),
+        # Budgets are refused before any rule is read, and the compiler names
+        # the policy in place of a rule, so that rejection carries no rule id.
+        ({"budgets": {"daily": 1}}, "canonical_compile_unsupported_policy_budgets", None),
+    ],
+)
 def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failure(
     tmp_path,
     monkeypatch,
+    spec_extra,
+    reason,
+    rule_id,
 ):
     store = GuardStore(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id="workspace-1")
@@ -22810,6 +22845,7 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
                         },
                     }
                 ],
+                **spec_extra,
             },
         },
     }
@@ -22862,13 +22898,18 @@ def test_sync_receipts_rolls_back_to_last_good_bundle_on_canonical_compile_failu
 
     assert store.get_sync_payload("policy_bundle") == last_good
     assert store.get_sync_payload("policy_bundle_last_good") == last_good
-    assert store.get_sync_payload("policy_bundle_last_error") == {
-        "reason": "canonical_compile_unsupported_policy_match"
-    }
+    last_error = store.get_sync_payload("policy_bundle_last_error")
+    assert last_error["reason"] == reason
+    # The rejection names the rule that refused to compile and what Guard can
+    # enforce instead; the bare code alone left an administrator with a
+    # published policy that never applied and nothing to act on.
+    assert last_error.get("ruleId") == rule_id
+    assert last_error["message"] == policy_bundle_rejection_message(reason)
+    assert "keeps the policy it already had" in last_error["message"]
     assert [decision["owner"] for decision in store.list_policy_decisions()] == ["legacy-last-good"]
     rollback_events = store.list_events(event_name="policy_bundle/rollback")
     assert rollback_events[-1]["payload"] == {
-        "reason": "canonical_compile_unsupported_policy_match",
+        "reason": reason,
         "restored": "policy_bundle_last_good",
     }
 

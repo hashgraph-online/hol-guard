@@ -123,11 +123,11 @@ def with_saved_artifact_hash_provenance(
 
     if not isinstance(stored_artifact_hash, str) or not stored_artifact_hash:
         return reuse
-    from .approval_context import parse_approval_context_token
+    from .approval_context import approval_context_token_is_well_formed
 
     return replace(
         reuse,
-        saved_artifact_hash_is_context_token=parse_approval_context_token(stored_artifact_hash) is not None,
+        saved_artifact_hash_is_context_token=approval_context_token_is_well_formed(stored_artifact_hash),
     )
 
 

@@ -11,9 +11,12 @@ import json
 import os
 import time
 from collections.abc import Mapping
+from dataclasses import asdict
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .models import GuardArtifact
+from .native_context import _canonical_request_sha256, _resolve_digest_home, ensure_resident_prerequisite
 from .native_resident_client import native_resident_client_request
 from .native_runtime import _isolated_environment, native_runtime_status
 from .native_runtime_resilience import (
@@ -25,6 +28,9 @@ if TYPE_CHECKING:
     from .runtime.package_intent_common import PackageIntent
 
 _MAX_REQUEST_BYTES = 256 * 1024
+# A workspace audit sends one intent holding every scanned lockfile target, so
+# the artifact request takes the same budget as the evaluation it feeds.
+_ARTIFACT_MAX_REQUEST_BYTES = 4 * 1024 * 1024
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
 _PACKAGE_AUTHORITY_FEATURE = "package-authority-v1"
 _REQUEST_SCHEMA = "guard-package-authority-request.v1"
@@ -188,6 +194,126 @@ def package_intent_parse_native(
     if not isinstance(runtime_private_metadata, Mapping):
         raise ValueError("native package intent missing private metadata")
     return PackageIntent.from_dict(payload, runtime_private_metadata=runtime_private_metadata)
+
+
+class NativePackageArtifactUnavailableError(RuntimeError):
+    """The resident gave no usable name for a package request review."""
+
+
+# Every field of the artifact wire. A request artifact never carries a command,
+# args, a url, a transport or a publisher, but they are sent as their empty
+# forms and must still be present: a reply that quietly grew or lost a field is
+# a malformed reply, not an artifact missing a field nobody checked.
+_ARTIFACT_WIRE_FIELDS = frozenset(
+    {
+        "artifact_id",
+        "name",
+        "harness",
+        "artifact_type",
+        "source_scope",
+        "config_path",
+        "command",
+        "args",
+        "url",
+        "transport",
+        "publisher",
+        "metadata",
+        "runtime_private_metadata",
+    }
+)
+
+
+def _artifact_from_wire(payload: object) -> GuardArtifact:
+    """Rebuild the artifact the resident named, or raise.
+
+    A malformed reply is never read as "no review to name": the caller asked
+    because it holds a package request, and an artifact it cannot rebuild
+    leaves that request unnamed.
+    """
+
+    if not isinstance(payload, Mapping) or set(payload) != _ARTIFACT_WIRE_FIELDS:
+        raise NativePackageArtifactUnavailableError("native_package_artifact_malformed")
+    metadata = payload["metadata"]
+    runtime_private_metadata = payload["runtime_private_metadata"]
+    if not isinstance(metadata, Mapping) or not isinstance(runtime_private_metadata, Mapping):
+        raise NativePackageArtifactUnavailableError("native_package_artifact_malformed")
+    text_fields = ("artifact_id", "name", "harness", "artifact_type", "source_scope", "config_path")
+    if any(not isinstance(payload[key], str) for key in text_fields):
+        raise NativePackageArtifactUnavailableError("native_package_artifact_malformed")
+    # A request artifact launches nothing. A filled launch field is drift, and
+    # the model would otherwise drop it for its default without a trace.
+    if payload["args"] != [] or any(payload[key] is not None for key in ("command", "url", "transport", "publisher")):
+        raise NativePackageArtifactUnavailableError("native_package_artifact_malformed")
+    return GuardArtifact(
+        artifact_id=str(payload["artifact_id"]),
+        name=str(payload["name"]),
+        harness=str(payload["harness"]),
+        artifact_type=str(payload["artifact_type"]),
+        source_scope=str(payload["source_scope"]),
+        config_path=str(payload["config_path"]),
+        metadata=dict(metadata),
+        runtime_private_metadata=dict(runtime_private_metadata),
+    )
+
+
+def package_request_artifact_native(
+    intent: PackageIntent,
+    *,
+    harness: str,
+    config_path: str,
+    source_scope: str,
+    guard_home: Path | None = None,
+    timeout_seconds: float = 5.0,
+    deadline_monotonic: float | None = None,
+) -> GuardArtifact:
+    """Ask the resident to name the review ``intent`` earns.
+
+    The request carries the intent exactly as the caller holds it — ``asdict``,
+    not the sanitized ``to_dict`` the public metadata carries. The artifact's
+    fingerprint hashes the exact ``raw_spec``, ``source_url`` and argv, so an
+    intent sent in its redacted spelling would key the review under an id no
+    earlier approval was stored under. Those exact values already cross this
+    channel in the other direction, as the private metadata of a parsed intent.
+
+    Every outcome other than a well-formed, request-bound ``ok`` reply raises:
+    the artifact id is the key a saved approval is matched under, and deriving
+    it here instead would put a second implementation in charge of which
+    review an approval stands for.
+    """
+
+    home = _resolve_digest_home(guard_home)
+    if not ensure_resident_prerequisite(home):
+        raise NativePackageArtifactUnavailableError("native_package_artifact_unavailable")
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": _request_id(),
+        "intent": asdict(intent),
+        "harness": harness,
+        "config_path": config_path,
+        "source_scope": source_scope,
+    }
+    try:
+        request_sha256 = "sha256:" + _canonical_request_sha256(request)
+    except (TypeError, ValueError) as error:
+        raise NativePackageArtifactUnavailableError("native_package_artifact_unavailable") from error
+    response = _resident_request(
+        operation="package_request_artifact",
+        request=request,
+        guard_home=home,
+        timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
+        max_request_bytes=_ARTIFACT_MAX_REQUEST_BYTES,
+    )
+    if response is None:
+        raise NativePackageArtifactUnavailableError("native_package_artifact_unavailable")
+    if response.get("request_id") != request["request_id"] or response.get("request_sha256") != request_sha256:
+        # Another request's artifact id would file this review under an approval
+        # it never earned.
+        identity = native_runtime_status().identity
+        if identity is not None:
+            native_record_resident_failure(identity.sha256, home, reason="native_package_request_artifact_unbound")
+        raise NativePackageArtifactUnavailableError("native_package_artifact_unbound")
+    return _artifact_from_wire(response.get("payload"))
 
 
 def evaluation_from_native_payload(payload: Mapping[str, object]) -> Any:

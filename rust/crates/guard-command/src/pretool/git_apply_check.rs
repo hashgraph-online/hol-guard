@@ -94,16 +94,34 @@ pub(crate) fn patch_targets(arguments: &[String]) -> Option<Vec<&str>> {
 /// here: the caller sends every target through the ordinary read screen,
 /// which resolves the path and refuses a link to a private file.
 fn patch_target(value: &str) -> bool {
-    let relative = value.strip_prefix('/').unwrap_or(value);
+    let relative = value
+        .strip_prefix('/')
+        .or_else(|| drive_root(value))
+        .unwrap_or(value);
     !value.is_empty()
         && value.len() <= 4096
         && !value.starts_with(['-', '\\'])
-        && value
+        && relative
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
         && relative
             .split('/')
             .all(|part| !matches!(part, "" | "." | ".."))
+}
+
+/// The rest of a `C:/...` path, which Git for Windows reads as absolute.
+/// Only the drive letter and its colon are set aside; the rest keeps the
+/// plain-path grammar, so a stream selector or another colon is still refused.
+#[cfg(windows)]
+fn drive_root(value: &str) -> Option<&str> {
+    let bytes = value.as_bytes();
+    (bytes.len() > 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && bytes[2] == b'/')
+        .then(|| &value[3..])
+}
+
+#[cfg(not(windows))]
+fn drive_root(_value: &str) -> Option<&str> {
+    None
 }
 
 /// A path the caller keeps out of, or holds the patch to. Git reads it as a

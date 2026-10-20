@@ -294,12 +294,14 @@ fn quoted_home_or_variable_roots_are_reviewed_and_rootless_fd_matches_dot() {
     for command in [
         "fd -e rs main --search-path=~/Code/org/app-portal",
         "fd . \"$HOME\"",
-        "fd . $HOME/Code/org",
         "git -C '~/Code/org/service-api' status --short",
         "git -C \"~/Code/org/service-api\" diff --stat",
     ] {
         assert_decision(&cwd, &layout.home, command, false);
     }
+    // With the shell's HOME the declared home, `$HOME` names it as a literal
+    // path does. Only a POSIX home is substituted.
+    assert_decision(&cwd, &layout.home, "fd . $HOME/Code/org", !cfg!(windows));
     // A rootless fd lists the cwd, exactly like an explicit `.` root.
     for directory in [&layout.home, &cwd] {
         assert_eq!(

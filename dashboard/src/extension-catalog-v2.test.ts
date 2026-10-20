@@ -156,6 +156,37 @@ try {
   }
 
   {
+    // A daemon still preparing its read model answers 503; the read waits it out.
+    let unavailable = 2;
+    serve((path, params) => {
+      if (path === INDEX && unavailable > 0) {
+        unavailable -= 1;
+        return { status: 503, body: { error: "catalog_read_model_unavailable" } };
+      }
+      return indexHandler(path, params) ?? { status: 500 };
+    });
+    const model = await loadCatalogReadModel();
+    assert.equal(model.protocol, "v2");
+    assert.deepEqual(model.extensions.map((item) => item.extension_id), [GIT, NPM]);
+    assert.deepEqual(requests.map((entry) => entry.params.get("cursor")), [null, null, null, "c1"]);
+  }
+
+  {
+    // A superseded search stops waiting for an unavailable daemon.
+    const controller = new AbortController();
+    serve((path, params) => {
+      const index = indexHandler(path, params);
+      if (index) return index;
+      queueMicrotask(() => controller.abort());
+      return { status: 503, body: { error: "catalog_read_transport_failed" } };
+    });
+    const model = await loadCatalogReadModel();
+    const before = requests.length;
+    await assert.rejects(model.searchPermissions("git", controller.signal), (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+    assert.equal(requests.length, before + 1);
+  }
+
+  {
     // A 304 with an unknown validator is retried once without a condition.
     let calls = 0;
     serve((path, params, headers) => {

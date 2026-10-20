@@ -68,6 +68,8 @@ _COMMON_HANDLERS = {
     "package-shims": "_run_guard_package_shims_command",
     "contained-write": "_run_guard_contained_write_command",
     "execute-contained-test": "_run_guard_execute_contained_test_command",
+    "execute-bound-bash": "_run_guard_execute_bound_bash_command",
+    "ack-bound-bash": "_run_guard_ack_bound_bash_command",
     "run": "_run_guard_run_command",
     "run-shim": "_run_guard_run_command",
     "diff": "_run_guard_diff_command",

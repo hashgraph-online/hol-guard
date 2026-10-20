@@ -8,7 +8,13 @@ import importlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
-from ..native_hook_authority_state import flag_field, hook_authority_state, keys_field, object_field
+from ..native_hook_authority_state import (
+    flag_field,
+    hook_authority_state,
+    keys_field,
+    object_field,
+    text_field,
+)
 
 if TYPE_CHECKING:
     from ._commands_shared import (
@@ -329,16 +335,6 @@ def _cursor_shell_command_from_payload(payload: Mapping[str, object]) -> str | N
     return None
 
 
-def _cursor_shell_command_fingerprint(command: str) -> str:
-    from ..adapters.cursor_native_approval import normalize_cursor_shell_command
-
-    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
-
-
-def _cursor_pending_shell_state_key(conversation_id: str, command: str) -> str:
-    return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
-
-
 def _append_cursor_pending_shell_key(
     store: GuardStore,
     *,
@@ -397,17 +393,26 @@ def _store_cursor_pending_shell_state(
     command: str,
     payload: Mapping[str, object],
     now: str,
-) -> bool:
+) -> str | None:
+    """Stores the pending shell state and returns the key it was stored under.
+
+    The conversation and the command name the row: the resident derives its
+    state key and reports it back, so the caller indexes and rolls back the row
+    the resident actually wrote.
+    """
+
     reply = hook_authority_state(
         store,
         "cursor_store_pending_state",
         now=now,
         create_key=True,
         conversation_id=conversation_id,
-        state_key=_cursor_pending_shell_state_key(conversation_id, command),
+        command=command,
         payload=dict(payload),
     )
-    return flag_field(reply, "stored")
+    if not flag_field(reply, "stored"):
+        return None
+    return text_field(reply, "state_key")
 
 
 def _load_verified_cursor_pending_shell_state(
@@ -420,22 +425,15 @@ def _load_verified_cursor_pending_shell_state(
 ) -> dict[str, object] | None:
     from ..adapters.cursor_native_approval import normalize_cursor_shell_command
 
-    normalized_command = normalize_cursor_shell_command(command)
-    expected_key = _cursor_pending_shell_state_key(conversation_id, normalized_command)
     reply = hook_authority_state(
         store,
         "cursor_load_pending_state",
         now=_state_now(now),
         conversation_id=conversation_id,
-        command=normalized_command,
-        state_key=state_key or expected_key,
-        expected_key=expected_key,
+        command=normalize_cursor_shell_command(command),
+        state_key=state_key,
     )
     return object_field(reply, "pending")
-
-
-def _cursor_native_shell_allow_state_key(conversation_id: str, command: str) -> str:
-    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_command_fingerprint(command)}"
 
 
 def _record_cursor_native_shell_allow_state(
@@ -456,7 +454,6 @@ def _record_cursor_native_shell_allow_state(
         now=now,
         create_key=True,
         conversation_id=conversation_id,
-        state_key=_cursor_native_shell_allow_state_key(conversation_id, normalized_command),
         command=normalized_command,
         artifact_id=artifact.artifact_id,
         artifact_hash=artifact_hash,
@@ -479,7 +476,6 @@ def _load_cursor_native_shell_allowance(
         now=_now(),
         conversation_id=conversation_id,
         command=command,
-        state_key=_cursor_native_shell_allow_state_key(conversation_id, command),
     )
     return object_field(reply, "allowance")
 
@@ -496,10 +492,7 @@ __all__ = [
     "_claude_guard_approval_question_text",
     "_claude_pending_permission_index_key",
     "_cursor_conversation_id",
-    "_cursor_native_shell_allow_state_key",
     "_cursor_native_shell_is_approved",
-    "_cursor_pending_shell_state_key",
-    "_cursor_shell_command_fingerprint",
     "_cursor_shell_command_from_payload",
     "_emit_claude_permission_request_passthrough",
     "_load_claude_pending_permission",

@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, generat
 
 import codex_plugin_scanner.guard.native_supply_chain_egress as egress_module
 from codex_plugin_scanner.cli import main
+from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     PackageRequestEvaluation,
     SupplyChainUserCopy,
@@ -252,6 +253,31 @@ def _data_flow_signal_v2() -> RiskSignalV2:
         redaction_level="summary",
         false_positive_hint="Allow only when the command intentionally moves non-sensitive data.",
         advisory_id=None,
+    )
+
+
+def _data_flow_artifact() -> GuardArtifact:
+    """The artifact the resident names alongside `_data_flow_signal_v2`."""
+    summary = "This command sends local secret to network host. Guard kept raw secret contents out of the evidence."
+    return GuardArtifact(
+        artifact_id="codex:project:data-flow:" + "a" * 64,
+        name="Bash data-flow exfiltration",
+        harness="codex",
+        artifact_type="tool_action_request",
+        source_scope="project",
+        config_path="codex.json",
+        metadata={
+            "action_class": "credential exfiltration shell command",
+            "command_text": "npm install minimist@1.2.8",
+            "guard_default_action": "require-reapproval",
+            "risk_classes": ["data_flow_exfiltration"],
+            "request_summary": summary,
+            "runtime_request_signals": ["This command sends local secret to network host."],
+            "runtime_request_summary": summary,
+            "runtime_request_reason": (
+                "Guard detected local-secret data flow in the runtime action before the command could send it away."
+            ),
+        },
     )
 
 
@@ -693,7 +719,7 @@ def test_guard_hook_keeps_data_flow_summary_when_package_warning_is_weaker(
     monkeypatch.setattr(
         guard_commands_module,
         "_runtime_action_data_flow_signals",
-        lambda *_args, **_kwargs: (_data_flow_signal_v2(),),
+        lambda *_args, **_kwargs: ((_data_flow_signal_v2(),), _data_flow_artifact()),
     )
     monkeypatch.setattr(
         guard_commands_module,

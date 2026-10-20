@@ -669,13 +669,13 @@ fn walk_scope_inner(
             let path = entry.path();
             let name = entry.file_name();
             let name = name.to_str().ok_or(ScopeUnproven)?;
-            // The Claude walk models ripgrep and skips .git. The host-neutral
-            // walk has no such model, so it must inspect repository metadata.
-            if name == ".git" && (ignores == Ignores::Ripgrep || names) {
-                continue;
-            }
             // Metadata only: never follow links or open a candidate secret.
             let metadata = std::fs::symlink_metadata(&path).map_err(|_| ScopeUnproven)?;
+            // Ripgrep's walk skips .git, a names walk all but a link; a content walk inspects it.
+            if name == ".git" && (ignores == Ignores::Ripgrep || (names && !metadata.is_symlink()))
+            {
+                continue;
+            }
             if metadata.file_type().is_symlink() {
                 // Claude's Grep does not follow links. Still refuse a link
                 // whose name or file target is sensitive, in case it would.

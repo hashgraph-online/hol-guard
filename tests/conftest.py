@@ -85,6 +85,25 @@ def _default_unit_test_native_mode(monkeypatch: pytest.MonkeyPatch) -> bool:
 
 
 @pytest.fixture(autouse=True)
+def _fresh_verified_runtime_copy() -> Iterator[None]:
+    """Start each test without the process's reused runtime copy."""
+    from codex_plugin_scanner.guard.extension_builder import native_executable_root
+
+    native_executable_root.release_copies()
+    yield
+    native_executable_root.release_copies()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_native_answer_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep reused native answers from crossing tests that stub native replies."""
+    from codex_plugin_scanner.guard.catalog_delivery import active_security, installed_bundle
+
+    monkeypatch.setattr(installed_bundle, "_ANSWERS", {})
+    monkeypatch.setattr(active_security, "_ANSWERS", type(active_security._ANSWERS)())
+
+
+@pytest.fixture(autouse=True)
 def _python_codex_hook_bridge(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> None:
     """Install Codex hooks with the Python bridge argv unless a test opts in.
 

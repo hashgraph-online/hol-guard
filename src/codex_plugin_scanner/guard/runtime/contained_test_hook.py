@@ -13,6 +13,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from ..desktop_core_currency import OUT_OF_SYNC_REASON, superseded_desktop_core
+from ..native_restricted_pytest import venv_activation_target
 from ..windows_paths import trusted_windows_local_temp
 from . import restricted_git, restricted_node_test, restricted_node_tool, restricted_vitest
 from .contained_authority import authority_unavailable, settled_authority
@@ -289,6 +290,25 @@ def run_authorized_contained_test(
                 )
         return run_authorized_contained_test(
             as_directory_change(payload, workspace=workspace, home=home_dir),
+            workspace=workspace,
+            authorize=authorize,
+            timeout_seconds=timeout_seconds,
+            cwd=cwd,
+            home_dir=home_dir,
+            merge_stderr=merge_stderr,
+        )
+
+    projected = venv_activation_target(tool_input["command"], cwd=cwd, home_dir=home_dir)
+    if projected is not None:
+        # A virtualenv activation hands its verdict to the command after it,
+        # and the pre-tool pass answered for that command. The activation as
+        # issued must carry the receipt; the projected command is then
+        # re-authorized on its own and planned from the text the answer named.
+        receipt = settled_authority(authorize, payload)
+        if not _contained_receipt(receipt):
+            raise _reject(receipt)
+        return run_authorized_contained_test(
+            {**payload, "tool_input": {**tool_input, "command": projected}},
             workspace=workspace,
             authorize=authorize,
             timeout_seconds=timeout_seconds,

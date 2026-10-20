@@ -2,7 +2,7 @@
 //!
 //! A script launch is persistable only when every module it can load is bound:
 //! the script and each relative import by content, each package import by its
-//! installed manifest (the `runner-local-bin` standard) and each builtin by
+//! installed manifest and selected code closure, and each builtin by
 //! name. A module that loads code by a computed name, evaluates strings,
 //! starts processes or reaches the module loader keeps the launch once-only,
 //! as do a graph that writes files and loads a local module at run time, and
@@ -19,6 +19,9 @@ use super::context::Ctx;
 use super::fs_path;
 use super::node_source::{module_specifiers, source_writes_files};
 use super::reasons::{Proof, MUTABLE_LAUNCHER, SENSITIVE_PATH};
+
+#[path = "node_installed.rs"]
+mod installed;
 
 pub(super) const NODE_LAUNCHERS: [&str; 2] = ["node", "nodejs"];
 
@@ -38,7 +41,9 @@ const INERT_OPTIONS: [&str; 10] = [
 ];
 /// Preload code or move package lookup outside the bound tree.
 const LOADER_ENVIRONMENT: [&str; 2] = ["NODE_OPTIONS", "NODE_PATH"];
-const SOURCE_EXTENSIONS: [&str; 6] = ["js", "mjs", "cjs", "ts", "mts", "cts"];
+// Node also loads an existing extensionless source file (notably bin shims).
+// This does not permit guessing an extension for an exports target.
+const SOURCE_EXTENSIONS: [&str; 7] = ["", "js", "mjs", "cjs", "ts", "mts", "cts"];
 /// CommonJS file resolution order; `.node` (a native addon) is refused.
 const REQUIRE_SUFFIXES: [&str; 4] = ["", ".js", ".json", ".node"];
 const MAX_MODULES: usize = 64;
@@ -190,10 +195,16 @@ impl Graph<'_> {
         for parent in fs_path::parents(&path) {
             let manifest = fs_path::join(&parent, "package.json");
             if fs_path::is_file(&manifest) {
-                if !self.data.contains_key(&manifest) {
-                    let (digest, _) = self.digest(&manifest, MAX_MANIFEST_BYTES)?;
-                    self.data.insert(manifest, digest);
+                let (digest, _) = self.digest(&manifest, MAX_MANIFEST_BYTES)?;
+                if self.data.get(&manifest).is_some_and(|old| old != &digest)
+                    || self
+                        .packages
+                        .get(&manifest)
+                        .is_some_and(|old| old != &digest)
+                {
+                    return Err("node_package_manifest_unproven");
                 }
+                self.data.insert(manifest, digest);
                 break;
             }
         }
@@ -212,7 +223,14 @@ impl Graph<'_> {
             .map(|suffix| format!("{base}{suffix}"))
             .find(|candidate| fs_path::is_file(candidate))
             .ok_or(MUTABLE_LAUNCHER)?;
-        let resolved = fs_path::resolve_strict(&resolved).ok_or(MUTABLE_LAUNCHER)?;
+        self.resolve_exact_file(&resolved)
+    }
+
+    fn resolve_exact_file(&mut self, path: &str) -> Proof<()> {
+        if !fs_path::is_file(path) {
+            return Err("node_package_entrypoint_unproven");
+        }
+        let resolved = fs_path::resolve_strict(path).ok_or(MUTABLE_LAUNCHER)?;
         match extension(&resolved).as_str() {
             "json" => {
                 if !self.data.contains_key(&resolved) {
@@ -224,27 +242,6 @@ impl Graph<'_> {
             ext if SOURCE_EXTENSIONS.contains(&ext) => self.add_module(resolved),
             _ => Err(MUTABLE_LAUNCHER),
         }
-    }
-
-    /// Bind the installed manifest the nearest `node_modules` lookup finds.
-    fn resolve_package(&mut self, importer: &str, name: &str) -> Proof<()> {
-        for parent in fs_path::parents(importer) {
-            if fs_path::name(&parent) == "node_modules" {
-                continue;
-            }
-            let package = name
-                .split('/')
-                .fold(fs_path::join(&parent, "node_modules"), |dir, part| {
-                    fs_path::join(&dir, part)
-                });
-            let manifest = fs_path::join(&package, "package.json");
-            if fs_path::is_file(&manifest) {
-                let (digest, _) = self.digest(&manifest, MAX_MANIFEST_BYTES)?;
-                self.packages.insert(manifest, digest);
-                return Ok(());
-            }
-        }
-        Err(MUTABLE_LAUNCHER)
     }
 
     fn resolve(&mut self, importer: &str, specifier: &str) -> Proof<()> {
@@ -260,7 +257,7 @@ impl Graph<'_> {
             return self.resolve_file(importer, specifier);
         }
         let name = package_name(specifier).ok_or(MUTABLE_LAUNCHER)?;
-        self.resolve_package(importer, &name)
+        installed::resolve(self, importer, specifier, &name)
     }
 }
 
@@ -299,14 +296,21 @@ pub(super) fn node_script(arguments: &[String], cwd: &str, ctx: &Ctx) -> Proof<V
         total: 0,
     };
     graph.add_module(resolved.clone())?;
-    let (mut writes, mut loads_local_at_run_time) = (false, false);
+    let (mut writes, mut loads_local_at_run_time, mut loads_package_at_run_time) =
+        (false, false, false);
     while let Some(module) = graph.queue.pop_front() {
         let (digest, bytes) = graph.digest(&module, MAX_MODULE_BYTES)?;
         let source = String::from_utf8(bytes).map_err(|_| MUTABLE_LAUNCHER)?;
         graph.modules.insert(module.clone(), digest);
         writes |= source_writes_files(&source);
         for specifier in module_specifiers(&source).ok_or(MUTABLE_LAUNCHER)? {
+            let builtin = specifier
+                .name
+                .strip_prefix("node:")
+                .unwrap_or(&specifier.name);
             loads_local_at_run_time |= specifier.runtime && is_relative(&specifier.name);
+            loads_package_at_run_time |=
+                specifier.runtime && !is_relative(&specifier.name) && !BUILTINS.contains(&builtin);
             graph.resolve(&module, &specifier.name)?;
         }
     }
@@ -314,6 +318,9 @@ pub(super) fn node_script(arguments: &[String], cwd: &str, ctx: &Ctx) -> Proof<V
     // that can write files could replace it first.
     if writes && loads_local_at_run_time {
         return Err(MUTABLE_LAUNCHER);
+    }
+    if writes && loads_package_at_run_time {
+        return Err("node_runtime_package_mutation_unproven");
     }
     let entries = |map: &BTreeMap<String, String>| -> Vec<Value> {
         map.iter()

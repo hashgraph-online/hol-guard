@@ -8,8 +8,14 @@
 //! or command, or older than the 30 minute window is never returned. It is
 //! deleted instead, and each integrity failure leaves a
 //! `rule.ignored.local_integrity` audit row. The key material and the clock are
-//! shipped by the transport; the Python-owned command fingerprints that name
-//! the Cursor state keys are opaque here.
+//! shipped by the transport.
+//!
+//! A row's name is derived here. A Cursor shell row is named by the
+//! conversation and the command it belongs to, and a Claude pending permission
+//! by its artifact, so the key a row is written under and the key it is read
+//! back under have one definition. A request may instead echo a key the
+//! resident issued earlier — out of a pending index, or out of an op's own
+//! reply — and that key is acted on as given.
 
 use std::time::Duration;
 
@@ -25,6 +31,10 @@ use guard_policy_snapshot::local_authority_integrity::{
 };
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Map, Value};
+
+use guard_command::cursor_shell_command::{
+    normalize_cursor_shell_command, CursorShellNormalization,
+};
 
 use crate::guard_store_json::{dumps_default, py_strip};
 use crate::package_authority_op::request_digest_with_limit;
@@ -201,6 +211,53 @@ fn exact_str<'a>(object: &'a Object, name: &str) -> Option<&'a str> {
 fn claude_pending_key(session_id: &str, artifact_id: &str) -> String {
     let fingerprint = &digest_bytes(artifact_id.as_bytes())[..24];
     format!("claude_pending_permission:{session_id}:{fingerprint}")
+}
+
+/// The command fingerprint both Cursor state keys are built from: the
+/// normalized command's digest, truncated the way the retired
+/// `_cursor_shell_command_fingerprint` truncated it.
+///
+/// A command the normalizer cannot read is no fingerprint at all. The retired
+/// Python raised on it, so a request carrying one is invalid rather than named
+/// after its unnormalized text.
+fn cursor_command_fingerprint(command: &str) -> Result<String, &'static str> {
+    match normalize_cursor_shell_command(command) {
+        CursorShellNormalization::Command(normalized) => {
+            Ok(digest_bytes(normalized.as_bytes())[..24].to_owned())
+        }
+        CursorShellNormalization::Unnormalizable => Err(ERROR_INVALID),
+    }
+}
+
+fn cursor_pending_key(conversation_id: &str, command: &str) -> Result<String, &'static str> {
+    Ok(format!(
+        "{}{conversation_id}:{}",
+        CURSOR_FAMILY.item_prefix,
+        cursor_command_fingerprint(command)?
+    ))
+}
+
+fn cursor_allow_key(conversation_id: &str, command: &str) -> Result<String, &'static str> {
+    Ok(format!(
+        "cursor_native_shell_allow:{conversation_id}:{}",
+        cursor_command_fingerprint(command)?
+    ))
+}
+
+/// The Cursor row a request names. A request that carries the command gets its
+/// key derived here; one that echoes a key the resident issued is acted on as
+/// given.
+fn cursor_target(
+    conversation_id: &str,
+    command: Option<&str>,
+    given: Option<&String>,
+    derive: fn(&str, &str) -> Result<String, &'static str>,
+) -> Result<String, &'static str> {
+    match (given, command) {
+        (Some(key), _) => Ok(key.clone()),
+        (None, Some(command)) => derive(conversation_id, command),
+        (None, None) => Err(ERROR_INVALID),
+    }
 }
 
 fn notice_key(session_id: &str, tool_name: Option<&str>) -> String {

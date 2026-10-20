@@ -14,7 +14,9 @@ use crate::hook_cli_claude_text::claude_approval_copy;
 use guard_command::hook_responses::cli_documents::{
     cli_document, cli_response, copilot_hook_response, CliOutcome,
 };
-use guard_command::hook_responses::{pre_tool, pre_tool_review, recording_only_pre_tool, Object};
+use guard_command::hook_responses::{
+    hermes, pre_tool, pre_tool_review, recording_only_pre_tool, Object,
+};
 use guard_contracts::{
     artifact_id_from_event, cursor_after_shell_observed, cursor_observer_event_for_payload,
     evaluation_has_terminal_policy_action, HookRenderRequestV1, HookRenderResultV1,
@@ -135,6 +137,19 @@ fn render(request: &HookRenderRequestV1) -> Result<Value, &'static str> {
             "value".into(),
             Value::Bool(cursor_after_shell_observed(payload)),
         );
+        return Ok(cli_payload(CliOutcome::Document(document)));
+    }
+    if request.kind == "hermes_bridge" {
+        // A daemon reply reaches Hermes as a decision object plus an exit
+        // status. Reading that reply is a verdict about a verdict, so the
+        // resident reads it and names the status rather than letting the
+        // forwarding side decide what the answer meant.
+        let params = object_of(request.cli.as_ref()).ok_or("native_hook_render_invalid")?;
+        let response = object_of(params.get("response")).ok_or("native_hook_render_invalid")?;
+        let (stdout_document, exit_code) = hermes::bridge_response(response);
+        let mut document = Object::new();
+        document.insert("document".into(), Value::Object(stdout_document));
+        document.insert("exit_code".into(), json!(exit_code));
         return Ok(cli_payload(CliOutcome::Document(document)));
     }
     if matches!(

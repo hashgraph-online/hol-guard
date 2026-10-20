@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 
+from ..native_hook_artifact_compose import native_hook_compose
 from .commands_support import *
 
 if TYPE_CHECKING:
@@ -248,18 +249,35 @@ def finalize_native_artifact_hook(
         response_payload = state.response_payload
     record_native_artifact_hook_receipt(state, store)
     approval_context = live_hook_approval_context(response_payload, harness=args.harness, guard_home=store.guard_home)
-    raw_runtime_reason = _runtime_artifact_native_reason(runtime_artifact, response_payload)
+    composed: dict[str, str] = {}
+
+    def raw_runtime_reason() -> str:
+        """The resident's reason for this artifact, composed on first use.
+
+        A pass that shows no reason must neither pay for the round trip nor
+        fail closed when the resident cannot serve one.
+        """
+
+        if "raw" not in composed:
+            composed["raw"] = _runtime_artifact_native_reason(
+                runtime_artifact,
+                response_payload,
+                composer=native_hook_compose,
+                guard_home=store.guard_home,
+            )
+        return composed["raw"]
+
     if _should_emit_native_hook_exit_block(args, event_name=event_name, policy_action=policy_action):
         if _canonical_harness_name(args.harness) == "codex" and approval_context is not None:
             native_block_reason = _native_hook_reason(
-                raw_runtime_reason,
+                raw_runtime_reason(),
                 approval_context,
                 _embedded_script_remediation(state),
             )
         else:
             native_block_reason = _native_hook_reason_for_harness(
                 args.harness,
-                raw_runtime_reason,
+                raw_runtime_reason(),
                 approval_context,
                 _embedded_script_remediation(state),
             )
@@ -282,7 +300,7 @@ def finalize_native_artifact_hook(
                 _canonical_harness_name(args.harness), policy_action, event_name
             )
         elif _canonical_harness_name(args.harness) in {"pi", "omp"}:
-            from ..adapters.pi_hooks import emit_pi_hook_response
+            from ..adapters._modules.pi.pi_hooks import emit_pi_hook_response
 
             emit_pi_hook_response(
                 policy_action=policy_action,
@@ -291,7 +309,7 @@ def finalize_native_artifact_hook(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
+            from ..adapters._modules.zcode.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
@@ -301,7 +319,7 @@ def finalize_native_artifact_hook(
                 output_stream=output_stream,
             )
         elif _canonical_harness_name(args.harness) == "devin":
-            from ..adapters.devin_hooks import emit_devin_hook_response
+            from ..adapters._modules.devin.devin_hooks import emit_devin_hook_response
 
             emit_devin_hook_response(
                 policy_action=policy_action,
@@ -321,30 +339,36 @@ def finalize_native_artifact_hook(
         return native_hook_verdict_exit_code(
             _canonical_harness_name(args.harness), policy_action, event_name
         )
-    if _canonical_harness_name(args.harness) == "codex" and (
-        event_name == "UserPromptSubmit"
-        or approval_context is not None
-        or policy_action in {"block", "sandbox-required"}
-    ):
-        runtime_reason = _native_hook_reason(
-            raw_runtime_reason,
-            approval_context or response_payload.get("review_hint"),
-            _embedded_script_remediation(state),
-        )
-    else:
-        runtime_reason = _native_hook_reason_for_harness(
-            args.harness,
-            raw_runtime_reason,
-            approval_context,
-            _embedded_script_remediation(state),
-        )
+    def runtime_reason() -> str:
+        """What this harness is told, composed on first use."""
+
+        if "harness" not in composed:
+            if _canonical_harness_name(args.harness) == "codex" and (
+                event_name == "UserPromptSubmit"
+                or approval_context is not None
+                or policy_action in {"block", "sandbox-required"}
+            ):
+                composed["harness"] = _native_hook_reason(
+                    raw_runtime_reason(),
+                    approval_context or response_payload.get("review_hint"),
+                    _embedded_script_remediation(state),
+                )
+            else:
+                composed["harness"] = _native_hook_reason_for_harness(
+                    args.harness,
+                    raw_runtime_reason(),
+                    approval_context,
+                    _embedded_script_remediation(state),
+                )
+        return composed["harness"]
+
     if _should_emit_claude_native_pretooluse_notice(
         args,
         event_name=event_name,
         policy_action=policy_action,
     ):
         _emit_native_hook_notification_stderr(
-            _claude_native_pretooluse_terminal_notice(payload=dict(payload), reason=runtime_reason)
+            _claude_native_pretooluse_terminal_notice(payload=dict(payload), reason=runtime_reason())
         )
     canonical_harness = _canonical_harness_name(args.harness)
     system_message = None
@@ -361,13 +385,14 @@ def finalize_native_artifact_hook(
             native_reason=runtime_reason,
         )
     if getattr(args, "json", False) and output_stream is None:
-        emit_reason = runtime_reason
         if canonical_harness == "copilot":
             emit_reason = _copilot_hook_reason(
                 response_payload.get("why_now"),
                 response_payload.get("review_hint"),
                 response_payload.get("risk_headline"),
             )
+        else:
+            emit_reason = runtime_reason()
         json_result = _native_hook_json_document(
             args,
             event_name=event_name,
@@ -403,7 +428,7 @@ def finalize_native_artifact_hook(
 
             emit_grok_hook_response(
                 policy_action=policy_action, event_name=event_name,
-                reason=runtime_reason, approval_payload=response_payload,
+                reason=runtime_reason(), approval_payload=response_payload,
                 output_stream=output_stream,
             )
             _record_harness_usage_for_hook(
@@ -414,11 +439,11 @@ def finalize_native_artifact_hook(
             )
             return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness in {"pi", "omp"}:
-            from ..adapters.pi_hooks import emit_pi_hook_response
+            from ..adapters._modules.pi.pi_hooks import emit_pi_hook_response
 
             emit_pi_hook_response(
                 policy_action=policy_action,
-                reason=runtime_reason,
+                reason=runtime_reason(),
                 approval_payload=response_payload,
                 output_stream=output_stream,
             )
@@ -430,11 +455,11 @@ def finalize_native_artifact_hook(
             )
             return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness == "zcode":
-            from ..adapters.zcode_hooks import emit_zcode_hook_response
+            from ..adapters._modules.zcode.zcode_hooks import emit_zcode_hook_response
 
             emit_zcode_hook_response(
                 policy_action=policy_action,
-                reason=runtime_reason,
+                reason=runtime_reason(),
                 event_name=event_name,
                 payload=payload,
                 output_stream=output_stream,
@@ -447,11 +472,11 @@ def finalize_native_artifact_hook(
             )
             return native_hook_verdict_exit_code(canonical_harness, policy_action, event_name)
         if canonical_harness == "devin":
-            from ..adapters.devin_hooks import emit_devin_hook_response
+            from ..adapters._modules.devin.devin_hooks import emit_devin_hook_response
 
             emit_devin_hook_response(
                 policy_action=policy_action,
-                reason=runtime_reason,
+                reason=runtime_reason(),
                 event_name=event_name,
                 payload=payload,
                 output_stream=output_stream,
@@ -467,7 +492,7 @@ def finalize_native_artifact_hook(
             harness=args.harness,
             policy_action=policy_action,
             event_name=event_name,
-            reason=runtime_reason,
+            reason=runtime_reason(),
             system_message=system_message,
             output_stream=output_stream,
         )
@@ -485,7 +510,7 @@ def finalize_native_artifact_hook(
         _emit_native_post_tool_envelope(
             args.harness,
             policy_action=policy_action,
-            reason=runtime_reason,
+            reason=runtime_reason(),
             response_payload=response_payload,
             output_stream=output_stream,
             as_json=getattr(args, "json", False),

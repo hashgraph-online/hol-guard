@@ -10,6 +10,12 @@ from codex_plugin_scanner.guard.config import GuardConfig, load_guard_config, up
 from codex_plugin_scanner.guard.models import GuardArtifact
 
 
+def _composer_never_called(*_args: object, **_kwargs: object) -> dict[str, object]:
+    """Fail when a reason the CLI still composes locally reaches the resident."""
+
+    raise AssertionError("the resident must not be asked for this reason")
+
+
 def test_prompt_mode_defaults_and_round_trip(tmp_path: Path) -> None:
     assert GuardConfig(guard_home=tmp_path, workspace=None).blocked_request_mode == "safe-alternative"
     assert load_guard_config(tmp_path).blocked_request_mode == "safe-alternative"
@@ -52,6 +58,8 @@ def test_terminal_cli_response_preserves_safe_alternative_guidance() -> None:
             "blocked_request_guidance": guidance,
             "decision_v2_json": {"harness_message": "Wait for approval."},
         },
+        composer=_composer_never_called,
+        guard_home=None,
     )
     assert reason == guidance
     assert "Wait for approval" not in reason

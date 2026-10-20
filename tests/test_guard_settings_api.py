@@ -298,7 +298,7 @@ def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) 
 def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
     patch_daemon_global(
         monkeypatch,
-        "resolve_package_firewall_entitlement",
+        "package_firewall_entitlement_or_denied",
         lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
     )
     _store, daemon = _with_daemon(tmp_path / "guard-home")
@@ -366,7 +366,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
         )
         patch_daemon_global(
             monkeypatch,
-            "resolve_package_firewall_entitlement",
+            "package_firewall_entitlement_or_denied",
             lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
         )
         allowed_status, allowed_payload = _json_request(
@@ -378,7 +378,7 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
         )
         patch_daemon_global(
             monkeypatch,
-            "resolve_package_firewall_entitlement",
+            "package_firewall_entitlement_or_denied",
             lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
         )
         _json_request(
@@ -439,7 +439,7 @@ def test_watch_to_protected_api_ignores_existing_sync_without_entitlement(
     _store, daemon = _with_daemon(guard_home)
     patch_daemon_global(
         monkeypatch,
-        "resolve_package_firewall_entitlement",
+        "package_firewall_entitlement_or_denied",
         lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
     )
     try:

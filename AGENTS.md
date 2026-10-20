@@ -12,7 +12,7 @@ Continue applying the 500-line guideline to source code where appropriate.
 
 ## Approval invariant
 
-Every command Guard pauses for review must offer Allow once and Always allow, and every part of Guard must honor an approval until the user removes it or the command's hash changes. Read `docs/guard/approval-invariant.md` before changing approval tokens, retry bindings, scope contracts, saved decisions or the review card. A change that makes a review once-only, or drops Always allow for a class of commands, breaks this invariant. Findings about what an approval token binds, and how to bind it more tightly without removing a choice, are in scope.
+Every executable review must offer Allow once and Always allow, and every part of Guard must honor an approval until the user removes it or the command's hash changes. Read `docs/guard/approval-invariant.md` before changing approval tokens, retry bindings, scope contracts, saved decisions or the review card. A change that makes a supported review once-only, or drops Always allow for a supported execution route, breaks this invariant. Content-bound scripts without a working execution binding are explicitly unsupported: show the unavailable capability and verified recovery actions instead of approval buttons that cannot run the reviewed version. Inventory or a command-text hash cannot substitute for that binding. Findings about tighter binding without removing a supported choice are in scope.
 
 ## Python runtime review policy
 

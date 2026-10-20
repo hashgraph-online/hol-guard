@@ -79,6 +79,45 @@ pub struct PackageIntentParseResultV1 {
 }
 
 // ---------------------------------------------------------------------------
+// PackageRequestArtifact — `build_package_request_artifact` port entry.
+// ---------------------------------------------------------------------------
+
+/// The review a parsed package intent earns. The host sends the intent it
+/// already holds and the naming the review is filed under; the runtime decides
+/// the artifact id a saved package approval is keyed by.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageRequestArtifactRequestV1 {
+    pub schema: String,
+    #[serde(default)]
+    pub request_id: String,
+    /// `intent.to_execution_dict()` — the exact targets and argv the
+    /// fingerprint is taken over, not the redacted public spelling.
+    pub intent: Value,
+    pub harness: String,
+    pub config_path: String,
+    pub source_scope: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct PackageRequestArtifactResultV1 {
+    pub schema: String,
+    pub request_id: String,
+    /// SHA-256 of the raw request bytes, binding the result to its request.
+    pub request_sha256: String,
+    /// `ok` or `error`.
+    pub status: String,
+    /// `ok`, `invalid_package_intent`, or `schema_mismatch`.
+    pub code: String,
+    /// The whole artifact, unredacted, on success — `GuardArtifact::to_wire`.
+    /// It carries `runtime_private_metadata`, the exact targets ephemeral
+    /// enforcement needs, which the public `to_dict` serialization drops.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub payload: Option<Value>,
+}
+
+// ---------------------------------------------------------------------------
 // SupplyChainEval — `evaluate_package_request_artifact` port entry.
 // ---------------------------------------------------------------------------
 

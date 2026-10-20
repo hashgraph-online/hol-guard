@@ -1,0 +1,282 @@
+[
+  {
+    "name": "cmd_051",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "cmd_052",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "cmd_053",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "cmd_054",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "cmd_068",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "cmd_109",
+    "previous_reason": "compound_command"
+  },
+  {
+    "name": "runner_npx_ok",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_yes",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_double_dash",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_no_args",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_selector",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_version",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_intent",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_empty_intent",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_intent_raises",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_two_executions",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_target_mismatch",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_unavailable",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_local",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_manager",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_guard_shim",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_hash",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_empty_hash",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_resolved",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_no_package_name",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_wrong_package_name",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_bad_package_name",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_lockfiles",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_no_manifests",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_operand",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_sensitive",
+    "previous_reason": "sensitive_path"
+  },
+  {
+    "name": "runner_npx_vitest_mutable",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_missing_manifest",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_bad_json",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_wrong_name",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_no_version",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_empty_version",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_big",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_manifest_array",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_ok",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_shim_no_script",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_bin_string_mismatch",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_bin_dict",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_shim_bin_dict_missing",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_bin_blank",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_bin_escape",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_bin_dir",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_no_bin_field",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_shim_scoped",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_scoped_not_shim",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_non_shim_walk",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_non_shim_no_manifest",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npx_non_shim_outer_package",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_pnpm_exec",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_pnpm_x",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_pnpm_direct",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_yarn_exec",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npm_exec",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npm_exec_twice",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npm_test",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_npm_run",
+    "previous_reason": "mutable_launcher"
+  },
+  {
+    "name": "runner_bunx",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_pnpx",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_in_compound",
+    "previous_reason": "compound_command"
+  },
+  {
+    "name": "runner_npx_pipe",
+    "previous_reason": "compound_command"
+  },
+  {
+    "name": "runner_npx_exe_suffix",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_upper",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_env_prefix",
+    "previous_reason": "unproven_launch"
+  },
+  {
+    "name": "runner_npx_flag_option",
+    "previous_reason": "runner_code_closure_unproven"
+  },
+  {
+    "name": "runner_npx_flag_other",
+    "previous_reason": "mutable_launcher"
+  }
+]

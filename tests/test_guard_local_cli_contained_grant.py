@@ -27,6 +27,14 @@ HASH = "ab" * 32
 GRANT = {"cli_id": "local-cli.lanectl", "identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
 CONTAINED = client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ("loopback-network",))
 OUTSIDE = routing.OUTSIDE_ROOTS_REASON
+ROUTE = {
+    "decision": "deny",
+    "minimum_action": "sandbox-required",
+    "policy_action": "sandbox-required",
+    "reason_code": "native_workspace_containment_required",
+    "reason": "HOL Guard runs this command in a protected workspace sandbox, widened only by the "
+    "local CLI access you approved on this device.",
+}
 
 
 @pytest.fixture(autouse=True)
@@ -78,10 +86,12 @@ def _contained(tmp_path: Path, action: str = "review", reason: str | None = OUTS
 def test_client_sends_the_reason_and_presents_the_contained_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    requests = _resident(monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT})
-    assert _contained(tmp_path) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)
+    requests = _resident(
+        monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": ROUTE}
+    )
+    assert _contained(tmp_path) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)
     assert requests[-1]["current_reason_code"] == OUTSIDE
-    assert _contained(tmp_path, "sandbox-required", None) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)
+    assert _contained(tmp_path, "sandbox-required", None) == (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)
     # Rust omits an absent reason from the digest, so the request does too.
     assert "current_reason_code" not in requests[-1]
     assert CONTAINED.prepare_input() == {"identity_hash": HASH, "name": "lanectl", "capabilities": ["loopback-network"]}
@@ -101,14 +111,37 @@ def test_client_sends_the_reason_and_presents_the_contained_grant(
     "reply",
     [
         {"action": client.ALLOW_CONTAINED_WITH_GRANT},
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"identity_hash": "AB" * 32}},
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"capabilities": ["network"]}},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"identity_hash": "AB" * 32},
+            "contained_route": ROUTE,
+        },
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"capabilities": ["network"]},
+            "contained_route": ROUTE,
+        },
         {
             "action": client.ALLOW_CONTAINED_WITH_GRANT,
             "contained_grant": GRANT | {"capabilities": ["state-dir-read", "loopback-network"]},
+            "contained_route": ROUTE,
         },
-        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT | {"extra": 1}},
-        {"action": "review", "contained_grant": GRANT},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT | {"extra": 1},
+            "contained_route": ROUTE,
+        },
+        # A grant without the route the resident decides for it.
+        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT},
+        {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": {"reason": "x"}},
+        {
+            "action": client.ALLOW_CONTAINED_WITH_GRANT,
+            "contained_grant": GRANT,
+            "contained_route": ROUTE | {"reason_code": ""},
+        },
+        # A route on an answer no grant widened.
+        {"action": "review", "contained_route": ROUTE},
+        {"action": "review", "contained_grant": GRANT, "contained_route": ROUTE},
         {"action": "review", "other": 1},
     ],
 )
@@ -120,7 +153,9 @@ def test_client_refuses_a_malformed_contained_answer(
 
 
 def test_client_widens_only_a_sandbox_bound_action(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    _resident(monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT})
+    _resident(
+        monkeypatch, {"action": client.ALLOW_CONTAINED_WITH_GRANT, "contained_grant": GRANT, "contained_route": ROUTE}
+    )
     assert _contained(tmp_path, "warn", None) is None
 
 
@@ -146,13 +181,15 @@ def _review(**changes: object) -> dict[str, object]:
 def test_daemon_turns_a_granted_outside_roots_review_into_the_sandbox(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     granted = routing.granted_containment_result(
         object(), _review(), payload=payload("lanectl status"), workspace=tmp_path, home_dir=tmp_path
     )
     assert granted is not None
     assert granted["minimum_action"] == granted["policy_action"] == "sandbox-required"
     assert granted["reason_code"] == "native_workspace_containment_required"
+    # Every routed field is the resident's answer, not one composed here.
+    assert {key: granted[key] for key in ROUTE} == ROUTE
     assert calls[0]["current_action"] == "review"
     assert calls[0]["reason_code"] == OUTSIDE
 
@@ -160,13 +197,15 @@ def test_daemon_turns_a_granted_outside_roots_review_into_the_sandbox(
 @pytest.mark.parametrize(
     ("result", "answer"),
     [
-        (_review(reason_code="native_policy_review"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(minimum_action="allow"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(policy_action="require-reapproval"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(action={"action_type": "package"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(action={"action_type": "guard_control"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED)),
-        (_review(), ("block", None)),
-        (_review(), ("review", None)),
+        (_review(reason_code="native_policy_review"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)),
+        (_review(minimum_action="allow"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)),
+        (_review(policy_action="require-reapproval"), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)),
+        (_review(action={"action_type": "package"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)),
+        (_review(action={"action_type": "guard_control"}), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE)),
+        # A grant the resident could not route: the review it was holding stands.
+        (_review(), (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, None)),
+        (_review(), ("block", None, None)),
+        (_review(), ("review", None, None)),
         (_review(), None),
         (_review(), RuntimeError("store down")),
     ],
@@ -186,7 +225,7 @@ def test_daemon_keeps_every_other_review(
 def test_daemon_routes_the_grant_and_answers_the_sink_with_the_receipt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     rendered: list[dict[str, object]] = []
     monkeypatch.setattr(
         routing, "render_pre_tool", lambda harness, verdict, **kwargs: rendered.append(dict(verdict)) or receipt()
@@ -262,7 +301,7 @@ def _run(tmp_path: Path) -> int:
 def test_sink_widens_by_the_store_grant_and_passes_capabilities_to_the_profile(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    calls = _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path))
     assert _run(tmp_path) == 0
     prepare = seen["prepare_workspace_contained"]
@@ -282,16 +321,20 @@ def test_sink_widens_by_the_store_grant_and_passes_capabilities_to_the_profile(
 @pytest.mark.parametrize(
     "second",
     [
-        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", "cd" * 32, "lanectl", ())),
-        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ())),
-        ("block", None),
-        ("sandbox-required", None),
+        (
+            client.ALLOW_CONTAINED_WITH_GRANT,
+            client.ContainedGrant("local-cli.lanectl", "cd" * 32, "lanectl", ()),
+            ROUTE,
+        ),
+        (client.ALLOW_CONTAINED_WITH_GRANT, client.ContainedGrant("local-cli.lanectl", HASH, "lanectl", ()), ROUTE),
+        ("block", None, None),
+        ("sandbox-required", None, None),
     ],
 )
 def test_sink_refuses_a_grant_that_changed_before_launch(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, second: object
 ) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED), second)
+    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE), second)
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path))
     with pytest.raises(RestrictedPytestError, match=lookup.GRANT_CHANGED):
         _run(tmp_path)
@@ -305,7 +348,7 @@ def test_sink_refuses_a_grant_that_changed_before_launch(
 def test_sink_refuses_a_plan_widened_beyond_the_decided_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, changes: dict[str, object]
 ) -> None:
-    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED))
+    _decides(monkeypatch, (client.ALLOW_CONTAINED_WITH_GRANT, CONTAINED, ROUTE))
     seen = _sink(monkeypatch, tmp_path, _granted_plan(tmp_path) | changes)
     with pytest.raises(RestrictedPytestError, match="Invalid workspace sandbox plan"):
         _run(tmp_path)
@@ -315,12 +358,12 @@ def test_sink_refuses_a_plan_widened_beyond_the_decided_grant(
 def test_sink_stops_a_blocked_cli_and_keeps_the_base_sandbox_without_a_grant(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    _decides(monkeypatch, ("block", None))
+    _decides(monkeypatch, ("block", None, None))
     seen = _sink(monkeypatch, tmp_path, plan(tmp_path))
     with pytest.raises(RestrictedPytestError, match=lookup.GRANT_BLOCKED):
         _run(tmp_path)
     assert "prepare_workspace_contained" not in seen
-    _decides(monkeypatch, ("sandbox-required", None))
+    _decides(monkeypatch, ("sandbox-required", None, None))
     seen = _sink(monkeypatch, tmp_path, plan(tmp_path))
     assert _run(tmp_path) == 0
     prepare = seen["prepare_workspace_contained"]

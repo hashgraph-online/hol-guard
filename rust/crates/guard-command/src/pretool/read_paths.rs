@@ -302,6 +302,7 @@ fn path_gate(
                     || git_config_document(canonical, cwd)
                     || worktree_gitfile(canonical)
                     || scratch::workspace_scratch_read(canonical, home_dir, cwd)
+                    || scratch::private_temporary_scratch_read(canonical, home_dir)
                     || virtualenv_activation_script(canonical)))
             || (read_only && execution_output_log(canonical, home_dir)))
     {

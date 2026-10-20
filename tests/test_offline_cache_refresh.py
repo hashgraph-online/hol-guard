@@ -1,6 +1,7 @@
 """Background cache maintenance must survive a security-proof outage."""
 
 import os
+import shutil
 import threading
 import time
 from types import SimpleNamespace
@@ -68,6 +69,84 @@ def test_expired_previews_release_only_native_selected_leases(monkeypatch, tmp_p
     finally:
         expired.close()
         active.close()
+
+
+def test_a_stopping_daemon_releases_every_prepared_lease(tmp_path):
+    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiService
+
+    previewed = cache_io.Lease(tmp_path / "previewed")
+    proved = cache_io.Lease(tmp_path / "proved")
+    service = SimpleNamespace(
+        _preview_lock=threading.Lock(),
+        _apply_lock=threading.Lock(),
+        _proof_lock=threading.Lock(),
+        _candidates=SimpleNamespace(
+            values={"previewed": SimpleNamespace(draft=SimpleNamespace(_cache_lease=previewed))}
+        ),
+        _pending_proofs={
+            "proved": SimpleNamespace(candidate=SimpleNamespace(draft=SimpleNamespace(_cache_lease=proved))),
+            "disable": SimpleNamespace(candidate=None),
+        },
+    )
+    try:
+        assert ExtensionControlApiService.release_prepared_cache_leases(service) is True
+        assert previewed.fd is None and proved.fd is None
+        assert service._candidates.values == {} and service._pending_proofs == {}
+        # Removing the cache no longer fails on Windows, where an open lease file is locked.
+        shutil.rmtree(tmp_path / "previewed")
+        shutil.rmtree(tmp_path / "proved")
+    finally:
+        previewed.close()
+        proved.close()
+
+
+def test_a_daemon_stop_does_not_wait_forever_on_a_held_preview(tmp_path):
+    from codex_plugin_scanner.guard.daemon.extension_control_prepared import release_all_leases
+
+    lease = cache_io.Lease(tmp_path / "held")
+    preview_lock = threading.Lock()
+    service = SimpleNamespace(
+        _preview_lock=preview_lock,
+        _apply_lock=threading.Lock(),
+        _proof_lock=threading.Lock(),
+        _candidates=SimpleNamespace(values={"held": SimpleNamespace(draft=SimpleNamespace(_cache_lease=lease))}),
+        _pending_proofs={},
+    )
+    try:
+        with preview_lock:
+            assert release_all_leases(service, timeout=0.01) is False
+        assert lease.fd is not None
+        assert not service._apply_lock.locked() and not service._proof_lock.locked()
+    finally:
+        lease.close()
+
+
+def test_a_preview_that_arrives_after_the_final_release_prepares_nothing(tmp_path):
+    from codex_plugin_scanner.guard.daemon.extension_control_api import ExtensionControlApiError
+    from codex_plugin_scanner.guard.daemon.extension_control_prepared import (
+        PreparedControlCandidates,
+        release_all_leases,
+    )
+
+    service = SimpleNamespace(
+        _preview_lock=threading.Lock(),
+        _apply_lock=threading.Lock(),
+        _proof_lock=threading.Lock(),
+        _candidates=PreparedControlCandidates(),
+        _pending_proofs={},
+    )
+    assert release_all_leases(service) is True
+    prepared = []
+
+    def prepare():
+        prepared.append(cache_io.Lease(tmp_path / "late"))
+        return None
+
+    # A request worker paused before preview dispatch resumes after the daemon stopped.
+    with pytest.raises(ExtensionControlApiError) as error:
+        service._candidates.get_or_prepare("late", prepare)
+    assert error.value.status == 503 and error.value.code == "extension_control_stopped"
+    assert prepared == [] and service._candidates.values == {}
 
 
 @pytest.mark.parametrize("kind", ["hardlink", "fifo"])

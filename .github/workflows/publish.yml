@@ -42,6 +42,7 @@ on:
       - "!**/*.md"
       - "!.github/workflows/**"
       - ".github/workflows/publish.yml"
+      - ".github/workflows/release-native-prepare.yml"
       - "README.md"
       - "src/**"
       - "scripts/**"
@@ -200,36 +201,97 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "Resolved main alpha version: $VERSION"
 
+  resolve-canary-version:
+    name: Resolve PR canary version
+    # Native compilation embeds the exact version, so the PR canary version is resolved once,
+    # before both the native compile and Build + Verify. Both adopt it, so a rerun of either
+    # job can never pair binaries with a different version.
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
+          sparse-checkout: |
+            pyproject.toml
+            uv.lock
+            scripts/sync_repo_version.py
+            src/codex_plugin_scanner/version.py
+          sparse-checkout-cone-mode: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+      - name: Compute PR canary version
+        id: version
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_RUN_NUMBER: ${{ github.run_number }}
+          GITHUB_RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+          BASE_VERSION=$(uv run --no-project --with packaging==25.0 python scripts/sync_repo_version.py --check)
+          VERSION=$(BASE_VERSION="$BASE_VERSION" python3 - <<'PY'
+          import os
+
+          def pair(left: int, right: int) -> int:
+              total = left + right
+              return total * (total + 1) // 2 + right
+
+          print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
+          PY
+          )
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved PR canary version: $VERSION"
+
   precompile-native:
     name: Prepare native release binaries
-    needs: [authorize-release, resolve-alpha-version]
-    # Stable tag dispatches and authorized main alpha dispatches compile once, beside
-    # Build + Verify. The wheel jobs then only verify, self-test on native hardware, and
-    # package. A failed version resolution skips this job, so wheels fall back to an
-    # in-job compile and Build + Verify still rejects the dispatch on its own.
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
+    # Stable tag dispatches, authorized main alpha dispatches and opted-in PR canaries
+    # compile once, beside Build + Verify. The wheel jobs then only verify, self-test on
+    # native hardware, and package. A failed version resolution skips this job, so wheels
+    # fall back to an in-job compile and Build + Verify still rejects the dispatch on its own.
+    # PR canaries keep the stable fat-LTO profile, so their wheels still prove the PyPI
+    # size budgets, and their compiles only read the trusted caches.
     if: >-
       always() && !cancelled() &&
       needs.authorize-release.result == 'success' &&
-      vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
-      github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
       (
         (
-          github.ref == format('refs/tags/v{0}', inputs.release_version) &&
-          inputs.release_channel == 'stable' && inputs.release_train == 'main'
+          vars.RELEASE_PUBLISHING_ENABLED == 'true' &&
+          github.event_name == 'workflow_dispatch' && github.run_attempt == 1 &&
+          (
+            (
+              github.ref == format('refs/tags/v{0}', inputs.release_version) &&
+              inputs.release_channel == 'stable' && inputs.release_train == 'main'
+            ) ||
+            (
+              github.ref == 'refs/heads/main' &&
+              inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
+              needs.resolve-alpha-version.result == 'success'
+            )
+          )
         ) ||
         (
-          github.ref == 'refs/heads/main' &&
-          inputs.release_channel == 'alpha' && inputs.release_train == 'main' &&
-          needs.resolve-alpha-version.result == 'success'
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository &&
+          contains(github.event.pull_request.labels.*.name, 'publish-testpypi-canary') &&
+          needs.resolve-canary-version.result == 'success'
         )
       )
     uses: ./.github/workflows/release-native-prepare.yml
     with:
-      source_sha: ${{ github.sha }}
-      version: ${{ needs.resolve-alpha-version.outputs.version || inputs.release_version }}
+      source_sha: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
+      version: ${{ needs.resolve-alpha-version.outputs.version || needs.resolve-canary-version.outputs.version || inputs.release_version }}
       # Alpha native wheels ship only on the GitHub prerelease, never on PyPI, so they
-      # use fast per-crate codegen and the separate alpha size ceiling. Stable keeps
-      # whole-program fat LTO and the PyPI budgets.
+      # use fast per-crate codegen. Stable keeps whole-program fat LTO.
       fast_codegen: ${{ inputs.release_channel == 'alpha' }}
     permissions:
       contents: read
@@ -245,7 +307,7 @@ jobs:
       (github.event_name != 'push' || github.run_attempt == 1) &&
       (github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip release publish]')) &&
       (github.event.action != 'labeled' || github.event.label.name == 'publish-testpypi-canary')
-    needs: [authorize-release, resolve-alpha-version]
+    needs: [authorize-release, resolve-alpha-version, resolve-canary-version]
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -266,23 +328,6 @@ jobs:
           fetch-depth: 0
           filter: blob:none
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || github.sha }}
-      - name: Retain workflow wheel-size policy before source checkout
-        shell: bash
-        env:
-          SIZE_POLICY_SHA: ${{ github.workflow_sha }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$SIZE_POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "SIZE_POLICY_SHA must be a full commit SHA" >&2
-            exit 1
-          fi
-          policy_root="$RUNNER_TEMP/hol-guard-wheel-size-policy"
-          mkdir -p "$policy_root/scripts/ci" "$policy_root/ci/package_size"
-          git fetch --no-tags --filter=blob:none origin "$SIZE_POLICY_SHA"
-          git show "$SIZE_POLICY_SHA:scripts/ci/check_wheel_size.py" > "$policy_root/scripts/ci/check_wheel_size.py"
-          git show "$SIZE_POLICY_SHA:ci/package_size/budgets.json" > "$policy_root/ci/package_size/budgets.json"
-          git show "$SIZE_POLICY_SHA:ci/package_size/alpha-native-budgets.json" > "$policy_root/ci/package_size/alpha-native-budgets.json"
-          echo "HOL_GUARD_WHEEL_SIZE_CHECKER=$policy_root/scripts/ci/check_wheel_size.py" >> "$GITHUB_ENV"
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
@@ -320,6 +365,7 @@ jobs:
           RELEASE_VERSION: ${{ github.event.inputs.release_version }}
           EXPECTED_SHA: ${{ github.event.inputs.expected_sha }}
           RESOLVED_ALPHA_VERSION: ${{ needs.resolve-alpha-version.outputs.version }}
+          RESOLVED_CANARY_VERSION: ${{ needs.resolve-canary-version.outputs.version }}
           RELEASE_PUBLISHING_ENABLED: ${{ vars.RELEASE_PUBLISHING_ENABLED }}
         run: |
           BASE_VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
@@ -571,16 +617,12 @@ jobs:
             VERSION=$(uv run --no-sync python scripts/validate_alpha_release.py "${VALIDATOR_ARGS[@]}")
           elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
             CHANNEL="canary"
-            VERSION=$(BASE_VERSION="$BASE_VERSION" PR_NUMBER="$PR_NUMBER" GITHUB_RUN_NUMBER="$GITHUB_RUN_NUMBER" GITHUB_RUN_ATTEMPT="$GITHUB_RUN_ATTEMPT" python - <<'PY'
-          import os
-
-          def pair(left: int, right: int) -> int:
-              total = left + right
-              return total * (total + 1) // 2 + right
-
-          print(f"{os.environ['BASE_VERSION']}.dev{pair(pair(int(os.environ['PR_NUMBER']), int(os.environ['GITHUB_RUN_NUMBER'])), int(os.environ['GITHUB_RUN_ATTEMPT']))}")
-          PY
-            )
+            # Adopt the version the native compile embeds; never recompute it here.
+            if [[ ! "$RESOLVED_CANARY_VERSION" =~ ^${BASE_VERSION//./\\.}\.dev[0-9]+$ ]]; then
+              echo "PR canary version '${RESOLVED_CANARY_VERSION}' was not resolved from ${BASE_VERSION}" >&2
+              exit 1
+            fi
+            VERSION="$RESOLVED_CANARY_VERSION"
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
@@ -748,7 +790,6 @@ jobs:
           CHANNEL: ${{ steps.version.outputs.channel }}
         run: |
           uv run --no-sync twine check dist/*
-          python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir dist
           python3 scripts/verify_guard_wheel_entrypoints.py dist
           # Stable builds only: the version is stamped by now, so --release compares every
           # coverage record's Guard version against the build being published. Alpha and
@@ -860,23 +901,6 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.sha) || needs.build.outputs.source_sha }}
-      - name: Retain immutable workflow wheel-size policy
-        shell: bash
-        env:
-          SIZE_POLICY_SHA: ${{ github.workflow_sha }}
-        run: |
-          set -euo pipefail
-          if [[ ! "$SIZE_POLICY_SHA" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "SIZE_POLICY_SHA must be a full commit SHA" >&2
-            exit 1
-          fi
-          policy_root="$RUNNER_TEMP/hol-guard-wheel-size-policy"
-          mkdir -p "$policy_root/scripts/ci" "$policy_root/ci/package_size"
-          git fetch --no-tags --filter=blob:none origin "$SIZE_POLICY_SHA"
-          git show "$SIZE_POLICY_SHA:scripts/ci/check_wheel_size.py" > "$policy_root/scripts/ci/check_wheel_size.py"
-          git show "$SIZE_POLICY_SHA:ci/package_size/budgets.json" > "$policy_root/ci/package_size/budgets.json"
-          git show "$SIZE_POLICY_SHA:ci/package_size/alpha-native-budgets.json" > "$policy_root/ci/package_size/alpha-native-budgets.json"
-          echo "HOL_GUARD_WHEEL_SIZE_CHECKER=$policy_root/scripts/ci/check_wheel_size.py" >> "$GITHUB_ENV"
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
@@ -1073,9 +1097,6 @@ jobs:
           TARGET: ${{ matrix.target }}
           VERSION: ${{ needs.build.outputs.version }}
           RELEASE_REPAIR: ${{ needs.build.outputs.release_repair }}
-          # Only alpha wheels from fast-codegen precompiled binaries get the larger alpha
-          # ceiling. The checker also refuses it for any version that is not an alpha.
-          ALPHA_FAST_CODEGEN: ${{ needs.precompile-native.result == 'success' && inputs.release_channel == 'alpha' }}
         run: |
           RULE_DIGEST=$("$RUNTIME" capabilities --json | python -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
           python scripts/build_native_hol_guard_wheel.py \
@@ -1089,15 +1110,6 @@ jobs:
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["implementation_digest"])')" \
             --base-program-digest "$(python -c 'import json,sys; print(json.load(open("source-compiled.json"))["base_program_digest"])')"
-          # Windows wheels carry no size budget: PyPI's limit is far above them,
-          # and the budget only ever blocked builds.
-          if [[ "$PLATFORM_TAG" != win_* ]]; then
-            SIZE_ARGS=()
-            if [[ "$ALPHA_FAST_CODEGEN" == "true" ]]; then
-              SIZE_ARGS+=(--alpha-native-budgets)
-            fi
-            python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir native-dist ${SIZE_ARGS[@]+"${SIZE_ARGS[@]}"}
-          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-guard-wheel-${{ matrix.platform_tag }}

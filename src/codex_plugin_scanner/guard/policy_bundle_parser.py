@@ -27,6 +27,42 @@ _POLICY_BUNDLE_RULE_MATCHER_FAMILIES = frozenset(
     {"file-read", "mcp", "mcp-tool", "package-request", "prompt", "prompt-env-read", "tool-action"}
 )
 
+CANONICAL_COMPILE_REJECTION_PREFIX = "canonical_compile_"
+
+# The compiler reports these before it reads any rule and names the policy
+# document in place of a rule, so a rejection for one of them carries no rule id.
+CANONICAL_COMPILE_DOCUMENT_CODES = frozenset(
+    {"invalid_policy_spec", "invalid_policy_rules", "unsupported_policy_budgets"}
+)
+
+# A rule the canonical compiler cannot turn into enforcement rows rejects the
+# whole bundle, so the device keeps the policy it already had. The reason code
+# alone names neither the rule nor what about it is unenforceable, which leaves
+# an administrator with a published policy that never applies and nothing to
+# act on. Each compile code carries the one sentence that says what Guard can
+# enforce instead; the rule's own id travels beside the reason in the stored
+# rejection.
+_CANONICAL_COMPILE_REMEDIATION = {
+    "unsupported_policy_match": (
+        "Guard enforces match on artifacts, harnesses, publishers, tools and workspaces; other match "
+        "fields, such as packages, domains or paths, are not enforced on this device, and tools cannot "
+        "be combined with artifacts or publishers."
+    ),
+    "invalid_policy_match_selector": "Every match field needs at least one non-empty value.",
+    "unsupported_policy_effect": "Guard enforces only allow and block rules.",
+    "unsupported_policy_lifetime": ("Guard enforces lifetime.mode permanent, or until with an expiresAt time."),
+    "unsupported_policy_budgets": "Budgets are not enforced by Guard.",
+    "command_expression_requires_guard_3_1_runtime": (
+        "This device does not enforce command expressions, so the rule stays unapplied. A tool match is "
+        "not a substitute: it covers every call to that tool, not only this command, so widen the rule "
+        "only as a deliberate policy decision."
+    ),
+    "policy_compilation_limit": (
+        "The rules expand into more enforcement rows than one policy may hold. Split the policy, or list "
+        "fewer tools, artifacts, harnesses, publishers and workspaces per rule."
+    ),
+}
+
 _POLICY_BUNDLE_TRUST_REMEDIATION_REASONS = frozenset(
     {
         "missing_signature",
@@ -180,6 +216,17 @@ def policy_bundle_is_version_downgrade(
 
 
 def policy_bundle_rejection_message(reason: str | None) -> str | None:
+    if reason is not None and reason.startswith(CANONICAL_COMPILE_REJECTION_PREFIX):
+        code = reason[len(CANONICAL_COMPILE_REJECTION_PREFIX) :]
+        detail = _CANONICAL_COMPILE_REMEDIATION.get(code)
+        subject = "policy" if code in CANONICAL_COMPILE_DOCUMENT_CODES else "rule"
+        return (
+            "The policy bundle was not applied because "
+            + ("its policy" if subject == "policy" else "one of its rules")
+            + " cannot be enforced on this device. "
+            + (f"{detail} " if detail else "")
+            + f"Change the {subject} in Guard Cloud and publish again; this device keeps the policy it already had."
+        )
     if reason == "inactive_rollout_state":
         return (
             "The authenticated policy bundle is not active for local enforcement. "

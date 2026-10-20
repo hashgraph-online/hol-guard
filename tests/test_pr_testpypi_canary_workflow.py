@@ -16,6 +16,7 @@ PUBLISH_PR_PATHS = [
     "!**/*.md",
     "!.github/workflows/**",
     ".github/workflows/publish.yml",
+    ".github/workflows/release-native-prepare.yml",
     "README.md",
     "src/**",
     "scripts/**",

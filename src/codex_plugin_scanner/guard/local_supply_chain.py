@@ -27,7 +27,11 @@ from .cloud_audit_request import build_cloud_workspace_audit_request
 from .config import GuardConfig
 from .mdm.network import managed_urlopen
 from .models import GuardAction, GuardArtifact
-from .native_mcp_proxy_decision import NativeMcpProxyDecisionError, native_external_archive_bind
+from .native_mcp_proxy_decision import (
+    NativeMcpProxyDecisionError,
+    native_external_archive_bind,
+    native_external_archive_binding_required,
+)
 from .native_package_approval_hash import native_package_approval_hash
 from .native_package_audit_projection import (
     native_batch_url,
@@ -313,7 +317,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
     entitlement_module = _package_firewall_entitlement_module()
     runner = _runtime_runner_module()
 
-    entitlement = entitlement_module.resolve_package_firewall_entitlement(store)
+    entitlement = entitlement_module.package_firewall_entitlement_or_denied(store)
     if bool(entitlement.get("allowed")):
         return entitlement
     if store.get_cloud_sync_profile() is None:
@@ -363,7 +367,7 @@ def resolve_package_firewall_entitlement_with_refresh(store: Any) -> dict[str, o
             break
         except (runner.GuardSyncNotAvailableError, runner.GuardSyncNotConfiguredError, OSError, RuntimeError):
             continue
-    return entitlement_module.resolve_package_firewall_entitlement(store)
+    return entitlement_module.package_firewall_entitlement_or_denied(store)
 
 
 def _workspace_has_project_markers(workspace_dir: Path) -> bool:
@@ -417,29 +421,10 @@ def _cleanup_external_archive_downloads(evaluation: object) -> None:
         download.cleanup()
 
 
-def _package_evaluation_requires_external_archive_binding(evaluation: object) -> bool:
-    source_hashes = getattr(evaluation, "external_archive_source_hashes", ())
-    if isinstance(source_hashes, (list, tuple)) and any(
-        isinstance(item, str) and len(item) == 64 for item in source_hashes
-    ):
-        return True
-    reasons = getattr(evaluation, "reasons", ())
-    if isinstance(reasons, (list, tuple)) and any(
-        isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source" for reason in reasons
-    ):
-        return True
-    packages = getattr(evaluation, "packages", ())
-    if not isinstance(packages, (list, tuple)):
-        return False
-    return any(
-        isinstance(package, Mapping)
-        and isinstance(package_reasons := package.get("reasons"), (list, tuple))
-        and any(
-            isinstance(reason, Mapping) and reason.get("code") == "external_tarball_source"
-            for reason in package_reasons
-        )
-        for package in packages
-    )
+def _package_evaluation_requires_external_archive_binding(evaluation: object, *, guard_home: Path) -> bool:
+    """Whether this evaluation only permits a request bound to its verified archives."""
+
+    return native_external_archive_binding_required(evaluation, guard_home=guard_home)
 
 
 def _bound_external_archive_launch_command(
@@ -451,7 +436,7 @@ def _bound_external_archive_launch_command(
     """The launch argv bound to the resident-verified archives, or ``None`` (deny)."""
 
     downloads = _external_archive_downloads(evaluation)
-    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation, guard_home=guard_home)
     if not downloads:
         return None if requires_binding else list(launch_command)
     try:
@@ -538,6 +523,7 @@ def _build_package_protect_authority(
         sanitized_intent,
         config_path="hol-guard.toml",
         source_scope="project",
+        guard_home=store.guard_home,
     )
     evaluation = evaluate_package_request_artifact(
         artifact=artifact,

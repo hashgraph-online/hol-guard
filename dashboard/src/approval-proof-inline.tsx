@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent, KeyboardEvent, RefObject } from "react";
 import { HiMiniKey } from "react-icons/hi2";
 import { ActionButton } from "./approval-center-primitives";
+import { shouldSubmitApprovalProof } from "./approval-keyboard";
 import type { GuardApprovalGatePublicConfig } from "./guard-types";
 import { isBulkApproveGateReady as approvalGateProofReady } from "./queue-bulk-approval-credentials";
 import { approvalGateIsLocked, approvalGateLockRemainingSeconds } from "./approval-gate-utils";
@@ -230,7 +231,7 @@ export function ApprovalProofInline(props: ApprovalProofInlineProps) {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key === "Enter" && !submitDisabled) {
+      if (shouldSubmitApprovalProof(event.key, event.nativeEvent.isComposing, submitDisabled)) {
         event.preventDefault();
         props.onSubmit();
       }

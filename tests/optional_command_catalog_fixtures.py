@@ -6,6 +6,7 @@ the resident receives a separately prepared pack set and signed policy first.
 
 from __future__ import annotations
 
+import os
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -43,8 +44,15 @@ METADATA_MODULES = {
 def authored_command_catalog():
     from codex_plugin_scanner.guard.runtime.generated_command_catalog import GeneratedCommandCatalog
     from scripts.export_extension_directory import native_extensions
+    from tests.native_command_test_support import _resolve_native_binary
 
-    return GeneratedCommandCatalog(native_extensions())
+    # Name the compiler explicitly: an installed wheel refuses an override from
+    # the environment, and the shard leaves none exported.
+    compiler = _resolve_native_binary("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", "guard-command-source")
+    with pytest.MonkeyPatch.context() as patch:
+        if compiler is not None and not os.environ.get("HOL_GUARD_BUILD_SOURCE_COMPILER"):
+            patch.setenv("HOL_GUARD_BUILD_SOURCE_COMPILER", str(compiler))
+        return GeneratedCommandCatalog(native_extensions())
 
 
 @pytest.fixture(autouse=True)
@@ -206,7 +214,10 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
             )
             assert edge is not None, "authenticated optional command resident unavailable"
             payload = dict(edge["result"])
-            model = native_command_model.review_command_model_native(command, guard_home=guard_home)
+            # The hook default leaves 250 ms; loaded Windows runners need the full second.
+            model = native_command_model.review_command_model_native(
+                command, guard_home=guard_home, timeout_seconds=1.0
+            )
             assert model is not None, "native command model unavailable"
             payload["command_model"] = model
             admitted = _BINDINGS[guard_home]

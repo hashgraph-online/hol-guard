@@ -20,6 +20,7 @@ use crate::guard_store_approval_sweep::{resolution, resolution_block_reason};
 use crate::guard_store_args::Args;
 use crate::guard_store_db::{exec, query_all, query_one, value_error, StoreError, StoreResult};
 use crate::guard_store_json::dumps_sorted;
+use crate::policy_store::PolicySnapshotStore;
 use crate::MAX_NATIVE_RESPONSE_BYTES;
 
 /// `exact_cloud_review.EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY`.
@@ -50,6 +51,7 @@ pub(crate) fn resolve_request_with_queue_result(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let request_id = args.str("request_id")?;
     let resolution = resolution(args)?;
@@ -59,6 +61,7 @@ pub(crate) fn resolve_request_with_queue_result(
         request_id,
         &resolution,
         args.opt_str("cwd")?,
+        owner,
     )?)
 }
 
@@ -68,6 +71,7 @@ pub(crate) fn resolve_native_workspace_review_request(
     connection: &Connection,
     guard_home: &str,
     args: &Args<'_>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let request_id = args.str("request_id")?;
     let action = args.str("resolution_action")?;
@@ -92,7 +96,7 @@ pub(crate) fn resolve_native_workspace_review_request(
     {
         return Ok(refused("native_workspace_review_cloud_review_disabled"));
     }
-    let Value::Object(current) = request(connection, guard_home, request_id, cwd)? else {
+    let Value::Object(current) = request(connection, guard_home, request_id, cwd, owner)? else {
         return Ok(refused("native_workspace_review_request_missing"));
     };
     match current.get("status").and_then(Value::as_str) {
@@ -134,7 +138,7 @@ pub(crate) fn resolve_native_workspace_review_request(
         Value::from(WORKSPACE_REVIEW_REASON),
         Value::from(resolved_at),
     ];
-    let mut result = queue_result(connection, guard_home, request_id, &resolution, cwd)?;
+    let mut result = queue_result(connection, guard_home, request_id, &resolution, cwd, owner)?;
     if let (Value::Bool(true), Some(receipt_json)) = (&result["resolved"], receipt_json) {
         exec(
             connection,
@@ -169,19 +173,20 @@ fn queue_result(
     request_id: &str,
     resolution: &[Value; 4],
     cwd: Option<&str>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
-    let Value::Object(item) = request(connection, guard_home, request_id, cwd)? else {
-        return unresolved(connection, guard_home, cwd, "not_found", Value::Null);
+    let Value::Object(item) = request(connection, guard_home, request_id, cwd, owner)? else {
+        return unresolved(connection, guard_home, cwd, "not_found", Value::Null, owner);
     };
     let item = Value::Object(item);
     if item["status"] != "pending" {
-        return unresolved(connection, guard_home, cwd, "already_resolved", item);
+        return unresolved(connection, guard_home, cwd, "already_resolved", item, owner);
     }
     if let Some(reason) = block_reason(&item) {
-        return unresolved(connection, guard_home, cwd, reason, item);
+        return unresolved(connection, guard_home, cwd, reason, item, owner);
     }
     if set_resolution(connection, request_id, resolution.clone(), true)? != 1 {
-        return unresolved(connection, guard_home, cwd, "already_resolved", item);
+        return unresolved(connection, guard_home, cwd, "already_resolved", item, owner);
     }
     let duplicate_ids = match item["queue_group_id"].as_str() {
         Some(queue_group_id) => resolve_duplicates(
@@ -194,10 +199,10 @@ fn queue_result(
         )?,
         None => Vec::new(),
     };
-    let updated = request(connection, guard_home, request_id, cwd)?;
+    let updated = request(connection, guard_home, request_id, cwd, owner)?;
     let mut excluded = vec![request_id];
     excluded.extend(duplicate_ids.iter().map(String::as_str));
-    let next = next_pending(connection, guard_home, &excluded, cwd)?;
+    let next = next_pending(connection, guard_home, &excluded, cwd, owner)?;
     let (summaries, remaining) = pending_summaries(connection, guard_home)?;
     Ok(json!({
         "resolved": true,
@@ -219,9 +224,10 @@ fn unresolved(
     cwd: Option<&str>,
     error: &str,
     item: Value,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let (summaries, remaining) = pending_summaries(connection, guard_home)?;
-    let next = next_pending(connection, guard_home, &[], cwd)?;
+    let next = next_pending(connection, guard_home, &[], cwd, owner)?;
     Ok(json!({
         "resolved": false,
         "error": error,
@@ -242,13 +248,14 @@ fn request(
     guard_home: &str,
     request_id: &str,
     cwd: Option<&str>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let args = Map::from_iter([
         ("request_id".to_owned(), Value::from(request_id)),
         ("derive_scope".to_owned(), Value::Bool(true)),
         ("cwd".to_owned(), Value::from(cwd)),
     ]);
-    get_approval_request(connection, guard_home, &Args(&args))
+    get_approval_request(connection, guard_home, &Args(&args), owner)
 }
 
 /// The id of the newest pending payload among the first candidates that is
@@ -258,12 +265,13 @@ fn next_pending(
     guard_home: &str,
     excluded: &[&str],
     cwd: Option<&str>,
+    owner: Option<&PolicySnapshotStore>,
 ) -> StoreResult<Value> {
     let args = Map::from_iter([
         ("exclude_ids".to_owned(), Value::from(excluded.to_vec())),
         ("cwd".to_owned(), Value::from(cwd)),
     ]);
-    let next = get_next_pending_request(connection, guard_home, &Args(&args))?;
+    let next = get_next_pending_request(connection, guard_home, &Args(&args), owner)?;
     Ok(next.get("request_id").cloned().unwrap_or(Value::Null))
 }
 

@@ -44,7 +44,7 @@ pub(super) fn shared_library_part(part: &str) -> bool {
         })
 }
 
-pub(super) fn home_spelling_matches_target(
+pub(in crate::pretool) fn home_spelling_matches_target(
     target: &std::path::Path,
     canonical: &std::path::Path,
     supplied_home: Option<&str>,

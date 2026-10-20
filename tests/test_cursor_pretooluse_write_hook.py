@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import cursor_hook_response_from_guard
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.cursor_hook_config import _MANAGED_HOOK_EVENTS, _MANAGED_HOOK_TIMEOUT_SECONDS
-from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (
     cursor_hook_script_source,
     cursor_native_hook_state,

@@ -22,8 +22,7 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     approval_context_tokens_validation_reason,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_file_read_request_artifact,
-    extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
 )
 from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
 
@@ -72,14 +71,16 @@ def _patch_server_spawn(monkeypatch: pytest.MonkeyPatch, spawn: Any) -> None:
 
 
 def _sensitive_artifact(workspace: Path) -> GuardArtifact:
-    request = extract_sensitive_file_read_request("read_file", {"path": ".env"}, cwd=workspace)
-    assert request is not None
-    return build_file_read_request_artifact(
+    _request, artifact = extract_sensitive_file_read_request_artifact(
+        "read_file",
+        {"path": ".env"},
+        cwd=workspace,
         harness="codex",
-        request=request,
         config_path=str(workspace / ".mcp.json"),
         source_scope="project",
     )
+    assert artifact is not None
+    return artifact
 
 
 def _pinned_token(proxy: StdioGuardProxy, artifact: GuardArtifact, config: GuardConfig) -> str:

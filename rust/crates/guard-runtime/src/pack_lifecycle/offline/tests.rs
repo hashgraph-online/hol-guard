@@ -81,7 +81,12 @@ fn offline_cleanup_fences_live_leases_and_collects_orphans_after_crash() {
     std::fs::write(&unrelated, b"unrelated").unwrap();
     let request =
         json!({"directory":directory,"key":"01".repeat(32),"activations":[],"maximum_bytes":0});
-    let lease = std::fs::File::open(directory.join(".cache-lease")).unwrap();
+    // Preparers hold the lease open for writing, as the Python cache lease does.
+    let lease = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(directory.join(".cache-lease"))
+        .unwrap();
     FileExt::lock_shared(&lease).unwrap();
     assert_eq!(cleanup::run(&request).unwrap()["busy"], true);
     assert!(orphan.exists());

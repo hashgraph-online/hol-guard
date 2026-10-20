@@ -61,6 +61,10 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
+          # The bundle stamps `git rev-parse HEAD` as its source SHA and the wheel build
+          # checks it against SOURCE_SHA below, so a pull request has to build its own head
+          # rather than the merge commit Actions checks out by default.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '22'
@@ -116,8 +120,10 @@ jobs:
         run: |
           compiler="rust/target/$TARGET/release/guard-command-source"
           "$compiler" export-trust > contracts/extensions/build-trust-class-map.v1.json
+          "$compiler" export-built > source-built.json
           jq -n --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' > source-build.json
+            --slurpfile built source-built.json \
+            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged",validation_base:{catalog:$built[0].catalog,programs:[]}}' > source-build.json
           "$compiler" compile < source-build.json > source-compiled.json
           jq --slurpfile build source-build.json '. + {build:$build[0]}' rust/crates/guard-command/tests/fixtures/command-source-behavior.v1.json > source-fixtures.json
           "$compiler" test < source-fixtures.json > source-fixture-results.json

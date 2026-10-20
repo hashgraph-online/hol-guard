@@ -2,14 +2,21 @@
 use super::*;
 use fs2::FileExt;
 use std::fs::OpenOptions;
+use std::io::Read;
 
 pub(super) fn run(input: &Value) -> Result<Value> {
     let directory = Path::new(input["directory"].as_str().ok_or_else(invalid)?);
-    let lock =
-        guard_secure_fs::read_bounded(&directory.join(".cache-lease"), 1).map_err(|_| invalid())?;
-    if lock.bytes != b"0" {
+    let path = directory.join(".cache-lease");
+    if guard_secure_fs::contains_symlink_component(&path) {
         return Err(invalid());
     }
+    let leaf = std::fs::symlink_metadata(&path).map_err(|_| invalid())?;
+    if !leaf.is_file() {
+        return Err(invalid());
+    }
+    // One handle checks identity, takes the lease and reads the byte. Preparers
+    // hold the lease open for writing, so a second read-only open would fail on
+    // Windows with a sharing violation instead of reporting the cache busy.
     // No replacement/unlink of this inode is permitted by any cache writer.
     let mut options = OpenOptions::new();
     options.read(true).write(true);
@@ -18,23 +25,41 @@ pub(super) fn run(input: &Value) -> Result<Value> {
         use std::os::unix::fs::OpenOptionsExt;
         options.custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC);
     }
-    let file = options
-        .open(directory.join(".cache-lease"))
-        .map_err(|_| invalid())?;
+    let file = options.open(&path).map_err(|_| invalid())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         let opened = file.metadata().map_err(|_| invalid())?;
-        if Some(opened.dev()) != lock.identity.dev || Some(opened.ino()) != lock.identity.ino {
+        if !opened.is_file()
+            || opened.nlink() != 1
+            || opened.dev() != leaf.dev()
+            || opened.ino() != leaf.ino()
+        {
             return Err(invalid());
         }
     }
-    let locked = read(&directory.join(".cache-lease"), 1)?;
-    if locked != b"0" {
+    #[cfg(windows)]
+    {
+        let (expected, links) =
+            guard_runtime_windows_process::regular_file_id(&path, false).map_err(|_| invalid())?;
+        let opened = guard_runtime_windows_process::handle_file_id(&file).map_err(|_| invalid())?;
+        if links != 1 || opened != expected {
+            return Err(invalid());
+        }
+    }
+    if guard_secure_fs::contains_symlink_component(&path) {
         return Err(invalid());
     }
     if file.try_lock_exclusive().is_err() {
         return Ok(json!({"busy":true,"evicted":0}));
+    }
+    let mut locked = Vec::with_capacity(2);
+    (&file)
+        .take(2)
+        .read_to_end(&mut locked)
+        .map_err(|_| invalid())?;
+    if locked != b"0" {
+        return Err(invalid());
     }
     let key = hex::decode(input["key"].as_str().ok_or_else(invalid)?).map_err(|_| invalid())?;
     if key.len() != 32 {

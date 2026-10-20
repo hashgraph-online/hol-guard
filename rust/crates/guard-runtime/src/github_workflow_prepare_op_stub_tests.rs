@@ -160,6 +160,16 @@ fn lineage_validates_real_rows_and_returns_their_identities() {
     assert_eq!(lineage["request_id"], "req-1");
     assert_eq!(lineage["operation_id"], "op-1");
     assert_eq!(lineage["session_id"], "sess-1");
+    // The op carries the identities the lineage names the capability by, so the
+    // host looks a capability up under the digest the resident derived.
+    assert_eq!(
+        lineage["capability_id"],
+        "gwc-04caee1311432ac664fb0049886efc8542650745e0ae8d1f196e9d59e679d2e3"
+    );
+    assert_eq!(
+        lineage["nonce"],
+        "8181504e4207c78e7a25469f287b65a4d76ba8efd47133cac27a0335be52ccee"
+    );
     assert_eq!(
         GitHubWorkflowApprovalRecord::decode(&lineage["record"]).unwrap(),
         GitHubWorkflowApprovalRecord::decode(&record).unwrap()

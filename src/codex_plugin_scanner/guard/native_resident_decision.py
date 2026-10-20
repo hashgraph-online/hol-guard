@@ -118,6 +118,12 @@ def resident_decide(
         digest = "sha256:" + _canonical_request_sha256(request)
     except (OSError, TypeError, ValueError):
         raise spec.fail(f"{spec.prefix}_request_invalid") from None
+    # This status is a starting point for the transport, not a gate. The daemon
+    # route transport pins the runtime for the duration of its own call and
+    # re-resolves the status under that pin, so every read outside the transport
+    # -- including this one -- reports the ambient mode. Refusing here on that
+    # ambient read, as an entry gate would, fails a pinned route closed; the
+    # transport applies the protocol and feature gate against the pinned status.
     runtime_status = native_runtime_status()
     response = transport(
         operation=spec.operation,

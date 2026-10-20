@@ -8,7 +8,7 @@ import pytest
 
 from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.approval_hook_copy import (
     _SIGNED_APPROVAL_LINK_UNAVAILABLE,
     live_hook_approval_context,

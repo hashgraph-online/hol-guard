@@ -128,15 +128,21 @@ def _lex(command: str) -> tuple[list[tuple[str, bool]], bool]:
 def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
     """The repository holding a cd target outside the hook workspace, as native authority finds it.
 
-    The nearest ancestor with a `.git` entry, strictly below home or the system
-    temporary directory and owned by this user. The sink rebases its approved
-    root there, so the run is contained to that repository exactly as it would
+    The nearest ancestor with a `.git` entry, strictly below home - or the
+    system temporary directory, on POSIX - and owned by this user. The sink
+    rebases its approved root there, so the run is contained to that repository exactly as it would
     be from a session started in it.
     """
     if home is None:
         return None
     directory = directory.resolve(strict=True)
-    for base in (home, Path("/tmp")):
+    # Native authority's Windows arm bases the search on the profile alone, so a
+    # checkout outside it keeps its review. `Path("/tmp")` resolves to `C:\tmp`
+    # on the current drive, which any authenticated user can create, and the
+    # owner check Python can still make there is the native one - which never
+    # runs for a root native would not return. Keep the bases identical.
+    bases = (home,) if os.name == "nt" else (home, Path("/tmp"))
+    for base in bases:
         try:
             base = base.resolve(strict=True)
         except (OSError, RuntimeError):
@@ -146,10 +152,28 @@ def sibling_project_root(directory: Path, *, home: Path | None) -> Path | None:
         candidate = directory
         while candidate != base:
             if os.path.lexists(candidate / ".git"):
-                return candidate if candidate.stat().st_uid == getattr(os, "getuid", lambda: -1)() else None
+                return candidate if _owned_by_this_user(candidate) else None
             candidate = candidate.parent
         return None
     return None
+
+
+def _owned_by_this_user(candidate: Path) -> bool:
+    """Whether this user owns `candidate`, as far as this process can ask.
+
+    POSIX compares the owning uid. Windows has no uid: `st_uid` is always 0
+    there and `os.getuid` does not exist, so comparing them rejected every
+    Windows checkout. The owner question is the native runtime's
+    (`owned_by_current_user`, owner SID against the process SID), it is
+    asked before any receipt is issued, and every caller here runs only after
+    `_contained_receipt` accepted that receipt. So on Windows this answers the
+    part Python can still see - the checkout is strictly inside the profile and
+    carries a `.git` - and leaves the owner to the authority that can read it.
+    """
+
+    if os.name == "nt":
+        return True
+    return candidate.stat().st_uid == getattr(os, "getuid", lambda: -1)()
 
 
 def anchored_sibling_root(command: str, *, workspace: Path, cwd: Path, home: Path | None) -> Path | None:

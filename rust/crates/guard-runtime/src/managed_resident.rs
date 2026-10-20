@@ -148,10 +148,8 @@ fn combine_liveness(
 }
 
 pub(crate) fn stop_managed(state_base: &Path, retire_clients: bool) -> Result<(), String> {
-    // Materialize the current runtime scope even when no resident state is
-    // present.  This keeps the stop command's authenticated, private-home
-    // contract deterministic for callers that use it to initialize a fresh
-    // scope before publishing test or recovery state.
+    // Materialize the private runtime scope even without resident state, so
+    // stop can initialize it before publishing test or recovery state.
     let digest = runtime_digest()?;
     let _ = state_scope(state_base, &digest)?;
     let request = br#"{"operation":"shutdown","request":{}}"#;
@@ -436,9 +434,8 @@ pub(crate) fn parse_process_id(value: &str) -> Result<u32, String> {
         .ok_or_else(|| "native_resident_owner_process_invalid".to_owned())
 }
 
-/// Upper bound on a caller-supplied deadline. Every operation is capped at nine
-/// seconds except the skill-directory scan, whose bounded tree walk may
-/// legitimately read hundreds of megabytes and is granted a longer ceiling.
+/// Upper bound on a caller-supplied deadline. Operations without a longer
+/// ceiling below are capped at nine seconds.
 const CLIENT_TIMEOUT_CEILING_MS: u64 = 9_000;
 /// Cold daemon-lifecycle startup. Python grants `_TIMEOUT_SECONDS` (10s) plus
 /// `_COLD_START_ALLOWANCE_SECONDS` (20s) in `native_daemon_lifecycle.py`.
@@ -476,7 +473,11 @@ pub(crate) fn client_timeout(payload: &[u8]) -> Duration {
             | "shim_admin",
         ) => CONTAINED_RUNNER_TIMEOUT_CEILING_MS,
         Some("codex_request_resume") => CODEX_REQUEST_RESUME_TIMEOUT_CEILING_MS,
+        Some("native_bash_execute") => guard_contracts::NATIVE_BASH_EXECUTE_MAX_TIMEOUT_MS + 1_000,
         Some("daemon_lifecycle_decide") => DAEMON_LIFECYCLE_TIMEOUT_CEILING_MS,
+        // A store call may wait out its own busy timeout; the caller's
+        // deadline still bounds the wait.
+        Some("guard_store") => crate::guard_store_op::MAX_BUSY_TIMEOUT_MS + 5_000,
         _ => CLIENT_TIMEOUT_CEILING_MS,
     };
     let budget = value

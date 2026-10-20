@@ -132,6 +132,11 @@ Date.now = () => forceExpiredDeadline ? realDateNow() + 60_000 : realDateNow();
 {source_ref}
 // This fixture executes output mediation only, without a session request map.
 function cleanupContainedTestRequest() {{}}
+// No bound Bash invocation is tracked here, so the owner-delivery helpers
+// observe nothing. Their real behaviour is exercised against the generated
+// containment source in the bound-Bash SDK tests.
+function boundBashPostObservation() {{ return undefined; }}
+function markBoundBashResultDelivery() {{ return undefined; }}
 function toolCallIdKey(value) {{ return typeof value === "string" && value.trim() ? value.trim() : null; }}
 {blocked_reason}
 function blockedToolResult(reason, details) {{

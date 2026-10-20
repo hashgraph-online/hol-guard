@@ -74,14 +74,17 @@ def close_native_residents_with_retry(home: Path) -> bool:
         time.sleep(min(_NATIVE_CLEANUP_RETRY_INTERVAL, remaining))
 
 
-def installed_native_case_runner():
-    spec = importlib.util.spec_from_file_location(
-        "installed_native_extension_case", Path(__file__).with_name("installed_native_extension_case.py")
-    )
-    require(spec is not None and spec.loader is not None, "case_runner_missing")
+def _sibling(name: str, code: str):
+    spec = importlib.util.spec_from_file_location(name, Path(__file__).with_name(f"{name}.py"))
+    require(spec is not None and spec.loader is not None, code)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    return module
+
+
+def installed_native_case_runner():
+    module = _sibling("installed_native_extension_case", "case_runner_missing")
     require(callable(getattr(module, "run_case", None)), "case_runner_missing")
     return module.run_case
 
@@ -89,18 +92,7 @@ def installed_native_case_runner():
 run_case = installed_native_case_runner()
 
 
-def installed_probe_support():
-    spec = importlib.util.spec_from_file_location(
-        "installed_extension_probe_support", Path(__file__).with_name("installed_extension_probe_support.py")
-    )
-    require(spec is not None and spec.loader is not None, "support_missing")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-_support = installed_probe_support()
+_support = _sibling("installed_extension_probe_support", "support_missing")
 prove_installed_data_only_authoring = _support.prove_installed_data_only_authoring
 persisted_native_receipt_ids = _support.persisted_native_receipt_ids
 receipt_processed_count = _support.receipt_processed_count
@@ -109,17 +101,11 @@ receipt_binding_diagnostic = _support.receipt_binding_diagnostic
 policy_readiness_diagnostic = _support.policy_readiness_diagnostic
 policy_request_phase_diagnostic = _support.policy_request_phase_diagnostic
 require_native_http_admission = _support.require_native_http_admission
+serve_release_assets = _support.serve_release_assets
 
 
 def installed_client():
-    spec = importlib.util.spec_from_file_location(
-        "native_extension_installed_client", Path(__file__).with_name("installed_hook_client.py")
-    )
-    require(spec is not None and spec.loader is not None, "client_missing")
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.installed_hook_request
+    return _sibling("installed_hook_client", "client_missing").installed_hook_request
 
 
 def provision(store: GuardStore) -> None:
@@ -482,7 +468,10 @@ def exercise(root: Path) -> dict[str, object]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", type=Path, required=True)
+    parser.add_argument("--release-assets", type=Path, help="pack assets exported by this unreleased build")
     args = parser.parse_args()
+    if args.release_assets is not None:
+        serve_release_assets(args.release_assets.resolve(strict=True))
     package = Path(codex_plugin_scanner.__file__).resolve()
     require("site-packages" in package.parts, "not_installed_package")
     status = native_runtime_status()
@@ -498,6 +487,7 @@ def main() -> int:
     report["data_only_authoring_receipts_authenticated"] = False
     report["source_sha"] = status.capabilities.build_sha
     report["rule_digest"] = status.capabilities.rule_digest
+    report["pack_release_source"] = "build-export" if args.release_assets is not None else "published-release"
     args.json.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(report, sort_keys=True))
     return 0

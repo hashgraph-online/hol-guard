@@ -11,7 +11,7 @@ import json
 import threading
 import time
 from contextlib import suppress
-from contextvars import ContextVar
+from contextvars import Context, ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -261,8 +261,13 @@ def request_refresh(home: Path, *, store=None):
         if _home != home or _refresh_worker is not None or time.monotonic() < _refresh_after:
             return
         _refresh_after = time.monotonic() + 300.0
+        # A fresh context keeps the caller's lifecycle session out of this
+        # worker, which can outlive it (free-threaded builds inherit context).
         _refresh_worker = threading.Thread(
-            target=_refresh, args=(home, store), name="catalog-current-publication", daemon=True
+            target=Context().run,
+            args=(_refresh, home, store),
+            name="catalog-current-publication",
+            daemon=True,
         )
         _refresh_worker.start()
 

@@ -341,7 +341,7 @@ fn an_approved_script_is_bound_to_its_content() {
             command,
             &scratch.cwd(),
             Some(&environment),
-            &ResidentEngines,
+            &ResidentEngines { guard_home: None },
         )
     };
     let first = bind(command).unwrap();

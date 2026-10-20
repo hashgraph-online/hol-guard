@@ -9,6 +9,9 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+use guard_command::cursor_shell_command::{
+    normalize_cursor_shell_command, CursorShellNormalization,
+};
 use guard_contracts::HookAuthorityStateRequestV1;
 use rusqlite::{params_from_iter, Connection};
 use serde_json::{json, Value};
@@ -19,6 +22,7 @@ use super::vectors::{apply_raw, events, fresh_store, op_request, owned_rows, rec
 
 const CURSOR_PENDING: &str = "cursor_pending_shell:";
 const CURSOR_INDEX: &str = "cursor_pending_shells:";
+const CURSOR_ALLOW: &str = "cursor_native_shell_allow:";
 const CLAUDE_PENDING: &str = "claude_pending_permission:";
 const CLAUDE_INDEX: &str = "claude_pending_permissions:";
 
@@ -171,6 +175,23 @@ fn inputs(connection: &Connection) -> Inputs {
     found
 }
 
+/// The keys the retired `_cursor_pending_shell_state_key` and
+/// `_cursor_native_shell_allow_state_key` wrote. The digest, the truncation
+/// and the two prefixes are spelled out here rather than taken from the
+/// resident, so its own derivation has something to disagree with. The
+/// normalizer is shared on purpose: the host normalizes the command before it
+/// sends it, and the resident normalizes again, which is the idempotency the
+/// normalizer's own tests pin.
+fn python_cursor_fingerprint(command: &str) -> Option<String> {
+    let CursorShellNormalization::Command(normalized) = normalize_cursor_shell_command(command)
+    else {
+        return None;
+    };
+    let mut hasher = Sha256::new();
+    hasher.update(normalized.as_bytes());
+    Some(hex::encode(hasher.finalize())[..24].to_owned())
+}
+
 /// The key the retired `_claude_pending_permission_state_key` wrote, spelled
 /// out here so the resident's own derivation has something to agree with.
 fn python_claude_pending_key(session_id: &str, artifact_id: &str) -> String {
@@ -264,6 +285,91 @@ fn session_ops_match_the_op_sequences_they_replace() {
                             },
                         );
                     }
+                }
+                for command in &found.commands {
+                    let Some(fingerprint) = python_cursor_fingerprint(command) else {
+                        continue;
+                    };
+                    let pending_key = format!("{CURSOR_PENDING}{conversation}:{fingerprint}");
+                    let allow_key = format!("{CURSOR_ALLOW}{conversation}:{fingerprint}");
+                    let label = format!("{name} step {step}: {conversation} {command}");
+                    compared += 1;
+                    agree(
+                        &path,
+                        &format!("{label} named load"),
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_load_pending_state",
+                                json!({ "conversation_id": conversation, "command": command,
+                                    "state_key": pending_key, "expected_key": pending_key }),
+                            )
+                        },
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_load_pending_state",
+                                json!({ "conversation_id": conversation, "command": command }),
+                            )
+                        },
+                    );
+                    agree(
+                        &path,
+                        &format!("{label} named find"),
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_find_pending",
+                                json!({ "conversation_id": conversation, "command": command,
+                                    "expected_key": pending_key }),
+                            )
+                        },
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_find_pending",
+                                json!({ "conversation_id": conversation, "command": command }),
+                            )
+                        },
+                    );
+                    agree(
+                        &path,
+                        &format!("{label} named remove"),
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_remove_pending",
+                                json!({ "conversation_id": conversation,
+                                    "pending_key": pending_key }),
+                            )
+                        },
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_remove_pending",
+                                json!({ "conversation_id": conversation, "command": command }),
+                            )
+                        },
+                    );
+                    agree(
+                        &path,
+                        &format!("{label} named allowance"),
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_load_allowance",
+                                json!({ "conversation_id": conversation, "command": command,
+                                    "state_key": allow_key }),
+                            )
+                        },
+                        |at| {
+                            base.call(
+                                at,
+                                "cursor_load_allowance",
+                                json!({ "conversation_id": conversation, "command": command }),
+                            )
+                        },
+                    );
                 }
             }
             for (session, artifact) in &found.claude_artifacts {

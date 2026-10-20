@@ -4,7 +4,7 @@ use std::fs::File;
 use std::fs::{self, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 const RESTART_WINDOW_MS: u64 = 60_000;
 // A crash loop is slowed by bounded exponential backoff, not stopped for a
@@ -19,9 +19,9 @@ const MAX_RESTARTS_PER_WINDOW: u32 = 3;
 /// every orderly cycle outlives this; a resident that reports success within
 /// milliseconds, over and over, is still a loop and keeps its charge.
 const HEALTHY_RUN_MIN_MS: u128 = 1_000;
-/// A supervisor records its exit while it is already shutting down, so it may
-/// wait for a concurrent spawn to finish with the budget instead of dropping
-/// the correction.
+/// Every budget update holds the lock for one small read and write, so a
+/// spawn, a reset and a supervisor recording its exit each wait briefly for
+/// one another instead of failing on an ordinary overlap.
 const BUDGET_LOCK_RETRY_DELAY: Duration = Duration::from_millis(25);
 const BUDGET_LOCK_RETRIES: u32 = 20;
 const BUDGET_SCHEMA: &str = "hol-guard-resident-restart-budget.v1";
@@ -66,7 +66,10 @@ fn acquire_budget_lock(scope: &Path) -> Result<RestartBudgetLock, String> {
     let file = crate::resident_state::private_lock_file(&path, &private_root)
         .map_err(|_| "native_resident_restart_budget_lock_failed".to_owned())?;
     fs2::FileExt::try_lock_exclusive(&file).map_err(|error| {
-        if error.kind() == std::io::ErrorKind::WouldBlock {
+        // Windows reports a held lock as ERROR_LOCK_VIOLATION, not WouldBlock.
+        // Treating that as a hard failure turned an ordinary race with the
+        // supervisor's exit bookkeeping into a failed resident spawn.
+        if crate::resident_state::is_lock_contention(&error) {
             "native_resident_restart_budget_busy".to_owned()
         } else {
             "native_resident_restart_budget_lock_failed".to_owned()
@@ -298,7 +301,11 @@ fn read_existing_budget(path: &Path, private_root: &Path) -> Result<Option<Resta
     Ok(Some(budget))
 }
 
-pub(super) fn consume_for_spawn(state_base: &Path, scope: &Path) -> Result<(), String> {
+pub(super) fn consume_for_spawn(
+    state_base: &Path,
+    scope: &Path,
+    deadline: Instant,
+) -> Result<(), String> {
     let verifier_key = state_base.join(crate::policy_store::VERIFIER_KEY_FILE_NAME);
     match std::fs::symlink_metadata(&verifier_key) {
         Ok(metadata)
@@ -314,12 +321,20 @@ pub(super) fn consume_for_spawn(state_base: &Path, scope: &Path) -> Result<(), S
         }
         Err(_) => return Err("native_policy_verifier_key_stat_failed".to_owned()),
     }
-    consume(scope)
+    consume_before(scope, Some(deadline))
 }
 
+#[cfg(test)]
 pub(super) fn consume(scope: &Path) -> Result<(), String> {
+    consume_before(scope, None)
+}
+
+/// Charge one spawn. A request that runs out of time while it waits for the
+/// lock charges nothing, so a resident is never started for an answer the
+/// client can no longer wait for.
+fn consume_before(scope: &Path, deadline: Option<Instant>) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, deadline)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path, &private_root)?;
@@ -372,7 +387,10 @@ pub(super) fn healthy_exit(success: bool, ran_for: Duration) -> bool {
     success && ran_for.as_millis() >= HEALTHY_RUN_MIN_MS
 }
 
-fn acquire_budget_lock_waiting(scope: &Path) -> Result<RestartBudgetLock, String> {
+fn acquire_budget_lock_waiting(
+    scope: &Path,
+    deadline: Option<Instant>,
+) -> Result<RestartBudgetLock, String> {
     let mut waited = 0;
     loop {
         match acquire_budget_lock(scope) {
@@ -380,8 +398,16 @@ fn acquire_budget_lock_waiting(scope: &Path) -> Result<RestartBudgetLock, String
                 if error == "native_resident_restart_budget_busy"
                     && waited < BUDGET_LOCK_RETRIES =>
             {
+                if deadline
+                    .is_some_and(|deadline| Instant::now() + BUDGET_LOCK_RETRY_DELAY >= deadline)
+                {
+                    return Err("native_client_deadline_exceeded".to_owned());
+                }
                 waited += 1;
                 std::thread::sleep(BUDGET_LOCK_RETRY_DELAY);
+            }
+            Ok(_) if deadline.is_some_and(|deadline| Instant::now() >= deadline) => {
+                return Err("native_client_deadline_exceeded".to_owned());
             }
             result => return result,
         }
@@ -406,7 +432,7 @@ pub(super) fn release_after_exit(
         return Ok(());
     }
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock_waiting(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
     let path = scope.join("restart-budget.json");
     #[cfg(windows)]
     recover_interrupted_replace(&path, &private_root)?;
@@ -438,7 +464,7 @@ pub(super) fn release_after_exit(
 
 pub(super) fn clear(scope: &Path) -> Result<(), String> {
     let private_root = crate::resident_state::private_root_for_scope(scope)?;
-    let _lock = acquire_budget_lock(scope)?;
+    let _lock = acquire_budget_lock_waiting(scope, None)?;
     let path = scope.join("restart-budget.json");
     if !existing_private_file(&path, &private_root)? {
         return Ok(());

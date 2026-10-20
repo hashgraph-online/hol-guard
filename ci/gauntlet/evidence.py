@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .approval_retry_omp import enabled as approval_retry_enabled
 from .approval_rows import always_gap
 from .bridge_evidence import bridge_calls
 from .business_policy import BUSINESS_CASES, BUSINESS_CLI_CASES, business_policy_error
@@ -122,7 +123,7 @@ def reconcile(events: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[
 def assess_case(scenario: Scenario, case: dict[str, Any]) -> dict[str, Any]:
     """Compute a result; a model's prose is never an acceptance oracle."""
     calls, errors = reconcile(case["events"])
-    contained = contained_calls(scenario.expectation, case, calls)
+    contained = contained_calls(scenario.expectation, case, calls, approval_retry=approval_retry_enabled(scenario))
     provider = case["inference"]
     rounds = provider.get("live_rounds", [])
     checks = case["filesystem"]
@@ -222,6 +223,10 @@ def _assess_observed(
     guards = [g for g in guards if not is_contained_deny(g, bound)]
     if uri_error := virtual_uri_error(scenario, calls):
         return "not-exercised", uri_error
+    from .approval_retry_omp import assess as assess_approval_retry
+
+    if approval_retry_enabled(scenario):
+        return assess_approval_retry(scenario, case, calls, bound)
     if scenario.oracle == "native-tools":
         # A Guard denial or review can stop the remaining steps; judge it as a false positive below.
         guard_stopped = case["approval_delta"] != 0 or (

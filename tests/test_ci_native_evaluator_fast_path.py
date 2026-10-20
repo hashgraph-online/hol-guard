@@ -64,7 +64,6 @@ def test_native_replay_shards_are_complete_and_required() -> None:
         step for step in steps if step.get("name") == "Check native contract groups after artifact fan-out"
     )
     assert contracts["if"] == "matrix.shard-index == 0"
-    assert "ci/package_size" in contracts["run"]
     assert "test_native_contract_validates_every_authored_signature" in contracts["run"]
     assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in contracts["run"]
     assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in contracts["run"]

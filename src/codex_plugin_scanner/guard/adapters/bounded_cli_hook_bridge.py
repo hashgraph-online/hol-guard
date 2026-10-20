@@ -17,6 +17,7 @@ from ..codex_hook_launch_runtime import (
 )
 from ..hook_execution_environment import stamp_hook_input_text
 from ..stable_guard_cli import prune_safe_cli_executable
+from ._modules.grok.grok_hook_invocation_template import configured_grok_payload
 from .adapter_safe_output import write_text_at_authorized_path
 from .bounded_cli_hook_envelope import (
     _canonical_event_token as _canonical_event_token,
@@ -51,7 +52,6 @@ from .desktop_hook_proxy import (
 from .desktop_hook_proxy import (
     _trusted_desktop_hook_proxy_command,
 )
-from .grok_hook_invocation_template import configured_grok_payload
 from .hook_input_reader import read_hook_input
 
 if TYPE_CHECKING:

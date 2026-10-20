@@ -452,7 +452,7 @@ fn prune_superseded_states(
             continue;
         }
         #[cfg(windows)]
-        if remove_windows_private_file(&candidate, &private_root).is_err() {
+        if remove_windows_private_file(&candidate, private_root).is_err() {
             match fs::remove_file(&candidate) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}

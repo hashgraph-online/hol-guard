@@ -3,6 +3,20 @@
 use super::*;
 
 impl PolicySnapshotStore {
+    pub(crate) fn guard_home(&self) -> &Path {
+        // The comparison key normalizes platform aliases. Filesystem capture
+        // needs the actual enrolled path, not that comparison spelling.
+        if self
+            .state_base
+            .file_name()
+            .is_some_and(|name| name == "native-runtime")
+        {
+            self.state_base.parent().unwrap_or(&self.state_base)
+        } else {
+            &self.state_base
+        }
+    }
+
     pub(crate) fn validate_request_snapshot(
         &self,
         value: &Value,

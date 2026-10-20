@@ -98,7 +98,6 @@ def _load_hook_payload(
     return payload
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-_NON_VERDICT_EVENTS = frozenset({"UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse"})
 
 
 def _render_cli(kind: str, harness: str, params: dict[str, object]) -> tuple[str, dict[str, object] | None] | None:
@@ -157,12 +156,6 @@ def _emit_native_hook_response(
     output_stream: TextIO | None = None,
 ) -> None:
     canonical = _canonical_harness_name(harness)
-    if canonical == "hermes" and event_name not in _NON_VERDICT_EVENTS:
-        from ..adapters.hermes_runtime_hooks import hermes_native_decision
-
-        decision = hermes_native_decision(policy_action=policy_action, reason=reason)
-        _write_json_line(decision, output_stream=output_stream)
-        return
     params: dict[str, object] = {
         "canonical_harness": canonical,
         "event_name": event_name,

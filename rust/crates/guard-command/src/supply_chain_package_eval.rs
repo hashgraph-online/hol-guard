@@ -293,6 +293,8 @@ use cloud_evaluation::evaluate_with_cloud;
 #[path = "supply_chain_package_eval/saved_policy.rs"]
 mod saved_policy;
 use saved_policy::{saved_policy_keeps_cached_error, SavedPolicyOutcome};
+#[path = "supply_chain_package_eval/cache_reuse.rs"]
+mod cache_reuse;
 #[path = "supply_chain_package_eval/orchestration.rs"]
 mod orchestration;
 use orchestration::evaluate_package_request_artifact_uncached;

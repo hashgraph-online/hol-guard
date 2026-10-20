@@ -35,6 +35,9 @@ pub fn draft(directory: &Path) -> Result<(TempDir, fs::File)> {
         }
         let lease = lock_file(&entry.path().join("lease"))?;
         if fs2::FileExt::try_lock_exclusive(&lease).is_ok() {
+            // Windows cannot remove a directory while a file in it is open.
+            // The cache lock keeps any other draft or acquire out meanwhile.
+            drop(lease);
             fs::remove_dir_all(entry.path())?;
         } else {
             active += 1;
@@ -84,6 +87,7 @@ pub fn directory(home: &Path) -> Result<PathBuf> {
                 }
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                #[cfg_attr(not(unix), allow(unused_mut))]
                 let mut builder = fs::DirBuilder::new();
                 #[cfg(unix)]
                 {
@@ -147,7 +151,7 @@ fn views(directory: &Path) -> Result<Vec<PathBuf>> {
     paths.sort_by_key(|p| fs::metadata(p).and_then(|m| m.modified()).ok());
     Ok(paths)
 }
-pub fn publish(spool: TempDir, new: Value) -> Result<Value> {
+pub fn publish(spool: TempDir, draft_lease: fs::File, new: Value) -> Result<Value> {
     let observation: Observation =
         serde_json::from_value(new["observation"].clone()).map_err(|_| Error::Invalid)?;
     let directory = directory(&observation.guard_home)?;
@@ -200,10 +204,15 @@ pub fn publish(spool: TempDir, new: Value) -> Result<Value> {
     if target.exists() {
         return Err(Error::Invalid);
     }
+    // Windows refuses to rename a directory while a file inside it is open.
+    // The cache lock held here already keeps every reaper and acquire away
+    // from the draft, so its lease can close before the rename.
+    drop(draft_lease);
     fs::rename(spool.path(), &target)?;
     #[cfg(unix)]
     fs::File::open(&directory)?.sync_all()?;
-    for (path, _lease) in evict {
+    for (path, lease) in evict {
+        drop(lease);
         fs::remove_dir_all(path)?;
     }
     summary(&new)
@@ -322,6 +331,10 @@ pub fn evaluate(request: &Value) -> Result<Value> {
         return Ok(json!({}));
     }
     if request["action"] == "observe" {
+        // Publication evicts views under the exclusive cache lock, so a shared
+        // lock keeps every view this read verifies in place until it returns.
+        let lock = lock_file(&root.join("cache.lock"))?;
+        fs2::FileExt::lock_shared(&lock)?;
         for path in views(&root)? {
             let value = record(&path)?;
             if value["manifest"]["catalogDigest"] == request["view_digest"]

@@ -19,6 +19,7 @@ from ..approval_gate import (
     input_from_mapping,
     require_extension_control,
 )
+from ..catalog_delivery import lifecycle
 from ..json_transport import escape_json_for_html
 from ..native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
 from ..runtime import command_inspection
@@ -58,6 +59,7 @@ from .extension_control_prepared import (
     expire_leases,
     expired,
     prepare_candidate,
+    release_all_leases,
     request_digest,
 )
 from .extension_control_request import request_needs_proof, required_request_string
@@ -110,6 +112,18 @@ class ExtensionControlApiService:
         self._candidates = PreparedControlCandidates()
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
+
+    def rebind_registry(self, registry: CommandSafetyExtensionRegistry) -> None:
+        """Serve a registry the daemon recovered after starting on another.
+
+        Proofs prepared against the previous registry name its catalog digest,
+        and a preview in flight sees the registry change, so both fail as
+        conflicts.
+        """
+
+        with self._apply_lock:
+            self._registry = registry
+            self.catalog_digest = registry.catalog_digest
 
     def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
         return self._registry, self._runtime.current()
@@ -320,7 +334,7 @@ class ExtensionControlApiService:
         return self.effective()
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
-        with self._preview_lock:
+        with self._preview_lock, lifecycle.session():
             return self._preview_locked(payload)
 
     def _preview_locked(self, payload: dict[str, object]) -> dict[str, object]:
@@ -400,10 +414,15 @@ class ExtensionControlApiService:
     def expire_prepared_cache_leases(self):
         expire_leases(self)
 
+    def release_prepared_cache_leases(self):
+        return release_all_leases(self)
+
     def apply(self, payload: dict[str, object]) -> dict[str, object]:
         with self._apply_lock:
             try:
-                return self._apply_locked(payload)
+                # One verified native executable serves every request of this mutation.
+                with lifecycle.session():
+                    return self._apply_locked(payload)
             except ExtensionControlApiError:
                 raise
             except Exception as exc:

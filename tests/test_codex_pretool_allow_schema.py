@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 
 
 def test_codex_pre_tool_response_omits_unsupported_allow() -> None:

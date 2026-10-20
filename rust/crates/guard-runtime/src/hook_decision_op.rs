@@ -14,7 +14,7 @@ use guard_contracts::{
 };
 
 use crate::hook_decision_compose::{compose, Composed};
-use crate::hook_decision_finalize::{finalize, post_claim};
+use crate::hook_decision_finalize::{finalize, post_claim, post_claim_reuse};
 use crate::hook_decision_native_facts::{verdict_handoff, VerdictHandoff};
 use crate::hook_decision_settle::settle;
 
@@ -77,6 +77,7 @@ pub(crate) fn decide(query: &HookDecisionQueryV1) -> Result<HookDecisionPayloadV
             Ok(HookDecisionPayloadV1::PostClaimReuse {
                 current_action: action.as_str().to_owned(),
                 validation_reason: reason.map(str::to_owned),
+                reuse: post_claim_reuse(inputs, action, reason),
             })
         }
         HookDecisionQueryV1::Finalize { inputs, settled } => {

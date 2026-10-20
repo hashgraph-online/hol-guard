@@ -5,7 +5,7 @@ import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
     OBSERVATION_FIELD,
     PROBE_FIELD,

@@ -282,6 +282,42 @@ fn token_cases_match_python_parse() {
     }
 }
 
+/// The predicate the three remaining Python callers of the retired decoder
+/// ask. It has to agree with the recorded Python parse on every token case,
+/// including the malformed ones, because the callers used to read exactly that
+/// verdict out of their own decoder.
+#[test]
+fn well_formed_verdict_matches_python_parse_on_every_token_case() {
+    for case in corpus()["token_cases"].as_array().unwrap() {
+        let result = evaluate(request_for(
+            ContextDigestKindV1::ApprovalContextTokenWellFormed {
+                token: case["token"].clone(),
+            },
+        ));
+        let expected = !matches!(case.get("parsed"), Some(Value::Null) | None);
+        assert_eq!(result.status, "ok", "case {}", case["id"]);
+        assert_eq!(
+            result.approval_context_token_well_formed,
+            Some(expected),
+            "case {}",
+            case["id"]
+        );
+    }
+}
+
+/// A `false` verdict is an answer, not a missing one: the result contract has
+/// to carry it rather than drop it as an empty field.
+#[test]
+fn a_false_well_formed_verdict_survives_the_result_contract() {
+    let result = evaluate(request_for(
+        ContextDigestKindV1::ApprovalContextTokenWellFormed {
+            token: Value::String("legacy-artifact-hash".to_owned()),
+        },
+    ));
+    assert_eq!(result.status, "ok");
+    assert_eq!(result.approval_context_token_well_formed, Some(false));
+}
+
 #[test]
 fn validation_cases_match_python_reasons() {
     for case in corpus()["validation_cases"].as_array().unwrap() {

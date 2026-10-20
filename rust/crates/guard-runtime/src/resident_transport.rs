@@ -1,4 +1,7 @@
-use std::io::{self, Read, Write};
+use std::io::Read;
+#[cfg(test)]
+use std::io::{self, Write};
+#[cfg(test)]
 use std::net::TcpStream;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -13,72 +16,15 @@ use sha2::{Digest, Sha256};
 mod control;
 #[path = "resident_worker_pool.rs"]
 mod worker_pool;
-#[cfg(unix)]
+#[cfg(all(test, unix))]
 use std::os::unix::net::UnixStream;
 use worker_pool::spawn_workers;
 
-pub(crate) trait ResidentStream: Read + Write + Send {
-    fn kernel_peer_identity(
-        &self,
-    ) -> Result<Option<crate::resident_peer_identity::UnixPeerIdentity>, String> {
-        Ok(None)
-    }
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()>;
-    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        self.set_resident_nonblocking(true)?;
-        let result = self.read(output);
-        let restore = self.set_resident_nonblocking(false);
-        match (result, restore) {
-            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
-            (result, Ok(())) => result,
-            (_, Err(error)) => Err(error),
-        }
-    }
-    fn configure_low_latency(&self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl ResidentStream for TcpStream {
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        TcpStream::set_read_timeout(self, timeout)
-    }
-
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        TcpStream::set_write_timeout(self, timeout)
-    }
-
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        self.set_nonblocking(nonblocking)
-    }
-
-    fn configure_low_latency(&self) -> io::Result<()> {
-        self.set_nodelay(true)
-    }
-}
-
-#[cfg(unix)]
-impl ResidentStream for UnixStream {
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    fn kernel_peer_identity(
-        &self,
-    ) -> Result<Option<crate::resident_peer_identity::UnixPeerIdentity>, String> {
-        crate::resident_peer_identity::UnixPeerIdentity::read(self).map(Some)
-    }
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        UnixStream::set_read_timeout(self, timeout)
-    }
-
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        UnixStream::set_write_timeout(self, timeout)
-    }
-
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        self.set_nonblocking(nonblocking)
-    }
-}
+#[path = "resident_stream.rs"]
+mod stream;
+pub(crate) use stream::{DisconnectInput, ResidentStream};
+#[path = "resident_request_cancellation.rs"]
+mod request_cancellation;
 
 pub(crate) type BoxedResidentStream = Box<dyn ResidentStream>;
 
@@ -102,48 +48,9 @@ impl PendingRequest {
     }
 }
 
-pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
-    }
-    let mut difference = 0u8;
-    for (left_byte, right_byte) in left.iter().zip(right) {
-        difference |= left_byte ^ right_byte;
-    }
-    difference == 0
-}
-
-pub(crate) fn hmac_sha256(key: &[u8], label: &[u8], nonce: &[u8]) -> [u8; crate::AUTH_PROOF_BYTES] {
-    const BLOCK_BYTES: usize = 64;
-    let mut key_block = [0u8; BLOCK_BYTES];
-    if key.len() > BLOCK_BYTES {
-        let digest = Sha256::digest(key);
-        key_block[..digest.len()].copy_from_slice(&digest);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-
-    let mut inner_pad = [0x36u8; BLOCK_BYTES];
-    let mut outer_pad = [0x5cu8; BLOCK_BYTES];
-    for index in 0..BLOCK_BYTES {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(label);
-    inner.update(nonce);
-    let inner_digest = inner.finalize();
-
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    let digest = outer.finalize();
-    let mut proof = [0u8; crate::AUTH_PROOF_BYTES];
-    proof.copy_from_slice(&digest);
-    proof
-}
+#[path = "resident_auth_crypto.rs"]
+mod auth_crypto;
+pub(crate) use auth_crypto::{constant_time_eq, hmac_sha256};
 
 fn authenticate_resident_stream(
     stream: &mut dyn ResidentStream,
@@ -397,10 +304,7 @@ fn handle_pending_request(
         } else {
             match catch_unwind(AssertUnwindSafe(|| {
                 observe(Phase::ResidentEvaluate, || {
-                    crate::resident_protocol::evaluate_resident_bytes(
-                        &request,
-                        policy_store.as_deref(),
-                    )
+                    request_cancellation::evaluate(&mut pending, &request, policy_store.as_deref())
                 })
             })) {
                 Ok(Ok(response)) => response,

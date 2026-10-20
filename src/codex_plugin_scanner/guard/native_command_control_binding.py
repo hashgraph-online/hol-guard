@@ -158,9 +158,10 @@ def read_native_command_control_binding(
 ) -> tuple[dict[str, object], ExtensionControlRuntime]:
     """Read committed local and managed authority, retaining both revision floors."""
 
+    from .catalog_delivery import lifecycle
     from .catalog_delivery.projection import capture
     from .native_command_control_projection import read_control_projection
 
-    with store.connection_scope():
+    with store.connection_scope(), lifecycle.session():
         metadata, registry, record_digest = capture(store)
         return read_control_projection(store, metadata, runtime, registry=registry, record_digest=record_digest)

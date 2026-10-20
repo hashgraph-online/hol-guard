@@ -136,6 +136,10 @@ pub(super) fn allowed_executable_path(
 ) -> bool {
     if path_is_within_lexically(path, workspace)
         || path_is_within_any(path, &TRUSTED_EXECUTABLE_ROOTS)
+        // A `/usr/bin` shim resolves into the developer directory, which is
+        // not a fixed prefix and so is not one of the trusted roots. It is
+        // accepted only while it is root-owned and sealed.
+        || super::developer_shim::is_developer_tool(path)
     {
         return true;
     }

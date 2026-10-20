@@ -63,7 +63,12 @@ def _render(
 
 
 def native_render_cli(
-    kind: str, harness: str, params: Mapping[str, object], *, guard_home: Path | None = None
+    kind: str,
+    harness: str,
+    params: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+    deadline: float | None = None,
 ) -> tuple[str, dict[str, object] | None] | None:
     """Render the in-process CLI hook outcome; ``None`` when the resident cannot answer.
 
@@ -71,12 +76,34 @@ def native_render_cli(
     (``document``, ``silent`` or ``fallback``) and the document for ``document``.
     """
 
-    payload = _render_payload({"kind": kind, "harness": harness, "cli": dict(params)}, guard_home)
+    payload = _render_payload({"kind": kind, "harness": harness, "cli": dict(params)}, guard_home, deadline)
     outcome = payload.get("outcome") if payload is not None else None
     if payload is None or outcome not in {"document", "silent", "fallback"}:
         return None
     document = payload.get("response")
     return str(outcome), dict(document) if isinstance(document, dict) else None
+
+
+def native_hermes_bridge(
+    response: Mapping[str, object], *, guard_home: Path | None = None, deadline: float | None = None
+) -> tuple[dict[str, object], int] | None:
+    """Read a Hermes daemon reply into its stdout document and exit status.
+
+    ``None`` when the resident cannot answer; the caller fails closed rather
+    than deciding here what the reply meant. ``deadline`` is the hook's
+    absolute ``time.monotonic()`` budget; the render gets only what remains.
+    """
+
+    rendered = native_render_cli(
+        "hermes_bridge", "hermes", {"response": dict(response)}, guard_home=guard_home, deadline=deadline
+    )
+    if rendered is None or rendered[1] is None:
+        return None
+    document = rendered[1].get("document")
+    exit_code = rendered[1].get("exit_code")
+    if not isinstance(document, dict) or not isinstance(exit_code, int) or isinstance(exit_code, bool):
+        return None
+    return dict(document), exit_code
 
 
 # The payload fields ``claude_approval_copy`` reads to name the tool.

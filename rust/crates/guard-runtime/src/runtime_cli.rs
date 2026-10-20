@@ -76,6 +76,10 @@ pub(super) fn run() -> Result<(), String> {
             let response = oneshot::evaluate_hook_bytes(&bytes)?;
             write_bytes_response(&response)
         }
+        [command, flag] if command == "native-bash-host-context" && flag == "--stdin" => {
+            let bytes = read_stdin_bounded()?;
+            write_bytes_response(&native_exact_action_op::observe_bash_host_bytes(&bytes)?)
+        }
         [command, flag] if policy_snapshot_build::is_command(command) && flag == "--stdin" => {
             let response = policy_snapshot_build::run_command(command, io::stdin().lock())?;
             write_bytes_response(&response)
@@ -160,6 +164,18 @@ pub(super) fn run() -> Result<(), String> {
                 std::path::Path::new(state_dir),
             )?;
             write_bytes_response(&request)
+        }
+        #[cfg(target_os = "macos")]
+        [command, flag, state_dir, owner_flag, owner_pid]
+            if command == "native-bash-execute-client" && flag == "--stdin" && owner_flag == "--host-owner-pid" => {
+            let pid = owner_pid.parse::<u32>().map_err(|_| "native_bash_host_owner_unavailable")?;
+            let response = native_bash_client::run(std::path::Path::new(state_dir), read_stdin_bounded()?, Some(pid))?;
+            write_bytes_response(&response)
+        }
+        #[cfg(target_os = "macos")]
+        [command, flag, state_dir] if command == "native-bash-execute-client" && flag == "--stdin" => {
+            let response = native_bash_client::run(std::path::Path::new(state_dir), read_stdin_bounded()?, None)?;
+            write_bytes_response(&response)
         }
         [command, flag, state_dir]
             if matches!(command.as_str(), "hook-client" | "resident-client")
