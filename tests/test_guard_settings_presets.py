@@ -313,6 +313,22 @@ class TestSettingsExplainCommand:
         assert "paranoid" not in payload["description"].lower()
         assert "re-approval" not in payload["description"]
 
+    def test_settings_list_prints_the_same_payload_as_bare_settings(
+        self,
+        tmp_path: Path,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        home_dir = tmp_path / "home"
+        _write_text(home_dir / "config.toml", 'security_level = "strict"\n')
+        assert main(["guard", "settings", "--home", str(home_dir), "--json"]) == 0
+        bare = json.loads(capsys.readouterr().out)
+        assert main(["guard", "settings", "list", "--home", str(home_dir), "--json"]) == 0
+        listed = json.loads(capsys.readouterr().out)
+        for payload in (bare, listed):
+            payload.pop("generated_at", None)
+        assert listed == bare
+        assert (home_dir / "config.toml").read_text(encoding="utf-8") == 'security_level = "strict"\n'
+
 
 class TestConfigMigration:
     """L282 — users on balanced/strict/custom retain their level after migration."""

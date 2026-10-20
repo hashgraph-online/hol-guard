@@ -2,10 +2,13 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::resident_diagnostics::note;
+
 use super::{
-    ensure_private_directory_under, private_root_for_state_base, process_start_marker,
-    read_state_file_raw, validate_package_process_identity, validate_runtime_process_identity,
-    validate_state, ResidentState, MAX_STATE_FILES, STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
+    durable_runtime_digest, ensure_private_directory_under, private_root_for_state_base,
+    process_start_marker, read_state_file_raw, validate_package_process_identity,
+    validate_runtime_process_identity, validate_state, ResidentState, MAX_STATE_FILES,
+    STATE_FILE_PREFIX, STATE_FILE_SUFFIX,
 };
 
 const MAX_SCOPES: usize = 16;
@@ -30,7 +33,67 @@ pub(crate) fn discover_home_states_prefer(
     base: &Path,
     preferred_digest: Option<&str>,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
+    discover_states(base, preferred_digest, Liveness::RuntimeDigest)
+}
+
+/// Discovery for a short-lived caller that can only use a resident running
+/// this caller's own runtime. A scope's resident counts as live when its start
+/// marker matches and it either runs this executable's path or is recorded
+/// under the digest this executable's durable copy is published as, so no
+/// runtime is hashed; the caller still validates the identity it connects to.
+pub(crate) fn discover_same_executable_states(
+    base: &Path,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
+    discover_states(base, None, Liveness::SameExecutable)
+}
+
+/// How discovery proves a fallback scope's resident is live.
+#[derive(Clone, Copy)]
+enum Liveness {
+    /// The process runs bytes matching the state's runtime digest.
+    RuntimeDigest,
+    /// The process runs this caller's own runtime, proven without a hash.
+    SameExecutable,
+}
+
+/// State-file counts summed over every scope one discovery pass loads.
+#[derive(Default)]
+struct ScopeTotals {
+    files: usize,
+    read_failed: usize,
+    invalid: usize,
+}
+
+fn discover_states(
+    base: &Path,
+    preferred_digest: Option<&str>,
+    liveness: Liveness,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
+    // Write one note per pass, not per scope: scopes with different counts
+    // would otherwise alternate values and defeat the repeat suppression.
+    let mut totals = ScopeTotals::default();
+    let result = discover_states_counted(base, preferred_digest, liveness, &mut totals);
+    note("discovery_state_files", totals.files);
+    if totals.read_failed > 0 {
+        note("discovery_state_read_failed", totals.read_failed);
+    }
+    if totals.invalid > 0 {
+        note("discovery_state_invalid", totals.invalid);
+    }
+    result
+}
+
+fn discover_states_counted(
+    base: &Path,
+    preferred_digest: Option<&str>,
+    liveness: Liveness,
+    totals: &mut ScopeTotals,
+) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let private_root = private_root_for_state_base(base)?;
+    let durable_digest = match liveness {
+        Liveness::RuntimeDigest => None,
+        Liveness::SameExecutable => durable_runtime_digest(base),
+    };
     let base = ensure_private_directory_under(base, &private_root, false)?;
     let validated_preferred_digest = preferred_digest
         .filter(|digest| digest.len() == 64 && digest.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -82,15 +145,30 @@ pub(crate) fn discover_home_states_prefer(
     // directory must not fail every hook.
     let mut states = Vec::new();
     let mut budget = DiscoveryBudget::new();
+    budget.liveness = liveness;
+    budget.durable_digest = durable_digest;
     if let Some((path, digest_prefix)) = preferred_candidate {
-        match load_scope_states(&path, &digest_prefix, &private_root, &mut budget) {
+        match load_scope_states(&path, &digest_prefix, &private_root, &mut budget, totals) {
             Ok(found) => states.extend(found),
-            Err(error) if error == "native_resident_state_list_failed" => return Err(error),
-            Err(_) => {}
+            Err(error) if error == "native_resident_state_list_failed" => {
+                note("discovery_preferred_scope_failed", 1);
+                return Err(error);
+            }
+            Err(_) => note("discovery_preferred_scope_failed", 1),
         }
+    } else if preferred_prefix.is_some() {
+        note("discovery_preferred_scope_missing", 1);
     }
-    let preferred_live = states.iter().any(|(_, _, state)| {
-        validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+    // Only a `RuntimeDigest` caller names a preferred scope, so only its
+    // states reach this check; a `SameExecutable` caller passes no preferred
+    // digest and goes straight to the fallback scopes below. The arm is kept
+    // so a preferred scope added to that mode proves liveness the way it
+    // proves it everywhere else: without hashing a runtime on the hook path.
+    let preferred_live = states.iter().any(|(_, _, state)| match liveness {
+        Liveness::RuntimeDigest => {
+            validate_package_process_identity(state.process_id, &state.process_start_marker).is_ok()
+        }
+        Liveness::SameExecutable => budget.verified_live(state).unwrap_or(false),
     });
     if truncated && !preferred_live {
         // An unseen fallback may still hold the home-wide resident owner lock.
@@ -100,7 +178,7 @@ pub(crate) fn discover_home_states_prefer(
         // Empty and stale version directories must not displace the live
         // resident. Bound total fallback I/O instead of selecting hash prefixes.
         for (path, digest_prefix) in fallback_candidates {
-            match load_scope_states(&path, &digest_prefix, &private_root, &mut budget) {
+            match load_scope_states(&path, &digest_prefix, &private_root, &mut budget, totals) {
                 Ok(found) => {
                     let mut live = None;
                     for (index, (_, _, state)) in found.iter().enumerate() {
@@ -123,9 +201,10 @@ pub(crate) fn discover_home_states_prefer(
                     }
                 }
                 Err(_) if budget.exhausted => {
-                    return Err("native_resident_state_list_failed".to_owned())
+                    note("discovery_fallback_scope_failed", 1);
+                    return Err("native_resident_state_list_failed".to_owned());
                 }
-                Err(_) => {}
+                Err(_) => note("discovery_fallback_scope_failed", 1),
             }
         }
     }
@@ -145,6 +224,8 @@ struct DiscoveryBudget {
     identities: usize,
     probes: HashMap<(u32, String, String), bool>,
     exhausted: bool,
+    liveness: Liveness,
+    durable_digest: Option<String>,
 }
 
 impl DiscoveryBudget {
@@ -155,6 +236,8 @@ impl DiscoveryBudget {
             identities: MAX_SCOPES,
             probes: HashMap::new(),
             exhausted: false,
+            liveness: Liveness::RuntimeDigest,
+            durable_digest: None,
         }
     }
 
@@ -174,7 +257,18 @@ impl DiscoveryBudget {
             return Err("native_resident_state_list_failed".to_owned());
         }
         self.identities -= 1;
-        let verified = validate_runtime_process_identity(key.0, &key.1, &key.2).is_ok();
+        let verified = match self.liveness {
+            Liveness::RuntimeDigest => {
+                validate_runtime_process_identity(key.0, &key.1, &key.2).is_ok()
+            }
+            Liveness::SameExecutable => super::validate_direct_lane_process_identity(
+                key.0,
+                &key.1,
+                &key.2,
+                self.durable_digest.as_deref(),
+            )
+            .is_ok(),
+        };
         self.probes.insert(key, verified);
         Ok(verified)
     }
@@ -199,18 +293,25 @@ fn load_scope_states(
     digest_prefix: &str,
     private_root: &Path,
     budget: &mut DiscoveryBudget,
+    totals: &mut ScopeTotals,
 ) -> Result<Vec<(PathBuf, String, ResidentState)>, String> {
     let scope = ensure_private_directory_under(scope, private_root, true)?;
     let mut paths = state_paths_with_budget(&scope, budget)?;
     paths.sort_by_key(|path| std::cmp::Reverse(generation_number(path).unwrap_or(0)));
+    totals.files += paths.len();
     let mut states = Vec::new();
+    let mut budget_result = Ok(());
     for (attempted, path) in paths.into_iter().enumerate() {
         if attempted >= MAX_STATE_READ_ATTEMPTS || states.len() == MAX_STATE_FILES {
             break;
         }
         // Count actual reads only; a per-scope limit may stop before this read.
-        budget.consume(true)?;
+        if let Err(error) = budget.consume(true) {
+            budget_result = Err(error);
+            break;
+        }
         let Ok(state) = read_state_file_raw(&path, private_root) else {
+            totals.read_failed += 1;
             continue;
         };
         let digest = state.runtime_sha256.clone();
@@ -219,10 +320,12 @@ fn load_scope_states(
             || !digest[..16].eq_ignore_ascii_case(digest_prefix)
             || validate_state(&scope, &state, &digest).is_err()
         {
+            totals.invalid += 1;
             continue;
         }
         states.push((scope.clone(), digest, state));
     }
+    budget_result?;
     Ok(states)
 }
 

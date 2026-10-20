@@ -37,8 +37,15 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
     _condition: Condition  # pyright: ignore[reportUninitializedInstanceVariable]
     _workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _pending_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
+    _deferred_workspace_paths: set[Path]  # pyright: ignore[reportUninitializedInstanceVariable]
     _published_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
     _observed_policy_fingerprint: tuple[str, str, str] | None  # pyright: ignore[reportUninitializedInstanceVariable]
+    # The blocked-request mode every config of the last compile agreed on.
+    _compiled_blocked_request_mode: str | None = None
+    # The managed-policy view every config of the last compile agreed on.
+    _compiled_structured_output_view: dict[str, object] | None = None
+    # The MCP relay harness views every config of the last compile agreed on.
+    _compiled_mcp_relay_harnesses: dict[str, object] | None = None
 
     def _current_policy_input_stats(
         self,
@@ -62,6 +69,13 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             *self._external_policy_paths(),
             *self._workspace_policy_paths(),
         )
+        # SQLite moves the database's ctime when the last mmap connection
+        # closes, without a write. Database changes are only a republish hint
+        # (the periodic reconcile compares the compiled policy), so ctime is
+        # left out for them; a real write still moves mtime or size.
+        database_paths = {
+            str(self.guard_home / name) for name in ("guard.db", "guard.db-wal", "guard.db-shm", "guard.db-journal")
+        }
         seen_paths: set[str] = set()
         for path in paths:
             path_key = str(path)
@@ -76,7 +90,12 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 values.append(
                     (
                         path_key,
-                        (metadata.st_mtime_ns, metadata.st_size, metadata.st_ino, metadata.st_ctime_ns),
+                        (
+                            metadata.st_mtime_ns,
+                            metadata.st_size,
+                            metadata.st_ino,
+                            0 if path_key in database_paths else metadata.st_ctime_ns,
+                        ),
                     )
                 )
         return tuple(values)
@@ -226,6 +245,9 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
         """
 
         from .config import load_guard_config
+        from .native_policy_snapshot_direct_lane_mcp_relay import uniform_harness_views
+        from .native_policy_snapshot_direct_lane_review import uniform_blocked_request_mode
+        from .native_policy_snapshot_direct_lane_structured import uniform_structured_output_view
         from .runtime.observed_mcp_tools import bound_native_mcp_tool_actions, native_observed_mcp_tool_actions
 
         with self._condition:
@@ -233,9 +255,15 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
             if settled_only:
                 selected = selected - self._pending_workspace_paths
             selected_workspaces = tuple(sorted(selected, key=str))
+        # A compile that fails before the view is read binds none.
+        self._compiled_structured_output_view = None
+        self._compiled_mcp_relay_harnesses = None
         configs = [load_guard_config(self.guard_home)]
         configs.extend(load_guard_config(self.guard_home, workspace=workspace) for workspace in selected_workspaces)
         policy = compose_effective_native_policies(tuple(configs))
+        self._compiled_blocked_request_mode = uniform_blocked_request_mode(configs)
+        self._compiled_structured_output_view = uniform_structured_output_view(configs)
+        self._compiled_mcp_relay_harnesses = uniform_harness_views(configs)
         try:
             mcp_actions = native_observed_mcp_tool_actions(self.store)
         except sqlite3.Error as error:
@@ -283,6 +311,25 @@ class NativePolicySnapshotPublisherInputs(NativePolicySnapshotDirectLaneAck):
                 self._acked = False
                 self._condition.notify_all()
             raise
+
+    def _committed_control_authority(self) -> dict[str, object] | None:
+        """Read the committed control marker without compiling the projection.
+
+        The marker is written under the mutation lease on every control
+        projection, so it moves when another process commits one. Reading it
+        costs one authenticated private-state read and takes no lease, which
+        is what lets the review fence compare committed control state inside a
+        hook budget. It never creates key material: a store with none has no
+        marker to authenticate.
+        """
+
+        from .native_command_control_authority_store import read_command_control_authority
+        from .native_policy_snapshot_codec import derive_native_policy_verifier_key
+
+        material = self.store._policy_integrity_secret_material(create=False)
+        if material is None or not isinstance(material[0], bytes):
+            return None
+        return read_command_control_authority(self.store, derive_native_policy_verifier_key(material[0]))
 
     def _compiled_business_source(self):
         from .business_policy_document_import import read_business_source_for_store

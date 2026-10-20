@@ -241,3 +241,10 @@ export async function initialize(page: Page) {
   await page.goto(`/extensions?guardDaemon=${DAEMON_ORIGIN}`);
   await expect(page.getByRole("heading", { name: "Extensions", exact: true })).toBeVisible();
 }
+
+/** Flips the Extensions list switch to the connectors and tools added on this device. */
+export async function showCustomExtensions(page: Page) {
+  const toggle = page.getByTestId("extension-list-switch").getByRole("button", { name: /^Custom extensions/ });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+}

@@ -23,6 +23,13 @@ from .restricted_pytest_model import (
 )
 from .restricted_pytest_sandbox import _backend_argv, _restricted_environment, _run_backend_process
 
+# Appended when a read-only run fails after printing a denied file operation.
+READ_ONLY_WRITE_DENIAL_NOTE = (
+    "This run hit a denied file operation (EPERM or EROFS). HOL Guard runs these tests with "
+    "the project read-only; only $TMPDIR is writable. If a test writes reports, caches or other "
+    "files into the project, point that output at $TMPDIR and run the same command again."
+)
+
 
 def _tsx_package_dir(command: Sequence[str]) -> Path | None:
     """Directory of the tsx package named by a contained `--import` loader."""
@@ -62,13 +69,14 @@ def vitest_arguments(command: Sequence[str]) -> tuple[str, ...]:
 
 
 def prepare_restricted_vitest(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     return native_launch_plan(
         "prepare_vitest",
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=sys.platform,
         backend_executable=None,
         profile=VITEST_READ_ONLY_PROFILE_VERSION,
@@ -104,6 +112,24 @@ def run_restricted_vitest(
     )
 
 
+def _transform_image(anchor: Path, workspace: Path, images: Path, *, required: bool) -> tuple[Path, Path, str] | None:
+    """The private esbuild image, or None when a build can run without one.
+
+    A build that never loads esbuild (tsc, a plain JavaScript config) keeps
+    running when the image cannot be prepared; Vitest always needs it.
+    """
+    from .restricted_esbuild import snapshot_esbuild
+    from .restricted_node_test import nearest_project_root
+
+    try:
+        project = nearest_project_root(anchor, workspace, "node_modules/esbuild/package.json")
+        return snapshot_esbuild(project, images)
+    except RestrictedPytestError:
+        if required:
+            raise
+        return None
+
+
 def run_restricted_node_plan(
     plan: RestrictedPytestPlan,
     *,
@@ -134,15 +160,14 @@ def run_restricted_node_plan(
         home.mkdir(mode=0o700)
         tmp.mkdir(mode=0o700)
         esbuild = None
-        if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION:
-            from .restricted_esbuild import snapshot_esbuild
-            from .restricted_node_test import nearest_project_root
-
+        # Vite bundles a TypeScript config with esbuild before a build starts,
+        # so a contained build needs the same transform image as Vitest.
+        if plan.profile_version in {VITEST_READ_ONLY_PROFILE_VERSION, NODE_BUILD_OUTPUT_PROFILE_VERSION}:
             # Executable images have a separate read-only tree. A child cannot
             # replace the image by renaming a writable scratch ancestor.
             anchor = _tsx_package_dir(plan.command) or plan.cwd
-            project = nearest_project_root(anchor, plan.workspace, "node_modules/esbuild/package.json")
-            esbuild = snapshot_esbuild(project, Path(images).resolve())
+            required = plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION
+            esbuild = _transform_image(anchor, plan.workspace, Path(images).resolve(), required=required)
             if esbuild is not None:
                 source, image, version = esbuild
                 if authorize_capability is None:
@@ -186,4 +211,7 @@ def run_restricted_node_plan(
             cwd=plan.cwd,
             node_virtual_address_space=plan.backend == "linux-bubblewrap",
             merge_stderr=merge_stderr,
+            write_denial_note=(
+                READ_ONLY_WRITE_DENIAL_NOTE if plan.profile_version == VITEST_READ_ONLY_PROFILE_VERSION else None
+            ),
         )

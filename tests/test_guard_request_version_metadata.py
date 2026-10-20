@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 import sqlite3
-import tempfile
 import uuid
 from pathlib import Path
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.native_approval_queue_identity import bind_connection_guard_home
 from codex_plugin_scanner.guard.runtime.cloud_review_sync import build_cloud_review_event
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
-    approval_schema_statement,
-    get_approval_request,
-)
+from codex_plugin_scanner.guard.store_approvals import get_approval_request
+from tests.native_approval_writes import add_approval_request, native_approval_connection
 
 
 def _request(version: str) -> GuardApprovalRequest:
@@ -39,11 +34,7 @@ def _request(version: str) -> GuardApprovalRequest:
 
 
 def _memory_connection() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
-    connection.row_factory = sqlite3.Row
-    bind_connection_guard_home(connection, Path(tempfile.mkdtemp(prefix="hol-guard-approval-home-")))
-    connection.execute(approval_schema_statement())
-    return connection
+    return native_approval_connection()
 
 
 def test_deduplicated_request_preserves_first_and_updates_last_guard_version() -> None:

@@ -155,3 +155,102 @@ fn post_tool_policy_floor_warning_on_a_proven_allow_renders_no_text() {
         );
     }
 }
+
+#[test]
+fn every_watched_ecosystems_package_permission_keeps_the_containment_receipt() {
+    let response = |extension: &str| {
+        obj(&json!({
+            "schema": "guard-pre-tool-result.v1",
+            "authority": "rust",
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": "native_workspace_containment_required",
+            "reason": "protected",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 0, "observations_digest": "sha256:fixture"},
+                "evaluation_error": null,
+                "observations": [],
+                "permission_observations": [{
+                    "extension_id": extension,
+                    "permission_id": format!("{extension}.permission.package-protection"),
+                    "uncertainty_reasons": [],
+                }],
+            },
+        }))
+    };
+    // The firewall marks which ecosystem's manager ran, not a risk the run
+    // carries, so a local verb below any of them reaches the sandbox.
+    for extension in ["command.package.node", "command.package.python"] {
+        for harness in ["zcode", "omp", "codex"] {
+            let rendered = pre_tool(harness, &response(extension));
+            assert_eq!(
+                rendered.get("required_execution_profile"),
+                Some(&json!("workspace-contained-v1")),
+                "{harness}: {extension}"
+            );
+            assert_eq!(
+                rendered.get("command_binding_digest"),
+                Some(&json!("sha256:fixture")),
+                "{harness}: {extension}"
+            );
+        }
+    }
+    // An extension the firewall does not own says nothing about the verb, so
+    // the verdict stays an ordinary block.
+    let rendered = pre_tool("zcode", &response("command.network.egress"));
+    assert_eq!(rendered.get("required_execution_profile"), None);
+    assert_eq!(rendered.get("policy_action"), Some(&json!("block")));
+}
+
+#[test]
+fn bun_eval_package_permission_keeps_the_node_eval_receipt() {
+    let response = |reason_code: &str| {
+        obj(&json!({
+            "schema": "guard-pre-tool-result.v1",
+            "authority": "rust",
+            "decision": "deny",
+            "minimum_action": "sandbox-required",
+            "policy_action": "sandbox-required",
+            "reason_code": reason_code,
+            "reason": "protected",
+            "command_extensions": {
+                "binding": {"uncertainty_count": 0},
+                "evaluation_error": null,
+                "observations": [],
+                "permission_observations": [{
+                    "extension_id": "command.package.node",
+                    "permission_id": "command.package.node.permission.package-protection",
+                    "uncertainty_reasons": [],
+                }],
+            },
+        }))
+    };
+    let rendered = pre_tool(
+        "zcode",
+        &response("native_bun_eval_readonly_containment_required"),
+    );
+    assert_eq!(
+        rendered.get("required_execution_profile"),
+        Some(&json!("node-eval-readonly-v1"))
+    );
+    assert_eq!(
+        rendered.get("reason_code"),
+        Some(&json!("native_bun_eval_readonly_containment_required"))
+    );
+    // `node -e` and Python evaluation never run a package-manager image, so
+    // the permission keeps them blocked.
+    for (harness, reason) in [
+        ("zcode", "native_node_eval_readonly_containment_required"),
+        ("omp", "native_node_eval_readonly_containment_required"),
+        ("zcode", "native_python_eval_readonly_containment_required"),
+    ] {
+        let rendered = pre_tool(harness, &response(reason));
+        assert_eq!(rendered.get("required_execution_profile"), None, "{reason}");
+        assert_eq!(
+            rendered.get("policy_action"),
+            Some(&json!("block")),
+            "{reason}"
+        );
+    }
+}

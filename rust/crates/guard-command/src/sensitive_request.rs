@@ -15,15 +15,20 @@ use crate::benign_request_api::{
 use crate::codex_output_env::Ctx;
 use crate::command_evaluation::CommandDecisionFloor;
 use crate::command_model::{parse_shell_command, CanonicalCommand};
+use crate::compound_artifact::compound_artifact;
 use crate::hook_adapter_value::OValue;
 use crate::sfrs_dispatcher::{extract_sensitive_tool_action_request, ExtractInputs};
 use crate::sfrs_dispatcher_request::{NativeEvaluationView, ToolActionRequestMatch};
+use crate::sfrs_gh_actions_read::is_nonexecuting_github_actions_read_workflow;
+use crate::sfrs_gh_ephemeral_body::gh_pr_create_uses_safe_ephemeral_body;
 use crate::sfrs_read_only_filters::read_only_lookup_target_is_safe;
 use crate::sfrs_requests::{
-    classify_sensitive_path, command_list_candidate_texts, extract_sensitive_file_read_request,
+    build_file_read_request_artifact, build_file_write_request_artifact, classify_sensitive_path,
+    command_list_candidate_texts, extract_sensitive_file_read_request,
     extract_sensitive_file_read_request_from_action, extract_sensitive_file_write_request,
     FileReadRequest, FileWriteRequest, SensitivePath,
 };
+use crate::unmodeled_shell_artifact::unmodeled_shell_artifact;
 use crate::CommandModelRequestV1;
 
 #[cfg(all(test, unix))]
@@ -34,13 +39,19 @@ mod tests;
 pub const QUERIES: &[&str] = &[
     "tool_action",
     "file_read",
+    "file_read_artifact",
     "file_read_from_action",
+    "file_read_from_action_artifact",
     "file_write",
+    "file_write_artifact",
     "classify_path",
     "command_list_candidate_texts",
     "benign_file_read",
     "benign_tool_action",
     "read_only_lookup_target_is_safe",
+    "benign_github_shell",
+    "unmodeled_shell_artifact",
+    "compound_artifact",
 ];
 
 /// Answer one query. `controls` is the extension-control snapshot the
@@ -71,12 +82,30 @@ pub fn evaluate(
             cwd,
             home,
         ))),
+        "file_read_artifact" => {
+            let naming = ArtifactNaming::from_input(input)?;
+            let found = extract_sensitive_file_read_request(
+                &ovalue_from_json(field("tool_name")),
+                &ovalue_from_json(field("arguments")),
+                cwd,
+                home,
+            );
+            Ok(naming.read_reply(found))
+        }
         "file_read_from_action" => {
             let action = ovalue_from_json(field("action"));
             let found = action.as_map().and_then(|action| {
                 extract_sensitive_file_read_request_from_action(action, cwd, home)
             });
             Ok(read_wire(found))
+        }
+        "file_read_from_action_artifact" => {
+            let naming = ArtifactNaming::from_input(input)?;
+            let action = ovalue_from_json(field("action"));
+            let found = action.as_map().and_then(|action| {
+                extract_sensitive_file_read_request_from_action(action, cwd, home)
+            });
+            Ok(naming.read_reply(found))
         }
         "file_write" => {
             let protected = protected_paths(field("protected_paths"))?;
@@ -88,6 +117,18 @@ pub fn evaluate(
                 &protected,
             );
             Ok(found.map_or(Value::Null, |found| write_wire(&found)))
+        }
+        "file_write_artifact" => {
+            let naming = ArtifactNaming::from_input(input)?;
+            let protected = protected_paths(field("protected_paths"))?;
+            let found = extract_sensitive_file_write_request(
+                &ovalue_from_json(field("tool_name")),
+                &ovalue_from_json(field("arguments")),
+                cwd,
+                home,
+                &protected,
+            );
+            Ok(naming.write_reply(found))
         }
         "classify_path" => {
             let path = field("path").as_str().ok_or(INVALID)?;
@@ -123,6 +164,17 @@ pub fn evaluate(
                 target, allow_dirs, home
             )))
         }
+        // A read-only Actions workflow or a static ephemeral PR body needs no
+        // unmodeled-shell review.
+        "benign_github_shell" => {
+            let command = field("command_text").as_str().ok_or(INVALID)?;
+            Ok(json!(
+                is_nonexecuting_github_actions_read_workflow(command, None, ctx)
+                    || gh_pr_create_uses_safe_ephemeral_body(command, ctx)
+            ))
+        }
+        "unmodeled_shell_artifact" => unmodeled_shell_artifact(input, ctx),
+        "compound_artifact" => compound_artifact(input, cwd, home, ctx),
         _ => Err("native_sensitive_request_query_unknown"),
     }
 }
@@ -361,6 +413,70 @@ fn tool_action_wire(found: &ToolActionRequestMatch) -> Result<Value, &'static st
         }
     }
     Ok(wire)
+}
+
+/// The naming a request artifact carries beyond the request itself: which
+/// harness asked, which policy file the resulting review cites, and whether
+/// the review is scoped to the project or to the account.
+///
+/// Python supplies these three because they describe the call site, not the
+/// request; everything the artifact says *about* the request — its id, its
+/// name and its metadata — is derived here, so one implementation decides
+/// what a sensitive-request artifact is called and what it is keyed under.
+struct ArtifactNaming {
+    harness: String,
+    config_path: String,
+    source_scope: String,
+}
+
+impl ArtifactNaming {
+    fn from_input(input: &Value) -> Result<Self, &'static str> {
+        let text = |key: &str| {
+            input
+                .get(key)
+                .and_then(Value::as_str)
+                .filter(|value| !value.is_empty())
+                .ok_or(INVALID)
+        };
+        Ok(Self {
+            harness: text("harness")?.to_owned(),
+            config_path: text("config_path")?.to_owned(),
+            source_scope: text("source_scope")?.to_owned(),
+        })
+    }
+
+    /// The match and its artifact together. They travel in one reply because
+    /// the caller needs both and a second round trip would let the request the
+    /// artifact describes differ from the request the caller then acts on.
+    fn read_reply(&self, found: Option<FileReadRequest>) -> Value {
+        let artifact = found.as_ref().map(|found| {
+            build_file_read_request_artifact(
+                &self.harness,
+                found,
+                &self.config_path,
+                &self.source_scope,
+            )
+        });
+        json!({
+            "match": read_wire(found),
+            "artifact": artifact,
+        })
+    }
+
+    fn write_reply(&self, found: Option<FileWriteRequest>) -> Value {
+        let artifact = found.as_ref().map(|found| {
+            build_file_write_request_artifact(
+                &self.harness,
+                found,
+                &self.config_path,
+                &self.source_scope,
+            )
+        });
+        json!({
+            "match": found.as_ref().map_or(Value::Null, write_wire),
+            "artifact": artifact,
+        })
+    }
 }
 
 fn path_wire(found: &SensitivePath) -> Value {

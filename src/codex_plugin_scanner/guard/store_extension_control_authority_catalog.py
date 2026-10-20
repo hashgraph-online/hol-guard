@@ -25,6 +25,11 @@ from .runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
+from .store_extension_control_authority_catalog_events import (
+    already_recorded,
+    build_catalog_migration_payload,
+    insert_catalog_migration_event,
+)
 from .store_extension_control_authority_support import (
     _now,
     _private_hash,
@@ -32,12 +37,6 @@ from .store_extension_control_authority_support import (
     _row_str,
     preserve_migrated_extension_control,
 )
-
-
-def _canonical_contract_value(value: object) -> object:
-    from .store_extension_control_authority import _canonical_contract_value as canonical
-
-    return canonical(value)
 
 
 class ExtensionControlAuthorityCatalogMixin:
@@ -53,6 +52,7 @@ class ExtensionControlAuthorityCatalogMixin:
         registry: CommandSafetyExtensionRegistry,
         *,
         key: bytes,
+        allow_migration: bool = True,
     ) -> tuple[ExtensionControlAuthorityView, dict[str, str] | None]:
         current = self._catalog_target_manifest(registry)
         with self._connect() as connection:
@@ -61,6 +61,11 @@ class ExtensionControlAuthorityCatalogMixin:
                 (registry.catalog_digest,),
             ).fetchone()
         if existing is None:
+            if not allow_migration:
+                # Nothing to compare against yet, and a read-only caller holds
+                # the shared lock. Recording the manifest is the next writer's
+                # job; serving the view is this one's.
+                return view, None
             self._write_catalog_manifest(registry, key=key, manifest=current)
             return view, None
         persisted = self._load_catalog_manifest(registry.catalog_digest, key=key)
@@ -88,6 +93,10 @@ class ExtensionControlAuthorityCatalogMixin:
             for layer in view.layers
         )
         if rebound != view.layers:
+            if not allow_migration:
+                # A read-only caller holds the shared lock. Show the rebound
+                # controls without committing the revision that records them.
+                return replace(view, layers=rebound), persisted
             view = self._migrate_extension_control_catalog(view, registry=registry, key=key)
         return view, persisted
 
@@ -221,47 +230,40 @@ class ExtensionControlAuthorityCatalogMixin:
         layers: tuple[ExtensionControlLayer, ...],
         retired_targets: tuple[str, ...],
     ) -> None:
-        payload = json.dumps(
-            {
-                "previous_revision": previous_revision,
-                "revision": revision,
-                "previous_catalog_digest": previous_catalog_digest,
-                "catalog_digest": catalog_digest,
-                "layer_count": len(layers),
-                "control_count": sum(len(layer.controls) for layer in layers),
-                "retired_target_count": len(retired_targets),
-                "retired_target_ids": list(retired_targets),
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        )
         with self._connect() as connection:
-            existing = connection.execute(
-                "select payload_json from guard_events where event_name = ?",
-                ("extension_control_authority_catalog_migrated",),
-            ).fetchall()
-            for row in existing:
-                try:
-                    recorded = json.loads(str(row["payload_json"]))
-                except json.JSONDecodeError:
-                    continue
-                if isinstance(recorded, dict) and recorded.get("revision") == revision:
-                    return
-            connection.execute(
-                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                ("extension_control_authority_catalog_migrated", payload, _now()),
+            if already_recorded(connection, revision):
+                return
+            payload, regression = build_catalog_migration_payload(
+                connection,
+                previous_revision=previous_revision,
+                revision=revision,
+                previous_catalog_digest=previous_catalog_digest,
+                catalog_digest=catalog_digest,
+                layers=layers,
+                retired_targets=retired_targets,
+                registry=None,
+                trigger="authority-read-backfill",
+                writer=False,
+            )
+            insert_catalog_migration_event(
+                connection,
+                payload=payload,
+                regression=regression,
+                occurred_at=_now(),
+                revision=revision,
+                previous_catalog_digest=previous_catalog_digest,
+                catalog_digest=catalog_digest,
             )
 
-    def _migrate_extension_control_catalog(
+    def _rebound_catalog_layers(
         self,
         previous: ExtensionControlAuthorityView,
         *,
         registry: CommandSafetyExtensionRegistry,
         key: bytes,
-    ) -> ExtensionControlAuthorityView:
-        """Rebind authenticated controls to a trusted built-in catalog update."""
+    ) -> tuple[ExtensionControlAuthorityView, tuple[ExtensionControlLayer, ...], tuple[str, ...]]:
+        """Restamp authenticated controls for `registry`, dropping retired targets."""
 
-        self._invalidate_native_extension_control_policy()
         catalog_digest = registry.catalog_digest
         previous_manifest = self._load_catalog_manifest(previous.catalog_digest, key=key) or {}
         current_manifest = self._catalog_target_manifest(registry)
@@ -286,6 +288,83 @@ class ExtensionControlAuthorityCatalogMixin:
             for layer in previous.layers
         )
         self._validate_layers(layers, catalog_digest)
+        return previous, layers, retired_targets
+
+    def _is_catalog_migration(
+        self,
+        revision: int,
+        *,
+        migrated_from: str,
+        migrated_to: str,
+        key: bytes,
+    ) -> bool:
+        """Whether `revision` was committed by that exact catalog migration.
+
+        A migration records its source and target digests in the private
+        idempotency hash of the transition it commits, so recomputing that hash
+        identifies the migration that produced a revision without trusting any
+        plaintext column.
+        """
+
+        if revision <= 0:
+            return False
+        with self._connect() as connection:
+            row = connection.execute(
+                "select idempotency_key_hash from extension_control_authority_transition where revision = ?",
+                (revision,),
+            ).fetchone()
+        if row is None:
+            return False
+        ref = f"catalog-migration:{migrated_from}:{migrated_to}:{revision - 1}"
+        return _row_str(row, "idempotency_key_hash") == _private_hash(ref, key=key, purpose="idempotency")
+
+    def _catalog_migration_oscillates(
+        self,
+        revision: int,
+        *,
+        migrated_from: str,
+        migrated_to: str,
+        key: bytes,
+    ) -> bool:
+        """Whether migrating again would only continue a two-catalog loop.
+
+        The first migration away from a catalog is real work: it rebinds the
+        controls and records the retirement the other install caused. A second
+        one that undoes a migration which itself undid this read's own is not.
+        Once two runtimes with different catalogs share a home, every read from
+        either side commits a revision, the committed revision advances faster
+        than a dashboard draft can be applied, and no mutation can name a
+        revision that still exists by the time it commits.
+        """
+
+        return self._is_catalog_migration(
+            revision, migrated_from=migrated_from, migrated_to=migrated_to, key=key
+        ) and self._is_catalog_migration(revision - 1, migrated_from=migrated_to, migrated_to=migrated_from, key=key)
+
+    def _rebind_extension_control_catalog(
+        self,
+        previous: ExtensionControlAuthorityView,
+        *,
+        registry: CommandSafetyExtensionRegistry,
+        key: bytes,
+    ) -> ExtensionControlAuthorityView:
+        """Serve controls under `registry`'s catalog without committing a revision."""
+
+        _, layers, _ = self._rebound_catalog_layers(previous, registry=registry, key=key)
+        return replace(previous, catalog_digest=registry.catalog_digest, layers=layers)
+
+    def _migrate_extension_control_catalog(
+        self,
+        previous: ExtensionControlAuthorityView,
+        *,
+        registry: CommandSafetyExtensionRegistry,
+        key: bytes,
+    ) -> ExtensionControlAuthorityView:
+        """Rebind authenticated controls to a trusted built-in catalog update."""
+
+        self._invalidate_native_extension_control_policy()
+        catalog_digest = registry.catalog_digest
+        previous, layers, retired_targets = self._rebound_catalog_layers(previous, registry=registry, key=key)
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
         with self._connect() as connection:
@@ -387,26 +466,26 @@ class ExtensionControlAuthorityCatalogMixin:
                 "update extension_control_authority_transition set phase = ?, committed_at = ? where revision = ?",
                 (AuthorityPhase.COMMITTED.value, created_at, revision),
             )
-            connection.execute(
-                "insert into guard_events (event_name, payload_json, occurred_at) values (?, ?, ?)",
-                (
-                    "extension_control_authority_catalog_migrated",
-                    json.dumps(
-                        {
-                            "previous_revision": previous.revision,
-                            "revision": revision,
-                            "previous_catalog_digest": previous.catalog_digest,
-                            "catalog_digest": catalog_digest,
-                            "layer_count": len(layers),
-                            "control_count": sum(len(layer.controls) for layer in layers),
-                            "retired_target_count": len(retired_targets),
-                            "retired_target_ids": retired_targets,
-                        },
-                        sort_keys=True,
-                        separators=(",", ":"),
-                    ),
-                    created_at,
-                ),
+            payload, regression = build_catalog_migration_payload(
+                connection,
+                previous_revision=previous.revision,
+                revision=revision,
+                previous_catalog_digest=previous.catalog_digest,
+                catalog_digest=catalog_digest,
+                layers=layers,
+                retired_targets=retired_targets,
+                registry=registry,
+                trigger="catalog-migration",
+                writer=True,
+            )
+            insert_catalog_migration_event(
+                connection,
+                payload=payload,
+                regression=regression,
+                occurred_at=created_at,
+                revision=revision,
+                previous_catalog_digest=previous.catalog_digest,
+                catalog_digest=catalog_digest,
             )
         self._write_and_verify_anchor(AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.COMMITTED), key=key)
         return self._read_extension_control_authority_locked(catalog_digest)

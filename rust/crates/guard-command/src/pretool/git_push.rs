@@ -1,4 +1,4 @@
-//! `git push [-u] origin <current-branch>` proven without review.
+//! `git push [-u] origin <current-branch|HEAD>` proven without review.
 //!
 //! The command shape is proven here; whether the repository may push is a
 //! question about the machine: which Git runs, which remote it names, which
@@ -25,6 +25,10 @@ pub struct GitPushRequest<'a> {
     pub path: &'a str,
     /// The `XDG_CONFIG_HOME` the agent's shell runs with, when set.
     pub xdg_config_home: Option<&'a str>,
+    /// The same command first creates `branch` at the checked-out commit and
+    /// switches to it, so `branch` must not exist yet and the branch checked
+    /// out now is the one it starts from.
+    pub creates_branch: bool,
 }
 
 /// Answers whether the push may run: the branch is the checked-out branch,
@@ -56,13 +60,52 @@ const TRANSPORT_PREFIXES: &[&str] = &["GIT_SSL_", "GIT_SSH", "GIT_HTTP", "GIT_CU
 /// for the server but leave origin, credentials and verification where they
 /// were. The hook stamps them from the session, which the agent's command
 /// cannot set; an inline assignment on the command is still refused.
-const CERTIFICATE_ANCHORS: &[&str] = &[
+pub(super) const CERTIFICATE_ANCHORS: &[&str] = &[
     "GIT_SSL_CAINFO",
     "GIT_SSL_CAPATH",
     "SSL_CERT_FILE",
     "SSL_CERT_DIR",
     "CURL_CA_BUNDLE",
 ];
+
+/// Whether an exported variable changes how Git authenticates, which
+/// transport it uses or how it verifies the server.
+fn routes_transport(name: &str) -> bool {
+    let key = name.to_ascii_uppercase();
+    !CERTIFICATE_ANCHORS.contains(&key.as_str())
+        && (TRANSPORT_ENVIRONMENT.contains(&key.as_str())
+            || TRANSPORT_PREFIXES
+                .iter()
+                .any(|prefix| key.starts_with(prefix)))
+}
+
+/// The trusted Git a `git push` from `cwd` would run, after the same
+/// environment checks the native push proof makes, or `None` when the agent's
+/// environment could reroute, re-authenticate or inject code into the push.
+/// A one-time approval of a reviewed push binds to the same answer.
+pub fn push_environment_git(
+    execution_environment: &guard_contracts::GuardExecutionEnvironmentV1,
+    home: &Path,
+    cwd: &Path,
+) -> Option<std::path::PathBuf> {
+    let (home, cwd) = (
+        std::fs::canonicalize(home).ok()?,
+        std::fs::canonicalize(cwd).ok()?,
+    );
+    let clean = super::git_config::clean_environment(Some(execution_environment), &home, &cwd)
+        && !execution_environment
+            .environment_names
+            .iter()
+            .any(|name| routes_transport(name))
+        && execution_environment
+            .xdg_config_home
+            .as_deref()
+            .is_none_or(|xdg| Path::new(xdg).is_absolute());
+    if !clean {
+        return None;
+    }
+    super::git_config::trusted_command("git", &home, &cwd, Some(execution_environment))
+}
 
 struct Push<'a> {
     directory: Option<&'a str>,
@@ -118,7 +161,13 @@ pub(super) fn exact_safe_command(
             if push_seen
                 || segment.pipeline_index != 0
                 || deadline.is_some_and(|deadline| Instant::now() >= deadline)
-                || !proven_push(segment, proof_context, execution_environment, *verdict)
+                || !proven_push(
+                    segment,
+                    proof_context,
+                    execution_environment,
+                    *verdict,
+                    None,
+                )
             {
                 return false;
             }
@@ -147,6 +196,47 @@ pub(super) fn exact_safe_command(
     push_seen
 }
 
+/// Whether `segment` is `git push [-u] origin <branch>` from the shell's own
+/// directory, the only push a chain of local Git writes may end with.
+pub(super) fn chained(segment: &CommandSegmentV1) -> bool {
+    plain_git(segment) && parse(segment).is_some_and(|push| push.directory.is_none())
+}
+
+/// Git itself, named first: the push proof resolves and runs this program, so
+/// any other executable, a wrapper such as `env -C` or an overridden path is
+/// refused.
+fn plain_git(segment: &CommandSegmentV1) -> bool {
+    let first = segment.text.split_whitespace().next();
+    [
+        segment.executable.as_deref(),
+        segment.tokens.first().map(String::as_str),
+        first,
+    ]
+    .into_iter()
+    .all(|word| word.map(super::executable_basename) == Some("git"))
+        && !segment.path_overridden
+        && segment.wrapper_chain.is_empty()
+}
+
+/// Proves a push that follows proven local Git writes in one chain, with the
+/// same runtime verdict a push alone gets. `created` is the branch an earlier
+/// `git switch -c` or `git checkout -b` in the chain creates and checks out.
+pub(super) fn chained_push_proven(
+    segment: &CommandSegmentV1,
+    context: super::PathContext<'_>,
+    deadline: Option<Instant>,
+    execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    created: Option<&str>,
+) -> bool {
+    let Some(verdict) = VERDICT.get() else {
+        return false;
+    };
+    chained(segment)
+        && segment.pipeline_index == 0
+        && deadline.is_none_or(|deadline| Instant::now() < deadline)
+        && proven_push(segment, context, execution_environment, *verdict, created)
+}
+
 fn trusted_filter(
     name: &str,
     context: super::PathContext<'_>,
@@ -167,12 +257,22 @@ fn proven_push(
     context: super::PathContext<'_>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
     verdict: GitPushVerdict,
+    created: Option<&str>,
 ) -> bool {
     let Some(environment) = execution_environment else {
         return false;
     };
+    if !plain_git(segment) {
+        return false;
+    }
     let Some(spec) = parse(segment) else {
         return false;
+    };
+    // `HEAD` after the command's own `git switch -c` names the new branch.
+    let branch = match created {
+        None => spec.branch,
+        Some(name) if spec.branch == name || spec.branch == "HEAD" => name,
+        Some(_) => return false,
     };
     let (Some(declared_home), Some(declared_cwd)) = (context.home_dir, context.cwd) else {
         return false;
@@ -188,14 +288,10 @@ fn proven_push(
     };
     if !segment.environment_names.is_empty()
         || !super::git_config::clean_environment(execution_environment, &home, &cwd)
-        || environment.environment_names.iter().any(|name| {
-            let key = name.to_ascii_uppercase();
-            !CERTIFICATE_ANCHORS.contains(&key.as_str())
-                && (TRANSPORT_ENVIRONMENT.contains(&key.as_str())
-                    || TRANSPORT_PREFIXES
-                        .iter()
-                        .any(|prefix| key.starts_with(prefix)))
-        })
+        || environment
+            .environment_names
+            .iter()
+            .any(|name| routes_transport(name))
     {
         return false;
     }
@@ -223,10 +319,11 @@ fn proven_push(
     verdict(&GitPushRequest {
         git: &git,
         repository: &repository,
-        branch: spec.branch,
+        branch,
         home: shell_home,
         path: &environment.path,
         xdg_config_home: environment.xdg_config_home.as_deref(),
+        creates_branch: created.is_some(),
     })
 }
 
@@ -312,6 +409,7 @@ mod tests {
             ("git push -u origin feature/one", None, "feature/one"),
             ("git push --set-upstream origin fix-two", None, "fix-two"),
             ("git push origin main", None, "main"),
+            ("git push -u origin HEAD", None, "HEAD"),
             ("git push -q -u origin topic 2>&1", None, "topic"),
             (
                 "git -C ../sibling push -u origin topic",

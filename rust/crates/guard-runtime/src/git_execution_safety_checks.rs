@@ -18,7 +18,11 @@ use crate::git_execution_safety_config::{
     safe_github_https_remote_url, status_arguments_are_read_only, Environment, GitConfig,
     HelperShape,
 };
-use crate::git_execution_safety_probe::{ProbeOutput, Prober};
+use crate::git_execution_safety_probe::{pushed_branch, ProbeOutput, Prober};
+
+#[path = "git_execution_safety_once.rs"]
+mod once;
+pub(crate) use once::push_once_state;
 
 pub(crate) struct Verdict {
     pub(crate) allowed: bool,
@@ -85,8 +89,10 @@ pub(crate) fn decide(request: &GitExecutionSafetyRequestV1) -> Verdict {
     Verdict::of(match request.check {
         GitExecutionSafetyCheckV1::StatusConfig => context.status_config(),
         GitExecutionSafetyCheckV1::ObjectQuery => context.object_query(),
-        GitExecutionSafetyCheckV1::FetchOrigin => context.fetch_origin(),
-        GitExecutionSafetyCheckV1::PushOrigin => context.push_origin(),
+        GitExecutionSafetyCheckV1::FetchOrigin => {
+            context.fetch_origin(&safe_github_https_remote_url)
+        }
+        GitExecutionSafetyCheckV1::PushOrigin => context.push_origin(&safe_github_https_remote_url),
         GitExecutionSafetyCheckV1::WorktreeAdd => context.worktree_add(),
         _ => false,
     })
@@ -133,6 +139,24 @@ impl Context<'_> {
             .is_some_and(|output| {
                 output.success() && output.text().is_some_and(|text| text.trim() == "true")
             })
+    }
+
+    /// Whether `git rev-parse --git-path NAME` names a path that does not exist.
+    fn git_path_is_absent(&self, prober: &Prober<'_>, repository: &Path, name: &str) -> bool {
+        let Some(text) = prober
+            .run(&["rev-parse", "--git-path", name])
+            .filter(ProbeOutput::success)
+            .and_then(|output| output.text().map(|text| text.trim().to_owned()))
+        else {
+            return false;
+        };
+        let path = Path::new(&text);
+        let path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            repository.join(path)
+        };
+        matches!(fs::symlink_metadata(path), Err(error) if error.kind() == std::io::ErrorKind::NotFound)
     }
 
     /// Git hook paths that exist and are executable make the operation unsafe.
@@ -228,7 +252,9 @@ impl Context<'_> {
                 .is_some_and(|config| !checkout_config_can_fetch(&config))
     }
 
-    fn fetch_origin(&self) -> bool {
+    /// `remote_ok` judges origin's rewritten URL: the native GitHub HTTPS
+    /// check, or `once::transport` for a one-time push approval.
+    fn fetch_origin(&self, remote_ok: &dyn Fn(&str) -> bool) -> bool {
         let environment = self.environment();
         if !routing_environment_is_clean(environment) || fetch_environment_is_set(environment) {
             return false;
@@ -249,8 +275,7 @@ impl Context<'_> {
         match config.get("remote.origin.url") {
             Some(urls)
                 if urls.iter().all(|url| {
-                    rewritten_remote_url(&config, url)
-                        .is_some_and(|url| safe_github_https_remote_url(&url))
+                    rewritten_remote_url(&config, url).is_some_and(|url| remote_ok(&url))
                 }) => {}
             _ => return false,
         }
@@ -293,7 +318,7 @@ impl Context<'_> {
         resolved.is_some_and(|path| binary_path_is_trusted(&path, cwd, home, &self.request.groups))
     }
 
-    fn push_origin(&self) -> bool {
+    fn push_origin(&self, remote_ok: &dyn Fn(&str) -> bool) -> bool {
         let Some(branch) = self
             .request
             .branch
@@ -305,7 +330,7 @@ impl Context<'_> {
         if !global_config_environment_is_stable(
             self.environment(),
             self.request.account_home.as_deref(),
-        ) || !self.fetch_origin()
+        ) || !self.fetch_origin(remote_ok)
         {
             return false;
         }
@@ -313,16 +338,20 @@ impl Context<'_> {
             return false;
         };
         let prober = self.prober(&repository);
-        let echoes = |arguments: &[&str]| {
+        let output = |arguments: &[&str]| {
             prober
                 .run(arguments)
                 .filter(ProbeOutput::success)
-                .and_then(|output| output.text().map(|text| text.trim() == branch))
-                .unwrap_or(false)
+                .and_then(|output| output.text().map(|text| text.trim().to_owned()))
         };
-        if !echoes(&["check-ref-format", "--branch", branch])
-            || !echoes(&["symbolic-ref", "--quiet", "--short", "HEAD"])
-        {
+        let Some(current) = output(&["symbolic-ref", "--quiet", "--short", "HEAD"]) else {
+            return false;
+        };
+        let reference = self.request.reference.as_deref();
+        let Some(branch) = pushed_branch(&prober, &current, branch, reference) else {
+            return false;
+        };
+        if output(&["check-ref-format", "--branch", branch]).as_deref() != Some(branch) {
             return false;
         }
         let scoped = |arguments: &[&str]| -> Option<GitConfig> {
@@ -332,12 +361,26 @@ impl Context<'_> {
             }
             parse_null_config(output.text()?)
         };
-        let (Some(config), Some(local), Some(worktree)) = (
+        let (Some(config), Some(local)) = (
             self.config(&prober),
             scoped(&["config", "--local", "--null", "--list"]),
-            scoped(&["config", "--worktree", "--null", "--list"]),
         ) else {
             return false;
+        };
+        // Git reads `config.worktree` only when the repository enables the
+        // worktreeConfig extension. Without it there is no worktree scope, and
+        // `--worktree` refuses to run once the repository has a linked worktree.
+        let worktree = if local.contains_key("extensions.worktreeconfig") {
+            match scoped(&["config", "--worktree", "--null", "--list"]) {
+                Some(worktree) => worktree,
+                // `--worktree` also fails when `config.worktree` is absent.
+                None if self.git_path_is_absent(&prober, &repository, "config.worktree") => {
+                    GitConfig::new()
+                }
+                None => return false,
+            }
+        } else {
+            GitConfig::new()
         };
         if push_config_routes_execution(&config, branch)
             || push_effective_config_weakens_transport(&config)

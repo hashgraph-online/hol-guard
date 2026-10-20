@@ -1,8 +1,34 @@
 use super::*;
 
+#[path = "parser_ansi_c.rs"]
+mod ansi_c;
+
+#[path = "parser_shell_tokens.rs"]
+mod tokens;
+
+pub(crate) use tokens::{shell_tokens, shell_tokens_preserving_redirects};
+
 pub(super) fn split_execution_segments(
     command: &str,
     preserve_unquoted_backslash: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
+    split_execution_segments_inner(command, preserve_unquoted_backslash, false)
+}
+
+/// Like [`split_execution_segments`], but a background `&` separates commands
+/// the way `;` does. Pipe checks use this so `curl … | sh &` is still the
+/// pipe, not an unparsed background job.
+pub(super) fn split_pipelines_including_background(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+) -> Result<Vec<RawSegment>, &'static str> {
+    split_execution_segments_inner(command, preserve_unquoted_backslash, true)
+}
+
+fn split_execution_segments_inner(
+    command: &str,
+    preserve_unquoted_backslash: bool,
+    allow_background: bool,
 ) -> Result<Vec<RawSegment>, &'static str> {
     let chars: Vec<char> = command.chars().collect();
     let mut quote = Quote::None;
@@ -33,7 +59,15 @@ pub(super) fn split_execution_segments(
                     quote = Quote::None;
                 } else if current == '\\' {
                     escaped = true;
-                } else if current == '`' || (current == '$' && chars.get(index + 1) == Some(&'(')) {
+                } else if current == '`'
+                    || (current == '$' && chars.get(index + 1) == Some(&'('))
+                    || (current == '$'
+                        && chars.get(index + 1) == Some(&'{')
+                        && chars
+                            .get(index + 2)
+                            .copied()
+                            .is_some_and(crate::parser_brace_command::opens_brace_command))
+                {
                     return Err("command_substitution_not_yet_supported");
                 }
                 index += 1;
@@ -45,7 +79,14 @@ pub(super) fn split_execution_segments(
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
-            '\\' if preserve_unquoted_backslash => {}
+            // The escape that survives `preserve_unquoted_backslash`: an
+            // operator that ends the command belongs to the word, so it never
+            // separates commands.
+            '\\' if preserve_unquoted_backslash => {
+                if crate::command_tokens::backslash_escapes_operator(&chars, index) {
+                    escaped = true;
+                }
+            }
             '\\' => escaped = true,
             '`' => return Err("command_substitution_not_yet_supported"),
             '$' if chars.get(index + 1) == Some(&'(') => {
@@ -54,10 +95,18 @@ pub(super) fn split_execution_segments(
             '$' if chars.get(index + 1) == Some(&'{') => {
                 return Err("parameter_expansion_not_yet_supported");
             }
-            '$' if chars
-                .get(index + 1)
-                .is_some_and(|next| *next == '\'' || *next == '"') =>
-            {
+            // Each `$` pairs off with the next one: `$$` is the shell's own
+            // process id, so the word beside it opens where this pair ends.
+            '$' if chars.get(index + 1) == Some(&'$') => {
+                index += 2;
+                continue;
+            }
+            // The word runs nothing, so carry on past the text it spells.
+            '$' if chars.get(index + 1) == Some(&'\'') => {
+                index = ansi_c::word(&chars, index, preserve_unquoted_backslash)?.1 + 1;
+                continue;
+            }
+            '$' if chars.get(index + 1) == Some(&'"') => {
                 return Err("non_posix_quoting_not_yet_supported");
             }
             '<' | '>'
@@ -83,20 +132,42 @@ pub(super) fn split_execution_segments(
                     continue;
                 }
                 if chars.get(index + 1) != Some(&'&') {
-                    return Err("background_job_not_yet_supported");
+                    if !allow_background {
+                        return Err("background_job_not_yet_supported");
+                    }
+                    push_segment(
+                        &chars,
+                        segment_start,
+                        index,
+                        group_index,
+                        pipeline_index,
+                        &mut segments,
+                    )?;
+                    let rest_blank = chars[index + 1..].iter().all(|value| value.is_whitespace());
+                    if rest_blank {
+                        return if segments.is_empty() {
+                            Err("background_job_not_yet_supported")
+                        } else {
+                            Ok(segments)
+                        };
+                    }
+                    segment_start = index + 1;
+                    group_index += 1;
+                    pipeline_index = 0;
+                } else {
+                    push_segment(
+                        &chars,
+                        segment_start,
+                        index,
+                        group_index,
+                        pipeline_index,
+                        &mut segments,
+                    )?;
+                    index += 1;
+                    segment_start = index + 1;
+                    group_index += 1;
+                    pipeline_index = 0;
                 }
-                push_segment(
-                    &chars,
-                    segment_start,
-                    index,
-                    group_index,
-                    pipeline_index,
-                    &mut segments,
-                )?;
-                index += 1;
-                segment_start = index + 1;
-                group_index += 1;
-                pipeline_index = 0;
             }
             '|' => {
                 let logical_or = chars.get(index + 1) == Some(&'|');
@@ -137,6 +208,16 @@ pub(super) fn split_execution_segments(
 
     if quote != Quote::None || escaped {
         return Err("malformed_shell_quoting");
+    }
+    // `ls;` is `ls`: one `;` or newline may end the command. A dangling `&&`,
+    // `||` or `|` still continues it, and `ls; ;` still fails.
+    let terminated = segment_start > 0
+        && matches!(chars[segment_start - 1], ';' | '\n')
+        && chars[segment_start..]
+            .iter()
+            .all(|value| value.is_whitespace());
+    if terminated && !segments.is_empty() {
+        return Ok(segments);
     }
     push_segment(
         &chars,
@@ -231,15 +312,34 @@ pub(super) fn is_stderr_to_null_redirect(
     start: usize,
     preserve_backslash: bool,
 ) -> bool {
-    // Only Unix's fixed stderr sink is inert; arbitrary paths and descriptors
-    // must still pass through the unsupported-redirection guard.
-    cfg!(unix)
+    // Only a fixed stderr sink known to be inert is dropped; arbitrary paths
+    // and descriptors must still pass through the unsupported-redirection
+    // guard.
+    stderr_null_sink_is_inert()
         && chars.get(start..start.saturating_add(11))
             == Some(&['2', '>', '/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l'])
         && starts_at_shell_token_boundary(chars, start, preserve_backslash)
         && chars.get(start + 11).is_none_or(|value| {
             is_shell_token_whitespace(*value) || matches!(*value, '|' | '&' | ';')
         })
+}
+
+/// `/dev/null` is the null device on Unix. On Windows, Git Bash (the shell
+/// harnesses run POSIX commands in) maps it to the null device too, while
+/// PowerShell and cmd open `\dev\null` on the shell's current drive. That
+/// open fails without writing anything while the drive has no `\dev`. The
+/// shell may have changed drive since Guard started, or earlier in the same
+/// command, so the sink is inert only while no drive letter has a `\dev`.
+pub(super) fn stderr_null_sink_is_inert() -> bool {
+    cfg!(unix)
+        || (cfg!(windows)
+            && (b'A'..=b'Z').all(|drive| {
+                std::fs::symlink_metadata(format!("{}:\\dev", drive as char)).is_err_and(|error| {
+                    // Not found, no such drive, or no media in the drive.
+                    error.kind() == std::io::ErrorKind::NotFound
+                        || matches!(error.raw_os_error(), Some(15 | 21))
+                })
+            }))
 }
 
 pub(super) fn starts_at_shell_token_boundary(
@@ -298,107 +398,10 @@ pub(super) fn push_segment(
     Ok(())
 }
 
-pub(crate) fn shell_tokens(
-    command: &str,
-    preserve_backslash: bool,
-) -> Result<Vec<String>, &'static str> {
-    shell_tokens_mode(command, preserve_backslash, true)
-}
+#[cfg(test)]
+#[path = "parser_segments_ansi_c_tests.rs"]
+mod ansi_c_tests;
 
-pub(crate) fn shell_tokens_preserving_redirects(
-    command: &str,
-) -> Result<Vec<String>, &'static str> {
-    shell_tokens_mode(command, false, false)
-}
-
-fn shell_tokens_mode(
-    command: &str,
-    preserve_backslash: bool,
-    exclude_stderr_redirect: bool,
-) -> Result<Vec<String>, &'static str> {
-    let mut tokens = Vec::new();
-    let mut token = String::new();
-    let mut token_started = false;
-    let mut quote = Quote::None;
-    let mut escaped = false;
-
-    let chars: Vec<char> = command.chars().collect();
-    let mut characters = chars.iter().copied().enumerate();
-    while let Some((index, current)) = characters.next() {
-        if escaped {
-            if quote == Quote::Double && current != '"' && current != '\\' {
-                token.push('\\');
-            }
-            token.push(current);
-            token_started = true;
-            escaped = false;
-            continue;
-        }
-        match quote {
-            Quote::Single => {
-                if current == '\'' {
-                    quote = Quote::None;
-                } else {
-                    token.push(current);
-                    token_started = true;
-                }
-            }
-            Quote::Double => {
-                if current == '"' {
-                    quote = Quote::None;
-                } else if current == '\\' {
-                    escaped = true;
-                    token_started = true;
-                } else {
-                    token.push(current);
-                    token_started = true;
-                }
-            }
-            Quote::None => match current {
-                '2' if exclude_stderr_redirect
-                    && !token_started
-                    && is_stderr_to_null_redirect(&chars, index, preserve_backslash) =>
-                {
-                    // A shell redirection is not an argv operand. Preserve it
-                    // in segment.text/spans, but exclude it from argument proofs.
-                    for _ in 0..10 {
-                        characters.next();
-                    }
-                }
-                '\'' => {
-                    quote = Quote::Single;
-                    token_started = true;
-                }
-                '"' => {
-                    quote = Quote::Double;
-                    token_started = true;
-                }
-                '\\' if preserve_backslash => {
-                    token.push('\\');
-                    token_started = true;
-                }
-                '\\' => {
-                    escaped = true;
-                    token_started = true;
-                }
-                value if is_shell_token_whitespace(value) => {
-                    if token_started {
-                        tokens.push(std::mem::take(&mut token));
-                        token_started = false;
-                    }
-                }
-                value => {
-                    token.push(value);
-                    token_started = true;
-                }
-            },
-        }
-    }
-    if quote != Quote::None || escaped {
-        return Err("malformed_shell_quoting");
-    }
-    if token_started {
-        tokens.push(token);
-    }
-    Ok(tokens)
-}
+#[cfg(test)]
+#[path = "parser_segments_windows_escape_tests.rs"]
+mod windows_escape_tests;

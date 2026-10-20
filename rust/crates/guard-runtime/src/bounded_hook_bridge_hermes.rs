@@ -9,8 +9,9 @@ use crate::bounded_hook_bridge_render::{member, rendered, Rendered};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::pyjson::PyVal;
 
+// The text `hermes_runtime_hooks.py` recorded in the render vectors, without
+// a trailing period; the CLI hook's `BLOCK_REASON` uses the same text.
 const DEFAULT_REASON: &str = "HOL Guard blocked this action";
-const BLOCK_ACTIONS: [&str; 4] = ["review", "require-reapproval", "sandbox-required", "block"];
 
 fn text_of(value: Option<&PyVal>) -> Option<&str> {
     match value {
@@ -71,7 +72,7 @@ fn policy_from_response(response: &[(String, PyVal)]) -> String {
 }
 
 /// `hermes_bridge_response(daemon_response, event_name=...)`.
-pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)]) -> Rendered {
+pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)], unmap: bool) -> Rendered {
     let policy_action = policy_from_response(daemon_response);
     let reason = reason_from_response(daemon_response);
     let decision = if matches!(policy_action.as_str(), "allow" | "warn") {
@@ -83,6 +84,7 @@ pub(crate) fn hermes_bridge_response(daemon_response: &[(String, PyVal)]) -> Ren
         ("decision".to_owned(), PyVal::Str(decision.to_owned())),
         ("reason".to_owned(), PyVal::Str(reason)),
     ];
-    let blocks = BLOCK_ACTIONS.contains(&policy_action.as_str());
-    rendered(&payload, String::new(), if blocks { 2 } else { 0 })
+    // The exit status follows the document: only a cleared action exits 0.
+    let blocks = decision == "block";
+    rendered(&payload, String::new(), if blocks { 2 } else { 0 }, unmap)
 }

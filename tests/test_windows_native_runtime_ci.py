@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import ast
+import json
 import re
 from pathlib import Path
+
+import yaml
 
 from tests.support.ci_workflow import composite_action_steps, load_ci_workflow
 
@@ -45,7 +48,10 @@ def _embedded_inputs() -> list[str]:
             continue
         if source.stem.endswith("_tests") or source.stem == "tests":
             continue
-        for match in re.finditer(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"', source.read_text(encoding="utf-8")):
+        text = source.read_text(encoding="utf-8")
+        # Inline trailing test modules are absent from the release runtime too.
+        text = re.sub(r"#\[cfg\(test\)\]\s*mod tests\s*\{.*\}\s*\Z", "", text, flags=re.DOTALL)
+        for match in re.finditer(r'include_(?:str|bytes)!\s*\(\s*"([^"]+)"', text):
             resolved = (source.parent / match.group(1)).resolve()
             try:
                 resolved = resolved.relative_to(ROOT).as_posix()
@@ -57,28 +63,26 @@ def _embedded_inputs() -> list[str]:
 
 
 def _build_script_inputs() -> list[str]:
-    """Collect directories every build.rs hands to sources(root, ...)."""
-    directories = []
-    for script in sorted(ROOT.glob("rust/**/build.rs")):
-        if "target" in script.relative_to(ROOT).parts:
-            continue
-        text = script.read_text(encoding="utf-8")
-        bindings = dict(re.findall(r'let\s+(\w+)\s*=\s*"([^"]+)"', text))
-        for match in re.finditer(r'sources\(root,\s*(?:"([^"]+)"|(\w+))', text):
-            directories.append(match.group(1) or bindings[match.group(2)])
-    return directories
+    """Collect the manifest and explicit source/trust records embedded by build.rs."""
+    manifest = "contracts/extensions/core-defaults.v1.json"
+    entries = json.loads((ROOT / manifest).read_text(encoding="utf-8"))["entries"]
+    script = (ROOT / "rust/crates/guard-command/build.rs").read_text(encoding="utf-8")
+    assert manifest in script
+    assert "sources(root, &entries, true)" in script
+    assert "sources(root, &entries, false)" in script
+    assert "trust_map(root, &entries)" in script
+    return [manifest, *(entry[field] for entry in entries for field in ("source", "trust"))]
 
 
 def test_runtime_cache_key_covers_every_build_input_outside_rust() -> None:
     """Assert the runtime cache key hashes every non-rust build input."""
     globs = _cache_key_globs()
     embedded = _embedded_inputs()
-    directories = _build_script_inputs()
-    assert {"contributions/command-sources", "contributions/mcp-servers", "contracts/extensions/trust"} <= set(
-        directories
-    )
+    selected = _build_script_inputs()
+    assert any(path.startswith("contributions/command-sources/") for path in selected)
+    assert any(path.startswith("contracts/extensions/trust/") for path in selected)
     assert any(path.startswith("spec/") for path in embedded)
-    for path in embedded + directories:
+    for path in embedded + selected:
         assert _covered(path, globs), f"{path} is a build input missing from the runtime cache key"
 
 
@@ -134,12 +138,120 @@ def test_required_aggregate_includes_the_windows_native_lane() -> None:
 
 
 def test_windows_shim_admin_lane_replays_vectors_and_runs_the_native_op() -> None:
-    """Keep the Windows shim path model verified on a real Windows host."""
+    """Partition the complete Windows contract inventory without weakening it."""
     job = load_ci_workflow()["jobs"]["windows-shim-admin"]
     assert job["runs-on"] == "windows-latest"
-    commands = "\n".join(step.get("run", "") for step in composite_action_steps("ci-job-windows-shim-admin"))
-    assert "-p guard-command --test shim_admin_vectors" in commands
-    assert "-p hol-guard-runtime --bin hol-guard-runtime shim_op" in commands
+    assert job["strategy"]["fail-fast"] is False
+    assert job["strategy"]["matrix"]["shim-gate"] == ["vectors", "native-op", "mcp"]
+    assert job["env"]["CARGO_PROFILE_TEST_DEBUG"] == "line-tables-only"
+    assert not any(
+        key in job["env"]
+        for key in (
+            "CARGO_PROFILE_TEST_OPT_LEVEL",
+            "CARGO_PROFILE_TEST_DEBUG_ASSERTIONS",
+            "CARGO_PROFILE_TEST_OVERFLOW_CHECKS",
+        )
+    )
+    assert job["timeout-minutes"] >= 10
+    # load_ci_workflow() deliberately expands in-tree composites, so inspect
+    # the raw YAML when checking the call-site binding.
+    raw = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))
+    raw_steps = raw["jobs"]["windows-shim-admin"]["steps"]
+    invoke = next(step for step in raw_steps if step.get("uses") == "./.github/actions/ci-job-windows-shim-admin")
+    assert invoke["with"]["shim-gate"] == "${{ matrix.shim-gate }}"
+
+    steps = composite_action_steps("ci-job-windows-shim-admin")
+    check = next(step for step in steps if step.get("name") == "Validate the selected Windows shim contract gate")
+    assert check["env"]["SHIM_GATE"] == "${{ inputs.shim-gate }}"
+    assert "'vectors', 'native-op', 'mcp'" in check["run"]
+    assert "throw" in check["run"]
+    assert not check.get("continue-on-error", False)
+
+    rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert rust["with"]["cache-key"] == "windows-shim-${{ inputs.shim-gate }}"
+    assert "cache-fallback-key" not in rust["with"]
+    vector = next(step for step in steps if step.get("name") == "Replay the recorded Windows shim vectors")
+    native_op = next(
+        step for step in steps if step.get("name") == "Install and report shims through the native op on Windows"
+    )
+    assert vector["if"] == "inputs.shim-gate == 'vectors'"
+    assert native_op["if"] == "inputs.shim-gate == 'native-op'"
+    assert not vector.get("continue-on-error", False)
+    assert not native_op.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test shim_admin_vectors"
+        in vector["run"]
+    )
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p hol-guard-runtime --bin hol-guard-runtime shim_op"
+        in native_op["run"]
+    )
+    child_tree = next(
+        step for step in steps if step.get("name") == "Contain MCP server process trees in a JobObject on Windows"
+    )
+    assert child_tree["if"] == "inputs.shim-gate == 'mcp'"
+    assert not child_tree.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-runtime-windows-process --test child_tree"
+        in child_tree["run"]
+    )
+    probe = next(step for step in steps if step.get("name") == "Probe an MCP server catalog natively on Windows")
+    assert probe["if"] == "inputs.shim-gate == 'mcp'"
+    assert not probe.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test mcp_stdio_probe_windows"
+        in probe["run"]
+    )
+    launch = next(step for step in steps if step.get("name") == "Verify MCP launch executables natively on Windows")
+    assert launch["if"] == "inputs.shim-gate == 'mcp'"
+    assert not launch.get("continue-on-error", False)
+    assert (
+        "cargo test --manifest-path rust/Cargo.toml --locked -p guard-command --test launch_identity_windows"
+        in launch["run"]
+    )
+
+    required = load_ci_workflow()["jobs"]["required"]
+    assert "windows-shim-admin" in required["needs"]
+    assert '"windows-shim-admin"' in "\n".join(step.get("run", "") for step in required["steps"])
+
+
+def test_windows_partition_union_keeps_every_original_cargo_contract() -> None:
+    prefix = "cargo test --manifest-path rust/Cargo.toml --locked -p "
+    expected = {
+        "vectors": [
+            "guard-command --test shim_admin_vectors",
+            "guard-command --test pretool_windows_drive_path_writes",
+            "guard-command --test pretool_windows_sibling_repository_writes",
+        ],
+        "native-op": [
+            "hol-guard-runtime --bin hol-guard-runtime shim_op",
+            "hol-guard-runtime --bin hol-guard-runtime direct_lane_input_tests",
+            "hol-guard-runtime --bin hol-guard-runtime storage_gate",
+            "hol-guard-runtime --bin hol-guard-runtime daemon_storage_hold",
+            "hol-guard-runtime --bin hol-guard-runtime windows_expanded_home",
+            "guard-runtime-windows-process --test process_liveness",
+        ],
+        "mcp": [
+            "guard-runtime-windows-process --test child_tree",
+            "guard-command --test mcp_stdio_probe_windows",
+            "guard-command --test launch_identity_windows",
+        ],
+    }
+    steps = composite_action_steps("ci-job-windows-shim-admin")
+    selected = {}
+    for gate, commands in expected.items():
+        steps_for_gate = [step for step in steps if step.get("if") == f"inputs.shim-gate == '{gate}'"]
+        assert all(not step.get("continue-on-error", False) for step in steps_for_gate)
+        assert all("$PSNativeCommandUseErrorActionPreference = $true" in step["run"] for step in steps_for_gate)
+        selected[gate] = [
+            line.strip().removeprefix(prefix)
+            for step in steps_for_gate
+            for line in step["run"].splitlines()
+            if line.strip().startswith(prefix)
+        ]
+        assert selected[gate] == commands
+    flattened = [command for commands in selected.values() for command in commands]
+    assert len(flattened) == len(set(flattened)) == 12
 
 
 def test_cross_platform_builds_no_native_runtime() -> None:

@@ -163,7 +163,7 @@ def safe_load_policy_bundle_verification_keys(
 
 
 def policy_bundle_keys_from_supply_chain_keyring(raw: object) -> tuple[PolicyBundleVerificationKey, ...]:
-    from .runtime.supply_chain_bundle_runtime import load_supply_chain_verification_keys
+    from .runtime.supply_chain_verification_keys import load_supply_chain_verification_keys
 
     try:
         supply_chain_keys = load_supply_chain_verification_keys(raw)

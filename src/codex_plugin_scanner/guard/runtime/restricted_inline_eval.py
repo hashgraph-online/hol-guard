@@ -33,13 +33,14 @@ def is_inline_eval(command: Sequence[str]) -> bool:
 
 
 def prepare_restricted_inline_eval(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     return native_launch_plan(
         "prepare_inline",
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=sys.platform,
         backend_executable=None,
         profile=(NODE_EVAL_READ_ONLY_PROFILE_VERSION, PYTHON_EVAL_READ_ONLY_PROFILE_VERSION),
@@ -56,9 +57,11 @@ def run_restricted_inline_eval(
     if (
         not 0 < timeout_seconds <= 86400
         or plan.profile_version not in {PYTHON_EVAL_READ_ONLY_PROFILE_VERSION, NODE_EVAL_READ_ONLY_PROFILE_VERSION}
-        or plan.backend not in {"macos-seatbelt", "linux-bubblewrap"}
+        or plan.backend not in {"macos-seatbelt", "linux-bubblewrap", "windows-appcontainer"}
     ):
         raise RestrictedPytestError("inline_eval_invalid_command", "Unexpected protected inline evaluation plan.")
+    if plan.backend == "windows-appcontainer":
+        return _run_windows_inline_eval(plan, timeout_seconds=timeout_seconds, merge_stderr=merge_stderr)
     node = plan.profile_version == NODE_EVAL_READ_ONLY_PROFILE_VERSION
     with tempfile.TemporaryDirectory(prefix="hol-guard-inline-eval-") as temporary:
         root = Path(temporary).resolve()
@@ -90,3 +93,32 @@ def run_restricted_inline_eval(
             node_virtual_address_space=node and plan.backend == "linux-bubblewrap",
             merge_stderr=merge_stderr,
         )
+
+
+def _run_windows_inline_eval(plan: RestrictedPytestPlan, *, timeout_seconds: int, merge_stderr: bool) -> int:
+    """The native runner stages a credential-filtered snapshot and owns the environment."""
+    if sys.platform != "win32" or plan.profile_version not in {
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }:
+        raise RestrictedPytestError("inline_eval_invalid_command", "Unexpected protected inline evaluation plan.")
+    argv = [
+        str(plan.backend_executable),
+        "contained-readonly-windows",
+        "--workspace",
+        str(plan.workspace),
+        "--cwd",
+        str(plan.cwd),
+        "--timeout-seconds",
+        str(timeout_seconds),
+        *(
+            ("--profile", NODE_EVAL_READ_ONLY_PROFILE_VERSION)
+            if plan.profile_version == NODE_EVAL_READ_ONLY_PROFILE_VERSION
+            else ()
+        ),
+        "--",
+        *plan.command,
+    ]
+    return _run_backend_process(
+        argv, env=os.environ, timeout_seconds=timeout_seconds, cwd=plan.cwd, merge_stderr=merge_stderr
+    )

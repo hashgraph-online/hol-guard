@@ -16,6 +16,16 @@ import pytest
 from .test_cursor_hook_deadline import _hook_namespace
 from .test_hook_http_deadline import open_descriptor_identities
 
+# The budget the hook is given, and the pause between the bytes a slow stage
+# drips. What this test proves is that discovery stops at the budget, not that
+# the budget is small: on a loaded runner the two healthy round trips before
+# the hook request can themselves outlast a fifth of a second, and the case
+# that expects a real answer then reads a timeout instead. A slow stage pauses
+# once per byte, so the shortest of them still runs several times the budget;
+# keep that product well clear of it when either value moves.
+BUDGET = 0.6
+DRIP = 0.1
+
 
 @pytest.mark.parametrize(
     "target,slow_stage",
@@ -95,7 +105,7 @@ def test_cursor_rpc_obeys_original_deadline(tmp_path, target, slow_stage):
                             if stopped.is_set():
                                 return
                             peer.sendall(bytes([value]))
-                            if stopped.wait(0.03):
+                            if stopped.wait(DRIP):
                                 return
                         if slow_stage == "headers":
                             peer.sendall(body)
@@ -108,9 +118,9 @@ def test_cursor_rpc_obeys_original_deadline(tmp_path, target, slow_stage):
     thread.start()
     try:
         started = time.monotonic()
-        result = namespace["_daemon_hook_result"]("{}", deadline_monotonic=started + 0.2, workspace=None)
+        result = namespace["_daemon_hook_result"]("{}", deadline_monotonic=started + BUDGET, workspace=None)
         elapsed = time.monotonic() - started
-        assert elapsed < 0.5, f"Cursor discovery extended to {elapsed:.3f}s"
+        assert elapsed < BUDGET + 0.3, f"Cursor discovery extended to {elapsed:.3f}s"
         if target == "complete":
             assert result[1] is None
             assert result[0] is not None

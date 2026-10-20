@@ -16,11 +16,13 @@ from codex_plugin_scanner.guard.native_policy_snapshot_contract import _policy_s
 from codex_plugin_scanner.guard.native_policy_snapshot_direct_lane import (
     DIRECT_HOOK_CONTAINED_ROUTE_FEATURE,
     DIRECT_HOOK_EVIDENCE_FEATURE,
+    DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,
     DIRECT_LANE_ACK_LEASE_MS,
     DIRECT_LANE_ACK_SCHEMA,
     NativePolicySnapshotDirectLaneAck,
     contained_sink_command,
     direct_lane_binding,
+    direct_lane_integrity_key,
     local_cli_block_rules_present,
     with_direct_hook_state,
 )
@@ -373,6 +375,61 @@ def test_the_sink_command_binds_only_for_a_resident_that_routes_containment() ->
         ("/usr/bin/python", *("-I",) * 8),
     ):
         assert "contained_sink_command" not in bind(rejected)
+
+
+def test_the_integrity_key_binds_only_for_a_resident_that_answers_permission_notices() -> None:
+    calls: list[bool] = []
+
+    class _Store:
+        def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+            calls.append(create)
+            return b"\x07" * 32, "synthetic:0707"
+
+    assert direct_lane_integrity_key(_Store(), ()) is None
+    assert calls == []
+    key = direct_lane_integrity_key(_Store(), (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,))
+    assert key == (b"\x07" * 32, "synthetic:0707")
+    # The key is read, never minted for the resident.
+    assert calls == [False]
+
+    class _Keyless:
+        def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+            return None, None
+
+    class _Failing:
+        def _policy_integrity_secret_material(self, *, create: bool) -> tuple[bytes | None, str | None]:
+            raise RuntimeError("keyring unavailable")
+
+    for store in (_Keyless(), _Failing(), object()):
+        assert direct_lane_integrity_key(store, (DIRECT_HOOK_PERMISSION_NOTICE_FEATURE,)) is None
+
+    def bind(integrity_key: tuple[bytes, str] | None) -> dict[str, object]:
+        bound = with_direct_hook_state(
+            {"workspaces": ["/work/repo"], "inputs": []},
+            home_dir="/home/guard",
+            harness_postures={},
+            local_cli_block_rules=False,
+            evidence_drain=False,
+            integrity_key=integrity_key,
+        )
+        assert bound is not None
+        return bound
+
+    bound = bind((b"\x07" * 32, "synthetic:0707"))
+    assert bound["integrity_key_b64"] == "BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc"
+    assert bound["integrity_key_id"] == "synthetic:0707"
+    assert "integrity_key_b64" not in bind(None)
+    # A key the resident would reject is left out whole, so notices defer.
+    for rejected in (
+        (b"", "synthetic:0707"),
+        (b"\x07", ""),
+        (b"\x07", "a\nb"),
+        (b"\x07", "a\x85b"),
+        (b"\x07", "k" * 257),
+        (b"\x07" * 1537, "synthetic:0707"),
+    ):
+        assert "integrity_key_b64" not in bind(rejected)
+        assert "integrity_key_id" not in bind(rejected)
 
 
 def test_the_bound_sink_command_starts_the_command_the_daemon_routes(

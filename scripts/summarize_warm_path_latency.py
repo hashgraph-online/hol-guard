@@ -39,6 +39,47 @@ def _optional_median(values: list[object]) -> float | None:
     return median(present) if present else None
 
 
+def _role_medians(rows: list[dict[str, object]]) -> dict[str, dict[str, float]]:
+    """Median process count and RSS, anonymous RSS and PSS MB per role over the rounds that recorded
+    roles (absent role or metric = 0)."""
+
+    recorded = [r["phase"]["service"]["roles"] for r in rows if "roles" in r["phase"]["service"]]  # type: ignore[index,operator]
+    names = sorted({role for roles in recorded for role in roles})
+    return {
+        role: {
+            metric: median([float(roles.get(role, {}).get(metric, 0)) for roles in recorded])
+            for metric in ("processes", "rss_mb", "anon_mb", "pss_mb")
+        }
+        for role in names
+    }
+
+
+def _role_cpu_medians(rows: list[dict[str, object]]) -> dict[str, float]:
+    """Median CPU ms per call per role over the rounds that recorded it (absent role = 0)."""
+
+    recorded = [
+        r["phase"]["service_cpu_ms_per_call_by_role"]  # type: ignore[index]
+        for r in rows
+        if "service_cpu_ms_per_call_by_role" in r["phase"]  # type: ignore[operator]
+    ]
+    names = sorted({role for roles in recorded for role in roles})
+    return {role: median([float(roles.get(role, 0.0)) for roles in recorded]) for role in names}
+
+
+def _setup_statuses(rows: list[dict[str, object]]) -> dict[str, int]:
+    """How each round's pre-timing setup went (MCP only), e.g. ``daemon_ensure=ok``."""
+
+    statuses: dict[str, int] = {}
+    for r in rows:
+        setup = r["phase"].get("setup") or {}  # type: ignore[union-attr]
+        labels = [f"daemon_ensure={setup['daemon_ensure']['status']}"] if "daemon_ensure" in setup else []
+        if "warmup_session" in setup:
+            labels.append(f"warmup_call={setup['warmup_session']['call_class']}")
+        for label in labels:
+            statuses[label] = statuses.get(label, 0) + 1
+    return statuses
+
+
 def summarize_label(rows: list[dict[str, object]]) -> dict[str, object]:
     per_round = {q: [float(r["phase"]["stats_ms"][q]) for r in rows] for q in ("p50", "p95", "p99")}  # type: ignore[index]
     pooled = [value for r in rows for value in r["phase"]["samples_ms"]]  # type: ignore[index]
@@ -62,8 +103,12 @@ def summarize_label(rows: list[dict[str, object]]) -> dict[str, object]:
         "client_cpu_ms_per_call": _optional_median([r["phase"].get("client_cpu_ms_per_call") for r in rows]),  # type: ignore[union-attr]
         "service_cpu_ms_per_call": median([float(r["phase"]["service_cpu_ms_per_call"]) for r in rows]),  # type: ignore[index]
         "service_rss_mb": median([float(r["phase"]["service"]["rss_mb"]) for r in rows]),  # type: ignore[index]
+        "service_pss_mb": _optional_median([r["phase"]["service"].get("pss_mb") for r in rows]),  # type: ignore[union-attr]
         "service_processes": median([float(r["phase"]["service"]["processes"]) for r in rows]),  # type: ignore[index]
         "service_fds": median([float(r["phase"]["service"]["fds"]) for r in rows]),  # type: ignore[index]
+        "service_roles": _role_medians(rows),
+        "service_role_cpu_ms_per_call": _role_cpu_medians(rows),
+        "setup": _setup_statuses(rows),
         "calibration_spawn_p50_ms": median([float(r["calibration"]["p50"]) for r in rows]),  # type: ignore[index]
     }
 
@@ -106,6 +151,18 @@ def _format_optional(value: object) -> str:
     return "n/a" if value is None else f"{float(value):.1f}"  # type: ignore[arg-type]
 
 
+def _format_roles(roles: dict[str, dict[str, float]], cpu_ms_per_call: dict[str, float] | None = None) -> str:
+    parts = []
+    for role, values in roles.items():
+        part = f"{role} {values['processes']:g}x {values['rss_mb']:.1f} MB"
+        if values.get("pss_mb"):
+            part += f" (anon {values['anon_mb']:.1f}, PSS {values['pss_mb']:.1f})"
+        if cpu_ms_per_call and role in cpu_ms_per_call:
+            part += f" {cpu_ms_per_call[role]:.2f} CPU ms/call"
+        parts.append(part)
+    return ", ".join(parts) or "none recorded"
+
+
 def render_markdown(document: dict[str, object], summary: dict[str, object]) -> str:
     runner = document["runner"]
     config = document["config"]
@@ -138,6 +195,14 @@ def render_markdown(document: dict[str, object], summary: dict[str, object]) -> 
                 f"{s['service_cpu_ms_per_call']:.2f} | {s['service_rss_mb']:.1f} | "
                 f"{s['service_processes']:.0f} | {s['non_allow']} |"
             )
+        lines.append("")
+        for role in ("baseline", "candidate"):
+            s = entry[role]
+            setup = ", ".join(f"{key} x{count}" for key, count in sorted(s["setup"].items()))
+            roles = _format_roles(s["service_roles"], s.get("service_role_cpu_ms_per_call"))
+            lines.append(
+                f"Service by role (median), `{summary[role]}`: {roles}." + (f" Setup: {setup}." if setup else "")
+            )
         flags = []
         if entry["noisy"]:
             flags.append(f"round p95 spread above {int(NOISE_SPREAD * 100)}%: treat the delta as inconclusive")
@@ -158,7 +223,8 @@ def render_markdown(document: dict[str, object], summary: dict[str, object]) -> 
         lines.append("")
     lines.append(
         "Method: p50/p95/p99 use linear interpolation per round; headline values are the median across rounds. "
-        "Whole-process spawn latency is measured for hooks; an open proxy session is measured for tools/call."
+        "Whole-process spawn latency is measured for hooks; an open proxy session is measured for tools/call, "
+        "after the daemon is ensured and one untimed warm-up session has run for every target."
     )
     return "\n".join(lines) + "\n"
 

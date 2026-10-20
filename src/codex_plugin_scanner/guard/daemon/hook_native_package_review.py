@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY, LIBRARY_SEARCH_PATH_NAMES
+from ..native_supply_chain_registry_cache import RegistryDeadlineError, registry_wait_deadline
 from .hook_fail_closed import render_pre_tool
 from .hook_request_parsing import pre_tool_command
 
@@ -36,6 +37,9 @@ _LOGGER = logging.getLogger(__name__)
 PACKAGE_REVIEW_REASON = "native_package_review"
 LIFECYCLE_SCRIPTS_ENABLED_CODE = "package_lifecycle_scripts_enabled"
 VERIFIED_NPM_VERSION_KEY = "verified_npm_version"
+REGISTRY_STILL_LOADING_REASON = (
+    "HOL Guard is still fetching registry metadata for this install. Run the same command again."
+)
 
 # One plain command: no expansion, quoting, globbing, redirection or chaining.
 # A word may not start with `~` or `=`, which shells expand to paths.
@@ -116,16 +120,21 @@ def native_package_review_response(
     if version is None or not _filters_outside_workspace(shape.group("filters"), environment, workspace):
         return None
     try:
-        evaluation = _evaluate(
-            store,
-            harness=harness,
-            tokens=tokens,
-            version=version,
-            workspace=workspace,
-            guard_home=guard_home,
-            home_dir=home_dir,
-            deadline=deadline,
-        )
+        with registry_wait_deadline(deadline):
+            evaluation = _evaluate(
+                store,
+                harness=harness,
+                tokens=tokens,
+                version=version,
+                workspace=workspace,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                deadline=deadline,
+            )
+    except RegistryDeadlineError:
+        # The download continues in the background and the next attempt reads
+        # it from the cache. Nothing ran, so stopping quietly costs one retry.
+        return _blocked(native_result, REGISTRY_STILL_LOADING_REASON, harness, guard_home, deadline)
     except Exception:
         _LOGGER.warning("Package evaluation failed for a native package review", exc_info=True)
         return None
@@ -150,6 +159,12 @@ def native_package_review_response(
         reason = guidance
     else:
         return None
+    return _blocked(native_result, reason, harness, guard_home, deadline)
+
+
+def _blocked(
+    native_result: Mapping[str, object], reason: str, harness: str, guard_home: Path, deadline: float | None
+) -> dict[str, object]:
     blocked = dict(native_result)
     blocked.update(decision="deny", minimum_action="block", policy_action="block", reason=reason)
     response = render_pre_tool(harness, blocked, guard_home=guard_home, deadline=deadline)
@@ -220,7 +235,14 @@ def _evaluate(
         or shlex.split(intent.redacted_command) != tokens
     ):
         return None
-    artifact = build_package_request_artifact(harness, intent, config_path="hol-guard.toml", source_scope="project")
+    artifact = build_package_request_artifact(
+        harness,
+        intent,
+        config_path="hol-guard.toml",
+        source_scope="project",
+        guard_home=guard_home,
+        deadline_monotonic=deadline,
+    )
     artifact = replace(artifact, metadata={**artifact.metadata, VERIFIED_NPM_VERSION_KEY: version})
     return evaluate_package_request_artifact(
         artifact=artifact, store=cast("GuardStore", store), workspace_dir=workspace

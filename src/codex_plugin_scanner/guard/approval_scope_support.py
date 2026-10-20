@@ -16,6 +16,9 @@ from .trusted_local_tools import local_tool_approval_payload
 
 APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX: Final = "guard.approval-scopes.v"
 APPROVAL_SCOPE_CONTRACT_VERSION: Final = f"{APPROVAL_SCOPE_CONTRACT_VERSION_PREFIX}7"
+# Set by the resident (approval_scope_contract.rs) when a native review has no
+# retry binding, so a one-time approval cannot let the agent's retry run.
+RETRY_CANNOT_REUSE_APPROVAL: Final = "retry_cannot_reuse_approval"
 ResolutionAction = Literal["allow", "block"]
 
 
@@ -71,6 +74,14 @@ class ApprovalScopeContract:
     once_only_reason: str | None = None
     version: str = APPROVAL_SCOPE_CONTRACT_VERSION
 
+    @property
+    def can_run_once(self) -> bool:
+        return bool(self.allow_scopes) and RETRY_CANNOT_REUSE_APPROVAL not in self.restrictions
+
+    @property
+    def can_persist_exact_version(self) -> bool:
+        return bool(self.allow_scopes) and self.exact_action_persistence_eligible
+
     def to_dict(self) -> dict[str, object]:
         return {
             "scope_contract_version": self.version,
@@ -90,21 +101,47 @@ class ApprovalScopeContract:
             },
             "exact_action_persistence_eligible": self.exact_action_persistence_eligible,
             "once_only_reason": self.once_only_reason,
+            "execution_approval": {
+                "schema": "guard.execution-approval.v1",
+                "can_record_decision": bool(self.block_scopes),
+                "can_run_once": self.can_run_once,
+                "can_persist_exact_version": self.can_persist_exact_version,
+                "delivery_reason": "execution_binding_unavailable"
+                if RETRY_CANNOT_REUSE_APPROVAL in self.restrictions
+                else None,
+            },
         }
 
 
-def _native_scopes(requests: Sequence[Mapping[str, object]]) -> list[tuple[ApprovalScopeContract, str | None]]:
+def _scope_item(request: Mapping[str, object]) -> dict[str, object]:
+    """Narrow a request to the fields the native scope contract reads."""
+
+    # Imported here for the same reason as in `_native_scopes`: the transport
+    # pulls in the native runtime, which the package-only hot paths skip.
+    from .native_approval_scope import REQUEST_FIELDS
+
+    item: dict[str, object] = {field: _json_boundary_value(request.get(field)) for field in REQUEST_FIELDS}
+    item["workspace_target"] = _derived_workspace_scope_target(request)
+    if request.get("artifact_type") == "native_bash_request" and request.get("request_id") is not None:
+        item["request_id"] = _json_boundary_value(request["request_id"])
+    return item
+
+
+def _native_scopes(
+    requests: Sequence[Mapping[str, object]],
+    *,
+    guard_home: Path | None = None,
+) -> list[tuple[ApprovalScopeContract, str | None]]:
     # Imported here: the resident transport pulls in the native runtime, which
     # hook hot paths that only need the package scope helpers must not load.
-    from .native_approval_scope import REQUEST_FIELDS, ApprovalScopeUnavailableError, native_approval_scopes
+    from .native_approval_scope import ApprovalScopeUnavailableError, native_approval_scopes
 
-    items: list[Mapping[str, object]] = []
-    for request in requests:
-        item: dict[str, object] = {field: _json_boundary_value(request.get(field)) for field in REQUEST_FIELDS}
-        item["workspace_target"] = _derived_workspace_scope_target(request)
-        items.append(item)
+    items: list[Mapping[str, object]] = [_scope_item(request) for request in requests]
     contracts: list[tuple[ApprovalScopeContract, str | None]] = []
-    for native in native_approval_scopes(items):
+    scopes = (
+        native_approval_scopes(items) if guard_home is None else native_approval_scopes(items, guard_home=guard_home)
+    )
+    for native in scopes:
         contract = _contract_from_native(native.contract)
         if contract is None:
             raise ApprovalScopeUnavailableError
@@ -157,7 +194,7 @@ def _contract_from_native(payload: Mapping[str, object]) -> ApprovalScopeContrac
         or any(item is not None and item not in DECISION_SCOPE_VALUES for item in recommended_scopes)
     ):
         return None
-    return ApprovalScopeContract(
+    contract = ApprovalScopeContract(
         allow_scopes=allow_scopes,
         block_scopes=block_scopes,
         recommended_allow_scope=_decision_scope(recommended_allow) if isinstance(recommended_allow, str) else None,
@@ -169,9 +206,31 @@ def _contract_from_native(payload: Mapping[str, object]) -> ApprovalScopeContrac
         exact_action_persistence_eligible=persistence,
         once_only_reason=once_only,
     )
+    # Older residents expose the retry restriction without capability fields.
+    # When present, the versioned projection must agree with that authority.
+    if "execution_approval" in payload:
+        execution = payload["execution_approval"]
+        if (
+            not isinstance(execution, dict)
+            or any(
+                not isinstance(execution.get(key), bool)
+                for key in (
+                    "can_record_decision",
+                    "can_run_once",
+                    "can_persist_exact_version",
+                )
+            )
+            or execution != contract.to_dict()["execution_approval"]
+        ):
+            return None
+    return contract
 
 
-def request_scope_contracts(requests: Sequence[Mapping[str, object]]) -> list[ApprovalScopeContract]:
+def request_scope_contracts(
+    requests: Sequence[Mapping[str, object]],
+    *,
+    guard_home: Path | None = None,
+) -> list[ApprovalScopeContract]:
     """Derive the current action-aware scope contract of each request in the resident.
 
     Reusable allow scopes are exposed only when Guard can persist an
@@ -180,11 +239,12 @@ def request_scope_contracts(requests: Sequence[Mapping[str, object]]) -> list[Ap
     Raises ``ApprovalScopeUnavailableError`` when the resident cannot answer.
     """
 
-    return [contract for contract, _token in _native_scopes(requests)]
+    scopes = _native_scopes(requests) if guard_home is None else _native_scopes(requests, guard_home=guard_home)
+    return [contract for contract, _token in scopes]
 
 
-def request_scope_contract(request: Mapping[str, object]) -> ApprovalScopeContract:
-    return request_scope_contracts([request])[0]
+def request_scope_contract(request: Mapping[str, object], *, guard_home: Path | None = None) -> ApprovalScopeContract:
+    return request_scope_contracts([request], guard_home=guard_home)[0]
 
 
 def scope_payload_for_request(request: Mapping[str, object], contract: ApprovalScopeContract) -> dict[str, object]:
@@ -223,23 +283,32 @@ def apply_scope_surfaces(payload: dict[str, object]) -> None:
         }
 
 
-def request_scope_contract_payloads(requests: Sequence[Mapping[str, object]]) -> list[dict[str, object]]:
+def request_scope_contract_payloads(
+    requests: Sequence[Mapping[str, object]],
+    *,
+    guard_home: Path | None = None,
+) -> list[dict[str, object]]:
     payloads: list[dict[str, object]] = []
-    for request, contract in zip(requests, request_scope_contracts(requests), strict=True):
+    for request, contract in zip(requests, request_scope_contracts(requests, guard_home=guard_home), strict=True):
         payloads.append(scope_payload_for_request(request, contract))
     return payloads
 
 
-def request_scope_contract_payload(request: Mapping[str, object]) -> dict[str, object]:
-    return request_scope_contract_payloads([request])[0]
+def request_scope_contract_payload(
+    request: Mapping[str, object], *, guard_home: Path | None = None
+) -> dict[str, object]:
+    return request_scope_contract_payloads([request], guard_home=guard_home)[0]
 
 
 def request_scope_observation(
     request: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
 ) -> tuple[ApprovalScopeContract, str | None]:
     """Derive one request's contract and exact-action token in one resident call."""
 
-    return _native_scopes([request])[0]
+    scopes = _native_scopes([request]) if guard_home is None else _native_scopes([request], guard_home=guard_home)
+    return scopes[0]
 
 
 def resolve_request_scope_selection(
@@ -249,47 +318,70 @@ def resolve_request_scope_selection(
     requested_scope: str,
     contract_version: str | None,
     contract_digest: str | None,
-    contract: ApprovalScopeContract | None = None,
+    guard_home: Path | None = None,
 ) -> ApprovalScopeSelection:
-    if action == "allow":
-        resolution_action: ResolutionAction = "allow"
-    elif action == "block":
-        resolution_action = "block"
-    else:
-        raise ValueError("unsupported_resolution_action")
-    if requested_scope not in DECISION_SCOPE_VALUES:
-        raise ValueError(f"Unsupported approval scope: {requested_scope}")
-    typed_scope = _decision_scope(requested_scope)
-    if contract is None:
-        contract = request_scope_contract(request)
-    if (contract_version is None) != (contract_digest is None):
-        raise ValueError("incomplete_scope_contract")
-    if contract_version is not None and (
-        contract_version != APPROVAL_SCOPE_CONTRACT_VERSION or contract_digest != contract.digest
-    ):
-        raise StaleApprovalScopeContractError(contract)
-    eligible = contract.allow_scopes if resolution_action == "allow" else contract.block_scopes
-    if typed_scope in eligible:
-        return ApprovalScopeSelection(typed_scope, typed_scope)
-    if contract_version is not None or action == "block":
-        raise IneligibleApprovalScopeError(
-            "ineligible_request_scope",
-            contract,
-            action=resolution_action,
-            requested_scope=requested_scope,
-        )
-    if "artifact" not in eligible:
-        raise IneligibleApprovalScopeError(
-            "request_action_not_overridable",
-            contract,
-            action=resolution_action,
-            requested_scope=requested_scope,
-        )
-    return ApprovalScopeSelection(
-        requested_scope=typed_scope,
-        applied_scope="artifact",
-        warning="legacy_scope_narrowed_to_artifact",
+    """Ask the resident what a chosen approval scope actually resolves to.
+
+    The resident derives the contract itself and decides whether the chosen
+    scope is one the request offers for this action, whether a client that
+    never read a contract has its wider choice narrowed to the artifact, and
+    whether a client resolving against a superseded contract is refused. This
+    function only translates that answer into the exceptions its callers
+    already handle, so no scope can be honoured here that the request does not
+    offer.
+    """
+
+    from .native_approval_scope import ApprovalScopeUnavailableError
+    from .native_approval_scope_select import native_approval_scope_selection
+
+    answer = native_approval_scope_selection(
+        _scope_item(request),
+        action=action,
+        requested_scope=requested_scope,
+        contract_version=contract_version,
+        contract_digest=contract_digest,
+        guard_home=guard_home,
     )
+    native_contract = answer.get("contract")
+    contract = _contract_from_native(native_contract) if isinstance(native_contract, Mapping) else None
+    outcome = answer.get("outcome")
+    if outcome == "selected":
+        applied_scope = answer.get("applied_scope")
+        warning = answer.get("warning")
+        if (
+            not isinstance(applied_scope, str)
+            or applied_scope not in DECISION_SCOPE_VALUES
+            or not (warning is None or isinstance(warning, str))
+        ):
+            raise ApprovalScopeUnavailableError
+        return ApprovalScopeSelection(
+            requested_scope=_decision_scope(requested_scope),
+            applied_scope=_decision_scope(applied_scope),
+            warning=warning,
+        )
+    if outcome != "refused":
+        raise ApprovalScopeUnavailableError
+    reason = answer.get("reason")
+    if reason == "unsupported_resolution_action":
+        raise ValueError("unsupported_resolution_action")
+    if reason == "unsupported_approval_scope":
+        raise ValueError(f"Unsupported approval scope: {requested_scope}")
+    # Every remaining refusal reports what the request does offer, so a caller
+    # that cannot see the contract has nothing to tell the user.
+    if contract is None:
+        raise ApprovalScopeUnavailableError
+    if reason == "incomplete_scope_contract":
+        raise ValueError("incomplete_scope_contract")
+    if reason == "stale_scope_contract":
+        raise StaleApprovalScopeContractError(contract)
+    if reason in ("ineligible_request_scope", "request_action_not_overridable"):
+        raise IneligibleApprovalScopeError(
+            reason,
+            contract,
+            action=cast(ResolutionAction, action),
+            requested_scope=requested_scope,
+        )
+    raise ApprovalScopeUnavailableError
 
 
 def resolve_request_workspace_scope(

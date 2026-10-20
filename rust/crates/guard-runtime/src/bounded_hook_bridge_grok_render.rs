@@ -9,6 +9,7 @@
 //! the script's fixed fail-closed payload, and an approval wait only applies
 //! the resolution the daemon reports for the request it opened.
 
+use crate::blocked_request_mode::is_unlinked_connector_setup_reason;
 use crate::bounded_hook_bridge_render::{member, FAILURE_REASON};
 use crate::claude_hook_bridge_render::py_strip;
 use crate::hook_env_stamp::{dumps, set_member};
@@ -169,8 +170,8 @@ pub(crate) fn dump_object(payload: &[(String, PyVal)]) -> String {
     out
 }
 
-/// `_failure_payload(event_name, _FAILURE_REASON)` for Grok.
-fn failure_payload(event_name: &str) -> Vec<(String, PyVal)> {
+/// `_failure_payload(event_name, reason)` for Grok.
+fn failure_payload(event_name: &str, reason: &str) -> Vec<(String, PyVal)> {
     let compacted = compact(event_name);
     if OBSERVE_EVENTS.contains(&compacted.as_str()) {
         return Vec::new();
@@ -193,14 +194,19 @@ fn failure_payload(event_name: &str) -> Vec<(String, PyVal)> {
     };
     vec![
         ("decision".to_owned(), text(decision)),
-        ("reason".to_owned(), text(FAILURE_REASON)),
+        ("reason".to_owned(), text(reason)),
     ]
 }
 
 /// What `_fail(input_text)` writes to stdout; Grok's failure always exits 0.
 /// The caller has already ruled out a PreToolUse label conflict.
 pub(crate) fn failure_stdout(input_text: &str) -> String {
-    let mut stdout = dump_object(&failure_payload(&event_name_of_text(input_text)));
+    failure_stdout_for(input_text, FAILURE_REASON)
+}
+
+/// What `_fail(input_text, reason=reason)` writes to stdout.
+pub(crate) fn failure_stdout_for(input_text: &str, reason: &str) -> String {
+    let mut stdout = dump_object(&failure_payload(&event_name_of_text(input_text), reason));
     stdout.push('\n');
     stdout
 }
@@ -294,9 +300,11 @@ pub(crate) fn to_native(
             if decision != "allow" && !reason.is_empty() {
                 payload.push(("reason".to_owned(), PyVal::Str(reason.clone())));
             }
+            let unlinked = is_unlinked_connector_setup_reason(&reason);
             for key in APPROVAL_KEYS {
                 match member(response, key) {
                     None | Some(PyVal::Null) => {}
+                    Some(_) if unlinked && key != "reason_code" => {}
                     Some(value) => set_member(&mut payload, key, value.clone()),
                 }
             }
@@ -484,6 +492,6 @@ pub(crate) fn quote_component(text: &str) -> String {
     out
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "bounded_hook_bridge_grok_render_tests.rs"]
 mod tests;

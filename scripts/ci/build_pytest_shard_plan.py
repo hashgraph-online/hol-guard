@@ -30,6 +30,7 @@ MAX_NODES_PER_AFFINITY_GROUP = 8
 SINGLE_PROCESS_FILES = frozenset({"tests/test_guard_command_decision_diff.py"})
 SCHEDULING_ONLY_NODE_IDS = frozenset(
     {
+        "tests/test_guard_command_decision_diff.py::test_fresh_process_report_is_environment_independent_and_bounded",
         "tests/test_guard_continuation_contract.py::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout",
         "tests/test_guard_daemon_storage_liveness.py::"
         "test_locked_storage_hook_burst_fails_safe_without_stranding_daemon",
@@ -80,6 +81,18 @@ SCHEDULING_ONLY_NODE_IDS = frozenset(
         "tests/test_python_capability_cleanup_gate.py::test_cleanup_contract_covers_every_scoped_hook_capability",
     }
 )
+# The benign and replay gates expect the Linux workspace sandbox. Coverage
+# deselects them; native-gates runs them with bubblewrap.
+SANDBOX_GATE_FILES = frozenset(
+    {
+        "tests/test_guard_benign_false_positive_gate.py",
+        "tests/test_guard_gauntlet_replay_gate.py",
+        "tests/test_guard_cli_hook_rpc_budget.py",
+    }
+)
+# This integration test needs two real engines and the historical Python client.
+# native-offline-upgrade owns it and is required by the aggregate check.
+NATIVE_OFFLINE_UPGRADE_FILES = frozenset({"tests/test_native_pack_offline_upgrade.py"})
 
 
 class _Arguments(Protocol):
@@ -177,7 +190,10 @@ def build_affinity_node_shards(
     nodes = [
         node_id
         for node_id in node_ids
-        if node_id not in SCHEDULING_ONLY_NODE_IDS and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        if node_id not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("[", maxsplit=1)[0] not in SCHEDULING_ONLY_NODE_IDS
+        and node_id.split("::", maxsplit=1)[0] not in SANDBOX_GATE_FILES
+        and node_id.split("::", maxsplit=1)[0] not in NATIVE_OFFLINE_UPGRADE_FILES
     ]
     if shard_count < 1:
         raise ValueError("shard_count must be positive")

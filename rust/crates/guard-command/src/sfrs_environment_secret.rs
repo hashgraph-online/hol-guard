@@ -62,6 +62,29 @@ mod tests {
     }
 
     #[test]
+    fn printenv_of_named_plain_variables_prints_no_secret() {
+        use crate::environment_secret_dump::printenv_may_print_secret;
+        for command in [
+            "printenv path",
+            "printenv home shell && ls",
+            "echo printenv path",
+        ] {
+            assert!(!printenv_may_print_secret(command), "{command}");
+        }
+        for command in [
+            "printenv",
+            "printenv | grep x",
+            "printenv -0",
+            "printenv github_token",
+            "printenv path aws_secret_access_key",
+            "printenv \"$name\"",
+            "printenv path; printenv",
+        ] {
+            assert!(printenv_may_print_secret(command), "{command}");
+        }
+    }
+
+    #[test]
     fn harmless_and_empty_commands_are_not_requests() {
         for command in ["echo hi", "", "   ", "é"] {
             let verdict =

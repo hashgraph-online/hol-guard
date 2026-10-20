@@ -26,11 +26,18 @@ fn fixed_read_only_inspections_do_not_invent_unrelated_git_owners() {
         "git for-each-ref '--format=%(refname)' refs/heads",
         "git rev-list --count HEAD",
         "git ls-tree -r HEAD",
+        "git ls-tree HEAD --name-only src/",
+        "git cat-file -p HEAD:README.md",
+        "git cat-file -t HEAD",
+        "git cat-file blob HEAD:README.md",
         "git symbolic-ref --short HEAD",
         "git config --get remote.origin.url",
         "git config --global --get user.email",
         "git config --list --show-origin",
         "git apply --check workspace/patches/change.patch",
+        "git apply --check -p1 workspace/patches/change.patch",
+        "git apply --check --stat --summary change.patch",
+        "git apply --check -- patches/one.diff patches/two.diff",
     ] {
         assert!(observations(command).rule_matches.is_empty(), "{command}");
     }
@@ -112,10 +119,16 @@ fn inspection_exemption_does_not_cover_execution_routing_or_mutation() {
         "git config --get --file other.cfg key",
         "git symbolic-ref HEAD refs/heads/other",
         "git cat-file --textconv HEAD:file",
+        "git cat-file --filters HEAD:file",
+        "git cat-file --path=file blob HEAD",
+        "git cat-file --batch-check",
+        "git -c core.pager=payload cat-file -p HEAD",
         "git apply change.patch",
         "git apply --check --unsafe-paths change.patch",
         "git apply --check ../change.patch",
         "git apply --check -",
+        "git apply --check --whitespace=fix change.patch",
+        "git apply --check --index change.patch",
     ] {
         let result = observations(command);
         assert!(!result.rule_matches.is_empty(), "{command}");

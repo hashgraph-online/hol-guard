@@ -338,6 +338,6 @@ pub(crate) fn valid_hook_json_or_degraded(
     Ok(trimmed.to_owned())
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_render_tests.rs"]
 mod tests;

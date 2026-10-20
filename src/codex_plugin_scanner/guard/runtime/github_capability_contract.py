@@ -5,12 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 from types import MappingProxyType
-from typing import Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 
 from codex_plugin_scanner.guard.action_lattice import guard_action_severity
 
 from ..models import GuardAction
-from .command_permission_catalog import COMMAND_PERMISSION_SCHEMA_VERSION, CommandPermissionSpec, PermissionRiskTier
+
+if TYPE_CHECKING:
+    from .command_permission_catalog import PermissionRiskTier
 
 GitHubCommandCapability = Literal[
     "read_local",
@@ -422,35 +424,4 @@ def combine_github_assessments(
         capabilities,
         "github.shell.combined-capabilities",
         "The shell composition contains multiple GitHub capabilities.",
-    )
-
-
-def github_permission_specs(implementation_version: str) -> tuple[CommandPermissionSpec, ...]:
-    return tuple(
-        CommandPermissionSpec(
-            permission_id=contract.permission_id,
-            schema_version=COMMAND_PERMISSION_SCHEMA_VERSION,
-            extension_id="command.github",
-            implementation_version=implementation_version,
-            label=contract.title,
-            description=contract.description,
-            risk_tier=contract.risk_tier,
-            baseline_floor=contract.action_floor,
-            default_enabled=True,
-            configurable=True,
-            fixed_reason=None,
-            typed_capabilities=(contract.capability,),
-            action_classes=() if contract.action_class is None else (contract.action_class,),
-            rule_ids=() if contract.rule_id is None else (contract.rule_id,),
-            dependencies=(),
-            conflicts=(),
-            implied_permissions=(),
-            introduced_version="2.2.0",
-            deprecated=False,
-            replacement_permission_id=None,
-            safer_guidance=contract.safer_alternatives,
-            example_command=contract.example_command,
-            family=contract.family,
-        )
-        for contract in github_capability_contracts()
     )

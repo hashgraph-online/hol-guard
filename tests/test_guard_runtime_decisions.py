@@ -199,6 +199,7 @@ def test_rejected_mcp_approval_copy_does_not_invent_argument_changes() -> None:
         summary="Prior approval could not be claimed.",
         approval_reuse_status="rejected",
         approval_reuse_reason_code="approval_reuse_claim_failed",
+        policy_action="require-reapproval",
     )
     action = resolve_tool_call_policy_action(rejected)
     decision = decision_from_legacy_policy_action(action, reason="approval_reuse_claim_failed")

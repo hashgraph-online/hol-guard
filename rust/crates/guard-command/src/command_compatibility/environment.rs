@@ -35,6 +35,66 @@ pub(crate) fn inert_environment_name(name: &str) -> bool {
     ) || name.starts_with("LC_")
 }
 
+/// The author and committer identity Git records in a new commit. Git reads
+/// them only as text for the commit header, so they cannot choose a
+/// repository, a configuration file or a program for Git to run. Every other
+/// `GIT_*` name (`GIT_DIR`, `GIT_CONFIG_*`, `GIT_PAGER`, `GIT_SSH_COMMAND`,
+/// ...) can, and stays non-inert.
+pub(crate) fn git_identity_environment_name(name: &str) -> bool {
+    matches!(
+        name,
+        "GIT_AUTHOR_NAME"
+            | "GIT_AUTHOR_EMAIL"
+            | "GIT_AUTHOR_DATE"
+            | "GIT_COMMITTER_NAME"
+            | "GIT_COMMITTER_EMAIL"
+            | "GIT_COMMITTER_DATE"
+    )
+}
+
+/// Variables that hold locations, the session's identity or display
+/// settings, never a credential, so printing them by name shows no secret.
+/// A name that fits no pattern here, such as `DATABASE_URL`, stays reviewed.
+pub(crate) fn plain_printed_name(name: &str) -> bool {
+    let word = |c: char| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_';
+    if name.is_empty() || !name.chars().all(word) || credential_routing_environment_name(name) {
+        return false;
+    }
+    inert_environment_name(name)
+        || matches!(
+            name,
+            "PATH"
+                | "HOME"
+                | "PWD"
+                | "OLDPWD"
+                | "SHELL"
+                | "SHLVL"
+                | "USER"
+                | "LOGNAME"
+                | "HOSTNAME"
+                | "TMPDIR"
+                | "EDITOR"
+                | "VISUAL"
+                | "PAGER"
+                | "TERM_PROGRAM"
+                | "COLORTERM"
+                | "VIRTUAL_ENV"
+                | "CONDA_PREFIX"
+                // Where a toolchain is installed or builds its output.
+                | "BUN_INSTALL"
+                | "NVM_DIR"
+                | "NVM_BIN"
+                | "PYENV_ROOT"
+                | "RBENV_ROOT"
+                | "GOROOT"
+                | "GOBIN"
+                | "CARGO_TARGET_DIR"
+                | "XDG_RUNTIME_DIR"
+        )
+        || name.ends_with("_HOME")
+        || name.ends_with("PATH")
+}
+
 /// Whole-word credential names, plus the pairs `API_KEY` and `CONFIG_DIR`.
 /// `GH_TOKEN`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOG_KEYRING_PASSWORD`, and
 /// `GH_CONFIG_DIR` match, so that prefix is not a reviewable context.
@@ -299,6 +359,37 @@ mod tests {
                     "{program}: CI {name}"
                 );
             }
+        }
+    }
+
+    #[test]
+    fn printed_names_are_plain_only_without_a_credential_word() {
+        for name in [
+            "PATH",
+            "HOME",
+            "USER",
+            "LC_ALL",
+            "JAVA_HOME",
+            "PYTHONPATH",
+            "NODE_ENV",
+            "BUN_INSTALL",
+            "NVM_DIR",
+        ] {
+            assert!(plain_printed_name(name), "{name}");
+        }
+        for name in [
+            "DATABASE_URL",
+            "GITHUB_TOKEN",
+            "OPENAI_API_KEY",
+            "AWS_SECRET_ACCESS_KEY",
+            "TOKEN_PATH",
+            "BUN_AUTH_TOKEN",
+            "NPM_CONFIG_DIR",
+            "path",
+            "-0",
+            "",
+        ] {
+            assert!(!plain_printed_name(name), "{name}");
         }
     }
 }

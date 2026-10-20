@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,13 @@ def _guard_cli(name: str):
     from .guard import cli as guard_cli_module
 
     return getattr(guard_cli_module, name)
+
+
+def _load_guard_command_hub() -> None:
+    # Parser construction no longer imports the Guard command hub. Load it
+    # before the dispatch handlers so an import failure keeps its traceback
+    # diagnostics instead of collapsing into a one-line error.
+    importlib.import_module(".guard.cli.commands", __package__)
 
 
 def _supported_harness_values() -> tuple[str, ...]:
@@ -311,6 +319,8 @@ def _resolve_legacy_args(
         "preflight",
         "pytest-contained",
         "execute-contained-test",
+        "execute-bound-bash",
+        "ack-bound-bash",
         "diff",
         "test-eval",
         "command",
@@ -368,7 +378,7 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
 
         return run_frozen_cursor_hook(requested_argv[1:])
     if requested_argv[:1] == ["__guard-claude-hook"]:
-        from .guard.adapters.claude_frozen_hook import run_frozen_claude_hook
+        from .guard.adapters._modules.claude.claude_frozen_hook import run_frozen_claude_hook
 
         return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
@@ -460,6 +470,7 @@ def main(argv: list[str] | None = None) -> int:
 
     warn_if_shadowed()
     if program_mode in {"guard", "hol-guard"}:
+        _load_guard_command_hub()
         try:
             import codex_plugin_scanner.cli as cli_module
 
@@ -494,6 +505,7 @@ def _dispatch_scanner_command(
     if args.command == "doctor":
         return _run_doctor(args)
     if args.command == "guard":
+        _load_guard_command_hub()
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:

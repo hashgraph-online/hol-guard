@@ -3,6 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from codex_plugin_scanner.guard.project_identity import resolve_portable_project_identity
+from codex_plugin_scanner.guard.store_portable_project_memory import (
+    _cached_portable_project_identity,
+)
 
 
 def _write_git_identity_metadata(git_dir: Path, remote: str) -> None:
@@ -61,3 +64,24 @@ def test_nested_git_metadata_symlinks_cannot_claim_external_repository_identity(
             (git_dir / "logs" / "HEAD").symlink_to(external_git / "logs" / "HEAD")
 
         assert resolve_portable_project_identity(workspace) is None
+
+
+def test_retargeted_workspace_link_does_not_reuse_the_first_directory(tmp_path: Path) -> None:
+    """A link moved inside one repository changes the cached identity revision."""
+    remote = "https://github.com/example/trusted-repository.git"
+    _write_git_identity_metadata(tmp_path / ".git", remote)
+    for name in ("first", "second"):
+        (tmp_path / name).mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(tmp_path / "first", target_is_directory=True)
+
+    first = _cached_portable_project_identity(str(link))
+    assert first is not None
+    # No Git metadata moved, so only the resolved workspace separates them.
+    link.unlink()
+    link.symlink_to(tmp_path / "second", target_is_directory=True)
+    second = _cached_portable_project_identity(str(link))
+
+    assert second is not None
+    assert second != first
+    assert second == resolve_portable_project_identity(tmp_path / "second")

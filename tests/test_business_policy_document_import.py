@@ -46,7 +46,6 @@ def test_cli_import_uses_exact_source_owner_and_reports_business_rules(tmp_path:
     candidate = document(0)
     path = tmp_path / "source.yaml"
     write_private_policy_text(path, json.dumps(candidate.to_mapping()))
-    monkeypatch.setenv("HOL_GUARD_POLICY_YAML_IMPORT", "1")
     monkeypatch.setattr(
         command,
         "prompt_for_approval_gate",
@@ -54,7 +53,7 @@ def test_cli_import_uses_exact_source_owner_and_reports_business_rules(tmp_path:
     )
     stream = io.StringIO()
     result = command._run_guard_policy_document_command(
-        SimpleNamespace(policy_command="import", file=str(path), mode="replace", dry_run=False, json=True),
+        SimpleNamespace(policy_command="import", file=str(path), mode="replace", dry_run=False, yes=True, json=True),
         store=store,
         output_stream=stream,
     )

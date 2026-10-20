@@ -49,7 +49,10 @@ def plan(workspace: Path, text: str = COMMAND, **changes: object) -> dict[str, o
         "sandbox_path": "/usr/bin:/bin",
         "bootstrap_git": None,
         "prefix_command": None,
+        "native_suffix": None,
         "denied_capabilities": [],
+        "grant_identity_hash": None,
+        "capabilities": [],
     }
     return value | changes
 
@@ -108,7 +111,7 @@ def test_a_workspace_receipt_runs_what_the_read_only_parsers_reject(
 @pytest.mark.parametrize(
     "command",
     [
-        "node --test 2>&1 | grep -A10 'user.test' | head -20",
+        "node --test 2>&1 | awk '/user.test/' | head -20",
         "git status --short && git add -A 2>&1; echo EXIT=$?",
         "cd /nonexistent && npm test",
     ],
@@ -133,7 +136,7 @@ def test_a_workspace_receipt_runs_shapes_the_wrapper_cannot_peel(
                 timeout_seconds=20,
                 authorize=lambda original, denied=denied: denied,
             )
-        assert error.value.reason_code == "contained_test_authorization_failed"
+        assert error.value.reason_code == "contained_run_authorization_failed"
     assert len(ran) == 1
 
 
@@ -179,6 +182,30 @@ def test_a_plan_that_differs_from_the_authorized_command_is_rejected(
             payload(), workspace=tmp_path, cwd=tmp_path, authorize=lambda original: receipt(), first_receipt=receipt()
         )
     assert started == []
+
+
+def test_a_read_grant_is_one_canonical_script_the_command_names(tmp_path: Path) -> None:
+    (tmp_path / "scratch").mkdir()
+    script = (tmp_path / "scratch" / "check.py").resolve()
+    script.write_text("print(1)\n", encoding="utf-8")
+    link = tmp_path / "scratch" / "link.py"
+    link.symlink_to(script)
+    text = f"python3 {script}"
+    workspace = tmp_path / "ws"
+    workspace.mkdir()
+    accepted = workspace_sink._validated_plan(plan(workspace, text, read_only_roots=[str(script)]), text, workspace)
+    assert accepted["read_only_roots"] == [str(script)]
+    for roots in (
+        [str(script.parent)],
+        [str(link)],
+        ["check.py"],
+        [str(tmp_path / "scratch" / "missing.py")],
+        [str(tmp_path / "scratch" / "other.py")],
+        str(script),
+        [3],
+    ):
+        with pytest.raises(RestrictedPytestError):
+            workspace_sink._validated_plan(plan(workspace, text, read_only_roots=roots), text, workspace)
 
 
 @pytest.fixture(autouse=True)
@@ -392,3 +419,85 @@ def test_macos_profile_receives_the_linked_worktree(monkeypatch: pytest.MonkeyPa
         payload(), workspace=tmp_path, cwd=tmp_path, authorize=lambda original: receipt(), first_receipt=receipt()
     )
     assert profiles[0]["linked_git"] == LINKED
+
+
+def sibling_layout(tmp_path: Path) -> tuple[Path, Path, Path]:
+    home = tmp_path / "home"
+    session = home / "projects" / "app"
+    sibling = home / "projects" / "app-report"
+    for root in (session, sibling):
+        (root / ".git").mkdir(parents=True)
+        (root / "web").mkdir()
+    return home, session, sibling
+
+
+@pytest.mark.parametrize("target", ["sibling", "session"])
+def test_a_workspace_receipt_runs_a_cd_below_the_root_from_that_root(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, target: str
+) -> None:
+    # The sandbox starts only at its root, so the `cd` into a package directory
+    # runs inside it as issued instead of being peeled to a cwd it refuses.
+    home, session, sibling = sibling_layout(tmp_path)
+    root = sibling if target == "sibling" else session
+    command = f"cd {root / 'web'} && ./node_modules/.bin/vite build"
+    ran: list[tuple[object, Path, Path]] = []
+
+    def run(original: object, *, workspace: Path, cwd: Path, **kwargs: object) -> int:
+        ran.append((original, workspace, cwd))
+        return 0
+
+    monkeypatch.setattr(sink, "run_workspace_contained", run)
+    authorized: list[object] = []
+    status = sink.run_authorized_contained_test(
+        payload(command),
+        workspace=session,
+        timeout_seconds=20,
+        authorize=lambda original: authorized.append(original) or receipt(),
+        home_dir=home,
+    )
+    assert status == 0
+    assert authorized == [payload(command)]
+    assert ran == [(payload(command), root.resolve(), root.resolve())]
+
+
+def test_a_cd_below_a_sibling_root_without_a_workspace_receipt_never_runs_there(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    home, session, sibling = sibling_layout(tmp_path)
+    command = f"cd {sibling / 'web'} && ./node_modules/.bin/vite build"
+    ran: list[object] = []
+    monkeypatch.setattr(sink, "run_workspace_contained", lambda *args, **kwargs: ran.append(args[0]) or 0)
+    other = receipt(
+        reason_code="native_pytest_readonly_containment_required", required_execution_profile="pytest-readonly-v2"
+    )
+    for denied in (None, receipt(observe_mode=True), other):
+        with pytest.raises(RestrictedPytestError):
+            sink.run_authorized_contained_test(
+                payload(command),
+                workspace=session,
+                timeout_seconds=20,
+                authorize=lambda original, denied=denied: denied if "cd " in str(original) else None,
+                home_dir=home,
+            )
+    assert ran == []
+
+
+def test_read_grants_need_a_launched_single_canonical_script(tmp_path: Path) -> None:
+    from codex_plugin_scanner.guard.runtime.restricted_workspace_grants import read_grants_valid
+
+    root = tmp_path.resolve()
+    upper = root / "Build.JS"
+    good = root / "good.py"
+    upper.write_text("x")
+    good.write_text("x")
+    assert read_grants_valid([str(upper)], f"node {upper}")
+    assert not read_grants_valid([str(good)], f"python3 {root}/other/good.py")
+    assert not read_grants_valid([str(good), str(upper)], f"node {upper}; python3 {good}")
+    assert read_grants_valid([str(good)], f"python3 {good};echo ok")
+    assert read_grants_valid([str(good)], f"python3 {good}|head")
+    assert read_grants_valid([str(good)], f"python3 {good}>out.log")
+    hashed = root / "run#2"
+    hashed.mkdir()
+    (hashed / "good.py").write_text("x")
+    assert read_grants_valid([str(hashed / "good.py")], f"python3 {hashed}/good.py")
+    assert not read_grants_valid([str(good)], f"python3 {good}#x")

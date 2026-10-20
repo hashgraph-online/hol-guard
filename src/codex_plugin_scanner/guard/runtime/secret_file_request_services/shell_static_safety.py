@@ -5,11 +5,9 @@ from __future__ import annotations
 import ast
 import os
 import re
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from ..git_execution_safety import git_binary_path_is_trusted
 from ..shell_execution_context import ShellExecutionContext
 from .constants_core import (
     _PYTHON_INTERPRETER_OPTIONS_WITH_VALUES,
@@ -17,65 +15,8 @@ from .constants_core import (
     _UNMODELED_INLINE_INTERPRETER_COMMANDS,
 )
 from .constants_patterns import _READ_ONLY_INTERPRETER_MUTATION_PATTERNS
-from .docker_requests import _which_for_execution_cwd
 from .request_artifacts import _normalized_shell_command_name
 from .shell_tokenization import _iter_shell_command_segments, _shell_segment_primary_command
-
-
-def _safe_cli_metadata_segment_is_safe(
-    command_name: str,
-    args: list[str],
-    *,
-    cwd: Path,
-    command_token: str,
-    command_index: int,
-) -> bool:
-    if command_index != 0 or command_token != command_name:
-        return False
-    if command_name == "git" and args in (["--version"], ["version"]):
-        git_path = _which_for_execution_cwd("git", cwd=cwd)
-        if git_path is None:
-            return False
-        try:
-            return git_binary_path_is_trusted(Path(git_path).resolve(), cwd=cwd.resolve())
-        except (OSError, RuntimeError):
-            return False
-    if command_name != "hol-guard" or args not in (
-        ["--version"],
-        ["status"],
-        ["status", "--json"],
-        ["daemon", "status"],
-        ["daemon", "status", "--json"],
-        ["doctor"],
-        ["doctor", "--json"],
-        ["settings"],
-        ["settings", "--json"],
-    ):
-        return False
-    executable = _which_for_execution_cwd("hol-guard", cwd=cwd)
-    if executable is None:
-        return False
-    try:
-        actual = Path(executable).resolve(strict=True)
-    except (OSError, RuntimeError):
-        return False
-    is_windows = sys.platform == "win32"
-    bin_name = "Scripts" if is_windows else "bin"
-    executable_names = ("hol-guard.exe", "hol-guard") if is_windows else ("hol-guard",)
-    roots = [Path(sys.prefix)]
-    site_packages = next(
-        (parent for parent in Path(__file__).resolve().parents if parent.name == "site-packages"), None
-    )
-    if site_packages is not None:
-        roots.append(site_packages.parent.parent if is_windows else site_packages.parent.parent.parent)
-    managed_candidates: set[Path] = set()
-    for root in roots:
-        for executable_name in executable_names:
-            try:
-                managed_candidates.add((root / bin_name / executable_name).resolve(strict=True))
-            except (OSError, RuntimeError):
-                continue
-    return actual in managed_candidates
 
 
 def _leading_literal_cd_workspace_root(
@@ -455,7 +396,6 @@ __all__ = [
     "_leading_literal_cd_workspace_root",
     "_path_text_is_within_root",
     "_path_text_is_within_root_text",
-    "_safe_cli_metadata_segment_is_safe",
     "_script_has_aliased_risky_import",
     "_script_interpreter_texts",
     "_script_is_benign_wait",

@@ -4,8 +4,7 @@ use guard_runtime_windows_process::{is_single_link_file, is_single_link_handle};
 use serde_json::json;
 use std::path::Path;
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 #[test]
 fn windows_home_writes_verify_real_file_link_counts() {

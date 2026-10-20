@@ -127,7 +127,7 @@ def test_privileged_feed_is_main_bound_and_pins_candidate_provenance() -> None:
     assert '--source-digest "$attested_commit"' in provenance
     attestation = (ROOT / "scripts/release/read_publish_attestation_commit.py").read_text(encoding="utf-8")
     assert "provenance workflow is not the publish workflow" in attestation
-    linux = linux_workflow_text()
+    linux = linux_workflow_text() + provenance
     assert '--source-ref "$source_ref"' in linux
     assert 'verify_published_wheel "refs/tags/${CORE_TAG}"' in linux
     assert 'verify_published_wheel "refs/heads/${RELEASE_BRANCH}"' in linux
@@ -201,8 +201,9 @@ def test_macos_feed_avoids_bash4_only_builtins_and_binds_mode() -> None:
     assert manifest["env"]["MODE"] == "${{ steps.existing.outputs.mode }}"
     assert 'test "$WHEEL_COUNT" -eq 1' in text
     assert 'test -f "$WHEEL"' in text
-    assert '--pattern "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
-    assert '-name "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
+    assert 'WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"' in text
+    assert '--pattern "$WHEEL_PATTERN"' in text
+    assert '-name "$WHEEL_PATTERN"' in text
     assert '--pattern "hol_guard-${CORE_VERSION}-*.whl"' not in text
     assert '-name "hol_guard-${CORE_VERSION}-*.whl"' not in text
 
@@ -218,7 +219,8 @@ def test_frozen_sidecar_stages_attested_native_runtime() -> None:
     build = next(step for step in publish_job()["steps"] if step.get("name") == "Build standalone Core executable")
     run = build["run"]
     assert isinstance(run, str)
-    assert 'cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"' in text
+    assert "ATTESTED_NAME=attested-macos-arm64.whl" in text
+    assert 'cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"' in text
     assert "python3 -I scripts/release/stage_native_runtime_for_desktop_core.py" in run
     assert '--wheel "$RUNNER_TEMP/attested-macos-arm64.whl"' in run
     assert '--expected-version "$CORE_VERSION"' in run
@@ -313,9 +315,13 @@ def test_linux_feed_publishes_digest_verified_gnu_sidecar() -> None:
         "attestations": "write",
     }
     assert 'test "$(uname -m)" = "x86_64"' in text
-    assert '--pattern "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
-    assert '-name "hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in text
-    assert 'cp "$WHEEL" "$RUNNER_TEMP/attested-linux-x64.whl"' in text
+    source = (ROOT / "scripts/release/authorize_macos_core_source.sh").read_text()
+    assert "bash scripts/release/authorize_macos_core_source.sh" in text
+    assert 'WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"' in source
+    assert '--pattern "$WHEEL_PATTERN"' in source
+    assert '-name "$WHEEL_PATTERN"' in source
+    assert "ATTESTED_NAME=attested-linux-x64.whl" in source
+    assert 'cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"' in source
     assert '--wheel "$RUNNER_TEMP/attested-linux-x64.whl"' in build_run
     assert '--expected-target "$NATIVE_RUNTIME_TARGET"' in build_run
     assert "--codesign-identity" not in build_run

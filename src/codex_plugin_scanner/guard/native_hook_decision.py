@@ -12,6 +12,7 @@ raises ``NativeHookDecisionError`` and callers fail closed.
 
 from __future__ import annotations
 
+import dataclasses
 import functools
 from collections.abc import Callable, Mapping
 from pathlib import Path
@@ -19,8 +20,14 @@ from typing import Any
 
 from .native_execution import _resident_request
 from .native_resident_decision import ResidentOperation, resident_decide, shape_fields
+from .runtime.approval_reuse import ApprovalReuseMalformedResultError, _decision_from_native_payload
 
 HOOK_DECISION_FEATURE = "hook-decision-v1"
+# The composed post-claim request names the claimed approval's context token
+# and expects the reuse decision back.  A resident that predates it rejects
+# those fields as unknown, and the claim it would have re-evaluated is already
+# consumed by then, so the capability is demanded before the request is sent.
+HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE = "hook-decision-post-claim-compose-v1"
 _UNAVAILABLE = "native_hook_decision_unavailable"
 _INVALID = "native_hook_decision_payload_invalid"
 _TIMEOUT_SECONDS = 5.0
@@ -142,11 +149,12 @@ def _decide(
     query: Mapping[str, object],
     guard_home: Path | None,
     validate: Callable[[dict[str, Any]], None],
+    feature: str = HOOK_DECISION_FEATURE,
 ) -> dict[str, Any]:
     # Copilot settlement carries the serialized tool arguments, so the request
     # gets the same budget as the hook edge that already accepted them.
     return resident_decide(
-        _OPERATION,
+        _OPERATION if feature == _OPERATION.feature else dataclasses.replace(_OPERATION, feature=feature),
         functools.partial(_resident_request, max_request_bytes=_MAX_REQUEST_BYTES),
         query,
         guard_home,
@@ -203,16 +211,51 @@ def native_compose_current(
 def native_post_claim_reuse(inputs: Mapping[str, object], *, guard_home: Path | None = None) -> tuple[str, str | None]:
     """The action and validation reason for re-evaluating a claimed saved approval."""
 
+    action, reason, _ = native_post_claim_decision(inputs, guard_home=guard_home)
+    return action, reason
+
+
+def native_post_claim_decision(
+    inputs: Mapping[str, object],
+    *,
+    guard_home: Path | None = None,
+) -> tuple[str, str | None, dict[str, Any] | None]:
+    """Re-evaluate a claimed saved approval, with its reuse decision when composed.
+
+    A request that names the claimed approval's context token asks the resident
+    to compare the tokens and to say what the re-evaluated claim means for
+    reuse, so the caller makes one request rather than three and never names a
+    saved action itself.  A request that settles the context on its own gets
+    the original two fields back and ``None`` here.
+    """
+
+    composed = "claimed_context_token" in inputs
+
     def validate(payload: dict[str, Any]) -> None:
-        if set(payload) != {"kind", "current_action", "validation_reason"}:
+        expected = {"kind", "current_action", "validation_reason"}
+        if set(payload) != (expected | {"reuse"} if composed else expected):
             raise NativeHookDecisionError(_INVALID)
         reason = payload["validation_reason"]
         if reason is not None and not isinstance(reason, str):
             raise NativeHookDecisionError(_INVALID)
+        if composed:
+            try:
+                _decision_from_native_payload(payload["reuse"])
+            except ApprovalReuseMalformedResultError:
+                raise NativeHookDecisionError(_INVALID) from None
         _action(payload["current_action"])
 
-    payload = _decide({"kind": "post_claim_reuse", "inputs": dict(inputs)}, guard_home, validate)
-    return _action(payload["current_action"]), payload["validation_reason"]
+    payload = _decide(
+        {"kind": "post_claim_reuse", "inputs": dict(inputs)},
+        guard_home,
+        validate,
+        HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE if composed else HOOK_DECISION_FEATURE,
+    )
+    return (
+        _action(payload["current_action"]),
+        payload["validation_reason"],
+        payload["reuse"] if composed else None,
+    )
 
 
 def native_finalize(
@@ -294,9 +337,11 @@ def native_copilot_settle(
 
 __all__ = [
     "HOOK_DECISION_FEATURE",
+    "HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE",
     "NativeHookDecisionError",
     "native_compose_current",
     "native_copilot_settle",
     "native_finalize",
+    "native_post_claim_decision",
     "native_post_claim_reuse",
 ]

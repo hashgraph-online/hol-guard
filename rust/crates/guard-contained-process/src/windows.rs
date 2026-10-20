@@ -17,6 +17,7 @@ use winapi::um::accctrl::{
     TRUSTEE_IS_USER,
 };
 use winapi::um::aclapi::{GetSecurityInfo, SetEntriesInAclW, SetSecurityInfo};
+use winapi::um::handleapi::INVALID_HANDLE_VALUE;
 use winapi::um::processthreadsapi::{
     CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
     UpdateProcThreadAttribute, PROCESS_INFORMATION,
@@ -24,14 +25,15 @@ use winapi::um::processthreadsapi::{
 use winapi::um::securitybaseapi::FreeSid;
 use winapi::um::userenv::{CreateAppContainerProfile, DeleteAppContainerProfile};
 use winapi::um::winbase::{
-    LocalFree, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT, EXTENDED_STARTUPINFO_PRESENT,
-    STARTF_USESTDHANDLES, STARTUPINFOEXW,
+    CreateActCtxW, LocalFree, ReleaseActCtx, ACTCTXW, CREATE_SUSPENDED, CREATE_UNICODE_ENVIRONMENT,
+    EXTENDED_STARTUPINFO_PRESENT, STARTF_USESTDHANDLES, STARTUPINFOEXW,
 };
 use winapi::um::winnt::{
     DACL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PACL,
     PROTECTED_DACL_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
 };
 
+const ACTCTX_FLAG_RESOURCE_NAME_VALID: u32 = 0x8;
 const HANDLE_LIST: usize = 0x0002_0002;
 const SECURITY_CAPABILITIES: usize = 0x0002_0009;
 // LPAC excludes ALL_APPLICATION_PACKAGES. Only explicitly granted snapshot
@@ -51,6 +53,26 @@ struct SecurityCapabilities {
 
 mod app_container;
 pub use app_container::AppContainer;
+mod desktop;
+mod publish;
+pub(crate) mod readonly;
+
+/// Builds and releases the activation context of a DLL's embedded manifest
+/// (resource 2) without loading the DLL.
+fn build_activation_context(path: &Path) {
+    let Ok(source) = wide(path.as_os_str()) else {
+        return;
+    };
+    let mut context: ACTCTXW = unsafe { zeroed() };
+    context.cbSize = size_of::<ACTCTXW>() as u32;
+    context.dwFlags = ACTCTX_FLAG_RESOURCE_NAME_VALID;
+    context.lpSource = source.as_ptr();
+    context.lpResourceName = 2 as _;
+    let handle = unsafe { CreateActCtxW(&context) };
+    if handle != INVALID_HANDLE_VALUE {
+        unsafe { ReleaseActCtx(handle) };
+    }
+}
 
 fn wide(value: &OsStr) -> io::Result<Vec<u16>> {
     let mut result: Vec<u16> = value.encode_wide().collect();
@@ -162,15 +184,7 @@ pub(crate) fn capture(
         ));
     }
     command.verify_bindings()?;
-    let result = capture_native(
-        &command,
-        isolation.app_container.as_ref(),
-        input,
-        cap,
-        isolation.output_per_stream,
-        deadline,
-        cancel,
-    );
+    let result = capture_native(&command, &isolation, input, cap, deadline, cancel);
     let cleanup = isolation
         .app_container
         .as_mut()
@@ -193,13 +207,15 @@ fn convert(output: guard_runtime_windows_process::CapturedOutput) -> CapturedOut
 
 fn capture_native(
     command: &PinnedCommand,
-    container: Option<&AppContainer>,
+    isolation: &Isolation,
     input: &[u8],
     cap: usize,
-    per_stream: bool,
     deadline: Instant,
     cancel: &AtomicBool,
 ) -> io::Result<CapturedOutput> {
+    let container = isolation.app_container.as_ref();
+    let job_limits = isolation.job_limits;
+    let per_stream = isolation.output_per_stream;
     if Instant::now() >= deadline || cancel.load(std::sync::atomic::Ordering::Acquire) {
         return Err(io::Error::new(
             io::ErrorKind::TimedOut,
@@ -212,10 +228,16 @@ fn capture_native(
         pipes.child_stdout.as_raw_handle() as HANDLE,
         pipes.child_stderr.as_raw_handle() as HANDLE,
     ];
+    let mut granted = container
+        .filter(|container| !container.registry_read.is_null())
+        .map(|container| winapi::um::winnt::SID_AND_ATTRIBUTES {
+            Sid: container.registry_read,
+            Attributes: winapi::um::winnt::SE_GROUP_ENABLED,
+        });
     let mut capabilities = SecurityCapabilities {
         app_container_sid: container.map_or(null_mut(), |container| container.sid),
-        capabilities: null_mut(),
-        capability_count: 0,
+        capabilities: granted.as_mut().map_or(null_mut(), |granted| granted),
+        capability_count: u32::from(granted.is_some()),
         reserved: 0,
     };
     let mut lpac = ALL_APPLICATION_PACKAGES_OPT_OUT;
@@ -228,7 +250,7 @@ fn capture_native(
     let executable = wide(command.executable_path.as_os_str())?;
     let cwd = wide(command.cwd.path().as_os_str())?;
     let mut argv = Vec::new();
-    quoted(command.executable_path.as_os_str(), &mut argv)?;
+    quoted(command.argument_zero.as_os_str(), &mut argv)?;
     for arg in &command.arguments {
         argv.push(b' ' as u16);
         quoted(arg, &mut argv)?;
@@ -241,6 +263,10 @@ fn capture_native(
         ));
     }
     let mut env = environment_block(&command.environment)?;
+    // Held until the child exits; see `desktop` for why a container needs it.
+    let mut desktop = container
+        .map(|container| desktop::PrivateDesktop::create(container.sid))
+        .transpose()?;
     let mut startup: STARTUPINFOEXW = unsafe { zeroed() };
     startup.StartupInfo.cb = size_of::<STARTUPINFOEXW>() as u32;
     startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
@@ -248,6 +274,9 @@ fn capture_native(
     startup.StartupInfo.hStdOutput = handles[1];
     startup.StartupInfo.hStdError = handles[2];
     startup.lpAttributeList = attributes.storage.as_mut_ptr().cast();
+    if let Some(desktop) = desktop.as_mut() {
+        startup.StartupInfo.lpDesktop = desktop.path.as_mut_ptr();
+    }
     let mut process: PROCESS_INFORMATION = unsafe { zeroed() };
     if Instant::now() >= deadline || cancel.load(std::sync::atomic::Ordering::Acquire) {
         return Err(io::Error::new(
@@ -280,7 +309,7 @@ fn capture_native(
     let guard = guard_runtime_windows_process::attach_suspended_process(
         process_handle,
         thread_handle,
-        None,
+        job_limits,
         deadline,
         cancel,
     )?;

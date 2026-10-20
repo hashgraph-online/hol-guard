@@ -2,22 +2,44 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 from pathlib import Path
 
 from ...models import GuardArtifact
+from ...native_tool_action_identity import tool_action_request_artifact_id
 from ...redaction import redact_text
 from ..command_decision_adapter import effect_decision_to_dict
 from ..command_evaluation import CompositeCommandEvaluation, evaluate_command
 from ..command_extensions import risk_classes_for_command_action
 from ..command_model import parse_shell_command
 from ..effect_contract import UncertaintyKind
-from ..effect_decision import EffectDecisionRequest, evaluate_effect_decision
+from ..effect_decision import DecisionFactorSource, DecisionReason, EffectDecision, FinalDisposition
 from ..extension_control_contract import ExtensionControlLayer
 from ..extension_control_runtime import ExtensionControlRuntimeSnapshot
 from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS
 from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
+
+# Artifact discovery can run before an authenticated native result exists, and
+# the sensitive request still has to be preserved at a review floor. The
+# resident cannot be asked for that floor: this branch exists precisely because
+# the native side produced nothing. Running the Python evaluator here would be
+# a second place a floor is decided, so the decision is pinned instead. It is
+# exactly what the Rust evaluator returns for an empty request carrying
+# `unsupported-input`, and `pinned_unavailable_evidence_floor` in `guard-command`
+# fails if the two ever drift.
+_UNSUPPORTED_INPUT_REASON = DecisionReason(
+    source=DecisionFactorSource.POLICY,
+    reason_code=f"uncertainty.{UncertaintyKind.UNSUPPORTED_INPUT.value}",
+    action_floor="review",
+    segment_ref=None,
+    operation_ref=None,
+)
+_NATIVE_EVIDENCE_UNAVAILABLE_DECISION = EffectDecision(
+    action="review",
+    disposition=FinalDisposition.REVIEW,
+    controlling_reasons=(_UNSUPPORTED_INPUT_REASON,),
+    reasons=(_UNSUPPORTED_INPUT_REASON,),
+    proof_routes=frozenset(),
+)
 
 
 def is_explicitly_benign_native_file_read_request(
@@ -107,31 +129,14 @@ def build_tool_action_request_artifact(
             if request.raw_command_text is None and request.canonical_command is not None
             else parse_shell_command(policy_command)
         )
-        decision_plane = evaluate_effect_decision(
-            EffectDecisionRequest(
-                factors=(),
-                uncertainties=(UncertaintyKind.UNSUPPORTED_INPUT,),
-            )
-        )
+        decision_plane = _NATIVE_EVIDENCE_UNAVAILABLE_DECISION
         control_resolution = {"blocked": True, "failures": ["native-evidence-unavailable"]}
         command_rule_matches = []
         risk_classes = list(risk_classes_for_command_action(request.action_class))
     wrapper_chain = tuple(dict.fromkeys((*command.wrapper_chain, *request.wrapper_chain)))
-    fingerprint_payload = {
-        "harness": harness,
-        "tool_name": request.normalized_tool_name,
-        "command_text": request.command_text,
-        "action_class": request.action_class,
-        "shell_execution_context_hash": request.shell_execution_context_hash,
-        "interpreter_executable_identities": request.interpreter_executable_identities,
-    }
-    if request.script_read_identity_sha256 is not None:
-        fingerprint_payload["script_read_identity_sha256"] = request.script_read_identity_sha256
-    if request.restricted_profile_version is not None:
-        fingerprint_payload["restricted_profile_version"] = request.restricted_profile_version
-    if request.pytest_config_identity_sha256 is not None:
-        fingerprint_payload["pytest_config_identity_sha256"] = request.pytest_config_identity_sha256
-    fingerprint = hashlib.sha256(json.dumps(fingerprint_payload, sort_keys=True).encode("utf-8")).hexdigest()
+    # The artifact id is the key a saved approval for this action is stored
+    # under, so the resident derives it and this side never recomputes it.
+    artifact_id = tool_action_request_artifact_id(harness, request, source_scope=source_scope)
     display_command_text = redact_text(request.command_text).text
     display_raw_command_text = (
         redact_text(request.raw_command_text).text if request.raw_command_text is not None else None
@@ -160,7 +165,7 @@ def build_tool_action_request_artifact(
             "effective_cwd": effective_cwds[-1] if effective_cwds else None,
         }
     return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:tool-action:{fingerprint}",
+        artifact_id=artifact_id,
         name=f"{request.tool_name} {request.action_class}",
         harness=harness,
         artifact_type="tool_action_request",

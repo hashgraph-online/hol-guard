@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 
 from .native_guard_store import NativeGuardStoreUnavailable
+from .native_policy_integrity_rows import PolicyRowVerifyItem, discard_row_signing_verifier_key
 from .store_base import *
 
 _LOGGER = logging.getLogger(__name__)
@@ -81,19 +82,25 @@ class StorePolicyIntegrityAdminMixin:
                 state = self._refresh_policy_integrity_state(connection, now=_now(), create_key=True)
                 key, key_id = self._policy_integrity_secret_material(create=True)
                 trusted_generation = _mapping_int(state, "generation")
+            local_rows = [row for row in rows if not is_remote_policy_source(str(row["source"]))]
+            local_results = iter(
+                self._policy_integrity_results_for_rows(
+                    local_rows,
+                    mode=str(state.get("mode") or "degraded"),
+                    key=key,
+                    key_id=key_id,
+                    trusted_generation=trusted_generation,
+                )
+                if state is not None
+                else []
+            )
             items: list[dict[str, object]] = []
             for row in rows:
                 payload = self._policy_decision_dict_from_row(row)
                 if not is_remote_policy_source(str(row["source"])):
                     if state is None:
                         continue
-                    integrity_result = self._policy_integrity_result_for_row(
-                        row,
-                        mode=str(state.get("mode") or "degraded"),
-                        key=key,
-                        key_id=key_id,
-                        trusted_generation=trusted_generation,
-                    )
+                    integrity_result = next(local_results)
                     payload["integrity_status"] = integrity_result.status
                     payload["integrity_message"] = integrity_result.message
                     payload["integrity_mode"] = state.get("mode")
@@ -226,15 +233,15 @@ class StorePolicyIntegrityAdminMixin:
         key, key_id = self._policy_integrity_secret_material(create=create_key)
         counts = {status: 0 for status in _POLICY_INTEGRITY_STATUSES}
         items: list[dict[str, object]] = []
-        for row in self._load_local_policy_rows(connection, harness=harness):
-            trusted_generation = _mapping_int(state, "generation")
-            integrity_result = self._policy_integrity_result_for_row(
-                row,
-                mode=str(state.get("mode") or "degraded"),
-                key=key,
-                key_id=key_id,
-                trusted_generation=trusted_generation,
-            )
+        rows = self._load_local_policy_rows(connection, harness=harness)
+        results = self._policy_integrity_results_for_rows(
+            rows,
+            mode=str(state.get("mode") or "degraded"),
+            key=key,
+            key_id=key_id,
+            trusted_generation=_mapping_int(state, "generation"),
+        )
+        for row, integrity_result in zip(rows, results, strict=True):
             counts[integrity_result.status] += 1
             if not include_items:
                 continue
@@ -388,14 +395,15 @@ class StorePolicyIntegrityAdminMixin:
             key, key_id = self._policy_integrity_secret_material(create=True)
             trusted_generation = _mapping_int(state, "generation")
             invalid_ids: list[int] = []
-            for row in self._load_local_policy_rows(connection, harness=harness):
-                integrity_result = self._policy_integrity_result_for_row(
-                    row,
-                    mode=str(state.get("mode") or "degraded"),
-                    key=key,
-                    key_id=key_id,
-                    trusted_generation=trusted_generation,
-                )
+            rows = self._load_local_policy_rows(connection, harness=harness)
+            results = self._policy_integrity_results_for_rows(
+                rows,
+                mode=str(state.get("mode") or "degraded"),
+                key=key,
+                key_id=key_id,
+                trusted_generation=trusted_generation,
+            )
+            for row, integrity_result in zip(rows, results, strict=True):
                 if integrity_result.status != "valid" and (decision_id := _int_value(row["decision_id"])) is not None:
                     invalid_ids.append(decision_id)
             cleared = 0
@@ -477,15 +485,17 @@ class StorePolicyIntegrityAdminMixin:
             rollback_row_ids: list[int] = []
             blocked_preserve_row_ids: list[int] = []
             selected_preserved_ids: set[int] = set()
-            for row in rows:
+            trusted_generation = _mapping_int(trusted_state, "generation")
+            results = self._verify_policy_rows(
+                [
+                    PolicyRowVerifyItem(_row_mapping(row), degraded_mode=False, trusted_generation=trusted_generation)
+                    for row in rows
+                ],
+                key=key,
+                key_id=key_id,
+            )
+            for row, integrity_result in zip(rows, results, strict=True):
                 decision_id = int(row["decision_id"])
-                integrity_result = verify_local_policy_row(
-                    _row_mapping(row),
-                    key=key,
-                    key_id=key_id,
-                    degraded_mode=False,
-                    trusted_generation=_mapping_int(trusted_state, "generation"),
-                )
                 if integrity_result.status not in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES:
                     if integrity_result.status == "rollback_detected":
                         rollback_row_ids.append(decision_id)
@@ -578,18 +588,18 @@ class StorePolicyIntegrityAdminMixin:
             ):
                 connection.rollback()
             else:
-                trusted_generation = _mapping_int(state, "generation")
+                rows = self._load_local_policy_rows(connection)
+                results = self._policy_integrity_results_for_rows(
+                    rows,
+                    mode=str(state.get("mode") or "degraded"),
+                    key=key,
+                    key_id=key_id,
+                    trusted_generation=_mapping_int(state, "generation"),
+                )
                 force_sign_ids = {
                     int(row["decision_id"])
-                    for row in self._load_local_policy_rows(connection)
-                    if self._policy_integrity_result_for_row(
-                        row,
-                        mode=str(state.get("mode") or "degraded"),
-                        key=key,
-                        key_id=key_id,
-                        trusted_generation=trusted_generation,
-                    ).status
-                    in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES
+                    for row, result in zip(rows, results, strict=True)
+                    if result.status in _POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES
                 }
                 next_control_state = self._advance_policy_integrity_generation(
                     connection,
@@ -616,6 +626,7 @@ class StorePolicyIntegrityAdminMixin:
         if secret_store is not None:
             secret_store.delete_secret(self._policy_integrity_key_ref)
             secret_store.delete_secret(self._policy_integrity_control_ref)
+            discard_row_signing_verifier_key(Path(self.guard_home))
         self._clear_policy_integrity_cache()
         with self._connect() as connection:
             self._refresh_policy_integrity_state(

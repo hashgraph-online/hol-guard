@@ -1,23 +1,148 @@
-"""Claude hook configuration primitives and managed-handler identity."""
+"""Claude hook configuration primitives and managed-handler identity.
+
+The managed hook groups (events, matchers, timeouts, status messages, pruned
+events, and bridge config keys) come from one declarative contract,
+``guard/contracts/claude-hook-groups.v1.json``. The native SessionStart lane
+compares installed settings against the same file, so the two cannot drift.
+"""
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Final, NamedTuple
 
 from .base import HarnessContext
 
+CLAUDE_HOOK_GROUPS_CONTRACT_PATH: Final = (
+    Path(__file__).resolve().parent.parent / "contracts" / "claude-hook-groups.v1.json"
+)
+_CONTRACT_SCHEMA: Final = "hol-guard.claude-hook-groups.v1"
+
+
+class ClaudeRuntimeHookGroup(NamedTuple):
+    event: str
+    matcher: str | None
+    timeout_seconds: int
+    status_message: str | None
+
+
+def _contract_error(field: str) -> ValueError:
+    return ValueError(f"claude_hook_groups_contract_invalid: {field}")
+
+
+def _field(mapping: Mapping[str, object], name: str) -> object:
+    if name not in mapping:
+        raise _contract_error(name)
+    return mapping[name]
+
+
+def _mapping(value: object, label: str) -> Mapping[str, object]:
+    if not isinstance(value, dict):
+        raise _contract_error(label)
+    return value
+
+
+def _text(value: object, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise _contract_error(label)
+    return value
+
+
+def _optional_text(value: object, label: str) -> str | None:
+    return None if value is None else _text(value, label)
+
+
+def _texts(value: object, label: str) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        raise _contract_error(label)
+    return tuple(_text(item, label) for item in value)
+
+
+def _seconds(value: object, label: str) -> int:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+        raise _contract_error(label)
+    return value
+
+
+def _runtime_group(value: object) -> ClaudeRuntimeHookGroup:
+    group = _mapping(value, "runtime_groups")
+    return ClaudeRuntimeHookGroup(
+        _text(_field(group, "event"), "runtime_groups.event"),
+        _optional_text(_field(group, "matcher"), "runtime_groups.matcher"),
+        _seconds(_field(group, "timeout_seconds"), "runtime_groups.timeout_seconds"),
+        _optional_text(_field(group, "status_message"), "runtime_groups.status_message"),
+    )
+
+
+class ClaudeHookGroupsContract(NamedTuple):
+    runtime_groups: tuple[ClaudeRuntimeHookGroup, ...]
+    pruned_events: tuple[str, ...]
+    session_start_matchers: tuple[str, ...]
+    session_start_timeout_seconds: int
+    session_start_context: str
+    daemon_hook_marker: str
+    session_start_hook_marker: str
+    bridge_required_keys: tuple[str, ...]
+    bridge_optional_keys: tuple[str, ...]
+
+
+def parse_claude_hook_groups_contract(document: object) -> ClaudeHookGroupsContract:
+    """Shape-check the whole contract; any defect fails installation closed."""
+
+    contract = _mapping(document, "document")
+    if contract.get("schema") != _CONTRACT_SCHEMA:
+        raise _contract_error("schema")
+    markers = _mapping(_field(contract, "markers"), "markers")
+    session_start = _mapping(_field(contract, "session_start"), "session_start")
+    bridge_config = _mapping(_field(contract, "bridge_config"), "bridge_config")
+    group_values = _field(contract, "runtime_groups")
+    if not isinstance(group_values, list) or not group_values:
+        raise _contract_error("runtime_groups")
+    groups = tuple(_runtime_group(group) for group in group_values)
+    events = {group.event for group in groups}
+    if len(events) != len(groups) or not {"PreToolUse", "PostToolUse", "Notification", "Stop"} <= events:
+        raise _contract_error("runtime_groups.event")
+    return ClaudeHookGroupsContract(
+        runtime_groups=groups,
+        pruned_events=_texts(_field(contract, "pruned_events"), "pruned_events"),
+        session_start_matchers=_texts(_field(session_start, "matchers"), "session_start.matchers"),
+        session_start_timeout_seconds=_seconds(
+            _field(session_start, "timeout_seconds"), "session_start.timeout_seconds"
+        ),
+        session_start_context=_text(_field(session_start, "additional_context"), "session_start.additional_context"),
+        daemon_hook_marker=_text(_field(markers, "daemon_hook"), "markers.daemon_hook"),
+        session_start_hook_marker=_text(_field(markers, "session_start_hook"), "markers.session_start_hook"),
+        bridge_required_keys=_texts(_field(bridge_config, "required_keys"), "bridge_config.required_keys"),
+        bridge_optional_keys=_texts(_field(bridge_config, "optional_keys"), "bridge_config.optional_keys"),
+    )
+
+
+def load_claude_hook_groups_contract(path: Path = CLAUDE_HOOK_GROUPS_CONTRACT_PATH) -> ClaudeHookGroupsContract:
+    return parse_claude_hook_groups_contract(json.loads(path.read_text(encoding="utf-8")))
+
+
+_CONTRACT: Final = load_claude_hook_groups_contract()
+_GROUPS_BY_EVENT: Final = {group.event: group for group in _CONTRACT.runtime_groups}
+CLAUDE_RUNTIME_HOOK_GROUPS: Final = _CONTRACT.runtime_groups
+CLAUDE_GUARD_PRUNED_HOOK_EVENTS: Final = _CONTRACT.pruned_events
+CLAUDE_BRIDGE_CONFIG_REQUIRED_KEYS: Final = _CONTRACT.bridge_required_keys
+CLAUDE_BRIDGE_CONFIG_OPTIONAL_KEYS: Final = _CONTRACT.bridge_optional_keys
+
 # Grep reads file contents, including hidden files such as `.env`; the
 # native authority proves directory scopes before allowing them.
-CLAUDE_GUARD_TOOL_MATCHER = "Bash|Read|Grep|Write|Edit|MultiEdit|WebFetch|WebSearch|mcp__.*"
-CLAUDE_GUARD_POST_TOOL_MATCHER = f"{CLAUDE_GUARD_TOOL_MATCHER}|AskUserQuestion"
-CLAUDE_GUARD_NOTIFICATION_MATCHER = "permission_prompt"
-CLAUDE_GUARD_SESSION_START_MATCHERS = ("startup", "resume", "clear", "compact")
-CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS = 30
-CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS = 10
-CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS = 10
-CLAUDE_GUARD_STOP_TIMEOUT_SECONDS = 10
-CLAUDE_GUARD_DAEMON_HOOK_MARKER = "HOL_GUARD_CLAUDE_DAEMON_HOOK"
-CLAUDE_GUARD_SESSION_START_HOOK_MARKER = "HOL_GUARD_CLAUDE_SESSION_START_HOOK"
+CLAUDE_GUARD_TOOL_MATCHER: Final = _text(_GROUPS_BY_EVENT["PreToolUse"].matcher, "PreToolUse.matcher")
+CLAUDE_GUARD_POST_TOOL_MATCHER: Final = _text(_GROUPS_BY_EVENT["PostToolUse"].matcher, "PostToolUse.matcher")
+CLAUDE_GUARD_NOTIFICATION_MATCHER: Final = _text(_GROUPS_BY_EVENT["Notification"].matcher, "Notification.matcher")
+CLAUDE_GUARD_SESSION_START_MATCHERS: Final = _CONTRACT.session_start_matchers
+CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS: Final = _GROUPS_BY_EVENT["PreToolUse"].timeout_seconds
+CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS: Final = _GROUPS_BY_EVENT["Notification"].timeout_seconds
+CLAUDE_GUARD_SESSION_START_TIMEOUT_SECONDS: Final = _CONTRACT.session_start_timeout_seconds
+CLAUDE_GUARD_STOP_TIMEOUT_SECONDS: Final = _GROUPS_BY_EVENT["Stop"].timeout_seconds
+CLAUDE_GUARD_SESSION_START_CONTEXT: Final = _CONTRACT.session_start_context
+CLAUDE_GUARD_DAEMON_HOOK_MARKER: Final = _CONTRACT.daemon_hook_marker
+CLAUDE_GUARD_SESSION_START_HOOK_MARKER: Final = _CONTRACT.session_start_hook_marker
 # Authenticated daemon marker: defer a PermissionRequest to Claude's own
 # dialog without supplying a decision.
 CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY = "guard_permission_passthrough"
@@ -56,33 +181,17 @@ def guard_command_handler(
 
 
 def sync_runtime_hook_groups(hooks: dict[str, object], hook_argv: tuple[str, ...]) -> None:
-    for key, matcher, timeout, status_message in (
-        (
-            "PreToolUse",
-            CLAUDE_GUARD_TOOL_MATCHER,
-            CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS,
-            "HOL Guard is checking this tool use",
-        ),
-        (
-            "PermissionRequest",
-            CLAUDE_GUARD_TOOL_MATCHER,
-            CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS,
-            "HOL Guard is reviewing this approval prompt",
-        ),
-        ("PostToolUse", CLAUDE_GUARD_POST_TOOL_MATCHER, CLAUDE_GUARD_TOOL_TIMEOUT_SECONDS, None),
-        ("Notification", CLAUDE_GUARD_NOTIFICATION_MATCHER, CLAUDE_GUARD_NOTIFICATION_TIMEOUT_SECONDS, None),
-        ("Stop", None, CLAUDE_GUARD_STOP_TIMEOUT_SECONDS, None),
-    ):
-        existing_entries = hooks.get(key)
-        hooks[key] = merge_hook_group(
+    for group in CLAUDE_RUNTIME_HOOK_GROUPS:
+        existing_entries = hooks.get(group.event)
+        hooks[group.event] = merge_hook_group(
             prune_guard_hook_entries(existing_entries if isinstance(existing_entries, list) else []),
-            matcher,
-            guard_command_handler(hook_argv, timeout=timeout, status_message=status_message),
+            group.matcher,
+            guard_command_handler(hook_argv, timeout=group.timeout_seconds, status_message=group.status_message),
         )
 
 
 def remove_unsupported_guard_hook_groups(hooks: dict[str, object]) -> None:
-    for key in ("PermissionDenied", "UserPromptSubmit"):
+    for key in CLAUDE_GUARD_PRUNED_HOOK_EVENTS:
         entries = hooks.get(key)
         if not isinstance(entries, list):
             continue
@@ -109,7 +218,7 @@ def is_guard_hook_command(command: object) -> bool:
         return True
     if "codex_plugin_scanner.cli" in command:
         return "guard hook" in command or "'guard', 'hook'" in command or '"guard", "hook"' in command
-    return "ensure_guard_daemon(" in command and "HOL Guard protection is active for this workspace." in command
+    return "ensure_guard_daemon(" in command and CLAUDE_GUARD_SESSION_START_CONTEXT in command
 
 
 def command_handler_argv(handler: dict[str, object]) -> tuple[str, ...] | None:

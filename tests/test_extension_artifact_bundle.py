@@ -32,6 +32,10 @@ SHA = "a" * 40
 
 @pytest.fixture
 def snapshot(tmp_path, monkeypatch):
+    # Other collected helpers can already have bootstrapped scripts/. Test
+    # bundle cleanup from a controlled path and restore inherited state later.
+    scripts_dir = str((ROOT / "scripts").resolve())
+    monkeypatch.setattr(sys, "path", [entry for entry in sys.path if entry != scripts_dir])
     root = tmp_path / "source"
     root.mkdir()
     for name in bundle.FILES:
@@ -74,6 +78,15 @@ def test_snapshot_leaves_scripts_directory_off_the_import_path(snapshot, tmp_pat
     scripts_dir = str((ROOT / "scripts").resolve())
     bundle.create_bundle(root, tmp_path / "again", SHA)
     assert scripts_dir not in sys.path
+
+
+def test_snapshot_preserves_preexisting_scripts_path_entries(snapshot, tmp_path, monkeypatch):
+    root, _output = snapshot
+    scripts_dir = str((ROOT / "scripts").resolve())
+    inherited = [*sys.path, scripts_dir, scripts_dir]
+    monkeypatch.setattr(sys, "path", inherited.copy())
+    bundle.create_bundle(root, tmp_path / "inherited", SHA)
+    assert sys.path.count(scripts_dir) == inherited.count(scripts_dir)
 
 
 def test_snapshot_is_deterministic_and_source_bound(snapshot, tmp_path):
@@ -437,15 +450,16 @@ def test_asset_download_preserves_binary_bytes_and_uses_numeric_id(tmp_path, mon
         publisher.download_asset({"id": 456}, output)
 
 
-def test_publication_is_postmerge_and_never_writes_a_branch():
+def test_publication_is_postmerge_without_generated_catalog_commits_or_prs():
     workflow = yaml.safe_load((ROOT / ".github/workflows/extension-artifact-regen.yml").read_text())
     events = workflow.get("on", workflow.get(True))
-    assert set(events) == {"push", "workflow_dispatch"}
+    assert set(events) == {"push", "workflow_dispatch", "schedule"}
+    assert events["schedule"] == [{"cron": "23 6 * * *"}]
     assert events["push"]["branches"] == ["main"]
     assert workflow["concurrency"]["cancel-in-progress"] is False
     commands = "\n".join(step.get("run", "") for step in workflow["jobs"]["regen"]["steps"])
     assert "git push" not in commands and "gh pr create" not in commands
-    assert "scripts/publish_extension_snapshot.py" in commands
+    assert "scripts/publish_extension_delivery.py" in commands
 
 
 def test_contribution_gate_accepts_public_records_and_rejects_shared_catalogs():

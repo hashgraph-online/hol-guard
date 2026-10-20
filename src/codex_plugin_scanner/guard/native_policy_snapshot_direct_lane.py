@@ -11,6 +11,7 @@ resident cannot prove makes the hook take the daemon path instead.
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import json
 import os
@@ -22,12 +23,19 @@ from pathlib import Path
 
 from .native_command_control_authority import AUTHORITY_FILE_NAME
 from .native_policy_snapshot_constants import NATIVE_RUNTIME_STATE_DIRECTORY
+from .native_policy_snapshot_direct_lane_windows import unlink_windows_ack, write_windows_ack
 
 DIRECT_LANE_PUSH_FEATURE = "policy-snapshot-direct-lane-v1"
 # The resident queues the evidence of each direct answer for the daemon to drain.
 DIRECT_HOOK_EVIDENCE_FEATURE = "hook-direct-evidence-v1"
 # The resident routes a Claude Code sandbox requirement with the bound sink command.
 DIRECT_HOOK_CONTAINED_ROUTE_FEATURE = "hook-direct-contained-route-v1"
+# The resident answers a Claude PermissionRequest from the session's notice,
+# verified and marked seen with the bound policy-integrity key.
+DIRECT_HOOK_PERMISSION_NOTICE_FEATURE = "hook-direct-permission-notice-v1"
+# The resident answers a reviewed PreToolUse from an exact-action decision
+# the user saved, verified with the bound policy-integrity key.
+DIRECT_HOOK_SAVED_DECISION_FEATURE = "hook-direct-saved-decision-v1"
 DIRECT_LANE_ACK_DIRECTORY = "direct-lane"
 DIRECT_LANE_ACK_FILE_NAME = "ack.json"
 DIRECT_LANE_ACK_SCHEMA = "guard-direct-lane-ack.v1"
@@ -44,6 +52,8 @@ _MAX_HARNESS_KEY_BYTES = 64
 _HARNESS_POSTURES = frozenset({"protected", "extra_careful", "watch"})
 _MAX_SINK_ARGS = 8
 _MAX_SINK_ARG_BYTES = 16_384
+_MAX_INTEGRITY_KEY_B64_BYTES = 2048
+_MAX_INTEGRITY_KEY_ID_BYTES = 256
 _I64_MIN = -(1 << 63)
 _I64_MAX = (1 << 63) - 1
 _U64_MAX = (1 << 64) - 1
@@ -91,8 +101,6 @@ def direct_lane_binding(
 ) -> dict[str, object] | None:
     """Build the push binding, or None when the lane cannot be proven."""
 
-    if os.name == "nt":
-        return None
     bound_inputs: list[dict[str, object]] = []
     for path, stat_identity in inputs:
         if _hint_only(Path(path)):
@@ -158,6 +166,49 @@ def contained_sink_command(features: Iterable[str]) -> tuple[str, ...] | None:
         return None
 
 
+def direct_lane_integrity_key(store: object, features: Iterable[str]) -> tuple[bytes, str] | None:
+    """The policy-integrity key for a resident that answers permission notices
+    or saved exact-action decisions.
+
+    The key is read, never created: without one there is no notice or saved
+    decision to verify.
+    """
+
+    if not {DIRECT_HOOK_PERMISSION_NOTICE_FEATURE, DIRECT_HOOK_SAVED_DECISION_FEATURE} & set(features):
+        return None
+    material = getattr(store, "_policy_integrity_secret_material", None)
+    if not callable(material):
+        return None
+    try:
+        loaded = material(create=False)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if not isinstance(loaded, tuple) or len(loaded) != 2:
+        return None
+    key, key_id = loaded
+    if not isinstance(key, bytes) or not key or not isinstance(key_id, str) or not key_id:
+        return None
+    return key, key_id
+
+
+def _integrity_key_fields(integrity_key: tuple[bytes, str]) -> dict[str, str] | None:
+    key, key_id = integrity_key
+    if not isinstance(key, bytes) or not key or not isinstance(key_id, str):
+        return None
+    encoded = base64.urlsafe_b64encode(key).rstrip(b"=").decode("ascii")
+    try:
+        key_id_bytes = key_id.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    if (
+        len(encoded) > _MAX_INTEGRITY_KEY_B64_BYTES
+        or not 0 < len(key_id_bytes) <= _MAX_INTEGRITY_KEY_ID_BYTES
+        or any(ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F for char in key_id)
+    ):
+        return None
+    return {"integrity_key_b64": encoded, "integrity_key_id": key_id}
+
+
 def _sink_command_valid(command: Sequence[str]) -> bool:
     def arg_valid(value: str) -> bool:
         try:
@@ -181,6 +232,7 @@ def with_direct_hook_state(
     local_cli_block_rules: bool,
     evidence_drain: bool,
     contained_sink_command: Sequence[str] | None = None,
+    integrity_key: tuple[bytes, str] | None = None,
 ) -> dict[str, object] | None:
     """Add the daemon state a direct hook needs beyond the snapshot.
 
@@ -188,7 +240,8 @@ def with_direct_hook_state(
     freshness and direct hooks defer as incomplete. ``evidence_drain`` is
     true only while this daemon drains the evidence of direct answers.
     Without ``contained_sink_command`` a Claude Code sandbox requirement
-    defers to this daemon, which routes it.
+    defers to this daemon, which routes it. Without ``integrity_key`` a
+    Claude PermissionRequest with a pending notice defers to this daemon.
     """
 
     if binding is None:
@@ -207,6 +260,8 @@ def with_direct_hook_state(
         bound["harness_postures"] = dict(sorted(harness_postures.items()))
     if contained_sink_command is not None and _sink_command_valid(contained_sink_command):
         bound["contained_sink_command"] = list(contained_sink_command)
+    if integrity_key is not None and (fields := _integrity_key_fields(integrity_key)) is not None:
+        bound.update(fields)
     return bound
 
 
@@ -225,6 +280,10 @@ class NativePolicySnapshotDirectLaneAck:
     _direct_lane_evidence_bound: bool = False
     # The home the serving daemon gives a hook that names none.
     _direct_lane_daemon_home: str | None = None
+    # The approval center origin and working directory the open lane bound.
+    _direct_lane_review_facts: tuple[object, object] | None = None
+    # The managed-policy view the open lane bound for Oh My Pi output mediation.
+    _direct_lane_structured_output: dict[str, object] | None = None
 
     def bind_direct_lane_daemon_home(self, home_dir: Path) -> None:
         """Record the home the serving daemon gives a hook that names none."""
@@ -362,19 +421,21 @@ class NativePolicySnapshotDirectLaneAck:
         return self.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / DIRECT_LANE_ACK_DIRECTORY / DIRECT_LANE_ACK_FILE_NAME
 
     def _unlink_direct_lane_ack(self) -> None:
-        if os.name == "nt":
-            return
         try:
-            self._direct_lane_ack_path().unlink()
+            if os.name == "nt":
+                unlink_windows_ack(self._direct_lane_ack_path())
+            else:
+                self._direct_lane_ack_path().unlink()
         except FileNotFoundError:
             pass
-        except OSError:
+        except (OSError, RuntimeError):
+            # A failed Windows binding or delete raises NativePolicySnapshotError.
             # The lease still bounds how long the resident can trust it.
             self._direct_lane_lease_expires_at_ms = 0
 
     def _write_direct_lane_ack_locked(self) -> None:
         target = self._direct_lane_ack_target
-        if os.name == "nt" or target is None:
+        if target is None:
             return
         generation, policy_digest = target
         lease_expires_at_ms = _now_ms() + DIRECT_LANE_ACK_LEASE_MS
@@ -389,6 +450,10 @@ class NativePolicySnapshotDirectLaneAck:
         ).encode("ascii")
         path = self._direct_lane_ack_path()
         try:
+            if os.name == "nt":
+                write_windows_ack(self.guard_home, path, body)
+                self._direct_lane_lease_expires_at_ms = lease_expires_at_ms
+                return
             _ensure_private_directory(path.parent)
             temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}.tmp")
             descriptor = os.open(
@@ -404,7 +469,7 @@ class NativePolicySnapshotDirectLaneAck:
                 with contextlib.suppress(OSError):
                     temporary.unlink()
                 raise
-        except OSError:
+        except (OSError, RuntimeError):
             # Without a fresh ACK file the resident defers every direct hook.
             self._direct_lane_lease_expires_at_ms = 0
             return

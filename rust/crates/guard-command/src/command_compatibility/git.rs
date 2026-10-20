@@ -1,7 +1,16 @@
 use super::{CommandSegmentV1, CompatibilityObservations};
 
+#[path = "git_allow_scope.rs"]
+mod git_allow_scope;
 #[path = "git_fetch.rs"]
 mod git_fetch;
+#[path = "git_hooks_path.rs"]
+mod git_hooks_path;
+pub(crate) use git_allow_scope::{
+    repository_routes_verified, runs_configured_program, subcommand_settles_uncertainty,
+};
+use git_hooks_path::hooks_path_names_no_hooks;
+pub(crate) use git_hooks_path::rooted_hooks_inert;
 
 const RULES: &[(&str, &str)] = &[
     ("branch", "command.git.branch"),
@@ -65,23 +74,18 @@ fn bounded_inspection(arguments: &[String]) -> bool {
     if arguments == ["rev-parse", "--show-toplevel"] {
         return true;
     }
-    let [command, mode, patch] = arguments else {
+    let Some((command, rest)) = arguments.split_first() else {
         return false;
     };
-    // These fixed built-ins cannot be replaced by aliases. This admits their
-    // capability attribution only; patch read and workspace proofs remain the
-    // responsibility of the ordinary command decision, not this classifier.
-    command == "apply"
-        && mode == "--check"
-        && !patch.is_empty()
-        && patch.len() <= 4096
-        && !patch.starts_with(['-', '/', '\\'])
-        && patch
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._-/".contains(&byte))
-        && patch
-            .split('/')
-            .all(|part| !matches!(part, "" | "." | ".."))
+    // These fixed built-ins cannot be replaced by aliases. The check grammar
+    // proves the invocation writes nothing, whichever of its options the
+    // caller spelled. This admits their capability attribution only; patch
+    // read and workspace proofs remain the responsibility of the ordinary
+    // command decision, not this classifier.
+    (command == "apply" && crate::pretool::git_apply_check::is_check_only(rest))
+        // A stash listing and a `show` of one entry print; every other
+        // stash spelling moves work and keeps its workspace attribution.
+        || (command == "stash" && crate::pretool::git_stash_reads::read_form(rest))
 }
 
 /// A staged-index diff that prints to stdout like `git diff HEAD`, which the
@@ -135,6 +139,10 @@ fn read_only_plumbing(arguments: &[String]) -> bool {
     // drivers, touch the network, or write are excluded.
     match command.as_str() {
         "rev-parse" | "merge-base" | "show-ref" | "ls-tree" | "for-each-ref" => true,
+        "cat-file" => crate::pretool::git_object_reads::read_form(command, rest),
+        // Both listings only print, and their grammars already exclude the
+        // forms that run a configured program; the read proof still decides.
+        "shortlog" | "check-ignore" => crate::pretool::git_listing_reads::read_form(command, rest),
         "rev-list" => !rest.iter().any(|argument| {
             matches!(argument.as_str(), "--output" | "-o") || argument.starts_with("--output=")
         }),
@@ -172,24 +180,27 @@ pub(super) fn inspection_arguments<'a>(
     context: crate::pretool::PathContext<'_>,
 ) -> Option<&'a [String]> {
     let remaining = routed(arguments, context, true)?;
-    matches!(
-        remaining.first().map(String::as_str),
+    let subcommand = remaining.first().map(String::as_str);
+    let admitted = match subcommand {
         Some(
-            "status"
-                | "diff"
-                | "log"
-                | "show"
-                | "branch"
-                | "hash-object"
-                | "rev-parse"
-                | "merge-base"
-                | "ls-files"
-                | "remote"
-                | "worktree"
-                | "config"
-        )
-    )
-    .then_some(remaining)
+            "status" | "diff" | "log" | "show" | "blame" | "describe" | "reflog" | "branch"
+            | "hash-object" | "rev-parse" | "merge-base" | "ls-files" | "remote" | "worktree"
+            | "config" | "grep" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref" | "rev-list"
+            | "shortlog" | "check-ignore",
+        ) => true,
+        // A tag listing, a clean preview and a patch check only print, but the
+        // same three subcommands also write a tag, remove a file and patch the
+        // tree, so each is admitted only in the spelling its own grammar
+        // proves.
+        Some("tag") => crate::pretool::git_tag_listing::is_listing(&remaining[1..]),
+        Some("clean") => crate::pretool::git_clean_preview::is_dry_run(&remaining[1..]),
+        Some("apply") => crate::pretool::git_apply_check::is_check_only(&remaining[1..]),
+        // `stash` reaches the worktree in every spelling but the two that
+        // print: a listing and a `show` of one entry.
+        Some("stash") => crate::pretool::git_stash_reads::read_form(&remaining[1..]),
+        _ => false,
+    };
+    admitted.then_some(remaining)
 }
 
 pub(super) fn fetch_origin_shaped(arguments: &[String]) -> bool {
@@ -227,7 +238,9 @@ fn routed<'a>(
             let boolean = value.to_ascii_lowercase();
             let safe = match key.to_ascii_lowercase().as_str() {
                 "core.fsmonitor" => matches!(boolean.as_str(), "false" | "0" | "no" | "off"),
-                "core.hookspath" => inspection && hooks_path_names_no_hooks(value),
+                "core.hookspath" => {
+                    inspection && hooks_path_names_no_hooks(value, context.cwd, arguments)
+                }
                 "core.quotepath" => matches!(
                     boolean.as_str(),
                     "true" | "false" | "1" | "0" | "yes" | "no" | "on" | "off"
@@ -240,8 +253,15 @@ fn routed<'a>(
             index += 2;
             continue;
         }
-        if let Some(git_dir) = argument.strip_prefix("--git-dir=").filter(|_| inspection) {
-            // A bare repository named by `--git-dir` is a read route like `-C`.
+        let git_dir = match argument.as_str() {
+            "--git-dir" if inspection => {
+                index += 1;
+                Some(arguments.get(index)?.as_str())
+            }
+            _ => argument.strip_prefix("--git-dir=").filter(|_| inspection),
+        };
+        if let Some(git_dir) = git_dir {
+            // A repository named by `--git-dir` is a read route like `-C`.
             if saw_change_directory
                 || saw_git_dir
                 || !crate::pretool::safe_directory_target(git_dir)
@@ -283,11 +303,24 @@ fn routed<'a>(
     arguments.get(index..)
 }
 
+#[cfg(test)]
 pub(super) fn observe_with_context(
     segment: &CommandSegmentV1,
     index: usize,
     result: &mut CompatibilityObservations,
     context: crate::pretool::PathContext<'_>,
+) {
+    observe_with_contexts(segment, index, result, context, context);
+}
+
+/// `proof_context` is where native proofs ran this segment: the directory a
+/// verified leading `cd` entered, or `context` itself.
+pub(super) fn observe_with_contexts(
+    segment: &CommandSegmentV1,
+    index: usize,
+    result: &mut CompatibilityObservations,
+    context: crate::pretool::PathContext<'_>,
+    proof_context: crate::pretool::PathContext<'_>,
 ) {
     let arguments = &segment.arguments;
     if arguments
@@ -311,7 +344,7 @@ pub(super) fn observe_with_context(
     // A remote operation behind proven `-C` routes names its subcommand
     // exactly, like the bare form; its own floors then apply.
     let routed_remote = command_index != 0
-        && matches!(command, "push" | "fetch")
+        && matches!(command, "push" | "fetch" | "pull")
         && routed_arguments(arguments, context)
             .filter(|_| crate::pretool::directory_targets::drive_targets_quoted(segment))
             .filter(|_| crate::pretool::directory_targets::home_targets_unquoted(segment))
@@ -334,13 +367,26 @@ pub(super) fn observe_with_context(
             crate::pretool::git_hash_object::read_operands(&remaining[1..]).is_some()
         });
     // `init` is a built-in, so no alias can replace it. Creating a repository
-    // in the current directory with only a quiet flag or an initial branch
-    // name touches none of the porcelain owners above. Templates, separate
-    // git directories and other targets keep every owner uncertain.
+    // in the current directory or one absolute target with only a quiet flag
+    // or an initial branch name touches none of the porcelain owners above;
+    // the native proof still decides the target. Templates, separate git
+    // directories and other options keep every owner uncertain.
     let plain_init = command_index == 0
         && command == "init"
-        && crate::pretool::init_arguments(&arguments[1..]).is_some();
+        && (crate::pretool::init_arguments(&arguments[1..]).is_some()
+            || crate::pretool::git_init_target::target(&arguments[1..])
+                .is_some_and(crate::pretool::git_init_target::absolute_target));
+    // A plain configuration write sets a key Git never runs; its own proof
+    // still decides the repository.
+    let plain_config_write = command == "config"
+        && crate::pretool::directory_targets::drive_targets_quoted(segment)
+        && crate::pretool::directory_targets::home_targets_unquoted(segment)
+        && routed_arguments(arguments, context).is_some_and(|remaining| {
+            remaining.first().map(String::as_str) == Some("config")
+                && crate::pretool::git_config_reads::writes::plain_write(&remaining[1..]).is_some()
+        });
     if plumbing
+        || plain_config_write
         || branch_listing
         || hash_read
         || plain_init
@@ -390,9 +436,12 @@ pub(super) fn observe_with_context(
         // option-prefixed, URL, or otherwise non-exact form stays uncertain.
         // The hook's native proof already checked the repository's origin,
         // transport, credential helpers and hooks for exactly this segment.
-        let plain = git_fetch::plain_origin_refresh(segment, command_index)
-            || (routed_remote && git_fetch::routed_origin_refresh(segment, command_index));
-        if !(plain && crate::pretool::verified_origin_operation(segment, context)) {
+        // A trailing `2>&1` only merges the fetch's progress into stdout.
+        let stripped = crate::pretool::without_stderr_merge(segment);
+        let refresh = stripped.as_ref().unwrap_or(segment);
+        let plain = git_fetch::plain_origin_refresh(refresh, command_index)
+            || (routed_remote && git_fetch::routed_origin_refresh(refresh, command_index));
+        if !(plain && crate::pretool::verified_origin_operation(refresh, proof_context)) {
             result.rule("command.git.unverified-fetch", index, !plain);
         }
     }
@@ -410,60 +459,3 @@ pub(super) fn observe_with_context(
 #[cfg(test)]
 #[path = "git_tests.rs"]
 mod tests;
-
-/// Hooks never run for an inspection read, and a path with no hook files adds
-/// none. `/dev/null` is the conventional way to disable hooks entirely.
-const GIT_HOOK_NAMES: &[&str] = &[
-    "applypatch-msg",
-    "pre-applypatch",
-    "post-applypatch",
-    "pre-commit",
-    "pre-merge-commit",
-    "prepare-commit-msg",
-    "commit-msg",
-    "post-commit",
-    "pre-rebase",
-    "post-checkout",
-    "post-merge",
-    "pre-push",
-    "pre-receive",
-    "update",
-    "proc-receive",
-    "post-receive",
-    "post-update",
-    "reference-transaction",
-    "push-to-checkout",
-    "pre-auto-gc",
-    "post-rewrite",
-    "sendemail-validate",
-    "fsmonitor-watchman",
-    "p4-changelist",
-    "p4-prepare-changelist",
-    "p4-post-changelist",
-    "p4-pre-submit",
-    "post-index-change",
-];
-
-fn hooks_path_names_no_hooks(value: &str) -> bool {
-    if value == "/dev/null" {
-        return true;
-    }
-    // Git joins an empty hooks path as `/<hook>`, so it names the filesystem root.
-    if value.is_empty() {
-        return GIT_HOOK_NAMES.iter().all(|name| {
-            std::fs::symlink_metadata(std::path::Path::new("/").join(name))
-                .is_err_and(|error| error.kind() == std::io::ErrorKind::NotFound)
-        });
-    }
-    let path = std::path::Path::new(value);
-    if !path.is_absolute() || value.starts_with('~') {
-        return false;
-    }
-    match std::fs::symlink_metadata(path) {
-        Err(error) => error.kind() == std::io::ErrorKind::NotFound,
-        Ok(metadata) => {
-            metadata.is_dir()
-                && std::fs::read_dir(path).is_ok_and(|mut entries| entries.next().is_none())
-        }
-    }
-}

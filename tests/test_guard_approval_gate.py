@@ -133,6 +133,11 @@ def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
         return PolicyIntegrityVerificationResult(status="valid")
 
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
+    monkeypatch.setattr(
+        GuardStore,
+        "_policy_integrity_results_for_rows",
+        lambda self, rows, **_: [PolicyIntegrityVerificationResult(status="valid") for _ in rows],
+    )
 
 
 def _enable_gate(store: GuardStore, *, cooldown_seconds: int = 0, strict_all_decisions: bool = False) -> None:
@@ -1930,7 +1935,7 @@ def test_approval_gate_allow_once_requires_password_prompt(tmp_path: Path, monke
     _enable_gate(store)
     prompt_calls = 0
 
-    def _approval_gate_input(_guard_home: Path) -> ApprovalGateInput:
+    def _approval_gate_input(_guard_home: Path, **_kwargs: object) -> ApprovalGateInput:
         nonlocal prompt_calls
         prompt_calls += 1
         return ApprovalGateInput(password=PASSWORD)

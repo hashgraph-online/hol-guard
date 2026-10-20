@@ -52,20 +52,46 @@ def _package_firewall_cli_gate_input(args: argparse.Namespace, guard_home: Path)
         return ApprovalGateInput(password=None, totp_code=totp_code)
     return prompt_for_approval_gate(guard_home, use_cooldown=False)
 
+def _package_firewall_authority_unavailable_payload(
+    operation: str,
+    entitlement: dict[str, object],
+) -> dict[str, object]:
+    """The reply when the resident cannot say what the entitlement permits.
+
+    No action is offered and the command stops. The composition is the
+    authority, so a request it could not answer is refused rather than
+    guessed at from the entitlement dict.
+    """
+
+    return {
+        "available_actions": [],
+        "entitlement": entitlement,
+        "error": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE,
+        "message": PACKAGE_FIREWALL_AUTHORITY_UNAVAILABLE_MESSAGE,
+        "operation": operation,
+    }
+
+
 def _package_firewall_block_payload(
     *,
     entitlement: dict[str, object],
     has_installed_managers: bool,
     operation: str,
+    guard_home: Path | None = None,
 ) -> tuple[int, dict[str, object]]:
-    status, error_code, message = package_firewall_block_details(entitlement)
+    try:
+        access = package_firewall_access(
+            entitlement,
+            has_installed_managers=has_installed_managers,
+            guard_home=guard_home,
+        )
+    except NativeHookComposeError:
+        return (503, _package_firewall_authority_unavailable_payload(operation, entitlement))
+    status, error_code, message = access.block
     return (
         status,
         {
-            "available_actions": package_firewall_available_actions(
-                entitlement,
-                has_installed_managers=has_installed_managers,
-            ),
+            "available_actions": access.available_actions,
             "cli_fallback": {
                 "connect": "hol-guard connect",
                 "status": "hol-guard package-shims status --json",
@@ -518,6 +544,7 @@ __all__ = [
     "_build_init_plan",
     "_guard_http_url",
     "_normalize_explicit_workspace_path",
+    "_package_firewall_authority_unavailable_payload",
     "_package_firewall_block_payload",
     "_package_firewall_cli_gate_input",
     "_print_init_plan_preview",

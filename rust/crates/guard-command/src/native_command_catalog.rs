@@ -18,18 +18,32 @@ use serde::Deserialize;
 use crate::native_command_program::packaged_command_program;
 
 #[cfg(not(guard_source_bootstrap))]
-const EMBEDDED_CATALOG: &[u8] =
-    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json"));
-// The bootstrap shadow lib (guard-command-build) produces no packaged output;
-// an empty slice keeps `include_bytes!` valid and `from_embedded` fails closed
-// exactly like the `EMBEDDED_PROGRAM` bootstrap path.
-#[cfg(guard_source_bootstrap)]
-const EMBEDDED_CATALOG: &[u8] = &[];
+static EMBEDDED_CATALOG: &[u8] =
+    include_bytes!(concat!(env!("OUT_DIR"), "/command-catalog.v1.json.zst"));
 
 /// The verified-at-build catalog bytes, for read-only projections such as
 /// [`crate::catalog_read_model`] that need fields this module does not type.
+// The bootstrap shadow lib (guard-command-build) produces no packaged output;
+// an empty slice keeps `include_bytes!` valid and `from_embedded` fails closed
+// exactly like the `EMBEDDED_PROGRAM` bootstrap path.
 pub(crate) fn embedded_catalog_bytes() -> &'static [u8] {
-    EMBEDDED_CATALOG
+    #[cfg(not(guard_source_bootstrap))]
+    {
+        static DECODED: OnceLock<Box<[u8]>> = OnceLock::new();
+        DECODED
+            .get_or_init(|| {
+                crate::packaged_blob::decode(
+                    EMBEDDED_CATALOG,
+                    env!("GUARD_PACKAGED_CATALOG_LEN"),
+                    env!("GUARD_PACKAGED_CATALOG_SHA256"),
+                )
+            })
+            .as_ref()
+    }
+    #[cfg(guard_source_bootstrap)]
+    {
+        &[]
+    }
 }
 
 /// One rule's metadata — the fields `GeneratedCommandRule` exposes that the
@@ -132,15 +146,35 @@ pub struct CommandCatalog {
 
 impl CommandCatalog {
     fn from_embedded() -> Result<Self, &'static str> {
+        Self::from_bytes(embedded_catalog_bytes())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_authored_test_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
+        Self::from_bytes(bytes)
+    }
+
+    fn from_bytes(bytes: &[u8]) -> Result<Self, &'static str> {
         #[derive(Deserialize)]
         struct Wrapper {
             catalog: Vec<CatalogExtension>,
             catalog_digest: String,
             program_digest: String,
         }
-        let wrapper: Wrapper = serde_json::from_slice(EMBEDDED_CATALOG)
-            .map_err(|_| "command_catalog_decode_failed")?;
-        let mut extensions = wrapper.catalog;
+        let wrapper: Wrapper =
+            serde_json::from_slice(bytes).map_err(|_| "command_catalog_decode_failed")?;
+        Self::from_extensions(
+            wrapper.catalog,
+            wrapper.program_digest,
+            wrapper.catalog_digest,
+        )
+    }
+
+    pub(crate) fn from_extensions(
+        mut extensions: Vec<CatalogExtension>,
+        program_digest: String,
+        catalog_digest: String,
+    ) -> Result<Self, &'static str> {
         extensions.sort_by(|a, b| a.extension_id.cmp(&b.extension_id));
 
         // Flatten rules in the same order the Python catalog does: extensions
@@ -202,8 +236,8 @@ impl CommandCatalog {
         }
 
         Ok(Self {
-            catalog_digest: wrapper.catalog_digest,
-            program_digest: wrapper.program_digest,
+            catalog_digest,
+            program_digest,
             extensions,
             by_extension_id,
             by_rule_id,

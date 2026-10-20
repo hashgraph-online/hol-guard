@@ -30,7 +30,7 @@ from codex_plugin_scanner.guard.codex_hook_launch_runtime import BoundedHookProc
 _ELAPSED_ENV = "HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS"
 _DAEMON_TRIED_ENV = "HOL_GUARD_BOUNDED_NATIVE_DAEMON_TRIED"
 _NATIVE_HARNESSES = ("copilot", "kimi", "devin", "zcode", "openclaw", "hermes", "cline")
-_POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="the native bounded bridge is POSIX-only")
+_POSIX_ONLY = pytest.mark.skipif(sys.platform == "win32", reason="asserts POSIX hook command syntax")
 
 
 def _offer_native(monkeypatch: pytest.MonkeyPatch, runtime: Path, features: tuple[str, ...]) -> None:
@@ -71,7 +71,6 @@ def _command(tmp_path: Path, harness: str) -> tuple[str, ...]:
 
 
 @pytest.mark.native_bounded_hook_bridge
-@_POSIX_ONLY
 @pytest.mark.parametrize("harness", _NATIVE_HARNESSES)
 def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, harness: str
@@ -84,12 +83,16 @@ def test_hook_uses_the_native_bridge_when_the_runtime_offers_it(
     assert argv[:2] == (str(runtime), NATIVE_BOUNDED_HOOK_COMMAND)
     assert argv[2:5] == (sys.executable, "-I", "-c")
     assert "bounded_cli_hook_bridge" in argv[5]
-    assert json.loads(argv[6])["harness"] == harness
+    config = json.loads(argv[6])
+    assert config["harness"] == harness
+    # The native bridge restarts an unreachable daemon with this, never Python.
+    start = config["start_command"]
+    assert start[:3] == [sys.executable, "-I", "-c"]
+    assert "schedule_guard_daemon_recovery" in start[3]
     assert bounded_python_argv(list(argv)) == list(argv[2:])
 
 
 @pytest.mark.native_bounded_hook_bridge
-@_POSIX_ONLY
 def test_other_harnesses_keep_the_python_bridge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))
 
@@ -99,7 +102,6 @@ def test_other_harnesses_keep_the_python_bridge(tmp_path: Path, monkeypatch: pyt
 
 
 @pytest.mark.native_bounded_hook_bridge
-@_POSIX_ONLY
 def test_hook_keeps_the_python_bridge_without_the_native_feature(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -111,7 +113,6 @@ def test_hook_keeps_the_python_bridge_without_the_native_feature(
 
 
 @pytest.mark.native_bounded_hook_bridge
-@_POSIX_ONLY
 def test_python_bridge_pin_keeps_the_python_argv(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOL_GUARD_BOUNDED_HOOK_BRIDGE", "python")
     _offer_native(monkeypatch, tmp_path / "hol-guard-runtime", (NATIVE_BOUNDED_HOOK_FEATURE,))

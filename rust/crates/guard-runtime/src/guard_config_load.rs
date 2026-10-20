@@ -90,6 +90,27 @@ fn load(request: &LoadRequest) -> Result<Value, String> {
     Ok(coerce_config(&merged, request.managed.as_ref()))
 }
 
+/// Effective `approval_wait_timeout_seconds` for an in-process caller (the
+/// native MCP relay) from the Guard home and workspace configuration only.
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) fn approval_wait_timeout_seconds(
+    guard_home: &Path,
+    workspace: Option<&Path>,
+) -> Result<i64, String> {
+    let request = LoadRequest {
+        schema: SCHEMA.to_owned(),
+        guard_home: guard_home.to_path_buf(),
+        workspace: workspace.map(Path::to_path_buf),
+        require_canonical_workspace: false,
+        managed: None,
+    };
+    let config = load(&request)?;
+    Ok(config
+        .get("approval_wait_timeout_seconds")
+        .and_then(Value::as_i64)
+        .unwrap_or(120))
+}
+
 fn watch_hours(value: Option<&Value>) -> i64 {
     match value.and_then(Value::as_i64) {
         Some(hours) if (0..=MAX_WATCH_AUTO_REVERT_HOURS).contains(&hours) => hours,
@@ -108,7 +129,7 @@ fn action_text(value: Option<&Value>, fallback: GuardAction) -> &'static str {
 }
 
 /// Derive every field of the loaded configuration from the composed payload.
-fn coerce_config(merged: &Map<String, Value>, managed: Option<&ManagedInput>) -> Value {
+pub(crate) fn coerce_config(merged: &Map<String, Value>, managed: Option<&ManagedInput>) -> Value {
     let get = |key: &str| merged.get(key);
     let loaded_mode = coerce::loaded_mode(get("mode"), "prompt");
     let security_level = base::coerce_security_level(get("security_level"));

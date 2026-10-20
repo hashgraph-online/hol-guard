@@ -10,7 +10,12 @@ from pathlib import Path
 
 from ..native_decision_receipt import receipt_matches_edge, validate_native_decision_receipt
 
-_SCHEMA = "guard.native-review-policy-binding.v1"
+# v2 drops ``policy_digest``: it is ``H(config_digest, rule_digest)`` over the
+# whole compiled snapshot, so it moves whenever the publisher republishes, even
+# for observed state that cannot weaken a verdict. The retry's own anchor
+# covers the configured policy, ``rule_digest`` and ``runtime_identity``, and
+# the receipt is still required to carry a well-formed ``policy_digest``.
+_SCHEMA = "guard.native-review-policy-binding.v2"
 
 
 def native_review_policy_binding(
@@ -47,7 +52,6 @@ def native_review_policy_binding(
         raise ValueError("native_review_policy_binding_invalid")
     return {
         "schema": _SCHEMA,
-        "policy_digest": receipt["policy_digest"],
         "rule_digest": receipt["rule_digest"],
         "runtime_identity": receipt["runtime_identity"],
         "command_extensions": dict(command_binding),
@@ -64,7 +68,52 @@ def native_review_matching_allow(
     workspace: Path | None,
     identity: str | None,
 ) -> bool:
-    consume = getattr(store, "consume_native_review_approval", None)
+    return _native_review_matching_decision(
+        store,
+        method="consume_native_review_approval",
+        harness=harness,
+        artifact_id=artifact_id,
+        tool_name=tool_name,
+        launch_target=launch_target,
+        workspace=workspace,
+        identity=identity,
+    )
+
+
+def native_review_matching_block(
+    store: object,
+    *,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+) -> bool:
+    return _native_review_matching_decision(
+        store,
+        method="matching_native_review_block",
+        harness=harness,
+        artifact_id=artifact_id,
+        tool_name=tool_name,
+        launch_target=launch_target,
+        workspace=workspace,
+        identity=identity,
+    )
+
+
+def _native_review_matching_decision(
+    store: object,
+    *,
+    method: str,
+    harness: str,
+    artifact_id: str,
+    tool_name: str,
+    launch_target: str,
+    workspace: Path | None,
+    identity: str | None,
+) -> bool:
+    consume = getattr(store, method, None)
     if not callable(consume) or identity is None or not launch_target:
         return False
     try:

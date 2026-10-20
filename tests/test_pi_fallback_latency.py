@@ -100,7 +100,7 @@ console.log(JSON.stringify({{
     _bun_executable() is None or os.name != "posix",
     reason="Bun and POSIX process groups are required for fallback termination testing",
 )
-def test_pi_extension_allows_only_one_cli_fallback_during_daemon_outage(tmp_path: Path) -> None:
+def test_pi_extension_denies_every_hook_without_cli_review_during_daemon_outage(tmp_path: Path) -> None:
     from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 
     bun = _bun_executable()
@@ -194,8 +194,7 @@ console.log(JSON.stringify({{
   elapsedMs: performance.now() - startedAt,
   allowed: results.filter((result) => result === undefined).length,
   blocked: results.filter((result) => result?.block === true).length,
-  recoveryBusy: notices.filter((reason) => reason.includes("recovery is already reviewing")).length,
-  recoveryTimeout: notices.filter((reason) => reason.includes("could not complete fallback review")).length,
+  unavailable: notices.filter((reason) => reason.includes("could not reach its local review service")).length,
 }}));
 """,
         encoding="utf-8",
@@ -214,11 +213,11 @@ console.log(JSON.stringify({{
     )
     payload = _decode_json_object(completed.stdout)
 
-    assert fallback_count_path.read_text(encoding="utf-8").splitlines() == ["1"]
+    # The Python CLI never reviews a hook the daemon could not answer.
+    assert not fallback_count_path.exists()
     assert payload["allowed"] == 0
     assert payload["blocked"] == 20
-    assert payload["recoveryBusy"] == 19
-    assert payload["recoveryTimeout"] == 1
+    assert payload["unavailable"] == 20
     elapsed_ms = payload["elapsedMs"]
     assert isinstance(elapsed_ms, (int, float))
     assert elapsed_ms < 2_000

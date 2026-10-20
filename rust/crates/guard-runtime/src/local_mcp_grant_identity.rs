@@ -65,7 +65,7 @@ fn is_token(value: &str) -> bool {
 }
 
 /// `is_local_cli_command_id`.
-fn is_command_id(value: &str) -> bool {
+pub(crate) fn is_command_id(value: &str) -> bool {
     if value == ROOT_COMMAND_ID || value == OTHER_COMMAND_ID {
         return true;
     }

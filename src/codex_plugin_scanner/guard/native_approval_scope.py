@@ -50,6 +50,7 @@ REQUEST_FIELDS = (
 # the contract reads beside that digest. Anything else in the stored envelope
 # (tool bodies, file contents) is not authorization material.
 _ENVELOPE_KEYS = (
+    "native_bash",
     "schema_version",
     "harness",
     "event_name",
@@ -178,7 +179,18 @@ def native_approval_scopes(
     if not ensure_resident_prerequisite(home):
         raise ApprovalScopeUnavailableError
     results: list[NativeScope] = []
-    for chunk in _item_chunks([_prepared_item(item) for item in items]):
+    prepared = [_prepared_item(item) for item in items]
+    if any("request_id" in item for item in prepared):
+        from .native_bash_protocol import DESCRIPTOR_FEATURE
+        from .native_runtime import native_runtime_status
+
+        status = native_runtime_status()
+        if status.capabilities is None or DESCRIPTOR_FEATURE not in status.capabilities.features:
+            # Older typed requests reject this field. The new artifact type and
+            # native-pretool namespace still withhold both execution durations.
+            for item in prepared:
+                item.pop("request_id", None)
+    for chunk in _item_chunks(prepared):
         wire: dict[str, object] = {
             "schema": _REQUEST_SCHEMA,
             "request_id": f"approval-scope-{uuid4().hex}",

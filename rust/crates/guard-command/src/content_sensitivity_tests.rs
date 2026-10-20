@@ -18,15 +18,61 @@ fn original_python_sensitivity_and_mediation_vectors_replay() {
             &vector["body"],
             Instant::now() + Duration::from_secs(2),
         );
-        match result {
-            Ok(actual) if actual == vector["expected"] => {}
+        match result.map(|actual| host_paths(query, actual)) {
+            Ok(actual) if actual == host_expected(vector) => {}
             other => failures.push(format!(
                 "vector {index} query {query}: {other:?}, expected {}",
-                vector["expected"]
+                host_expected(vector)
             )),
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+/// The path vectors were recorded with POSIX paths. Windows resolves the
+/// same paths and joins them with its own separator, so a resolved `path` is
+/// compared in POSIX spelling there.
+fn host_paths(query: &str, mut value: Value) -> Value {
+    fn posix(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                for (key, item) in map.iter_mut() {
+                    match item {
+                        Value::String(path) if key == "path" => *path = path.replace('\\', "/"),
+                        _ => posix(item),
+                    }
+                }
+            }
+            Value::Array(items) => items.iter_mut().for_each(posix),
+            _ => {}
+        }
+    }
+    if cfg!(windows) && matches!(query, "path" | "path_batch") {
+        posix(&mut value);
+    }
+    value
+}
+
+/// A few path vectors spell the requested path with backslashes. POSIX
+/// recorded them as one relative file name joined to `cwd`; Windows reads the
+/// same text as separators, so a drive-rooted spelling stays absolute and a
+/// relative one joins `cwd` component by component. The classification
+/// (family, sensitivity, reason, requested path) must still match exactly.
+fn host_expected(vector: &Value) -> Value {
+    let mut expected = vector["expected"].clone();
+    let requested = vector["body"]["path"].as_str().unwrap_or_default();
+    if !cfg!(windows) || !requested.contains('\\') || !expected["ok"]["path"].is_string() {
+        return expected;
+    }
+    let requested = requested.replace('\\', "/");
+    let drive_rooted = requested.as_bytes().get(1..3) == Some(&b":/"[..]);
+    expected["ok"]["path"] = Value::String(if drive_rooted {
+        requested
+    } else {
+        let cwd = vector["body"]["cwd"].as_str().expect("recorded cwd");
+        format!("{}/{requested}", cwd.trim_end_matches('/'))
+    });
+    expected
 }
 
 #[test]
@@ -44,10 +90,13 @@ fn large_output_encoding_is_lossless_and_native_decoding_rejects_invalid_frames(
         assert_eq!(decoded["text"], expected);
         assert_eq!(decoded["suppress_samples"], true);
         assert_eq!(decoded["documentation_sample_context"], false);
+        // A debug build scans each multi-megabyte frame with every rule, which
+        // can exceed 30 seconds on a loaded runner. The test checks lossless
+        // decoding and the scan result, not the production budget.
         let outcome = super::evaluate(
             "content",
             &decoded,
-            Instant::now() + Duration::from_secs(30),
+            Instant::now() + Duration::from_secs(300),
         )
         .unwrap();
         assert_eq!(outcome["ok"], json!([]));
@@ -119,8 +168,8 @@ fn batched_paths_replay_original_python_outcomes_in_order() {
         )
         .unwrap();
         assert_eq!(
-            actual["ok"],
-            json!([vector["expected"]["ok"], vector["expected"]["ok"]])
+            host_paths("path_batch", actual)["ok"],
+            json!([host_expected(vector)["ok"], host_expected(vector)["ok"]])
         );
     }
     assert!(super::evaluate(

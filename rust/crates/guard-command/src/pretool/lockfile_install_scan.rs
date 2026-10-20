@@ -42,6 +42,10 @@ const BUNFIG_INSTALL_KEYS: &[&str] = &[
     "saveTextLockfile",
     "linker",
     "auto",
+    "minimumReleaseAge",
+    "linkWorkspacePackages",
+    "dryRun",
+    "smol",
 ];
 
 pub(super) fn directory_ready(
@@ -63,15 +67,8 @@ pub(super) fn directory_ready(
     {
         return false;
     }
-    let (lockfile, absent): (&str, &[&str]) = match manager {
-        Manager::Bun => ("bun.lock", &["bun.lockb"]),
-        Manager::Pnpm => ("pnpm-lock.yaml", &[".pnpmfile.cjs", ".pnpmfile.mjs"]),
-        Manager::Npm => ("package-lock.json", &["npm-shrinkwrap.json"]),
-    };
-    let lockfile = directory.join(lockfile);
-    if !absent.iter().all(|name| missing(&directory.join(name)))
-        || !regular(&lockfile, MAX_LOCKFILE_BYTES)
-    {
+    let lockfile = directory.join(lockfile_name(manager));
+    if !companions_absent(manager, directory) || !regular(&lockfile, MAX_LOCKFILE_BYTES) {
         return false;
     }
     let Ok(text) = fs::read_to_string(&lockfile) else {
@@ -102,6 +99,61 @@ pub(super) fn directory_ready(
         }
         Manager::Npm => package_lock_registry_only(&text, deadline),
     }
+}
+
+/// The lockfile each manager installs from.
+fn lockfile_name(manager: Manager) -> &'static str {
+    match manager {
+        Manager::Bun => "bun.lock",
+        Manager::Pnpm => "pnpm-lock.yaml",
+        Manager::Npm => "package-lock.json",
+    }
+}
+
+/// Whether `directory` lacks every file that would change what `manager`
+/// installs from its lockfile: Bun's binary lockfile, a pnpmfile, or npm's
+/// shrinkwrap.
+fn companions_absent(manager: Manager, directory: &Path) -> bool {
+    let absent: &[&str] = match manager {
+        Manager::Bun => &["bun.lockb"],
+        Manager::Pnpm => &[".pnpmfile.cjs", ".pnpmfile.mjs"],
+        Manager::Npm => &["npm-shrinkwrap.json"],
+    };
+    absent.iter().all(|name| missing(&directory.join(name)))
+}
+
+/// When `directory` has no lockfile for `manager` but holds exactly one
+/// other manager's lockfile, a sentence naming the no-script install that
+/// fits it. An agent that guessed the wrong package manager can then restore
+/// dependencies instead of stopping on the review.
+pub(super) fn present_lockfile_hint(manager: Manager, directory: &Path) -> Option<String> {
+    if !missing(&directory.join(lockfile_name(manager))) {
+        return None;
+    }
+    let present: Vec<Manager> = [Manager::Bun, Manager::Pnpm, Manager::Npm]
+        .into_iter()
+        .filter(|other| {
+            *other != manager && regular(&directory.join(lockfile_name(*other)), MAX_LOCKFILE_BYTES)
+        })
+        .collect();
+    let [other] = present.as_slice() else {
+        return None;
+    };
+    // A companion file sends the named install to review too, so naming it
+    // would only lead to a second hold.
+    if !companions_absent(*other, directory) {
+        return None;
+    }
+    let form = match other {
+        Manager::Bun => "bun install --frozen-lockfile --ignore-scripts",
+        Manager::Pnpm => "pnpm install --frozen-lockfile --ignore-scripts --ignore-pnpmfile",
+        Manager::Npm => "npm ci --ignore-scripts",
+    };
+    Some(format!(
+        "This folder has no `{}`. It has `{}`, so the install that fits it is `{form}`.",
+        lockfile_name(manager),
+        lockfile_name(*other),
+    ))
 }
 
 fn missing(path: &Path) -> bool {
@@ -171,14 +223,56 @@ fn bunfig_inert(path: &Path) -> bool {
         let Ok(table) = toml::from_str::<toml::Table>(text) else {
             return false;
         };
+        if bunfig_preloads_code(&table) {
+            return false;
+        }
         match table.get("install") {
             None => true,
-            Some(toml::Value::Table(install)) => install
-                .keys()
-                .all(|key| BUNFIG_INSTALL_KEYS.contains(&key.as_str())),
+            Some(toml::Value::Table(install)) => install.iter().all(|(key, value)| {
+                BUNFIG_INSTALL_KEYS.contains(&key.as_str())
+                    || (key == "lockfile" && bunfig_lockfile_inert(value))
+                    || (key == "cache" && bunfig_cache_inert(value))
+            }),
             Some(_) => false,
         }
     })
+}
+
+/// `preload` names scripts Bun runs before a file, at the top level or under
+/// `[run]` or `[test]`. An install does not read it, but a project that
+/// configures code to run at startup is not one to wave through unseen.
+fn bunfig_preloads_code(table: &toml::Table) -> bool {
+    table.contains_key("preload")
+        || ["run", "test"].iter().any(|section| {
+            matches!(table.get(*section), Some(toml::Value::Table(inner)) if inner.contains_key("preload"))
+        })
+}
+
+/// `[install.cache]` may only switch the cache off. A `dir` moves where the
+/// install writes.
+fn bunfig_cache_inert(value: &toml::Value) -> bool {
+    let toml::Value::Table(cache) = value else {
+        return false;
+    };
+    cache.iter().all(|(key, value)| {
+        matches!(key.as_str(), "disable" | "disableManifest") && value.is_bool()
+    })
+}
+
+/// `[install.lockfile]` only says whether Bun writes `bun.lock` and whether it
+/// also prints a `yarn.lock`. A frozen install writes neither, and neither key
+/// names a registry, a credential or a script.
+fn bunfig_lockfile_inert(value: &toml::Value) -> bool {
+    let toml::Value::Table(lockfile) = value else {
+        return false;
+    };
+    lockfile
+        .iter()
+        .all(|(key, value)| match (key.as_str(), value) {
+            ("save", toml::Value::Boolean(_)) => true,
+            ("print", toml::Value::String(format)) => format == "yarn",
+            _ => false,
+        })
 }
 
 /// Top-level keys only: the file is YAML, and a nested value cannot name a

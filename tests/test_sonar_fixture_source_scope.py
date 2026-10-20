@@ -15,10 +15,6 @@ def test_offline_generators_are_test_sources_without_hiding_runtime_enforcement(
         if "=" in line and not line.startswith("#")
     )
     patterns = properties["sonar.test.inclusions"].split(",")
-    generators = sorted((ROOT / "rust/crates/guard-command/testdata").glob("generate_*_fixtures.py"))
-    assert len(generators) == 2
-    for path in generators:
-        assert any(fnmatch.fnmatchcase(path.relative_to(ROOT).as_posix(), pattern) for pattern in patterns)
     recorders = sorted((ROOT / "rust/crates/guard-runtime/testdata").rglob("*.py"))
     assert recorders
     for path in recorders:

@@ -67,6 +67,12 @@ function testRiskControlConsequencesHasAllKeys(): void {
     "guard_bypass",
     "cloud_advisory",
     "encoded_exfiltration",
+    "package_unknown",
+    "package_lockfile_drift",
+    "package_direct_source",
+    "package_custom_registry",
+    "package_install",
+    "low_trust_artifact",
   ];
   for (const key of requiredKeys) {
     const entry = RISK_CONTROL_CONSEQUENCES[key];

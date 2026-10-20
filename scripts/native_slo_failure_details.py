@@ -7,7 +7,7 @@ import json
 import sys
 from collections import Counter
 
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_auth import _DaemonResponseError
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_auth import _DaemonResponseError
 from scripts.native_slo_contract import SAFE_FAILURE_STAGE_NAMES
 from scripts.native_slo_progress import classify_benchmark_error
 

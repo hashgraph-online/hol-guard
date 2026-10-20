@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import json
-import time
 import uuid
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.runtime_transition_hook_probe import (
     OBSERVATION_FIELD,
     PROBE_FIELD,
@@ -50,7 +49,7 @@ def test_probe_metadata_is_strict_and_never_a_decision_override(fault):
 
 
 @pytest.mark.parametrize("fault", [None, "request", "event", "harness", "observe", "secret"])
-def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(capsys, fault):
+def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(fault):
     payload = probe_payload()
     request_id = payload[PROBE_FIELD]["request_id"]
     overrides = {"request_id": request_id, "harness": "codex", "event_name": "PreToolUse"}
@@ -67,17 +66,16 @@ def test_bridge_probe_sideband_requires_fresh_redacted_enforcing_receipt(capsys,
         receipt["command"] = "private command must not be emitted"
     observation = transition_hook_observation(payload, receipt)
     response = {"policy_action": "allow", "hookSpecificOutput": {"permissionDecision": "allow"}}
-    ordinary = bridge._codex_hook_response(response, event_name="PreToolUse")
+    ordinary = codex_hook_response(response, event_name="PreToolUse")
     if observation is not None:
         response[OBSERVATION_FIELD] = observation
-    bridge._write_transition_observation(json.dumps(payload), response)
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert bridge._codex_hook_response(response, event_name="PreToolUse") == ordinary
+    # The sideband is written by the native bridge; the field it adds must stay
+    # out of the hook response either way.
+    assert codex_hook_response(response, event_name="PreToolUse") == ordinary
     if fault is None:
-        assert json.loads(captured.err) == observation
+        assert observation is not None and "private command must not be emitted" not in json.dumps(observation)
     else:
-        assert observation is None and captured.err == ""
+        assert observation is None
 
 
 def test_omp_receipt_is_bound_to_fresh_probe_id():
@@ -126,39 +124,3 @@ def test_observation_package_identity_requires_complete_new_roles_and_preserves_
             trust._verify_transport(identities, manifest)
     else:
         assert set(trust._verified_packaged_files(manifest)) == set(paths)
-
-
-@pytest.mark.usefixtures("native_hook_force")
-@pytest.mark.parametrize("command,decision", [("pwd", "allow"), ("rm -rf /", "deny")])
-def test_actual_native_hook_worker_binds_observation_to_fresh_probe_id(tmp_path, capsys, command, decision):
-    from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker
-    from codex_plugin_scanner.guard.native_resident_client import close_native_residents
-    from codex_plugin_scanner.guard.store import GuardStore
-
-    home, workspace = tmp_path / "guard-home", tmp_path / "workspace"
-    workspace.mkdir()
-    store = GuardStore(home)
-    deadline = time.monotonic() + 10
-    worker = HookWorker(store=store)
-    payload = probe_payload(command)
-    try:
-        result = worker.review_http_payload(
-            payload=payload,
-            params={},
-            default_harness="codex",
-            home_dir=tmp_path,
-            guard_home=home,
-            workspace=workspace,
-            deadline=deadline,
-        )
-        receipt = worker.last_native_decision_receipt
-        assert receipt is not None and receipt["decision"] == decision
-        observation = transition_hook_observation(payload, receipt)
-        assert observation is not None
-        assert observation["request_id"] == payload[PROBE_FIELD]["request_id"]
-        result[OBSERVATION_FIELD] = observation
-        bridge._write_transition_observation(json.dumps(payload), result)
-        assert json.loads(capsys.readouterr().err) == observation
-    finally:
-        assert worker.close(deadline_monotonic=deadline)
-        assert close_native_residents(guard_home=home, deadline_monotonic=deadline)

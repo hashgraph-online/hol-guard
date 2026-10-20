@@ -1,6 +1,15 @@
 //! The Cursor `PreToolUse` the resident answers.
+//!
+//! A Cursor `PostToolUse` (the client's `afterShellExecution` and
+//! `afterMCPExecution` observers) takes the shared `PostToolUse` lane: the
+//! daemon has no Cursor step for it and records the edge's response, as the
+//! drain does. A Cursor prompt takes the shared prompt lane: the daemon
+//! accepts its receipt and returns the edge's response, with no notice.
+//! Outside Watch, a review this module leaves takes the shared saved
+//! decision, approve-once and approval inbox path, which keeps a pause the
+//! Cursor client would rewrite with the daemon.
 
-use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE, REPAIRABLE_BLOCK_REASON};
+use super::{reviewed_edge, HookDirectDefer, PRE_TOOL_USE};
 use serde_json::Value;
 
 /// The edge result for a Cursor `PreToolUse`, when the daemon would return
@@ -10,7 +19,8 @@ use serde_json::Value;
 /// response the edge rendered as a block or sandbox requirement, for a
 /// terminal block or sandbox floor. The daemon may pause a review and repair
 /// an authority block, and Cursor has no contained route, so neither of
-/// those is answered here.
+/// those is answered here; the caller hands a review to the saved decision
+/// path.
 pub(super) fn answer(edge: &[u8], recording_only: bool) -> Result<Value, HookDirectDefer> {
     let parsed = reviewed_edge(edge, PRE_TOOL_USE)?;
     let text = |value: Option<&Value>, name: &str| {
@@ -32,9 +42,7 @@ pub(super) fn answer(edge: &[u8], recording_only: bool) -> Result<Value, HookDir
             field("minimum_action").as_deref(),
         ) {
             (Some("allow"), Some("allow" | "warn")) => rendered_allow,
-            (Some("deny" | "block"), Some("block")) => {
-                rendered_deny && field("reason_code").as_deref() != Some(REPAIRABLE_BLOCK_REASON)
-            }
+            (Some("deny" | "block"), Some("block")) => rendered_deny,
             (Some("deny" | "block"), Some("sandbox-required")) => rendered_deny,
             _ => false,
         }

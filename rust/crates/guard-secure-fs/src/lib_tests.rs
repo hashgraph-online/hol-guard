@@ -272,6 +272,58 @@ fn sensitive_paths_are_classified() {
 }
 
 #[test]
+fn windows_name_aliases_keep_the_plain_path_classification() {
+    let paths = [
+        ".env",
+        ".env.local",
+        "project/.npmrc",
+        "home/.ssh/id_rsa",
+        "home/.aws/credentials",
+        "home/.kube/config",
+        "keys/deploy.key",
+        "config/secrets/app.json",
+        "src/main.rs",
+        "notes.md",
+        "../shared/README.md",
+    ];
+    let suffixes = [
+        ".",
+        " ",
+        ". .",
+        "::$DATA",
+        "::$data",
+        ". ::$DATA",
+        "::$DATA.",
+        "::$DATA ",
+    ];
+    for path in paths {
+        let family = sensitive_path_family(Path::new(path));
+        let named = credential_named_path(Path::new(path));
+        let mut variants = vec![path.replace('/', "\\")];
+        for suffix in suffixes {
+            variants.push(format!("{path}{suffix}"));
+            // Every component, not only the last, loses its trailing dots.
+            variants.push(path.replace('/', &format!("{suffix}/")));
+        }
+        for variant in variants {
+            assert_eq!(
+                sensitive_path_family(Path::new(&variant)),
+                family,
+                "{variant}"
+            );
+            assert_eq!(
+                credential_named_path(Path::new(&variant)),
+                named,
+                "{variant}"
+            );
+        }
+    }
+    assert_eq!(win32_name("..."), "...");
+    assert_eq!(win32_name(".. "), ".. ");
+    assert_eq!(win32_name("notes.md:hidden"), "notes.md:hidden");
+}
+
+#[test]
 fn source_classifier_rejects_hidden_sensitive_and_escape_paths() {
     let root = fixture_root("classifier");
     let home = root.join("home");
@@ -416,4 +468,32 @@ fn hidden_empty_marker_files_are_bounded_to_work_trees() {
         );
     }
     std::fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn project_dotfiles_are_benign_only_as_the_final_component() {
+    for allowed in [
+        ".gitignore",
+        "src/.gitignore",
+        ".editorconfig",
+        "/home/u/project/.dockerignore",
+        ".github/workflows/.gitignore",
+    ] {
+        assert!(hidden_read_parts_allowed(Path::new(allowed)), "{allowed}");
+    }
+    for denied in [
+        ".gitignore/x",
+        ".editorconfig/.gitignore",
+        ".git/config",
+        ".git/hooks/pre-commit",
+        ".git/info/exclude",
+        ".git/.gitignore",
+        ".git-credentials",
+        ".gitattributes",
+        ".npmrc",
+        ".envrc",
+        ".pre-commit-config.yaml",
+    ] {
+        assert!(!hidden_read_parts_allowed(Path::new(denied)), "{denied}");
+    }
 }

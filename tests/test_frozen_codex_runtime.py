@@ -364,6 +364,41 @@ def test_frozen_codex_install_and_runtime_trust_validate_without_source_files(
     assert trusted.cwd == Path(bridge_config["manifest_path"]).parent.resolve(strict=True)
 
 
+def test_frozen_codex_hook_runs_behind_the_durable_native_bridge(
+    tmp_path: Path,
+    frozen_codex_contract: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    context = _context(tmp_path)
+    runtime = context.guard_home / "native-runtime" / ("a" * 64) / "hol-guard-runtime"
+    # The durable copy is named from the Guard home the install binds.
+    monkeypatch.setattr(
+        codex_adapter, "_native_bridge_executable", lambda home: home / "native-runtime" / ("a" * 64) / runtime.name
+    )
+    codex_config = context.home_dir / ".codex" / "config.toml"
+    codex_config.parent.mkdir(parents=True)
+    codex_config.write_text("[features]\ncodex_hooks = true\n", encoding="utf-8")
+
+    CodexHarnessAdapter().install(context)
+
+    assert codex_adapter.codex_native_hook_state(context)["integrity_status"] == "valid"
+    handler = codex_adapter._read_toml(codex_config)["hooks"]["PreToolUse"][-1]["hooks"][0]
+    bridge_argv = shlex.split(handler["command"])
+    invocation = str(Path(sys.executable).resolve(strict=True))
+    assert bridge_argv[:4] == [str(runtime), "codex-hook-bridge", invocation, "--_hol-guard-codex-bridge"]
+    bridge_config_json = bridge_argv[4]
+    bridge_config = json.loads(bridge_config_json)
+    assert bridge_config["start_command"][:2] == [invocation, "--_hol-guard-codex-daemon-recover"]
+
+    codex_hook_runtime_trust.validate_codex_hook_launch(
+        manifest_path=bridge_config["manifest_path"],
+        state_path=bridge_config["state_path"],
+        fallback_command=bridge_config["fallback_command"],
+        start_command=bridge_config["start_command"],
+        config_json=bridge_config_json,
+    )
+
+
 @pytest.mark.parametrize("legacy_roles", [False, True], ids=["current_roles", "legacy_nine_roles"])
 def test_retained_frozen_hook_can_be_validated_against_exact_transition_artifact(
     tmp_path,

@@ -348,19 +348,3 @@ class TestScrg267FixtureAllManagers:
         assert detail["real_binary_path"] == str(real_binary)
         assert detail["path_index"] == 0
         assert detail["real_binary_path_index"] == 1
-
-
-class TestScrg270DaemonShimCoverage:
-    """SCRG270: daemon snapshot includes shim coverage."""
-
-    def test_daemon_snapshot_route_includes_shim_coverage(self, tmp_path: Path) -> None:
-        from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
-
-        ctx = _make_context(tmp_path)
-        install_package_shims(ctx, managers=("npm", "pip"))
-        snapshot = _build_snapshot_payload(ctx)
-        assert "package_manager_coverage" in snapshot
-        coverage = snapshot["package_manager_coverage"]
-        assert "shims_installed" in coverage
-        assert "npm" in coverage["shims_installed"]
-        assert "pip" in coverage["shims_installed"]

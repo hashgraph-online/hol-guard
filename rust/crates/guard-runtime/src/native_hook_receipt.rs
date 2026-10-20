@@ -31,6 +31,7 @@ struct DecisionReceiptInputs<'a> {
     request_id: &'a str,
     request_digest: &'a str,
     execution_intent_digest: Option<&'a str>,
+    review_anchor_digest: Option<&'a str>,
     business_review_binding: Option<&'a str>,
     harness: &'a str,
     event_name: &'a str,
@@ -50,6 +51,7 @@ pub(crate) struct NativeReceiptIdentity<'a> {
     pub(crate) request_id: &'a str,
     pub(crate) request_digest: &'a str,
     pub(crate) execution_intent_digest: Option<&'a str>,
+    pub(crate) review_anchor_digest: Option<&'a str>,
 }
 
 fn build_decision_receipt(
@@ -109,6 +111,7 @@ fn build_decision_receipt(
         request_id: inputs.request_id.to_owned(),
         request_digest: inputs.request_digest.to_owned(),
         execution_intent_digest: inputs.execution_intent_digest.map(ToOwned::to_owned),
+        review_anchor_digest: inputs.review_anchor_digest.map(ToOwned::to_owned),
         business_review_binding: inputs.business_review_binding.map(ToOwned::to_owned),
         harness: inputs.harness.to_owned(),
         event_name: inputs.event_name.to_owned(),
@@ -154,6 +157,7 @@ pub(crate) fn receipt_from_pre_tool(
             request_id: identity.request_id,
             request_digest: identity.request_digest,
             execution_intent_digest: identity.execution_intent_digest,
+            review_anchor_digest: identity.review_anchor_digest,
             business_review_binding: None,
             harness,
             event_name: &result.action.event,
@@ -189,6 +193,7 @@ pub(crate) fn receipt_from_post_tool(
             request_id: identity.request_id,
             request_digest: identity.request_digest,
             execution_intent_digest: identity.execution_intent_digest,
+            review_anchor_digest: identity.review_anchor_digest,
             business_review_binding: None,
             harness,
             event_name: "PostToolUse",
@@ -247,6 +252,7 @@ mod tests {
                 request_id: identity.request_id,
                 request_digest: identity.request_digest,
                 execution_intent_digest: identity.execution_intent_digest,
+                review_anchor_digest: identity.review_anchor_digest,
                 business_review_binding,
                 harness: "codex",
                 event_name: "PreToolUse",
@@ -271,6 +277,7 @@ mod tests {
             request_id: "request",
             request_digest: &"a".repeat(64),
             execution_intent_digest: None,
+            review_anchor_digest: None,
         };
         let ordinary = receipt(&identity);
         let first = receipt_with_business_binding(&identity, Some(&"b".repeat(64)));
@@ -286,19 +293,23 @@ mod tests {
     }
 
     #[test]
-    fn execution_intent_evidence_is_not_decision_identity() {
+    fn retry_anchor_evidence_is_not_decision_identity() {
         let legacy = receipt(&NativeReceiptIdentity {
             request_id: "request",
             request_digest: &"a".repeat(64),
             execution_intent_digest: None,
+            review_anchor_digest: None,
         });
         let evidenced = receipt(&NativeReceiptIdentity {
             request_id: "request",
             request_digest: &"a".repeat(64),
             execution_intent_digest: Some(&"b".repeat(64)),
+            review_anchor_digest: Some(&"d".repeat(64)),
         });
         assert_eq!(legacy.decision_id, evidenced.decision_id);
         assert_eq!(legacy.execution_intent_digest, None);
         assert_eq!(evidenced.execution_intent_digest, Some("b".repeat(64)));
+        assert_eq!(legacy.review_anchor_digest, None);
+        assert_eq!(evidenced.review_anchor_digest, Some("d".repeat(64)));
     }
 }

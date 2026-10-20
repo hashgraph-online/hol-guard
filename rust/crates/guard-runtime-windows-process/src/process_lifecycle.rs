@@ -1,5 +1,8 @@
+use std::ffi::OsString;
 use std::io;
+use std::os::windows::ffi::OsStringExt;
 use std::os::windows::io::{AsRawHandle, FromRawHandle, OwnedHandle, RawHandle};
+use std::path::PathBuf;
 use std::ptr::null_mut;
 use std::time::Duration;
 
@@ -9,7 +12,7 @@ use winapi::shared::winerror::{ERROR_INVALID_PARAMETER, WAIT_TIMEOUT};
 use winapi::um::jobapi2::{AssignProcessToJobObject, CreateJobObjectW, TerminateJobObject};
 use winapi::um::processthreadsapi::{GetProcessTimes, ResumeThread, TerminateProcess};
 use winapi::um::synchapi::WaitForSingleObject;
-use winapi::um::winbase::{WAIT_FAILED, WAIT_OBJECT_0};
+use winapi::um::winbase::{QueryFullProcessImageNameW, WAIT_FAILED, WAIT_OBJECT_0};
 use winapi::um::winnt::{PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_TERMINATE, SYNCHRONIZE};
 
 const MAX_FINITE_WAIT_MILLIS: DWORD = u32::MAX - 1;
@@ -71,6 +74,70 @@ pub(super) fn process_start_marker_for_handle(process: &OwnedHandle) -> io::Resu
 pub fn process_start_marker(process_id: u32) -> io::Result<String> {
     let process = super::open_process(process_id, PROCESS_QUERY_LIMITED_INFORMATION)?;
     process_start_marker_for_handle(&process)
+}
+
+/// Like `process_start_marker`, but fails once the process has exited. An exited
+/// process stays queryable while any handle to it (often its parent's) is open.
+pub fn running_process_start_marker(process_id: u32) -> io::Result<String> {
+    let process = super::open_process(process_id, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?;
+    if !process_is_running(&process)? {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "process has exited",
+        ));
+    }
+    process_start_marker_for_handle(&process)
+}
+
+/// Image path of a process that has not exited.
+///
+/// One `OpenProcess` call answers this directly. A sysinfo refresh snapshots
+/// every process on the machine first, which costs hundreds of milliseconds
+/// per lookup on Windows and sits on every resident request.
+pub fn running_process_image_path(process_id: u32) -> io::Result<PathBuf> {
+    let process = super::open_process(process_id, SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION)?;
+    if !process_is_running(&process)? {
+        return Err(io::Error::new(
+            io::ErrorKind::NotFound,
+            "process has exited",
+        ));
+    }
+    let mut buffer = vec![0u16; 32_768];
+    let mut size = buffer.len() as DWORD;
+    // SAFETY: `process` owns a valid process handle, `buffer` holds `size`
+    // writable UTF-16 units and `size` is initialized writable storage.
+    if unsafe {
+        QueryFullProcessImageNameW(
+            process.as_raw_handle() as HANDLE,
+            0,
+            buffer.as_mut_ptr(),
+            &mut size,
+        )
+    } == FALSE
+    {
+        return Err(io::Error::last_os_error());
+    }
+    buffer.truncate(size as usize);
+    Ok(PathBuf::from(OsString::from_wide(&buffer)))
+}
+
+/// Whether a process runs, as `windows_process_liveness` answers it:
+/// `Some(false)` only when Windows proves it gone (an unknown id or an
+/// exited process), `None` when that cannot be proven either way.
+pub fn process_liveness(process_id: u32) -> Option<bool> {
+    // Python answers "not running" for PID 0 without asking Windows, and
+    // `open_process` refuses it before `OpenProcess` can set an error code.
+    if process_id == 0 {
+        return Some(false);
+    }
+    let process = match super::open_process(process_id, SYNCHRONIZE) {
+        Ok(process) => process,
+        Err(error) if error.raw_os_error() == Some(ERROR_INVALID_PARAMETER as i32) => {
+            return Some(false)
+        }
+        Err(_) => return None,
+    };
+    process_is_running(&process).ok()
 }
 
 /// Wait for a process to terminate, treating an already-gone PID as exited.

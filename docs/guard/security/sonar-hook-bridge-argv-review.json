@@ -1,0 +1,14 @@
+{
+  "project": "hashgraph-online_hol-guard",
+  "branch": "main",
+  "issue": "AaFVWubqjlIsfgWZxpG_",
+  "rule": "pythonsecurity:S8705",
+  "component": "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py",
+  "reviewed_commit": "586daf1f094ed5f0c7c1818a026b88f298296e3a",
+  "reason": "The rule reports faulty LLM-supplied CLI arguments reaching subprocess.run in main(). No element of that argv is model-supplied, and nothing derived from the reported source can become a separate argument to the child. argv[0] is native_runtime_status().identity.path, whose digest, size, owner and mode are verified before the path is returned; a frozen build resolves it through durable_hook_runtime, which republishes only bytes hashing to that validated identity and re-verifies the copy on every reuse, so a pre-planted file at the durable path is rejected rather than executed. argv[1] and argv[2] are the module constants NATIVE_CLAUDE_HOOK_COMMAND and CLAUDE_GUARD_DAEMON_HOOK_MARKER. argv[3] is a single json.dumps object the native bridge parses as configuration; it is one argument and cannot split into flags or options. The child is launched from an argument list, never through a shell, so no quoting or word-splitting boundary exists. The reported values originate from the hook command Guard's own installer wrote into harness settings, so any party able to change them can already replace the hook command outright. No analyzer rule, exclusion, or gate threshold is changed.",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/adapters/claude_daemon_hook_bridge.py": "2e111adc5457124b702580990fe0b875f13ea455259a1b7568272b8b35bbb017",
+    "src/codex_plugin_scanner/guard/adapters/native_hook_bridge.py": "89fa4c5a3a72c8f1eaba3f4abd4ce5e8696230bca304df5085a1e5833be3dcd0",
+    "src/codex_plugin_scanner/guard/native_runtime_durable.py": "02406d578806652cfd2b08f0a6de3e34da59a3ac134f51365f79508443e85ba0"
+  }
+}

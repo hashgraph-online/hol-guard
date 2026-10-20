@@ -117,10 +117,6 @@ def test_inspection_native_evaluation_failure_preserves_block_without_reparsing(
         "codex_plugin_scanner.guard.runtime.command_model.parse_shell_command",
         forbidden,
     )
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.runtime.secret_file_request_services.shell_request_classifier.parse_shell_command",
-        forbidden,
-    )
     monkeypatch.setattr(command_inspection, "extract_sensitive_tool_action_request", forbidden)
     monkeypatch.setattr(command_inspection, "build_tool_action_request_artifact", forbidden)
     result = command_inspection.inspect_command(command, cwd=tmp_path, home_dir=tmp_path, guard_home=tmp_path)

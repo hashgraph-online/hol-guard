@@ -55,8 +55,10 @@ pub(super) fn safe_symlink_arguments(
 /// `rm [-f] [--] FILE...` over a few existing regular files in the workspace.
 ///
 /// Each operand must be the file itself, not a link, so the screen applies to
-/// the entry that is removed. Directories, recursion and home-wide paths
-/// stay under review.
+/// the entry that is removed. The one link admitted is one at the root of a
+/// linked worktree of the session's repository, such as a shared
+/// `node_modules`: removing it leaves its target alone. Directories,
+/// recursion and home-wide paths stay under review.
 pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathContext<'_>) -> bool {
     if !workspace_below_home(context) {
         return false;
@@ -76,7 +78,10 @@ pub(super) fn safe_remove_arguments(arguments: &[String], context: super::PathCo
         }
         options = false;
         operands += 1;
-        if operands > 16 || !removable_regular_file(argument, context) {
+        if operands > 16
+            || !(removable_regular_file(argument, context)
+                || super::directory_targets::sibling::removable_link(argument, context))
+        {
             return false;
         }
     }

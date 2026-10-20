@@ -38,12 +38,6 @@ from .store_extension_control_authority_support import (
 )
 
 
-def _canonical_contract_value(value: object) -> object:
-    from .store_extension_control_authority import _canonical_contract_value as canonical
-
-    return canonical(value)
-
-
 def _activation_layers(state, **kwargs):
     from .store_extension_control_authority import managed_controls_layers_from_activation_state
 
@@ -55,9 +49,16 @@ class ExtensionControlAuthorityReadsMixin:
 
     def read_extension_control_authority(self, *, catalog_digest: str) -> ExtensionControlAuthorityView:
         self._extension_control_last_catalog_digest = catalog_digest
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+
         try:
             with self._extension_control_authority_lock():
                 return self._read_extension_control_authority_locked(catalog_digest)
+        except NativeCommandControlAuthorityUnavailableError:
+            # The lease was busy, so nothing about this authority was read. An
+            # outage never reads as a verdict: report it instead of claiming a
+            # health state this call never observed.
+            raise
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
         except Exception:
@@ -69,23 +70,38 @@ class ExtensionControlAuthorityReadsMixin:
         *,
         include_managed_controls: bool = True,
         read_only: bool = False,
+        lock_timeout_seconds: float | None = None,
     ) -> ExtensionControlAuthorityView:
-        from .native_command_control_authority_io import NativeCommandControlMutationRequiredError
+        from .native_command_control_authority_io import (
+            NativeCommandControlAuthorityUnavailableError,
+            NativeCommandControlMutationRequiredError,
+        )
 
         catalog_digest = registry.catalog_digest
         self._extension_control_last_catalog_digest = catalog_digest
+        # A read-only caller takes the shared lock, so it must not commit a
+        # catalog migration: another reader holding the same lock would race it.
+        # Rebind the controls for this registry in memory instead and leave the
+        # move to the next writer, which holds the lock exclusively.
+        may_migrate = not read_only
         try:
             self._catalog_target_manifest(registry)
-            with self._extension_control_authority_lock(shared=read_only):
+            with self._extension_control_authority_lock(shared=read_only, timeout_seconds=lock_timeout_seconds):
                 self._require_compatible_extension_control_schema()
-                view = self._read_extension_control_authority_locked(catalog_digest, migration_registry=registry)
+                view = self._read_extension_control_authority_locked(
+                    catalog_digest,
+                    migration_registry=registry,
+                    allow_migration=may_migrate,
+                )
                 stale_manifest: dict[str, str] | None = None
                 authority_key: bytes | None = None
                 if view.health is AuthorityHealth.PROTECTED:
                     authority_key = self._authority_key(required=True)
                     if authority_key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
-                    view, stale_manifest = self._sync_trusted_catalog_manifest(view, registry, key=authority_key)
+                    view, stale_manifest = self._sync_trusted_catalog_manifest(
+                        view, registry, key=authority_key, allow_migration=may_migrate
+                    )
                 if include_managed_controls:
                     composed = self._with_managed_controls_activation(
                         view,
@@ -94,7 +110,7 @@ class ExtensionControlAuthorityReadsMixin:
                     )
                 else:
                     composed = view
-                if stale_manifest is not None:
+                if stale_manifest is not None and may_migrate:
                     if authority_key is None:
                         raise ExtensionControlAuthorityError("extension-control authority key is unavailable")
                     self._write_catalog_manifest(
@@ -104,7 +120,9 @@ class ExtensionControlAuthorityReadsMixin:
                         replace=True,
                     )
                 return composed
-        except NativeCommandControlMutationRequiredError:
+        except (NativeCommandControlAuthorityUnavailableError, NativeCommandControlMutationRequiredError):
+            # Neither is a statement about the authority. The first means the
+            # lease was busy, the second that this read needs an exclusive one.
             raise
         except ExtensionControlAuthorityError:
             return self._tampered_view(catalog_digest)
@@ -255,6 +273,7 @@ class ExtensionControlAuthorityReadsMixin:
         catalog_digest: str,
         *,
         migration_registry: CommandSafetyExtensionRegistry | None = None,
+        allow_migration: bool = True,
         _healed: bool = False,
     ) -> ExtensionControlAuthorityView:
         with self._connect() as connection:
@@ -294,7 +313,7 @@ class ExtensionControlAuthorityReadsMixin:
             elif stored_catalog_digest != catalog_digest:
                 if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
                     raise ExtensionControlAuthorityError("extension control catalog digest changed")
-                pending = self._pending_transition(revision + 1)
+                pending = self._pending_transition(revision + 1) if allow_migration else None
                 if pending is not None and _row_str(pending, "catalog_digest") == catalog_digest:
                     with self._connect() as connection:
                         resumed = self._resume_idempotent_transition(
@@ -319,6 +338,23 @@ class ExtensionControlAuthorityReadsMixin:
                 previous = self._read_extension_control_authority_locked(stored_catalog_digest)
                 if previous.health is not AuthorityHealth.PROTECTED:
                     raise ExtensionControlAuthorityError("extension control catalog migration source unavailable")
+                if not allow_migration or self._catalog_migration_oscillates(
+                    revision,
+                    migrated_from=catalog_digest,
+                    migrated_to=stored_catalog_digest,
+                    key=key,
+                ):
+                    # Serve the controls under this catalog without committing
+                    # a revision. Either the caller only wants to read them --
+                    # it may hold the shared lock, where a commit would race
+                    # another reader -- or two runtimes with different catalogs
+                    # are migrating this authority back and forth. In the
+                    # second case both sides have already recorded the move
+                    # once, so committing again only hands the loop back, and
+                    # the stored revision then advances faster than a dashboard
+                    # draft can be applied. Rebind in memory exactly as a
+                    # migration would, and leave the stored revision alone.
+                    return self._rebind_extension_control_catalog(previous, registry=migration_registry, key=key)
                 return self._migrate_extension_control_catalog(previous, registry=migration_registry, key=key)
             payload = verify_authenticated_record(
                 str(row["snapshot_json"]),

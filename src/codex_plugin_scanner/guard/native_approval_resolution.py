@@ -56,13 +56,32 @@ def _envelope(value: object) -> dict[str, object] | None:
         return None
     payload = value.get("raw_payload_redacted")
     mode = payload if isinstance(payload, Mapping) else {}
-    return {
+    result: dict[str, object] = {
         "raw_command_text": _text(value.get("raw_command_text")),
         "command": _text(value.get("command")),
         "wrapper_chain": _chain(value.get("wrapper_chain")),
         "permission_mode": _text(mode.get("permission_mode")),
         "permission_mode_camel": _text(mode.get("permissionMode")),
     }
+    if "native_bash" in value:
+        result["native_bash"] = value["native_bash"]
+    return result
+
+
+def _native_bash_refusal(request: Mapping[str, object], action: str, scope: str, persist: bool | None) -> bool:
+    from .native_bash_protocol import ARTIFACT_ID, ARTIFACT_TYPE, LEGACY_ARTIFACT_IDS
+
+    envelope = request.get("action_envelope_json")
+    return (
+        action == "block"
+        and scope == "artifact"
+        and persist is not True
+        and (
+            request.get("artifact_type") == ARTIFACT_TYPE
+            or request.get("artifact_id") in (ARTIFACT_ID, *LEGACY_ARTIFACT_IDS)
+            or (isinstance(envelope, Mapping) and "native_bash" in envelope)
+        )
+    )
 
 
 def _browser_intent(value: object) -> dict[str, object] | None:
@@ -104,6 +123,16 @@ def build_plan_request(
     """Narrow a stored approval request and the resolution inputs to the wire form."""
 
     harness = request.get("harness")
+    envelope = _envelope(request.get("action_envelope_json"))
+    if _native_bash_refusal(request, action, scope, persist_policy):
+        # This wire form also reaches older native planners. Ask the native
+        # authority for an audit-only refusal, never a grant or sibling rule.
+        persist_policy = False
+        resolve_scope_matches = False
+        requires_local_once = False
+        native_exact_token = None
+        if envelope is not None:
+            envelope.pop("native_bash", None)
     return {
         "schema": _REQUEST_SCHEMA,
         "request_id": request_id,
@@ -127,7 +156,7 @@ def build_plan_request(
             "source_scope": _text(request.get("source_scope")),
             "raw_command_text": _text(request.get("raw_command_text")),
             "wrapper_chain": _chain(request.get("wrapper_chain")),
-            "envelope": _envelope(request.get("action_envelope_json")),
+            "envelope": envelope,
             "browser_intent": _browser_intent(request.get("browser_intent")),
         },
     }
@@ -182,5 +211,12 @@ def native_approval_resolution_plan(
         raise ApprovalResolutionPlanUnavailableError
     decision = payload.get("decision")
     if not isinstance(decision, dict) or not isinstance(decision.get("harness"), str):
+        raise ApprovalResolutionPlanUnavailableError
+    if _native_bash_refusal(request, action, scope, persist_policy) and (
+        decision.get("action") != "block"
+        or payload.get("persistence") != "none"
+        or payload.get("local_once") is not None
+        or payload.get("matching") is not None
+    ):
         raise ApprovalResolutionPlanUnavailableError
     return payload

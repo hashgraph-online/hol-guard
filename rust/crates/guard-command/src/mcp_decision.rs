@@ -355,16 +355,6 @@ fn persisted_mcp_digest(material: &Value) -> Result<String, &'static str> {
     Ok(format!("{:x}", Sha256::digest(&bytes)))
 }
 
-pub fn mcp_tool_content_digest(
-    request: &guard_contracts::McpToolContentDigestRequestV1,
-) -> Result<String, &'static str> {
-    persisted_mcp_digest(&json!({
-        "arguments": request.arguments,
-        "artifact_id": request.artifact_id,
-        "config_path": request.config_path,
-    }))
-}
-
 pub fn mcp_tool_approval_digest(
     request: &guard_contracts::McpToolApprovalDigestRequestV1,
 ) -> Result<String, &'static str> {
@@ -466,7 +456,7 @@ fn which_in(launcher: &str, parts: &[PathBuf]) -> Option<String> {
 /// File names tried per directory. Windows applies `PATHEXT` the way
 /// `shutil.which` does: a name already carrying a listed extension is tried
 /// as-is, otherwise each extension is appended.
-fn launcher_file_names(launcher: &str) -> Vec<String> {
+pub(crate) fn launcher_file_names(launcher: &str) -> Vec<String> {
     if !cfg!(windows) {
         return vec![launcher.to_owned()];
     }

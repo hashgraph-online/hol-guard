@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 from dataclasses import replace
 from pathlib import Path
@@ -46,6 +47,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_limits import MAX_NATIVE_COMMAND_PROGRAM_BYTES
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntimeSnapshot
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -125,6 +127,30 @@ def test_release_program_metadata_uses_the_compiled_semantic_profile() -> None:
     metadata = load_native_command_program_metadata()
     assert metadata.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     assert len(metadata.program_digest) == len(metadata.trust_digest) == 64
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        {"z": [None, True, False], "a": {"é": '雪\n\t"\\', "emoji": "😀"}},
+        [0, -7, 2**80, -0.0, 1e-7, 1e20],
+        {"nested": [{"b": 2, "a": 1}], "empty": ""},
+    ],
+)
+def test_program_metadata_streamed_hash_preserves_canonical_bytes_and_tamper_detection(value: object) -> None:
+    program = _program()
+    program.pop("program_digest")
+    program["annotation"] = value
+    expected = hashlib.sha256(b"hol-guard.native-command-program.v1\0" + _canonical_json_bytes_v3(program)).hexdigest()
+    program["program_digest"] = expected
+    # Different whitespace, key order and Unicode escapes must normalize to
+    # exactly the same bytes as the existing canonical encoder.
+    payload = json.dumps(program, indent=1, ensure_ascii=True).encode()
+    metadata = binding_module._metadata_from_bytes(payload)
+    assert metadata.program_digest == expected
+    program["trust_digest"] = "d" * 64
+    with pytest.raises(NativePolicySnapshotError, match="digest_mismatch"):
+        binding_module._metadata_from_bytes(json.dumps(program).encode())
 
 
 def test_projection_preserves_existing_effective_digest_and_complete_control_layers(tmp_path: Path) -> None:
@@ -245,7 +271,7 @@ def test_metadata_cache_rechecks_exact_bytes_even_when_file_size_and_mtime_match
         b"{" * 10000,
         b"{}",
         b'{"schema":"a","schema":"b"}',
-        b" " * (4 * 1024 * 1024 + 1),
+        b" " * (MAX_NATIVE_COMMAND_PROGRAM_BYTES + 1),
     ],
 )
 def test_artifact_loader_rejects_oversize_invalid_and_duplicate_json(

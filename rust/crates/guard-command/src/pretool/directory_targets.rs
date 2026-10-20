@@ -5,6 +5,15 @@
 //! proved only when every backslash in its segment survives the shell, and
 //! only in the exact spelling of its canonical path.
 
+#[path = "directory_targets_sibling.rs"]
+pub(crate) mod sibling;
+#[path = "directory_targets_tmp_alias.rs"]
+pub(crate) mod tmp_alias;
+
+#[cfg(unix)]
+#[path = "path_trust.rs"]
+pub(in crate::pretool) mod path_trust;
+
 pub(crate) fn safe_directory_target(target: &str) -> bool {
     // Windows spells an absolute directory with backslash separators. Check
     // a drive-absolute target in its forward-slash form; a backslash anywhere
@@ -46,6 +55,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
         value
     };
     let supplied = std::path::Path::new(value);
+    // Only a spelling the command anchors itself may name its target through
+    // a link; a relative operand follows the shell's logical `$PWD`.
+    let anchored = supplied.is_absolute();
     let joined;
     let supplied = if supplied.is_absolute() {
         supplied
@@ -55,7 +67,7 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
     };
     let canonical = std::fs::canonicalize(supplied).ok()?;
     // Non-aliased targets avoid CDPATH and logical/physical cwd ambiguity.
-    if !absolute_path_spelling_matches(supplied, &canonical)
+    if !absolute_path_spelling_matches(supplied, &canonical, anchored)
         || !canonical.is_dir()
         || !super::read_paths::resolved_path_allowed(&canonical, context.home_dir, context.cwd)
     {
@@ -70,8 +82,9 @@ pub(super) fn verified_cwd_target(value: &str, context: super::PathContext<'_>) 
 /// POSIX `cd` skips the CDPATH search for operands that begin with `.` or
 /// `..`; any other relative operand needs proof that CDPATH is unset. The
 /// lexical join is what a logical `cd` reaches, so the caller's spelling
-/// check rejects symlinked components. `..` is never proved: the shell
-/// resolves it against its logical `$PWD`, which may name a symlinked
+/// check rejects symlinked components. `..` is proved only into a linked
+/// worktree of the session's repository (see `sibling`): elsewhere the
+/// shell resolves it against its logical `$PWD`, which may name a symlinked
 /// parent the reported cwd does not show. On Windows a `:` can name a
 /// drive-relative path (`C:src`) or an alternate data stream, and Git Bash
 /// resolves a root-relative `/etc` against its own root rather than the
@@ -83,7 +96,7 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     {
         return None;
     }
-    let dotted = value == "." || value.starts_with("./");
+    let dotted = value == "." || value.starts_with("./") || value.starts_with("../");
     if !dotted && !context.cdpath_unset {
         return None;
     }
@@ -95,42 +108,46 @@ fn relative_cwd_target(value: &str, context: super::PathContext<'_>) -> Option<s
     for component in base.join(value).components() {
         match component {
             std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => return None,
+            std::path::Component::ParentDir => {
+                return sibling::linked_root(value, base);
+            }
             other => joined.push(other),
         }
     }
     Some(joined)
 }
 
-fn absolute_path_spelling_matches(supplied: &std::path::Path, canonical: &std::path::Path) -> bool {
+fn absolute_path_spelling_matches(
+    supplied: &std::path::Path,
+    canonical: &std::path::Path,
+    anchored: bool,
+) -> bool {
     if canonical == supplied {
         return true;
     }
     // macOS exposes the root temporary directory through this fixed system
-    // alias. Permit only the exact canonical suffix; deeper symlink aliases
-    // remain rejected by the physical-cwd proof.
-    #[cfg(target_os = "macos")]
+    // alias. Permit the exact canonical suffix.
+    if tmp_alias::private_tmp_spelling(supplied).is_some_and(|spelling| spelling == canonical) {
+        return true;
+    }
+    // Other links count only when nobody but this user or root can retarget
+    // them, such as `/var -> private/var` or a link in the user's own
+    // directory. A link in a directory others can write stays rejected.
+    #[cfg(unix)]
     {
-        let alias = std::path::Path::new("/tmp");
-        let Ok(relative) = supplied.strip_prefix(alias) else {
-            return false;
-        };
-        let Ok(alias_canonical) = std::fs::canonicalize(alias) else {
-            return false;
-        };
-        alias_canonical == std::path::Path::new("/private/tmp")
-            && canonical == alias_canonical.join(relative)
+        anchored && path_trust::trusted_link_spelling(supplied, canonical)
     }
     // Windows canonical paths carry the verbatim prefix.
     #[cfg(windows)]
     {
+        let _ = anchored;
         supplied
             .to_str()
             .is_some_and(|text| exact_drive_spelling(text, canonical))
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(not(any(unix, windows)))]
     {
-        let _ = (supplied, canonical);
+        let _ = (supplied, canonical, anchored);
         false
     }
 }
@@ -337,13 +354,52 @@ impl<'a> super::PathContext<'a> {
         let npm_config_inert = match execution_environment {
             Some(environment) => {
                 environment.has_valid_shape()
+                    && !environment.environment_names.iter().any(|name| {
+                        npm_selector(name)
+                            && !super::npm_environment::inert_npm_config_name(name)
+                            && !super::npm_environment::trusted_stamped_loader(
+                                environment,
+                                name,
+                                home_dir,
+                                cwd.as_slice(),
+                            )
+                    })
+            }
+            None => !std::env::vars_os().any(|(name, value)| {
+                let name = name.to_string_lossy();
+                !value.is_empty()
+                    && npm_selector(&name)
+                    && !super::npm_environment::inert_npm_config_name(&name)
+            }),
+        };
+        // pip reads `PIP_<OPTION>` for every option the running subcommand
+        // takes, so an inherited variable can add the index query or the log
+        // file the command itself leaves out. `XDG_CONFIG_HOME` moves the
+        // user configuration file that does the same, out of the directory
+        // the file check below can see.
+        let pip_config_inert = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
                     && !environment
                         .environment_names
                         .iter()
-                        .any(|name| npm_selector(name))
+                        .any(|name| pip_selector(name))
             }
             None => !std::env::vars_os()
-                .any(|(name, value)| !value.is_empty() && npm_selector(&name.to_string_lossy())),
+                .any(|(name, value)| !value.is_empty() && pip_selector(&name.to_string_lossy())),
+        };
+        // ripgrep reads RIPGREP_CONFIG_PATH unless the command passes
+        // `--no-config`, and ignores it only when it is empty. A stamped
+        // environment carries names without values, so any name counts.
+        let ripgrep_config_absent = match execution_environment {
+            Some(environment) => {
+                environment.has_valid_shape()
+                    && !environment
+                        .environment_names
+                        .iter()
+                        .any(|name| name.eq_ignore_ascii_case(RIPGREP_CONFIG_NAME))
+            }
+            None => std::env::var_os(RIPGREP_CONFIG_NAME).is_none_or(|value| value.is_empty()),
         };
         // The shell expands `~` from its own HOME: the stamped one, or the
         // runtime's when no environment was stamped.
@@ -361,16 +417,23 @@ impl<'a> super::PathContext<'a> {
         let shell_home_matches = home_dir.zip(shell_home).is_some_and(|(declared, shell)| {
             canonical(declared).is_some_and(|declared| canonical(&shell) == Some(declared))
         });
+        let psql_environment =
+            super::safe_scalar::psql_environment(execution_environment, shell_home_matches);
         Self {
             home_dir,
             cwd,
             cdpath_unset,
             rustup_override_absent,
             npm_config_inert,
+            pip_config_inert,
             shell_home_matches,
+            ripgrep_config_absent,
+            psql_environment,
         }
     }
 }
+
+const RIPGREP_CONFIG_NAME: &str = "RIPGREP_CONFIG_PATH";
 
 fn rustup_selector(name: &str) -> bool {
     name.eq_ignore_ascii_case("RUSTUP_TOOLCHAIN") || name.eq_ignore_ascii_case("RUSTUP_HOME")
@@ -383,6 +446,35 @@ fn rustup_selector(name: &str) -> bool {
 /// usually for a company's TLS-inspecting proxy that already sees all of the
 /// user's traffic; it leaves the registry where it was, and the agent's own
 /// command cannot set the hook's environment.
+/// Variables pip reads before any option on the command line, beyond the ones
+/// that only change how it prints.
+///
+/// pip asks platformdirs where its user and global configuration files live,
+/// so the four names platformdirs resolves those directories from move a
+/// `pip.conf` out of the directories the file check reads: the config names
+/// on Linux, and the data names on macOS, where a configuration directory is
+/// a data directory. The remaining `XDG_` names, `XDG_RUNTIME_DIR` among
+/// them, name no directory pip reads configuration from.
+fn pip_selector(name: &str) -> bool {
+    let upper = name.to_ascii_uppercase();
+    if matches!(
+        upper.as_str(),
+        "XDG_CONFIG_HOME" | "XDG_CONFIG_DIRS" | "XDG_DATA_HOME" | "XDG_DATA_DIRS"
+    ) {
+        return true;
+    }
+    upper.starts_with("PIP_")
+        && !matches!(
+            upper.as_str(),
+            "PIP_DISABLE_PIP_VERSION_CHECK"
+                | "PIP_REQUIRE_VIRTUALENV"
+                | "PIP_NO_COLOR"
+                | "PIP_NO_INPUT"
+                | "PIP_QUIET"
+                | "PIP_VERBOSE"
+        )
+}
+
 fn npm_selector(name: &str) -> bool {
     let upper = name.to_ascii_uppercase();
     upper.starts_with("NPM_CONFIG_")

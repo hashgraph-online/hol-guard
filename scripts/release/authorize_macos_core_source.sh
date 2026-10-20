@@ -14,6 +14,17 @@ export GIT_TERMINAL_PROMPT=0
 : "${GITHUB_OUTPUT:?}"
 : "${RUNNER_TEMP:?}"
 RELEASE_CHANNEL="${RELEASE_CHANNEL:-stable}"
+case "${RELEASE_TARGET:-aarch64-apple-darwin}" in
+  aarch64-apple-darwin)
+    WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl"
+    ATTESTED_NAME=attested-macos-arm64.whl
+    ;;
+  x86_64-unknown-linux-gnu)
+    WHEEL_PATTERN="hol_guard-${CORE_VERSION}-*-manylinux_*_x86_64.whl"
+    ATTESTED_NAME=attested-linux-x64.whl
+    ;;
+  *) echo "Unsupported Desktop Core target" >&2; exit 1 ;;
+esac
 
 case "$RELEASE_CHANNEL" in
   stable) ;;
@@ -43,7 +54,7 @@ fi
 git -C "$TRUST_REPO" merge-base --is-ancestor \
   "$SOURCE_SHA" "refs/remotes/origin/${RELEASE_BRANCH}"
 gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
-  --pattern "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl" \
+  --pattern "$WHEEL_PATTERN" \
   --dir "$TRUST_ASSETS"
 gh release download "$CORE_TAG" --repo "$GITHUB_REPOSITORY" \
   --pattern "hol-guard-v${CORE_VERSION}.intoto.jsonl" --dir "$TRUST_ASSETS"
@@ -53,7 +64,7 @@ while IFS= read -r candidate; do
   WHEEL="$candidate"
   WHEEL_COUNT=$((WHEEL_COUNT + 1))
 done < <(find "$TRUST_ASSETS" -maxdepth 1 -type f \
-  -name "hol_guard-${CORE_VERSION}-*-macosx_*_arm64.whl" -print)
+  -name "$WHEEL_PATTERN" -print)
 test "$WHEEL_COUNT" -eq 1
 test -f "$WHEEL"
 BUNDLE="$TRUST_ASSETS/hol-guard-v${CORE_VERSION}.intoto.jsonl"
@@ -89,7 +100,7 @@ if ! verify_published_wheel "refs/tags/${CORE_TAG}"; then
       --deny-self-hosted-runners >/dev/null
   fi
 fi
-cp "$WHEEL" "$RUNNER_TEMP/attested-macos-arm64.whl"
+cp "$WHEEL" "$RUNNER_TEMP/$ATTESTED_NAME"
 echo "ATTESTED_WHEEL_FILENAME=$(basename "$WHEEL")" >> "$GITHUB_ENV"
-test -f "$RUNNER_TEMP/attested-macos-arm64.whl"
+test -f "$RUNNER_TEMP/$ATTESTED_NAME"
 echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"

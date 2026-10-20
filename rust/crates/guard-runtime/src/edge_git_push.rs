@@ -35,6 +35,11 @@ fn verdict(push: &GitPushRequest<'_>) -> bool {
     let Some(groups) = groups() else {
         return false;
     };
+    // The probes run this program in the repository: only Git itself.
+    let name = push.git.file_name().and_then(|name| name.to_str());
+    if !matches!(name, Some("git" | "git.exe")) {
+        return false;
+    }
     // `decide` trusts a supplied binary; prove it the way resolution would.
     if !binary_path_is_trusted(push.git, push.repository, push.home, &groups) {
         return false;
@@ -68,12 +73,12 @@ fn request(
         git_path: None,
         arguments: Vec::new(),
         branch: Some(push.branch.to_owned()),
-        reference: None,
+        reference: push.creates_branch.then(|| "HEAD".to_owned()),
     }
 }
 
 #[cfg(unix)]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     let user = nix::unistd::User::from_uid(nix::unistd::Uid::current()).ok()??;
     Path::new(&user.dir)
         .is_absolute()
@@ -81,7 +86,7 @@ fn account_home() -> Option<String> {
 }
 
 #[cfg(not(unix))]
-fn account_home() -> Option<String> {
+pub(crate) fn account_home() -> Option<String> {
     None
 }
 
@@ -89,7 +94,7 @@ fn account_home() -> Option<String> {
 /// the Git path is writable by this account. `getgroups` has no safe binding
 /// on Apple targets, so the system `id` reports them.
 #[cfg(unix)]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     let output = std::process::Command::new("/usr/bin/id")
         .arg("-G")
         .env_clear()
@@ -111,7 +116,7 @@ fn groups() -> Option<Vec<u32>> {
 }
 
 #[cfg(not(unix))]
-fn groups() -> Option<Vec<u32>> {
+pub(crate) fn groups() -> Option<Vec<u32>> {
     None
 }
 
@@ -128,6 +133,7 @@ mod tests {
             home,
             path: "/usr/bin:/bin",
             xdg_config_home: None,
+            creates_branch: false,
         }
     }
 
@@ -146,6 +152,7 @@ mod tests {
         assert_eq!(built.check, GitExecutionSafetyCheckV1::PushOrigin);
         assert_eq!(built.branch.as_deref(), Some("feature/one"));
         assert_eq!(built.cwd, "/home/tester/project");
+        assert_eq!(built.reference, None);
         assert_eq!(
             built.environment.keys().collect::<Vec<_>>(),
             ["HOME", "PATH"]
@@ -159,6 +166,11 @@ mod tests {
             built.environment.get("XDG_CONFIG_HOME").map(String::as_str),
             Some("/home/tester/.config")
         );
+        let mut created = push(&git, &repository, &home);
+        created.creates_branch = true;
+        let built = request(&created, "/home/tester".into(), Vec::new());
+        assert_eq!(built.reference.as_deref(), Some("HEAD"));
+        assert_eq!(built.branch.as_deref(), Some("feature/one"));
     }
 
     #[test]

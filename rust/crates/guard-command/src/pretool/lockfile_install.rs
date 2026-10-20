@@ -14,6 +14,7 @@ mod scan;
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use guard_contracts::{GuardExecutionEnvironmentV1, PreToolActionTypeV1, PreToolResultV1};
+use std::path::Path;
 use std::time::Instant;
 
 pub(crate) const REASON: &str = "native_exact_safe_lockfile_install";
@@ -55,11 +56,29 @@ pub(super) fn settle(
     let Some((manager, directory)) = install(model, context) else {
         return;
     };
+    // The session proof trusted the loader paths outside the session's own
+    // directory; the install writes in `directory`, so they must avoid it too.
+    if execution_environment.is_some_and(|environment| {
+        environment.library_search_paths.keys().any(|name| {
+            !super::npm_environment::trusted_stamped_loader(
+                environment,
+                name,
+                context.home_dir,
+                &[directory.as_str()],
+            )
+        })
+    }) {
+        return;
+    }
     let context = super::PathContext {
         cwd: Some(directory.as_str()),
         ..context
     };
     if !scan::directory_ready(manager, context, xdg_config_home.as_deref(), deadline) {
+        if let Some(hint) = scan::present_lockfile_hint(manager, Path::new(&directory)) {
+            result.reason.push(' ');
+            result.reason.push_str(&hint);
+        }
         return;
     }
     result.minimum_action = "allow".into();
@@ -97,23 +116,25 @@ fn evidence_clean(result: &PreToolResultV1, model: &CanonicalCommandV1) -> bool 
 }
 
 /// No inherited variable may move the registry or the configuration the
-/// managers read, or add arguments. npm's own selectors are checked through
-/// the path context. `BUN_INSTALL` and `PNPM_HOME` only say where the tool
-/// lives, so they stay allowed. Returns the XDG configuration directory, whose
-/// pnpm and Bun files are checked like the ones in home.
+/// managers read, or add arguments. An npm cache or output setting is inert.
+/// npm's own selectors are checked through the path context. `BUN_INSTALL`
+/// and `PNPM_HOME` only say where the tool lives, so they stay allowed.
+/// Returns the XDG configuration directory, whose pnpm and Bun files are
+/// checked like the ones in home.
 fn environment_inert(
     execution_environment: Option<&GuardExecutionEnvironmentV1>,
 ) -> Option<Option<String>> {
     let selector = |name: &str| {
         let upper = name.to_ascii_uppercase();
-        [
+        let configuration = [
             "BUN_CONFIG_",
             "PNPM_CONFIG_",
             "NPM_CONFIG_",
             "COREPACK_NPM_",
         ]
         .iter()
-        .any(|prefix| upper.starts_with(prefix))
+        .any(|prefix| upper.starts_with(prefix));
+        (configuration && !super::npm_environment::inert_npm_config_name(name))
             || upper == "BUN_OPTIONS"
     };
     match execution_environment {
@@ -136,7 +157,9 @@ fn environment_inert(
 /// The manager and the directory it installs in, when the command is an
 /// optional verified `cd`, the install, then only commands that are safe on
 /// their own, such as `| tail`. Running first means nothing earlier in the
-/// command can rewrite the configuration checked here.
+/// command can rewrite the configuration checked here. Bun's `--cwd <dir>`
+/// moves the install the way a leading `cd` would, so its directory is proved
+/// the same way, and never on top of a `cd`.
 fn install(
     model: &CanonicalCommandV1,
     context: super::PathContext<'_>,
@@ -145,15 +168,23 @@ fn install(
         return None;
     }
     let leading_cd = model.segments.first()?.executable.as_deref() == Some("cd");
-    let directory = if leading_cd {
+    let shell_directory = if leading_cd {
         super::segment_proof::verified_cwd_compound_context(model, context)?
     } else {
         context.cwd?.to_owned()
     };
     let start = usize::from(leading_cd);
-    let manager = install_form(model.segments.get(start)?)?;
+    let (manager, moved) = install_form(model.segments.get(start)?)?;
+    let directory = match moved {
+        None => shell_directory.clone(),
+        Some(target) if !leading_cd => {
+            super::directory_targets::verified_cwd_target(&target, context)?
+        }
+        Some(_) => return None,
+    };
+    // Later commands still run where the shell is, not where `--cwd` points.
     let context = super::PathContext {
-        cwd: Some(directory.as_str()),
+        cwd: Some(shell_directory.as_str()),
         ..context
     };
     model.segments[start + 1..]
@@ -167,7 +198,9 @@ fn install(
         .then_some((manager, directory))
 }
 
-fn install_form(original: &CommandSegmentV1) -> Option<Manager> {
+/// The manager, and the directory a Bun `--cwd` names, for an install with
+/// the required flags and only known optional ones.
+fn install_form(original: &CommandSegmentV1) -> Option<(Manager, Option<String>)> {
     let stripped = super::segment_proof::without_stderr_merge(original);
     let segment = stripped.as_ref().unwrap_or(original);
     if segment.pipeline_index != 0
@@ -184,8 +217,25 @@ fn install_form(original: &CommandSegmentV1) -> Option<Manager> {
         "npm" => Manager::Npm,
         _ => return None,
     };
-    let (verb, flags) = segment.arguments.split_first()?;
-    let flags: Vec<&str> = flags.iter().map(String::as_str).collect();
+    let (verb, rest) = segment.arguments.split_first()?;
+    let mut flags: Vec<&str> = Vec::new();
+    let mut moved = None;
+    let mut rest = rest.iter();
+    while let Some(argument) = rest.next() {
+        let target = match argument.strip_prefix("--cwd=") {
+            Some(target) => target,
+            None if argument == "--cwd" => rest.next()?.as_str(),
+            None => {
+                flags.push(argument.as_str());
+                continue;
+            }
+        };
+        // Only Bun reads `--cwd`, and a second one would be ambiguous.
+        if manager != Manager::Bun || target.is_empty() || moved.is_some() {
+            return None;
+        }
+        moved = Some(target.to_owned());
+    }
     let (verbs, required, optional): (&[&str], &[&str], &[&str]) = match manager {
         Manager::Bun => (
             &["install", "i"],
@@ -208,6 +258,10 @@ fn install_form(original: &CommandSegmentV1) -> Option<Manager> {
                 "--prod",
                 "--reporter=append-only",
                 "--reporter=silent",
+                "--reporter=default",
+                "--loglevel=error",
+                "--loglevel=warn",
+                "--ignore-pnpmfile",
             ],
         ),
         Manager::Npm => (
@@ -223,6 +277,10 @@ fn install_form(original: &CommandSegmentV1) -> Option<Manager> {
                 "--omit=dev",
                 "--omit=optional",
                 "--allow-git=none",
+                "--loglevel=error",
+                "--loglevel=warn",
+                "--loglevel=silent",
+                "--progress=false",
             ],
         ),
     };
@@ -231,5 +289,5 @@ fn install_form(original: &CommandSegmentV1) -> Option<Manager> {
         && flags
             .iter()
             .all(|flag| required.contains(flag) || optional.contains(flag)))
-    .then_some(manager)
+    .then_some((manager, moved))
 }

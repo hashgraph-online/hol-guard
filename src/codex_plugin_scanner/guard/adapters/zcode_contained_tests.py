@@ -26,6 +26,7 @@ _PROFILES = {
     "native_package_test_readonly_containment_required": "package-test-readonly-v1",
     "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
     "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
+    "native_bun_eval_readonly_containment_required": "node-eval-readonly-v1",
     "native_git_readonly_containment_required": "git-readonly-v1",
     "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
     "native_node_build_output_containment_required": "node-build-output-v1",
@@ -34,6 +35,7 @@ _PROFILES = {
 _ROUTED_HARNESSES = frozenset({"zcode", "claude-code"})
 # Codex is routed by its hook bridge, which first confirms the running Codex applies updatedInput.
 _SINK_HARNESSES = _ROUTED_HARNESSES | {"codex"}
+_WINDOWS_SINK_HARNESSES = frozenset({"claude-code", "codex"})
 
 
 def cleanup_stale_zcode_requests() -> None:
@@ -106,10 +108,15 @@ def route_zcode_containment(
     return routed if routed is not None else response
 
 
-def contained_sink_command_prefix() -> tuple[str, ...]:
+def contained_sink_command_prefix(
+    python_executable: str | None = None, package_root: Path | None = None
+) -> tuple[str, ...]:
     """The argv prefix ``route_zcode_containment`` starts the sink with."""
     return _sink_command_prefix(
-        {"python_executable": sys.executable, "package_root": str(Path(__file__).resolve().parents[3])}
+        {
+            "python_executable": python_executable or sys.executable,
+            "package_root": str(package_root or Path(__file__).resolve().parents[3]),
+        }
     )
 
 
@@ -118,13 +125,46 @@ def _sink_command_prefix(config: Mapping[str, object]) -> tuple[str, ...]:
         from ..stable_guard_cli import resolve_frozen_guard_cli
 
         return (resolve_frozen_guard_cli(),)
-    return isolated_guard_cli_command(str(config["python_executable"]), Path(str(config["package_root"])), ())
+    package_root = Path(str(config["package_root"]))
+    command = isolated_guard_cli_command(str(config["python_executable"]), package_root, ())
+    if sys.platform != "win32":
+        return command
+    # Git Bash hands a native program each doubled backslash as a single one,
+    # which breaks the escaped package root in the bootstrap. The same
+    # directory written with forward slashes needs no escaping.
+    root = str(package_root.resolve())
+    return (*command[:-1], command[-1].replace(repr(root), repr(root.replace("\\", "/")), 1))
 
 
-def _platform_contains(response: Mapping[str, object]) -> bool:
-    """macOS runs every contained profile; Linux runs the workspace sandbox."""
-    return sys.platform == "darwin" or (
-        sys.platform == "linux" and response.get("required_execution_profile") == "workspace-contained-v1"
+def _request_root() -> str | None:
+    """Where the sink looks for a snapshot; on Windows not TEMP, which the
+    harness shell may set differently from this hook."""
+    if sys.platform != "win32":
+        return None
+    from ..windows_paths import trusted_windows_local_temp
+
+    return str(trusted_windows_local_temp())
+
+
+_WINDOWS_PROFILES = frozenset(
+    {
+        "python-eval-readonly-v1",
+        "node-eval-readonly-v1",
+        "node-build-output-v1",
+        "node-tool-readonly-v1",
+    }
+)
+
+
+def platform_contains(response: Mapping[str, object]) -> bool:
+    """macOS runs every contained profile; Linux runs the workspace sandbox;
+    Windows runs installed Python and Node scripts, Vite builds and local
+    lint, typecheck and format checks in an AppContainer."""
+    profile = response.get("required_execution_profile")
+    return (
+        sys.platform == "darwin"
+        or (sys.platform == "linux" and profile == "workspace-contained-v1")
+        or (sys.platform == "win32" and profile in _WINDOWS_PROFILES)
     )
 
 
@@ -138,8 +178,12 @@ def contained_zcode_response(
     """Allow only the rewritten sink; native authority is rechecked at execution."""
     reason = response.get("reason_code")
     if (
-        not _platform_contains(response)
+        not platform_contains(response)
         or config.get("harness") not in _SINK_HARNESSES
+        # The sink command is POSIX-quoted for Git Bash and the Pi shell; on
+        # Windows Codex gets a PowerShell command. Any other harness there
+        # keeps its single review.
+        or (sys.platform == "win32" and config.get("harness") not in _WINDOWS_SINK_HARNESSES)
         or response.get("decision") != "deny"
         or response.get("policy_action") != "sandbox-required"
         or response.get("observe_mode") is True
@@ -191,7 +235,7 @@ def contained_zcode_response(
         if len(serialized) > 1_048_576:
             return None
         cleanup_stale_zcode_requests()
-        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-"))
+        directory = Path(tempfile.mkdtemp(prefix="hol-guard-contained-test-", dir=_request_root()))
         # mkdtemp creates an owner-only directory; do not widen its permissions.
         request = directory / "request.json"
         descriptor = os.open(request, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -214,13 +258,21 @@ def contained_zcode_response(
         if "--home" in cli_args:
             args.extend(["--home", cli_args[cli_args.index("--home") + 1]])
         command = (*_sink_command_prefix(config), *args)
+        if sys.platform == "win32" and config.get("harness") == "codex":
+            from ..windows_powershell_quote import powershell_join
+
+            shell_command = powershell_join(command)
+        else:
+            shell_command = shlex.join(command)
+        if shell_command is None:
+            raise ValueError("sink command cannot be quoted for this shell")
         return {
             "policy_action": "allow",
             "reason_code": "native_contained_execution_routed",
             "hookSpecificOutput": {
                 "hookEventName": "PreToolUse",
                 "permissionDecision": "allow",
-                "updatedInput": {**original, "command": shlex.join(command)},
+                "updatedInput": {**original, "command": shell_command},
             },
         }
     except (OSError, ValueError, KeyError, IndexError, TypeError):

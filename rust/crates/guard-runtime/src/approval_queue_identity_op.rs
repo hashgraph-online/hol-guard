@@ -66,13 +66,21 @@ pub(crate) fn evaluate(request: &ApprovalQueueIdentityRequestV1) -> Result<Value
     Ok(json!({ "items": items }))
 }
 
-fn identify(item: &ApprovalQueueIdentityItemV1) -> Option<Value> {
+pub(crate) fn identify(item: &ApprovalQueueIdentityItemV1) -> Option<Value> {
     let identity_key = normalize_command_identity(item.launch_target.as_deref().unwrap_or(""));
     let action_identity = match item.action_identity.as_deref().filter(|id| !id.is_empty()) {
         Some(identity) => identity.to_owned(),
         None => build_action_identity(item.launch_target.as_deref(), item.envelope.as_ref())?,
     };
     let queue_group_id = match item.queue_group_id.as_deref().filter(|id| !id.is_empty()) {
+        // A bare connector marker joins the connector's group under this
+        // row's own action, so only rows that already merged still merge.
+        Some(group) if crate::connector_setup::is_connector_marker(group) => {
+            crate::connector_setup::action_group_id(
+                group,
+                &build_queue_group_id(item, &action_identity)?,
+            )
+        }
         Some(group) => group.to_owned(),
         None => build_queue_group_id(item, &action_identity)?,
     };

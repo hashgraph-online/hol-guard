@@ -38,6 +38,20 @@ When Guard pauses a command that a built-in command extension already covers, su
 
 The same change is available from the terminal with `hol-guard command controls set <permission-id> --state allow`.
 
+### Connectors that need setup
+
+A request held only because Guard does not recognise the local CLI it launches (for example a user-installed `lanectl`) records which connector it waits on instead of an extension hint. The request page then carries a `connector_recommendation` (`guard.approval-connector-recommendation.v1`) naming the connector and its Protect page (`/extensions/local-cli/<cli-id>`).
+
+- The daemon re-checks it on every read: the request is still pending and in the connector's `connector:<identity-hash>:` group, the stored connector still has the same identity and is still `unset`, and Emergency Lockdown is off. Once the connector is allowed, blocked or forgotten, the recommendation disappears.
+- `status` is `available` only with healthy protection settings and a configured approval gate; otherwise it is `authority_unavailable` or `approval_gate_required`.
+- `caution` is set when any pending request in the same connector group carries a destructive, credential, exfiltration or similar risk class.
+- The recommendation is read-only. Setting the connector up goes through the same local-CLI preview, one-use proof and apply flow as Protect. Hosted dashboard origins never receive it, and agent-facing text never carries its link.
+- `setup_href` opens that Protect page on this request (`?setup=<request-id>&identity=<identity-hash>`); the page offers the pre-filled setup only while the stored connector still has that identity and no decision.
+- `setup_request` is a pre-filled body for that same endpoint (`state: "allowed"` plus `connector_group_request_id`). The dashboard adds the revision, approval credentials and session nonce; nothing else can set a connector to `allowed`.
+- When an `allowed` apply names `connector_group_request_id`, the daemon resolves the pending rows of that connector's group after the write saves, through the existing bulk approve-once path. The approval gate is checked again and the resident's bulk eligibility still applies, so a row it rejects stays pending. The id must belong to the group, and a `blocked` apply cannot carry it. If the group cannot be resolved, the setting stays saved and the rows stay pending.
+- Every row the bulk path approves runs the existing continuation for its own agent: Codex rows get the `approvals resume` binding, and other harnesses get the same retry text as `hol-guard approvals retry-hint`. The response's `connector_group.continuation` is the one for the request the setup started from.
+- `GET /v1/local-clis?identity=<identity-hash>` lists only the connector with that exact identity and no seeded profile rows, so a Protect deep link never shows a changed binary as the one that was held.
+
 ## Local and Cloud boundary
 
 Local Guard remains the enforcement authority on the device. Local interception, policy evaluation, approvals, local receipts, recovery, Test Lab evaluation, and current-device protection do not depend on a paid Cloud plan. Guard Cloud adds continuity, synchronization, durable history, advanced evidence/search, and team or organization coordination without redefining whether the local device is protected.

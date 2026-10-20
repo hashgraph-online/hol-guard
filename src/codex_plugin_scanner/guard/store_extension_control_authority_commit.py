@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import secrets
 
+from .runtime.command_extensions import CommandSafetyExtensionRegistry
 from .runtime.extension_control_authority import (
     SNAPSHOT_PURPOSE,
     TRANSITION_PURPOSE,
@@ -19,6 +20,7 @@ from .runtime.extension_control_authority import (
     layers_to_json,
 )
 from .runtime.extension_control_contract import (
+    ControlLayerKind,
     ExtensionControlLayer,
 )
 from .runtime.extension_control_proof import (
@@ -39,13 +41,27 @@ from .store_extension_control_authority_support import (
 )
 
 
-def _canonical_contract_value(value: object) -> object:
-    from .store_extension_control_authority import _canonical_contract_value as canonical
-
-    return canonical(value)
-
-
 class ExtensionControlAuthorityCommitMixin:
+    def migrate_installed_command_pack_authority(self):
+        """Authenticate legacy controls before admitting the installed release.
+
+        Called at daemon installation/startup, never by preview or recovery.
+        Neither controls, managed state nor saved command decisions are mutated.
+        """
+        from .catalog_delivery import lifecycle_store
+        from .catalog_delivery.preparation_authority import load_installed_bundle
+
+        installed = load_installed_bundle()
+        if installed is None:
+            return
+        with self._extension_control_authority_lock(shared=True):
+            if lifecycle_store.migration_retained(self):
+                return
+        with self._extension_control_authority_lock():
+            with self._connect() as connection:
+                ensure_extension_control_authority_schema(connection)
+            lifecycle_store.migrate_installed(self, installed)
+
     def enroll_extension_control_authority(
         self,
         *,
@@ -65,6 +81,12 @@ class ExtensionControlAuthorityCommitMixin:
             if current.health is not AuthorityHealth.UNENROLLED:
                 raise ExtensionControlAuthorityError("extension control authority already enrolled")
             consume_extension_control_enrollment_proof(self.guard_home, proof, enrollment)
+            from .catalog_delivery import lifecycle_store
+            from .catalog_delivery.preparation_authority import load_installed_bundle
+
+            installed = load_installed_bundle()
+            if installed is not None:
+                lifecycle_store.enroll_installed(self, installed)
             return self._bootstrap_extension_control_authority(catalog_digest, key=None)
 
     def commit_extension_control_layers(
@@ -77,7 +99,16 @@ class ExtensionControlAuthorityCommitMixin:
         idempotency_key: str,
         nonce: str,
         proof: ExtensionControlProof,
+        migration_registry: CommandSafetyExtensionRegistry | None = None,
+        pack_activation=None,
+        expected_managed_revision: int | None = None,
+        expected_managed_layers: tuple[ExtensionControlLayer, ...] | None = None,
+        managed_registry: CommandSafetyExtensionRegistry | None = None,
     ) -> ExtensionControlAuthorityView:
+        if pack_activation is not None:
+            if migration_registry is None or migration_registry.catalog_digest != catalog_digest:
+                raise ExtensionControlAuthorityError("pack activation requires its verified registry")
+            self._catalog_target_manifest(migration_registry)
         self._validate_commit_input(
             layers,
             catalog_digest=catalog_digest,
@@ -97,11 +128,49 @@ class ExtensionControlAuthorityCommitMixin:
         validate_extension_control_proof(proof, mutation)
         layers_json = layers_to_json(layers)
         self._validate_serialized_layers(layers_json)
+        managed_manifest = None
+        if expected_managed_revision is not None:
+            if managed_registry is None or expected_managed_layers is None:
+                raise ExtensionControlAuthorityError("managed policy binding missing")
+            managed_manifest = self._catalog_target_manifest(managed_registry)
         with self._extension_control_authority_lock():
+            if pack_activation is not None:
+                from .catalog_delivery import lifecycle_store
+
+                lifecycle_store.check(self, pack_activation.lifecycle_before, pack_activation.lifecycle_after)
+                from .catalog_delivery.active_security import check_scope
+
+                check_scope(self, pack_activation.security_digest)
+            if expected_managed_revision is not None:
+                assert managed_registry is not None
+                managed_view = self._read_extension_control_authority_locked(
+                    managed_registry.catalog_digest,
+                    migration_registry=managed_registry,
+                    allow_migration=False,
+                )
+                managed_view = self._with_managed_controls_activation(managed_view, current_manifest=managed_manifest)
+                if (
+                    managed_view.health is not AuthorityHealth.PROTECTED
+                    or managed_view.managed_revision != expected_managed_revision
+                    or tuple(layer for layer in managed_view.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+                    != expected_managed_layers
+                ):
+                    raise ExtensionControlAuthorityError("managed policy changed before commit")
             self._invalidate_native_extension_control_policy()
             # Do not roll back an abandoned transition yet: a retry of the same
             # request must still find and resume its prepared row below.
-            current = self._read_extension_control_authority_locked(catalog_digest, _healed=True)
+            #
+            # Pass the registry: when another install has bound this authority
+            # to its own catalog, a write under ours has to be able to rebind
+            # the stored controls. Without it the read below rejects the
+            # digest, every apply answers 409, and the only way out of the
+            # conflict is to stop running one of the two installs.
+            current = self._read_extension_control_authority_locked(
+                catalog_digest,
+                migration_registry=migration_registry,
+                _healed=True,
+                allow_migration=pack_activation is None,
+            )
             key = self._authority_key(required=True)
             assert key is not None
             actor_hash = _private_hash(actor_id, key=key, purpose="actor")
@@ -181,11 +250,15 @@ class ExtensionControlAuthorityCommitMixin:
                             (proof_hash,),
                         )
                         proof_already_consumed = True
-                    current = self._read_extension_control_authority_locked(catalog_digest)
+                    current = self._read_extension_control_authority_locked(
+                        catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
+                    )
             if current.health is AuthorityHealth.RECOVERY_REQUIRED:
                 # A different request abandoned its prepared transition before
                 # anchoring it; roll that back so this request can proceed.
-                current = self._read_extension_control_authority_locked(catalog_digest)
+                current = self._read_extension_control_authority_locked(
+                    catalog_digest, migration_registry=migration_registry, allow_migration=pack_activation is None
+                )
             if current.health is not AuthorityHealth.PROTECTED:
                 raise ExtensionControlAuthorityError("extension control authority unavailable")
             with self._connect() as connection:
@@ -224,6 +297,7 @@ class ExtensionControlAuthorityCommitMixin:
                     "layers_json": layers_json,
                     "previous_digest": previous_digest,
                     "committed_at": created_at,
+                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
                 },
                 key=key,
                 purpose=SNAPSHOT_PURPOSE,
@@ -240,6 +314,7 @@ class ExtensionControlAuthorityCommitMixin:
                     "nonce_hash": nonce_hash,
                     "created_at": created_at,
                     "phase": AuthorityPhase.PREPARED.value,
+                    **({"command_pack_record_digest": pack_activation.digest} if pack_activation is not None else {}),
                 },
                 key=key,
                 purpose=TRANSITION_PURPOSE,
@@ -280,6 +355,18 @@ class ExtensionControlAuthorityCommitMixin:
                         created_at,
                     ),
                 )
+                if pack_activation is not None:
+                    from .catalog_delivery.activation_journal import reserve
+
+                    reserve(
+                        self,
+                        connection,
+                        pack_activation,
+                        control_revision=revision,
+                        snapshot_digest=snapshot_digest,
+                        catalog_digest=catalog_digest,
+                        recorded_at=created_at,
+                    )
             if not proof_already_consumed:
                 consume_extension_control_proof(self.guard_home, proof, mutation)
             anchored = AuthorityAnchor(revision, snapshot_digest, AuthorityPhase.ANCHORED)
@@ -288,6 +375,12 @@ class ExtensionControlAuthorityCommitMixin:
             except Exception as exc:
                 raise ExtensionControlAuthorityError("extension control authority anchor unavailable") from exc
             with self._connect() as connection:
+                from .catalog_delivery.activation_journal import finish
+
+                pending = connection.execute(
+                    "select * from extension_control_authority_transition where revision=?", (revision,)
+                ).fetchone()
+                finish(self, connection, pending)
                 connection.execute(
                     "update extension_control_authority_transition set phase = ? where revision = ?",
                     (AuthorityPhase.ANCHORED.value, revision),

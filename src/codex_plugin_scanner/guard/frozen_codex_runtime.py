@@ -1,9 +1,9 @@
 """Frozen-runtime compatibility for authenticated Guard-managed Codex hooks.
 
-The Desktop Core sidecar is a PyInstaller one-file executable. In that shape,
+The Desktop Core sidecar is a PyInstaller executable. In that shape,
 ``sys.executable`` is the Guard executable itself rather than a Python
-interpreter, and Python module ``__file__`` paths live in PyInstaller's
-short-lived extraction directory. The normal Codex hook contract intentionally
+interpreter, and a one-file build's Python module ``__file__`` paths live in
+PyInstaller's short-lived extraction directory. The normal Codex hook contract intentionally
 binds source-package files and invokes the Python interpreter with ``-I``.
 
 This module keeps that source-install contract unchanged and installs a strict
@@ -108,24 +108,26 @@ def install_frozen_codex_runtime(*, force: bool = False) -> bool:
     ) -> tuple[str, ...]:
         # Reuse the established config builder after replacing only its child
         # launch contracts. This keeps query, timeout, home, manifest, and
-        # workspace semantics identical to source installs.
-        # A frozen runtime is its own bridge; it never launches the native one.
-        source_argv = python_bridge_argv(
-            list(
-                source_hook_command(
-                    context,
-                    home_is_current=home_is_current,
-                    python_executable=python_executable,
-                )
+        # workspace semantics identical to source installs, and keeps the
+        # native launcher the source builder selected: its durable copy under
+        # the Guard home answers each hook from the daemon and fails closed
+        # without one. It only reads the config this executable's argv carries.
+        source_command = list(
+            source_hook_command(
+                context,
+                home_is_current=home_is_current,
+                python_executable=python_executable,
             )
         )
+        source_argv = python_bridge_argv(source_command)
         if len(source_argv) != 4 or not isinstance(source_argv[3], str):
             raise RuntimeError("Guard's source Codex bridge contract is not canonical")
         config_json = source_argv[3]
         payload = _decode_private_payload(decode_bridge_config_argument(config_json), label="Codex bridge")
         if not payload:
             raise RuntimeError("Guard's Codex bridge config is empty")
-        return (python_executable, _FROZEN_BRIDGE_ARG, config_json)
+        native_prefix = tuple(str(part) for part in source_command[: len(source_command) - len(source_argv)])
+        return (*native_prefix, python_executable, _FROZEN_BRIDGE_ARG, config_json)
 
     def frozen_packaged_paths() -> tuple[tuple[str, Path], ...]:
         executable = Path(sys.executable).expanduser().resolve(strict=True)
@@ -443,7 +445,10 @@ def _verify_frozen_bridge_contract(
     if not isinstance(events, list) or not events:
         raise ValueError("managed frozen Codex hook event identity is invalid")
     for event in events:
-        if not isinstance(event, dict) or event.get("argv") != expected_argv:
+        argv = event.get("argv") if isinstance(event, dict) else None
+        # The native launcher prefix is not part of the bridge identity, as for
+        # source installs: it reads its config from this exact argv.
+        if not isinstance(argv, list) or python_bridge_argv(argv) != expected_argv:
             raise ValueError("managed frozen Codex hook bridge config changed after authentication")
 
 

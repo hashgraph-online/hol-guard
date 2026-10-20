@@ -1128,8 +1128,11 @@ const API_OPTIONS_WITH_VALUES: &[&str] = &[
     "-f",
     "-h",
     "-p",
+    "-q",
+    "-t",
 ];
 const API_BOOLEAN_OPTIONS: &[&str] = &[
+    "--allow-escape-sequences",
     "--include",
     "--paginate",
     "--silent",
@@ -1137,7 +1140,7 @@ const API_BOOLEAN_OPTIONS: &[&str] = &[
     "--verbose",
     "-i",
 ];
-const API_VALUE_PREFIXES: &[&str] = &["-f", "-F", "-H", "-X", "-h", "-p"];
+const API_VALUE_PREFIXES: &[&str] = &["-f", "-F", "-H", "-X", "-h", "-p", "-q", "-t"];
 
 fn method_override_header_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
@@ -1233,10 +1236,17 @@ fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessme
             Some(p) => (token[..p].to_string(), true, token[p + 1..].to_string()),
             None => (token.clone(), false, String::new()),
         };
-        if !separator && token.len() > 2 && API_VALUE_PREFIXES.contains(&&token[..2]) {
-            option_name = token[..2].to_string();
+        // pflag reads an attached short value (`-q.sha`, `-q=.sha`) before any `=`.
+        if let Some(head) = token
+            .get(..2)
+            .filter(|head| token.len() > 2 && API_VALUE_PREFIXES.contains(head))
+        {
+            option_name = head.to_string();
             separator = true;
-            attached_value = token[2..].to_string();
+            attached_value = token[2..]
+                .strip_prefix('=')
+                .unwrap_or(&token[2..])
+                .to_string();
         }
         if API_BOOLEAN_OPTIONS.contains(&option_name.as_str()) {
             if separator {
@@ -1276,7 +1286,7 @@ fn parse_api_arguments(args: &[String]) -> Result<ApiArgs, GitHubCommandAssessme
                     has_dynamic_option_value || value_is_dynamic(&value, true);
             } else if option_name == "--input" {
                 has_input = true;
-            } else if value_is_dynamic(&value, true) {
+            } else if value_is_dynamic(&value, true) || jq_env(&option_name, &value) {
                 has_dynamic_option_value = true;
             }
             index += consumed;
@@ -1627,17 +1637,24 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
     let mut jq_count = 0;
     while index < args.len() {
         let token = &args[index];
-        if token == "--jq" {
+        // `-q` is the short spelling of `--jq`, with the same attached forms.
+        let attached_jq = token.strip_prefix("--jq=").or_else(|| {
+            let tail = token.strip_prefix("-q").filter(|tail| !tail.is_empty())?;
+            Some(tail.strip_prefix('=').unwrap_or(tail))
+        });
+        if attached_jq.is_some() || matches!(token.as_str(), "--jq" | "-q") {
             jq_count += 1;
-            if jq_count > 1 || index + 1 >= args.len() || !jq_is_plain_path(&args[index + 1]) {
-                return false;
-            }
-            index += 2;
-            continue;
-        }
-        if let Some(v) = token.strip_prefix("--jq=") {
-            jq_count += 1;
-            if jq_count > 1 || !jq_is_plain_path(v) {
+            let value = match attached_jq {
+                Some(value) => value,
+                None => {
+                    index += 1;
+                    match args.get(index) {
+                        Some(value) => value.as_str(),
+                        None => return false,
+                    }
+                }
+            };
+            if jq_count > 1 || !jq_is_plain_path(value) {
                 return false;
             }
             index += 1;
@@ -1678,18 +1695,9 @@ fn routine_review_thread_arguments_are_static(args: &[String]) -> bool {
     field_names.iter().filter(|n| n.as_str() == "query").count() == 1 && field_names.len() <= 2
 }
 
-/// A `--jq` filter that only walks down the resolution's own response,
-/// `.data.resolveReviewThread.thread.isResolved` or a prefix of it, and so
-/// cannot call `env`, `input` or any other builtin or project other data.
-fn jq_is_plain_path(filter: &str) -> bool {
-    let steps: Vec<&str> = filter.split('.').collect();
-    steps.first() == Some(&"")
-        && (2..=5).contains(&steps.len())
-        && steps[1..]
-            .iter()
-            .zip(["data", "resolveReviewThread", "thread", "id|isResolved"])
-            .all(|(step, expected)| expected.split('|').any(|name| name == *step))
-}
+#[path = "github_review_thread_jq.rs"]
+mod review_thread_jq;
+use review_thread_jq::{jq_env, jq_is_plain_path};
 
 // ---------------------------------------------------------------------------
 // github_graphql_capabilities.py
@@ -1743,7 +1751,7 @@ fn routine_review_thread_literal_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*"PRRT_[A-Za-z0-9_-]{{8,}}"\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })
@@ -1752,7 +1760,7 @@ fn routine_review_thread_variable_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
         Regex::new(&format!(
-            r#"\A\s*mutation\s*\(\s*\$(?P<declared>[_A-Za-z][_0-9A-Za-z]*)\s*:\s*ID!\s*\)\s*\{{\s*resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$(?P<used>[_A-Za-z][_0-9A-Za-z]*)\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
+            r#"\A\s*mutation\s*\(\s*\$(?P<declared>[_A-Za-z][_0-9A-Za-z]*)\s*:\s*ID!\s*\)\s*\{{\s*(?:un)?resolveReviewThread\s*\(\s*input\s*:\s*\{{\s*threadId\s*:\s*\$(?P<used>[_A-Za-z][_0-9A-Za-z]*)\s*\}}\s*\)\s*\{{\s*thread\s*\{{\s*{REVIEW_THREAD_SELECTION}\s*\}}\s*\}}\s*\}}\s*\z"#
         ))
         .unwrap()
     })

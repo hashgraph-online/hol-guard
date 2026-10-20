@@ -405,6 +405,20 @@ def _run_guard_cloud_command(
         payload["supply_chain"] = build_local_supply_chain_posture(store, config, now=_now())
         _emit("cloud-sync-intel", payload, getattr(args, "json", False))
         return 0
+    if cloud_command == "status":
+        from .cloud_status import build_cloud_status_payload, render_cloud_status_text
+
+        payload = build_cloud_status_payload(
+            store,
+            guard_config=config,
+            now=_now(),
+            fetch_cloud=not bool(getattr(args, "offline", False)),
+        )
+        if getattr(args, "json", False):
+            _emit("cloud-status", payload, True)
+        else:
+            print(render_cloud_status_text(payload))
+        return 0
     print("cloud subcommand is required", file=sys.stderr)
     return 2
 

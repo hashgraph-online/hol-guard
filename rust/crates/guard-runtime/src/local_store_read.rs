@@ -8,9 +8,13 @@ use std::path::{Path, PathBuf};
 
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 
-const STORE_FILE_NAME: &str = "guard.db";
+#[path = "local_store_read_cache.rs"]
+mod cache;
+pub(crate) use cache::{open_read_only_cached, CachedConnection};
+
+pub(crate) const STORE_FILE_NAME: &str = "guard.db";
 /// Highest `local_cli_schema_migration` version this build reads.
-pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 11;
+pub(crate) const SUPPORTED_SCHEMA_VERSION: i64 = 14;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum StoreReadError {
@@ -58,11 +62,8 @@ pub(crate) fn open_read_only(store_path: &Path) -> Result<Option<Connection>, St
 
 pub(crate) fn table_exists(connection: &Connection, table: &str) -> Result<bool, StoreReadError> {
     connection
-        .query_row(
-            "select 1 from sqlite_master where type = 'table' and name = ?1",
-            params![table],
-            |_| Ok(()),
-        )
+        .prepare_cached("select 1 from sqlite_master where type = 'table' and name = ?1")
+        .and_then(|mut statement| statement.query_row(params![table], |_| Ok(())))
         .optional()
         .map(|found| found.is_some())
         .map_err(|_| StoreReadError::StoreUnavailable)
@@ -86,11 +87,10 @@ pub(crate) fn schema_version(connection: &Connection) -> Result<Option<i64>, Sto
         return Ok(None);
     }
     let marker: Option<(i64, String)> = connection
-        .query_row(
+        .prepare_cached(
             "select version, checksum from local_cli_schema_migration where singleton = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
         )
+        .and_then(|mut statement| statement.query_row([], |row| Ok((row.get(0)?, row.get(1)?))))
         .optional()
         .map_err(|_| StoreReadError::StoreUnavailable)?;
     let Some((version, checksum)) = marker else {
@@ -192,4 +192,38 @@ pub(crate) fn hook_store_probe(
             .map_err(|_| StoreReadError::StoreUnavailable)?;
     }
     Ok(probe)
+}
+
+/// Whether `sync_state` holds a Claude Code permission notice for
+/// `session_id`, under its session key or any of its tool keys. A row that
+/// fails verification counts too: only the daemon, which holds the key,
+/// can tell a valid notice from one it must invalidate.
+pub(crate) fn claude_permission_notice_present(
+    guard_home: &Path,
+    session_id: &str,
+) -> Result<bool, StoreReadError> {
+    let Some(connection) = open_read_only(&guard_home.join(STORE_FILE_NAME))? else {
+        return Ok(false);
+    };
+    connection
+        .busy_timeout(std::time::Duration::from_millis(HOOK_PROBE_BUSY_TIMEOUT_MS))
+        .map_err(|_| StoreReadError::StoreUnavailable)?;
+    if !table_exists(&connection, "sync_state")? {
+        return Ok(false);
+    }
+    // Under the binary collation every `<session key>:<tool>` key sorts at or
+    // after `<session key>:` and before `<session key>;`.
+    let session_key = format!("claude_permission_notice:{session_id}");
+    connection
+        .query_row(
+            "select exists(select 1 from sync_state \
+               where state_key = ?1 or (state_key >= ?2 and state_key < ?3))",
+            params![
+                session_key,
+                format!("{session_key}:"),
+                format!("{session_key};")
+            ],
+            |row| row.get(0),
+        )
+        .map_err(|_| StoreReadError::StoreUnavailable)
 }

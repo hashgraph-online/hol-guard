@@ -129,9 +129,11 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
     for index in 0..16 {
         let stale_digest = format!("{index:016x}{}", "0".repeat(48));
         let scope = state_scope(&base, &stale_digest).unwrap();
+        // Publication refuses an unreadable state, so take a valid template
+        // above the written range and leave only the stale generations.
         let mut state = publish_state(
             &scope,
-            0,
+            65,
             std::process::id(),
             &stale_digest,
             "loopback",
@@ -139,6 +141,7 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
             &token,
         )
         .unwrap();
+        fs::remove_file(scope.join(format!("generation-{:020}.json", 65))).unwrap();
         state.process_start_marker = "stale-process-marker".to_owned();
         let private_root = private_root_for_scope(&scope).unwrap();
         for generation in 1..=64 {
@@ -164,5 +167,32 @@ fn a_verified_live_fallback_survives_the_retained_state_cap() {
     let states = discover_home_states_prefer(&base, Some(&preferred_digest)).unwrap();
     assert_eq!(states.len(), 1);
     assert_eq!(states[0].1, digest);
+    fs::remove_dir_all(base).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn same_executable_discovery_accepts_this_executable_without_hashing() {
+    let base = test_home("same-executable");
+    // Neither recorded digest matches this test binary, so digest liveness
+    // keeps scanning while same-executable liveness stops at the first scope.
+    for digest in ["aa".repeat(32), "fe".repeat(32)] {
+        let scope = state_scope(&base, &digest).unwrap();
+        publish_state(
+            &scope,
+            1,
+            std::process::id(),
+            &digest,
+            "loopback",
+            "127.0.0.1:1".to_owned(),
+            &[9u8; crate::AUTH_TOKEN_BYTES],
+        )
+        .unwrap();
+    }
+
+    assert_eq!(discover_home_states_prefer(&base, None).unwrap().len(), 2);
+    let states = discover_same_executable_states(&base).unwrap();
+    assert_eq!(states.len(), 1);
+    assert_eq!(states[0].1, "aa".repeat(32));
     fs::remove_dir_all(base).unwrap();
 }

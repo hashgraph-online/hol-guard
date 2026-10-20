@@ -25,7 +25,6 @@ import pytest
 from codex_plugin_scanner.cli import _resolve_legacy_args, main
 from codex_plugin_scanner.guard import local_trust_contract as local_trust_contract_module
 from codex_plugin_scanner.guard import local_trust_controller as local_trust_controller_module
-from codex_plugin_scanner.guard import policy_integrity as policy_integrity_module
 from codex_plugin_scanner.guard import store as guard_store_module
 from codex_plugin_scanner.guard import store_policy_integrity_runtime as policy_integrity_runtime_module
 from codex_plugin_scanner.guard.cli import commands_dispatch_trust as trust_dispatch_module
@@ -53,6 +52,10 @@ from codex_plugin_scanner.guard.local_trust_contract import (
     select_trust_backend,
 )
 from codex_plugin_scanner.guard.models import PolicyDecision
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import (
+    NATIVE_POLICY_VERIFIER_KEY_NAME,
+    NATIVE_RUNTIME_STATE_DIRECTORY,
+)
 from codex_plugin_scanner.guard.policy_authority import PolicyAuthorityError
 from codex_plugin_scanner.guard.policy_bundle_decisions import build_policy_bundle_decisions
 from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_acceptance_checkpoint
@@ -63,6 +66,7 @@ from codex_plugin_scanner.guard.store import (
 )
 from codex_plugin_scanner.guard.store_policy_integrity_backend import MirroredPolicyIntegritySecretStore
 from tests.policy_bundle_signing_helpers import policy_bundle_test_keyring, sign_policy_bundle
+from tests.policy_integrity_fixture import canonical_policy_payload
 
 _POLICY_BUNDLE_WORKSPACE_ID = "workspace-1"
 _TRUST_BACKEND_CORRUPT_RESULT_RUNTIME_TIMEOUT_SECONDS = 1.0
@@ -991,6 +995,10 @@ def _rotate_policy_integrity_key(store: GuardStore, *, raw_key: bytes) -> None:
         store._policy_integrity_key_ref,
         base64.urlsafe_b64encode(raw_key).decode("ascii"),
     )
+    # The resident verifier key is derived from the master key and is never
+    # replaced in place, so a rotation is an explicit repair that retires it
+    # with the old master.
+    (store.guard_home / NATIVE_RUNTIME_STATE_DIRECTORY / NATIVE_POLICY_VERIFIER_KEY_NAME).unlink(missing_ok=True)
     store._clear_policy_integrity_cache()
 
 
@@ -1927,7 +1935,7 @@ def test_startup_refresh_does_not_promote_legacy_row_generation(tmp_path: Path) 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:baseline"))
     legacy_row["integrity_version"] = 1
     legacy_row["integrity_generation"] = 999
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2048,7 +2056,7 @@ def test_startup_refresh_keeps_pending_generation_when_legacy_rows_remain(
     assert key_id is not None
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2116,10 +2124,10 @@ def test_startup_refresh_clears_stale_pending_generation_when_legacy_rows_remain
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     pending_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:pending"))
     pending_row["integrity_generation"] = 1
-    pending_payload = policy_integrity_module.canonical_policy_payload(
+    pending_payload = canonical_policy_payload(
         pending_row,
         integrity_version=pending_row["integrity_version"],
     )
@@ -2205,10 +2213,10 @@ def test_refresh_clears_stale_pending_generation_when_legacy_rows_remain(
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     pending_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:pending"))
     pending_row["integrity_generation"] = 1
-    pending_payload = policy_integrity_module.canonical_policy_payload(
+    pending_payload = canonical_policy_payload(
         pending_row,
         integrity_version=pending_row["integrity_version"],
     )
@@ -2278,7 +2286,7 @@ def test_refresh_keeps_pending_generation_when_only_signed_v1_rows_remain(tmp_pa
 
     legacy_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:legacy"))
     legacy_row["integrity_version"] = 1
-    legacy_payload = policy_integrity_module.canonical_policy_payload(legacy_row, integrity_version=1)
+    legacy_payload = canonical_policy_payload(legacy_row, integrity_version=1)
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2673,9 +2681,7 @@ def test_startup_refresh_leaves_mixed_newer_generations_unresolved(tmp_path: Pat
 
     newer_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:current"))
     newer_row["integrity_generation"] = 3
-    newer_payload = policy_integrity_module.canonical_policy_payload(
-        newer_row, integrity_version=newer_row["integrity_version"]
-    )
+    newer_payload = canonical_policy_payload(newer_row, integrity_version=newer_row["integrity_version"])
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """
@@ -2756,9 +2762,7 @@ def test_startup_refresh_leaves_invalid_newer_generations_unresolved(tmp_path: P
 
     valid_row = dict(_policy_row(store.guard_home, artifact_id="codex:project:baseline"))
     valid_row["integrity_generation"] = 3
-    valid_payload = policy_integrity_module.canonical_policy_payload(
-        valid_row, integrity_version=valid_row["integrity_version"]
-    )
+    valid_payload = canonical_policy_payload(valid_row, integrity_version=valid_row["integrity_version"])
     with sqlite3.connect(store.guard_home / "guard.db") as connection:
         connection.execute(
             """

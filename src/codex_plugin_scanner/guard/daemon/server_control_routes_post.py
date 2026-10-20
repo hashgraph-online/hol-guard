@@ -20,6 +20,8 @@ from ..native_daemon_route import NativeDaemonRouteError, native_resolve_request
 from ..native_resident_revival import native_route_unavailable_body
 from .command_activity_api import handle_command_activity_feedback
 from .extension_control_api import ExtensionControlApiError
+from .harness_version_api import WRITE_PATHS as HARNESS_VERSION_WRITE_PATHS
+from .harness_version_api import handle_harness_version_write
 from .local_approval_continuation import apply_local_approval_continuation
 from .local_cli_http import handle_local_cli_post
 from .manager import repair_approval_center_locator
@@ -241,6 +243,13 @@ class _ControlPostRoutes:
             else:
                 self._handle_supply_chain_package_firewall_action(action, payload)
             return
+        if parsed.path in HARNESS_VERSION_WRITE_PATHS:
+            # Fail closed if the native route table predates these paths.
+            if not self._header_token_is_valid():
+                self._write_unauthorized(extra_headers=self._cors_headers_for_request())
+                return
+            handle_harness_version_write(self, parsed.path, payload, self._harness_context({}))
+            return
         if len(path_parts) == 4 and path_parts[:2] == ["v1", "harnesses"]:
             self._handle_harness_action(path_parts[2], path_parts[3], payload)
             return
@@ -285,6 +294,7 @@ class _ControlPostRoutes:
                     requested_scope=scope,
                     contract_version=scope_contract_version,
                     contract_digest=scope_contract_digest,
+                    guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
                 )
                 if existing_request.get("status") != "pending":
                     if (
@@ -347,12 +357,20 @@ class _ControlPostRoutes:
                         requested_scope=scope,
                         contract_version=scope_contract_version,
                         contract_digest=scope_contract_digest,
+                        guard_home=self.server.store.guard_home,  # type: ignore[attr-defined]
                     )
                 except StaleApprovalScopeContractError as error:
                     self._write_stale_approval_scope_error(error)
                     return
                 except IneligibleApprovalScopeError as error:
                     self._write_ineligible_approval_scope_error(error)
+                    return
+                except ApprovalScopeUnavailableError:
+                    self._write_json(
+                        {"resolved": False, "error": "native_approval_scope_unavailable"},
+                        status=503,
+                        extra_headers={"Cache-Control": "no-store"},
+                    )
                     return
                 except ValueError as error:
                     self._write_json({"resolved": False, "error": str(error)}, status=400)

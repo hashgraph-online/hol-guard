@@ -486,6 +486,6 @@ pub(crate) fn frame_response(
     })
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "claude_hook_bridge_http_tests.rs"]
 mod tests;

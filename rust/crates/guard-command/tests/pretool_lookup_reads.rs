@@ -1,5 +1,5 @@
 #![cfg(unix)]
-//! Command lookups, Guard help, `git merge-base` and chained Git reads.
+//! Command lookups, Guard help, `git merge-base`, `git grep` and chained Git reads.
 use guard_command::pretool::{evaluate_pre_tool_envelope_with_execution_context, PathContext};
 use serde_json::json;
 use std::path::{Path, PathBuf};
@@ -169,6 +169,113 @@ fn merge_base_pager_configuration_still_asks() {
 }
 
 #[test]
+fn git_grep_searches_proceed() {
+    let home = home();
+    let project = home.join("project");
+    let routed = format!(
+        "git -C {} grep -l one HEAD -- src | head",
+        project.to_str().unwrap()
+    );
+    for harness in HARNESSES {
+        for command in [
+            "git grep -l one HEAD",
+            "git grep -n one -- src",
+            "git grep -in -e one --or -e two HEAD | head -5",
+            "git grep -c one; echo ---; git grep -l one HEAD -- src",
+            "git log --oneline -1 && git grep -l one HEAD",
+            routed.as_str(),
+        ] {
+            let result = classify(&home, harness, command);
+            assert_eq!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn git_grep_helpers_and_other_searches_still_ask() {
+    let home = home();
+    for harness in ["omp", "codex"] {
+        for command in [
+            "git grep -O one",
+            "git grep -iOvi one",
+            "git grep --open-files-in-pager=vi one",
+            "git grep --open one",
+            "git grep -f src/one.ts",
+            "git grep --no-index one",
+            "git grep --untracked one",
+            "git grep --textconv one",
+            "git grep --recurse-submodules one",
+            "git -c core.pager=less grep one",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn git_grep_pager_and_fallback_configuration_still_ask() {
+    let home = home();
+    let project = home.join("project");
+    git(&project, &["config", "pager.grep", "sh -c id"]);
+    let result = classify(&home, "codex", "git grep -l one HEAD");
+    assert_ne!(result.decision, "allow", "{result:?}");
+    git(&project, &["config", "--unset", "pager.grep"]);
+    git(&project, &["config", "grep.fallbackToNoIndex", "true"]);
+    let result = classify(&home, "codex", "git grep -l one");
+    assert_ne!(result.decision, "allow", "{result:?}");
+}
+
+#[test]
+fn git_search_patterns_naming_environment_reads_proceed() {
+    let home = home();
+    let project = home.join("project");
+    let routed = format!(
+        "git -C {} grep -ln \"process.env.CI\" -- src | head -10",
+        project.to_str().unwrap()
+    );
+    for harness in HARNESSES {
+        for command in [
+            routed.as_str(),
+            "git grep -n \"\\.env\" -- src",
+            "git grep -e .ssh/ -e os.environ HEAD",
+            "git log --oneline -S \"process.env.CI\" -- src/one.ts | head -5",
+            "git log --oneline -G.env --grep=process.env",
+            "git log --oneline --grep .env",
+            "git log -S .ssh/ --author dev --oneline",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_eq!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
+fn git_searches_of_credential_paths_or_words_still_ask() {
+    let home = home();
+    for harness in ["omp", "codex"] {
+        for command in [
+            "git grep foo -- .env",
+            "git grep foo .env",
+            "git grep -f .env",
+            "git grep -n password",
+            "git grep -e .env -- src/.env.local",
+            "git log -S secret",
+            "git log -p -S process.env -- .env",
+            "git show HEAD:.env",
+            "git cat-file -p HEAD:.env.local",
+            "git diff -S .env",
+            "git log -p --author -S .env",
+            "git log -p --committer -G .ssh/id_rsa",
+            "git log -p --output out -S .env",
+        ] {
+            let result = classify(&home, harness, command);
+            assert_ne!(result.decision, "allow", "{harness}: {command}");
+        }
+    }
+}
+
+#[test]
 fn bun_x_no_install_typecheck_routes_to_the_readonly_tool() {
     let home = home();
     let result = classify(&home, "codex", "bun x --no-install tsc --noEmit");
@@ -191,7 +298,6 @@ fn git_reads_after_unproven_segments_still_ask() {
             "git -c core.pager=less log && git status",
             "GIT_PAGER=less git log && git status",
             "git merge-base --octopus-evil HEAD main",
-            "git merge-base HEAD main > out.txt",
         ] {
             let result = classify(&home, harness, command);
             assert_ne!(result.decision, "allow", "{harness}: {command}");

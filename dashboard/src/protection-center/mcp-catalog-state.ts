@@ -10,6 +10,11 @@ export function mcpToolCanReceiveDirectAllow(command: LocalCliCommand): boolean 
 export function mcpCatalogCopy(item: LocalCliItem): { title: string; description: string } | null {
   if (item.surface !== "mcp") return null;
   const catalog = item.mcp_catalog;
+  if (!catalog && item.remote_origin) return {
+    title: "Remote connector",
+    description: "Guard does not connect to remote servers, so it cannot list this connector's tools. "
+      + "Tools appear here after your host app calls them.",
+  };
   if (!catalog) return {
     title: "Inventory not checked",
     description: "Guard knows observed tools from this connector. Its full inventory has not been verified.",

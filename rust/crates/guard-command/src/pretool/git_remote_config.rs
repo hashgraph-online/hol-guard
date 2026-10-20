@@ -79,12 +79,7 @@ pub(super) fn fetch_config_routes_execution(config: &GitConfig) -> bool {
         if !(key.starts_with("url.") && key.ends_with(".insteadof")) {
             continue;
         }
-        if key != "url.https://github.com/.insteadof"
-            || entries.is_empty()
-            || entries
-                .iter()
-                .any(|value| value.trim() != "git@github.com:")
-        {
+        if !github_rewrite_pair(key, entries) {
             return true;
         }
     }
@@ -96,10 +91,8 @@ pub(super) fn fetch_config_routes_execution(config: &GitConfig) -> bool {
     }
     const BOOLEAN_KEYS: &[&str] = &[
         "remote.origin.mirror",
-        "remote.origin.prune",
         "remote.origin.prunetags",
         "remote.origin.recursesubmodules",
-        "fetch.prune",
         "fetch.prunetags",
         "fetch.recursesubmodules",
         "submodule.recurse",
@@ -116,16 +109,21 @@ pub(super) fn fetch_config_routes_execution(config: &GitConfig) -> bool {
 }
 
 /// Repository-scoped transport or credential settings a cloned repository
-/// could carry to redirect where a push authenticates.
+/// could carry to redirect where a push authenticates. A hooks directory
+/// below the repository, which hook managers such as Husky set, is not
+/// one: the hook files in it are judged by `Probe::hooks_inert`.
 pub(super) fn repository_config_routes_transport(config: &GitConfig) -> bool {
-    config.keys().any(|key| {
+    config.iter().any(|(key, entries)| {
         key.starts_with("http.")
             || key.starts_with("credential.")
+            || (key == "core.hookspath"
+                && !entries
+                    .iter()
+                    .all(|value| super::git_hook_files::repository_relative_hooks_path(value)))
             || matches!(
                 key.as_str(),
                 "core.askpass"
                     | "core.gitproxy"
-                    | "core.hookspath"
                     | "remote.origin.proxy"
                     | "remote.origin.proxyauthmethod"
             )
@@ -207,12 +205,58 @@ pub(super) fn safe_github_https_remote_url(value: &str) -> bool {
     let parts: Vec<&str> = stripped.split('/').collect();
     parts.len() == 3
         && parts[0].is_empty()
-        && parts[1..].iter().all(|part| {
-            !matches!(*part, "" | "." | "..")
-                && part
-                    .bytes()
-                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
-        })
+        && parts[1..].iter().all(|part| plain_repository_name(part))
+}
+
+/// `git@github.com:<owner>/<repo>[.git]` or `ssh://git@github.com/<owner>/<repo>[.git]`:
+/// the `git` user, no port, and an owner and repository of plain name bytes.
+/// Git then starts only `ssh` with `git@github.com` and a quoted repository
+/// path; the session's `GIT_SSH*` variables and `core.sshCommand` are refused
+/// elsewhere, so nothing but the user's own `ssh` configuration is in play.
+pub(super) fn safe_github_ssh_remote_url(value: &str) -> bool {
+    if !value.bytes().all(|byte| byte.is_ascii_graphic()) {
+        return false;
+    }
+    let path = if let Some(path) = value.strip_prefix("git@github.com:") {
+        path
+    } else if let Some(path) = value.strip_prefix("ssh://git@github.com/") {
+        path
+    } else {
+        return false;
+    };
+    let stripped = path.strip_suffix(".git").unwrap_or(path);
+    let parts: Vec<&str> = stripped.split('/').collect();
+    parts.len() == 2 && parts.iter().all(|part| plain_repository_name(part))
+}
+
+fn plain_repository_name(part: &str) -> bool {
+    !matches!(part, "" | "." | "..")
+        && part
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'-'))
+}
+
+/// A GitHub origin Git reaches over HTTPS or SSH.
+pub(super) fn safe_github_remote_url(value: &str) -> bool {
+    safe_github_https_remote_url(value) || safe_github_ssh_remote_url(value)
+}
+
+/// `url.<base>.insteadOf` rules that only exchange one GitHub spelling for
+/// another: HTTPS for `git@github.com:` and the reverse. The rewritten
+/// origin is judged afterwards as any other.
+fn github_rewrite_pair(key: &str, entries: &[String]) -> bool {
+    let Some(base) = key
+        .strip_prefix("url.")
+        .and_then(|rest| rest.strip_suffix(".insteadof"))
+    else {
+        return false;
+    };
+    let prefixes: &[&str] = match base {
+        "https://github.com/" => &["git@github.com:", "ssh://git@github.com/"],
+        "git@github.com:" | "ssh://git@github.com/" => &["https://github.com/"],
+        _ => return false,
+    };
+    !entries.is_empty() && entries.iter().all(|value| prefixes.contains(&value.trim()))
 }
 
 /// A credential helper Guard can resolve to one executable on disk.

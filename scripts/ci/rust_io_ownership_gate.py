@@ -50,7 +50,12 @@ from scripts.ci.rust_io_ownership_policy import (
     NATIVE_MODES,
     SCHEMA,
 )
-from scripts.ci.rust_io_ownership_resolver import FunctionIndex, FunctionRecordLike, resolve_call
+from scripts.ci.rust_io_ownership_resolver import (
+    FunctionIndex,
+    FunctionRecordLike,
+    _import_target_path,
+    resolve_call,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,11 +83,22 @@ class IoObservation:
     reachable: bool
 
 
+# `_branch_failures` asserts the shape of this one, so name it instead of reaching
+# for a position in ROOTS that a later entry point can quietly take over.
+HOOK_WORKER_ROOT: Final = RootSpec(
+    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "review_http_payload",
+    "HookWorker",
+)
+
 ROOTS: Final = (
+    HOOK_WORKER_ROOT,
+    # The CLI command is where a harness hook invocation enters Guard, so the walk
+    # starts one level above `route_native_hook`: harness resolution and payload
+    # loading run before any native call and were outside the gate until now.
     RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "review_http_payload",
-        "HookWorker",
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "_run_guard_hook_command",
     ),
     RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
@@ -204,7 +220,55 @@ def _category(path: str, kind: str) -> str:
     return "unclassified_python_io"
 
 
-def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
+def _shadowed_names(root: Path, path: str, tree: ast.AST, record: FunctionRecord) -> frozenset[str]:
+    """Names a sibling module's export was deliberately renamed to in scope.
+
+    A bare call matches an operation by name alone, so
+    `from .runtime_resolution import _redact_secrets as resolve` would
+    otherwise be read as `Path.resolve`. A name qualifies only when all of
+    these hold:
+
+    - a relative import renames a sibling function to it, either at module
+      level or inside this function, so a rename in one function never hides
+      a real operation in another;
+    - neither this function nor the module also binds it through an absolute
+      import or a module-level definition, which would leave the call
+      ambiguous;
+    - the renamed function resolves in the repository and performs no
+      operation of its own. A renamed hashing or filesystem helper keeps
+      counting at every call site, as does a local wrapper such as
+      `def sha256(...)` or an absolute `from hashlib import sha256`.
+    """
+
+    module_body = getattr(tree, "body", [])
+    scope = [*module_body, *ast.walk(record.node)]
+    rebound = {
+        item.name for item in module_body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    for node in scope:
+        if isinstance(node, ast.Import):
+            rebound.update(alias.asname or alias.name.split(".", maxsplit=1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            rebound.update(alias.asname or alias.name for alias in node.names)
+    names: set[str] = set()
+    for node in scope:
+        if not isinstance(node, ast.ImportFrom) or node.level == 0 or not node.module:
+            continue
+        target = _import_target_path(root, path, node)
+        for alias in node.names:
+            if alias.asname is None or alias.asname == alias.name or alias.asname in rebound:
+                continue
+            if target is not None and _performs_no_operation(root, target, alias.name):
+                names.add(alias.asname)
+    return frozenset(names)
+
+
+def _performs_no_operation(root: Path, path: str, name: str) -> bool:
+    candidates = [record for record in _functions(_parsed_module(root / path), path) if record.qualname == name]
+    return len(candidates) == 1 and next(iter(_observations(candidates[0])), None) is None
+
+
+def _observations(record: FunctionRecord, shadowed: frozenset[str] = frozenset()) -> Iterable[IoObservation]:
     path = record.path
     if record.name in _EQUIVALENCE_FUNCTIONS:
         yield IoObservation(path, record.node.lineno, record.name, "equivalence", _category(path, "equivalence"), True)
@@ -212,6 +276,8 @@ def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
         if isinstance(node, ast.Call):
             name = _call_name(node)
             chain = _attribute_chain(node.func)
+            if isinstance(node.func, ast.Name) and name in shadowed:
+                continue
             kind: str | None = None
             operation: str | None = None
             if (path, chain) in _TRANSPORT_ENCODE_OPERATIONS:
@@ -291,7 +357,7 @@ def _native_branch(record: FunctionRecord, marker: str) -> ast.If | None:
 
 def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRecord]]) -> list[str]:
     failures: list[str] = []
-    review = _root_record(root, ROOTS[0], records)
+    review = _root_record(root, HOOK_WORKER_ROOT, records)
     if not _call_in(review.node, "_review_native_edge"):
         failures.append("HookWorker.review_http_payload has no direct native edge return")
     elif any(
@@ -323,7 +389,8 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
         tree = _parsed_module(path)
         module_records = tuple(_functions(tree, relative))
         for record in module_records:
-            for observation in _observations(record):
+            shadowed = _shadowed_names(root, relative, tree, record)
+            for observation in _observations(record, shadowed):
                 observations.append(
                     IoObservation(
                         observation.path,
@@ -340,14 +407,34 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
     )
 
 
-def _capability_contract() -> list[dict[str, object]]:
-    return capability_contract(COMPATIBILITY_MODES)
-
-
 def validate(root: Path) -> dict[str, object]:
     """Validate current source in a fresh, bounded-lifetime analysis scope."""
     with analysis_cache():
         return _validate(root)
+
+
+def _control_plane_remainder(inventory: list[IoObservation]) -> dict[str, object]:
+    """Describe the unclassified remainder so the count cannot be read as a gate debt.
+
+    Every unclassified operation is, by construction, off the hook decision path:
+    `_validate` refuses to pass while one is reachable. Reporting only the raw
+    category totals invites the opposite reading -- that thousands of operations
+    are waiting to be classified -- so say plainly that the remainder is Python
+    control plane and that none of it is reachable from a root.
+    """
+    remainder = [item for item in inventory if item.category.startswith("unclassified_python")]
+    return {
+        "operation_count": len(remainder),
+        "file_count": len({item.path for item in remainder}),
+        "reachable_count": sum(1 for item in remainder if item.reachable),
+        "by_subpackage": dict(sorted(Counter(_subpackage(item.path) for item in remainder).items())),
+    }
+
+
+def _subpackage(path: str) -> str:
+    tail = path.split("src/codex_plugin_scanner/guard/", 1)[-1]
+    head, separator, _ = tail.partition("/")
+    return head if separator else "<top-level>"
 
 
 def _validate(root: Path) -> dict[str, object]:
@@ -361,6 +448,10 @@ def _validate(root: Path) -> dict[str, object]:
         failures.extend(
             f"reachable unclassified Python I/O: {item.path}:{item.line} {item.operation}" for item in reachable_bad
         )
+    # A waiver the hook graph no longer reaches excuses nothing; one outside this tree is left alone.
+    waived = {item.path for item in inventory if item.reachable and item.category == "pending_authority_migration"}
+    stale = sorted(path for path in _PENDING_AUTHORITY_PATHS if path not in waived and (root / path).is_file())
+    failures.extend(f"stale pending_authority_migration waiver: {path}" for path in stale)
     if failures:
         raise RuntimeError("; ".join(failures))
     reachable_inventory = [item for item in inventory if item.reachable]
@@ -370,11 +461,12 @@ def _validate(root: Path) -> dict[str, object]:
         "status": "passed",
         "native_modes": sorted(NATIVE_MODES),
         "compatibility_modes": sorted(COMPATIBILITY_MODES),
-        "capabilities": _capability_contract(),
+        "capabilities": capability_contract(COMPATIBILITY_MODES),
         "roots": [f"{item.path}:{item.name}" for item in (_root_record(root, spec, records) for spec in ROOTS)],
         "reachable_function_count": len(reachable),
         "inventory_total": len(inventory),
         "inventory_by_category": dict(sorted(inventory_counts.items())),
+        "control_plane_remainder": _control_plane_remainder(inventory),
         "inventory": [
             {
                 "path": item.path,

@@ -67,7 +67,18 @@ def test_resident_change_waits_for_new_ack_instead_of_returning_an_unready_polic
 
 
 @pytest.mark.parametrize(
-    "error", ["native_command_control_mutation_in_progress", "native_business_source_mutation_in_progress"]
+    "error",
+    [
+        "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
+        "native_command_control_binding_changed",
+        "native_command_pack_projection_changed",
+        "native_business_source_mutation_in_progress",
+        "native_business_source_binding_changed",
+        "native_local_cli_revision_changed",
+        "native_provider_catalog_changed",
+        "native_policy_snapshot_expired",
+    ],
 )
 def test_control_mutation_contention_waits_for_committed_policy_ack(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
@@ -104,7 +115,9 @@ def test_control_mutation_contention_waits_for_committed_policy_ack(
     [
         "native_policy_snapshot_resident_changed",
         "native_command_control_mutation_in_progress",
+        "native_command_control_authority_not_current",
         "native_business_source_mutation_in_progress",
+        "native_policy_snapshot_expired",
     ],
 )
 @pytest.mark.parametrize("deadline", [None, 100.25, 99.0])
@@ -129,9 +142,7 @@ def test_resident_change_preserves_existing_deadline_and_never_admits_without_ac
         publisher.close()
 
 
-@pytest.mark.parametrize(
-    "error", ["native_policy_snapshot_runtime_unavailable", "native_command_control_binding_changed", "unknown_error"]
-)
+@pytest.mark.parametrize("error", ["native_policy_snapshot_runtime_unavailable", "unknown_error"])
 def test_other_publication_failures_still_reject_immediately(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, error: str
 ) -> None:

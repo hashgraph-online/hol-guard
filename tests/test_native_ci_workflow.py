@@ -39,23 +39,68 @@ def _workflow(name: str) -> dict:
     ],
 )
 def test_effective_cache_write_privilege_is_limited_to_trusted_main_builds(ref, event, platform, opt_in, allowed):
+    assert _cache_write_allowed(ref, event, platform, opt_in, None) is allowed
+
+
+RELEASE_REF = "refs/heads/release-please--branches--main--components--hol-guard"
+
+
+@pytest.mark.parametrize(
+    ("ref", "event", "push_ref", "allowed"),
+    [
+        (RELEASE_REF, "push", RELEASE_REF, True),
+        (RELEASE_REF, "push", None, False),
+        (RELEASE_REF, "workflow_dispatch", RELEASE_REF, False),
+        (RELEASE_REF, "pull_request", RELEASE_REF, False),
+        ("refs/pull/3701/merge", "pull_request", RELEASE_REF, False),
+        ("refs/heads/contributor", "push", RELEASE_REF, False),
+        (RELEASE_REF + "-other", "push", RELEASE_REF, False),
+        ("refs/heads/main", "push", RELEASE_REF, True),
+        ("refs/heads/main", "workflow_dispatch", RELEASE_REF, False),
+    ],
+)
+def test_named_push_ref_may_save_only_its_own_push_builds(ref, event, push_ref, allowed):
+    """A caller-named branch saves only on its own pushes; PR refs and dispatches stay readers."""
+    assert _cache_write_allowed(ref, event, "macOS", None, push_ref) is allowed
+
+
+def test_gauntlet_runtime_builds_on_release_branch_pushes_only() -> None:
+    """The qualify wheel rebuilds on every release-branch push and cancels a stale head's build."""
+    workflow = yaml.safe_load((ROOT / ".github/workflows/gauntlet-full-task-runtime.yml").read_text(encoding="utf-8"))
+    triggers = workflow[True]
+    assert triggers["push"] == {"branches": [RELEASE_REF.removeprefix("refs/heads/")]}
+    assert "pull_request_target" not in triggers
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "gauntlet-full-task-runtime-${{ github.ref }}",
+        "cancel-in-progress": True,
+    }
+    steps = workflow["jobs"]["native-build"]["steps"]
+    setup = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
+    assert setup["with"]["save-push-ref"] == RELEASE_REF
+
+
+def _cache_write_allowed(ref, event, platform, opt_in, push_ref) -> bool:
     action = yaml.safe_load((ROOT / ".github/actions/setup-rust/action.yml").read_text(encoding="utf-8"))
     cache = next(step for step in action["runs"]["steps"] if step.get("uses", "").startswith("Swatinem/"))
     if opt_in is None:
         opt_in = action["inputs"]["save-main-cache"]["default"]
+    if push_ref is None:
+        push_ref = action["inputs"]["save-push-ref"]["default"]
     expression = cache["with"]["save-if"].strip()[3:-2]
     for name, value in {
         "github.ref": ref,
         "github.event_name": event,
         "runner.os": platform,
         "inputs.save-main-cache": opt_in,
+        "inputs.save-push-ref": push_ref,
     }.items():
         expression = expression.replace(name, repr(value))
     expression = "(" + expression.replace("&&", " and ").replace("||", " or ") + ")"
     tree = ast.parse(expression, mode="eval")
-    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.Constant)
+    permitted = (ast.Expression, ast.BoolOp, ast.And, ast.Or, ast.Compare, ast.Eq, ast.NotEq, ast.Constant)
     assert all(isinstance(node, permitted) for node in ast.walk(tree)), "Unsupported cache-policy expression"
-    assert bool(eval(compile(tree, "<cache-policy>", "eval"), {"__builtins__": {}})) is allowed
+    return bool(eval(compile(tree, "<cache-policy>", "eval"), {"__builtins__": {}}))
 
 
 def test_parallel_macos_proofs_use_this_runs_matching_platform_wheel() -> None:

@@ -37,7 +37,7 @@ const basePolicy = (overrides: Partial<GuardPolicyDecision>): GuardPolicyDecisio
 const enrichedPackageRule = basePolicy({
   remembered_command: "pnpm install",
   remembered_context: "Package install via pnpm",
-  workspace_label: "hol-points-portal",
+  workspace_label: "cloud-portal",
   source_receipt_id: "receipt-abc123",
   artifact_hash: "sha256:62de981049ed20f850ae2bb52a9aaa2820c6d9be809592ec0c4b3d207b83f9b6",
 });
@@ -47,7 +47,7 @@ const enrichedDisplay = resolvePolicyDisplay(enrichedPackageRule);
 assert(enrichedDisplay.headline === "pnpm install", "POL-H1: enriched command becomes headline");
 assert(enrichedDisplay.kindLine === "Package install via pnpm", "POL-H2: enriched context becomes kind line");
 assert(
-  enrichedDisplay.rememberSentence.includes("hol-points-portal"),
+  enrichedDisplay.rememberSentence.includes("cloud-portal"),
   "POL-H3: remember sentence names project folder",
 );
 assert(
@@ -112,7 +112,7 @@ assert(
   resolvePolicyRowTitle(scannerLabelRule, resolvePolicyDisplay(scannerLabelRule)).toLowerCase().includes("shell"),
   "POL-H19: scanner labels fall back to action family headline",
 );
-assert(resolvePolicyRowFolder(enrichedPackageRule) === "hol-points-portal", "POL-H20: folder resolves workspace label");
+assert(resolvePolicyRowFolder(enrichedPackageRule) === "cloud-portal", "POL-H20: folder resolves workspace label");
 assert(resolvePolicyRowFrequency(enrichedPackageRule) === "This project", "POL-H21: frequency uses policy scope label");
 assert(
   resolvePolicyRowSubtitle(enrichedPackageRule, enrichedDisplay)?.includes("This project"),

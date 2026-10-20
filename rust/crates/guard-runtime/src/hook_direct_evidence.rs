@@ -12,7 +12,10 @@
 //! is sent again. Each queue names its own epoch, and an acknowledgement from
 //! another epoch is ignored: a restarted resident numbers its records from
 //! one again, and the daemon's cursor for the old resident must not drop them.
+//! Each page also carries the queue's diagnostic hook counts, which the
+//! daemon only logs.
 
+use crate::hook_direct_counters::DirectHookCounters;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -26,7 +29,7 @@ const MAX_QUEUED_RECORDS: usize = 1_024;
 const MAX_QUEUED_BYTES: usize = 8 * 1024 * 1024;
 /// One drain page stays well under the resident response cap.
 const MAX_DRAIN_BYTES: usize = 1536 * 1024;
-const MAX_RECORD_BYTES: usize = 1024 * 1024;
+pub(crate) const MAX_RECORD_BYTES: usize = 1024 * 1024;
 const DEFAULT_DRAIN_RECORDS: usize = 256;
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,6 +73,7 @@ impl Default for QueueState {
 pub(crate) struct DirectEvidenceQueue {
     epoch: String,
     state: Mutex<QueueState>,
+    counters: DirectHookCounters,
 }
 
 impl Default for DirectEvidenceQueue {
@@ -86,31 +90,42 @@ impl Default for DirectEvidenceQueue {
                 QUEUES.fetch_add(1, Ordering::Relaxed)
             ),
             state: Mutex::new(QueueState::default()),
+            counters: DirectHookCounters::default(),
         }
     }
 }
 
 impl DirectEvidenceQueue {
+    /// The diagnostic counts of direct hooks since this queue started.
+    pub(crate) fn counters(&self) -> &DirectHookCounters {
+        &self.counters
+    }
+
     /// Queue one record, or refuse it when the queue cannot hold it.
     pub(crate) fn offer(&self, record: Value) -> bool {
+        self.try_offer(record).is_ok()
+    }
+
+    /// Queue one record, or hand it back when the queue cannot hold it.
+    pub(crate) fn try_offer(&self, record: Value) -> Result<(), Value> {
         let Ok(encoded) = serde_json::to_vec(&record) else {
-            return false;
+            return Err(record);
         };
         let bytes = encoded.len();
         if bytes > MAX_RECORD_BYTES {
-            return false;
+            return Err(record);
         }
         let Ok(mut state) = self.state.lock() else {
-            return false;
+            return Err(record);
         };
         if state.records.len() >= MAX_QUEUED_RECORDS || state.bytes + bytes > MAX_QUEUED_BYTES {
-            return false;
+            return Err(record);
         }
         let seq = state.next_seq;
         state.next_seq = state.next_seq.saturating_add(1);
         state.bytes += bytes;
         state.records.push_back(QueuedRecord { seq, bytes, record });
-        true
+        Ok(())
     }
 
     /// Acknowledge records the daemon already has, then copy the next page.
@@ -181,6 +196,7 @@ pub(crate) fn drain(
         "records": records,
         "remaining": remaining,
         "through": through,
+        "counters": queue.counters.snapshot(),
     }))
     .map_err(|_| "direct_hook_evidence_encoding_failed".to_owned())
 }

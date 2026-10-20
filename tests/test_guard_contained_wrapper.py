@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.runtime import contained_test_hook as sink
-from codex_plugin_scanner.guard.runtime import restricted_vitest
+from codex_plugin_scanner.guard.runtime import contained_wrapper, restricted_vitest
 from codex_plugin_scanner.guard.runtime.contained_wrapper import (
     OutputFilter,
     bounded_output,
@@ -46,6 +47,12 @@ def test_peels_verified_cd_and_bounded_filters(tmp_path: Path) -> None:
         None,
     )
     assert peel_contained_wrapper("pytest -q", workspace=tmp_path) is None
+    # An inline program's `;` is code: `node -e` runs as one argv in the sandbox.
+    assert peel_contained_wrapper(f"cd '{web}' && node -e \"a(); b()\"", workspace=tmp_path) == (
+        "node -e 'a(); b()'",
+        resolved,
+        None,
+    )
 
 
 @pytest.mark.parametrize(
@@ -113,6 +120,10 @@ def test_status_echo_reports_the_shell_status() -> None:
         "pytest -q # note | tail -5",
         "cd $HOME && pytest -q",
         "pytest -k 'a;b' | tail -5",
+        "node -e 'a;b' extra | tail -5",
+        "node -p 'a;b' | tail -5",
+        "bash -c 'a;b' | tail -5",
+        "cd {web} && sh -c 'a;b'",
         'pytest -k "a>b" | tail -5',
         "pytest -q foo2>&1 | tail -5",
         "pytest -q 2>&1 > out.txt | tail -5",
@@ -145,6 +156,16 @@ def test_other_operators_are_left_to_the_strict_unwrapped_path(tmp_path: Path, c
         ("pytest tests/a\\ b.py | head -3", "pytest 'tests/a b.py'", OutputFilter("head", 3, False)),
         ('pytest -k "a \\"b\\" (c)" | head -n 2', "pytest -k 'a \"b\" (c)'", OutputFilter("head", 2, False)),
         ("pytest -q '|' x | tail -1", "pytest -q x", None),
+        (
+            'node -e "a(); if (!b) c(1); d()" | tail -3',
+            "node -e 'a(); if (!b) c(1); d()'",
+            OutputFilter("tail", 3, False),
+        ),
+        (
+            "python3 -c 'import sys; print(1 if sys else 0)' 2>&1 | head -2",
+            "python3 -c 'import sys; print(1 if sys else 0)'",
+            OutputFilter("head", 2, True),
+        ),
     ],
 )
 def test_quoted_words_are_single_arguments(tmp_path: Path, command: str, core: str, output: OutputFilter) -> None:
@@ -385,6 +406,51 @@ def test_cd_into_a_sibling_repository_is_peeled_with_home(tmp_path: Path) -> Non
         assert sibling_project_root(target, home=home) is None
         with pytest.raises(ValueError):
             peel_contained_wrapper(f"cd {target} && pytest -q", workspace=workspace, home=home)
+
+
+def test_the_owner_question_is_left_to_native_authority_on_windows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows has no uid, so the sink cannot reject a checkout for lacking one.
+
+    `st_uid` is 0 there and `os.getuid` does not exist, so the POSIX comparison
+    answered "not yours" for every Windows checkout and the sink rejected the
+    sandbox-required commands Rust had already admitted. The owner SID is the
+    runtime's question and it gates the receipt this path requires.
+    """
+
+    home, _workspace, sibling = sibling_home(tmp_path)
+    dashboard = sibling / "dashboard"
+    monkeypatch.setattr(contained_wrapper.os, "name", "nt")
+    assert sibling_project_root(dashboard, home=home) == sibling.resolve()
+    # The structural questions Python can still answer stay answered.
+    assert sibling_project_root(home / "loose", home=home) is None
+    assert sibling_project_root(tmp_path, home=home) is None
+
+
+@pytest.mark.skipif(not Path("/tmp").is_dir(), reason="needs a POSIX temporary root")
+def test_windows_does_not_accept_a_checkout_under_the_temporary_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Leaving the owner to native authority only holds for roots it would return.
+
+    Native's Windows arm bases the search on the profile alone, so it never asks
+    `owned_by_current_user` about a checkout under the temporary root - and
+    `Path("/tmp")` resolves to `C:\\tmp` there, which any authenticated user can
+    create. Accepting one would rebase the sandbox onto a planted repository
+    with no owner check from either side.
+    """
+
+    with tempfile.TemporaryDirectory(dir="/tmp", prefix="guard-sibling-") as value:
+        planted = Path(value) / "planted"
+        (planted / ".git").mkdir(parents=True)
+        home = Path(value) / "home"
+        home.mkdir()
+
+        assert sibling_project_root(planted, home=home) == planted.resolve()
+
+        monkeypatch.setattr(contained_wrapper.os, "name", "nt")
+        assert sibling_project_root(planted, home=home) is None
 
 
 def test_home_itself_is_never_a_sibling_repository(tmp_path: Path) -> None:

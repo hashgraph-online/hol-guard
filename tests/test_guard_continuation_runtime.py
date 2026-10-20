@@ -21,6 +21,7 @@ from codex_plugin_scanner.guard.continuation_worker import StoreContinuationPlan
 from codex_plugin_scanner.guard.live_process_identity import current_process_identity
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_continuation import continuation_store_call
 
 NOW = "2026-08-24T12:00:00+00:00"
 
@@ -435,7 +436,9 @@ def test_stale_claimant_cannot_commit_after_lease_recovery(tmp_path: Path) -> No
     assert recovered is not None
 
     with pytest.raises(RuntimeError, match="claim ownership changed"):
-        store.finalize_continuation_attempt(
+        continuation_store_call(
+            store,
+            "store_finalize",
             request_id="request-owner",
             offer_hash="offer-owner",
             action="allow_once",

@@ -28,6 +28,13 @@ use crate::context_digest::{parse_context_token, python_strip, validate_context_
 use crate::package_authority_op::{request_digest, ResidentPackageEval};
 use crate::package_evaluation_compose_op::{compose, parse_action, parse_evaluation, patch};
 
+#[path = "package_policy_resolve_approvals.rs"]
+mod approvals;
+use approvals::{
+    is_durable_exact_artifact_approval, is_fresh_artifact_approval,
+    is_legacy_package_local_approval,
+};
+
 const LOCAL_HARNESS: &str = "guard-cli";
 const EVALUATION_KEYS: [&str; 3] = ["policy_action", "reasons", "packages"];
 
@@ -63,56 +70,6 @@ fn non_empty_text<'a>(map: &'a Map<String, Value>, key: &str) -> Option<&'a str>
 
 fn field_or_null<'a>(map: &'a Map<String, Value>, key: &str) -> &'a Value {
     map.get(key).unwrap_or(&Value::Null)
-}
-
-fn is_fresh_artifact_approval(decision: &Map<String, Value>, request: Option<&Value>) -> bool {
-    if !(is_int(decision.get("decision_id"))
-        && text_is(decision, "source", "approval-gate")
-        && text_is(decision, "scope", "artifact")
-        && decision.get("expires_at").is_some_and(Value::is_string))
-    {
-        return false;
-    }
-    if non_empty_text(decision, "request_id").is_some() {
-        return request
-            .and_then(Value::as_object)
-            .is_some_and(|row| text_is(row, "resolution_scope", "artifact"));
-    }
-    decision.get("harness").and_then(Value::as_str) == Some(LOCAL_HARNESS)
-        && decision
-            .get("artifact_id")
-            .and_then(Value::as_str)
-            .is_some_and(|id| id.starts_with(&format!("{LOCAL_HARNESS}:project:package-request:")))
-        && has_token(decision)
-}
-
-fn is_durable_exact_artifact_approval(decision: &Map<String, Value>) -> bool {
-    is_int(decision.get("decision_id"))
-        && text_is(decision, "action", "allow")
-        && text_is(decision, "source", "approval-gate")
-        && text_is(decision, "scope", "artifact")
-        && field_or_null(decision, "expires_at").is_null()
-        && has_token(decision)
-}
-
-fn is_legacy_package_local_approval(
-    decision: &Map<String, Value>,
-    request: Option<&Value>,
-) -> bool {
-    if non_empty_text(decision, "approval_id").is_none()
-        || non_empty_text(decision, "request_id").is_none()
-        || !field_or_null(decision, "workspace").is_null()
-    {
-        return false;
-    }
-    request.and_then(Value::as_object).is_some_and(|row| {
-        text_is(row, "artifact_type", "package_request")
-            && text_is(row, "status", "resolved")
-            && text_is(row, "resolution_action", "allow")
-            && text_is(row, "resolution_scope", "artifact")
-            && field_or_null(row, "artifact_id") == field_or_null(decision, "artifact_id")
-            && field_or_null(row, "artifact_hash") == field_or_null(decision, "artifact_hash")
-    })
 }
 
 /// A policy-bundle family row is stale only when the validated bundle proves
@@ -212,7 +169,7 @@ fn subset(map: &Map<String, Value>) -> Value {
 
 /// Run one compose rewrite over `current` and overlay its fields, the way the
 /// caller used to apply each patch to the evaluation in turn.
-fn rewrite(
+pub(crate) fn rewrite(
     current: &Map<String, Value>,
     kind: &str,
     reuse: Option<&ApprovalReuseDecision>,
@@ -299,7 +256,8 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     let fresh_local_approval = decision
         .is_some_and(|row| is_fresh_artifact_approval(row, approval_request))
         || legacy_local_approval;
-    let durable_exact_approval = decision.is_some_and(is_durable_exact_artifact_approval);
+    let durable_exact_approval =
+        decision.is_some_and(|row| is_durable_exact_artifact_approval(row, &request.artifact_id));
     let current_value = json!(effective.as_str());
     let stored_hash: Option<Value> = match decision {
         Some(row) => row.get("artifact_hash").cloned(),
@@ -416,14 +374,8 @@ fn resolve(request: &PackagePolicyResolveRequestV1) -> Result<Resolution, String
     Ok(resolution(output, None, false))
 }
 
-pub(crate) fn evaluate_package_policy_resolve(
-    request: &PackagePolicyResolveRequestV1,
-) -> Result<Vec<u8>, String> {
-    let request_sha256 = request_digest(request)?;
-    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
-        return Err("native_package_policy_resolve_schema_mismatch".to_owned());
-    }
-    if request.request_id.is_empty()
+fn malformed(request: &PackagePolicyResolveRequestV1) -> bool {
+    request.request_id.is_empty()
         || request.guard_home.is_empty()
         || request.harness.is_empty()
         || request.artifact_id.is_empty()
@@ -431,7 +383,53 @@ pub(crate) fn evaluate_package_policy_resolve(
             .decision
             .as_ref()
             .is_some_and(|row| !row.is_object())
-    {
+}
+
+/// What a read-only resolution settles beside the evaluation it rewrites: the
+/// saved row it accepted, and the disposition a receipt records for it.
+pub(crate) struct UnclaimedResolution {
+    pub(crate) output: Map<String, Value>,
+    pub(crate) claim_disposition: Option<String>,
+    /// A saved row was accepted without a claim being asked for.
+    pub(crate) reused: bool,
+}
+
+/// The resolved evaluation for a read-only request: no claim is asked for, so
+/// a saved approval is only ever reported, never claimed.
+pub(crate) fn resolve_unclaimed(
+    request: &PackagePolicyResolveRequestV1,
+) -> Result<Map<String, Value>, String> {
+    resolve_unclaimed_resolution(request).map(|resolution| resolution.output)
+}
+
+/// The same resolution, for a caller that also records which saved row was
+/// reused. `resolve_unclaimed` drops both, because the finalize op rewrites an
+/// evaluation it has already decided the reuse of.
+pub(crate) fn resolve_unclaimed_resolution(
+    request: &PackagePolicyResolveRequestV1,
+) -> Result<UnclaimedResolution, String> {
+    if malformed(request) || request.claim_saved_approval || request.claim_succeeded.is_some() {
+        return Err(invalid());
+    }
+    let resolution = resolve(request)?;
+    if resolution.claim.is_some() {
+        return Err(invalid());
+    }
+    Ok(UnclaimedResolution {
+        output: resolution.output,
+        claim_disposition: resolution.claim_disposition,
+        reused: resolution.reused,
+    })
+}
+
+pub(crate) fn evaluate_package_policy_resolve(
+    request: &PackagePolicyResolveRequestV1,
+) -> Result<Vec<u8>, String> {
+    let request_sha256 = request_digest(request)?;
+    if request.schema != PACKAGE_AUTHORITY_REQUEST_SCHEMA {
+        return Err("native_package_policy_resolve_schema_mismatch".to_owned());
+    }
+    if malformed(request) {
         return Err(invalid());
     }
     let resolution = resolve(request)?;

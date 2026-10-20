@@ -30,6 +30,7 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
 from codex_plugin_scanner.guard.runtime.restricted_archive_download import RestrictedArchiveDownload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 from tests.package_target_support import recorded_target
 from tests.silent_cloud_server import silent_cloud_sync_url
 from tests.support.network import stub_authenticated_urlopen
@@ -589,6 +590,7 @@ def test_evaluate_package_request_artifact_reviews_npm_git_sources_before_cloud(
     thread.start()
     try:
         store = GuardStore(tmp_path / "guard-home")
+        review_package_signals(tmp_path / "guard-home")
         _seed_guard_cloud(
             store,
             workspace_id=WORKSPACE_ID,
@@ -874,6 +876,7 @@ def test_evaluate_package_request_artifact_handles_invalid_lockfile_bytes_withou
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     bind_workspace(store, WORKSPACE_ID)
     response = _bundle_response(
         packages=[
@@ -906,6 +909,7 @@ def test_evaluate_package_request_artifact_pauses_for_unreadable_lockfile(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     bind_workspace(store, WORKSPACE_ID)
     response = _bundle_response(
         packages=[
@@ -950,6 +954,7 @@ def test_evaluate_package_request_artifact_range_only_timeout_falls_back_safely(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     _seed_guard_cloud(store, workspace_id=WORKSPACE_ID)
     response = _bundle_response(
         packages=[

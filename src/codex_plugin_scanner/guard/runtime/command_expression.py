@@ -1,7 +1,11 @@
 """Portable command-pattern policy expressions for HOL Guard 3.0.
 
-Expressions deliberately operate on normalized command text. Regex and glob operators
-use this module's bounded dialect, so policy validation and runtime evaluation cannot drift.
+Expressions deliberately operate on normalized command text. This module parses their
+shape and bounds; it compiles nothing.
+
+The dialect belongs to the runtime. ``guard-command`` holds the one glob translation and
+the one regex engine, for authoring and for enforcement alike, so a pattern cannot be
+accepted while a document is written and refused when a command runs against it.
 """
 
 from __future__ import annotations
@@ -9,15 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Final, Literal, TypeAlias
 
-import regex
-
 CommandPatternOperator: TypeAlias = Literal["exact", "startsWith", "contains", "endsWith", "glob", "regex"]
 CommandExpressionCombinator: TypeAlias = Literal["all", "any"]
 
 MAX_COMMAND_PATTERN_LENGTH: Final = 512
 MAX_COMMAND_CONDITIONS: Final = 64
 MAX_NORMALIZED_COMMAND_LENGTH: Final = 4096
-REGEX_TIMEOUT_SECONDS: Final = 0.05
 _COMMAND_PATTERN_OPERATORS: Final = frozenset({"exact", "startsWith", "contains", "endsWith", "glob", "regex"})
 _COMMAND_EXPRESSION_COMBINATORS: Final = frozenset({"all", "any"})
 
@@ -146,105 +147,15 @@ def command_expression_from_mapping(value: object) -> CommandExpression:
     )
 
 
-def _glob_pattern(value: str) -> str:
-    """Translate a portable glob: ``*``, ``?``, classes, and backslash escapes."""
-
-    pieces: list[str] = ["\\A"]
-    index = 0
-    while index < len(value):
-        character = value[index]
-        if character == "\\":
-            index += 1
-            if index >= len(value):
-                raise CommandExpressionError("glob_escape_incomplete")
-            pieces.append(regex.escape(value[index]))
-        elif character == "*":
-            pieces.append(".*")
-        elif character == "?":
-            pieces.append(".")
-        elif character == "[":
-            closing = value.find("]", index + 1)
-            if closing == -1:
-                raise CommandExpressionError("glob_class_unclosed")
-            content = value[index + 1 : closing]
-            if not content:
-                raise CommandExpressionError("glob_class_empty")
-            if content[0] == "!":
-                content = "^" + content[1:]
-            pieces.append("[" + content + "]")
-            index = closing
-        else:
-            pieces.append(regex.escape(character))
-        index += 1
-    pieces.append("\\Z")
-    return "".join(pieces)
-
-
-def _compile_pattern(condition: CommandCondition) -> regex.Pattern[str]:
-    flags = 0 if condition.case_sensitive else regex.IGNORECASE
-    if condition.operator == "glob":
-        source = _glob_pattern(condition.value)
-    elif condition.operator == "regex":
-        source = condition.value
-    else:
-        source = regex.escape(condition.value)
-    try:
-        return regex.compile(source, flags=flags)
-    except regex.error as error:
-        raise CommandExpressionError(f"invalid_command_{condition.operator}:{error}") from error
-
-
-def validate_command_expression(expression: CommandExpression) -> None:
-    """Compile every pattern once during policy validation."""
-
-    for condition in expression.conditions:
-        if condition.operator in {"glob", "regex"}:
-            _compile_pattern(condition)
-
-
-def matches_command_condition(condition: CommandCondition, command: str) -> bool:
-    normalized_command = normalize_command_text(command)
-    if condition.operator == "exact":
-        if condition.case_sensitive:
-            return normalized_command == condition.value
-        return normalized_command.casefold() == condition.value.casefold()
-    if condition.operator == "startsWith":
-        if condition.case_sensitive:
-            return normalized_command.startswith(condition.value)
-        return normalized_command.casefold().startswith(condition.value.casefold())
-    if condition.operator == "contains":
-        if condition.case_sensitive:
-            return condition.value in normalized_command
-        return condition.value.casefold() in normalized_command.casefold()
-    if condition.operator == "endsWith":
-        if condition.case_sensitive:
-            return normalized_command.endswith(condition.value)
-        return normalized_command.casefold().endswith(condition.value.casefold())
-    pattern = _compile_pattern(condition)
-    try:
-        return pattern.fullmatch(normalized_command, timeout=REGEX_TIMEOUT_SECONDS) is not None
-    except TimeoutError as error:
-        raise CommandExpressionError("command_pattern_timeout") from error
-
-
-def matches_command_expression(expression: CommandExpression, command: str) -> bool:
-    matches = (matches_command_condition(condition, command) for condition in expression.conditions)
-    return all(matches) if expression.combinator == "all" else any(matches)
-
-
 __all__ = [
     "MAX_COMMAND_CONDITIONS",
     "MAX_COMMAND_PATTERN_LENGTH",
     "MAX_NORMALIZED_COMMAND_LENGTH",
-    "REGEX_TIMEOUT_SECONDS",
     "CommandCondition",
     "CommandExpression",
     "CommandExpressionCombinator",
     "CommandExpressionError",
     "CommandPatternOperator",
     "command_expression_from_mapping",
-    "matches_command_condition",
-    "matches_command_expression",
     "normalize_command_text",
-    "validate_command_expression",
 ]

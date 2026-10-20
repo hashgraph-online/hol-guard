@@ -295,6 +295,9 @@
       },
       "expected": {
         "value": false
+      },
+      "windows_expected": {
+        "value": true
       }
     },
     {

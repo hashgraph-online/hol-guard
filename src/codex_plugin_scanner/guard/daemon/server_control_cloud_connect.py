@@ -19,7 +19,8 @@ from ..cli.connect_sync_result import (
     failed_browser_connect_flow_state,
 )
 from ..package_firewall_entitlement import (
-    resolve_package_firewall_entitlement,
+    PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON,
+    package_firewall_entitlement_or_denied,
 )
 from ..runtime.runner import (
     prepare_guard_cloud_connect_authorization,
@@ -196,8 +197,14 @@ class _CloudConnectRoutes:
                     browser_opened=browser_opened,
                     managed_controls_publish=_managed_controls_publish_for(self.server),
                 )
-                resolved_entitlement = resolve_package_firewall_entitlement(store)
+                # The credentials are already stored. A runtime that cannot
+                # report the entitlement has not failed the sign-in, so this
+                # reads a denial rather than raising into the failure path.
+                resolved_entitlement = package_firewall_entitlement_or_denied(store)
                 resolved_reason = str(resolved_entitlement.get("reason") or "")
+                if resolved_reason == PACKAGE_FIREWALL_RUNTIME_UNAVAILABLE_REASON:
+                    _set_package_firewall_connect_state(self.server, None)  # type: ignore[arg-type]
+                    return
                 if bool(resolved_entitlement.get("allowed")) or resolved_reason == "paid_guard_cloud_required":
                     _set_package_firewall_connect_state(self.server, None)  # type: ignore[arg-type]
                     return

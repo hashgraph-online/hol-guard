@@ -22,3 +22,20 @@ The device setting is `blocked_request_mode = "safe-alternative"` (default) or
 `blocked_request_mode = "ask"` in the local Guard configuration. Workspace
 configuration cannot opt the user into prompts. Existing installations with no
 explicit value receive the new default.
+
+## What runs contained
+
+A command Guard cannot prove safe on its own can still run inside the
+protected workspace sandbox. The contained-run reason and the note a failed
+contained run prints say so, so an agent can plan around it:
+
+- Guard runs a command it proves safe directly, outside the sandbox.
+- A contained command and every program it starts, including children of an
+  interpreter such as `node`, `python` or a shell script, can write only the
+  workspace, `$TMPDIR` and a private scratch `$HOME` that is not your real home
+  directory. They have no network, no access to your home directory, no
+  pseudo-terminal and no Docker socket.
+- When a contained command fails on one of those limits, the note names the
+  limit that was hit (a write, a program start, the network, a read, a PTY or
+  the Docker socket). The limits stay denied; use a non-interactive form of
+  the command, or keep what it needs inside the workspace.

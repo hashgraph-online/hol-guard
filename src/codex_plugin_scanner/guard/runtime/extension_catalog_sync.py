@@ -469,3 +469,12 @@ def build_builtin_extension_catalog_wire(
         guard_version=guard_version,
         generated_at=generated_at,
     )
+
+
+def build_v1_catalog_from_view(view: object) -> ExtensionCatalogWire:
+    """Native bounded compatibility projection of the complete observed view."""
+    from .extension_catalog_pages import PreparedCatalogView
+
+    if not isinstance(view, PreparedCatalogView):
+        raise ValueError("A prepared complete catalog view is required")
+    return view.legacy()

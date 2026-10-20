@@ -25,11 +25,11 @@ from .commands_support_workspace import _workspace_from_cursor_project_dir
 def prepare_native_hook_payload(payload: dict[str, object], *, harness: str) -> dict[str, object]:
     """Apply harness-specific normalization after native authority declines."""
 
-    from ..adapters.cline_hook_payload import prepare_cline_hook_payload
+    from ..adapters._modules.cline.cline_hook_payload import prepare_cline_hook_payload
+    from ..adapters._modules.devin.devin_hooks import prepare_devin_hook_payload
+    from ..adapters._modules.zcode.zcode_hooks import prepare_zcode_hook_payload
     from ..adapters.cursor_hooks import prepare_cursor_hook_payload
-    from ..adapters.devin_hooks import prepare_devin_hook_payload
     from ..adapters.grok_hooks import prepare_grok_hook_payload
-    from ..adapters.zcode_hooks import prepare_zcode_hook_payload
     from .commands_support_runtime_resolution import _canonical_harness_name
 
     canonical_harness = _canonical_harness_name(harness)

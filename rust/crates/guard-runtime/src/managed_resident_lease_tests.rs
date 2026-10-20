@@ -187,6 +187,10 @@ fn uninspectable_lease_path_retains_the_resident() {
 fn removed_state_base_releases_the_resident() {
     let home = test_directory("removed-state-base");
     let state_base = home.join("native-runtime");
+    // Guard provisions the state base before the resident runs. On Windows
+    // the resident only binds it and never creates it, so provision it here.
+    #[cfg(windows)]
+    fixture_directory(&state_base);
     lease_directory(&state_base).expect("lease directory should be available");
     fs::remove_dir_all(&home).expect("test directory should be removable");
 

@@ -132,9 +132,21 @@ pub fn decide_contributed_mcp(
     if !extension_is_active(contribution, input.layers) {
         return None;
     }
+    decide_active_contribution(
+        contribution,
+        input,
+        input.layers.iter().any(|layer| layer.global_lockdown),
+    )
+}
+
+/// The caller has already authenticated this contribution's activation.
+pub(crate) fn decide_active_contribution(
+    contribution: &Contribution<'_>,
+    input: &ContributedMcpInput<'_>,
+    lockdown: bool,
+) -> Option<ContributedMcpOutcome> {
     let tool_name = identity_tool_name(input)?;
     let state = mcp_tool_state(contribution.mcp, tool_name);
-    let lockdown = input.layers.iter().any(|layer| layer.global_lockdown);
     let current = input.current_action;
     let outcome = |action, reason| {
         Some(ContributedMcpOutcome {
@@ -259,7 +271,7 @@ fn transport(input: &ContributedMcpInput<'_>) -> Option<String> {
     None
 }
 
-fn matching_contribution<'a, 'b>(
+pub(crate) fn matching_contribution<'a, 'b>(
     contributions: &'b [Contribution<'a>],
     input: &ContributedMcpInput<'_>,
 ) -> Option<&'b Contribution<'a>> {

@@ -20,15 +20,18 @@ winapi = { workspace = true, features = [
     "jobapi2",
     "knownfolders",
     "namedpipeapi",
+    "processenv",
     "processthreadsapi",
     "shlobj",
     "stringapiset",
     "synchapi",
+    "tlhelp32",
     "winbase",
     "winerror",
     "wincred",
     "wincrypt",
     "winnt",
+    "winreg",
 ] }
 windows-permissions.workspace = true
 getrandom.workspace = true

@@ -23,12 +23,12 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
 )
 from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
-    _capability_id,
     claim_resolved_github_workflow_authorization,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import canonical_framed_payload, format_utc_timestamp
+from tests.github_workflow_test_support import capability_id as _capability_id
 from tests.github_workflow_test_support import native_lineage_verified as native_lineage_verified
 from tests.github_workflow_test_support import with_binding
 from tests.test_guard_github_workflow_runtime import _descriptor, _seed_resolved_request

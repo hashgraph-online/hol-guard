@@ -46,10 +46,6 @@ def classify_secret_path(
     return None if result is None else SecretPathMatch(**result)
 
 
-def classify_legacy_secret_path_families(text: str) -> set[str]:
-    return set(content_query("legacy", {"text": text}))
-
-
 def classify_secret_paths_batch(
     paths: list[str], *, cwd: Path | None = None, home_dir: Path | None = None, deadline_monotonic: float | None = None
 ) -> tuple[SecretPathMatch | None, ...]:
@@ -78,7 +74,3 @@ def classify_secret_content(
         },
     )
     return tuple(SecretContentMatch(**item) for item in result)
-
-
-def secret_content_rule_version() -> str:
-    return content_query("content_version", {})

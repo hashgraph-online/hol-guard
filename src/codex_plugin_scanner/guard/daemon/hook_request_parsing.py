@@ -8,28 +8,41 @@ from pathlib import Path
 from ..runtime.hook_review_types import (
     HookPayloadKind,
 )
-from ..runtime.local_temp_paths import trusted_temporary_root_for_path
 
 HOOK_PAYLOAD_REFERENCE_KEY = "guard_payload_ref"
 MAX_HOOK_PAYLOAD_REFERENCE_BYTES = 5 * 1024 * 1024
-_REFERENCE_DIR_PREFIX = "hol-guard-hook-payload-"
 
 
 class HookPayloadReferenceError(ValueError):
     """Raised when a hook payload reference cannot be safely validated."""
 
 
-def hook_payload_reference_size(payload: Mapping[str, object]) -> int | None:
-    """Return the conservative reservation required before reading a reference."""
+def hook_payload_reference_size(
+    payload: Mapping[str, object],
+    *,
+    guard_home: Path | str,
+    deadline_monotonic: float | None = None,
+) -> int | None:
+    """Return the conservative reservation required before reading a reference.
+
+    Whether the referenced file is one Guard's own writer could have put where
+    it is, is a runtime verdict, so settling it needs the Guard home to reach
+    the resident and the caller's deadline to stay inside the hook's budget.
+    """
 
     ref = payload.get(HOOK_PAYLOAD_REFERENCE_KEY)
     if not isinstance(ref, Mapping):
         return None
-    _ = _validated_reference(ref)
+    _ = _validated_reference(ref, guard_home=guard_home, deadline_monotonic=deadline_monotonic)
     return MAX_HOOK_PAYLOAD_REFERENCE_BYTES
 
 
-def _validated_reference(ref: Mapping[str, object]) -> tuple[Path, str]:
+def _validated_reference(
+    ref: Mapping[str, object],
+    *,
+    guard_home: Path | str,
+    deadline_monotonic: float | None = None,
+) -> tuple[Path, str]:
     path_value = ref.get("path")
     sha256_value = ref.get("sha256")
     if ref.get("version") != 1 or not isinstance(path_value, str) or not isinstance(sha256_value, str):
@@ -37,22 +50,41 @@ def _validated_reference(ref: Mapping[str, object]) -> tuple[Path, str]:
     expected_sha256 = sha256_value.strip().lower()
     if len(expected_sha256) != 64 or any(char not in "0123456789abcdef" for char in expected_sha256):
         raise HookPayloadReferenceError("Invalid HOL Guard hook payload reference digest.")
-    path = _safe_reference_path(path_value)
+    path = _safe_reference_path(path_value, guard_home=guard_home, deadline_monotonic=deadline_monotonic)
     return path, expected_sha256
 
 
-def _safe_reference_path(path_value: str) -> Path:
+def _safe_reference_path(
+    path_value: str,
+    *,
+    guard_home: Path | str,
+    deadline_monotonic: float | None = None,
+) -> Path:
+    """The file this reference names, once the runtime says Guard wrote it.
+
+    The runtime owns the rule: the file has to resolve, sit directly inside a
+    `hol-guard-hook-payload-` directory under a temporary root this user owns,
+    and be a regular file. A runtime that cannot answer refuses the reference
+    rather than letting the daemon decide for itself.
+    """
+
+    # Imported here so the hook bridges, which import this module, stay off the
+    # native runtime's import closure until a payload actually carries a
+    # reference. ``tests/test_hook_bridge_import_closure.py`` holds that line.
+    from ..native_directory_trust import NativeDirectoryTrustError, native_directory_trust
+
     try:
-        path = Path(path_value).resolve(strict=True)
-        temp_root = trusted_temporary_root_for_path(path)
-    except OSError as error:
-        raise HookPayloadReferenceError("HOL Guard hook payload reference path is invalid.") from error
-    parent = path.parent
-    if temp_root is None or parent.parent != temp_root or not parent.name.startswith(_REFERENCE_DIR_PREFIX):
+        verdicts = native_directory_trust(
+            [("payload-reference", path_value)],
+            guard_home=guard_home,
+            deadline_monotonic=deadline_monotonic,
+        )
+    except NativeDirectoryTrustError as error:
+        raise HookPayloadReferenceError("HOL Guard could not settle the hook payload reference.") from error
+    settled = verdicts[0].path if verdicts else None
+    if settled is None:
         raise HookPayloadReferenceError("HOL Guard hook payload reference must be in a Guard-owned temp directory.")
-    if not path.is_file():
-        raise HookPayloadReferenceError("HOL Guard hook payload reference must be a file.")
-    return path
+    return Path(settled)
 
 
 def runtime_hook_event_name(payload: Mapping[str, object]) -> str:

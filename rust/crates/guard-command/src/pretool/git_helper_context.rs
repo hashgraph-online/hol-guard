@@ -17,14 +17,16 @@ pub(super) fn git_helper_context_required(
         cwd: destination.as_deref().or(context.cwd),
         ..context
     };
-    model
-        .segments
-        .iter()
-        .any(|segment| segment_runs_helpers(segment, context))
+    (0..model.segments.len()).any(|index| {
+        let child = super::fanout_reads::git_xargs_child(model, index);
+        segment_runs_helpers(child.as_ref().unwrap_or(&model.segments[index]), context)
+    })
 }
 
 /// Whether a Git segment's operation can start a configured helper.
-fn segment_runs_helpers(segment: &crate::CommandSegmentV1, context: PathContext<'_>) -> bool {
+fn segment_runs_helpers(original: &crate::CommandSegmentV1, context: PathContext<'_>) -> bool {
+    let stripped = super::segment_proof::without_stderr_merge(original);
+    let segment = stripped.as_ref().unwrap_or(original);
     segment.executable.as_deref().is_some_and(|executable| {
         executable_basename(executable) == "git"
             // Leading `-C`/`-P` options precede the subcommand.
@@ -48,8 +50,27 @@ fn segment_runs_helpers(segment: &crate::CommandSegmentV1, context: PathContext<
                         }
                         // The probe screens the printed entries for credentials.
                         "config" => super::git_config_reads::read_form(&arguments[1..]).is_some(),
-                        // merge-base does not page by default, but pager.merge-base can.
-                        "merge-base" => true,
+                        // These do not page by default, but pager.<name> can, and
+                        // an object read can fetch from a partial clone's promisor.
+                        "merge-base" | "ls-tree" | "cat-file" | "show-ref" | "for-each-ref"
+                        | "rev-list" => true,
+                        // blame and reflog page by default; describe honors
+                        // pager.describe when it is set.
+                        "blame" | "describe" | "reflog" => true,
+                        // grep pages by default through pager.grep or core.pager.
+                        "grep" => true,
+                        // A stash listing is a log that pages under
+                        // pager.stash, and `stash show` runs the diff drivers.
+                        "stash" => true,
+                        // A shortlog pages under pager.shortlog, and both
+                        // listings read the repository's configuration.
+                        "shortlog" | "check-ignore" => true,
+                        // Finding the untracked paths refreshes the index,
+                        // which starts a configured core.fsmonitor.
+                        "clean" => true,
+                        // Reading the files the patch names refreshes the
+                        // index, which starts a configured core.fsmonitor.
+                        "apply" => true,
                         _ => false,
                     }
                 })
@@ -69,6 +90,26 @@ pub(super) fn git_helpers_proven_inert(
     };
     let rest = super::segment_proof::after_read_prefix(model, context);
     let model = rest.as_ref().unwrap_or(model);
+    // `cd <dir>; <rest>` and `cd <dir> && <head>; <tail>` leave their later
+    // reads running in the new directory when the `cd` succeeded and in the
+    // original one when it failed. Inspect each read in every directory it
+    // can run in, the split the Git execution-context floor already makes.
+    if let Some((cwd, rest)) = super::safe_reads::leading_semicolon_cd(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return helpers_inert(&rest, moved, deadline, environment)
+            && helpers_inert(&rest, context, deadline, environment);
+    }
+    if let Some((cwd, rest, tail)) = super::safe_reads::leading_and_cd(model, context) {
+        let moved = PathContext {
+            cwd: Some(&cwd),
+            ..context
+        };
+        return helpers_inert(&rest, moved, deadline, environment)
+            && helpers_inert(&tail, context, deadline, environment);
+    }
     // After a verified `cd`, the Git process reads configuration from the new
     // directory, so the probe must run there rather than in the reported cwd.
     let destination = super::segment_proof::verified_cwd_compound_context(model, context);
@@ -76,9 +117,29 @@ pub(super) fn git_helpers_proven_inert(
         cwd: destination.as_deref().or(context.cwd),
         ..context
     };
-    model.segments.iter().enumerate().all(|(index, segment)| {
+    helpers_inert(model, context, deadline, environment)
+}
+
+/// Whether every Git read in `model` is proven to start no configured helper
+/// when it runs in `context`.
+fn helpers_inert(
+    model: &CanonicalCommandV1,
+    context: PathContext<'_>,
+    deadline: Option<std::time::Instant>,
+    environment: &guard_contracts::GuardExecutionEnvironmentV1,
+) -> bool {
+    model.segments.iter().enumerate().all(|(index, original)| {
+        // `git merge-base ... | xargs git log` runs its Git read as the child.
+        let child = super::fanout_reads::git_xargs_child(model, index);
+        let original = child.as_ref().unwrap_or(original);
+        // A trailing `2>&1` is a redirect, not a Git argument.
+        let stripped = super::segment_proof::without_stderr_merge(original);
+        let segment = stripped.as_ref().unwrap_or(original);
         segment.executable.as_deref().is_none_or(|executable| {
             executable_basename(executable) != "git"
+                // The exact-safe proof already cleared Git reads that start no
+                // helper, such as `rev-parse`, so only helper reads need the probe.
+                || !segment_runs_helpers(segment, context)
                 || (segment.environment_names.is_empty()
                     && super::directory_targets::drive_targets_quoted(segment)
                     && super::directory_targets::home_targets_unquoted(segment)

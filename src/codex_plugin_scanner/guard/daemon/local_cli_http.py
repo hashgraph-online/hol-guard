@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Callable
 from typing import Protocol
+from urllib.parse import parse_qs
 
 from .local_cli_api import LocalCliApiError
+
+_IDENTITY_HASH = re.compile(r"[0-9a-f]{64}")
 
 _RECOGNIZE_SOCKET_TIMEOUT_SECONDS = 30.0
 
@@ -76,17 +80,36 @@ def handle_local_cli_post(handler: object, path: str, payload: dict[str, object]
     _write_unavailable(write_json)
 
 
-def handle_local_cli_list(handler: object) -> None:
+def _identity_filter(query: str) -> tuple[bool, str | None]:
+    """``(valid, identity_hash)`` for an optional ``?identity=<64 hex>`` filter."""
+
+    values = parse_qs(query, keep_blank_values=True).get("identity")
+    if values is None:
+        return True, None
+    if len(values) != 1 or not _IDENTITY_HASH.fullmatch(values[0]):
+        return False, None
+    return True, values[0]
+
+
+def handle_local_cli_list(handler: object, query: str = "") -> None:
     daemon_server = getattr(handler, "_daemon_server", None)
     write_json = getattr(handler, "_write_json", None)
     if not callable(daemon_server) or not callable(write_json):
+        return
+    valid, identity_hash = _identity_filter(query)
+    if not valid:
+        write_json(
+            {"error": "invalid_identity", "message": "Use a 64-character connector identity."},
+            status=400,
+            extra_headers={"Cache-Control": "no-store"},
+        )
         return
     daemon = daemon_server()
     list_items = getattr(getattr(daemon, "local_cli_api", None), "list_items", None)
     if not callable(list_items):
         return
     try:
-        payload = list_items()
+        payload = list_items() if identity_hash is None else list_items(identity_hash=identity_hash)
     except Exception as error:
         record_exception = getattr(getattr(daemon, "diagnostics", None), "record_exception", None)
         if callable(record_exception):

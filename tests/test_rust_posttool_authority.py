@@ -176,18 +176,18 @@ def test_cli_auto_posttool_uses_native_worker_not_python_engine(
     assert result["reason_code"] == "native_post_tool_unavailable"
 
 
-def test_cli_native_authority_drains_receipt_writer_before_exit(
+def test_cli_native_authority_leaves_the_resident_writer_running(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    stop_timeouts: list[float] = []
+    stops: list[float] = []
 
     class _Writer:
         def __init__(self, *, store: GuardStore) -> None:
             del store
 
         def stop(self, *, timeout_seconds: float) -> bool:
-            stop_timeouts.append(timeout_seconds)
+            stops.append(timeout_seconds)
             return True
 
     class _Worker:
@@ -201,7 +201,7 @@ def test_cli_native_authority_drains_receipt_writer_before_exit(
             return None
 
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.RuntimeHookEvidenceWriter",
+        "codex_plugin_scanner.guard.cli.commands_hook_native_authority.NativeHookEvidenceWriter",
         _Writer,
     )
     monkeypatch.setattr(
@@ -219,7 +219,9 @@ def test_cli_native_authority_drains_receipt_writer_before_exit(
     )
 
     assert result == {"decision": "deny", "reason_code": "test_native_decision"}
-    assert stop_timeouts == [pytest.approx(0.25)]
+    # The writer lives in the resident, which outlives this one-shot hook.
+    # Stopping it here would drain and drop a queue the next hook needs.
+    assert stops == []
 
 
 def test_native_policy_snapshot_generation_is_stable_for_same_policy(tmp_path: Path) -> None:

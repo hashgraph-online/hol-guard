@@ -3,13 +3,14 @@
 import json
 import os
 import stat
+import sys
 from pathlib import Path
 
 import pytest
 
 from ci.gauntlet.catalog import load_catalog
 from ci.gauntlet.harness_judge import _relative, _tokens, assess_harness_case, effective_decision, guard_decisions
-from ci.gauntlet.harnesses import CredentialSeed, adapter, read_transcript
+from ci.gauntlet.harnesses import CredentialSeed, adapter, keep_login_shell_path, read_transcript
 from ci.gauntlet.proofs import required_checks
 
 SCENARIOS = {scenario.id: scenario for scenario in load_catalog()}
@@ -424,3 +425,95 @@ def test_codex_config_home_is_pinned_inside_the_fixture(tmp_path):
     environment = harness_environment(adapter("codex"), tmp_path, tmp_path / "agent", "canary", {})
     assert environment["CODEX_HOME"] == str(tmp_path / ".codex")
     assert environment["USERPROFILE"] == str(tmp_path)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the Keychain account name comes from the POSIX user database")
+def test_keychain_logins_get_the_operator_account_name(tmp_path, monkeypatch):
+    # Claude Code looks up its Keychain login by $USER and reports "Not logged in" without it.
+    import pwd
+
+    from ci.gauntlet.harness_case import harness_environment
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+
+    account = pwd.getpwuid(os.getuid()).pw_name
+    environment = harness_environment(adapter("claude-code"), tmp_path, tmp_path / "agent", "canary", {})
+    assert environment["USER"] == account
+    assert adapter("cursor").keychain_environment() == {"USER": account}
+    assert adapter("codex").keychain_environment() == {}
+    monkeypatch.setattr(sys, "platform", "linux")
+    assert adapter("claude-code").keychain_environment() == {}
+
+
+def test_macos_login_shells_keep_the_runner_path_order(tmp_path, monkeypatch):
+    # Codex runs commands through `zsh -lc`; path_helper would otherwise put BSD sed first.
+    path = os.pathsep.join(["/opt/gnu sed/bin", "/usr/bin"])
+    monkeypatch.setattr(sys, "platform", "linux")
+    keep_login_shell_path(tmp_path, path)
+    assert not (tmp_path / ".zprofile").exists()
+    monkeypatch.setattr(sys, "platform", "darwin")
+    keep_login_shell_path(tmp_path, path)
+    assert (tmp_path / ".zprofile").read_text(encoding="utf-8") == f"export PATH='{path}'\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the account home comes from the POSIX user database")
+def test_harness_lane_refuses_a_runner_without_the_user_database(monkeypatch):
+    # Every managed install takes the Codex lifecycle lock, which needs getpwuid.
+    import pwd
+
+    from ci.gauntlet.harness_case import require_account_database
+
+    require_account_database()
+
+    def missing(uid: int) -> object:
+        raise KeyError(f"getpwuid(): uid not found: {uid}")
+
+    monkeypatch.setattr(pwd, "getpwuid", missing)
+    with pytest.raises(RuntimeError, match="cannot resolve its OS account"):
+        require_account_database()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the account home comes from the POSIX user database")
+def test_installed_lane_refuses_a_runner_without_the_user_database_before_any_setup(monkeypatch, tmp_path, capsys):
+    # The installed lane takes the same lifecycle lock through its own managed
+    # installs, so it must name the account cause before building any lane.
+    import pwd
+
+    from ci.gauntlet import installed_lane
+    from ci.gauntlet.__main__ import main
+
+    def missing(uid: int) -> object:
+        raise KeyError(f"getpwuid(): uid not found: {uid}")
+
+    def must_not_run(**kwargs: object) -> dict[str, object]:
+        raise AssertionError("the installed lane started setup without an OS account")
+
+    monkeypatch.setattr(pwd, "getpwuid", missing)
+    monkeypatch.setattr(installed_lane, "run_lane", must_not_run)
+    code = main(["installed", "--runtime", str(tmp_path / "hol-guard"), "--output", str(tmp_path / "out")])
+    assert code == 2
+    assert "cannot resolve its OS account" in capsys.readouterr().err
+
+
+@pytest.mark.skipif(os.name == "nt", reason="the account home comes from the POSIX user database")
+@pytest.mark.parametrize(("harness", "refused"), [("codex", True), ("claude-code", True), ("cursor", True)])
+def test_every_managed_harness_lane_needs_the_user_database(
+    monkeypatch, tmp_path, capsys, harness, refused
+):
+    import pwd
+
+    from ci.gauntlet import harness_suite
+    from ci.gauntlet.__main__ import main
+
+    def missing(uid: int) -> object:
+        raise KeyError(f"getpwuid(): uid not found: {uid}")
+
+    def fake_suite(**kwargs: object) -> dict[str, object]:
+        return {"pass": True, "cases": [], "outcomes": {}}
+
+    monkeypatch.setattr(pwd, "getpwuid", missing)
+    monkeypatch.setattr(harness_suite, "run_harness_suite", fake_suite)
+    code = main(["run", "--harness", harness, "--expected-source-sha", "a" * 40, "--output", str(tmp_path / "out")])
+    captured = capsys.readouterr()
+    assert (code == 2) is refused
+    assert ("cannot resolve its OS account" in captured.err) is refused

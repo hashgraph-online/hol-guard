@@ -1,7 +1,6 @@
 // Creating this many files is slow on Windows runners; the limits are shared.
 #![cfg(not(windows))]
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 use fixture::*;
 use serde_json::json;
 

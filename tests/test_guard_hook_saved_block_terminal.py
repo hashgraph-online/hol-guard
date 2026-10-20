@@ -37,6 +37,7 @@ def _context(tmp_path: Path) -> HarnessContext:
 def _saved_block_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="block",
+        policy_action="block",
         source="policy",
         signals=("tool name implies destructive file or system changes",),
         summary="Local Guard kept this tool call blocked by saved policy.",
@@ -51,6 +52,7 @@ def _saved_block_decision() -> ToolCallDecision:
 def _fresh_block_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="block",
+        policy_action="block",
         source="heuristic",
         signals=("tool name implies destructive file or system changes",),
         summary="The current call is destructive.",
@@ -61,6 +63,7 @@ def _fresh_block_decision() -> ToolCallDecision:
 def _saved_allow_decision() -> ToolCallDecision:
     return ToolCallDecision(
         action="allow",
+        policy_action="allow",
         source="policy",
         signals=("tool name implies destructive file or system changes",),
         summary="Local Guard reused an exact saved approval for this tool call.",

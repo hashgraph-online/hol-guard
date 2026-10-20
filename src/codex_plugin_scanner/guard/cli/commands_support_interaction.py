@@ -63,6 +63,9 @@ def _run_apps_command(
 ) -> int:
     apps_command = getattr(args, "apps_command", None)
     if apps_command is None:
+        from ..adapters.harness_mcp_discovery import observe_configured_mcp_servers
+
+        observe_configured_mcp_servers(store, context=context, seen_at=_now())
         _emit(
             "apps",
             {
@@ -350,7 +353,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
         if canonical == "zcode":
-            from ..adapters.zcode_hooks import zcode_hook_process_exit
+            from ..adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
 
             # ZCode turns exit code 2 into an unconditional deny and never
             # parses the stdout JSON, so review-tier PreToolUse actions fall

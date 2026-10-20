@@ -252,6 +252,9 @@ pub(super) fn write_bounded_response(
         #[cfg(windows)]
         if let Ok(metadata) = std::fs::metadata(&path) {
             let mut permissions = metadata.permissions();
+            // Windows-only: clearing FILE_ATTRIBUTE_READONLY so the partial
+            // file can be removed; there are no unix mode bits to widen here.
+            #[allow(clippy::permissions_set_readonly_false)]
             permissions.set_readonly(false);
             let _ = std::fs::set_permissions(&path, permissions);
         }

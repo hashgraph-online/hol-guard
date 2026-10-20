@@ -46,31 +46,45 @@ pub(super) fn exact_safe_command(
         && !preload_config_present(environment, &home, &cwd)
 }
 
-/// A Node inline print stays under review when the stamp shows a preload.
+/// A proven command stays under review when the stamp shows a setting that
+/// runs code before it.
 ///
-/// `NODE_OPTIONS` and the dynamic loader run code before `console.log`. A
-/// missing stamp keeps the older numeric proof, which has no identity print.
-pub(super) fn node_inline_preload_configured(
+/// `NODE_OPTIONS` and the dynamic loader run code before a Node inline
+/// `console.log`; a missing stamp keeps the older numeric proof, which has no
+/// identity print. `PSQLRC` names a startup file, which can run `\!` shell
+/// commands, for a `psql` read without `-X`.
+pub(super) fn inherited_preload_configured(
     model: &CanonicalCommandV1,
     environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
     let Some(environment) = environment.filter(|environment| environment.has_valid_shape()) else {
         return false;
     };
-    let preload = environment.environment_names.iter().any(|name| {
-        matches!(
-            name.to_ascii_uppercase().as_str(),
-            "NODE_OPTIONS" | "LD_PRELOAD" | "LD_AUDIT" | "DYLD_INSERT_LIBRARIES"
-        )
-    });
-    preload
+    let named = |names: &[&str]| {
+        environment
+            .environment_names
+            .iter()
+            .any(|name| names.contains(&name.to_ascii_uppercase().as_str()))
+    };
+    let preload = named(&[
+        "NODE_OPTIONS",
+        "LD_PRELOAD",
+        "LD_AUDIT",
+        "DYLD_INSERT_LIBRARIES",
+    ]);
+    let psqlrc = named(&["PSQLRC"]);
+    (preload || psqlrc)
         && model.segments.iter().any(|segment| {
             let stripped = super::segment_proof::without_stderr_merge(segment);
             let segment = stripped.as_ref().unwrap_or(segment);
             segment.executable.as_deref().is_some_and(|executable| {
                 let basename = super::executable_basename(executable);
-                matches!(basename, "node" | "nodejs")
-                    && super::pure_expression::safe_inline_expression(basename, &segment.arguments)
+                (preload
+                    && matches!(basename, "node" | "nodejs")
+                    && super::pure_expression::safe_inline_expression(basename, &segment.arguments))
+                    || (psqlrc
+                        && basename == "psql"
+                        && super::postgres_reads::psql_reads_startup_files(&segment.arguments))
             })
         })
 }

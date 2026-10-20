@@ -15,6 +15,7 @@ use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
 use crate::guard_store_db::{query_all, query_one, Row, StoreError, StoreResult};
+use crate::guard_store_local_cli_grants as local_cli_grants;
 use crate::local_store_read;
 
 const OBSERVED_MCP_PREFIX: &str = "observed-mcp:";
@@ -89,6 +90,52 @@ fn observed_mcp_tool(harness: &str, tool_name: &str) -> Option<ObservedTool> {
     })
 }
 
+/// The connector an `observed-mcp:<harness>:<namespace>` marker names
+/// (`_source`, `store_mcp_provider_permissions.py`). The namespace must parse
+/// back to itself, so a marker cannot name a connector it does not identify.
+pub(crate) struct MarkerSource {
+    harness: String,
+    namespace: String,
+}
+
+impl MarkerSource {
+    /// The MCP server identity the connector is enrolled under.
+    pub(crate) fn identity_hash(&self) -> String {
+        ObservedTool {
+            namespace: self.namespace.clone(),
+            qualified_name: String::new(),
+            harness: self.harness.clone(),
+        }
+        .server_identity_hash()
+    }
+
+    /// `provider_action_selector(source, slug)`: one provider action of this
+    /// connector, across every account it serves.
+    pub(crate) fn action_selector(&self, slug: &str) -> Option<String> {
+        let mut bytes = slug.bytes();
+        let first = bytes.next()?;
+        if !first.is_ascii_alphanumeric()
+            || slug.len() > 128
+            || !bytes.all(|byte| byte.is_ascii_alphanumeric() || b"_.-".contains(&byte))
+        {
+            return None;
+        }
+        Some(format!(
+            "{}:{}:composio:all-accounts:{slug}",
+            self.harness, self.namespace
+        ))
+    }
+}
+
+pub(crate) fn marker_source(marker: &str) -> Option<MarkerSource> {
+    let (harness, namespace) = marker.strip_prefix(OBSERVED_MCP_PREFIX)?.split_once(':')?;
+    let tool = observed_mcp_tool(harness, &format!("{namespace}probe"))?;
+    (tool.namespace == namespace).then_some(MarkerSource {
+        harness: tool.harness,
+        namespace: tool.namespace,
+    })
+}
+
 /// `is_local_cli_id`: `local-cli.[a-z0-9]+(-[a-z0-9]+){0,8}`.
 pub(crate) fn is_local_cli_id(value: &str) -> bool {
     let Some(rest) = value.strip_prefix("local-cli.") else {
@@ -108,15 +155,24 @@ fn text(row: &Row, name: &str) -> Option<String> {
     row.get(name).and_then(Value::as_str).map(str::to_owned)
 }
 
+/// Oldest schema with every column these reads use. Version 12 only added
+/// the declaration columns, which these reads never touch.
+const MIN_READ_SCHEMA_VERSION: i64 = 11;
+
 /// The Python writer migrates an older store before this read; a store from
 /// a newer Guard, or one whose schema marker is damaged, stays unread.
-fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
+pub(crate) fn require_current_schema(connection: &Connection) -> StoreResult<bool> {
     let unreadable = |_| StoreError::Invalid("native_guard_store_local_cli_schema_unreadable");
     if !local_store_read::table_exists(connection, "local_cli_observation").map_err(unreadable)? {
         return Ok(false);
     }
     match local_store_read::schema_version(connection).map_err(unreadable)? {
-        Some(local_store_read::SUPPORTED_SCHEMA_VERSION) => Ok(true),
+        Some(version)
+            if (MIN_READ_SCHEMA_VERSION..=local_store_read::SUPPORTED_SCHEMA_VERSION)
+                .contains(&version) =>
+        {
+            Ok(true)
+        }
         _ => Err(StoreError::Invalid(
             "native_guard_store_local_cli_schema_unreadable",
         )),
@@ -187,7 +243,7 @@ fn compile_item(
         actions.insert(namespace_block, Value::from("block"));
         return Ok(());
     }
-    let states = command_states(connection, &grant_cli_id)?;
+    let states = local_cli_grants::command_states(connection, &grant_cli_id)?;
     if states.get(OTHER_COMMAND_ID).map(String::as_str) == Some("block") {
         actions.insert(namespace_block, Value::from("block"));
     }
@@ -253,40 +309,9 @@ fn granted_connector(
     Ok(Some((cli_id, text(&grant, "state"))))
 }
 
-/// `_read_command_states`: recognised states only.
-fn command_states(
-    connection: &Connection,
-    cli_id: &str,
-) -> StoreResult<std::collections::HashMap<String, String>> {
-    let rows = query_all(
-        connection,
-        "select command_id, state from local_cli_command_grant \
-         where cli_id = ? and typeof(command_id) = 'text' and typeof(state) = 'text'",
-        &[Value::from(cli_id)],
-    )?;
-    Ok(rows
-        .iter()
-        .filter_map(|row| {
-            let state = text(row, "state")?;
-            matches!(state.as_str(), "inherit" | "allow" | "block" | "review")
-                .then(|| text(row, "command_id").map(|command_id| (command_id, state)))?
-        })
-        .collect())
-}
-
-/// `_read_command_catalog`: well-formed commands in catalog order, as
-/// `(command_id, usage)`.
+/// Well-formed catalog commands in catalog order, as `(command_id, usage)`.
 fn command_catalog(connection: &Connection, cli_id: &str) -> StoreResult<Vec<(String, String)>> {
-    let rows = query_all(
-        connection,
-        "select command_id, usage from local_cli_command \
-         where cli_id = ? and typeof(command_id) = 'text' and typeof(usage) = 'text' \
-           and typeof(name) = 'text' and typeof(description) = 'text' \
-           and typeof(parent_id) in ('null', 'text') \
-         order by sort_index asc, command_id asc",
-        &[Value::from(cli_id)],
-    )?;
-    Ok(rows
+    Ok(local_cli_grants::command_catalog(connection, cli_id)?
         .iter()
         .filter_map(|row| Some((text(row, "command_id")?, text(row, "usage")?)))
         .collect())

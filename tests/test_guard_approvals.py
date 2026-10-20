@@ -2079,34 +2079,6 @@ class TestGuardApprovals:
 
         assert store.get_runtime_state() is None
 
-    def test_guard_store_touches_runtime_state_only_for_matching_session(self, tmp_path):
-        store = GuardStore(tmp_path / "guard-home")
-        store.upsert_runtime_state(
-            session_id="session-active",
-            daemon_host="127.0.0.1",
-            daemon_port=4455,
-            started_at="2026-04-11T00:00:00+00:00",
-            last_heartbeat_at="2026-04-11T00:00:00+00:00",
-        )
-
-        store.touch_runtime_state(
-            session_id="session-stale",
-            last_heartbeat_at="2026-04-11T01:00:00+00:00",
-        )
-        unchanged_state = store.get_runtime_state()
-
-        assert unchanged_state is not None
-        assert unchanged_state["last_heartbeat_at"] == "2026-04-11T00:00:00+00:00"
-
-        store.touch_runtime_state(
-            session_id="session-active",
-            last_heartbeat_at="2026-04-11T01:00:00+00:00",
-        )
-        updated_state = store.get_runtime_state()
-
-        assert updated_state is not None
-        assert updated_state["last_heartbeat_at"] == "2026-04-11T01:00:00+00:00"
-
     def test_guard_daemon_v1_endpoints_expose_requests_diff_receipts_and_policy(self, tmp_path):
         store = GuardStore(tmp_path / "guard-home")
         artifact = GuardArtifact(
@@ -3109,6 +3081,24 @@ class TestGuardApprovals:
         assert "guard-dashboard-root" in body
         assert logo_type == "image/png"
         assert len(logo_bytes) > 0
+
+    def test_guard_daemon_stamps_the_dashboard_build_on_the_shell_and_every_response(self, tmp_path):
+        store = GuardStore(tmp_path / "guard-home")
+        daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+        daemon.start()
+
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/inbox", timeout=5) as response:
+                shell = response.read().decode("utf-8")
+                shell_build = response.headers.get("X-Guard-Dashboard-Build")
+            with urllib.request.urlopen(f"http://127.0.0.1:{daemon.port}/healthz", timeout=5) as response:
+                api_build = response.headers.get("X-Guard-Dashboard-Build")
+        finally:
+            daemon.stop()
+
+        assert shell_build
+        assert api_build == shell_build
+        assert f'<meta name="guard-dashboard-build" content="{shell_build}" />' in shell
 
     def test_guard_run_headless_enqueues_approval_request(self, tmp_path, capsys):
         home_dir = tmp_path / "home"

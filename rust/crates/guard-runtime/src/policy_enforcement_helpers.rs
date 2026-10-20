@@ -39,6 +39,19 @@ pub(super) fn policy_floor_with_cause(
     action_type: PreToolActionTypeV1,
     input: &FloorInput<'_>,
 ) -> Result<(String, FloorCause), String> {
+    policy_floor_with_cause_and_delivery(policy, compiled, harness, action_type, input, false)
+}
+
+/// An already admitted owner invocation satisfies only duplicate, overridable
+/// execution-review floors. Hard actions and independent output risks remain.
+pub(super) fn policy_floor_with_cause_and_delivery(
+    policy: &EffectiveNativePolicyV3,
+    compiled: &CompiledEffectivePolicy,
+    harness: &str,
+    action_type: PreToolActionTypeV1,
+    input: &FloorInput<'_>,
+    verified_delivery: bool,
+) -> Result<(String, FloorCause), String> {
     let facts = input.facts;
     let mut floor = if input.benign_prompt
         && matches!(
@@ -47,10 +60,16 @@ pub(super) fn policy_floor_with_cause(
         ) {
         "warn".to_owned()
     } else {
-        policy.default_action.clone()
+        delivery_floor(
+            &policy.default_action,
+            FloorCause::Default,
+            verified_delivery,
+        )
+        .to_owned()
     };
     let mut cause = FloorCause::Default;
     let mut raise = |floor: &mut String, action: &str, by: FloorCause| -> Result<(), String> {
+        let action = delivery_floor(action, by, verified_delivery);
         let joined = join_action(floor, action)?;
         if joined != *floor {
             *floor = joined;
@@ -130,6 +149,27 @@ pub(super) fn policy_floor_with_cause(
         }
     }
     Ok((floor, cause))
+}
+
+fn delivery_floor(action: &str, cause: FloorCause, verified: bool) -> &str {
+    if verified
+        && matches!(action, "review" | "require-reapproval")
+        && matches!(
+            cause,
+            FloorCause::Default
+                | FloorCause::Harness
+                | FloorCause::Subprocess
+                | FloorCause::ChangedHash
+                | FloorCause::UnknownPublisher
+                | FloorCause::Artifact
+                | FloorCause::Publisher
+                | FloorCause::Risk("execution")
+        )
+    {
+        "allow"
+    } else {
+        action
+    }
 }
 
 pub(super) fn action_rank(action: &str) -> Option<u8> {

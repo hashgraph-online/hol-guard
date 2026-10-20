@@ -78,10 +78,6 @@ def _binding_dto(value: dict[str, Any] | None) -> StructuredOutputBinding | None
     )
 
 
-def parse_structured_output_policy(value: object) -> StructuredOutputPolicy:
-    return _policy_dto(content_query("policy", {"value": value}))
-
-
 def canonical_harness_name(value: str) -> str:
     # This public spelling helper is presentation, not a policy decision.
     # The native operation independently normalizes and checks its binding.
@@ -123,14 +119,6 @@ def resolve_managed_structured_output_resolution(config: object, *, harness: str
 
 def resolve_managed_structured_output_binding(config: object, *, harness: str) -> StructuredOutputBinding | None:
     return resolve_managed_structured_output_resolution(config, harness=harness).binding
-
-
-def canonical_structured_content_bytes(value: object, *, deadline_monotonic: float | None = None) -> bytes | None:
-    try:
-        result = content_query("canonical", {"value": value}, deadline_monotonic=deadline_monotonic)
-    except NativeContentSensitivityError:
-        return None
-    return None if result is None else result.encode("utf-8")
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,9 +198,7 @@ __all__ = [
     "StructuredOutputPolicy",
     "StructuredOutputResolution",
     "canonical_harness_name",
-    "canonical_structured_content_bytes",
     "mediate_native_post_tool_content",
-    "parse_structured_output_policy",
     "resolve_managed_structured_output_binding",
     "resolve_managed_structured_output_resolution",
 ]

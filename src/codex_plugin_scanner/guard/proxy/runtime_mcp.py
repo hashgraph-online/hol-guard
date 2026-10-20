@@ -29,21 +29,20 @@ from ..daemon.manager import load_guard_daemon_auth_token
 from ..harness_posture import config_for_harness
 from ..local_supply_chain import (
     _cleanup_external_archive_downloads,
+    _external_archive_downloads,
     _package_evaluation_requires_external_archive_binding,
     _resolve_stored_package_policy_override,
-    _verified_external_archive_replacements,
     evaluate_package_request_artifact,
     package_current_action_and_hash,
     package_external_archive_override,
 )
 from ..mcp_tool_calls import (
+    RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED,
     ToolCallDecision,
     allow_tool_call,
     block_tool_call,
     build_tool_call_identity,
     evaluate_tool_call,
-    tool_call_risk_categories,
-    tool_call_risk_summary,
 )
 from ..models import GuardAction, GuardArtifact, HarnessDetection
 from ..native_approval_proof import (
@@ -56,15 +55,20 @@ from ..native_execution import (
     mcp_stdio_session_close_native,
     mcp_stdio_session_open_native,
 )
+from ..native_hook_artifact_compose import NativeHookComposeError
 from ..native_mcp_proxy_decision import (
     NativeMcpProxyDecisionError,
     cursor_fact,
     native_external_archive_bind,
+    native_inline_approval_reply,
+    native_inline_approval_reply_available,
     native_mcp_proxy_decide,
     native_package_reason_signals,
     package_facts,
     tool_facts,
 )
+from ..native_mcp_relay_server_report import report_mcp_relay_server
+from ..native_package_authority import NativePackageArtifactUnavailableError
 from ..package_execution_context import build_package_execution_context
 from ..policy.engine import build_decision_v2
 from ..runtime.approval_context import (
@@ -73,8 +77,7 @@ from ..runtime.approval_context import (
     resolved_runtime_launch_executable,
     runtime_launch_identity_matches,
 )
-from ..runtime.browser_mcp_intent import normalize_browser_mcp_intent
-from ..runtime.composio_contract import composio_requires_action_review
+from ..runtime.composio_contract import composio_names_a_wrapper
 from ..runtime.harness_attribution import origin_harness_env
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from ..runtime.package_intent_common import build_package_request_artifact
@@ -85,8 +88,10 @@ from ..store import GuardStore
 from ..tool_decision_evidence import tool_decision_scanner_evidence as _tool_decision_scanner_evidence
 from ._env import _build_scrubbed_env
 from .native_mcp_child_io import _ChildOutputFrame, _NativeChildProcess, _NativeMcpChildIo
+from .runtime_mcp_projection import McpCallProjector, connector_agent_text, review_artifact_payload
 from .stdio import (
     ProxyIoTimeoutError,
+    _approval_surface_policy_for_browser,
     _blocked_tool_response,
     _is_timeout_response,
     _quarantine_process,
@@ -102,17 +107,15 @@ def _bound_external_archive_mcp_request(
     evaluation: object,
     guard_home: Path,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    replacements = _verified_external_archive_replacements(evaluation)
-    if replacements is None:
-        return None
-    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation)
-    if not replacements and not requires_binding:
+    downloads = _external_archive_downloads(evaluation)
+    requires_binding = _package_evaluation_requires_external_archive_binding(evaluation, guard_home=guard_home)
+    if not downloads and not requires_binding:
         return message, params
     try:
-        # With no replacements the resident does not inspect params, so keep the request small.
+        # With no downloads the resident does not inspect params, so keep the request small.
         bound_params = native_external_archive_bind(
-            params if replacements else {},
-            replacements,
+            params if downloads else {},
+            downloads,
             requires_binding=requires_binding,
             guard_home=guard_home,
         )
@@ -120,93 +123,28 @@ def _bound_external_archive_mcp_request(
         return None
     if bound_params is None:
         return None
-    if not replacements:
+    if not downloads:
         return message, params
     return {**message, "params": bound_params}, bound_params
 
 
-def _approval_surface_policy_for_browser(configured_policy: object, approval_flow: Mapping[str, object]) -> str:
-    if approval_flow.get("tier") != "approval-center":
-        return "notify-only"
-    if approval_flow.get("auto_open_browser") is False:
-        return "never-auto-open"
-    policy = str(configured_policy or "auto-open-once")
-    if policy == "native-only":
-        return "never-auto-open"
-    return policy
-
-
-def _tool_decision_after_runtime_allow(decision: ToolCallDecision, *, source: str) -> ToolCallDecision:
+def _tool_decision_after_runtime_allow(
+    decision: ToolCallDecision, *, source: str, policy_action: GuardAction
+) -> ToolCallDecision:
     return replace(
         decision,
         action="allow",
+        policy_action=policy_action,
         source=source,
         pending_approval_reuse_decision=None,
         approval_reuse_claim_disposition=None,
     )
 
 
-def _safe_mcp_arguments(value: object) -> object:
-    """Project MCP arguments into a display/persistence-safe representation.
-
-    Native authority only: the resident `mcp_arguments_projection` op owns the
-    secret-shaped-key masking, URL query redaction, and scalar fragment tables.
-    `None` means no `arguments` key — preserved so absent and null digest alike.
-    Native failure is terminal; the silent-Python-redaction fallback was an
-    accountability leak (secrets could persist unredacted).
-    """
-    from ..native_context import context_mcp_arguments_projection
-
-    safe_arguments, _launch, _digest = context_mcp_arguments_projection("", value)
-    return safe_arguments
-
-
-def _safe_mcp_params(params: Mapping[str, object]) -> dict[str, object]:
-    return cast(dict[str, object], _safe_mcp_arguments(params))
-
-
-def _browser_intent_payload(
-    artifact: Any,
-    arguments: object,
-    *,
-    default_launch_target: str,
-) -> tuple[str, dict[str, object] | None]:
-    """Project the launch target label and safe browser intent payload for a tool call."""
-    browser_intent = normalize_browser_mcp_intent(artifact, arguments)
-    if browser_intent is None:
-        return default_launch_target, None
-    # Build a safer browser-specific launch target label
-    target = browser_intent.target_domain or browser_intent.target_origin or "unknown"
-    launch_target = f"{browser_intent.mcp_server_name} {browser_intent.operation} {target}"
-    browser_intent_dict = cast(
-        dict[str, object],
-        _safe_mcp_arguments(
-            {
-                "version": browser_intent.version,
-                "intent": browser_intent.intent,
-                "operation": browser_intent.operation,
-                "target_url": browser_intent.target_url,
-                "target_origin": browser_intent.target_origin,
-                "target_domain": browser_intent.target_domain,
-                "target_path_prefix": browser_intent.target_path_prefix,
-                "method": browser_intent.method,
-                "profile_mode": browser_intent.profile_mode,
-                "mcp_server_name": browser_intent.mcp_server_name,
-                "mcp_server_identity_hash": browser_intent.mcp_server_identity_hash,
-                "mcp_tool_name": browser_intent.mcp_tool_name,
-                "mcp_tool_identity_hash": browser_intent.mcp_tool_identity_hash,
-                "mcp_schema_hash": browser_intent.mcp_schema_hash,
-                "sensitive_surface_flags": list(browser_intent.sensitive_surface_flags),
-                "volatile_fields_dropped": list(browser_intent.volatile_fields_dropped),
-            }
-        ),
-    )
-    return launch_target, browser_intent_dict
-
-
 _ToolCatalogState = Literal["unobserved", "pending", "complete", "invalidated", "error"]
 _TOOL_CATALOG_EXECUTION_BOUNDARY_CHANGED = "tool_catalog_changed_at_execution_boundary"
 _TOOLS_CALL_PREWRITE_QUIET_SECONDS = 0.005
+_RELAY_REPORT_EXIT_SECONDS = 2.0
 
 
 class _ToolCatalogBoundaryChangedError(RuntimeError):
@@ -372,6 +310,7 @@ class RuntimeMcpGuardProxy:
                 env=_configured_server_environment(initial_launch_env, self.server_env_keys),
                 env_keys=self.server_env_keys,
             )
+        self._call_projector = McpCallProjector(context.guard_home)
         self._inline_prompt_available = False
         self._inline_prompt_counter = 0
         self._buffered_child_responses: dict[str, list[dict[str, Any]]] = {}
@@ -386,6 +325,9 @@ class RuntimeMcpGuardProxy:
         self._tool_catalog_inflight = False
         self._tool_catalog_inflight_cursor: str | None = None
         self._tool_catalog_generation = 0
+        # The last complete catalog reported for the relay.
+        self._relay_reported_catalog: str | None = None
+        self._relay_report: threading.Thread | None = None
         self._active_process: _NativeChildProcess | None = None
         self._active_runtime_launch_identity: dict[str, object] | None = None
         self._active_executable_identity: dict[str, object] | None = None
@@ -525,6 +467,7 @@ class RuntimeMcpGuardProxy:
             self._active_server_env_values_hash = None
             self._active_server_identity = None
             self._deactivate_child_process_io()
+            self._finish_relay_report()
 
     def _reset_child_process_state(self) -> None:
         self._buffered_child_responses.clear()
@@ -783,6 +726,7 @@ class RuntimeMcpGuardProxy:
         return replace(
             decision,
             action=gate["action"],
+            policy_action=gate["policy_action"],
             source=gate["source"],
             summary=gate["summary"],
             approval_reuse_status=gate["approval_reuse_status"],
@@ -842,7 +786,7 @@ class RuntimeMcpGuardProxy:
             server_identity=self._session_server_identity(),
             tool_definition=public_tool_definition,
             provider_catalog_hash=(
-                self.store.read_mcp_provider_authority_hash() if composio_requires_action_review(tool_name) else None
+                self.store.read_mcp_provider_authority_hash() if composio_names_a_wrapper(tool_name) else None
             ),
         )
         artifact, artifact_hash = identity.artifact, identity.artifact_hash
@@ -920,7 +864,6 @@ class RuntimeMcpGuardProxy:
         artifact_hash: str,
         decision: ToolCallDecision,
         scanner_evidence: tuple[dict[str, object], ...],
-        arguments: object,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         block_tool_call(
             store=self.store,
@@ -930,7 +873,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=decision.signals,
             risk_categories=decision.risk_categories,
-            arguments=_safe_mcp_arguments(arguments),
+            arguments=self._call_projector.project(tool_name, message.get("params")).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action="block",
         )
@@ -946,28 +889,26 @@ class RuntimeMcpGuardProxy:
             "approval_requests": [],
         }
 
+    @staticmethod
     def _inline_approval_deny_result(
-        self,
-        approval_result: object,
+        answer: object,
         deny_tool_call: Callable[..., tuple[dict[str, Any], dict[str, Any]]],
-        tool_name: str,
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
-        if _approval_denies(approval_result):
-            return deny_tool_call(
-                decision_source="inline-denied",
-                event_decision="deny-inline",
-                reason=f"HOL Guard blocked tool call {tool_name} from {self.server_name}.",
-            )
-        if _approval_invalid(approval_result):
-            return deny_tool_call(
-                decision_source="inline-invalid",
-                event_decision="deny-inline-invalid",
-                reason=(
-                    f"HOL Guard blocked tool call {tool_name} from {self.server_name} because inline "
-                    "approval returned an invalid response."
-                ),
-            )
-        return None
+        """The block the resident named for a refused or malformed answer.
+
+        The resident classified the answer and composed the block, so an answer
+        that names none leaves the call unblocked here; the route treats that as
+        an inline decision it never bound and fails closed on it.
+        """
+
+        block = answer.get("block") if isinstance(answer, Mapping) else None
+        if not isinstance(block, Mapping):
+            return None
+        return deny_tool_call(
+            decision_source=block["decision_source"],
+            event_decision=block["event_decision"],
+            reason=block["reason"],
+        )
 
     def _handle_message_serialized(
         self,
@@ -986,7 +927,11 @@ class RuntimeMcpGuardProxy:
             "method": method,
             "tool_name": params.get("name") if isinstance(params, dict) else None,
             "decision": "forward",
-            "redacted_params": _safe_mcp_params(params) if isinstance(params, Mapping) else {},
+            "redacted_params": (
+                self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params
+                if isinstance(params, dict)
+                else {}
+            ),
         }
         if method in {"notifications/tools/list_changed", "tools/list_changed"}:
             self._invalidate_tools_catalog()
@@ -1064,6 +1009,8 @@ class RuntimeMcpGuardProxy:
             NativeMcpProxyDecisionError,
             NativeDecisionAuthorityError,
             NativeDecisionUnavailableError,
+            NativeHookComposeError,
+            NativePackageArtifactUnavailableError,
             KeyError,
             TypeError,
         ):
@@ -1090,6 +1037,7 @@ class RuntimeMcpGuardProxy:
         return replace(
             decision,
             action=override["action"],
+            policy_action=override["policy_action"],
             source=override["source"],
             pending_approval_reuse_decision=None,
             approval_reuse_claim_disposition=None,
@@ -1108,7 +1056,15 @@ class RuntimeMcpGuardProxy:
             "mode": self.config.mode,
             "package_present": package_artifact is not None,
             "asks_for_approval": bool(asks_for_approval(self.config)),
-            "inline_available": bool(self._inline_prompt_available and approval_callback is not None),
+            # A prompt is only worth raising when the resident can classify the
+            # answer. Without the query every answer -- including an approval the
+            # user gave -- fails closed into the approval queue, so an older
+            # resident would interrupt the user for nothing.
+            "inline_available": bool(
+                self._inline_prompt_available
+                and approval_callback is not None
+                and native_inline_approval_reply_available()
+            ),
             "tool_name": tool_name,
         }
 
@@ -1146,8 +1102,14 @@ class RuntimeMcpGuardProxy:
             if approval_callback is None:
                 return {"inline_approval": "fallthrough"}
             result = approval_callback(self._inline_approval_request(tool_name, effective(need).summary))
-            held["approval_result"] = result
-            return {"inline_approval": _inline_approval_kind(result)}
+            answer = native_inline_approval_reply(
+                result,
+                tool_name=tool_name,
+                server_name=self.server_name,
+                guard_home=Path(self.store.guard_home),
+            )
+            held["inline_approval_answer"] = answer
+            return {"inline_approval": answer["inline_approval"]}
 
         return self._native_decide(
             {
@@ -1222,6 +1184,7 @@ class RuntimeMcpGuardProxy:
                 params=params,
                 scanner_evidence=decision_scanner_evidence,
                 policy_action=tool_policy_action,
+                connector_setup=decision.connector_setup if tool_policy_action == "review" else None,
             )
 
         if kind == "stored_block":
@@ -1252,7 +1215,7 @@ class RuntimeMcpGuardProxy:
             return queue()
         if kind == "inline_denied":
             denied = self._inline_approval_deny_result(
-                held.get("approval_result"),
+                held.get("inline_approval_answer"),
                 deny_tool_call=partial(
                     self._deny_inline_tool_call,
                     message=message,
@@ -1262,9 +1225,7 @@ class RuntimeMcpGuardProxy:
                     artifact_hash=tool_artifact_hash,
                     decision=decision,
                     scanner_evidence=decision_scanner_evidence,
-                    arguments=arguments,
                 ),
-                tool_name=tool_name,
             )
             if denied is None:
                 raise NativeMcpProxyDecisionError("native_mcp_proxy_decision_inline_unbound")
@@ -1282,7 +1243,7 @@ class RuntimeMcpGuardProxy:
                         signals=decision.signals,
                         risk_categories=decision.risk_categories,
                         remember=bool(route["remember"]),
-                        arguments=_safe_mcp_arguments(arguments),
+                        arguments=self._call_projector.project(tool_name, params).safe_arguments,
                         additional_scanner_evidence=decision_scanner_evidence,
                         emit_runtime_evidence=False,
                     )
@@ -1309,7 +1270,11 @@ class RuntimeMcpGuardProxy:
                 tool_decision=(
                     decision
                     if tool_source is None
-                    else _tool_decision_after_runtime_allow(decision, source=tool_source)
+                    else _tool_decision_after_runtime_allow(
+                        decision,
+                        source=tool_source,
+                        policy_action=route["decision_policy_action"],
+                    )
                 ),
                 tool_scanner_evidence=decision_scanner_evidence,
                 package_resolution=held["package_resolution"],
@@ -1430,6 +1395,7 @@ class RuntimeMcpGuardProxy:
             intent=intent,
             config_path=self.config_path,
             source_scope=self.source_scope,
+            guard_home=self.context.guard_home,
         )
 
     def _resolve_package_policy(
@@ -2123,7 +2089,7 @@ class RuntimeMcpGuardProxy:
                 signals=receipt_signals or reason_signals,
                 risk_categories=receipt_risk_categories,
                 remember=True,
-                arguments=_safe_mcp_arguments(params.get("arguments")),
+                arguments=self._call_projector.project(tool_name, params).safe_arguments,
                 policy_workspace=policy_workspace,
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
@@ -2158,7 +2124,7 @@ class RuntimeMcpGuardProxy:
             signals=receipt_signals or reason_signals,
             risk_categories=receipt_risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             policy_workspace=policy_workspace,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
@@ -2168,7 +2134,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "timeout" if _is_timeout_response(response) else event_decision,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "scanner_evidence": list(scanner_evidence),
         }
 
@@ -2278,7 +2244,7 @@ class RuntimeMcpGuardProxy:
                         "config_path": artifact.config_path,
                         "changed_fields": ["runtime_tool_call", "package_request"],
                         "policy_action": policy_action,
-                        "launch_target": self._launch_target(tool_name, params.get("arguments")),
+                        "launch_target": self._call_projector.project(tool_name, params).launch_target,
                         "risk_summary": package_evaluation.risk_summary,
                         "risk_signals": list(risk_signals),
                         "decision_v2_json": decision_v2_payload,
@@ -2298,7 +2264,7 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=risk_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2329,7 +2295,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-package-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -2357,7 +2323,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=signals,
             risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2380,7 +2346,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": f"terminal-{policy_action}",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
         if scanner_evidence:
@@ -2407,7 +2373,7 @@ class RuntimeMcpGuardProxy:
             decision_source="policy-block",
             now=_now(),
             signals=reason_signals,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2455,7 +2421,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": f"terminal-package-{policy_action}",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
             "scanner_evidence": list(scanner_evidence),
         }
@@ -2481,7 +2447,7 @@ class RuntimeMcpGuardProxy:
             now=_now(),
             signals=signals,
             risk_categories=risk_categories,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(tool_name, params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action="block",
         )
@@ -2503,7 +2469,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "block-stored-policy",
             "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
         }
         if scanner_evidence:
@@ -2547,7 +2513,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "package-block-stored",
             "policy_action": "block",
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params).safe_params,
             "approval_requests": [],
             "scanner_evidence": list(scanner_evidence),
         }
@@ -2756,7 +2722,7 @@ class RuntimeMcpGuardProxy:
                     signals=signals,
                     risk_categories=risk_categories,
                     remember=True,
-                    arguments=_safe_mcp_arguments(params.get("arguments")),
+                    arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
                     additional_scanner_evidence=scanner_evidence,
                     policy_action=policy_action,
                     emit_runtime_evidence=False,
@@ -2801,7 +2767,7 @@ class RuntimeMcpGuardProxy:
             signals=signals,
             risk_categories=risk_categories,
             remember=False,
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            arguments=self._call_projector.project(str(params.get("name") or "unknown"), params).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -2810,7 +2776,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": params.get("name"),
             "decision": "timeout" if _is_timeout_response(response) else decision_source,
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(str(params.get("name") or "unknown"), params).safe_params,
         }
         if scanner_evidence:
             event["scanner_evidence"] = list(scanner_evidence)
@@ -3271,41 +3237,19 @@ class RuntimeMcpGuardProxy:
         *,
         policy_action: str = "require-reapproval",
         scanner_evidence: tuple[dict[str, object], ...] = (),
+        connector_setup: Mapping[str, object] | None = None,
     ) -> dict[str, Any]:
-        """Build the artifact payload for approval center queueing.
-
-        Includes browser intent metadata when the MCP tool call is a browser
-        automation call (HGBM063-HGBM065).
-        """
-        arguments = params.get("arguments")
-        launch_target, browser_intent_dict = _browser_intent_payload(
+        """Build the artifact payload for approval center queueing."""
+        projection = self._call_projector.project(tool_name, params, artifact)
+        return review_artifact_payload(
+            projection,
             artifact,
-            arguments,
-            default_launch_target=self._launch_target(tool_name, arguments),
+            artifact_hash,
+            signals,
+            policy_action=policy_action,
+            scanner_evidence=scanner_evidence,
+            connector_setup=connector_setup,
         )
-        changed_fields: list[str] = ["runtime_tool_call"]
-
-        if browser_intent_dict is not None:
-            changed_fields.append("runtime_browser_tool_call")
-
-        payload: dict[str, Any] = {
-            "artifact_id": artifact.artifact_id,
-            "artifact_name": artifact.name,
-            "artifact_hash": artifact_hash,
-            "artifact_type": artifact.artifact_type,
-            "source_scope": artifact.source_scope,
-            "config_path": artifact.config_path,
-            "changed_fields": changed_fields,
-            "policy_action": policy_action,
-            "launch_target": launch_target,
-            "risk_summary": tool_call_risk_summary(artifact, arguments),
-            "risk_signals": list(signals),
-        }
-        if browser_intent_dict is not None:
-            payload["browser_intent"] = browser_intent_dict
-        if scanner_evidence:
-            payload["scanner_evidence"] = list(scanner_evidence)
-        return payload
 
     def _queue_approval_center_response(
         self,
@@ -3318,7 +3262,11 @@ class RuntimeMcpGuardProxy:
         params: dict[str, Any],
         scanner_evidence: tuple[dict[str, object], ...] = (),
         policy_action: GuardAction = "require-reapproval",
+        connector_setup: Mapping[str, object] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
+        connector_code = (
+            {} if connector_setup is None else {"guardReasonCode": RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED}
+        )
         if not asks_for_approval(self.config):
             block_tool_call(
                 store=self.store,
@@ -3327,8 +3275,8 @@ class RuntimeMcpGuardProxy:
                 decision_source="policy-safe-alternative",
                 now=_now(),
                 signals=signals,
-                risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
-                arguments=_safe_mcp_arguments(params.get("arguments")),
+                risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+                arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
                 additional_scanner_evidence=scanner_evidence,
                 policy_action=policy_action,
             )
@@ -3352,6 +3300,7 @@ class RuntimeMcpGuardProxy:
                             signals,
                             policy_action=policy_action,
                             scanner_evidence=scanner_evidence,
+                            connector_setup=connector_setup,
                         )
                     ]
                 },
@@ -3363,8 +3312,15 @@ class RuntimeMcpGuardProxy:
                 tool_name,
                 safe_alternative_reason(
                     f"HOL Guard blocked tool call {tool_name} from {self.server_name}. " + " ".join(signals)
-                ),
-                {"approvalRequests": [], "guardPolicyAction": "block", "transportOutcome": "not-forwarded"},
+                )
+                if connector_setup is None
+                else connector_agent_text(connector_setup, ask=False),
+                {
+                    "approvalRequests": [],
+                    "guardPolicyAction": "block",
+                    "transportOutcome": "not-forwarded",
+                    **connector_code,
+                },
             ), {
                 "method": "tools/call",
                 "tool_name": tool_name,
@@ -3372,7 +3328,7 @@ class RuntimeMcpGuardProxy:
                 "policy_action": policy_action,
                 "approval_requests": [],
                 "prompted": False,
-                "redacted_params": _safe_mcp_params(params),
+                "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             }
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
         queued = queue_blocked_approvals(
@@ -3394,6 +3350,7 @@ class RuntimeMcpGuardProxy:
                         signals,
                         policy_action=policy_action,
                         scanner_evidence=scanner_evidence,
+                        connector_setup=connector_setup,
                     ),
                 ]
             },
@@ -3408,8 +3365,8 @@ class RuntimeMcpGuardProxy:
             decision_source="approval-center-pending",
             now=_now(),
             signals=signals,
-            risk_categories=tool_call_risk_categories(artifact, params.get("arguments")),
-            arguments=_safe_mcp_arguments(params.get("arguments")),
+            risk_categories=self._call_projector.project(tool_name, params, artifact).risk_categories,
+            arguments=self._call_projector.project(tool_name, params, artifact).safe_arguments,
             additional_scanner_evidence=scanner_evidence,
             policy_action=policy_action,
         )
@@ -3425,6 +3382,7 @@ class RuntimeMcpGuardProxy:
             "approvalRequests": queued,
             "guardPolicyAction": policy_action,
             "reviewUrl": review_url,
+            **connector_code,
         }
         response = _blocked_tool_response(
             message_id,
@@ -3432,7 +3390,9 @@ class RuntimeMcpGuardProxy:
             (
                 f"HOL Guard stopped tool call {tool_name} from {self.server_name}. "
                 f"Approve request {request_id} at {review_url}, then retry the same action."
-            ),
+            )
+            if connector_setup is None
+            else f"{connector_agent_text(connector_setup, ask=True)} Review it at {review_url}.",
             response_data,
         )
         queued_event: dict[str, Any] = {
@@ -3440,7 +3400,7 @@ class RuntimeMcpGuardProxy:
             "tool_name": tool_name,
             "decision": "queue-approval",
             "policy_action": policy_action,
-            "redacted_params": _safe_mcp_params(params),
+            "redacted_params": self._call_projector.project(tool_name, params, artifact).safe_params,
             "approval_center_url": approval_center_url,
             "approval_requests": queued,
             "review_url": review_url,
@@ -3465,11 +3425,8 @@ class RuntimeMcpGuardProxy:
         if policy_action not in {"review", "block", "sandbox-required", "require-reapproval"}:
             return []
         approval_center_url = ensure_guard_daemon(self.context.guard_home)
-        launch_target, browser_intent_dict = _browser_intent_payload(
-            artifact,
-            params.get("arguments"),
-            default_launch_target=self._launch_target(tool_name, params.get("arguments")),
-        )
+        projection = self._call_projector.project(tool_name, params, artifact)
+        launch_target, browser_intent_dict = projection.display_launch_target, projection.browser_intent
         artifact_payload: dict[str, Any] = {
             "artifact_id": artifact.artifact_id,
             "artifact_name": artifact.name,
@@ -3612,13 +3569,38 @@ class RuntimeMcpGuardProxy:
                 "response": response,
             }
         )
+        self._report_relay_server()
 
-    @staticmethod
-    def _launch_target(tool_name: str, arguments: object) -> str:
-        from ..native_context import context_mcp_arguments_projection
+    def _report_relay_server(self) -> None:
+        """Report a newly complete catalog so later sessions can be relayed."""
 
-        _safe, launch_target, _digest = context_mcp_arguments_projection(tool_name, arguments)
-        return launch_target
+        if self._tool_catalog_state != "complete":
+            return
+        try:
+            reported = json.dumps(self._tool_catalog, sort_keys=True, default=repr)
+            identity_hash = self._session_server_identity().identity_hash
+        except Exception:
+            return
+        if reported == self._relay_reported_catalog:
+            return
+        self._relay_reported_catalog = reported
+        self._relay_report = report_mcp_relay_server(
+            guard_home=self.store.guard_home,
+            harness=self.harness,
+            server_name=self.server_name,
+            source_scope=self.source_scope,
+            config_path=self.config_path,
+            server_id=self.server_id,
+            identity_hash=identity_hash,
+            tools=list(self._tool_catalog.values()),
+        )
+
+    def _finish_relay_report(self) -> None:
+        """Give an unsent report a moment before the session exits."""
+
+        report, self._relay_report = self._relay_report, None
+        if report is not None:
+            report.join(timeout=_RELAY_REPORT_EXIT_SECONDS)
 
 
 class ElicitationMcpGuardProxy(RuntimeMcpGuardProxy):
@@ -3692,45 +3674,6 @@ class OpenCodeMcpGuardProxy(RuntimeMcpGuardProxy):
     def _inline_approval_request(self, tool_name: str, summary: str) -> dict[str, Any]:
         del tool_name, summary
         raise RuntimeError("OpenCode uses native permission prompts instead of Guard MCP inline approval.")
-
-
-def _approval_allows(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    return isinstance(content, dict) and content.get("decision") == "approve"
-
-
-def _approval_denies(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return False
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    return isinstance(content, dict) and content.get("decision") == "deny"
-
-
-def _approval_invalid(payload: object) -> bool:
-    if not isinstance(payload, dict):
-        return True
-    if payload.get("action") != "accept":
-        return False
-    content = payload.get("content")
-    if not isinstance(content, dict):
-        return True
-    return content.get("decision") not in {"approve", "deny"}
-
-
-def _inline_approval_kind(payload: object) -> str:
-    """Classify an inline approval reply for the resident; it decides what follows."""
-
-    if _approval_allows(payload):
-        return "allow"
-    if _approval_denies(payload) or _approval_invalid(payload):
-        return "denied"
-    return "fallthrough"
 
 
 def _approval_payload(payload: dict[str, Any]) -> dict[str, Any]:

@@ -43,6 +43,20 @@ class NativeContentSensitivityDeadlineError(NativeContentSensitivityError):
     """The caller's absolute transport budget expired."""
 
 
+# Bodies over this size cross the transport as gzip-packed JSON the resident
+# bounds and unpacks (``guard_command::content_sensitivity::decode_input``).
+PACK_THRESHOLD_BYTES = 128 * 1024
+
+
+def pack_json_body(body_bytes: bytes) -> dict[str, object]:
+    """The lossless packed wire form of an encoded JSON body."""
+
+    return {
+        "packed_json_gzip_v1": base64.b64encode(gzip.compress(body_bytes, compresslevel=1, mtime=0)).decode("ascii"),
+        "decoded_bytes": len(body_bytes),
+    }
+
+
 def _binary_signature(status: NativeRuntimeStatus) -> tuple[int, ...] | None:
     if status.identity is None:
         return None
@@ -56,8 +70,13 @@ def _binary_signature(status: NativeRuntimeStatus) -> tuple[int, ...] | None:
     )
 
 
-# A small query to a resident that has to be spawned first, and a large one.
+# A small query to a resident that has to be spawned first, a small query to
+# one that is already running, and a large one. The warm bound still has to
+# hold a round trip on a loaded machine and the resident's first query after
+# it starts, which builds its matchers; a shorter bound fails those checks
+# closed although nothing is wrong.
 _COLD_START_SECONDS = 4.0
+_WARM_QUERY_SECONDS = 2.0
 _LARGE_QUERY_SECONDS = 30.0
 
 
@@ -92,19 +111,14 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
     if len(body_bytes) > 12 * 1024 * 1024:
         raise NativeContentSensitivityError("native_content_sensitivity_request_invalid")
     # Without a caller deadline, runtime discovery and a resident spawn get
-    # their own bound; the 0.5 s budget is for a round trip to a warm resident.
+    # their own bound; a resident that is already running gets the warm one.
     deadline = (
         deadline_monotonic
         if deadline_monotonic is not None
         else started + (_LARGE_QUERY_SECONDS if len(body_bytes) > 65536 else _COLD_START_SECONDS)
     )
-    if len(body_bytes) > 128 * 1024:
-        body = {
-            "packed_json_gzip_v1": base64.b64encode(gzip.compress(body_bytes, compresslevel=1, mtime=0)).decode(
-                "ascii"
-            ),
-            "decoded_bytes": len(body_bytes),
-        }
+    if len(body_bytes) > PACK_THRESHOLD_BYTES:
+        body = pack_json_body(body_bytes)
     status = _status(deadline)
     if time.monotonic() >= deadline:
         raise NativeContentSensitivityDeadlineError("native_content_sensitivity_deadline_exceeded")
@@ -115,7 +129,7 @@ def content_query(query: str, body: dict[str, Any], *, deadline_monotonic: float
         and status.identity is not None
         and native_resident_client_ready(status.identity.path, home)
     ):
-        deadline = min(deadline, time.monotonic() + 0.5)
+        deadline = min(deadline, time.monotonic() + _WARM_QUERY_SECONDS)
     if (
         not status.available
         or not status.compatible

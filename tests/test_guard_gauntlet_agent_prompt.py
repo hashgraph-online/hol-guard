@@ -11,10 +11,11 @@ from ci.gauntlet.agent_prompt import (
     JSON_COMMANDS_HEADER,
     command_block,
     fixture_authorization,
+    plain_line,
     scenario_prompt,
 )
 from ci.gauntlet.catalog import load_catalog
-from ci.gauntlet.fixtures import create_fixture
+from ci.gauntlet.fixtures import create_fixture, scratch_checkout, stage_directory
 
 
 @pytest.mark.parametrize("scenario", load_catalog(), ids=lambda scenario: scenario.id)
@@ -22,10 +23,20 @@ def test_rendered_command_arguments_survive_prompt_serialization(tmp_path, scena
     """Exercise quotes, spaces, Unicode, pipelines and collector URLs as actual model input."""
     fixture = create_fixture(tmp_path / "space café's prompt fixture")
     rendered = scenario.render(
-        {"home": str(fixture.home), "workspace": str(fixture.workspace), "collector_url": "http://127.0.0.1:12345/"}
+        {
+            "home": str(fixture.home),
+            "workspace": str(fixture.workspace),
+            "root": str(fixture.root),
+            "scratch": str(scratch_checkout(fixture.root)),
+            "stage": str(stage_directory(fixture.root)),
+            "collector_url": "http://127.0.0.1:12345/",
+        }
     )
     prompt = scenario_prompt(rendered)
-    if rendered.commands:
+    if rendered.commands and not all(plain_line(command) for command in rendered.commands):
+        # A multi-line command (a heredoc) is listed as JSON, which decodes to the exact text.
+        assert tuple(json.loads(prompt.split(JSON_COMMANDS_HEADER, 1)[1])) == rendered.commands
+    elif rendered.commands:
         assert tuple(prompt.split(COMMANDS_HEADER, 1)[1].split("\n")) == rendered.commands
         assert '\\"' not in prompt.split(COMMANDS_HEADER, 1)[1]
     else:

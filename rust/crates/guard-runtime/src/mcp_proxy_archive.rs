@@ -1,11 +1,16 @@
-//! Rebinding a `tools/call` to the verified local copies of its external
-//! archives. The resident decides whether and how the request is rewritten; the
+//! Rebinding a `tools/call` (or a package-manager launch argv) to the verified
+//! local copies of its external archives. The resident decides whether and how the request is rewritten; the
 //! caller applies the returned edits, so key order and number formatting of the
 //! forwarded request stay exactly what the client sent.
 
-use guard_contracts::McpExternalArchiveBindQueryV1;
+use guard_contracts::{McpExternalArchiveBindQueryV1, McpExternalArchiveBindingRequiredQueryV1};
 use serde_json::{json, Value};
 
+use guard_command::local_supply_chain::{
+    package_evaluation_requires_external_archive_binding, PackageRequestEvaluation,
+};
+
+use crate::mcp_proxy_archive_verify::verified_replacements;
 use crate::mcp_proxy_shlex as shlex;
 
 const SHELL_KEYS: [&str; 4] = ["cmd", "command", "shellCommand", "shell_command"];
@@ -87,10 +92,39 @@ fn walk(
     Some(())
 }
 
+/// Whether this evaluation only permits a request bound to the external
+/// archives it verified.
+///
+/// The evaluator that produced the evaluation is the one authority on what its
+/// reasons mean, so the callers that have to decide whether to demand a
+/// binding — the hook's package leg, the proxy's forward leg and the launch
+/// binder — read the answer here instead of each reading the reasons again.
+pub(crate) fn binding_required(query: &McpExternalArchiveBindingRequiredQueryV1) -> Value {
+    json!({
+        "required": package_evaluation_requires_external_archive_binding(
+            &PackageRequestEvaluation::new(query.evaluation.clone()),
+        )
+    })
+}
+
 /// `unchanged`, `unbound` (fail closed) or `bound` with the edits to apply.
+/// Every download is re-verified first; one that changed refuses the binding.
 pub(crate) fn bind(query: &McpExternalArchiveBindQueryV1) -> Value {
-    if query.replacements.is_empty() {
-        let kind = if query.requires_binding {
+    match verified_replacements(&query.downloads) {
+        Some(replacements) => {
+            bind_replacements(&query.params, &replacements, query.requires_binding)
+        }
+        None => json!({ "kind": "unbound" }),
+    }
+}
+
+pub(crate) fn bind_replacements(
+    params: &Value,
+    replacements: &[(String, String)],
+    requires_binding: bool,
+) -> Value {
+    if replacements.is_empty() {
+        let kind = if requires_binding {
             "unbound"
         } else {
             "unchanged"
@@ -98,11 +132,11 @@ pub(crate) fn bind(query: &McpExternalArchiveBindQueryV1) -> Value {
         return json!({ "kind": kind });
     }
     let mut binding = Binding {
-        replacements: &query.replacements,
-        matched: vec![false; query.replacements.len()],
+        replacements,
+        matched: vec![false; replacements.len()],
         edits: Vec::new(),
     };
-    if walk(&mut binding, &query.params, &mut Vec::new(), false).is_none() {
+    if walk(&mut binding, params, &mut Vec::new(), false).is_none() {
         return json!({ "kind": "unbound" });
     }
     // Every verified archive must have been found in the request.

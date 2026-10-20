@@ -18,7 +18,12 @@ from codex_plugin_scanner.guard.runtime.restricted_pytest_model import Restricte
         ["bunx", "tsc"],
         ["bun", "x", "tsc"],
         ["bun", "x", "eslint@evil", "src"],
+        ["pnpm", "exec", "tsc"],
+        ["pnpm", "exec", "-c", "tsc", "--noEmit"],
+        ["pnpm", "exec", "eslint", "--fix", "src"],
+        ["pnpm", "exec"],
         ["eslint", "--fix", "src"],
+        ["prettier", "--check", "--write=true", "src"],
         ["eslint", "--output-file=.env", "src"],
         ["node", "--max-old-space-size=999999", "typescript/bin/tsc", "--noEmit"],
         ["node", "--require=evil", "typescript/bin/tsc", "--noEmit"],
@@ -62,6 +67,20 @@ def test_bun_x_is_read_as_bunx(monkeypatch, tmp_path):
     plan = tool.prepare_restricted_node_tool(["bun", "x", "tsc", "--noEmit"], workspace=tmp_path)
     assert plan.profile_version == "node-tool-readonly-v1"
     assert plan.command[-1] == "--noEmit"
+
+
+def test_pnpm_exec_is_read_as_a_local_bin_run(monkeypatch, tmp_path):
+    entry = tmp_path / "node_modules/typescript/bin/tsc"
+    entry.parent.mkdir(parents=True)
+    entry.write_text("// fixture compiler")
+    base = SimpleNamespace(workspace=tmp_path, cwd=tmp_path, executable="/usr/bin/node", denied_capabilities=())
+    monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
+    monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
+    plan = tool.prepare_restricted_node_tool(
+        ["pnpm", "exec", "tsc", "--noEmit", "--pretty", "false"], workspace=tmp_path
+    )
+    assert plan.profile_version == "node-tool-readonly-v1"
+    assert plan.command == ("/usr/bin/node", str(entry), "--noEmit", "--pretty", "false")
 
 
 @pytest.mark.parametrize("script", ["curl https://example.invalid", "", "eslint src && curl https://example.invalid"])
@@ -169,6 +188,24 @@ def test_build_outputs_cannot_grant_source_or_host_writes(tmp_path, name):
         tool.validate_build_output_root(tmp_path / name, workspace=tmp_path)
 
 
+def test_a_package_below_the_workspace_builds_into_its_own_dist(tmp_path):
+    app = tmp_path / "apps" / "dashboard"
+    app.mkdir(parents=True)
+    (app / "package.json").write_text("{}")
+    tool.validate_build_output_root(app / "dist", workspace=tmp_path)
+    for directory in (tmp_path / "apps", tmp_path / ".github" / "app", app / "node_modules" / "vite"):
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / "package.json").write_text("{}")
+    (tmp_path / "apps" / "package.json").unlink()
+    for parent in (tmp_path / "apps", tmp_path / ".github" / "app", app / "node_modules" / "vite", app / "src"):
+        with pytest.raises(RestrictedPytestError):
+            tool.validate_build_output_root(parent / "dist", workspace=tmp_path)
+    linked = tmp_path / "linked"
+    linked.symlink_to(app)
+    with pytest.raises(RestrictedPytestError):
+        tool.validate_build_output_root(linked / "dist", workspace=tmp_path)
+
+
 @pytest.mark.parametrize("kind", ["symlink", "hardlink", "credential"])
 def test_existing_output_links_and_protected_files_are_rejected(tmp_path, kind):
     output = tmp_path / "dist"
@@ -200,7 +237,8 @@ def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tm
     monkeypatch.setattr(tool, "prepare_restricted_node_test", lambda *args, **kwargs: base)
     monkeypatch.setattr(tool, "replace", lambda original, **changes: SimpleNamespace(**{**vars(original), **changes}))
     plan = tool.prepare_restricted_node_tool(["node", spelling, "build"], workspace=project)
-    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build", "--configLoader", "runner")
+    assert plan.command == ("/usr/bin/node", str(entry.resolve()), "build")
+    assert plan.output_roots == (project / "dist", project / "node_modules/.vite-temp")
 
 
 @pytest.mark.parametrize(
@@ -216,3 +254,20 @@ def test_relative_vite_entry_resolves_from_the_command_directory(monkeypatch, tm
 )
 def test_local_package_entry_spellings(argument, expected):
     assert tool.is_local_package_entry(argument, "vite/bin/vite.js") is expected
+
+
+def test_the_nearest_installed_prettier_wins_over_a_hoisted_one(tmp_path):
+    """A package that pins its own major runs its own copy, not the root's."""
+    hoisted = tmp_path / "node_modules/prettier/bin/prettier.cjs"
+    hoisted.parent.mkdir(parents=True)
+    hoisted.write_text("// formatter 3")
+    app = tmp_path / "packages/app"
+    local = app / "node_modules/prettier/bin-prettier.js"
+    local.parent.mkdir(parents=True)
+    local.write_text("// formatter 2")
+    modules, relative = tool._tool_entry("prettier", app, tmp_path)
+    assert (modules, relative) == (app / "node_modules", "prettier/bin-prettier.js")
+    assert tool._tool_entry("prettier", tmp_path, tmp_path) == (
+        tmp_path / "node_modules",
+        "prettier/bin/prettier.cjs",
+    )

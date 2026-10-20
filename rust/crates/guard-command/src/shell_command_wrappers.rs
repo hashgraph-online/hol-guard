@@ -421,7 +421,9 @@ fn command_name(
     }
     let command_path = Path::new(token);
     if !command_path.is_absolute() {
-        return String::new();
+        return paths::posix_system_command_basename(token)
+            .map(str::to_lowercase)
+            .unwrap_or_default();
     }
     if !is_trusted_absolute_command_path(command_path, cwd, home_dir) {
         return String::new();

@@ -1,14 +1,16 @@
 //! The Cursor bridge's reproduction of its client's request, and the
-//! ported-client check.
+//! client constants it reads.
 
 use std::time::{Duration, Instant};
 
+use guard_command::hook_adapter_value::parse_python_json;
 use serde_json::{json, Value};
 
 use super::*;
-use crate::cursor_hook_bridge_script::{normalize, ported_constants, ScriptConstants};
+use crate::cursor_hook_bridge_response::{FIXED_NOW, UNAVAILABLE_STDOUT};
+use crate::cursor_hook_bridge_script::{normalize, read_client_constants, ScriptConstants};
 
-fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
+pub(super) fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
     format!(
         "import os\nGUARD_HOME = {}\nGUARD_CLI = [\"/bin/hol-guard\"]\n\
          GUARD_RECOVERY_COMMAND = [\"/bin/hol-guard\", \"guard\", \"daemon\"]\n\
@@ -18,7 +20,8 @@ fn client_text(guard_home: &str, hook_argv: &str, timeout: &str) -> String {
     )
 }
 
-const HOOK_ARGV: &str = r#"["guard", "hook", "--harness", "cursor", "--home", "/home/u"]"#;
+pub(super) const HOOK_ARGV: &str =
+    r#"["guard", "hook", "--harness", "cursor", "--home", "/home/u"]"#;
 
 #[test]
 fn rendered_constants_are_read_back_from_the_client() {
@@ -36,6 +39,11 @@ fn rendered_constants_are_read_back_from_the_client() {
         ScriptConstants {
             guard_home: "/g h".to_owned(),
             home: Some("/home/u".to_owned()),
+            recovery_command: vec![
+                "/bin/hol-guard".to_owned(),
+                "guard".to_owned(),
+                "daemon".to_owned(),
+            ],
             timeout_seconds: 57,
         }
     );
@@ -67,8 +75,22 @@ fn clients_the_renderer_did_not_write_are_not_read() {
     ] {
         assert_eq!(normalize(&text), None, "{text}");
     }
-    // A client the renderer wrote from another template.
-    assert_eq!(ported_constants(&client_text("/g", HOOK_ARGV, "1")), None);
+}
+
+#[test]
+fn a_client_an_older_guard_rendered_is_answered_natively() {
+    let dir = tempfile::tempdir().unwrap();
+    let script = dir.path().join("cursor_hook.py");
+    // Rendered from another template than the one the bridge was ported from.
+    std::fs::write(&script, client_text("/g", HOOK_ARGV, "3")).unwrap();
+    let constants = read_client_constants(&script).unwrap();
+    assert_eq!(
+        (constants.guard_home.as_str(), constants.timeout_seconds),
+        ("/g", 3)
+    );
+    std::fs::write(&script, client_text("/g", HOOK_ARGV, "0")).unwrap();
+    assert_eq!(read_client_constants(&script), None);
+    assert_eq!(read_client_constants(&dir.path().join("missing.py")), None);
 }
 
 #[test]
@@ -97,6 +119,22 @@ fn scratch(label: &str) -> std::path::PathBuf {
     std::fs::canonicalize(root).unwrap()
 }
 
+/// A guard home with the daemon auth token file the client may sign a
+/// loopback review link with, or without it.
+fn guard_home(label: &str, tokened: bool) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let root = scratch(label);
+    if tokened {
+        // The client loads the token only from a private file in a private
+        // directory.
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let token = root.join("daemon-auth-token");
+        std::fs::write(&token, "3f".repeat(32)).unwrap();
+        std::fs::set_permissions(&token, std::fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    root
+}
+
 fn map(value: Value) -> OMap {
     let OValue::Map(map) = parse_python_json(&value.to_string()).unwrap() else {
         panic!("not a map");
@@ -114,25 +152,29 @@ fn the_workspace_is_the_first_directory_the_client_would_pick() {
         "cwd": dir("cwd"),
     }));
     assert_eq!(
-        workspace(&payload, Some(format!("\t{}\n", dir("project")).into())),
+        workspace(
+            &payload,
+            Some(format!("\t{}\n", dir("project")).into()),
+            false
+        ),
         Ok(Some(dir("project")))
     );
     assert_eq!(
-        workspace(&payload, Some(missing.clone().into())),
+        workspace(&payload, Some(missing.clone().into()), false),
         Ok(Some(dir("root")))
     );
-    assert_eq!(workspace(&payload, None), Ok(Some(dir("root"))));
+    assert_eq!(workspace(&payload, None, false), Ok(Some(dir("root"))));
     let camel = map(json!({"workspace_roots": [], "workspaceRoots": [dir("root")]}));
-    assert_eq!(workspace(&camel, None), Ok(Some(dir("root"))));
+    assert_eq!(workspace(&camel, None, false), Ok(Some(dir("root"))));
     let not_list = map(json!({"workspace_roots": dir("root"), "cwd": dir("cwd")}));
-    assert_eq!(workspace(&not_list, None), Ok(Some(dir("cwd"))));
+    assert_eq!(workspace(&not_list, None, false), Ok(Some(dir("cwd"))));
     let nothing = map(json!({"workspace_roots": [missing], "cwd": 7}));
-    assert_eq!(workspace(&nothing, None), Ok(None));
+    assert_eq!(workspace(&nothing, None, false), Ok(None));
     #[cfg(unix)]
     {
         use std::os::unix::ffi::OsStringExt;
         let undecodable = std::ffi::OsString::from_vec(b"/\xff".to_vec());
-        assert_eq!(workspace(&nothing, Some(undecodable)), Err(()));
+        assert_eq!(workspace(&nothing, Some(undecodable), false), Err(()));
     }
     std::fs::remove_dir_all(root).unwrap();
 }
@@ -141,17 +183,25 @@ fn test_client() -> Client {
     Client {
         guard_home: "/g".to_owned(),
         home: Some("/h".to_owned()),
+        recovery_command: Vec::new(),
+        event: "preToolUse".to_owned(),
         deadline: Instant::now() + Duration::from_secs(5),
     }
 }
 
 #[test]
-fn only_hooks_cursor_asks_before_running_a_tool_are_sent() {
+fn only_tool_hooks_and_observers_are_sent() {
     let client = test_client();
     let shell = br#"{"hook_event_name":"beforeShellExecution","command":"ls","cwd":"/nonexistent-cursor-cwd"}"#;
-    let Request { data, query, event } = prepared_request(&client, shell).unwrap();
+    let Request {
+        data,
+        query,
+        event,
+        kind,
+    } = prepared_request(&client, shell).unwrap();
     assert_eq!(query, "guard-home=%2Fg&home=%2Fh");
     assert_eq!(event, "beforeShellExecution");
+    assert_eq!(kind, Kind::PreToolUse);
     let sent: Value = serde_json::from_str(&data).unwrap();
     assert_eq!(sent["hook_event_name"], "PreToolUse");
     assert_eq!(sent["cursor_source_hook_event"], "beforeShellExecution");
@@ -159,9 +209,9 @@ fn only_hooks_cursor_asks_before_running_a_tool_are_sent() {
     with_bom.extend_from_slice(shell);
     assert!(prepared_request(&client, &with_bom).is_some());
     for raw in [
-        &br#"{"hook_event_name":"afterShellExecution","command":"ls"}"#[..],
-        br#"{"hook_event_name":"afterMCPExecution","tool_name":"x"}"#,
-        br#"{"hook_event_name":"beforeSubmitPrompt","prompt":"hi"}"#,
+        &br#"{"hook_event_name":"beforeSubmitPrompt","prompt":"hi"}"#[..],
+        br#"{"hook_event_name":"afterFileEdit","file_path":"/tmp/a"}"#,
+        br#"{"hook_event_name":"after_shell_execution","command":"ls"}"#,
         br#"{"hook_event_name":"stop"}"#,
         br#"[]"#,
         b"",
@@ -224,14 +274,179 @@ fn answers_match_the_client_for_every_vector() {
     let fixture: Value = serde_json::from_str(ANSWER_VECTORS).unwrap();
     let vectors = fixture["vectors"].as_array().unwrap();
     assert!(vectors.len() >= 20);
+    // A loopback review link the client may sign stays with the client.
+    let home = guard_home("answers", true);
     for vector in vectors {
         let event = vector["event"].as_str().unwrap();
         let response = vector["response"].as_str().unwrap();
-        let expected = vector["stdout"].as_str().map(|stdout| {
-            let code = vector["exit_code"].as_i64().unwrap();
-            (stdout.to_owned(), i32::try_from(code).unwrap())
-        });
-        assert_eq!(answer(event, response), expected, "{event:?} {response}");
+        let Some(stdout) = vector["stdout"].as_str() else {
+            // The client signs review links and keeps lone surrogates, which
+            // the review and surrogate vectors check; anything else the
+            // bridge does not answer fails closed.
+            if !(response.to_ascii_lowercase().contains("approval") || response.contains("\\ud800"))
+            {
+                assert_eq!(
+                    answer(Kind::PreToolUse, event, response, &home),
+                    None,
+                    "{event:?} {response}"
+                );
+            }
+            continue;
+        };
+        let code = vector["exit_code"].as_i64().unwrap();
+        let expected = Some((stdout.to_owned(), i32::try_from(code).unwrap()));
+        assert_eq!(
+            answer(Kind::PreToolUse, event, response, &home),
+            expected,
+            "{event:?} {response}"
+        );
+    }
+    std::fs::remove_dir_all(home).unwrap();
+}
+
+const REVIEW_VECTORS: &str =
+    include_str!("../testdata/cursor_hook_bridge/cursor_review_vectors.json");
+
+#[test]
+fn reviews_and_prompts_match_the_client_in_either_guard_home() {
+    let fixture: Value = serde_json::from_str(REVIEW_VECTORS).unwrap();
+    assert_eq!(
+        fixture["schema"],
+        "hol-guard-cursor-native-review-answers.v1"
+    );
+    let vectors = fixture["vectors"].as_array().unwrap();
+    assert!(vectors.len() >= 200);
+    FIXED_NOW.with(|now| now.set(fixture["now_micros"].as_i64()));
+    let signed = vectors
+        .iter()
+        .filter(|vector| {
+            vector["stdout"]
+                .as_str()
+                .unwrap()
+                .contains("#guard-token=gld1.")
+        })
+        .count();
+    assert!(signed >= 30);
+    let untokened = guard_home("review-untokened", false);
+    let tokened = guard_home("review-tokened", true);
+    for vector in vectors {
+        let home = match vector["home"].as_str().unwrap() {
+            "untokened" => &untokened,
+            "tokened" => &tokened,
+            other => panic!("unknown home {other}"),
+        };
+        let event = vector["event"].as_str().unwrap();
+        let response = vector["response"].as_str().unwrap();
+        let kind = if prompt_event(event) {
+            Kind::Prompt
+        } else {
+            Kind::PreToolUse
+        };
+        let code = vector["exit_code"].as_i64().unwrap();
+        let expected = Some((
+            vector["stdout"].as_str().unwrap().to_owned(),
+            i32::try_from(code).unwrap(),
+        ));
+        assert_eq!(
+            answer(kind, event, response, home),
+            expected,
+            "{} {} {event:?} {response}",
+            vector["home"],
+            vector["case"]
+        );
+    }
+    // A link the client leaves unsigned is shown as it is.
+    let odd = r#"{"policy_action":"review","reason":"r","approval_url":"https://guard.example/approvals/a?b=c"}"#;
+    let (stdout, code) = answer(Kind::PreToolUse, "beforeShellExecution", odd, &tokened).unwrap();
+    assert_eq!(code, 0);
+    assert!(stdout.contains("a?b=c.") && !stdout.contains("guard-token"));
+    FIXED_NOW.with(|now| now.set(None));
+    std::fs::remove_dir_all(untokened).unwrap();
+    std::fs::remove_dir_all(tokened).unwrap();
+}
+
+#[test]
+fn a_prompt_is_sent_only_when_nothing_else_names_the_hook() {
+    let client = test_client();
+    for name in [
+        "UserPromptSubmit",
+        " user_prompt_submit ",
+        "prompt",
+        "userPromptSubmitted",
+    ] {
+        let raw = json!({"hook_event_name": name, "prompt": "hi"}).to_string();
+        let request = prepared_request(&client, raw.as_bytes()).unwrap_or_else(|| panic!("{name}"));
+        assert_eq!(request.kind, Kind::Prompt, "{name}");
+        assert_eq!(request.event, name);
+    }
+    for raw in [
+        &br#"{"hook_event_name":"UserPromptSubmit","event":"x","prompt":"hi"}"#[..],
+        br#"{"hook_event_name":"UserPromptSubmit","eventName":"x","prompt":"hi"}"#,
+        br#"{"hook_event_name":"beforeSubmitPrompt","prompt":"hi"}"#,
+    ] {
+        assert_eq!(
+            prepared_request(&client, raw),
+            None,
+            "{}",
+            String::from_utf8_lossy(raw)
+        );
+    }
+}
+
+const AFTER_VECTORS: &str =
+    include_str!("../../../../tests/fixtures/cursor_native_answers/after_vectors.json");
+
+/// The stamped payload as `json.loads` reads it, without the environment
+/// the stamp adds.
+fn sent_payload(data: &str) -> Value {
+    let mut sent: Value = serde_json::from_str(data).unwrap();
+    sent.as_object_mut()
+        .unwrap()
+        .remove("guard_execution_environment");
+    sent
+}
+
+#[test]
+fn observers_are_sent_and_answered_as_the_client_does() {
+    let fixture: Value = serde_json::from_str(AFTER_VECTORS).unwrap();
+    assert_eq!(
+        fixture["schema"],
+        "hol-guard-cursor-native-after-answers.v1"
+    );
+    let vectors = fixture["vectors"].as_array().unwrap();
+    assert!(vectors.len() >= 8);
+    let client = test_client();
+    for vector in vectors {
+        let input = vector["input"].as_str().unwrap();
+        let request = prepared_request(&client, input.as_bytes());
+        if vector["observer"] != true {
+            assert!(
+                request.is_none_or(|request| request.kind != Kind::After),
+                "{input}"
+            );
+            continue;
+        }
+        let request = request.unwrap_or_else(|| panic!("{input}"));
+        assert_eq!(request.kind, Kind::After, "{input}");
+        assert_eq!(sent_payload(&request.data), vector["sent"], "{input}");
+        for expected in vector["answers"].as_array().unwrap() {
+            let body = expected["daemon_body"].as_str().unwrap();
+            let stdout = expected["stdout"].as_str().unwrap().to_owned();
+            let code = i32::try_from(expected["exit_code"].as_i64().unwrap()).unwrap();
+            assert_eq!(
+                answer(Kind::After, &request.event, body, Path::new("/g")),
+                Some((stdout, code)),
+                "{input} {body}"
+            );
+        }
+    }
+    // A body `_daemon_hook_result` rejects sends the hook to the client.
+    for body in ["", " ", "[]", "null", "\"{}\"", "{", "{} {}"] {
+        assert_eq!(
+            answer(Kind::After, "afterShellExecution", body, Path::new("/g")),
+            None,
+            "{body:?}"
+        );
     }
 }
 
@@ -248,8 +463,9 @@ fn only_the_installed_command_shape_is_answered() {
             .collect::<Vec<_>>()
     };
     let started = Instant::now();
+    let installed = argv(&["python3", "-I", &script, EVENT_FLAG, "preToolUse"]);
+    assert!(client(&installed, started).is_some());
     for python_argv in [
-        argv(&["python3", "-I", &script, EVENT_FLAG, "preToolUse"]),
         argv(&["python3", "-I", &script, EVENT_FLAG]),
         argv(&["python3", "-E", &script, EVENT_FLAG, "preToolUse"]),
         argv(&["python3", "-I", &script, "--event", "preToolUse"]),
@@ -261,7 +477,6 @@ fn only_the_installed_command_shape_is_answered() {
             "preToolUse",
         ]),
     ] {
-        // The fixture is not the ported client, so none of these is read.
         assert!(client(&python_argv, started).is_none(), "{python_argv:?}");
     }
     std::fs::remove_dir_all(root).unwrap();

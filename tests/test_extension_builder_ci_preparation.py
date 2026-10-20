@@ -13,6 +13,7 @@ import yaml
 
 from scripts import refresh_extension_artifacts as refresh
 from scripts.ci import detect_pending_extension_regen as detector
+from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -274,7 +275,7 @@ def test_builder_stages_trust_before_dependency_install_and_native_build():
     run = steps[prepare]["run"]
     assert run.count("scripts/prepare_extension_contribution.py") == 2
     assert "scripts/prepare_extension_contribution.py --check" in run
-    assert "scripts/render_command_extension_directory.py --check" in run
+    assert 'scripts/prepare_extension_contribution.py --check "${arguments[@]}"' in run
     assert "verify_native_command_program.py" not in run  # Do not compile/verify the same projections twice.
     for path in (
         "test_guard_extension_trust.py",
@@ -350,7 +351,7 @@ def test_shared_rust_setup_prepares_source_only_mcp_without_product_imports(chec
     ],
 )
 def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_name):
-    workflow = yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text())
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / workflow_name).read_text()))
     steps = workflow["jobs"][job_name]["steps"]
     setup = next(i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/setup-rust")
     build = next(
@@ -359,5 +360,12 @@ def test_native_builds_stage_shared_trust_before_compilation(workflow_name, job_
         if "cargo build" in step.get("run", "") or "build-native-wheel-macos.sh" in step.get("run", "")
     )
     assert setup < build
-    assert "if" not in steps[setup]
+    if "if" in steps[setup]:
+        # Binary reuse may skip the toolchain, never fresh trust defaults.
+        assert steps[setup]["if"] == "steps.evaluator-cache.outputs.cache-hit != 'true'"
+        trust = next(i for i, step in enumerate(steps) if "--trust-only" in step.get("run", ""))
+        restore = next(i for i, step in enumerate(steps) if step.get("id") == "evaluator-cache")
+        assert trust < restore < setup
+        assert "if" not in steps[trust]
+        assert "continue-on-error" not in steps[trust]
     assert "continue-on-error" not in steps[setup]

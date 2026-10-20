@@ -85,6 +85,28 @@ def _json_payload(path: Path) -> dict[str, object]:
         return {}
 
 
+def detection_request(harness: str, context: HarnessContext) -> dict[str, object]:
+    """The home and workspace a native detection kind reads, as Python holds them.
+
+    The working directory always travels with the request: relative paths,
+    including ones read from harness-written files, resolve against Python's
+    cwd and never the resident's.
+    """
+
+    workspace = context.workspace_dir
+    request: dict[str, object] = {
+        "harness": harness,
+        "home": str(context.home_dir),
+        "workspace": None if workspace is None else str(workspace),
+    }
+    try:
+        request["cwd"] = os.getcwd()
+    except OSError:
+        if not context.home_dir.is_absolute() or (workspace is not None and not workspace.is_absolute()):
+            raise
+    return request
+
+
 def _command_available(command: str) -> bool:
     return shutil.which(command) is not None
 

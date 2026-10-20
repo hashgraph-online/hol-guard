@@ -33,7 +33,7 @@ pub(super) fn trusted_location(path: &Path, home: &Path, cwd: &Path) -> bool {
     true
 }
 
-fn temporary_location(path: &Path) -> bool {
+pub(super) fn temporary_location(path: &Path) -> bool {
     let canonical_temp = fs::canonicalize(std::env::temp_dir()).ok();
     path.starts_with(std::env::temp_dir())
         || canonical_temp
@@ -248,9 +248,9 @@ mod tests {
         let root = proof_root();
         let _ = fs::remove_dir_all(&root);
         fs::create_dir_all(&root).unwrap();
-        let link = root.join("lib");
         #[cfg(unix)]
         {
+            let link = root.join("lib");
             std::os::unix::fs::symlink("/usr/lib", &link).unwrap();
             assert!(!trusted_library_search_path(
                 link.to_str().unwrap(),

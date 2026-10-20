@@ -134,6 +134,36 @@ export const RISK_CONTROL_CONSEQUENCES: Readonly<Record<string, RiskControlConse
     example: "A base64 payload decodes a secret and sends it over the network",
     impact: "Guard connects hidden execution and exfiltration into one reviewable risk",
   },
+  package_unknown: {
+    key: "package_unknown",
+    example: "A package has no local or Cloud reputation yet, or its lockfile cannot be read",
+    impact: "Guard records unrecognized packages and can pause them when you want every unknown package reviewed",
+  },
+  package_lockfile_drift: {
+    key: "package_lockfile_drift",
+    example: "package.json adds a dependency that the existing lockfile does not pin yet",
+    impact: "Guard can pause installs that change the dependency graph beyond the committed lockfile",
+  },
+  package_direct_source: {
+    key: "package_direct_source",
+    example: "A dependency installs from a git URL, a tarball link, a local path, or a Go replace",
+    impact: "Guard can pause installs that skip the package registry",
+  },
+  package_custom_registry: {
+    key: "package_custom_registry",
+    example: "An install sets --registry, --index-url, or NPM_CONFIG_REGISTRY to another index",
+    impact: "Guard can pause installs that pull from an index other than the default registry",
+  },
+  package_install: {
+    key: "package_install",
+    example: "Any npm, pnpm, yarn, bun, pip, uv, cargo, or go install or update",
+    impact: "Guard pauses every install or update for review when you opt in",
+  },
+  low_trust_artifact: {
+    key: "low_trust_artifact",
+    example: "A skill, MCP server, or plugin has a HOL Registry trust score below 80",
+    impact: "Guard flags low-trust skills, MCP servers, and plugins, and pauses them when this action asks for review",
+  },
 };
 
 export type SettingSearchMatch = {
@@ -158,6 +188,12 @@ const SETTINGS_SEARCH_INDEX: SettingSearchMatch[] = [
   { key: "guard_bypass", label: "Guard bypass", description: "Attempts to disable Guard hooks, policies, or approval flow.", section: "risk" },
   { key: "cloud_advisory", label: "Cloud advisories", description: "Team and Cloud guidance for known risky patterns.", section: "risk" },
   { key: "encoded_exfiltration", label: "Encoded exfiltration", description: "Encoded payloads that hide secret extraction and network transfer.", section: "risk" },
+  { key: "package_unknown", label: "Unrecognized packages", description: "Packages Guard cannot identify or find reputation for.", section: "risk" },
+  { key: "package_lockfile_drift", label: "Lockfile bumps", description: "Manifest dependencies the lockfile does not pin yet.", section: "risk" },
+  { key: "package_direct_source", label: "Direct package sources", description: "Git, URL, archive, local-path and replaced sources instead of the registry.", section: "risk" },
+  { key: "package_custom_registry", label: "Custom registries", description: "Installs that use a non-default package index or registry.", section: "risk" },
+  { key: "package_install", label: "Every package install", description: "Every package install or update, even with no risk signal.", section: "risk" },
+  { key: "low_trust_artifact", label: "Low trust scores", description: "Skills, MCP servers, and plugins scoring below 80 in the HOL Registry.", section: "risk" },
   { key: "default_action", label: "First-time action", description: "What Guard does the first time it sees a new action.", section: "defaults" },
   { key: "unknown_publisher_action", label: "Unknown source", description: "What Guard does when it cannot verify who published a tool or command.", section: "defaults" },
   { key: "changed_hash_action", label: "Changed command", description: "What Guard does when an approved command changes.", section: "defaults" },

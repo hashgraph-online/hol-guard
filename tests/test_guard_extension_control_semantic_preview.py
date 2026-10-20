@@ -22,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
 )
 from codex_plugin_scanner.guard.runtime.extension_control_runtime import ExtensionControlRuntime
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 
 
 def _configurable_permission():

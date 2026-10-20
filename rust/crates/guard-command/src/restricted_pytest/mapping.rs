@@ -17,6 +17,7 @@ struct Input {
     read_files: BTreeSet<PathBuf>,
     runtime_roots: Vec<PathBuf>,
     workspace: PathBuf,
+    dependency_candidates: Option<BTreeMap<String, BTreeSet<PathBuf>>>,
     path: PathBuf,
     library: bool,
     system_library: bool,
@@ -32,6 +33,7 @@ impl Default for Input {
             read_files: BTreeSet::new(),
             runtime_roots: vec![],
             workspace: PathBuf::new(),
+            dependency_candidates: None,
             path: PathBuf::new(),
             library: false,
             system_library: false,
@@ -163,7 +165,20 @@ impl Inspector<'_> {
             records.insert(path, record);
             for name in dependencies {
                 let mut matches = BTreeSet::new();
-                for parent in &self.parents {
+                // Discovery records filenames, including symlink aliases, without
+                // granting reads through them. Restrict lookup to observed names,
+                // then apply the same canonical target and read-index checks.
+                // Legacy callers and path-valued DT_NEEDED retain full lookup.
+                let parents: Vec<_> = match &self.input.dependency_candidates {
+                    Some(index) if !name.contains('/') => index
+                        .get(&name)
+                        .into_iter()
+                        .flatten()
+                        .filter(|parent| self.parents.contains(*parent))
+                        .collect(),
+                    _ => self.parents.iter().collect(),
+                };
+                for parent in parents {
                     check(self.deadline)?;
                     if let Ok(candidate) = parent.join(&name).canonicalize() {
                         if self.input.read_files.contains(&candidate)
@@ -222,6 +237,28 @@ fn collect(input: &Input, deadline: Instant) -> Result<Value> {
     }
     check(deadline)?;
     Ok(json!(records.into_values().collect::<Vec<_>>()))
+}
+
+/// Typed entry for in-process callers that already hold the read index, so a
+/// full system index is not encoded as JSON only to be parsed straight back.
+pub fn evidence(
+    images: BTreeSet<PathBuf>,
+    read_files: BTreeSet<PathBuf>,
+    runtime_roots: Vec<PathBuf>,
+    workspace: PathBuf,
+    dependency_candidates: BTreeMap<String, BTreeSet<PathBuf>>,
+    deadline: Instant,
+) -> Result<Value> {
+    check(deadline)?;
+    let input = Input {
+        images,
+        read_files,
+        runtime_roots,
+        workspace,
+        dependency_candidates: Some(dependency_candidates),
+        ..Input::default()
+    };
+    collect(&input, deadline)
 }
 
 pub(super) fn evaluate(operation: &str, input: &Value, deadline: Instant) -> Option<Value> {

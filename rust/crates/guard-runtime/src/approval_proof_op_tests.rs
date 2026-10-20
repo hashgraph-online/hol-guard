@@ -145,3 +145,73 @@ fn empty_approval_id_takes_the_decision_id_branch_for_every_caller() {
         expected
     );
 }
+
+/// The predicate Python used to compute inline: a claimed row is still the
+/// authority when the claim consumed it, or when the fresh lookup selects the
+/// same row apart from the counters unrelated authority writes advance.
+#[test]
+fn claim_row_revalidation_reads_the_row_the_launch_was_granted_under() {
+    // `approval-gate-once` is retained, so the fresh row has to still match.
+    let claimed = json!({
+        "action": "allow", "approval_id": "a1", "source": "approval-gate-once",
+        "artifact_hash": "h1", "_approval_authority_revision": 4, "integrity_generation": 7,
+    });
+    let revalidated = |current: Value| {
+        resident(json!({
+            "kind": "claim_row_revalidated",
+            "claimed_decision": claimed.clone(),
+            "current_decision": current,
+        }))["payload"]["accepted"]
+            .as_bool()
+            .unwrap()
+    };
+    let mut moved_counters = claimed.clone();
+    moved_counters["_approval_authority_revision"] = json!(9);
+    moved_counters["integrity_generation"] = json!(11);
+    assert!(revalidated(moved_counters));
+    let mut other_grant = claimed.clone();
+    other_grant["artifact_hash"] = json!("h2");
+    assert!(!revalidated(other_grant));
+    assert!(!revalidated(Value::Null));
+
+    // A consumed claim deletes its own row, so the lookup finding nothing is
+    // the expected outcome rather than evidence that the grant changed.
+    let consumed = json!({"action": "allow", "decision_id": 1, "source": "approval-gate", "expires_at": "2030-01-01T00:00:00Z"});
+    assert_eq!(
+        super::claim_disposition(consumed.as_object().unwrap()).map(|d| d.as_str()),
+        Some("consumed")
+    );
+    assert!(resident(json!({
+        "kind": "claim_row_revalidated",
+        "claimed_decision": consumed,
+        "current_decision": Value::Null,
+    }))["payload"]["accepted"]
+        .as_bool()
+        .unwrap());
+    assert!(!resident(json!({
+        "kind": "claim_row_revalidated",
+        "claimed_decision": Value::Null,
+        "current_decision": Value::Null,
+    }))["payload"]["accepted"]
+        .as_bool()
+        .unwrap());
+}
+
+/// Python compared the rows with `!=`, so an unchanged grant whose counter
+/// comes back as a float, and a field the fresh row omits that was null in the
+/// claimed one, both still count as the same row.
+#[test]
+fn claim_row_revalidation_compares_values_the_way_python_did() {
+    let claimed = json!({
+        "action": "allow", "source": "approval-gate-once", "approval_id": "a1",
+        "decision_id": 1, "reason": Value::Null,
+    });
+    let current = json!({"action": "allow", "source": "approval-gate-once", "approval_id": "a1", "decision_id": 1.0});
+    assert!(resident(json!({
+        "kind": "claim_row_revalidated",
+        "claimed_decision": claimed,
+        "current_decision": current,
+    }))["payload"]["accepted"]
+        .as_bool()
+        .unwrap());
+}

@@ -1,0 +1,2905 @@
+{
+ "cases": [
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "nothing",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:allow",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:allow",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:ask",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 2
+     },
+     "name": "permission:ask",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:rules",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:rules",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\nallow = [\"Read(*)\"]\ndeny = []\nask = [\"Bash(*)\", \"Edit(*)\"]\nrules = [1]\nother = [\"x\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:allow",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:allow",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:ask",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 2
+     },
+     "name": "permission:ask",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:rules",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:rules",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\nallow = [\"Read(*)\"]\ndeny = []\nask = [\"Bash(*)\", \"Edit(*)\"]\nrules = [1]\nother = [\"x\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "config_permissions",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "permission = \"x\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "permission_not_table",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\nallow = []\ndeny = []\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "permission_empty_lists",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:dup",
+     "artifact_type": "mcp_server",
+     "command": "second",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "1299bd43ac90cca4347038d23b91f817fe3c7246533fba19e99a0ea91eeef89a",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "dup",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "1299bd43ac90cca4347038d23b91f817fe3c7246533fba19e99a0ea91eeef89a",
+       "hashBasis": "content",
+       "versionLabel": "dup"
+      }
+     },
+     "name": "dup",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [
+      "a",
+      "1",
+      "2.5",
+      "True",
+      "False",
+      "-0.0",
+      "inf",
+      "nan",
+      "1e+20",
+      "1e-05",
+      "16"
+     ],
+     "artifact_id": "grok:global:mcp:local",
+     "artifact_type": "mcp_server",
+     "command": "node",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "b4165acd4ae4590c49eb0f5afe2c2ea0b883e6e7938c8da1b74e992743a16847",
+      "env_keys": [
+       "A",
+       "B",
+       "D"
+      ],
+      "env_values_hash": "dd0b34b25a62397ceab87a7b2ca67351ee7cb7c42672f7a9e829cdcab92cb520",
+      "header_values_hash": "17fc9e3e243d4f8789c4fc14214766580ea457e056a55f9bb06408a99dfb6fc8",
+      "headers_keys": [
+       "Authorization",
+       "X-Pad"
+      ],
+      "name": "local",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "b4165acd4ae4590c49eb0f5afe2c2ea0b883e6e7938c8da1b74e992743a16847",
+       "hashBasis": "content",
+       "versionLabel": "local"
+      }
+     },
+     "name": "local",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:remote",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "remote",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "78cde8973cc8d625c6254127640a0859fff495d284ad58cfa2a53082f4e95f17",
+       "hashBasis": "content",
+       "versionLabel": "remote"
+      }
+     },
+     "name": "remote",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://mcp.example/x"
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:both",
+     "artifact_type": "mcp_server",
+     "command": "c",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "f497480d7e0ffa2a7e50260e497a3be79a9ef2238936d048abbbd5ddc0eb1e60",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "both",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "f497480d7e0ffa2a7e50260e497a3be79a9ef2238936d048abbbd5ddc0eb1e60",
+       "hashBasis": "content",
+       "versionLabel": "both"
+      }
+     },
+     "name": "both",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://both"
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:envonly",
+     "artifact_type": "mcp_server",
+     "command": "e",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "fd304278eb1ba17910fc2223f2339ef7882cdeff45a257017a949c1571090a3f",
+      "env_keys": [
+       "K"
+      ],
+      "env_values_hash": "b56bfb2eea8dd7936ae629915ce58f4f320b9f4fbffb72433cb4de5f8c53a56b",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "envonly",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "fd304278eb1ba17910fc2223f2339ef7882cdeff45a257017a949c1571090a3f",
+       "hashBasis": "content",
+       "versionLabel": "envonly"
+      }
+     },
+     "name": "envonly",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:dotted",
+     "artifact_type": "mcp_server",
+     "command": "dotted-cmd",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "c3eedfe2b7d8652d37d167166c345e6d0bd571ba576dea58c3cbd7b2ac10f45b",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "dotted",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c3eedfe2b7d8652d37d167166c345e6d0bd571ba576dea58c3cbd7b2ac10f45b",
+       "hashBasis": "content",
+       "versionLabel": "dotted"
+      }
+     },
+     "name": "dotted",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:x.y",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "8fd6e35cb1c8b069a29f45ea7333474cf9f33c6b45aad2d2cf953f475145cc98",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "x.y",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "8fd6e35cb1c8b069a29f45ea7333474cf9f33c6b45aad2d2cf953f475145cc98",
+       "hashBasis": "content",
+       "versionLabel": "x.y"
+      }
+     },
+     "name": "x.y",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "https://xy"
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:",
+     "artifact_type": "mcp_server",
+     "command": "empty-name",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "9bc2f23f28667ff4774ebbd79f5d57c27858ed544e605bc9ac361bd981a3877a",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "9bc2f23f28667ff4774ebbd79f5d57c27858ed544e605bc9ac361bd981a3877a",
+       "hashBasis": "content",
+       "versionLabel": ""
+      }
+     },
+     "name": "",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "\"mcp_servers.dotted\" = { command = \"dotted-cmd\" }\n\"mcp_servers.dup\" = { command = \"second\" }\n\"mcp_servers.x.y\" = { url = \"https://xy\" }\n\"mcp_servers.\" = { command = \"empty-name\" }\n\"mcp_servers.str\" = \"not-a-table\"\nmcp_other = { command = \"ignored\" }\n\n[mcp_servers.dup]\ncommand = \"first\"\n\n[mcp_servers.local]\ncommand = \"node\"\nargs = [\"a\", 1, 2.5, true, false, -0.0, inf, nan, 1e20, 1e-5, 0x10]\nenvironment = { A = \"1\", \" B \" = \"2\", C = 3, \"\" = \"e\", \" \" = \"s\" }\nenv = { A = \"override\", D = \"4\" }\nheaders = { Authorization = \"Bearer x\", \" X-Pad \" = \"p\", N = 1 }\n\n[mcp_servers.remote]\nurl = \"https://mcp.example/x\"\ncommand = 5\nargs = \"not-a-list\"\n\n[mcp_servers.both]\ncommand = \"c\"\nurl = \"https://both\"\ntransport = \"sse\"\n\n[mcp_servers.bare]\nx = 1\n\n[mcp_servers.envonly]\ncommand = \"e\"\nenv = { K = \"v\" }\nenvironment = \"nope\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "config_servers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:a",
+     "artifact_type": "mcp_server",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "ad9b40dc035e1b4d4ae70858fffa22b1acab7416e12ee6c4c50acb024ab23634",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "a",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "ad9b40dc035e1b4d4ae70858fffa22b1acab7416e12ee6c4c50acb024ab23634",
+       "hashBasis": "content",
+       "versionLabel": "a"
+      }
+     },
+     "name": "a",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "http",
+     "url": "u"
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "mcp_servers = \"x\"\n\"mcp_servers.a\" = { url = \"u\" }\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "mcp_servers_not_table",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c1",
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "c02a558e5c458d61b0351de39fa82ae85e3114391333ca226402876ad0c90756",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "c02a558e5c458d61b0351de39fa82ae85e3114391333ca226402876ad0c90756",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:allow",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/managed_config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:allow",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:mcp:s",
+     "artifact_type": "mcp_server",
+     "command": "c2",
+     "config_path": "<ROOT>/home/.grok/managed_config.toml",
+     "harness": "grok",
+     "metadata": {
+      "content_hash": "32f57b1d1373566e7470a4bf3b66ab851d2f1d4fc4493605ef1db06272c48bc1",
+      "env_keys": [],
+      "env_values_hash": "5c871428ca7a09622c5e4af9f1ad622c65a4367e0cb4fef559457f78c3953d5e",
+      "header_values_hash": "54a6032462f6d1dfded3f1227b42605efcfb67729ba46bfada674447a93d555d",
+      "headers_keys": [],
+      "name": "s",
+      "versionInfo": {
+       "changedFields": [],
+       "contentHash": "32f57b1d1373566e7470a4bf3b66ab851d2f1d4fc4493605ef1db06272c48bc1",
+       "hashBasis": "content",
+       "versionLabel": "s"
+      }
+     },
+     "name": "s",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": "stdio",
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:ask",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/requirements.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:ask",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[mcp_servers.s]\ncommand = \"c1\"\n[permission]\ndeny = [\"a\"]\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/managed_config.toml",
+     "text": "[permission]\nallow = [\"b\"]\n[mcp_servers.s]\ncommand = \"c2\"\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/requirements.toml",
+     "text": "[permission]\nask = [\"c\"]\nsandbox = \"off\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml",
+    "<ROOT>/home/.grok/managed_config.toml",
+    "<ROOT>/home/.grok/requirements.toml"
+   ],
+   "home": "home",
+   "name": "all_three_configs",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in requirements.toml: sandbox = \"off\". Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "mode = \"always-approve\"\n[x]\ndefaultMode = \"bypassPermissions\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_markers",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in config.toml: always-approve. Guard hooks still run, but Grok may auto-approve some actions.",
+    "Degraded Grok protection signal in config.toml: bypasspermissions. Guard hooks still run, but Grok may auto-approve some actions.",
+    "Degraded Grok protection signal in config.toml: defaultmode = \"bypasspermissions\". Guard hooks still run, but Grok may auto-approve some actions.",
+    "Degraded Grok protection signal in config.toml: defaultMode\": \"bypassPermissions\". Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/managed_config.toml",
+     "text": "xdefaultMode = \"bypassPermissionsZ\"\nk = \"a\\\"b\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/managed_config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_serialized_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in managed_config.toml: bypasspermissions. Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "sandbox = \" OFF \"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_sandbox_strip",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in config.toml: sandbox off. Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/requirements.toml",
+     "text": "sandbox=\"off\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/requirements.toml"
+   ],
+   "home": "home",
+   "name": "degraded_sandbox_compact",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in requirements.toml: sandbox=\"off\". Guard hooks still run, but Grok may auto-approve some actions.",
+    "Degraded Grok protection signal in requirements.toml: sandbox off. Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "sandbox = false\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_sandbox_not_string",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "# BYPASS_PERMISSIONS here\na = 1\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_comment_marker",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in config.toml: bypass_permissions. Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "# always-approve\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_comment_only",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "\"éclé\" = \"café 😀 \\u0007 \\u007f\"\nn = [1.5, -0.0, inf, -inf, nan, 1e300, 12]\nm = \"KEEP always‐approve\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_unicode",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "a = 1\n# K sandbox = \"OFF\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "degraded_kelvin_raw",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in config.toml: sandbox = \"off\". Guard hooks still run, but Grok may auto-approve some actions."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "when = 1979-05-27\n"
+    }
+   ],
+   "home": "home",
+   "name": "datetime_refused",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[[\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "toml_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "efbbbf5b7065726d697373696f6e5d0a616c6c6f77203d205b2261225d0a",
+     "mode": 420,
+     "path": "home/.grok/config.toml"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "toml_bom",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "61203d2022ff220a",
+     "mode": 420,
+     "path": "home/.grok/config.toml"
+    }
+   ],
+   "home": "home",
+   "name": "toml_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\nallow = [\"a\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "toml_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "home/.grok/config.toml"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "config_is_directory",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "elsewhere/c.toml",
+     "text": "[permission]\ndeny = [\"z\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "config_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.grok/config.toml",
+     "target": "<ROOT>/elsewhere/c.toml"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [
+     "<ROOT>/etc/grok/managed_config.toml",
+     "<ROOT>/etc/grok/requirements.toml"
+    ],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "etc/grok/managed_config.toml",
+     "text": "x = 1\n"
+    },
+    {
+     "mode": 420,
+     "path": "etc/grok/requirements.toml",
+     "text": "x = 1\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "sandbox = \"off\"\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml",
+    "<ROOT>/etc/grok/managed_config.toml",
+    "<ROOT>/etc/grok/requirements.toml"
+   ],
+   "home": "home",
+   "name": "system_policy",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Degraded Grok protection signal in config.toml: sandbox = \"off\". Guard hooks still run, but Grok may auto-approve some actions.",
+    "Degraded Grok protection signal in config.toml: sandbox off. Guard hooks still run, but Grok may auto-approve some actions.",
+    "Enterprise Grok policy detected at managed_config.toml.",
+    "Enterprise Grok policy detected at requirements.toml."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [
+     "<ROOT>/etc/grok/requirements.toml"
+    ],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 0,
+     "path": "etc/grok/managed_config.toml",
+     "text": "x = 1\n"
+    },
+    {
+     "mode": 420,
+     "path": "etc/grok/requirements.toml",
+     "text": "x = 1\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/etc/grok/requirements.toml"
+   ],
+   "home": "home",
+   "name": "system_policy_unreadable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [
+    "Enterprise Grok policy detected at requirements.toml."
+   ],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "hidden",
+     "config_path": "<ROOT>/home/.grok/hooks/.hidden.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "bare",
+     "config_path": "<ROOT>/home/.grok/hooks/.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:0:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "Bash"
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:0:4",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "Bash"
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:4:0",
+     "artifact_type": "hook",
+     "command": "empty-matcher.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": ""
+     },
+     "name": "PreToolUse:",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:5:0",
+     "artifact_type": "hook",
+     "command": "null-matcher.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": null
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:6:0",
+     "artifact_type": "hook",
+     "command": "list-matcher.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": [
+       "a",
+       1
+      ]
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:7:0",
+     "artifact_type": "hook",
+     "command": "float-matcher.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": 2.5
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:äupper:0:0",
+     "artifact_type": "hook",
+     "command": "u.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "ÄUpper",
+      "matcher": 5
+     },
+     "name": "ÄUpper",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:sessionstart:0:0",
+     "artifact_type": "hook",
+     "command": "é   s.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "SessionStart",
+      "matcher": null
+     },
+     "name": "SessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "home/.grok/hooks/dir.json"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"Bash\", \"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\"}, {\"command\": \"  \"}, {\"command\": 5}, \"not-a-dict\", {\"command\": \"b.sh\", \"timeout\": 3}]}, {\"hooks\": \"not-a-list\"}, {\"command\": \"direct.sh\"}, \"not-a-dict\", {\"matcher\": \"\", \"hooks\": [{\"command\": \"empty-matcher.sh\"}]}, {\"matcher\": null, \"hooks\": [{\"command\": \"null-matcher.sh\"}]}, {\"matcher\": [\"a\", 1], \"hooks\": [{\"command\": \"list-matcher.sh\"}]}, {\"matcher\": 2.5, \"hooks\": [{\"command\": \"float-matcher.sh\"}]}], \"Stop\": {\"hooks\": [{\"command\": \"x\"}]}, \"\\u00c4Upper\": [{\"hooks\": [{\"command\": \"u.sh\"}], \"matcher\": 5}], \"SessionStart\": [{\"hooks\": [{\"command\": \"\\u00e9 \\u2028 s.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/b.json",
+     "text": "{}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/c.json",
+     "text": "{"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/d.json",
+     "text": "{\"hooks\": [\"x\"]}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/e.json",
+     "text": "[{\"hooks\": {}}]"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/z.JSON",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"upper\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/.hidden.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"hidden\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"bare\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/notes.txt",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"txt\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/nested/n.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"nested\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks/.hidden.json",
+    "<ROOT>/home/.grok/hooks/.json",
+    "<ROOT>/home/.grok/hooks/a.json",
+    "<ROOT>/home/.grok/hooks/d.json"
+   ],
+   "home": "home",
+   "name": "hooks_dir",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "10",
+     "config_path": "<ROOT>/home/.grok/hooks/10.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "9",
+     "config_path": "<ROOT>/home/.grok/hooks/9.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "C",
+     "config_path": "<ROOT>/home/.grok/hooks/C.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "_",
+     "config_path": "<ROOT>/home/.grok/hooks/_.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a-b",
+     "config_path": "<ROOT>/home/.grok/hooks/a-b.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a.b",
+     "config_path": "<ROOT>/home/.grok/hooks/a.b.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "b",
+     "config_path": "<ROOT>/home/.grok/hooks/b.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "é",
+     "config_path": "<ROOT>/home/.grok/hooks/é.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/b.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"b\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/C.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"C\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a-b.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a-b\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.b.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a.b\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/é.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"\\u00e9\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/_.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"_\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/10.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"10\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/9.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"9\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks/10.json",
+    "<ROOT>/home/.grok/hooks/9.json",
+    "<ROOT>/home/.grok/hooks/C.json",
+    "<ROOT>/home/.grok/hooks/_.json",
+    "<ROOT>/home/.grok/hooks/a-b.json",
+    "<ROOT>/home/.grok/hooks/a.b.json",
+    "<ROOT>/home/.grok/hooks/a.json",
+    "<ROOT>/home/.grok/hooks/b.json",
+    "<ROOT>/home/.grok/hooks/é.json"
+   ],
+   "home": "home",
+   "name": "hooks_sort_order",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "linked",
+     "config_path": "<ROOT>/home/.grok/hooks/linked.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "pack/h.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"linked\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks/linked.json"
+   ],
+   "home": "home",
+   "name": "hooks_symlinks",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.grok/hooks/linked.json",
+     "target": "<ROOT>/pack/h.json"
+    },
+    {
+     "path": "home/.grok/hooks/dangling.json",
+     "target": "<ROOT>/pack/missing.json"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "hooks_dir_is_file",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {
+    "home/.grok/hooks": 192
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"x\"}]}]}}"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "hooks_dir_unlistable",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "two",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"one\"}]}], \"Stop\": [{\"hooks\": [{\"command\": \"two\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks/a.json"
+   ],
+   "home": "home",
+   "name": "hooks_duplicate_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b22686f6f6b73223a207b22ff223a205b5d7d7d",
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json"
+    }
+   ],
+   "home": "home",
+   "name": "hooks_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"\\udc80\"}]}]}}"
+    }
+   ],
+   "home": "home",
+   "name": "hooks_lone_surrogate_command",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:0:0",
+     "artifact_type": "hook",
+     "command": "global.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/g.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": null
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:hook:pretooluse:0:0",
+     "artifact_type": "hook",
+     "command": "project.sh",
+     "config_path": "<ROOT>/work/.grok/hooks/p.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": null
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "work/.grok/skills",
+    "work/.grok/agents"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/.grok/config.toml",
+     "text": "[permission]\nallow = [\"not-parsed\"]\nsandbox = \"off\"\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.grok/hooks/p.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"project.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/g.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"hooks\": [{\"command\": \"global.sh\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks/g.json",
+    "<ROOT>/work/.grok/config.toml",
+    "<ROOT>/work/.grok/hooks/p.json",
+    "<ROOT>/work/.grok/skills",
+    "<ROOT>/work/.grok/hooks",
+    "<ROOT>/work/.grok/agents"
+   ],
+   "home": "home",
+   "name": "project_root",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:marketplace-metadata",
+     "artifact_type": "marketplace",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+     "harness": "grok",
+     "metadata": {
+      "entries": 2
+     },
+     "name": "known_marketplaces",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:instruction:agents.md",
+     "artifact_type": "instruction_surface",
+     "command": null,
+     "config_path": "<ROOT>/work/AGENTS.md",
+     "harness": "grok",
+     "metadata": {},
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:instruction:claude.md",
+     "artifact_type": "instruction_surface",
+     "command": null,
+     "config_path": "<ROOT>/work/CLAUDE.md",
+     "harness": "grok",
+     "metadata": {},
+     "name": "CLAUDE.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "home/.grok/skills",
+    "home/.grok/plugins/marketplaces",
+    "home/.grok/sessions",
+    "home/.grok/personas",
+    "home/.grok/workflows",
+    "work/.grok/plugins",
+    "work/.grok/hooks",
+    "work/.grok/workflows",
+    "home/.agents/skills",
+    "home/.agents/commands"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks-paths",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json",
+     "text": "{\"a\": {\"source\": \"x\"}, \"b\": 1}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/sandbox.toml",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/trusted_folders.toml",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/.grok/sandbox.toml",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "x"
+    },
+    {
+     "mode": 420,
+     "path": "work/CLAUDE.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/hooks-paths",
+    "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+    "<ROOT>/home/.grok/skills",
+    "<ROOT>/home/.grok/plugins",
+    "<ROOT>/home/.grok/plugins/marketplaces",
+    "<ROOT>/home/.grok/sessions",
+    "<ROOT>/home/.grok/personas",
+    "<ROOT>/home/.grok/workflows",
+    "<ROOT>/home/.grok/sandbox.toml",
+    "<ROOT>/home/.grok/trusted_folders.toml",
+    "<ROOT>/work/.grok/plugins",
+    "<ROOT>/work/.grok/hooks",
+    "<ROOT>/work/.grok/personas",
+    "<ROOT>/work/.grok/workflows",
+    "<ROOT>/work/.grok/sandbox.toml",
+    "<ROOT>/home/.agents/skills",
+    "<ROOT>/home/.agents/commands",
+    "<ROOT>/work/AGENTS.md",
+    "<ROOT>/work/CLAUDE.md"
+   ],
+   "home": "home",
+   "name": "surfaces",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "home/.grok/agents",
+     "target": "<ROOT>/missing"
+    },
+    {
+     "path": "work/.grok/personas",
+     "target": "<ROOT>/home"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json",
+     "text": "{}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+    "<ROOT>/home/.grok/plugins"
+   ],
+   "home": "home",
+   "name": "marketplace_empty",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json",
+     "text": "[1, 2]"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+    "<ROOT>/home/.grok/plugins"
+   ],
+   "home": "home",
+   "name": "marketplace_list",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json",
+     "text": "{"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+    "<ROOT>/home/.grok/plugins"
+   ],
+   "home": "home",
+   "name": "marketplace_invalid",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "hex": "7b22ff223a20317d",
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json"
+    }
+   ],
+   "home": "home",
+   "name": "marketplace_invalid_utf8",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:marketplace-metadata",
+     "artifact_type": "marketplace",
+     "command": null,
+     "config_path": "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+     "harness": "grok",
+     "metadata": {
+      "entries": 2
+     },
+     "name": "known_marketplaces",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/plugins/known_marketplaces.json",
+     "text": "{\"a\": 1, \"b\": 2, \"a\": 3}"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/plugins/known_marketplaces.json",
+    "<ROOT>/home/.grok/plugins"
+   ],
+   "home": "home",
+   "name": "marketplace_duplicate_keys",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [
+    "work/AGENTS.md",
+    "work/CLAUDE.md"
+   ],
+   "files": [],
+   "found_paths": [],
+   "home": "home",
+   "name": "instruction_directories",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": null
+   },
+   "artifacts": [],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [],
+   "home": "home",
+   "name": "instructions_no_workspace",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/gh",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/gh/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "gh.sh",
+     "config_path": "<ROOT>/gh/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "home/.agents/skills",
+    "gh/.agents/commands"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "gh/.grok/config.toml",
+     "text": "[permission]\ndeny = [\"g\"]\n"
+    },
+    {
+     "mode": 420,
+     "path": "gh/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"gh.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\ndeny = [\"ignored\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/gh/.grok/config.toml",
+    "<ROOT>/gh/.grok/hooks/a.json",
+    "<ROOT>/home/.agents/skills"
+   ],
+   "home": "home",
+   "name": "grok_home_env",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/real",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "<ROOT>/real/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "real/.grok/config.toml",
+     "text": "[permission]\ndeny = [\"r\"]\n"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/real/.grok/config.toml"
+   ],
+   "home": "home",
+   "name": "grok_home_env_symlink",
+   "relative": false,
+   "symlinks": [
+    {
+     "path": "linkhome",
+     "target": "<ROOT>/real"
+    }
+   ],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/home"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "<ROOT>/home/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:instruction:agents.md",
+     "artifact_type": "instruction_surface",
+     "command": null,
+     "config_path": "<ROOT>/home/AGENTS.md",
+     "harness": "grok",
+     "metadata": {},
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "home/.grok/skills"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "a = 1\n"
+    },
+    {
+     "mode": 420,
+     "path": "home/AGENTS.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "<ROOT>/home/.grok/config.toml",
+    "<ROOT>/home/.grok/hooks/a.json",
+    "<ROOT>/home/.grok/skills",
+    "<ROOT>/home/.grok/hooks",
+    "<ROOT>/home/AGENTS.md"
+   ],
+   "home": "home",
+   "name": "workspace_is_home",
+   "relative": false,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "home"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "grok_home": "home",
+    "harness": "grok",
+    "home": "home",
+    "system_policy_paths": [],
+    "workspace": "work"
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": "home/.grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:hook:stop:0:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": "work/.grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "Stop",
+      "matcher": null
+     },
+     "name": "Stop",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:project:instruction:agents.md",
+     "artifact_type": "instruction_surface",
+     "command": null,
+     "config_path": "work/AGENTS.md",
+     "harness": "grok",
+     "metadata": {},
+     "name": "AGENTS.md",
+     "publisher": null,
+     "source_scope": "project",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    "home/.grok/skills"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "[permission]\ndeny = [\"r\"]\n"
+    },
+    {
+     "mode": 420,
+     "path": "work/.grok/hooks/a.json",
+     "text": "{\"hooks\": {\"Stop\": [{\"hooks\": [{\"command\": \"a.sh\"}]}]}}"
+    },
+    {
+     "mode": 420,
+     "path": "work/AGENTS.md",
+     "text": "x"
+    }
+   ],
+   "found_paths": [
+    "home/.grok/config.toml",
+    "work/.grok/hooks/a.json",
+    "home/.grok/skills",
+    "work/.grok/hooks",
+    "work/AGENTS.md"
+   ],
+   "home": "home",
+   "name": "relative_context",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": "work"
+  },
+  {
+   "args": {
+    "cwd": "<ROOT>",
+    "grok_home": ".",
+    "harness": "grok",
+    "home": ".",
+    "system_policy_paths": [],
+    "workspace": null
+   },
+   "artifacts": [
+    {
+     "args": [],
+     "artifact_id": "grok:global:permission:deny",
+     "artifact_type": "policy",
+     "command": null,
+     "config_path": ".grok/config.toml",
+     "harness": "grok",
+     "metadata": {
+      "entries": 1
+     },
+     "name": "permission:deny",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:0:0",
+     "artifact_type": "hook",
+     "command": "a.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "Bash"
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:0:4",
+     "artifact_type": "hook",
+     "command": "b.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": "Bash"
+     },
+     "name": "PreToolUse:Bash",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:4:0",
+     "artifact_type": "hook",
+     "command": "empty-matcher.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": ""
+     },
+     "name": "PreToolUse:",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:5:0",
+     "artifact_type": "hook",
+     "command": "null-matcher.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": null
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:6:0",
+     "artifact_type": "hook",
+     "command": "list-matcher.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": [
+       "a",
+       1
+      ]
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:pretooluse:7:0",
+     "artifact_type": "hook",
+     "command": "float-matcher.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "PreToolUse",
+      "matcher": 2.5
+     },
+     "name": "PreToolUse",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:äupper:0:0",
+     "artifact_type": "hook",
+     "command": "u.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "ÄUpper",
+      "matcher": 5
+     },
+     "name": "ÄUpper",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    },
+    {
+     "args": [],
+     "artifact_id": "grok:global:hook:sessionstart:0:0",
+     "artifact_type": "hook",
+     "command": "é   s.sh",
+     "config_path": ".grok/hooks/a.json",
+     "harness": "grok",
+     "metadata": {
+      "event": "SessionStart",
+      "matcher": null
+     },
+     "name": "SessionStart",
+     "publisher": null,
+     "source_scope": "global",
+     "transport": null,
+     "url": null
+    }
+   ],
+   "dir_modes": {},
+   "dirs": [
+    ".agents/skills"
+   ],
+   "files": [
+    {
+     "mode": 420,
+     "path": ".grok/config.toml",
+     "text": "[permission]\ndeny = [\"r\"]\n"
+    },
+    {
+     "mode": 420,
+     "path": ".grok/hooks/a.json",
+     "text": "{\"hooks\": {\"PreToolUse\": [{\"matcher\": \"Bash\", \"hooks\": [{\"type\": \"command\", \"command\": \"a.sh\"}, {\"command\": \"  \"}, {\"command\": 5}, \"not-a-dict\", {\"command\": \"b.sh\", \"timeout\": 3}]}, {\"hooks\": \"not-a-list\"}, {\"command\": \"direct.sh\"}, \"not-a-dict\", {\"matcher\": \"\", \"hooks\": [{\"command\": \"empty-matcher.sh\"}]}, {\"matcher\": null, \"hooks\": [{\"command\": \"null-matcher.sh\"}]}, {\"matcher\": [\"a\", 1], \"hooks\": [{\"command\": \"list-matcher.sh\"}]}, {\"matcher\": 2.5, \"hooks\": [{\"command\": \"float-matcher.sh\"}]}], \"Stop\": {\"hooks\": [{\"command\": \"x\"}]}, \"\\u00c4Upper\": [{\"hooks\": [{\"command\": \"u.sh\"}], \"matcher\": 5}], \"SessionStart\": [{\"hooks\": [{\"command\": \"\\u00e9 \\u2028 s.sh\"}]}]}}"
+    }
+   ],
+   "found_paths": [
+    ".grok/config.toml",
+    ".grok/hooks/a.json",
+    ".agents/skills"
+   ],
+   "home": ".",
+   "name": "home_is_cwd",
+   "relative": true,
+   "symlinks": [],
+   "warnings": [],
+   "workspace": null
+  },
+  {
+   "args": {
+    "grok_home": "<ROOT>/home",
+    "harness": "grok",
+    "home": "<ROOT>/home",
+    "system_policy_paths": [],
+    "workspace": "<ROOT>/work"
+   },
+   "dir_modes": {
+    "home/.grok": 0
+   },
+   "dirs": [],
+   "files": [
+    {
+     "mode": 420,
+     "path": "home/.grok/config.toml",
+     "text": "a = 1\n"
+    }
+   ],
+   "home": "home",
+   "name": "grok_root_unsearchable",
+   "refused": true,
+   "relative": false,
+   "symlinks": [],
+   "workspace": "work"
+  }
+ ],
+ "schema": "guard-grok-vectors.v1"
+}

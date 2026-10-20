@@ -206,12 +206,13 @@ def _proof(
     key: str,
     actor_id: str,
     nonce: str,
+    catalog_digest: str = BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
 ) -> ExtensionControlProof:
     return issue_extension_control_proof(
         store.guard_home,
         ExtensionControlMutation(
             previous_revision=revision,
-            catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest,
+            catalog_digest=catalog_digest,
             layers=layers,
             actor_id=actor_id,
             idempotency_key=key,

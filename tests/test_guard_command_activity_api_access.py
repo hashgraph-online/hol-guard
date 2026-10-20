@@ -10,14 +10,13 @@ import base64
 import json
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
 from pathlib import Path
 
 from codex_plugin_scanner.guard.daemon.command_activity_api import stream_command_activity_events
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.local_dashboard_session import build_local_dashboard_session_token
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.guard_command_activity_api_support import json_request, raw_request, seed
+from tests.guard_command_activity_api_support import json_request, raw_request, recent_day, seed
 
 
 def _dashboard_token(daemon: GuardDaemonServer, *, surface: str = "dashboard", **claims: object) -> str:
@@ -30,7 +29,7 @@ def _dashboard_token(daemon: GuardDaemonServer, *, surface: str = "dashboard", *
 
 def test_activity_routes_require_auth_and_exact_hosted_origin(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -61,7 +60,7 @@ def test_activity_routes_require_auth_and_exact_hosted_origin(tmp_path: Path) ->
 
 def test_dashboard_session_scope_is_an_exact_path_allowlist(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -90,7 +89,7 @@ def test_dashboard_session_scope_is_an_exact_path_allowlist(tmp_path: Path) -> N
 
 def test_signed_cursor_rejects_tampering_and_filter_rebinding(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -135,7 +134,7 @@ def test_signed_cursor_rejects_tampering_and_filter_rebinding(tmp_path: Path) ->
 
 def test_query_and_feedback_payloads_fail_closed(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -191,7 +190,7 @@ def test_query_and_feedback_payloads_fail_closed(tmp_path: Path) -> None:
 
 def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store, occurred_on=datetime.now(timezone.utc).date())
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:
@@ -230,7 +229,7 @@ def test_analytics_and_extensions_are_paginated_bounded_contracts(tmp_path: Path
 
 def test_sse_emits_only_invalidation_type_and_activity_id(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     response = None
@@ -267,7 +266,7 @@ def test_sse_emits_only_invalidation_type_and_activity_id(tmp_path: Path) -> Non
 
 def test_sse_last_event_id_resumes_without_replay(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     response = None
@@ -296,7 +295,7 @@ def test_sse_last_event_id_resumes_without_replay(tmp_path: Path) -> None:
 
 def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     with store._connect() as connection:
         connection.execute("delete from command_activity_invalidations where sequence = 1")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
@@ -324,7 +323,7 @@ def test_sse_retention_gap_emits_reset_before_retained_events(tmp_path: Path) ->
 
 def test_sse_admission_is_capped(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    seed(store)
+    seed(store, occurred_on=recent_day())
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     daemon.start()
     try:

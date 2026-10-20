@@ -36,7 +36,7 @@ fn request_digest(request: &McpToolCallIdentityRequestV1) -> Result<String, &'st
     ))
 }
 
-fn hash_request(
+pub(crate) fn hash_request(
     artifact: &McpToolCallArtifactV1,
     input: &McpToolCallHashInputV1,
 ) -> McpToolApprovalHashRequestV1 {

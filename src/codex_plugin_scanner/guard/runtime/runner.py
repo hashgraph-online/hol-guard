@@ -7,6 +7,7 @@ import hashlib
 import importlib.metadata
 import io
 import json
+import logging
 import os
 import socket
 import time
@@ -64,6 +65,8 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
+    CANONICAL_COMPILE_DOCUMENT_CODES,
+    CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -104,6 +107,19 @@ from .extension_catalog_handshake import (
 )
 from .extension_catalog_sync import build_builtin_extension_catalog_wire
 from .extension_control_authority import ExtensionControlAuthorityView
+from .fleet_posture import (
+    CAPABILITY as FLEET_POSTURE_CAPABILITY,
+)
+from .fleet_posture import (
+    FOLLOWUP_STATE_KEY as _FLEET_POSTURE_FOLLOWUP_KEY,
+)
+from .fleet_posture import (
+    FleetPostureBuild,
+    FleetPostureSettings,
+    build_fleet_posture_state,
+    commit_fleet_posture_sent,
+    request_full_inventory,
+)
 from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
 from .local_runtime_fallbacks import local_receipt_redaction_level
 from .managed_controls_sync import (
@@ -189,6 +205,7 @@ _PAIN_SIGNAL_EVENTS = frozenset(
     }
 )
 _EXCEPTION_EXPIRY_ALERT_WINDOW_HOURS = 7 * 24
+_LOGGER = logging.getLogger(__name__)
 _GUARD_SYNC_USER_AGENT = f"hol-guard/{__version__}"
 _SYNC_HTTP_TIMEOUT_SECONDS = 20
 _SYNC_HTTP_RETRY_TIMEOUT_SECONDS = 120
@@ -291,12 +308,17 @@ def _validate_cached_policy_bundle(
     return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
     resolved_reason = reason or "invalid_policy_bundle"
     payload: dict[str, object] = {"reason": resolved_reason}
     remediation = policy_bundle_rejection_message(resolved_reason)
     if remediation is not None:
         payload["message"] = remediation
+    # One rule refuses to compile and the whole bundle stays unapplied, so the
+    # rejection names that rule: without it an administrator sees only that a
+    # published policy never arrived.
+    if rule_id:
+        payload["ruleId"] = rule_id[:128]
     return payload
 
 
@@ -436,7 +458,21 @@ def sync_receipts(
     latest_uploaded_rowid: int | None = None
     auth_refresh_retried = False
     persisted_command_detail_backfill_marker = command_detail_backfill_marker
+    # The posture rides on the first request of the cycle only; later batches
+    # carry receipts and the plain context.
+    pending_fleet_posture = _build_fleet_posture_for_sync(
+        store,
+        sync_context=sync_context,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+    )
+    bundle_hash_sent = _sync_context_bundle_hash(sync_context)
     for receipt_batch in _iter_receipt_sync_batches(receipts):
+        batch_sync_context = dict(sync_context)
+        batch_fleet_posture = pending_fleet_posture
+        pending_fleet_posture = None
+        if batch_fleet_posture is not None:
+            batch_sync_context["fleetPosture"] = batch_fleet_posture.payload
         body = json.dumps(
             {
                 "receipts": _cloud_sync_receipts_payload(
@@ -445,7 +481,7 @@ def sync_receipts(
                     device_name=device_name,
                     redaction_level=redaction_level,
                 ),
-                "syncContext": sync_context,
+                "syncContext": batch_sync_context,
             }
         ).encode("utf-8")
         request = _guard_sync_request(
@@ -463,6 +499,9 @@ def sync_receipts(
             )
         except urllib.error.HTTPError as error:
             if error.code == 401:
+                edge_block = _cloud_edge_block_from_http_error(error)
+                if edge_block is not None:
+                    raise RuntimeError(edge_block) from error
                 if auth_context is None and not auth_refresh_retried:
                     auth_refresh_retried = True
                     resolved_auth_context = _resolve_guard_sync_auth_context(store, force_refresh=True)
@@ -484,6 +523,9 @@ def sync_receipts(
                         )
                     except urllib.error.HTTPError as retry_error:
                         if retry_error.code == 401:
+                            edge_block = _cloud_edge_block_from_http_error(retry_error)
+                            if edge_block is not None:
+                                raise RuntimeError(edge_block) from retry_error
                             raise GuardSyncAuthorizationExpiredError(
                                 _guard_oauth_reauthorization_message()
                             ) from retry_error
@@ -506,6 +548,7 @@ def sync_receipts(
                 raise RuntimeError(_sync_http_error_message(error)) from error
         except OSError as error:
             raise RuntimeError(_sync_url_error_message(error)) from error
+        _record_fleet_posture_delivery(store, batch_fleet_posture, payload)
         cursor_batch_rowids = _receipt_sync_cursor_rowids_from_batch(
             receipt_batch,
             cursor_receipt_ids=cursor_receipt_ids,
@@ -613,6 +656,7 @@ def sync_receipts(
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
     if policy_bundle_field_provided:
         policy_bundle_rejection_reason: str | None
+        policy_bundle_rejection_rule_id: str | None = None
         if policy_bundle_field_malformed or policy_bundle_payload is None:
             policy_bundle_rejection_reason = "invalid_policy_bundle"
         else:
@@ -664,6 +708,7 @@ def sync_receipts(
             workspace_id=cloud_workspace_id,
             device_id=delivery_device_id,
             runtime_summary=runtime_session_summary,
+            guard_home=store.guard_home,
         )
         if managed_controls_error is not None:
             policy_bundle_rejection_reason = managed_controls_error
@@ -738,7 +783,9 @@ def sync_receipts(
                     )
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+                policy_bundle_rejection_reason = f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}"
+                if error.code not in CANONICAL_COMPILE_DOCUMENT_CODES:
+                    policy_bundle_rejection_rule_id = error.rule_id
             except PolicyBundleNativeError as error:
                 candidate_policy_decisions = []
                 validated_policy_bundle = None
@@ -761,7 +808,10 @@ def sync_receipts(
             # checkpoint. Prefer current so a rejected refresh cannot roll
             # policy authority back to an older signed bundle.
             effective_policy_bundle = existing_policy_bundle or last_good_bundle
-            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
+            activation_last_error = _policy_bundle_rejection_payload(
+                policy_bundle_rejection_reason,
+                policy_bundle_rejection_rule_id,
+            )
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,
@@ -1000,6 +1050,19 @@ def sync_receipts(
                     },
                     now,
                 )
+    _send_policy_ack_followup(
+        store,
+        sync_context=sync_context,
+        bundle_hash_sent=bundle_hash_sent,
+        auth_context=resolved_auth_context,
+        sync_url=sync_url,
+        device_id=device_id,
+        device_name=device_name,
+        local_guard_online_at=local_guard_online_at,
+        home_dir=home_dir,
+        workspace_dir=workspace_dir,
+        now=now,
+    )
     if review_verification_keys_payload is not None:
         if cloud_workspace_id is None:
             raise RuntimeError("review_verification_keys_workspace_missing")
@@ -1027,7 +1090,7 @@ def sync_receipts(
             pain_signals_uploaded = 0
         else:
             raise
-    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=5000), now)
+    value_metrics, weekly_digest = _sync.value_metrics(store.list_events(limit=_sync.VALUE_METRIC_EVENT_LIMIT), now)
     summary: dict[str, object] = {
         "synced_at": payload.get("syncedAt"),
         "receipts_stored": receipts_stored_total,
@@ -1622,6 +1685,8 @@ def sync_runtime_session(
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+        store=store,
+        guard_home=store.guard_home,
         auth_context=resolved_auth_context,
         runtime_sync_url=sync_url,
         runtime_response=payload,
@@ -1663,7 +1728,7 @@ def _local_guard_runtime_session(
         "client_title": "HOL Guard CLI",
         "client_version": __version__,
         "workspace": "local-machine",
-        "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon"],
+        "capabilities": ["approval-center", "guard-cloud-sync", "local-daemon", FLEET_POSTURE_CAPABILITY],
         "policy_document_versions": list(_POLICY_DOCUMENT_VERSIONS),
         "policy_bundle_versions": list(_POLICY_BUNDLE_VERSIONS),
         "policy_contracts": list(_POLICY_CONTRACTS),
@@ -3085,11 +3150,55 @@ def _read_guard_cloud_error_message(payload: dict[str, object]) -> str | None:
     return None
 
 
+CLOUD_EDGE_BLOCK_REASON_PREFIX = "Guard Cloud is unreachable from this network"
+
+
+def _cloud_edge_block_message(error: urllib.error.HTTPError, raw_body: str) -> str | None:
+    """Cloudflare's own block or challenge page instead of a Guard Cloud answer.
+
+    Mirrors ``cloud_edge_block_message`` in guard_sync_transport.rs. The page is HTML
+    a client cannot pass, so its raw text is no use as an error message.
+    """
+    headers = error.headers
+    if headers is None:
+        return None
+    challenged = headers.get("cf-mitigated") is not None
+    from_cloudflare = headers.get("cf-ray") is not None or str(headers.get("server") or "").lower() == "cloudflare"
+    html = str(headers.get("content-type") or "").lower().startswith("text/html")
+    page = raw_body[: 64 * 1024]
+    challenge_page = "Just a moment..." in page or "challenge-platform" in page
+    block_page = "Attention Required! | Cloudflare" in page or "Sorry, you have been blocked" in page
+    if not challenged and not (from_cloudflare and html and (challenge_page or block_page)):
+        return None
+    action = "challenged" if challenged or challenge_page else "blocked"
+    ray = str(headers.get("cf-ray") or "").split("-", 1)[0]
+    if ray.isascii() and ray.isalnum():
+        ray_detail, ray_hint = f", Ray ID {ray}", "; the Guard Cloud operator can look up that Ray ID"
+    else:
+        ray_detail, ray_hint = "", ""
+    return (
+        f"{CLOUD_EDGE_BLOCK_REASON_PREFIX}: Cloudflare in front of Guard Cloud {action} the request "
+        f"(HTTP {error.code}{ray_detail}). This is not a sign-in problem, so reconnecting will not help{ray_hint}."
+    )
+
+
+def _cloud_edge_block_from_http_error(error: urllib.error.HTTPError) -> str | None:
+    """Read the body once and return the edge-block message, if Cloudflare answered."""
+    try:
+        raw_body = error.read().decode("utf-8", errors="replace")
+    except OSError:
+        raw_body = ""
+    return _cloud_edge_block_message(error, raw_body)
+
+
 def _sync_http_error_message(error: urllib.error.HTTPError) -> str:
     try:
         raw_body = error.read().decode("utf-8", errors="replace")
     except OSError:
         raw_body = ""
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return edge_block
     try:
         payload = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
@@ -3141,6 +3250,9 @@ def _check_plan_restriction_403(
         payload: object = json.loads(raw_body) if raw_body else None
     except json.JSONDecodeError:
         payload = None
+    edge_block = _cloud_edge_block_message(error, raw_body)
+    if edge_block is not None:
+        return False, edge_block
     fallback = raw_body.strip() or f"HTTP Error {error.code}: {error.reason}"
     if not isinstance(payload, dict):
         return False, fallback
@@ -3184,6 +3296,7 @@ def _urlopen_with_sync_retries(
     retry_timeout_seconds: int,
     parse_json_response: bool,
     nonce_fast_path: bool,
+    max_response_bytes: int | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -3203,7 +3316,10 @@ def _urlopen_with_sync_retries(
         try:
             with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
                 if parse_json_response:
-                    return json.loads(response.read().decode("utf-8"))
+                    raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
+                    if max_response_bytes is not None and len(raw) > max_response_bytes:
+                        raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")
+                    return json.loads(raw.decode("utf-8"))
                 return None
         except urllib.error.HTTPError as error:
             if nonce_fast_path and error.code == 401:
@@ -3267,6 +3383,7 @@ def _urlopen_json_with_timeout_retry(
     request: urllib.request.Request,
     timeout_seconds: int,
     retry_timeout_seconds: int,
+    max_response_bytes: int | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -3274,6 +3391,7 @@ def _urlopen_json_with_timeout_retry(
         retry_timeout_seconds=retry_timeout_seconds,
         parse_json_response=True,
         nonce_fast_path=False,
+        max_response_bytes=max_response_bytes,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
@@ -3550,6 +3668,148 @@ def _validated_policy_bundle_acknowledgement(
     return acknowledgement
 
 
+def _sync_context_acknowledgement(sync_context: dict[str, object]) -> dict[str, object] | None:
+    for key in ("policyBundleAcknowledgementV2", "policyBundleAcknowledgement"):
+        value = sync_context.get(key)
+        if isinstance(value, dict) and value:
+            return value
+    return None
+
+
+def _sync_context_bundle_hash(sync_context: dict[str, object]) -> str | None:
+    acknowledgement = _sync_context_acknowledgement(sync_context)
+    return _optional_string(acknowledgement.get("bundleHash")) if acknowledgement is not None else None
+
+
+def _build_fleet_posture_for_sync(
+    store: GuardStore,
+    *,
+    sync_context: dict[str, object],
+    home_dir: Path | None,
+    workspace_dir: Path | None,
+) -> FleetPostureBuild | None:
+    """Build the posture for one request. Never raises: posture is best-effort."""
+
+    try:
+        from ..adapters import list_adapters
+        from ..config import load_guard_config
+
+        guard_home = store.guard_home
+        try:
+            guard_config = load_guard_config(guard_home, workspace_dir, create_home=False)
+        except Exception:
+            guard_config = None
+        context = HarnessContext(
+            home_dir=home_dir if home_dir is not None else Path.home(),
+            workspace_dir=workspace_dir,
+            guard_home=guard_home,
+        )
+        runtime = "python"
+        return build_fleet_posture_state(
+            store,
+            list_adapters(),
+            FleetPostureSettings(context=context, guard_config=guard_config, runtime=runtime),
+            acknowledgement=_sync_context_acknowledgement(sync_context),
+        )
+    except Exception:
+        _LOGGER.debug("Fleet posture could not be built", exc_info=True)
+        return None
+
+
+def _record_fleet_posture_delivery(
+    store: GuardStore,
+    built: FleetPostureBuild | None,
+    response: dict[str, object],
+) -> None:
+    """Commit the sent snapshot and honour a ``fleetPostureRequest`` in the reply."""
+
+    stamp = _sync_timestamp(response)
+    if built is not None:
+        try:
+            commit_fleet_posture_sent(store, built, now=stamp)
+        except Exception:
+            _LOGGER.debug("Fleet posture snapshot could not be recorded", exc_info=True)
+    request = response.get("fleetPostureRequest")
+    if isinstance(request, dict) and request.get("inventory") == "full":
+        try:
+            request_full_inventory(store, source="cloud", now=stamp)
+        except Exception:
+            _LOGGER.debug("Fleet posture full-inventory request could not be recorded", exc_info=True)
+
+
+def _send_policy_ack_followup(
+    store: GuardStore,
+    *,
+    sync_context: dict[str, object],
+    bundle_hash_sent: str | None,
+    auth_context: dict[str, object],
+    sync_url: str,
+    device_id: str,
+    device_name: str,
+    local_guard_online_at: str,
+    home_dir: Path | None,
+    workspace_dir: Path | None,
+    now: str,
+) -> None:
+    """Report a bundle applied in this cycle without waiting for the next one.
+
+    The context built at the start of a cycle carries the previous cycle's
+    acknowledgement, so Guard Cloud would learn about a new bundle one full
+    interval late. When the stored acknowledgement now names a bundle the request
+    did not carry, refresh the in-memory context and send one empty-receipt
+    follow-up. The attempt is recorded per bundle hash before sending, so a
+    failure or a rejection never turns into a loop.
+    """
+
+    try:
+        fresh = _receipt_sync_context(
+            store,
+            local_guard_online_at=local_guard_online_at,
+            device_id=device_id,
+            device_name=device_name,
+        )
+        fresh_ack = _sync_context_acknowledgement(fresh)
+        fresh_hash = _sync_context_bundle_hash(fresh)
+        if fresh_ack is None or fresh_hash is None:
+            return
+        for key in ("policyBundleAcknowledgementV2", "policyBundleAcknowledgement"):
+            sync_context.pop(key, None)
+        sync_context.update(
+            {key: value for key, value in fresh.items() if key.startswith("policyBundleAcknowledgement")}
+        )
+        if fresh_hash == bundle_hash_sent:
+            return
+        attempted = store.get_sync_payload(_FLEET_POSTURE_FOLLOWUP_KEY)
+        if isinstance(attempted, dict) and attempted.get("bundleHash") == fresh_hash:
+            return
+        store.set_sync_payload(_FLEET_POSTURE_FOLLOWUP_KEY, {"bundleHash": fresh_hash, "attemptedAt": now}, now)
+        built = _build_fleet_posture_for_sync(
+            store,
+            sync_context=sync_context,
+            home_dir=home_dir,
+            workspace_dir=workspace_dir,
+        )
+        followup_context = dict(sync_context)
+        if built is not None:
+            followup_context["fleetPosture"] = built.payload
+        request = _guard_sync_request(
+            auth_context,
+            request_url=sync_url,
+            method="POST",
+            data=json.dumps({"receipts": [], "syncContext": followup_context}).encode("utf-8"),
+            extra_headers=None,
+        )
+        response = _urlopen_json_with_timeout_retry(
+            request=request,
+            timeout_seconds=_SYNC_HTTP_TIMEOUT_SECONDS,
+            retry_timeout_seconds=_SYNC_HTTP_RETRY_TIMEOUT_SECONDS,
+        )
+        if isinstance(response, dict):
+            _record_fleet_posture_delivery(store, built, response)
+    except Exception:
+        _LOGGER.debug("Policy acknowledgement follow-up sync failed", exc_info=True)
+
+
 def _receipt_sync_context(
     store: GuardStore,
     *,
@@ -3809,6 +4069,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
 
 def _sync_extension_catalog_from_runtime_handshake(
     *,
+    store: GuardStore | None = None,
+    guard_home: Path | None = None,
     auth_context: dict[str, object],
     runtime_sync_url: str,
     runtime_response: dict[str, object],
@@ -3816,12 +4078,69 @@ def _sync_extension_catalog_from_runtime_handshake(
 ) -> dict[str, object]:
     """Upload the canonical catalog only after a digest-bound Cloud request."""
 
+    from .extension_catalog_pages import observed_view
+    from .extension_catalog_sync import build_v1_catalog_from_view
+    from .extension_catalog_transfer import catalog_sync_plan, sync_catalog_view
+
+    signal = runtime_response.get("extensionCatalogSync")
+    if isinstance(signal, dict) and "protocolVersion" in signal:
+
+        def send_page(url: str, body: bytes) -> object:
+            request = _guard_sync_request(
+                auth_context,
+                request_url=url,
+                method="POST",
+                data=body,
+                extra_headers=None,
+            )
+            try:
+                return _urlopen_json_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
+                    max_response_bytes=4096,
+                )
+            except urllib.error.HTTPError as error:
+                raise RuntimeError(_sync_http_error_message(error)) from error
+            except OSError as error:
+                raise RuntimeError(_sync_url_error_message(error)) from error
+
+        view = observed_view(session_payload, guard_home)
+        result = sync_catalog_view(
+            runtime_sync_url=runtime_sync_url,
+            runtime_response=runtime_response,
+            session_payload=session_payload,
+            view=view,
+            send=send_page,
+        )
+        if store is None:
+            raise RuntimeError("Authenticated catalog completion requires the current store")
+        from .extension_catalog_completion import complete_authenticated_view
+
+        result.update(
+            complete_authenticated_view(
+                store=store,
+                view=view,
+                auth_context=auth_context,
+                url=catalog_sync_plan(
+                    view=view,
+                    runtime_sync_url=runtime_sync_url,
+                    runtime_response=runtime_response,
+                    session_payload=session_payload,
+                )["upload_url"],
+                send=send_page,
+            )
+        )
+        return result
+
     summary, upload = prepare_extension_catalog_handshake(
         runtime_sync_url=runtime_sync_url,
         runtime_response=runtime_response,
         session_payload=session_payload,
-        catalog_factory=lambda generated_at: build_builtin_extension_catalog_wire(
-            guard_version=__version__, generated_at=generated_at
+        catalog_factory=lambda generated_at: (
+            build_v1_catalog_from_view(observed_view(session_payload, guard_home))
+            if "extensionCatalogViewDigest" in session_payload
+            else build_builtin_extension_catalog_wire(guard_version=__version__, generated_at=generated_at)
         ),
         fallback_generated_at=_now(),
     )

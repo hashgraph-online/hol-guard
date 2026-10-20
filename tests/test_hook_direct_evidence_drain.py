@@ -85,7 +85,40 @@ def test_a_drained_answer_is_recorded_like_a_daemon_allow(tmp_path: Path, observ
     assert activity["receipt_id"] == RECEIPT["decision_id"]
 
 
-@pytest.mark.parametrize("harness", ["claude-code", "cursor", "kimi", "copilot", "hermes", "opencode"])
+class _EventStore:
+    def __init__(self) -> None:
+        self.events: list[tuple[str, dict[str, object]]] = []
+
+    def add_event(self, event_name: str, payload: dict[str, object], now: str) -> None:
+        del now
+        self.events.append((event_name, payload))
+
+
+def test_a_drained_answer_that_waited_out_a_policy_update_leaves_a_window_event(
+    tmp_path: Path, observed: list[dict[str, object]]
+) -> None:
+    host = _Host(tmp_path, store=_EventStore())
+    assert record_direct_hook_evidence(host, _record(fence_wait_ms=300))
+
+    [(name, payload)] = host.store.events  # pyright: ignore[reportAttributeAccessIssue]
+    assert name == "policy_source_fence_window"
+    assert payload["absorbed_calls"] == 1
+    assert payload["exhausted_calls"] == 0
+    assert host.activity_writer.receipts == [RECEIPT]
+
+
+def test_a_drained_answer_without_a_wait_leaves_no_window_event(
+    tmp_path: Path, observed: list[dict[str, object]]
+) -> None:
+    host = _Host(tmp_path, store=_EventStore())
+    assert record_direct_hook_evidence(host, _record())
+    assert record_direct_hook_evidence(host, _record(fence_wait_ms=0))
+    assert host.store.events == []  # pyright: ignore[reportAttributeAccessIssue]
+
+
+@pytest.mark.parametrize(
+    "harness", ["claude-code", "cursor", "kimi", "copilot", "zcode", "hermes", "opencode", "grok", "pi", "omp"]
+)
 def test_a_drained_answer_is_recorded_for_its_harness(
     tmp_path: Path, observed: list[dict[str, object]], harness: str
 ) -> None:
@@ -126,8 +159,6 @@ def test_a_codex_receipt_reaches_the_binding_capture(
     [
         "not a record",
         _record(harness="gemini"),
-        _record(harness="zcode"),
-        _record(harness="grok"),
         _record(payload="ls"),
         _record(workspace=None),
         _record(harness_response=None),

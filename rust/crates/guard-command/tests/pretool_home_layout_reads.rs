@@ -6,8 +6,7 @@
 use serde_json::json;
 use std::path::{Path, PathBuf};
 
-#[path = "support/git_helper_fixture.rs"]
-pub mod fixture;
+use crate::git_helper_fixture as fixture;
 
 fn git(directory: &Path, arguments: &[&str]) {
     let status = std::process::Command::new("git")
@@ -23,16 +22,15 @@ fn git(directory: &Path, arguments: &[&str]) {
         ])
         .args(arguments)
         .env("GIT_CONFIG_NOSYSTEM", "1")
-        .env(
-            "GIT_CONFIG_GLOBAL",
-            if cfg!(windows) { "NUL" } else { "/dev/null" },
-        )
+        // Git for Windows maps `/dev/null` to the null device; some releases
+        // reject a literal `NUL` here with "unable to access 'NUL'".
+        .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .status()
         .unwrap();
     assert!(status.success(), "git {arguments:?}");
 }
 
-fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
+pub(crate) fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolResultV1 {
     fixture::evaluate_pre_tool_envelope_with_context(
         "codex",
         "PreToolUse",
@@ -44,7 +42,7 @@ fn decide(cwd: &Path, home: &Path, command: &str) -> guard_contracts::PreToolRes
     )
 }
 
-fn repository(path: &Path) {
+pub(crate) fn repository(path: &Path) {
     std::fs::create_dir_all(path.join(".github/workflows")).unwrap();
     std::fs::create_dir_all(path.join("src")).unwrap();
     std::fs::write(path.join(".github/workflows/ci.yml"), "name: ci\n").unwrap();
@@ -54,16 +52,16 @@ fn repository(path: &Path) {
     git(path, &["commit", "--quiet", "-m", "fixture"]);
 }
 
-struct Layout {
+pub(crate) struct Layout {
     _cleanup: fixture::FixtureCleanup,
-    home: PathBuf,
-    org: PathBuf,
+    pub(crate) home: PathBuf,
+    pub(crate) org: PathBuf,
 }
 
 /// `CARGO_TARGET_TMPDIR` keeps the fixture outside `/var` and dot
 /// directories on macOS, which the read screens would otherwise refuse for
 /// reasons unrelated to the layout under test.
-fn layout(name: &str) -> Layout {
+pub(crate) fn layout(name: &str) -> Layout {
     let root = Path::new(env!("CARGO_TARGET_TMPDIR")).join(format!(
         "home-layout-{name}-{}-{}",
         std::process::id(),
@@ -76,8 +74,8 @@ fn layout(name: &str) -> Layout {
     let home = root.join("home");
     let org = home.join("Code").join("org");
     std::fs::create_dir_all(&org).unwrap();
-    let home = std::fs::canonicalize(home).unwrap();
-    let org = std::fs::canonicalize(org).unwrap();
+    let home = fixture::canonical_spelling(home);
+    let org = fixture::canonical_spelling(org);
     repository(&org.join("app-portal"));
     repository(&org.join("service-api"));
     Layout {
@@ -87,7 +85,7 @@ fn layout(name: &str) -> Layout {
     }
 }
 
-fn assert_decision(cwd: &Path, home: &Path, command: &str, allowed: bool) {
+pub(crate) fn assert_decision(cwd: &Path, home: &Path, command: &str, allowed: bool) {
     let result = decide(cwd, home, command);
     assert_eq!(
         result.decision == "allow",
@@ -103,8 +101,8 @@ fn search_of_child_repository_by_absolute_or_home_path_is_allowed() {
     let layout = layout("rg");
     let child = layout.org.join("app-portal");
     for command in [
-        format!("rg -n fixture {}", child.display()),
-        format!("rg -n fixture {}/src", child.display()),
+        format!("rg -n fixture {}", fixture::shell_word(&child)),
+        format!("rg -n fixture {}/src", fixture::shell_word(&child)),
         "rg -n fixture ~/Code/org/app-portal".to_owned(),
         "rg -n fixture app-portal".to_owned(),
     ] {
@@ -119,17 +117,22 @@ fn search_root_that_is_hidden_linked_away_or_sensitive_is_reviewed() {
     std::fs::create_dir_all(&hidden).unwrap();
     std::fs::write(hidden.join("notes.md"), "fixture\n").unwrap();
     std::fs::create_dir_all(layout.home.join(".ssh")).unwrap();
+    // Only unix adds a symlinked case below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut commands = vec![
-        format!("rg -n fixture {}", hidden.display()),
-        format!("rg -n fixture {}", layout.home.join(".ssh").display()),
+        format!("rg -n fixture {}", fixture::shell_word(&hidden)),
+        format!(
+            "rg -n fixture {}",
+            fixture::shell_word(&layout.home.join(".ssh"))
+        ),
         "rg -n fixture ~/.ssh".to_owned(),
-        format!("rg -n fixture {}/../org", layout.org.display()),
+        format!("rg -n fixture {}/../org", fixture::shell_word(&layout.org)),
     ];
     #[cfg(unix)]
     {
         let link = layout.org.join("notes-link");
         std::os::unix::fs::symlink(&hidden, &link).unwrap();
-        commands.push(format!("rg -n fixture {}", link.display()));
+        commands.push(format!("rg -n fixture {}", fixture::shell_word(&link)));
     }
     for command in commands {
         assert_decision(&layout.org, &layout.home, &command, false);
@@ -143,7 +146,7 @@ fn git_inspection_of_sibling_repository_below_home_is_allowed() {
     let sibling = layout.org.join("service-api");
     for command in [
         "git -C ../service-api log --oneline -3".to_owned(),
-        format!("git -C {} status --short", sibling.display()),
+        format!("git -C {} status --short", fixture::shell_word(&sibling)),
         "git -C ~/Code/org/service-api diff --stat".to_owned(),
     ] {
         assert_decision(&cwd, &layout.home, &command, true);
@@ -168,10 +171,10 @@ fn git_route_to_hidden_home_or_helper_configured_repository_is_reviewed() {
     let plain = layout.org.join("plain-directory");
     std::fs::create_dir_all(&plain).unwrap();
     for command in [
-        format!("git -C {} log --oneline -1", hidden.display()),
+        format!("git -C {} log --oneline -1", fixture::shell_word(&hidden)),
         "git -C ~ status --short".to_owned(),
         "git -C ../helper-repo status --short".to_owned(),
-        format!("git -C {} status --short", plain.display()),
+        format!("git -C {} status --short", fixture::shell_word(&plain)),
     ] {
         assert_decision(&cwd, &layout.home, &command, false);
     }
@@ -196,7 +199,7 @@ fn git_inspection_of_linked_worktree_below_home_is_allowed_unless_forged() {
     let cwd = layout.org.join("service-api");
     for command in [
         "git -C ../app-portal-feature diff --stat".to_owned(),
-        format!("git -C {} log --oneline -1", linked.display()),
+        format!("git -C {} log --oneline -1", fixture::shell_word(&linked)),
     ] {
         assert_decision(&cwd, &layout.home, &command, true);
     }
@@ -213,28 +216,92 @@ fn git_inspection_of_linked_worktree_below_home_is_allowed_unless_forged() {
     );
 }
 
+/// Agents also keep a multi-repository parent and its sibling worktrees in
+/// the shared temporary directory. A sibling there is routable only while
+/// every directory below `/tmp` belongs to the user and no one else can write
+/// to it.
+#[cfg(unix)]
+#[test]
+fn git_inspection_of_owned_sibling_below_tmp_is_allowed_unless_shared() {
+    use std::os::unix::fs::PermissionsExt;
+    let layout = layout("git-tmp");
+    let scratch = std::fs::canonicalize("/tmp")
+        .unwrap()
+        .join(format!("guard-tmp-siblings-{}", std::process::id()));
+    let _cleanup = fixture::FixtureCleanup(scratch.clone());
+    let org = scratch.join("org");
+    std::fs::create_dir_all(&org).unwrap();
+    std::fs::set_permissions(&scratch, std::fs::Permissions::from_mode(0o700)).unwrap();
+    repository(&org.join("app"));
+    let linked = scratch.join("app-followup");
+    git(
+        &org.join("app"),
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            "-b",
+            "followup",
+            linked.to_str().unwrap(),
+        ],
+    );
+    // The umask may leave group write on directories made above.
+    for directory in [&org, &org.join("app"), &linked] {
+        std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    for command in [
+        format!("git -C {} log --oneline -3", fixture::shell_word(&linked)),
+        format!("git -C {} status --short", fixture::shell_word(&linked)),
+        format!(
+            "git -C {}/org/app rev-parse HEAD",
+            fixture::shell_word(&scratch)
+        ),
+    ] {
+        assert_decision(&org, &layout.home, &command, true);
+    }
+    let shared = scratch.join("shared");
+    repository(&shared);
+    std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777)).unwrap();
+    assert_decision(
+        &org,
+        &layout.home,
+        &format!("git -C {} log --oneline -1", fixture::shell_word(&shared)),
+        false,
+    );
+}
+
 #[test]
 fn quoted_home_or_variable_roots_are_reviewed_and_rootless_fd_matches_dot() {
     let layout = layout("quoted-roots");
     let cwd = layout.org.join("app-portal");
-    let literal_home = [
+    let escaped_tilde = "rg -n fixture \\~/Code/org/app-portal";
+    let mut literal_home = vec![
         "rg -n fixture '~/Code/org/app-portal'",
-        "rg -n fixture \\~/Code/org/app-portal",
         "fd -e rs main '~/Code/org/app-portal'",
     ];
+    // A POSIX shell reads `\~` as a literal tilde. PowerShell and cmd keep
+    // the backslash, so on Windows the word names `\~\Code\...` at the root
+    // of the current drive, never the home folder, and is not proven.
+    if cfg!(windows) {
+        assert_decision(&cwd, &layout.home, escaped_tilde, false);
+    } else {
+        literal_home.push(escaped_tilde);
+    }
     // With no `~` entry in the cwd the literal path names nothing.
-    for command in literal_home {
+    for &command in &literal_home {
         assert_decision(&cwd, &layout.home, command, true);
     }
     for command in [
         "fd -e rs main --search-path=~/Code/org/app-portal",
         "fd . \"$HOME\"",
-        "fd . $HOME/Code/org",
         "git -C '~/Code/org/service-api' status --short",
         "git -C \"~/Code/org/service-api\" diff --stat",
     ] {
         assert_decision(&cwd, &layout.home, command, false);
     }
+    // With the shell's HOME the declared home, `$HOME` names it as a literal
+    // path does. Only a POSIX home is substituted.
+    assert_decision(&cwd, &layout.home, "fd . $HOME/Code/org", !cfg!(windows));
     // A rootless fd lists the cwd, exactly like an explicit `.` root.
     for directory in [&layout.home, &cwd] {
         assert_eq!(
@@ -251,7 +318,7 @@ fn quoted_home_or_variable_roots_are_reviewed_and_rootless_fd_matches_dot() {
     }
     // Once the cwd holds a `~` entry, the literal path reads something else.
     std::fs::create_dir(cwd.join("~")).unwrap();
-    for command in literal_home {
+    for &command in &literal_home {
         assert_decision(&cwd, &layout.home, command, false);
         // The same cwd spelled from home still sees its `~` entry.
         let spelled = Path::new("~/Code/org/app-portal");
@@ -269,8 +336,8 @@ fn search_of_sibling_repository_by_absolute_home_or_parent_path_is_allowed() {
     let cwd = layout.org.join("app-portal");
     let sibling = layout.org.join("service-api");
     for command in [
-        format!("rg -n fixture {}", sibling.display()),
-        format!("rg -n fixture {}/src", sibling.display()),
+        format!("rg -n fixture {}", fixture::shell_word(&sibling)),
+        format!("rg -n fixture {}/src", fixture::shell_word(&sibling)),
         "rg -n fixture ~/Code/org/service-api".to_owned(),
         "rg -n fixture ../service-api".to_owned(),
         "rg -n fixture ../service-api/src".to_owned(),
@@ -287,10 +354,12 @@ fn search_of_sibling_outside_a_real_repository_or_with_hidden_flags_is_reviewed(
     let plain = layout.org.join("plain-notes");
     std::fs::create_dir_all(&plain).unwrap();
     std::fs::write(plain.join(".env"), "TOKEN=fixture\n").unwrap();
+    // Only unix adds a symlinked case below.
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut commands = vec![
         "rg -n fixture ..".to_owned(),
         "rg -n fixture ../plain-notes".to_owned(),
-        format!("rg -n fixture {}", plain.display()),
+        format!("rg -n fixture {}", fixture::shell_word(&plain)),
         "rg --hidden -n fixture ../service-api".to_owned(),
         "rg -uu -n fixture ../service-api".to_owned(),
         "rg --no-ignore -n fixture ~/Code/org/service-api".to_owned(),
@@ -312,7 +381,7 @@ fn search_of_sibling_outside_a_real_repository_or_with_hidden_flags_is_reviewed(
     }
 }
 
-fn write(path: PathBuf, text: &str) {
+pub(crate) fn write(path: PathBuf, text: &str) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, text).unwrap();
 }
@@ -346,6 +415,9 @@ fn sibling_search_prunes_plainly_gitignored_directories() {
     );
 }
 
+/// Each case re-includes a file the search then reaches, which is what makes
+/// the rule matter. A rule naming a file that is not there decides nothing,
+/// and is covered beside the negation tests.
 #[test]
 fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
     let cases: [(&str, &[(&str, &str)]); 6] = [
@@ -354,9 +426,27 @@ fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
             &[(".ignore", "!.env\n"), (".env", "TOKEN=fixture\n")],
         ),
         ("rgignore", &[("src/.rgignore", "!.env\n")]),
-        ("negated", &[(".gitignore", "target\n!.env\n")]),
-        ("nested-negated", &[("src/.gitignore", "!.env\n")]),
-        ("exclude", &[(".git/info/exclude", "!.env\n")]),
+        (
+            "negated",
+            &[
+                (".gitignore", "target\n!.env\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
+        (
+            "nested-negated",
+            &[
+                ("src/.gitignore", "!.env\n"),
+                ("src/.env", "TOKEN=fixture\n"),
+            ],
+        ),
+        (
+            "exclude",
+            &[
+                (".git/info/exclude", "!.env\n"),
+                (".env", "TOKEN=fixture\n"),
+            ],
+        ),
         (
             "credentials",
             &[("config/credentials.txt", "TOKEN=fixture\n")],
@@ -379,11 +469,13 @@ fn sibling_search_whose_ignore_rules_could_widen_it_is_reviewed() {
     let nested = self::layout("rg-sibling-subdirectory");
     let sibling = nested.org.join("service-api");
     write(sibling.join("web/.gitignore"), "!.env\n");
+    write(sibling.join("web/src/.env"), "TOKEN=fixture\n");
     write(sibling.join("web/src/main.rs"), "fn main() {}\n");
-    write(sibling.join(".github/workflows/ci.yml"), "on: push\n");
     let cwd = nested.org.join("app-portal");
-    for operand in ["../service-api/web/src", "../service-api/.github"] {
-        let command = format!("rg -n fixture {operand}");
-        assert_decision(&cwd, &nested.home, &command, false);
-    }
+    assert_decision(
+        &cwd,
+        &nested.home,
+        "rg -n fixture ../service-api/web/src",
+        false,
+    );
 }

@@ -347,7 +347,8 @@ fn omp_bounded_line_selectors_keep_sensitive_and_unsupported_targets_denied() {
         format!("{}:raw", project.join(".env").display()),
         format!("{}:raw", ssh.join("id_ed25519").display()),
         format!("{}:raw", project.display()),
-        "main.rs:1-5:raw".to_owned(),
+        "main.rs:raw:raw".to_owned(),
+        "main.rs:-5,1-2:raw".to_owned(),
         "main.rs:img".to_owned(),
     ] {
         let decision = read_directory("omp", &target, &home, &project);
@@ -421,6 +422,71 @@ fn omp_selectors_accept_verified_tmp_alias_but_reject_child_symlinks() {
     let decision = read_directory("omp", &symlink_target, &canonical_home, &canonical_project);
     assert_ne!(decision.minimum_action, "allow", "{symlink_target}");
     assert!(!decision.explicitly_benign, "{symlink_target}");
+
+    let _ = std::fs::remove_dir_all(root);
+}
+
+fn shell_action(
+    harness: &str,
+    command: &str,
+    home: &std::path::Path,
+    cwd: &std::path::Path,
+) -> String {
+    super::super::evaluate_pre_tool_envelope_with_context(
+        harness,
+        "PreToolUse",
+        &serde_json::json!({"tool_name": "bash", "tool_input": {"command": command}}),
+        None,
+        None,
+        home.to_str(),
+        cwd.to_str(),
+    )
+    .minimum_action
+}
+
+/// `..` resolves against the physical working directory, so a listing of a
+/// sibling checkout is the same read as its absolute spelling. The resolved
+/// target still clears every sensitive screen.
+#[test]
+fn relative_parent_listings_follow_their_resolved_target() {
+    let root = fixture_root();
+    let home = root.join("home");
+    let workspace = home.join("projects/repo");
+    let sibling = home.join("projects/worktree-report");
+    for directory in [&workspace, &sibling, &home.join(".ssh")] {
+        std::fs::create_dir_all(directory).unwrap();
+    }
+    std::fs::write(sibling.join("README.md"), "synthetic\n").unwrap();
+    std::fs::write(home.join("projects/.env"), "SYNTHETIC=1\n").unwrap();
+    std::fs::write(home.join(".ssh/config"), "Host x\n").unwrap();
+
+    for harness in ["omp", "claude-code"] {
+        for command in [
+            "ls -la ../worktree-report/",
+            "ls -la ../worktree-report",
+            "ls ..",
+            "cat ../worktree-report/README.md",
+            // A missing child of a listable parent reveals no more than
+            // listing the parent does.
+            "ls ../missing",
+        ] {
+            let action = shell_action(harness, command, &home, &workspace);
+            assert_eq!(action, "allow", "{harness}: {command}");
+        }
+    }
+    for command in [
+        "ls ../../.ssh",
+        "ls -la ../../.ssh/",
+        "cat ../.env",
+        "cat ../../.ssh/config",
+        "cat ../worktree-report/../.env",
+        "ls ../../.ssh/missing",
+        "ls ../worktree-report/../missing",
+        "ls ~/projects/../.ssh",
+    ] {
+        let action = shell_action("omp", command, &home, &workspace);
+        assert_ne!(action, "allow", "{command}");
+    }
 
     let _ = std::fs::remove_dir_all(root);
 }

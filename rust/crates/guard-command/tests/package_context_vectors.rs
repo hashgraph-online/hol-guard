@@ -1,12 +1,14 @@
 //! Parity replay for `guard_command::package_context_build`.
 //!
 //! The vectors under `fixtures/package_context_vectors.v1.json.gz` were recorded
-//! by `scripts/ci/package_context_vector_recorder.py` from the retired Python
-//! builder. Each scenario materialises a file tree in a scratch directory, runs
-//! the Rust build over it with replay ports, and requires the same digest,
-//! components and non-portable reason, plus the same ordered log of native hook
-//! calls (digest texts, search-path digest, environment projection and launch
-//! identity) with the scratch directory replaced by `{root}`.
+//! from the retired Python builder, by a recorder that has since been removed
+//! along with it. They are the only record of what that builder answered, so
+//! they are read and never regenerated. Each scenario materialises a file tree
+//! in a scratch directory, runs the Rust build over it with replay ports, and
+//! requires the same digest, components and non-portable reason, plus the same
+//! ordered log of native hook calls (digest texts, search-path digest,
+//! environment projection and launch identity) with the scratch directory
+//! replaced by `{root}`.
 #![cfg(unix)]
 
 use std::collections::BTreeMap;

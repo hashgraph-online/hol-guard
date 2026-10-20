@@ -39,6 +39,9 @@ const HEADLESS_APP_ACTIONS: &[&str] = &["connect", "repair", "disconnect", "stat
 const HARNESS_ACTIONS: &[&str] = &["install", "verify", "repair", "uninstall"];
 
 const TOKEN_REQUIRED_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
     "/v1/clients/attach",
     "/v1/clients/heartbeat",
@@ -77,6 +80,9 @@ const TOKEN_REQUIRED_PATHS: &[&str] = &[
 ];
 
 const HOSTED_API_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/capabilities",
     "/v1/connect/complete",
     "/v1/inventory",
@@ -123,6 +129,9 @@ const HOSTED_API_PATHS: &[&str] = &[
 ];
 
 const LOCAL_SURFACE_PATHS: &[&str] = &[
+    "/v1/harness-versions/refresh",
+    "/v1/harness-versions/acknowledge",
+    "/v1/harness-versions/clear-acknowledgement",
     "/v1/cloud-review",
     "/v1/capabilities",
     "/v1/sessions",
@@ -201,6 +210,8 @@ pub(crate) fn requires_header_token(path: &str) -> bool {
     }
     let n = parts.len();
     (n >= 3 && starts_with(&parts, &["v1", "hooks"]))
+        // Sponsored extension discovery: authenticated daemon routes.
+        || (n >= 4 && starts_with(&parts, &["v1", "discovery", "extensions"]))
         || (n == 3
             && starts_with(&parts, &["v1", "apps"])
             && HEADLESS_APP_ACTIONS.contains(&parts[2]))
@@ -234,6 +245,8 @@ pub(crate) fn hosted_dashboard_api_path(path: &str) -> bool {
     let n = parts.len();
     (n == 3 && starts_with(&parts, &["v1", "receipts"]))
         || (n >= 4 && starts_with(&parts, &["v2", "extension-controls", "catalog"]))
+        // Sponsored extension discovery routes are hosted dashboard APIs.
+        || (n == 4 && starts_with(&parts, &["v1", "discovery", "extensions"]))
         || (n == 4 && starts_with(&parts, &["v1", "audit", "remediations"]))
         || (n == 4 && starts_with(&parts, &["v1", "approvals"]) && parts[3] == "decision")
         || (n == 5

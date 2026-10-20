@@ -22,7 +22,6 @@ from .contract_models import HarnessSetupContract as HarnessSetupContract
 from .contract_models import HarnessSetupStep as HarnessSetupStep
 from .contract_registry import _BASE_HARNESS_CONTRACTS
 from .contract_rendering import DISPLAY_NAMES as _DISPLAY_NAMES
-from .contract_rendering import render_harness_contracts
 
 _CAPABILITY_EVENTS_BY_HARNESS = {**HOOK_EVENT_CAPABILITIES, **AGENT_EVENT_CAPABILITIES}
 
@@ -167,11 +166,6 @@ def setup_contract_for(harness: str) -> HarnessSetupContract | None:
         docs_path=contract.docs_path,
         icon_label=contract.icon_label,
     )
-
-
-def harness_contracts_table() -> str:
-    """Return a Markdown table summarising all harness contracts."""
-    return render_harness_contracts(HARNESS_CONTRACTS)
 
 
 def harness_capability_report(

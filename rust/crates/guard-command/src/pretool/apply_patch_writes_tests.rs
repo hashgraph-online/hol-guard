@@ -112,12 +112,57 @@ fn protected_or_unbounded_targets_stay_unproven() {
         "*** Update File: AGENTS.md",
         "*** Update File: .git/config",
         "*** Add File: .codex/config.toml",
+        "*** Add File: .opencode/plugins/x.ts",
+        "*** Add File: .zcode/settings.json",
+        "*** Add File: .gemini/settings.json",
+        "*** Update File: .mcp.json",
+        "*** Add File: .github/copilot-instructions.md",
+        "*** Add File: .husky/pre-commit",
         "*** Update File: ../outside.ts",
         "*** Delete File: src/settings.ts",
         outside.as_str(),
     ] {
         let command = patch(&["*** Update File: src/settings.ts", header]);
         assert!(!proven(&review("codex", &command, &fixture)), "{header}");
+    }
+}
+
+#[test]
+fn sibling_project_in_verified_home_matches_host_write_tools() {
+    // Claude Code's Write and Oh My Pi's write already reach a sibling
+    // project in the verified home; Codex's edit tool gets the same scope.
+    let fixture = fixture();
+    let sibling = fixture.home.join("other-project");
+    std::fs::create_dir_all(sibling.join(".git")).unwrap();
+    std::fs::create_dir_all(fixture.home.join("bin")).unwrap();
+    std::fs::write(sibling.join("notes.md"), "Reviewed\n").unwrap();
+    for path in ["notes.md", "added.md"] {
+        let header = if path == "notes.md" { "Update" } else { "Add" };
+        let command = patch(&[&format!(
+            "*** {header} File: {}",
+            sibling.join(path).display()
+        )]);
+        let result = review("codex", &command, &fixture);
+        assert!(proven(&result), "{command}: {result:?}");
+    }
+    for target in [
+        sibling.join("AGENTS.md"),
+        sibling.join(".git/config"),
+        sibling.join(".codex/config.toml"),
+        fixture.home.join(".zshrc"),
+        fixture.home.join(".ssh/config"),
+        fixture.home.join("bin/tool"),
+    ] {
+        let command = patch(&[&format!("*** Add File: {}", target.display())]);
+        assert!(!proven(&review("codex", &command, &fixture)), "{command}");
+    }
+    // Codex writes `~/notes.md` under cwd, not the home directory.
+    for header in [
+        "*** Add File: ~/notes.md",
+        "*** Update File: ~/other-project/notes.md",
+    ] {
+        let command = patch(&[header]);
+        assert!(!proven(&review("codex", &command, &fixture)), "{command}");
     }
 }
 

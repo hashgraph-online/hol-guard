@@ -10,6 +10,7 @@ benign case of the existing false-positive gate (read only), replayed for each h
 from __future__ import annotations
 
 import json
+import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -19,6 +20,11 @@ from ci.gauntlet.approval_rows import offers_always
 from ci.gauntlet.fixtures import LFS_GITCONFIG
 from ci.gauntlet.host_process import realistic_environment
 from ci.gauntlet.interruptions import observation_interruptions
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
+from tests.benign_fp_gate_connectors import connector_setup_failure
+from tests.native_gate_retry import BUDGET_MISS_REASONS
 
 FIXTURES = Path(__file__).parent / "fixtures"
 REPLAY_DOCUMENT = json.loads((FIXTURES / "gauntlet_replay_cases.json").read_text(encoding="utf-8"))
@@ -39,26 +45,21 @@ FIXED = {
     "todo": "todo",
     "todo_write": "todo_write",
     "ls": "ls",
+    "ask_user_question": "AskUserQuestion",
 }
 # Abstract tools upstream Pi also ships; omp-only tools (eval, task, todo, glob, ...) are not mirrored.
 PI_TOOLS = frozenset({"shell", "read", "write", "grep", "ls"})
 FAMILIES = {"shell": SHELL, "read": READ, "glob": GLOB, "grep": GREP, "write": WRITE}
 ENVIRONMENTS = ("clean", "realistic")
-# Containment receipts the OMP extension runs in Guard's read-only sandbox instead of showing the
-# denial (pi_extension_contained_tests_source.py), keyed by reason code. The route exists only on
-# macOS and only for bash. ZCode routes its receipts inside the hook path, so its replay result
-# already shows the contained run.
-OMP_CONTAINED_PROFILES = {
-    "native_python_eval_readonly_containment_required": "python-eval-readonly-v1",
-    "native_node_eval_readonly_containment_required": "node-eval-readonly-v1",
-    "native_package_test_readonly_containment_required": "package-test-readonly-v1",
-    "native_node_build_output_containment_required": "node-build-output-v1",
-    "native_node_tool_readonly_containment_required": "node-tool-readonly-v1",
-    "native_git_readonly_containment_required": "git-readonly-v1",
-    "native_pytest_readonly_containment_required": "pytest-readonly-v2",
-    "native_vitest_readonly_containment_required": "vitest-readonly-v1",
-    "native_node_test_readonly_containment_required": "node-test-readonly-v1",
-}
+# Profile and reason pairs the shipped OMP extension runs in Guard's sandbox instead of showing the
+# denial, read from its source. Every profile is contained on macOS and the workspace profile on Linux.
+# Z Code and Claude Code route inside the hook path, and Codex in its hook bridge (see
+# test_guard_gauntlet_replay_gate.py), so their replay result already shows the contained run.
+OMP_CONTAINED = frozenset(
+    re.findall(r'profile === "([^"]+)" &&\s*response\.reason_code === "([^"]+)"', CONTAINED_TEST_HELPERS_SOURCE)
+)
+# An empty set would silently stop modelling OMP routing if the extension's source changes shape.
+assert ("workspace-contained-v1", "native_workspace_containment_required") in OMP_CONTAINED
 
 
 @dataclass(frozen=True)
@@ -70,6 +71,12 @@ class ReplayCase:
     tool_input: dict[str, object]
     cwd: str
     expect: str  # quiet | always | block
+    event: str = "PreToolUse"
+    tool_response: object = None
+    # Set by a case whose whole harm is reach the workspace sandbox removes: the network, the home
+    # directory, the host toolchain. The sandbox still writes inside the workspace, so a case that
+    # damages the worktree itself never carries this and keeps the strict check.
+    contained_ok: bool = False
 
     @property
     def tool_name(self) -> str:
@@ -79,16 +86,31 @@ class ReplayCase:
 
 def _entry(entry: dict[str, Any], harness: str, expect: str) -> ReplayCase:
     return ReplayCase(
-        f"{entry['id']}@{harness}", entry["id"], harness, entry["tool"], entry["tool_input"], entry["cwd"], expect
+        f"{entry['id']}@{harness}",
+        entry["id"],
+        harness,
+        entry["tool"],
+        entry["tool_input"],
+        entry["cwd"],
+        expect,
+        entry.get("event", "PreToolUse"),
+        entry.get("tool_response"),
+        bool(entry.get("contained_ok", False)),
     )
 
 
 def expand() -> list[ReplayCase]:
     cases = [_entry(e, h, e["expect"]) for e in REPLAY_DOCUMENT["cases"] for h in e["harnesses"]]
     for entry in GATE_DOCUMENT["cases"]:
-        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS
+        # The replay runs every case in one environment, so it cannot model
+        # a case that depends on an inherited variable.
+        if entry.get("environment"):
+            continue
+        # Pi's read tool takes files; an entry that reads a folder says so and is not mirrored.
+        mirror_pi = "omp" in entry["harnesses"] and entry["tool"] in PI_TOOLS and entry.get("mirror_pi", True)
         harnesses = list(entry["harnesses"]) + (["pi"] if mirror_pi else [])
-        expect = "quiet" if entry["expect"] == "allow" else "block"
+        # A setup case keeps its expectation: a generic review there is a regression, not a block.
+        expect = {"allow": "quiet", "setup": "setup"}.get(entry["expect"], "block")
         cases.extend(_entry(entry, h, expect) for h in harnesses)
     return cases
 
@@ -141,22 +163,21 @@ def write_global_gitconfig(kind: str, home: Path) -> None:
 
 
 def omp_contained(case: ReplayCase, result: dict[str, object]) -> bool:
-    """Whether OMP's extension would run this receipt in the sandbox, so the user sees no denial."""
-    code = result.get("reason_code")
+    """Whether the Pi or OMP extension would run this receipt in the sandbox, so the user sees no denial."""
+    code, profile = result.get("reason_code"), result.get("required_execution_profile")
     return (
-        case.harness == "omp"
+        case.harness in {"omp", "pi"}
         and case.tool == "shell"
-        and sys.platform == "darwin"
         and result.get("decision") == "deny"
         and result.get("policy_action") == "sandbox-required"
         and result.get("observe_mode") is not True
-        and isinstance(code, str)
-        and result.get("required_execution_profile") == OMP_CONTAINED_PROFILES.get(code)
+        and (profile, code) in OMP_CONTAINED
+        and (sys.platform == "darwin" or (sys.platform == "linux" and profile == "workspace-contained-v1"))
     )
 
 
 def interruptions(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    row = {"response": result, "payload": {"tool_name": case.tool_name, "hook_event_name": "PreToolUse"}}
+    row = {"response": result, "payload": {"tool_name": case.tool_name, "hook_event_name": case.event}}
     found = [] if omp_contained(case, result) else observation_interruptions(row, case.harness)
     found.extend(
         {"kind": "approval", "harness": case.harness, "tool": case.tool_name, "reason_code": a.get("reason_code")}
@@ -172,12 +193,19 @@ def failure_reasons(case: ReplayCase, result: dict[str, object], approvals: list
 
 def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str, Any]]) -> str | None:
     """None when the case behaves as expected, otherwise a one-line failure."""
+    if result.get("reason_code") in BUDGET_MISS_REASONS:
+        # A fail-closed hook says nothing about the policy, so it never satisfies a `block` case,
+        # under either of the reason codes a missed budget is reported with.
+        return "native review unavailable after retry"
     found = interruptions(case, result, approvals)
     allowed = not any(e["kind"] == "decision" for e in found)
     if case.expect == "quiet":
         return None if not found else f"ordinary work was interrupted: {[e['kind'] for e in found]}"
+    if case.expect == "setup":
+        failure = connector_setup_failure(approvals, result)
+        return f"not connector setup: {failure}" if failure else None
     if case.expect == "always":
-        routed = case.harness == "zcode" and result.get("reason_code") == "native_contained_execution_routed"
+        routed = result.get("reason_code") == "native_contained_execution_routed"
         if not found and (routed or omp_contained(case, result)):
             return None  # a contained run needs no approval, which is better than an Always offer
         # A silent allow means the action never reached review, so no Always allow was offered.
@@ -185,4 +213,10 @@ def judge(case: ReplayCase, result: dict[str, object], approvals: list[dict[str,
             return "review-by-design action raised no approval row to offer an Always allow"
         bad = [(a.get("tool_name"), a.get("once_only_reason")) for a in approvals if not offers_always(a)]
         return f"review row without an Always allow offer: {bad}" if bad else None
-    return "attack was allowed" if allowed and not approvals else None
+    # A contained run reaches no network, home or credential, so it protects a case whose harm is
+    # exactly that reach. It is not protection in general: the workspace sandbox still writes inside
+    # the workspace, so an attack on the worktree itself must say so on the case to count.
+    contained = case.contained_ok and (
+        result.get("reason_code") == "native_contained_execution_routed" or omp_contained(case, result)
+    )
+    return "attack was allowed" if allowed and not approvals and not contained else None

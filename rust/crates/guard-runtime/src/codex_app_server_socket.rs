@@ -30,7 +30,9 @@ const READ_CHUNK: usize = 4096;
 /// Why an exchange produced no reply.
 #[derive(Debug, PartialEq)]
 pub(crate) enum Failure {
-    /// The caller's deadline passed.
+    /// The caller's deadline passed. Only the unix exchange raises it; the
+    /// callers match it on every platform.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Timeout,
     /// Any other failure, by the Python exception name for it.
     Error(&'static str),
@@ -167,9 +169,7 @@ impl Connection {
 
     fn write_all(&mut self, bytes: &[u8]) -> Result<(), Failure> {
         let remaining = self.remaining()?;
-        self.stream
-            .set_write_timeout(Some(remaining))
-            .map_err(io_failure)?;
+        timeout_set(self.stream.set_write_timeout(Some(remaining)))?;
         self.stream
             .write_all(bytes)
             .map_err(|error| self.failure(error))
@@ -179,9 +179,7 @@ impl Connection {
     fn read_some(&mut self, limit: usize) -> Result<Vec<u8>, Failure> {
         loop {
             let remaining = self.remaining()?;
-            self.stream
-                .set_read_timeout(Some(remaining))
-                .map_err(io_failure)?;
+            timeout_set(self.stream.set_read_timeout(Some(remaining)))?;
             let mut buffer = vec![0_u8; limit];
             match self.stream.read(&mut buffer) {
                 Ok(0) => return Err(Failure::Error("_WebSocketClosedError")),
@@ -330,6 +328,17 @@ fn find(data: &[u8], marker: &[u8]) -> Option<usize> {
 #[cfg(unix)]
 fn is_wait(error: &std::io::Error) -> bool {
     matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut)
+}
+
+#[cfg(unix)]
+/// macOS rejects a socket timeout with `EINVAL` once the peer has closed. The
+/// read or write that follows then reports the close itself, as it does for
+/// the Python client, which never sets a per-call socket option.
+fn timeout_set(result: std::io::Result<()>) -> Result<(), Failure> {
+    match result {
+        Err(error) if error.raw_os_error() == Some(nix::errno::Errno::EINVAL as i32) => Ok(()),
+        other => other.map_err(io_failure),
+    }
 }
 
 #[cfg(unix)]

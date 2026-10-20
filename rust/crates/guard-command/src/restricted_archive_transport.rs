@@ -282,7 +282,9 @@ pub fn validate_managed_destination(
     Ok(())
 }
 
-const PUBLIC_REGISTRIES: &[&str] = &[
+/// The registries a managed policy refuses when it disables public
+/// registries, shared with the brokered egress caller's own destination check.
+pub const PUBLIC_REGISTRIES: &[&str] = &[
     "pypi.org",
     "files.pythonhosted.org",
     "registry.npmjs.org",

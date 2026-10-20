@@ -78,21 +78,20 @@ fn spawn_workers_run_queued_jobs_in_parallel() {
             thread::sleep(Duration::from_millis(40));
         }
     });
-    let started_at = Instant::now();
     for _ in 0..4 {
         sender.send(1).expect("enqueue parallel job");
     }
     drop(sender);
+    // Each job waits until all four have started, so a worker pool that ran
+    // one job at a time would never get past the first. Reaching four proves
+    // the overlap; a wall-clock bound would only measure runner load.
     let deadline = Instant::now() + Duration::from_millis(400);
     while started.load(std::sync::atomic::Ordering::SeqCst) < 4 && Instant::now() < deadline {
         thread::sleep(Duration::from_millis(1));
     }
-    assert_eq!(started.load(std::sync::atomic::Ordering::SeqCst), 4);
-    while started_at.elapsed() < Duration::from_millis(40) {
-        thread::sleep(Duration::from_millis(1));
-    }
-    assert!(
-        started_at.elapsed() < Duration::from_millis(160),
+    assert_eq!(
+        started.load(std::sync::atomic::Ordering::SeqCst),
+        4,
         "queued auth/eval work must overlap instead of running one job at a time"
     );
 }

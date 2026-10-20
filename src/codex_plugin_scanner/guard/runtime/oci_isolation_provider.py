@@ -16,13 +16,10 @@ a refusal into ``ProviderPlanError``; it never computes a verdict itself.
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
 import time
-from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
-from typing import Final, cast
+from typing import Final
 
 from codex_plugin_scanner.guard.native_runner_authority import NativeRunnerAuthorityError, native_runner_authority
 from codex_plugin_scanner.guard.runtime.execution_assurance_contract import (
@@ -44,7 +41,7 @@ from codex_plugin_scanner.guard.runtime.isolation_provider import (
 )
 from codex_plugin_scanner.guard.runtime.oci_mount_security import resolve_oci_bundle_root
 
-from .payload_coercion import object_map, string_tuple
+from .payload_coercion import object_map
 
 _PROVIDE_KIND: Final = "oci-isolation"
 _SIGNING_IDENTITY: Final = "guard-oci-builtin"
@@ -79,127 +76,6 @@ _OCI_ABSENT: Final[tuple[AtomicGuaranteeKind, ...]] = (
 # ---------------------------------------------------------------------------
 # Evidence types
 # ---------------------------------------------------------------------------
-
-
-class OCISeccompProfile(str, Enum):
-    """Seccomp profile kind."""
-
-    STRICT = "strict"
-    CUSTOM = "custom"
-    DEFAULT = "default"
-    NONE = "none"
-    UNSET = "unset"
-
-
-@dataclass(frozen=True)
-class OCISeccompEvidence:
-    """Evidence about OCI seccomp configuration."""
-
-    profile_kind: OCISeccompProfile = OCISeccompProfile.UNSET
-    profile_json_digest: str = "0" * 64  # SHA-256 hex of profile JSON
-
-
-@dataclass(frozen=True)
-class OCILSMEvidence:
-    """Evidence about LSM (SELinux/AppArmor) configuration."""
-
-    enabled: bool = False
-    profile_name: str = ""
-    profile_verified: bool = False
-
-
-@dataclass(frozen=True)
-class OCICGroupEvidence:
-    """Evidence about cgroup configuration."""
-
-    v2: bool = False
-    path: str = ""
-    controller_bound: bool = False
-
-
-@dataclass(frozen=True)
-class OCINamespaceEvidence:
-    """Evidence about namespace isolation."""
-
-    pid_isolated: bool = False
-    net_isolated: bool = False
-    ipc_isolated: bool = False
-    uts_isolated: bool = False
-    user_isolated: bool = False
-
-
-@dataclass(frozen=True)
-class OCIMountEvidence:
-    """Evidence about OCI mounts."""
-
-    readonly_rootfs: bool = False
-    host_bind_mounts: tuple[str, ...] = ()
-    secret_mounts: tuple[str, ...] = ()
-    output_mounts: tuple[str, ...] = ()
-    forbidden_bind_sources: tuple[str, ...] = ()
-    unverified_bind_sources: tuple[str, ...] = ()
-    resolved_bind_sources: tuple[str, ...] = ()
-    world_writable_binds: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class OCINetworkEvidence:
-    """Evidence about network configuration."""
-
-    mode: str = "default"
-    port_mappings: tuple[str, ...] = ()
-    loopback_only: bool = False
-
-
-@dataclass(frozen=True)
-class OCICapabilitiesEvidence:
-    """Evidence about Linux capabilities."""
-
-    effective: tuple[str, ...] = ()
-    permitted: tuple[str, ...] = ()
-    ambient: tuple[str, ...] = ()
-    bounding_set: tuple[str, ...] = ()
-    dangerous_capabilities: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class OCIRootFSEvidence:
-    """Evidence about rootfs configuration."""
-
-    path: str = ""
-    readonly: bool = False
-    absolute: bool = False
-    containment_verified: bool = False
-    resolved_path: str = ""
-
-
-@dataclass(frozen=True)
-class OCIUserEvidence:
-    """Evidence about user configuration."""
-
-    uid: int = 0
-    gid: int = 0
-    non_root: bool = False
-
-
-@dataclass(frozen=True)
-class OCIBundleEvidence:
-    """Evidence from OCI bundle spec validation."""
-
-    bundle_version: str = "1.0.0"
-    bundle_valid: bool = False
-    binary_digest: str = "0" * 64  # SHA-256 of OCI runtime binary
-    binary_verified: bool = False
-
-    seccomp: OCISeccompEvidence = field(default_factory=OCISeccompEvidence)
-    lsm: OCILSMEvidence = field(default_factory=OCILSMEvidence)
-    cgroup: OCICGroupEvidence = field(default_factory=OCICGroupEvidence)
-    namespaces: OCINamespaceEvidence = field(default_factory=OCINamespaceEvidence)
-    mounts: OCIMountEvidence = field(default_factory=OCIMountEvidence)
-    network: OCINetworkEvidence = field(default_factory=OCINetworkEvidence)
-    capabilities: OCICapabilitiesEvidence = field(default_factory=OCICapabilitiesEvidence)
-    rootfs: OCIRootFSEvidence = field(default_factory=OCIRootFSEvidence)
-    user: OCIUserEvidence = field(default_factory=OCIUserEvidence)
 
 
 # ---------------------------------------------------------------------------
@@ -376,140 +252,10 @@ class OCIIsolationProvider:
 # ---------------------------------------------------------------------------
 
 
-def _evidence_wire(evidence: OCIBundleEvidence) -> dict[str, object]:
-    def section(value: object) -> object:
-        if isinstance(value, Enum):
-            return value.value
-        if isinstance(value, tuple):
-            return [section(item) for item in cast(tuple[object, ...], value)]
-        if dataclasses.is_dataclass(value) and not isinstance(value, type):
-            return {field.name: section(getattr(value, field.name)) for field in dataclasses.fields(value)}
-        return value
-
-    return cast(dict[str, object], section(evidence))
-
-
 def _mapping(value: object) -> dict[str, object]:
     return object_map(value) or {}
 
 
-def _evidence_from_wire(wire: dict[str, object]) -> OCIBundleEvidence:
-    seccomp = _mapping(wire.get("seccomp"))
-    lsm = _mapping(wire.get("lsm"))
-    cgroup = _mapping(wire.get("cgroup"))
-    namespaces = _mapping(wire.get("namespaces"))
-    mounts = _mapping(wire.get("mounts"))
-    network = _mapping(wire.get("network"))
-    capabilities = _mapping(wire.get("capabilities"))
-    rootfs = _mapping(wire.get("rootfs"))
-    user = _mapping(wire.get("user"))
-    return OCIBundleEvidence(
-        bundle_version=str(wire["bundle_version"]),
-        bundle_valid=wire["bundle_valid"] is True,
-        binary_digest=str(wire["binary_digest"]),
-        binary_verified=wire["binary_verified"] is True,
-        seccomp=OCISeccompEvidence(
-            profile_kind=OCISeccompProfile(str(seccomp["profile_kind"])),
-            profile_json_digest=str(seccomp["profile_json_digest"]),
-        ),
-        lsm=OCILSMEvidence(
-            enabled=lsm["enabled"] is True,
-            profile_name=str(lsm["profile_name"]),
-            profile_verified=lsm["profile_verified"] is True,
-        ),
-        cgroup=OCICGroupEvidence(
-            v2=cgroup["v2"] is True,
-            path=str(cgroup["path"]),
-            controller_bound=cgroup["controller_bound"] is True,
-        ),
-        namespaces=OCINamespaceEvidence(
-            **{name: namespaces[name] is True for name in OCINamespaceEvidence.__dataclass_fields__}
-        ),
-        mounts=OCIMountEvidence(
-            readonly_rootfs=mounts["readonly_rootfs"] is True,
-            **{
-                name: string_tuple(mounts[name])
-                for name in OCIMountEvidence.__dataclass_fields__
-                if name != "readonly_rootfs"
-            },
-        ),
-        network=OCINetworkEvidence(
-            mode=str(network["mode"]),
-            port_mappings=string_tuple(network["port_mappings"]),
-            loopback_only=network["loopback_only"] is True,
-        ),
-        capabilities=OCICapabilitiesEvidence(
-            **{name: string_tuple(capabilities[name]) for name in OCICapabilitiesEvidence.__dataclass_fields__}
-        ),
-        rootfs=OCIRootFSEvidence(
-            path=str(rootfs["path"]),
-            readonly=rootfs["readonly"] is True,
-            absolute=rootfs["absolute"] is True,
-            containment_verified=rootfs["containment_verified"] is True,
-            resolved_path=str(rootfs["resolved_path"]),
-        ),
-        user=OCIUserEvidence(
-            uid=cast(int, user["uid"]),
-            gid=cast(int, user["gid"]),
-            non_root=user["non_root"] is True,
-        ),
-    )
-
-
-def build_oci_evidence(
-    bundle: dict[str, object],
-    rootfs: dict[str, object] | None = None,
-    process: dict[str, object] | None = None,
-    linux: dict[str, object] | None = None,
-    bundle_root: str | Path | None = None,
-) -> OCIBundleEvidence:
-    """Build OCI bundle evidence from spec dicts in the native resident."""
-    args: dict[str, object] = {"bundle": bundle}
-    for key, value in (
-        ("rootfs", rootfs),
-        ("process", process),
-        ("linux", linux),
-        ("bundle_root", None if bundle_root is None else str(Path(bundle_root).absolute())),
-    ):
-        if value is not None:
-            args[key] = value
-    answer = native_runner_authority("oci_bundle_evidence", args)
-    return _evidence_from_wire(_mapping(answer.get("evidence")))
-
-
-def evaluate_oci_evidence(
-    evidence: OCIBundleEvidence,
-    violations: tuple[str, ...] | None = None,
-) -> tuple[tuple[str, ...], tuple[AtomicGuarantee, ...]]:
-    """Return the native violation list and deny-by-default guarantees."""
-    args: dict[str, object] = {"evidence": _evidence_wire(evidence)}
-    if violations is not None:
-        args["violations"] = list(violations)
-    answer = native_runner_authority("oci_evidence_verdict", args)
-    guarantees = tuple(
-        AtomicGuarantee(
-            kind=AtomicGuaranteeKind(str(item["kind"])),
-            enforced=item["enforced"] is True,
-            boundary=GuardExecutionAssuranceBoundary(str(item["boundary"])),
-        )
-        for item in cast(list[dict[str, object]], answer["guarantees"])
-    )
-    return string_tuple(answer["violations"]), guarantees
-
-
 __all__ = [
-    "OCIBundleEvidence",
-    "OCICGroupEvidence",
-    "OCICapabilitiesEvidence",
     "OCIIsolationProvider",
-    "OCILSMEvidence",
-    "OCIMountEvidence",
-    "OCINamespaceEvidence",
-    "OCINetworkEvidence",
-    "OCIRootFSEvidence",
-    "OCISeccompEvidence",
-    "OCISeccompProfile",
-    "OCIUserEvidence",
-    "build_oci_evidence",
-    "evaluate_oci_evidence",
 ]

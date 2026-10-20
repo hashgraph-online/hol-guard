@@ -1,0 +1,13 @@
+{
+  "schema": "guard.command-pack-limits.v1",
+  "max_object_bytes": 65536,
+  "max_blob_bytes": 8388608,
+  "concat_fanout": 64,
+  "max_concat_depth": 4,
+  "index_leaf_entries": 64,
+  "index_branch_children": 16,
+  "max_index_depth": 64,
+  "hash": "sha256",
+  "index_key": "sha256-utf8-extension-id-hex-prefix",
+  "authority": "authenticated-release-root-required"
+}

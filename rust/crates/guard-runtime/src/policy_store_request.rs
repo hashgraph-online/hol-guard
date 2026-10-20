@@ -3,6 +3,20 @@
 use super::*;
 
 impl PolicySnapshotStore {
+    pub(crate) fn guard_home(&self) -> &Path {
+        // The comparison key normalizes platform aliases. Filesystem capture
+        // needs the actual enrolled path, not that comparison spelling.
+        if self
+            .state_base
+            .file_name()
+            .is_some_and(|name| name == "native-runtime")
+        {
+            self.state_base.parent().unwrap_or(&self.state_base)
+        } else {
+            &self.state_base
+        }
+    }
+
     pub(crate) fn validate_request_snapshot(
         &self,
         value: &Value,
@@ -121,7 +135,7 @@ impl PolicySnapshotStore {
         {
             return Err("native_policy_snapshot_context_mismatch".to_owned());
         }
-        let state = self
+        let mut state = self
             .state
             .lock()
             .map_err(|_| "native_policy_snapshot_state_unavailable".to_owned())?;
@@ -130,17 +144,32 @@ impl PolicySnapshotStore {
         }
         let snapshot = state
             .snapshot
-            .as_ref()
+            .clone()
             .ok_or_else(|| "native_policy_snapshot_missing".to_owned())?;
-        validate_v3(
-            snapshot,
-            state.generation_floor.max(1),
-            &self.expected_runtime_identity,
-            &self.expected_rule_digest,
-            &self.verifier_key,
-            now,
-        )
-        .map_err(snapshot_error)?;
-        Ok(Arc::clone(snapshot))
+        let floor = state.generation_floor.max(1);
+        let verified = state
+            .verified
+            .as_ref()
+            .is_some_and(|(seen, seen_floor)| Arc::ptr_eq(seen, &snapshot) && *seen_floor == floor);
+        if verified {
+            if snapshot.expires_at_ms <= now {
+                return Err(snapshot_error(
+                    guard_policy_snapshot::SnapshotError::Expired,
+                ));
+            }
+        } else {
+            state.verified = None;
+            validate_v3(
+                &snapshot,
+                floor,
+                &self.expected_runtime_identity,
+                &self.expected_rule_digest,
+                &self.verifier_key,
+                now,
+            )
+            .map_err(snapshot_error)?;
+            state.verified = Some((Arc::clone(&snapshot), floor));
+        }
+        Ok(snapshot)
     }
 }

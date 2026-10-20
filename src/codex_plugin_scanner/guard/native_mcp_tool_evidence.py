@@ -1,13 +1,15 @@
 """Typed client for the native MCP tool-evidence owner; no Python evaluator.
 
-Rust owns two projections of an MCP tool call: the risk signals and summary
-text (including browser scope, argument, schema, and target-redaction checks),
-and the portal firewall evidence for ``mcp_server`` and ``tool_call``
-artifacts. Python ships artifact/argument DTOs, binds the answer to the
-request by ``request_id`` and canonical ``request_sha256``, and renders it.
-Any transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
-(never another exception type); nothing here ever recomputes a signal,
-summary, or fingerprint locally, and a failure is never an empty result.
+Rust owns the portal firewall evidence for ``mcp_server``, ``tool_call``
+and ``skill`` artifacts. Python ships the DTO -- for a skill, the document
+text it read, since the resident does no IO -- binds the answer by
+``request_id`` and canonical ``request_sha256``, and renders it. Any
+transport, scope, or binding failure raises ``NativeMcpToolEvidenceError``
+(never another exception type); nothing here ever recomputes a fingerprint
+locally, and a failure is never an empty result.
+
+``risk_input`` builds the risk DTO the MCP proxy sends with its
+``call_projection`` check, which renders the risk signals and summary.
 """
 
 from __future__ import annotations
@@ -21,7 +23,6 @@ from typing import Any
 
 from .models import GuardArtifact
 from .native_context import (
-    _MCP_RISK_CATEGORIES,
     _canonical_request_sha256,
     _native_error,
     _native_runtime_status_memo,
@@ -46,6 +47,21 @@ _MAX_REQUEST_BYTES = 2 * 1024 * 1024
 _TIMEOUT_SECONDS = 5.0
 _INVALID_RESULT = "native_mcp_tool_evidence_result_invalid"
 _FIREWALL_ARTIFACT_TYPES = frozenset({"mcp_server", "tool_call"})
+_EMPTY_FIREWALL_INPUT: dict[str, object] = {
+    "command": None,
+    "transport": None,
+    "has_url": False,
+    "args": [],
+    "server_name": None,
+    "env": [],
+    "mcp_server_identity": None,
+    "mcp_tool_identity": None,
+    "tool_schema": None,
+    "tool_description": None,
+    "tool_names": None,
+    "tool_names_camel": None,
+    "skill_content": None,
+}
 
 
 class NativeMcpToolEvidenceError(ValueError):
@@ -67,7 +83,7 @@ def risk_input(
     risk_categories: tuple[str, ...] | None = None,
     summary_code: str | None = None,
 ) -> dict[str, object]:
-    """Transport-only DTO for the ``risk`` subop."""
+    """Transport-only risk DTO for the proxy's ``call_projection`` check."""
     return {
         "artifact": json_safe_copy(
             {"name": artifact.name, "command": artifact.command, "metadata": dict(artifact.metadata)}
@@ -111,6 +127,30 @@ def firewall_input(artifact: GuardArtifact) -> dict[str, object]:
         "tool_description": json_safe_copy(metadata.get("tool_description")),
         "tool_names": json_safe_copy(metadata.get("tool_names")),
         "tool_names_camel": json_safe_copy(metadata.get("toolNames")),
+        "skill_content": None,
+    }
+
+
+def skill_firewall_input(
+    *,
+    name: str,
+    config_path: str,
+    publisher: str | None,
+    skill_content: str | None,
+) -> dict[str, object]:
+    """Transport-only DTO for a ``skill`` document's firewall projection.
+
+    The resident derives the identity from ``skill_content``; Python reads the
+    document because the op does no IO. ``None`` content means the document
+    could not be read and projects to no firewall.
+    """
+    return {
+        **_EMPTY_FIREWALL_INPUT,
+        "artifact_type": "skill",
+        "name": name,
+        "config_path": config_path,
+        "publisher": publisher,
+        "skill_content": skill_content,
     }
 
 
@@ -133,7 +173,6 @@ def native_mcp_tool_evidence_request(
         "request_id": uuid.uuid4().hex,
         "subop": subop,
         "guard_home": str(guard_home),
-        "risk": payload if subop == "risk" else None,
         "firewall": payload if subop == "firewall" else None,
     }
     status = _native_runtime_status_memo()
@@ -224,25 +263,6 @@ def native_mcp_tool_evidence_request(
     return verified
 
 
-def _string_list(value: object) -> list[str]:
-    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return value
-
-
-def _validated_risk_payload(payload: dict[str, Any]) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    categories = _string_list(payload.get("risk_categories"))
-    signals = _string_list(payload.get("signals"))
-    summary = payload.get("summary")
-    if (
-        not isinstance(summary, str)
-        or len(signals) != len(categories)
-        or any(category not in _MCP_RISK_CATEGORIES for category in categories)
-    ):
-        raise NativeMcpToolEvidenceError(_INVALID_RESULT)
-    return tuple(categories), tuple(signals), summary
-
-
 def _validated_firewall_payload(payload: dict[str, Any]) -> dict[str, object] | None:
     patch = payload.get("metadata_patch")
     if "metadata_patch" not in payload or not (patch is None or isinstance(patch, dict)):
@@ -250,23 +270,25 @@ def _validated_firewall_payload(payload: dict[str, Any]) -> dict[str, object] | 
     return patch
 
 
-def native_tool_risk_evidence(
-    artifact: GuardArtifact,
-    arguments: object,
-    *,
-    risk_categories: tuple[str, ...] | None = None,
-    summary_code: str | None = None,
-) -> tuple[tuple[str, ...], tuple[str, ...], str]:
-    """Return native ``(risk_categories, signals, summary)`` for one tool call."""
-    return native_mcp_tool_evidence_request(
-        "risk",
-        risk_input(artifact, arguments, risk_categories=risk_categories, summary_code=summary_code),
-        validate=_validated_risk_payload,
-    )
-
-
 def native_firewall_metadata_patch(artifact: GuardArtifact) -> dict[str, object] | None:
     """Return the native metadata patch for a firewall artifact, or ``None`` for no firewall."""
     if artifact.artifact_type not in _FIREWALL_ARTIFACT_TYPES:
         raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_unsupported_artifact_type")
     return native_mcp_tool_evidence_request("firewall", firewall_input(artifact), validate=_validated_firewall_payload)
+
+
+def native_skill_firewall_metadata_patch(
+    *,
+    name: str,
+    config_path: str,
+    publisher: str | None = None,
+    skill_content: str | None,
+    guard_home: Path | None = None,
+) -> dict[str, object] | None:
+    """Native metadata patch for a skill document, or ``None`` for no firewall."""
+    return native_mcp_tool_evidence_request(
+        "firewall",
+        skill_firewall_input(name=name, config_path=config_path, publisher=publisher, skill_content=skill_content),
+        guard_home,
+        validate=_validated_firewall_payload,
+    )

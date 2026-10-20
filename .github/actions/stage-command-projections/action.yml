@@ -9,6 +9,9 @@ runs:
   steps:
     - uses: ./.github/actions/setup-rust
       if: inputs.compiler == ''
+      with:
+        cache-key: stage-command-projections
+        cache-fallback-key: native-wheel
     - name: Generate and verify package resources
       shell: bash
       env:

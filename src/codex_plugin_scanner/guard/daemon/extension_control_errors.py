@@ -11,6 +11,7 @@ _RECOVERY_ACTIONS = {
     "authority_apply_failed": "refresh_effective_controls",
     "authority_conflict": "refresh_effective_controls",
     "authority_unavailable": "enroll_or_repair_authority",
+    "authority_unread": "refresh_effective_controls",
     "catalog_conflict": "refresh_catalog",
     "immutable_extension": "remove_local_override",
     "immutable_permission": "remove_local_override",

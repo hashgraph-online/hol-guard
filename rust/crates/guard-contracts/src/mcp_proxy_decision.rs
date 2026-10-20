@@ -15,10 +15,24 @@ use serde_json::Value;
 use crate::mcp_sensitive_read::{
     McpSensitiveReadContextQueryV1, McpSensitiveReadHintQueryV1, McpSensitiveReadReuseQueryV1,
 };
+use crate::mcp_tool_evidence::McpToolRiskInputV1;
 
 pub const MCP_PROXY_DECISION_REQUEST_SCHEMA: &str = "guard-mcp-proxy-decision-request.v1";
 pub const MCP_PROXY_DECISION_RESULT_SCHEMA: &str = "guard-mcp-proxy-decision-result.v1";
 pub const MCP_PROXY_DECISION_FEATURE: &str = "mcp-proxy-decision-v1";
+/// The resident verifies the downloaded archive files of an archive binding itself.
+pub const MCP_PROXY_ARCHIVE_VERIFY_FEATURE: &str = "mcp-proxy-archive-verify-v1";
+
+/// The resident also classifies the answer to an inline approval prompt.
+/// An older resident rejects that query as an unknown check, so a caller
+/// asks for this capability before sending it.
+pub const MCP_PROXY_INLINE_APPROVAL_REPLY_FEATURE: &str = "mcp-proxy-inline-approval-reply-v1";
+
+/// The resident also answers whether an evaluation demands an archive binding
+/// at all. An older resident rejects that query as an unknown check, so a
+/// caller asks for this capability before sending it.
+pub const MCP_PROXY_ARCHIVE_BINDING_REQUIRED_FEATURE: &str =
+    "mcp-proxy-archive-binding-required-v1";
 /// Largest request the op accepts (a `tools/list` page rides inside it).
 pub const MCP_PROXY_DECISION_MAX_BYTES: usize = 5 * 1024 * 1024;
 
@@ -223,16 +237,50 @@ pub struct McpEvidenceItemQueryV1 {
     pub kind: McpEvidenceItemKindV1,
 }
 
-/// Rebind a `tools/call` to the verified local copies of its external archives.
+/// One archive the package evaluation downloaded, as it recorded it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpExternalArchiveDownloadV1 {
+    pub source_url: String,
+    pub path: String,
+    pub size: u64,
+    pub sha256: String,
+}
+
+/// Rebind a `tools/call` (or a launch argv) to the local copies of its
+/// external archives. The resident re-verifies every download before binding.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct McpExternalArchiveBindQueryV1 {
-    /// The request `params` exactly as received.
+    /// The request `params` (or argv array) exactly as received.
     pub params: Value,
-    /// `(source url, verified local path)` pairs, in the order they apply.
-    pub replacements: Vec<(String, String)>,
+    /// The downloads to verify, in the order their replacements apply.
+    pub downloads: Vec<McpExternalArchiveDownloadV1>,
     /// Whether the package evaluation demands a binding at all.
     pub requires_binding: bool,
+}
+
+/// Classify the answer a client gave to one inline approval prompt.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpInlineApprovalReplyQueryV1 {
+    /// The answer reduced to its payload: an `elicitation/create` result, or
+    /// the cancel the proxy substitutes for an error, a closed stream or a
+    /// prompt that timed out.
+    pub payload: Value,
+    /// The tool the prompt was raised for, named in the block it produces.
+    pub tool_name: String,
+    /// The server that offered the tool, named alongside it.
+    pub server_name: String,
+}
+
+/// Whether a package evaluation only permits a request bound to the external
+/// archives it verified.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpExternalArchiveBindingRequiredQueryV1 {
+    /// The package evaluation, exactly as the evaluator produced it.
+    pub evaluation: Value,
 }
 
 /// Project the reasons of a package evaluation into risk signals.
@@ -240,6 +288,20 @@ pub struct McpExternalArchiveBindQueryV1 {
 #[serde(deny_unknown_fields)]
 pub struct McpPackageReasonSignalsQueryV1 {
     pub reasons: Vec<Value>,
+}
+
+/// Everything the proxy shows and binds for one `tools/call`: masked
+/// arguments and params, the launch target, the browser intent and the risk
+/// evidence, in one round trip.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct McpCallProjectionQueryV1 {
+    pub tool_name: String,
+    /// The request `params` exactly as received.
+    pub params: Value,
+    /// The call's artifact and arguments; `null` when the proxy has no
+    /// artifact yet, which skips the browser intent and risk evidence.
+    pub risk: Option<McpToolRiskInputV1>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -255,11 +317,14 @@ pub enum McpProxyQueryV1 {
     RouteToolCall(McpRouteToolCallQueryV1),
     ObserveToolForward(McpObserveToolForwardQueryV1),
     EvidenceItem(McpEvidenceItemQueryV1),
-    SensitiveReadContext(McpSensitiveReadContextQueryV1),
+    SensitiveReadContext(Box<McpSensitiveReadContextQueryV1>),
     SensitiveReadReuse(McpSensitiveReadReuseQueryV1),
     SensitiveReadHint(McpSensitiveReadHintQueryV1),
     ExternalArchiveBind(McpExternalArchiveBindQueryV1),
+    ExternalArchiveBindingRequired(McpExternalArchiveBindingRequiredQueryV1),
     PackageReasonSignals(McpPackageReasonSignalsQueryV1),
+    InlineApprovalReply(McpInlineApprovalReplyQueryV1),
+    CallProjection(McpCallProjectionQueryV1),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

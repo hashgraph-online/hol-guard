@@ -4,13 +4,12 @@
 
 from __future__ import annotations
 
-from .local_authority_integrity import sign_local_authority_payload, verify_local_authority_payload
+from .local_authority_integrity import verify_local_authority_payload
 from .policy_integrity import PolicyIntegrityVerificationResult
 
 # ruff: noqa: F403,F405
 from .store_base import *
 from .store_local_once_authority import (
-    LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
     local_once_integrity_purpose,
     persist_local_once_approval,
 )
@@ -61,95 +60,6 @@ class StoreEventReceiptsMixin:
                 integrity_key=key,
                 integrity_key_id=key_id,
             )
-
-    @staticmethod
-    def _claim_local_once_approval_by_id_locked(
-        connection: sqlite3.Connection,
-        *,
-        approval_id: str,
-        now: str,
-        expected_decision: Mapping[str, object] | None = None,
-        integrity_key: bytes | None = None,
-        integrity_key_id: str | None = None,
-        consume: bool = True,
-        authority_kind: str = LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
-    ) -> dict[str, object] | None:
-        now = _canonical_utc_timestamp(now)
-        row = connection.execute(
-            """
-            select approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
-                   created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-                   integrity_key_id, signed_at, authority_kind
-            from guard_local_once_approvals
-            where approval_id = ? and claimed_at is null
-              and julianday(expires_at) > julianday(?)
-            """,
-            (approval_id, now),
-        ).fetchone()
-        if row is None:
-            return None
-        if _row_value(row, "authority_kind") != authority_kind:
-            return None
-        integrity_result = _verify_local_once_approval(
-            row,
-            key=integrity_key,
-            key_id=integrity_key_id,
-        )
-        if integrity_result.status != "valid" or integrity_key is None or integrity_key_id is None:
-            return None
-        decision = _local_once_approval_payload(row)
-        identity_keys = (
-            "action",
-            "approval_id",
-            "artifact_hash",
-            "artifact_id",
-            "expires_at",
-            "harness",
-            "integrity_key_id",
-            "integrity_status",
-            "integrity_version",
-            "publisher",
-            "request_id",
-            "source",
-            "signed_at",
-            "updated_at",
-            "workspace",
-            "authority_kind",
-        )
-        if expected_decision is not None and any(
-            decision.get(key) != expected_decision.get(key) for key in identity_keys
-        ):
-            return None
-        if not consume:
-            return decision
-        claimed_row = {**_local_once_approval_signed_payload(row), "claimed_at": now}
-        claimed_integrity = sign_local_authority_payload(
-            claimed_row,
-            key=integrity_key,
-            key_id=integrity_key_id,
-            purpose=local_once_integrity_purpose(_row_value(row, "authority_kind")),
-            signed_at=now,
-        )
-        claim_cursor = connection.execute(
-            """
-            update guard_local_once_approvals
-            set claimed_at = ?, integrity_version = ?, payload_hash = ?, payload_mac = ?,
-                integrity_key_id = ?, signed_at = ?
-            where approval_id = ? and claimed_at is null
-            """,
-            (
-                now,
-                claimed_integrity["integrity_version"],
-                claimed_integrity["payload_hash"],
-                claimed_integrity["payload_mac"],
-                claimed_integrity["integrity_key_id"],
-                claimed_integrity["signed_at"],
-                approval_id,
-            ),
-        )
-        if claim_cursor.rowcount != 1:
-            return None
-        return decision
 
     def list_events(self, limit: int = 100, event_name: str | None = None) -> list[dict[str, object]]:
         query, params = _list_events_query(limit, event_name)

@@ -78,3 +78,68 @@ def test_scheduler_health_dimensions_are_bounded() -> None:
     assert stats["retries"] == 1
     assert set(stats["queue_wait_by_lane_p99_ms"]) == {"decision", "content-security", "evidence"}
     admission.permit.release()
+
+
+def _record_slow_reviews(scheduler: RuntimeHookScheduler, clock: FakeClock, *, count: int, seconds: float) -> None:
+    for index in range(count):
+        admission = scheduler.acquire(
+            harness="omp",
+            client_key=f"stalled-{index}",
+            lane="decision",
+            payload_bytes=2,
+            normalized_payload=b"{}",
+            deadline=clock.value + 30.0,
+        )
+        assert admission.permit is not None
+        clock.value += seconds
+        admission.permit.release()
+
+
+def test_slow_samples_from_an_ended_stall_do_not_refuse_the_next_idle_hook() -> None:
+    clock = FakeClock()
+    scheduler = RuntimeHookScheduler(monotonic=clock)
+    # A hung resident made every review run to its deadline.
+    _record_slow_reviews(scheduler, clock, count=25, seconds=3.0)
+    assert scheduler.stats()["service_time_by_lane_p95_ms"]["decision"] >= 2900.0
+
+    # The resident is back; the hook only spent a moment waiting for fresh policy.
+    admission = scheduler.acquire(
+        harness="omp",
+        client_key="agent",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
+    )
+
+    assert admission.reason_code is None
+    assert admission.permit is not None
+    admission.permit.release()
+
+
+def test_slow_samples_still_shed_hooks_while_other_reviews_are_in_flight() -> None:
+    clock = FakeClock()
+    scheduler = RuntimeHookScheduler(monotonic=clock)
+    _record_slow_reviews(scheduler, clock, count=25, seconds=3.0)
+    running = scheduler.acquire(
+        harness="omp",
+        client_key="running",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=clock.value + 30.0,
+    )
+    assert running.permit is not None
+
+    admission = scheduler.acquire(
+        harness="omp",
+        client_key="agent",
+        lane="decision",
+        payload_bytes=2,
+        normalized_payload=b"{}",
+        deadline=RuntimeHookDeadline(expires_at=clock.value + 2.0),
+    )
+
+    assert admission.permit is None
+    assert admission.reason_code == "daemon_hook_deadline_exhausted"
+    running.permit.release()

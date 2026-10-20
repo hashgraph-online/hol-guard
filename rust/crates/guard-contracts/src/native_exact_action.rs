@@ -18,7 +18,13 @@ pub const NATIVE_EXACT_ACTION_REQUEST_SCHEMA: &str = "guard-native-exact-action-
 /// Schema discriminator for the result.
 pub const NATIVE_EXACT_ACTION_RESULT_SCHEMA: &str = "guard-native-exact-action-result.v1";
 /// Capability advertised by the runtime when this operation is available.
-pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v1";
+pub const NATIVE_EXACT_ACTION_FEATURE: &str = "native-exact-action-v4";
+/// Inventory alone did not establish bound script delivery.
+pub const NATIVE_EXACT_ACTION_V3_FEATURE: &str = "native-exact-action-v3";
+/// Same wire schema, before complete interpreter-resource identity.
+pub const NATIVE_EXACT_ACTION_PREVIOUS_FEATURE: &str = "native-exact-action-v2";
+/// Old clients retain the same wire schema; the stronger proof is compatible.
+pub const NATIVE_EXACT_ACTION_LEGACY_FEATURE: &str = "native-exact-action-v1";
 /// Largest canonical request serialization the op will accept.
 pub const NATIVE_EXACT_ACTION_MAX_BYTES: usize = 256 * 1024;
 /// Longest filesystem budget a request may ask for.
@@ -64,6 +70,14 @@ pub enum NativePolicyBindingV1 {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeExactActionQueryV1 {
+    /// Non-authorizing code observations. The nested action must be ExactAction.
+    LaunchEvidence {
+        action: Box<NativeExactActionQueryV1>,
+    },
+    /// Observe a bounded Bash graph. This never mints a permission token.
+    BashSubject {
+        capture: Box<crate::NativeBashCaptureV1>,
+    },
     /// The persistent exact-action token of one review, or the reason it must
     /// stay a one-time allow.
     ExactAction {
@@ -74,6 +88,10 @@ pub enum NativeExactActionQueryV1 {
         /// The tool input as `[key, value]` pairs in payload order.
         #[serde(default)]
         tool_input: Option<Vec<(String, Value)>>,
+        /// The tool input as sent, when the payload carried one that is not
+        /// an object, so that input still binds the command hash.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        raw_tool_input: Option<Value>,
         /// The payload's own `cwd`, when it was non-blank text.
         #[serde(default)]
         payload_cwd: Option<String>,
@@ -93,18 +111,36 @@ pub enum NativeExactActionQueryV1 {
         harness: String,
         #[serde(default)]
         command: Option<String>,
+        /// The payload's own `cwd`, which resolves files fed on standard input.
+        #[serde(default)]
+        cwd: Option<String>,
         workspace_bound: bool,
         facts: NativeReviewFactsV1,
         /// The verified decision receipt as Python decoded it.
         #[serde(default)]
         receipt: Option<Value>,
         policy_binding: NativePolicyBindingV1,
+        /// The workspace a `git push` approval is proved in.
+        #[serde(default)]
+        workspace: Option<String>,
+        /// The hook's stamped `guard_execution_environment`: the agent's own
+        /// `PATH`, `HOME` and variable names. Without it no launcher binds.
+        #[serde(default)]
+        execution_environment: Option<Value>,
     },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum NativeExactActionPayloadV1 {
+    LaunchEvidence {
+        evidence: Option<Box<NativeLaunchEvidenceV1>>,
+        unavailable_reason: Option<String>,
+    },
+    BashSubject {
+        subject: Option<Box<crate::NativeBashSubjectV1>>,
+        unavailable_reason: Option<String>,
+    },
     /// Exactly one of `token` and `once_only_reason` is set.
     ExactAction {
         token: Option<String>,
@@ -113,6 +149,23 @@ pub enum NativeExactActionPayloadV1 {
     ReviewBinding {
         binding: Option<String>,
     },
+}
+
+/// A digest of observed code/configuration, never an approval context token.
+/// This response has no execution owner and cannot grant any consent duration.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct NativeLaunchEvidenceV1 {
+    pub schema: String,
+    pub inventory_sha256: String,
+    pub code_identity_complete: bool,
+    pub unknown_edges: Vec<String>,
+    pub risk_verdict: String,
+    pub execution_binding: String,
+    pub duration: String,
+    pub scope: String,
+    pub can_run_once: bool,
+    pub can_persist: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

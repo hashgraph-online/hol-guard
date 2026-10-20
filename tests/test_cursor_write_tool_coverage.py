@@ -7,15 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
-    HOOK_SCRIPT_NAME,
-    live_guard_cursor_hooks_intercept,
-)
-from codex_plugin_scanner.guard.adapters.cursor_hook_events import (
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
     CURSOR_FILE_MUTATION_TOOLS,
     cursor_entry_guards_file_mutations,
     unsupported_cursor_hook_events,
+)
+from codex_plugin_scanner.guard.adapters.cursor_hook_config import (
+    HOOK_SCRIPT_NAME,
+    live_guard_cursor_hooks_intercept,
 )
 from codex_plugin_scanner.guard.runtime.actions import normalize_cursor_hook_payload
 from codex_plugin_scanner.guard.runtime.secret_file_request_services.request_artifacts import (

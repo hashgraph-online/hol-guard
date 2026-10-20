@@ -9,57 +9,88 @@
 //! `PreToolUse` allow or terminal block, any `PreToolUse` verdict in Watch,
 //! any reviewed `PostToolUse` of those harnesses, and a reviewed
 //! `UserPromptSubmit` with its receipt, for Codex always and for Claude Code
-//! in Watch, and a Cursor `PreToolUse` its hook client runs as an allow.
-//! The bounded bridge harnesses other than ZCode and Grok are answered as
-//! Codex is. The daemon never changes those responses. Every other request,
-//! and every `PreToolUse` verdict the daemon turns into an approval or a
-//! repair link, defers so the caller takes the daemon path, which is
-//! unchanged. A Claude Code sandbox requirement outside Watch is routed to
+//! in Watch, and a Cursor `PreToolUse` or `UserPromptSubmit` its hook client
+//! renders as it would the daemon's answer.
+//! The bounded bridge harnesses, Grok among them, are answered as Codex is.
+//! An Oh My Pi `PostToolUse` also carries the structured output mediation the
+//! daemon would attach, resolved from the managed-policy view the publisher
+//! bound.
+//! The daemon never changes those responses. Every other request, and every
+//! `PreToolUse` verdict the daemon turns into an approval or a repair link,
+//! defers so the caller takes the daemon path, which is unchanged; a
+//! reviewed `PreToolUse` outside Watch, Cursor's included, is answered from a
+//! saved decision, an approve-once or the approval inbox where
+//! `hook_direct_saved_decision.rs` reproduces the daemon. A Claude
+//! Code or ZCode sandbox requirement outside Watch is routed to
 //! contained execution as the daemon routes it, once the daemon has bound
 //! its sink command, and defers without one. While custom extension
 //! block rules exist, an allowed `PreToolUse` whose command launches a local
-//! CLI, or whose launch cannot be derived, also defers so the daemon reads
-//! that CLI's grant.
+//! CLI reads that CLI's grant as the daemon does and, when the grant blocks
+//! it, answers with the daemon's block, including the unverified block when
+//! the grant answer cannot be trusted. A launch the daemon rejects as
+//! malformed and a catalog read failure still defer.
 //!
 //! The daemon also records evidence after it answers. An answer is returned
 //! only once that evidence is queued for the daemon to drain.
 
 use crate::policy_store::policy_store_direct_lane::DirectLaneDefer;
 use crate::policy_store::PolicySnapshotStore;
+use edge::{direct_event, post_tool_answer, pre_tool_answer, prompt_answer, reviewed_edge};
 use guard_contracts::{
     GuardExecutionEnvironmentV1, GuardHookEnvelopeV2, GuardHookSourceMetadataV2,
     GUARD_HOOK_ENVELOPE_V2_SCHEMA,
 };
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, Instant};
 #[cfg(all(test, unix))]
-use workspace::{expanduser, normalized_workspace, normpath};
-use workspace::{python_strip, settled_directory, workspace_candidate};
+use workspace::normalized_workspace;
+use workspace::{expanduser, normpath, settled_directory, workspace_candidate};
 
 pub(crate) const HOOK_DIRECT_FEATURE: &str = "hook-direct-v1";
 /// The resident accepts the sink command that routes a sandbox requirement.
 pub(crate) const HOOK_DIRECT_CONTAINED_ROUTE_FEATURE: &str = "hook-direct-contained-route-v1";
+/// Advertised once the resident answers a Claude PermissionRequest from the
+/// session's notice, verified and marked seen with the bound integrity key.
+pub(crate) const HOOK_DIRECT_PERMISSION_NOTICE_FEATURE: &str = "hook-direct-permission-notice-v1";
+/// The resident answers a reviewed `PreToolUse` from a saved exact-action
+/// decision when the binding carries what the daemon reads it with.
+pub(crate) const HOOK_DIRECT_SAVED_DECISION_FEATURE: &str = "hook-direct-saved-decision-v1";
+/// The resident takes the bound managed-policy view, resolves an Oh My Pi
+/// `PostToolUse`'s structured output mediation from it, and answers the hook
+/// with the mediation the daemon would have attached.
+pub(crate) const HOOK_DIRECT_STRUCTURED_OUTPUT_FEATURE: &str = "hook-direct-structured-output-v1";
 const HOOK_DIRECT_RESULT_SCHEMA: &str = "guard-hook-direct-result.v1";
 /// The harnesses whose allow the daemon returns as the edge rendered it.
 /// The bounded bridge harnesses after Cursor have no harness-specific step
-/// on the daemon path for the hooks answered here.
-const DIRECT_HARNESSES: [&str; 10] = [
+/// on the daemon path for the hooks answered here; the `pi` module defers
+/// the Oh My Pi steps the resident cannot repeat.
+pub(crate) const DIRECT_HARNESSES: [&str; 14] = [
     "codex",
     CLAUDE_CODE,
     CURSOR,
     "copilot",
     "kimi",
     "devin",
+    ZCODE,
     "openclaw",
     "hermes",
     "cline",
     "opencode",
+    GROK,
+    "pi",
+    "omp",
 ];
 const TRANSITION_PROBE_FIELD: &str = "guard_transition_probe";
-const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
-const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = ["guard_payload_ref", "guard_source_ref"];
+pub(crate) const EXECUTION_ENVIRONMENT_FIELD: &str = "guard_execution_environment";
+const ENCRYPTED_PAYLOAD_FIELD: &str = "guard_payload_ref";
+const SOURCE_REFERENCE_FIELD: &str = "guard_source_ref";
+/// The model-visible content an Oh My Pi `PostToolUse` carries, which
+/// structured output mediation scans.
+const STRUCTURED_OUTPUT_FIELD: &str = "structured_output_json";
+const PAYLOAD_REFERENCE_FIELDS: [&str; 2] = [ENCRYPTED_PAYLOAD_FIELD, SOURCE_REFERENCE_FIELD];
 const EVENT_NAME_FIELDS: [&str; 6] = [
     "event",
     "eventName",
@@ -70,12 +101,12 @@ const EVENT_NAME_FIELDS: [&str; 6] = [
 ];
 const PRE_TOOL_USE: &str = "PreToolUse";
 const POST_TOOL_USE: &str = "PostToolUse";
-/// The denial the daemon adds a command-control repair link to.
-const REPAIRABLE_BLOCK_REASON: &str = "native_command_control_authority_block";
 const USER_PROMPT_SUBMIT: &str = "UserPromptSubmit";
 const USER_PROMPT_EVENT_NAMES: [&str; 3] = ["prompt", "userpromptsubmit", "userpromptsubmitted"];
 const CLAUDE_CODE: &str = "claude-code";
 const CURSOR: &str = "cursor";
+const ZCODE: &str = "zcode";
+const GROK: &str = "grok";
 const PRE_TOOL_EVENT_NAMES: [&str; 7] = [
     "pretool",
     "pretooluse",
@@ -115,7 +146,7 @@ pub(crate) struct HookDirectRequestV1 {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum HookDirectDefer {
+pub(crate) enum HookDirectDefer {
     HarnessUnsupported,
     HarnessUnmanaged,
     EventUnsupported,
@@ -128,17 +159,24 @@ enum HookDirectDefer {
     HomeMismatch,
     LocalCliRules,
     PromptNotice,
+    PermissionNotice,
     ExecutionEnvironmentInvalid,
     EvidenceUndrained,
     EvidenceFull,
     ContainedRouteFailed,
     EdgeFailed,
     NotAllow,
+    SavedDecision,
+    ReviewQueue,
     RuntimeSuperseded,
+    /// An Oh My Pi `PostToolUse` whose managed-policy view the binding does
+    /// not carry, or does not carry readably: only the daemon can resolve
+    /// what its structured output requires.
+    StructuredMediation,
 }
 
 impl HookDirectDefer {
-    fn code(self) -> &'static str {
+    pub(crate) fn code(self) -> &'static str {
         match self {
             Self::HarnessUnsupported => "direct_hook_harness_unsupported",
             Self::HarnessUnmanaged => "direct_hook_harness_unmanaged",
@@ -152,13 +190,17 @@ impl HookDirectDefer {
             Self::HomeMismatch => "direct_hook_home_mismatch",
             Self::LocalCliRules => "direct_hook_local_cli_rules",
             Self::PromptNotice => "direct_hook_prompt_notice",
+            Self::PermissionNotice => "direct_hook_permission_notice",
             Self::ExecutionEnvironmentInvalid => "direct_hook_execution_environment_invalid",
             Self::EvidenceUndrained => "direct_hook_evidence_undrained",
             Self::EvidenceFull => "direct_hook_evidence_full",
             Self::ContainedRouteFailed => "direct_hook_contained_route_failed",
             Self::EdgeFailed => "direct_hook_edge_failed",
             Self::NotAllow => "direct_hook_not_allow",
+            Self::SavedDecision => "direct_hook_saved_decision",
+            Self::ReviewQueue => "direct_hook_review_queue",
             Self::RuntimeSuperseded => "direct_hook_runtime_superseded",
+            Self::StructuredMediation => "direct_hook_structured_mediation",
         }
     }
 }
@@ -167,7 +209,7 @@ pub(crate) fn evaluate(
     request: HookDirectRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Vec<u8>, String> {
-    let body = match answer(request, policy_store) {
+    let body = match crate::hook_direct_counters::counted(request, policy_store, answer) {
         Ok(edge) => json!({
             "schema": HOOK_DIRECT_RESULT_SCHEMA,
             "outcome": "answer",
@@ -186,7 +228,7 @@ pub(crate) fn evaluate(
 /// resident by its executable path, so after an update replaces that file a
 /// resident still running the old image must leave hooks to the daemon. Once
 /// superseded it stays so, without hashing the new file on every hook.
-fn runtime_current() -> bool {
+pub(crate) fn runtime_current() -> bool {
     static SUPERSEDED: AtomicBool = AtomicBool::new(false);
     if SUPERSEDED.load(Ordering::Relaxed) {
         return false;
@@ -203,6 +245,9 @@ fn answer(
     request: HookDirectRequestV1,
     policy_store: &PolicySnapshotStore,
 ) -> Result<Value, HookDirectDefer> {
+    // The deadline every bounded step of this hook shares, as the daemon
+    // starts its own when the request arrives.
+    let started = Instant::now();
     if !DIRECT_HARNESSES.contains(&request.harness.as_str()) {
         return Err(HookDirectDefer::HarnessUnsupported);
     }
@@ -212,22 +257,29 @@ fn answer(
     let Value::Object(mut payload) = request.payload else {
         return Err(HookDirectDefer::PayloadUnsupported);
     };
-    let event = direct_event(&payload)?.ok_or(HookDirectDefer::EventUnsupported)?;
+    let Some(event) = direct_event(&payload)? else {
+        return lifecycle::answer(
+            &request.harness,
+            &request.guard_home,
+            &payload,
+            policy_store,
+        );
+    };
     let pre_tool = event == PRE_TOOL_USE;
     let cursor_harness = request.harness == CURSOR;
-    if cursor_harness && !pre_tool {
-        return Err(HookDirectDefer::EventUnsupported);
-    }
     if payload.contains_key(TRANSITION_PROBE_FIELD) {
         // A probe carries a request identity only the daemon assigns.
         return Err(HookDirectDefer::TransitionProbe);
     }
-    if PAYLOAD_REFERENCE_FIELDS
-        .iter()
-        .any(|field| payload.contains_key(*field))
+    // The edge refuses an encrypted payload reference and reviews a source
+    // reference only after a tool ran, reading the file as the daemon does.
+    if payload.contains_key(ENCRYPTED_PAYLOAD_FIELD)
+        || (payload.contains_key(SOURCE_REFERENCE_FIELD) && event != POST_TOOL_USE)
     {
         return Err(HookDirectDefer::PayloadUnsupported);
     }
+    let structured_mediation = pi::structured_mediation(&request.harness, event);
+    let source_ref_external_allowed = pi::source_ref_external_allowed(&request.harness);
     payload.remove("hook_env");
     // The daemon records the payload without `hook_env`, and with the
     // execution environment present even when the caller sent none.
@@ -245,7 +297,20 @@ fn answer(
     };
 
     let request_home = match request.home_dir {
-        Some(home_dir) => home_dir,
+        // The daemon sends the `home` query as the caller spelled it. The
+        // lane normalizes that spelling here so the binding's own home below
+        // decides whether this is the home the lane was published for. It is
+        // settled lexically, the way the daemon settles a home: asking the
+        // filesystem to canonicalize it would refuse a home that simply is
+        // not mounted on this host, which is a verdict the daemon never
+        // reaches. A spelling that cannot be normalized defers, and the
+        // daemon path refuses and audits it there.
+        Some(home_dir) => {
+            let bound = policy_store
+                .direct_lane_home_dir()
+                .ok_or(HookDirectDefer::BindingIncomplete)?;
+            normpath(&expanduser(&home_dir, &bound)?)?
+        }
         None => policy_store
             .direct_lane_home_dir()
             .ok_or(HookDirectDefer::BindingIncomplete)?,
@@ -254,8 +319,17 @@ fn answer(
         .ok_or(HookDirectDefer::WorkspaceMissing)?;
     let workspace = settled_directory(&candidate)?;
     let (snapshot, binding) = policy_store
-        .admit_direct_hook(&workspace)
+        .admit_direct_hook_or_subdirectory(&workspace)
         .map_err(HookDirectDefer::Lane)?;
+    // The daemon resolves what the managed policy requires of this hook's
+    // structured output from the config it loads. The resident resolves the
+    // same thing from the view the publisher bound, and mediates once the
+    // edge has decided; without a resolvable view it has nothing to mediate
+    // against and leaves the hook to the daemon.
+    let structured_resolution = structured_mediation
+        .then(|| pi::resolution(&request.harness, binding.structured_output_config.as_ref()))
+        .map(|resolution| resolution.ok_or(HookDirectDefer::StructuredMediation))
+        .transpose()?;
 
     let home_dir = binding
         .home_dir
@@ -301,23 +375,27 @@ fn answer(
 
     // Only a `PreToolUse` under custom rules reads its payload after the edge.
     let rule_payload = (pre_tool && custom_rules).then(|| payload.clone());
-    // Claude Code applies `updatedInput`, so the daemon routes its sandbox
-    // requirements to contained execution with the sink command it binds.
-    let contained = pre_tool && request.harness == CLAUDE_CODE;
+    // Claude Code and ZCode apply `updatedInput`, so the daemon routes their
+    // sandbox requirements to contained execution with the sink command it
+    // binds.
+    let contained = pre_tool && (request.harness == CLAUDE_CODE || request.harness == ZCODE);
     let sink_command = binding.contained_sink_command.clone().filter(|_| contained);
     let guard_home = request.guard_home.clone();
+    // The daemon reads a reviewed `PreToolUse` against the exact-action
+    // decisions the user saved once no custom grant applies to its command,
+    // which the saved-decision read checks against the store it reads.
+    let saved_payload = (pre_tool && !recording_only).then(|| payload.clone());
+    let deadline_budget_ms = request
+        .deadline_budget_ms
+        .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
+        .clamp(1, MAX_DEADLINE_BUDGET_MS);
     let envelope = GuardHookEnvelopeV2 {
         schema: GUARD_HOOK_ENVELOPE_V2_SCHEMA.to_owned(),
         request_id: None,
         harness: request.harness.clone(),
         event: event.to_owned(),
         raw_payload: Value::Object(payload),
-        deadline_budget_ms: Some(
-            request
-                .deadline_budget_ms
-                .unwrap_or(DEFAULT_DEADLINE_BUDGET_MS)
-                .clamp(1, MAX_DEADLINE_BUDGET_MS),
-        ),
+        deadline_budget_ms: Some(deadline_budget_ms),
         policy_generation: snapshot.generation,
         policy_snapshot: json!({
             "generation": snapshot.generation,
@@ -328,59 +406,130 @@ fn answer(
             cwd: Some(workspace.clone()),
             home_dir: request_home.clone(),
             guard_home: request.guard_home,
-            source_ref_external_allowed: false,
+            source_ref_external_allowed,
             execution_environment,
         },
         recording_only,
     };
-    let edge = crate::edge::evaluate_envelope_with_store(envelope, policy_store)
-        .map_err(|_| HookDirectDefer::EdgeFailed)?;
+    let (edge, fence_wait) = fence::evaluate(envelope, policy_store)?;
     // Removed again unless the answer that runs it is returned.
     let mut snapshot = None;
-    let answered = match event {
-        PRE_TOOL_USE if cursor_harness => cursor::answer(&edge, recording_only)?,
+    let mut answered = match event {
         // Watch never pauses or repairs a call: the daemon records the
         // edge's non-blocking response for every verdict, as the drain does.
-        PRE_TOOL_USE if recording_only => reviewed_edge(&edge, PRE_TOOL_USE)?,
-        PRE_TOOL_USE => {
-            let mut answered = pre_tool_answer(&edge, contained && sink_command.is_none())?;
-            if let Some(command) = sink_command.as_deref() {
-                let target = contained::SinkTarget {
-                    command,
+        PRE_TOOL_USE if recording_only && !cursor_harness => reviewed_edge(&edge, PRE_TOOL_USE)?,
+        PRE_TOOL_USE => match (
+            if cursor_harness {
+                cursor::answer(&edge, recording_only)
+            } else {
+                pre_tool_answer(&edge, contained && sink_command.is_none())
+            },
+            saved_payload.as_ref(),
+        ) {
+            // The daemon returns a saved decision's response as is.
+            (Err(HookDirectDefer::NotAllow), Some(payload)) => {
+                let context = saved_decision::Context {
                     harness: &request.harness,
-                    guard_home: &guard_home,
-                    home_dir: &request_home,
+                    payload,
+                    recorded_payload: &evidence_payload,
                     workspace: &workspace,
+                    home_dir: &request_home,
+                    guard_home: &guard_home,
+                    binding: &binding,
                 };
-                if let Some((routed, written)) =
-                    contained::route(&answered["harness_response"], &evidence_payload, &target)?
-                {
-                    answered["harness_response"] = routed;
-                    snapshot = Some(written);
-                }
+                saved_decision::answer(&edge, &context)?
             }
-            answered
-        }
+            (passed, _) => {
+                let mut answered = passed?;
+                if let Some(command) = sink_command.as_deref() {
+                    let target = contained::SinkTarget {
+                        command,
+                        harness: &request.harness,
+                        guard_home: &guard_home,
+                        home_dir: &request_home,
+                        workspace: &workspace,
+                    };
+                    if let Some((routed, written)) =
+                        contained::route(&answered["harness_response"], &evidence_payload, &target)?
+                    {
+                        answered["harness_response"] = routed;
+                        snapshot = Some(written);
+                    }
+                }
+                answered
+            }
+        },
         POST_TOOL_USE => post_tool_answer(&edge)?,
         _ => prompt_answer(&edge, prompt_notice)?,
     };
-    if local_cli::defers_for_custom_rule(
-        &answered,
-        rule_payload.as_ref(),
-        &workspace,
-        &request_home,
-    ) {
-        return Err(HookDirectDefer::LocalCliRules);
+    if let Some(resolution) = structured_resolution {
+        let result = answered["result"].clone();
+        // The edge's own receipt, which the daemon mediates against once it
+        // has recorded it; the resident queues it for the same drain.
+        let receipt = answered.get("receipt").cloned().unwrap_or(Value::Null);
+        let content = evidence_payload
+            .get(STRUCTURED_OUTPUT_FIELD)
+            .cloned()
+            .unwrap_or(Value::Null);
+        let deadline = started + Duration::from_millis(deadline_budget_ms);
+        let context = pi::Mediation {
+            harness: &request.harness,
+            resolution: &resolution,
+            result: &result,
+            receipt: &receipt,
+            content: &content,
+            recording_only,
+            deadline,
+        };
+        // Readmitting the workspace settles an ACK the publisher may still be
+        // writing, which is a wait of its own. That wait is capped by the
+        // deadline, and past the deadline it can no longer change the answer,
+        // so the recheck reports no binding and `mediate_finish` withholds on
+        // the deadline it has already missed.
+        let refresh = || {
+            if Instant::now() >= deadline {
+                return Value::Null;
+            }
+            policy_store
+                .admit_direct_hook_or_subdirectory_by(&workspace, deadline)
+                .ok()
+                .and_then(|(_, refreshed)| {
+                    pi::resolution(
+                        &request.harness,
+                        refreshed.structured_output_config.as_ref(),
+                    )
+                })
+                .map_or(Value::Null, |refreshed| pi::resolved_binding(&refreshed))
+        };
+        if let Some(mediation) = pi::mediate(&context, refresh) {
+            answered["harness_response"]["structured_content_mediation"] = mediation;
+        }
+    }
+    let rule_check = local_cli::RuleCheck {
+        payload: rule_payload.as_ref(),
+        harness: &request.harness,
+        workspace: &workspace,
+        home_dir: &request_home,
+        guard_home: &guard_home,
+        recording_only,
+    };
+    // The daemon's custom block replaces the edge response before it routes
+    // a sandbox requirement, so a block also drops any routed snapshot.
+    if let Some(blocked) = local_cli::custom_rule_response(&answered, &rule_check)
+        .map_err(|()| HookDirectDefer::LocalCliRules)?
+    {
+        answered["harness_response"] = blocked;
+        snapshot = None;
     }
     let evidence = json!({
         "event": event,
         "harness": request.harness,
-        "workspace": workspace,
-        "home_dir": request_home,
+        "workspace": workspace, "home_dir": request_home,
         "payload": Value::Object(evidence_payload),
         "receipt": answered.get("receipt").cloned().unwrap_or(Value::Null),
         "harness_response": answered["harness_response"].clone(),
     });
+    let evidence = fence::with_wait(evidence, fence_wait);
     if !policy_store.direct_evidence().offer(evidence) {
         return Err(HookDirectDefer::EvidenceFull);
     }
@@ -390,122 +539,26 @@ fn answer(
     Ok(answered)
 }
 
-/// The edge result for `event`, when it carries the result and harness
-/// response the daemon reads.
-fn reviewed_edge(edge: &[u8], event: &str) -> Result<Value, HookDirectDefer> {
-    let parsed: Value = serde_json::from_slice(edge).map_err(|_| HookDirectDefer::EdgeFailed)?;
-    if parsed.get("event_name").and_then(Value::as_str) != Some(event)
-        || !parsed.get("result").is_some_and(Value::is_object)
-        || !parsed.get("harness_response").is_some_and(Value::is_object)
-    {
-        return Err(HookDirectDefer::EdgeFailed);
-    }
-    Ok(parsed)
-}
-
-/// The edge result to return as is, when the daemon would pass it through
-/// unchanged:
-///
-/// - an allow, with an allow or warn floor. The daemon asks for approval
-///   only on review and require-reapproval floors, so a warn is recorded and
-///   run like an allow.
-/// - a terminal block or sandbox requirement. The daemon only adds a repair
-///   link to a command-control authority block and routes a Claude Code
-///   sandbox requirement to contained execution, which defers here with
-///   `contained` and is otherwise routed by the caller; any other denial keeps
-///   the edge's harness response. A saved approval never lowers a terminal
-///   action, and the daemon checks custom block rules only against an allow.
-fn pre_tool_answer(edge: &[u8], contained: bool) -> Result<Value, HookDirectDefer> {
-    let parsed = reviewed_edge(edge, PRE_TOOL_USE)?;
-    let result = parsed.get("result");
-    let field = |name: &str| {
-        result
-            .and_then(|result| result.get(name))
-            .and_then(Value::as_str)
-    };
-    let passed_through = match (field("decision"), field("minimum_action")) {
-        (Some("allow"), Some("allow" | "warn")) => true,
-        (Some("deny" | "block"), Some("block")) => {
-            field("reason_code") != Some(REPAIRABLE_BLOCK_REASON)
-        }
-        (Some("deny" | "block"), Some("sandbox-required")) => !contained,
-        _ => false,
-    };
-    if !passed_through {
-        return Err(HookDirectDefer::NotAllow);
-    }
-    Ok(parsed)
-}
-
-/// The edge result to return as is: the daemon passes every reviewed
-/// `PostToolUse` of these harnesses through unchanged.
-fn post_tool_answer(edge: &[u8]) -> Result<Value, HookDirectDefer> {
-    reviewed_edge(edge, POST_TOOL_USE)
-}
-
-/// The edge result to return as is: the daemon passes a reviewed
-/// `UserPromptSubmit` through once it accepts the receipt, and answers one
-/// without a receipt as unavailable. With `notice`, the daemon adds Guard's
-/// Claude Code notice for exactly these actions and leaves any other
-/// response untouched.
-fn prompt_answer(edge: &[u8], notice: bool) -> Result<Value, HookDirectDefer> {
-    let parsed = reviewed_edge(edge, USER_PROMPT_SUBMIT)?;
-    if !parsed.get("receipt").is_some_and(Value::is_object) {
-        return Err(HookDirectDefer::EdgeFailed);
-    }
-    let action = parsed
-        .get("result")
-        .and_then(|result| result.get("minimum_action"))
-        .and_then(Value::as_str);
-    if notice
-        && matches!(
-            action,
-            Some("require-reapproval" | "block" | "sandbox-required")
-        )
-    {
-        return Err(HookDirectDefer::PromptNotice);
-    }
-    Ok(parsed)
-}
-
-/// The daemon's event name rule: the first non-blank name field decides, and
-/// a payload without one is a `PreToolUse`. Only the two tool events and a
-/// prompt can be answered here.
-fn direct_event(payload: &Map<String, Value>) -> Result<Option<&'static str>, HookDirectDefer> {
-    for field in EVENT_NAME_FIELDS {
-        let Some(value) = payload.get(field).and_then(Value::as_str) else {
-            continue;
-        };
-        let Some(stripped) = python_strip(value)? else {
-            continue;
-        };
-        let compact: String = stripped
-            .chars()
-            .filter(|character| !matches!(character, '_' | '-'))
-            .collect();
-        if !compact.is_ascii() {
-            return Ok(None);
-        }
-        let compact = compact.to_ascii_lowercase();
-        return Ok(if PRE_TOOL_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(PRE_TOOL_USE)
-        } else if POST_TOOL_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(POST_TOOL_USE)
-        } else if USER_PROMPT_EVENT_NAMES.contains(&compact.as_str()) {
-            Some(USER_PROMPT_SUBMIT)
-        } else {
-            None
-        });
-    }
-    Ok(Some(PRE_TOOL_USE))
-}
-
+#[path = "hook_direct_claude_permission_text.rs"]
+pub(crate) mod claude_permission_text;
+#[path = "hook_direct_claude_prompt_text.rs"]
+mod claude_prompt_text;
 #[path = "hook_direct_contained.rs"]
-mod contained;
+pub(crate) mod contained;
 #[path = "hook_direct_cursor.rs"]
 mod cursor;
+#[path = "hook_direct_edge.rs"]
+mod edge;
+#[path = "hook_direct_fence.rs"]
+mod fence;
+#[path = "hook_direct_lifecycle.rs"]
+mod lifecycle;
 #[path = "hook_direct_local_cli.rs"]
-mod local_cli;
+pub(crate) mod local_cli;
+#[path = "hook_direct_pi.rs"]
+mod pi;
+#[path = "hook_direct_saved_decision.rs"]
+pub(crate) mod saved_decision;
 #[path = "hook_direct_workspace.rs"]
 mod workspace;
 

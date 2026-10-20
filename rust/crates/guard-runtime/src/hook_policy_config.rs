@@ -100,7 +100,11 @@ fn posture_stops(
     };
     matches!(risk_class, "guard_bypass" | "encoded_exfiltration")
         || (risk_class == "prompt_injection" && art.hard_block && strong)
-        || (risk_class == "persistence" && art.writes_launch_agent)
+        || (risk_class == "persistence"
+            && (art.writes_launch_agent
+                || crate::persistence_action_class::action_class_writes_persistence_agent(
+                    art.action_class.as_deref(),
+                )))
         || (risk_class == "malicious_skill" && art.skill_is_known_bad)
 }
 
@@ -124,7 +128,7 @@ fn apply_explicit(
     events: &mut Vec<Value>,
 ) -> GuardAction {
     let resolved = typed(action).unwrap_or(GuardAction::RequireReapproval);
-    if !posture_stops(config, risk_class, Some(art), art.confidence_strong) {
+    if !posture_stops(config, risk_class, Some(art), art.confidence_strong()) {
         return resolved;
     }
     if resolved != GuardAction::Block {

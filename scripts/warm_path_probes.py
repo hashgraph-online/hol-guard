@@ -6,8 +6,10 @@ same probe code runs unchanged against any source revision:
 * ``hook``: install the Claude Code hooks into a throwaway home, then execute the
   installed PreToolUse handler exactly as the harness would (one process per
   call, benign Bash payload on stdin) and time spawn to exit.
-* ``mcp``: install the Codex MCP proxy around a stdlib canary server, keep one
-  proxy session open, and time each non-package ``tools/call`` round trip.
+* ``mcp``: install the Codex MCP proxy around a stdlib canary server, ensure the
+  daemon and run one untimed warm-up session so every version reaches its
+  installed steady state, then keep one proxy session open and time each
+  non-package ``tools/call`` round trip.
 
 Linux only for resource accounting; nothing here changes product behavior.
 """
@@ -18,7 +20,6 @@ import json
 import os
 import queue
 import resource
-import signal
 import subprocess
 import threading
 import time
@@ -26,9 +27,9 @@ from collections import Counter
 from pathlib import Path
 
 import tomllib
+from warm_path_services import alive_pids, ensure_daemon, role_cpu_ms_per_call, service_snapshot, stop_services
 from warm_path_stats import describe
 
-_CLK_TCK = os.sysconf("SC_CLK_TCK") if hasattr(os, "sysconf") else 100
 _CALL_TIMEOUT_SECONDS = 30
 _BENIGN_HOOK_PAYLOAD = {
     "session_id": "warm-path-probe",
@@ -52,102 +53,6 @@ def clean_env(python: Path, home: Path) -> dict[str, str]:
     env["XDG_DATA_HOME"] = str(home / ".local" / "share")
     env["PATH"] = f"{python.parent}{os.pathsep}{env.get('PATH', '')}"
     return env
-
-
-def alive_pids() -> set[int]:
-    return {int(entry) for entry in os.listdir("/proc") if entry.isdigit()}
-
-
-def _ancestors() -> set[int]:
-    chain: set[int] = {os.getpid()}
-    pid = os.getppid()
-    while pid > 1 and pid not in chain:
-        chain.add(pid)
-        try:
-            pid = int(Path(f"/proc/{pid}/stat").read_text(encoding="utf-8").rsplit(")", 1)[1].split()[1])
-        except (OSError, ValueError, IndexError):
-            break
-    return chain
-
-
-def guard_pids(baseline: set[int], root: Path) -> set[int]:
-    """Return live processes started since ``baseline`` that belong to the installed Guard."""
-
-    markers = (b"hol-guard", b"hol_guard", b"codex_plugin_scanner", str(root).encode())
-    excluded = _ancestors()
-    found: set[int] = set()
-    for pid in alive_pids() - baseline - excluded:
-        try:
-            command = Path(f"/proc/{pid}/cmdline").read_bytes()
-        except OSError:
-            continue
-        # The canary fixture is the measured workload's upstream, not Guard. Identify it by its own
-        # script argument (argv[1]), since its path may legitimately contain a Guard marker.
-        argv = command.split(b"\0")
-        if len(argv) > 1 and argv[1].endswith(b"mcp-canary-server.py"):
-            continue
-        if any(marker in command for marker in markers):
-            found.add(pid)
-    return found
-
-
-def _process_snapshot(pid: int) -> dict[str, object] | None:
-    try:
-        status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
-        stat = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8")
-        fds = len(os.listdir(f"/proc/{pid}/fd"))
-    except OSError:
-        return None
-    fields = {line.split(":", 1)[0]: line.split(":", 1)[1].strip() for line in status.splitlines() if ":" in line}
-    after_name = stat.rsplit(")", 1)[1].split()
-    ticks = int(after_name[11]) + int(after_name[12])
-    return {
-        "pid": pid,
-        "name": fields.get("Name", "?"),
-        "rss_kb": int(fields.get("VmRSS", "0 kB").split()[0]),
-        "threads": int(fields.get("Threads", "0")),
-        "fds": fds,
-        "cpu_s": ticks / _CLK_TCK,
-    }
-
-
-def service_snapshot(baseline: set[int], root: Path) -> dict[str, object]:
-    """Summarize Guard processes that appeared after ``baseline`` and are still alive."""
-
-    rows = [row for pid in sorted(guard_pids(baseline, root)) if (row := _process_snapshot(pid)) is not None]
-    return {
-        "processes": len(rows),
-        "names": sorted(Counter(str(row["name"]) for row in rows).items()),
-        "rss_mb": round(sum(int(row["rss_kb"]) for row in rows) / 1024, 2),
-        "threads": sum(int(row["threads"]) for row in rows),
-        "fds": sum(int(row["fds"]) for row in rows),
-        "cpu_s": round(sum(float(row["cpu_s"]) for row in rows), 4),
-    }
-
-
-def stop_services(cli: Path, env: dict[str, str], home: Path, guard_home: Path, baseline: set[int], root: Path) -> None:
-    subprocess.run(
-        [str(cli), "guard", "daemon", "stop", "--home", str(home), "--guard-home", str(guard_home), "--json"],
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=False,
-    )
-    leftovers = sorted(guard_pids(baseline, root))
-    for pid in leftovers:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            continue
-    deadline = time.monotonic() + 3.0
-    while time.monotonic() < deadline and (alive_pids() & set(leftovers)):
-        time.sleep(0.1)
-    for pid in alive_pids() & set(leftovers):
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except OSError:
-            continue
 
 
 def _describe_interpreter(cli: Path) -> str:
@@ -284,6 +189,7 @@ def run_hook_phase(cli: Path, env: dict[str, str], root: Path, *, warmup: int, s
         "warmup_ms": warmup_ms,
         "client_cpu_ms_per_call": client_cpu_ms / max(1, samples),
         "service_cpu_ms_per_call": service_cpu_ms / max(1, samples),
+        "service_cpu_ms_per_call_by_role": role_cpu_ms_per_call(before_service, after_service, samples),
         "service": after_service,
         "handler_shape": {"kind": "shell" if isinstance(handler, str) else "argv", "length": len(handler)},
     }
@@ -382,6 +288,67 @@ def _codex_proxy_command(home: Path) -> tuple[list[str], dict[str, str]]:
     }
 
 
+def _open_mcp_session(
+    argv: list[str], env: dict[str, str], cwd: Path, stderr_path: Path
+) -> tuple[_ProxySession, dict[str, object], float]:
+    """Spawn the installed launcher, initialize and list tools; return the session, init reply and ready ms."""
+
+    started = time.perf_counter_ns()
+    session = _ProxySession(argv, env, cwd, stderr_path)
+    try:
+        _, init = session.request(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-06-18",
+                    "capabilities": {},
+                    "clientInfo": {"name": "warm-path-probe", "version": "1"},
+                },
+            }
+        )
+        ready_ms = (time.perf_counter_ns() - started) / 1e6
+        session.notify({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        session.request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    except BaseException:
+        session.close()
+        raise
+    return session, init, ready_ms
+
+
+def _tool_call(session: _ProxySession, request_id: int) -> tuple[float, str]:
+    message = {
+        "jsonrpc": "2.0",
+        "id": request_id,
+        "method": "tools/call",
+        "params": {"name": "safe_echo", "arguments": {"text": "guard"}},
+    }
+    elapsed, response = session.request(message)
+    return elapsed, classify_mcp_response(response)
+
+
+def _warm_up_mcp(argv: list[str], env: dict[str, str], cwd: Path, stderr_path: Path) -> dict[str, object]:
+    """One untimed session (initialize, list, one call, close) before the timed one.
+
+    A server's first session may run under a different launcher than its later ones (the native
+    relay hands an unreported server to the Python proxy, which reports its catalog), so the timed
+    session must not be the first one any version sees.
+    """
+
+    started = time.perf_counter_ns()
+    session, init, _ = _open_mcp_session(argv, env, cwd, stderr_path)
+    try:
+        _, call_class = _tool_call(session, 3)
+    finally:
+        session.close()
+    return {
+        "initialize_class": "ok" if isinstance(init.get("result"), dict) else classify_mcp_response(init),
+        "call_class": call_class,
+        "elapsed_ms": (time.perf_counter_ns() - started) / 1e6,
+    }
+
+
 def run_mcp_phase(
     cli: Path, env: dict[str, str], root: Path, *, canary: Path, interpreter: str, warmup: int, samples: int
 ) -> dict[str, object]:
@@ -398,37 +365,18 @@ def run_mcp_phase(
     session: _ProxySession | None = None
     try:
         _run_install(cli, "codex", env, home, guard_home, workspace)
+        # Same installed steady state for every target: daemon up, and the server seen once.
+        daemon = ensure_daemon(cli, env, home, guard_home, workspace)
         argv, proxy_env = _codex_proxy_command(home)
-        started = time.perf_counter_ns()
-        session = _ProxySession(argv, {**env, **proxy_env}, workspace, root / "proxy.stderr")
-        _, init = session.request(
-            {
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-06-18",
-                    "capabilities": {},
-                    "clientInfo": {"name": "warm-path-probe", "version": "1"},
-                },
-            }
-        )
-        session_ready_ms = (time.perf_counter_ns() - started) / 1e6
-        session.notify({"jsonrpc": "2.0", "method": "notifications/initialized"})
-        session.request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+        session_env = {**env, **proxy_env}
+        warmup_session = _warm_up_mcp(argv, session_env, workspace, root / "warmup-session.stderr")
+        session, init, session_ready_ms = _open_mcp_session(argv, session_env, workspace, root / "proxy.stderr")
         next_id = 3
 
         def call() -> tuple[float, str]:
             nonlocal next_id
-            message = {
-                "jsonrpc": "2.0",
-                "id": next_id,
-                "method": "tools/call",
-                "params": {"name": "safe_echo", "arguments": {"text": "guard"}},
-            }
-            next_id += 1
-            elapsed, response = session.request(message)  # type: ignore[union-attr]
-            return elapsed, classify_mcp_response(response)
+            request_id, next_id = next_id, next_id + 1
+            return _tool_call(session, request_id)  # type: ignore[arg-type]
 
         warmup_ms = [call()[0] for _ in range(warmup)]
         before_service = service_snapshot(baseline, root)
@@ -452,5 +400,25 @@ def run_mcp_phase(
         "service_cpu_ms_per_call": (float(after_service["cpu_s"]) - float(before_service["cpu_s"]))
         * 1000
         / max(1, samples),
+        "service_cpu_ms_per_call_by_role": role_cpu_ms_per_call(before_service, after_service, samples),
         "service": after_service,
+        "setup": {"daemon_ensure": daemon, "warmup_session": warmup_session},
     }
+
+
+_SAVED_STATE_PROBE = """
+import json, sys
+from pathlib import Path
+from codex_plugin_scanner.guard import native_policy_snapshot_direct_lane_saved as saved
+from codex_plugin_scanner.guard.store import GuardStore
+state = saved._integrity_state(GuardStore(Path(sys.argv[1]), prime_policy_integrity=False))
+print(json.dumps({"environment": saved._environment() is not None, "integrity_state": state}))
+"""
+
+
+def saved_decision_inputs(python: Path, env: dict[str, str], guard_home: Path) -> str:
+    """What the publisher reads to bind saved decisions, which MCP relay decisions require (informational)."""
+
+    probe = [str(python), "-c", _SAVED_STATE_PROBE, str(guard_home)]
+    result = subprocess.run(probe, env=env, capture_output=True, text=True, timeout=60, check=False)
+    return (result.stdout or result.stderr).strip()[-400:]

@@ -333,51 +333,6 @@ class TestGeminiMultiScope:
         assert all(a.source_scope == "global" for a in result.artifacts)
 
 
-class TestGeminiHookCommandHelper:
-    def test_direct_command_returned_as_is(self) -> None:
-        entry = {"command": "my-hook.sh"}
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result == "my-hook.sh"
-
-    def test_nested_hook_command_extracted(self) -> None:
-        entry = {"hooks": [{"type": "command", "command": "nested-hook.sh"}]}
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result == "nested-hook.sh"
-
-    def test_multiple_nested_commands_joined_with_newline(self) -> None:
-        entry = {
-            "hooks": [
-                {"type": "command", "command": "hook-a.sh"},
-                {"type": "command", "command": "hook-b.sh"},
-            ]
-        }
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result == "hook-a.sh\nhook-b.sh"
-
-    def test_no_command_returns_none(self) -> None:
-        entry = {"type": "other", "data": "value"}
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result is None
-
-    def test_non_string_command_ignored(self) -> None:
-        entry = {"command": 42}
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result is None
-
-    def test_empty_nested_hooks_list_returns_none(self) -> None:
-        entry = {"hooks": []}
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result is None
-
-    def test_direct_and_nested_commands_both_collected(self) -> None:
-        entry = {
-            "command": "direct.sh",
-            "hooks": [{"type": "command", "command": "nested.sh"}],
-        }
-        result = GeminiHarnessAdapter._entry_hook_command(entry)
-        assert result == "direct.sh\nnested.sh"
-
-
 class TestGeminiAdapterContract:
     def test_adapter_has_setup_contract(self) -> None:
         contract = GeminiHarnessAdapter().setup_contract()

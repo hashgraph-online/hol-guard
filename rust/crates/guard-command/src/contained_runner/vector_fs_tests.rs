@@ -227,3 +227,26 @@ fn package_script_evidence_matches_python() {
         assert_eq!(evidence.binding_digest, framed(b"", &encoded), "{id}");
     }
 }
+
+/// The resident answers `_bounded_local_runner_chain_is_safe`'s one question
+/// through this predicate, so it has to agree with the evidence these vectors
+/// recorded from Python — including the Bun shapes that yield no evidence at
+/// all. The predicate always evaluates the fixture as Bun, so a vector recorded
+/// for another manager says nothing about it.
+#[test]
+fn the_bun_script_predicate_agrees_with_the_recorded_evidence() {
+    for case in section("package_script_evidence") {
+        if text(case, "manager") != "bun" {
+            continue;
+        }
+        let id = text(case, "id");
+        let workspace = Workspace::with_fixture(fixture_of(case));
+        let expected = &case["expected"];
+        let complete = !expected.is_null() && expected["status"] == "complete";
+        assert_eq!(
+            super::bun_script_evidence_complete(&strings(&case["argv"]), &workspace.path),
+            complete,
+            "{id}"
+        );
+    }
+}

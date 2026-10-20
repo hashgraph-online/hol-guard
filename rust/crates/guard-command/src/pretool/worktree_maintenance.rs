@@ -2,12 +2,16 @@
 //! unlocked linked worktree registered with the routed checkout. Neither
 //! starts a hook; the removal's internal status check is proven
 //! execution-free, and Git itself refuses to remove a worktree with local
-//! changes unless forced.
+//! changes unless forced. The removal may also run in a chain that first
+//! removes the links placed in the worktree and then reads what is left.
 
 use crate::{CanonicalCommandV1, CommandSegmentV1};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
+#[path = "worktree_maintenance_chain.rs"]
+pub(super) mod chain;
 
 enum Maintenance<'a> {
     Prune,
@@ -20,6 +24,9 @@ pub(super) fn exact_safe_command(
     deadline: Option<Instant>,
     execution_environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
 ) -> bool {
+    if model.segments.len() > 1 {
+        return chain::proven(model, context, deadline, execution_environment);
+    }
     if model.confidence != "exact"
         || model.path_overridden
         || !model.wrapper_chain.is_empty()

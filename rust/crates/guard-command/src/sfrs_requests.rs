@@ -266,7 +266,10 @@ pub(crate) fn extract_sensitive_file_write_request(
     None
 }
 
-fn artifact(
+/// The artifact wire every request artifact is sent on. The fields a request
+/// artifact never carries are still named, as their empty forms, so a reader
+/// that validates the shape sees one key set whatever built it.
+pub(crate) fn request_artifact_wire(
     artifact_id: String,
     name: String,
     harness: &str,
@@ -290,6 +293,21 @@ fn artifact(
         "metadata": metadata,
         "runtime_private_metadata": {},
     })
+}
+
+/// The last component of `path` for an artifact's display name, as the
+/// retired Python builders read it with `Path(...).name`: on Windows that
+/// splits on `\` as well as `/`, so a review names `id_rsa` rather than the
+/// whole path.
+pub(crate) fn artifact_file_name(path: &str) -> String {
+    let parsed = PyPath::new(path);
+    let name = parsed.name();
+    if cfg!(windows) {
+        let name = name.trim_end_matches('\\');
+        name.rsplit('\\').next().unwrap_or(name).to_owned()
+    } else {
+        name.to_owned()
+    }
 }
 
 /// `build_file_read_request_artifact`.
@@ -317,12 +335,12 @@ pub(crate) fn build_file_read_request_artifact(
         "runtime_request_summary": format!("Requests access to a sensitive local file: {family}."),
         "runtime_request_reason": request.path_match.reason,
     });
-    artifact(
+    request_artifact_wire(
         format!("{harness}:{source_scope}:file-read:{fingerprint}"),
         format!(
             "{} {}",
             request.tool_name,
-            PyPath::new(&request.path_match.path).name()
+            artifact_file_name(&request.path_match.path)
         ),
         harness,
         "file_read_request",
@@ -364,12 +382,12 @@ pub(crate) fn build_file_write_request_artifact(
         ),
         "runtime_request_reason": request.reason,
     });
-    artifact(
+    request_artifact_wire(
         format!("{harness}:{source_scope}:file-write:{fingerprint}"),
         format!(
             "{} {}",
             request.tool_name,
-            PyPath::new(&request.normalized_path).name()
+            artifact_file_name(&request.normalized_path)
         ),
         harness,
         "tool_action_request",

@@ -14,7 +14,7 @@ from codex_plugin_scanner.guard.cli.commands_support_codex_commands import (
     _codex_post_tool_command_is_read_only_source_inspection,
 )
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
-from codex_plugin_scanner.guard.runtime.kubernetes_commands import kubernetes_secret_read_source
+from codex_plugin_scanner.guard.native_shell_helpers import kubernetes_secret_read_source
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
@@ -29,7 +29,7 @@ def _network_secret_dump_command() -> str:
     return (
         "# Check the actual decoded values for the network-related keys\n"
         "kubectl --kubeconfig /Users/example/workspace/kubeconfig \\\n"
-        "  -n hol-points-portal-staging get secret hol-points-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
+        "  -n cloud-portal-staging get secret cloud-portal-env -o jsonpath='{.data}' 2>&1 | python3 -c \"\n"
         "import json, sys, base64\n"
         "data = json.loads(sys.stdin.read())\n"
         "network_keys = ['HEDERA_NETWORK', 'HOL_HEDERA_NETWORK', 'NEXT_PUBLIC_NETWORK', 'LEDGER_DEMO_NETWORK']\n"

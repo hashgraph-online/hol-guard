@@ -2,11 +2,48 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import os
+import stat
+from pathlib import Path, PureWindowsPath
 from typing import TYPE_CHECKING, cast
+
+from .native_guard_config import WORKSPACE_CONFIG_FILENAMES
 
 if TYPE_CHECKING:
     from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
+
+
+def _spelled_without_links(candidate: Path) -> bool:
+    """True when ``candidate`` reaches its directory through no link.
+
+    The overlay checks walk ``candidate`` and its parents as spelled, so a
+    symlink, junction or substituted drive would hide the real ancestors.
+    Windows also spells one directory several ways with no link between:
+    8.3 short names, such as the ``RUNNER~1`` temp root of hosted CI
+    runners, and letter case. ``realpath`` re-spells those, so there a path
+    also counts when it resolves on the same drive to as many components and
+    none of the components it names is a reparse point.
+    """
+
+    try:
+        final = os.path.realpath(candidate)
+    except (OSError, ValueError):
+        return False
+    if final == os.fspath(candidate):
+        return True
+    if os.name != "nt":
+        return False
+    resolved = PureWindowsPath(final)
+    if resolved.drive.upper() != candidate.drive.upper() or len(resolved.parts) != len(candidate.parts):
+        return False
+    for component in (candidate, *candidate.parents):
+        try:
+            attributes = os.lstat(component).st_file_attributes
+        except (AttributeError, OSError, ValueError):
+            return False
+        if attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT:
+            return False
+    return True
 
 
 class NativePolicySnapshotWorkspaceReadinessMixin:
@@ -28,18 +65,38 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
             return False
         candidate = publisher._resolved_workspace(workspace)
         with publisher._condition:
-            if candidate in publisher._workspace_paths:
+            # Only a new or deferred workspace needs the overlay scans below.
+            if candidate in publisher._workspace_paths and candidate not in publisher._deferred_workspace_paths:
                 return False
-            publisher._workspace_paths.add(candidate)
-            publisher._pending_workspace_paths.add(candidate)
-            # Re-read input files including this workspace's overlays.
-            publisher._input_fingerprint = None
+        file_less = publisher._file_less_canonical_workspace(candidate)
+        free_ancestors = file_less and publisher._overlay_free_ancestors(candidate)
+        with publisher._condition:
+            if candidate in publisher._workspace_paths:
+                if candidate not in publisher._deferred_workspace_paths or (
+                    file_less and publisher._covered_by_ack_locked(candidate, free_ancestors=free_ancestors)
+                ):
+                    return False
+                # A deferred workspace gained an overlay; it now needs its own ACK.
+                publisher._deferred_workspace_paths.discard(candidate)
+                registered = False
+            else:
+                publisher._workspace_paths.add(candidate)
+                publisher._pending_workspace_paths.add(candidate)
+                # Re-read input files including this workspace's overlays.
+                publisher._input_fingerprint = None
+                registered = True
+                if file_less and publisher._covered_by_ack_locked(candidate, free_ancestors=free_ancestors):
+                    # The current ACK already carries this workspace's policy.
+                    # A publish now would supersede the generation its hooks
+                    # are presenting, so it compiles with the next publish.
+                    publisher._deferred_workspace_paths.add(candidate)
+                    return True
             if publisher._closed:
-                return True
+                return registered
             publisher._queue_pending_workspace_publish_locked()
             publisher._condition.notify_all()
         publisher._publish_event.set()
-        return True
+        return registered
 
     def workspace_policy_pending(self, workspace: Path | None) -> bool:
         """True until an ACKed snapshot compiled this workspace's overlays."""
@@ -50,6 +107,70 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
         candidate = publisher._resolved_workspace(workspace)
         with publisher._condition:
             return candidate in publisher._pending_workspace_paths
+
+    def workspace_admissible_without_overlay(self, workspace: Path | None) -> bool:
+        """True when the ACKed snapshot already holds this pending workspace's policy.
+
+        A workspace config reads only that directory's own overlay files, and
+        the snapshot merges every overlay strictest-first over the home config.
+        A canonical directory that has no overlay file therefore contributes
+        nothing beyond the home config, so its hooks may use the current ACK
+        until a later publish compiles it. That holds below an already compiled
+        workspace, or where no ancestor holds an overlay; below an unsettled
+        overlay the directory waits, since that overlay joins the merge once it
+        settles. Any overlay entry, read error, symlink or junction keeps the
+        workspace gated on its own ACK.
+        """
+
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        if workspace is None:
+            return False
+        candidate = publisher._resolved_workspace(workspace)
+        with publisher._condition:
+            if candidate not in publisher._deferred_workspace_paths:
+                return False
+        if not publisher._file_less_canonical_workspace(candidate):
+            return False
+        free_ancestors = publisher._overlay_free_ancestors(candidate)
+        with publisher._condition:
+            return candidate in publisher._deferred_workspace_paths and publisher._covered_by_ack_locked(
+                candidate, free_ancestors=free_ancestors
+            )
+
+    def _covered_by_ack_locked(self, candidate: Path, *, free_ancestors: bool) -> bool:
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        if publisher._under_settled_workspace_locked(candidate):
+            return True
+        return free_ancestors and publisher._acked and publisher._snapshot is not None
+
+    def _under_settled_workspace_locked(self, candidate: Path) -> bool:
+        publisher = cast("NativePolicySnapshotPublisher", self)
+        settled = publisher._workspace_paths - publisher._pending_workspace_paths
+        return any(candidate != parent and candidate.is_relative_to(parent) for parent in settled)
+
+    @staticmethod
+    def _file_less_canonical_workspace(candidate: Path) -> bool:
+        if not _spelled_without_links(candidate):
+            return False
+        return NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(candidate)
+
+    @staticmethod
+    def _overlay_free_ancestors(candidate: Path) -> bool:
+        return candidate.is_absolute() and all(
+            NativePolicySnapshotWorkspaceReadinessMixin._overlay_absent(parent) for parent in candidate.parents
+        )
+
+    @staticmethod
+    def _overlay_absent(directory: Path) -> bool:
+        for name in WORKSPACE_CONFIG_FILENAMES:
+            try:
+                _ = os.lstat(directory / name)
+            except FileNotFoundError:
+                continue
+            except (OSError, ValueError):
+                return False
+            return False
+        return True
 
     def _queue_pending_workspace_publish_locked(self) -> None:
         publisher = cast("NativePolicySnapshotPublisher", self)
@@ -69,6 +190,7 @@ class NativePolicySnapshotWorkspaceReadinessMixin:
 
         publisher = cast("NativePolicySnapshotPublisher", self)
         publisher._pending_workspace_paths.difference_update(compiled_workspaces)
-        if publisher._pending_workspace_paths:
+        publisher._deferred_workspace_paths.intersection_update(publisher._pending_workspace_paths)
+        if publisher._pending_workspace_paths - publisher._deferred_workspace_paths:
             publisher._queue_pending_workspace_publish_locked()
             publisher._publish_event.set()

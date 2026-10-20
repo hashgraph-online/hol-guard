@@ -164,7 +164,8 @@ def test_tsx_requires_a_local_loader_and_a_workspace_script(tmp_path, monkeypatc
 
 
 def test_group_or_world_writable_transform_image_is_rejected(tmp_path, monkeypatch):
-    """Another local account can replace a 0777 image before the private copy."""
+    """Another local account can replace a 0777 image it can reach before the private copy."""
+    monkeypatch.setattr(esbuild, "_private_ancestor", lambda _path: False)
     monkeypatch.setattr(esbuild.sys, "platform", "darwin")
     monkeypatch.setattr(esbuild.platform, "machine", lambda: "arm64")
     package = tmp_path / "node_modules/esbuild"

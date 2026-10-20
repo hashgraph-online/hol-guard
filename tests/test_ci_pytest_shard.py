@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from scripts.ci.build_pytest_shard_plan import SCHEDULING_ONLY_NODE_IDS
+from scripts.ci.build_pytest_shard_plan import SANDBOX_GATE_FILES, SCHEDULING_ONLY_NODE_IDS
 from tests.support.ci_workflow import expand_ci_job_actions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,14 +67,14 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert payload["env"]["CI_PYTHON_VERSION"] == "3.12.14"
     assert "test-plan" not in jobs
     assert "tests" not in jobs
-    assert jobs["coverage-plan"]["needs"] == "native-command-evaluators"
+    assert "coverage-plan" not in jobs
     for name in (
-        "coverage-plan",
         "compatibility",
         "cisco-full",
         "cross-platform",
         "windows-packaged-daemon",
         "macos-skill-identity",
+        "macos-gates",
     ):
         needs = jobs[name]["needs"]
         assert "native-command-evaluators" in (needs if isinstance(needs, list) else [needs])
@@ -104,21 +104,23 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "if" not in native_steps[upload_index]
 
     for planner, executor, version, env_name, count, width in (
-        ("coverage-plan", "coverage", "3.12", "CI_PYTHON_VERSION", 256, 3),
+        ("native-command-evaluators", "coverage", "3.12", "CI_PYTHON_VERSION", 64, 3),
     ):
         plan_job = jobs[planner]
         execution_job = jobs[executor]
         assert set(execution_job["needs"]) == {planner, "plan", "native-command-evaluators"}
         # Coverage consumes the planner-emitted shard indices via a dynamic matrix
         # rather than a static literal range, so assert the expression references
-        # the coverage-plan output and that the planner emits the expected count.
+        # the native-command-evaluators output and that the planner emits the expected count.
         raw_index = execution_job["strategy"]["matrix"]["shard-index"]
-        assert "fromJSON" in str(raw_index) and "coverage-plan.outputs.shard-indices" in str(raw_index)
+        assert "fromJSON" in str(raw_index) and "native-command-evaluators.outputs.shard-indices" in str(raw_index)
         for job in (plan_job, execution_job):
             setup = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/setup-ci-python")
             assert setup["with"]["python-version"] == "${{ env." + env_name + " }}"
         plan = next(step for step in plan_job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
         assert plan["with"]["python-version"] == version
+        assert plan["timeout-minutes"] == 5
+        assert plan_job["timeout-minutes"] == 12 + plan["timeout-minutes"]
         # shard-count is a `${{ env.NAME }}` reference into the workflow env block.
         raw_count = str(plan["with"]["shard-count"])
         env_ref = re.fullmatch(r"\$\{\{\s*env\.([A-Z0-9_]+)\s*\}\}", raw_count)
@@ -161,7 +163,7 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     for node in SCHEDULING_ONLY_NODE_IDS:
         assert node in selected or node.split("[", 1)[0] in selected or node.split("::", 1)[0] in selected
     redundant_deselections = re.findall(r"--deselect '?([^'\s]+)'?", coverage_job)
-    assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS
+    assert set(redundant_deselections) <= SCHEDULING_ONLY_NODE_IDS | SANDBOX_GATE_FILES
     assert coverage_job.count("--deselect ") == len(set(redundant_deselections))
     assert {STORAGE_LIVENESS_NODE} <= SCHEDULING_ONLY_NODE_IDS
     assert jobs["scheduling-sensitive"]["strategy"]["matrix"]["python-version"] == ["3.12.14", "3.14.7"]
@@ -174,22 +176,30 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
     assert "--cov" not in scheduling_job
 
     candidate = jobs["duration-manifest-candidate"]
-    assert candidate["needs"] == ["coverage", "coverage-plan"]
-    assert candidate["if"] == "needs.coverage.result == 'success'"
-    assert 'if [ "${#reports[@]}" -ne "${{ needs.coverage-plan.outputs.shard-count }}" ];' in "\n".join(
+    assert candidate["needs"] == ["coverage", "native-command-evaluators"]
+    # Main's skipped PR planner must not trigger an implicit success() check.
+    # Cancellation and incomplete producers must still prevent publication.
+    assert " ".join(candidate["if"].split()) == (
+        "!cancelled() && needs.coverage.result == 'success' && needs.native-command-evaluators.result == 'success'"
+    )
+    assert 'if [ "${#reports[@]}" -ne "${{ needs.native-command-evaluators.outputs.shard-count }}" ];' in "\n".join(
         step.get("run", "") for step in candidate["steps"]
     )
     sonar_job = _workflow_job(workflow, "sonar", "scheduling-sensitive")
     assert "bash scripts/ci/prepare_sonar_analysis.sh" in sonar_job
     sonar_setup = (ROOT / "scripts/ci/prepare_sonar_analysis.sh").read_text(encoding="utf-8")
     assert 'test "${#reports[@]}" -eq "${CI_PYTEST_COVERAGE_SHARDS:-128}"' in sonar_setup
-    assert "vars.SONAR_CI_ENABLED == 'true'" in sonar_job
+    assert "vars.SONAR_CI_ENABLED == 'true'" in jobs["sonar-context"]["if"]
+    assert set(jobs["sonar"]["needs"]) == {"sonar-context", "sonar-rust-coverage", "native-workspace", "coverage"}
+    assert "needs.sonar-rust-coverage.result == 'success'" in jobs["sonar"]["if"]
+    assert "needs.native-workspace.result == 'success'" in jobs["sonar"]["if"]
+    assert "needs.coverage.result == 'success'" in jobs["sonar"]["if"]
     gate = jobs["ci-python-312"]
     assert gate["name"] == "ci (3.12)"
     assert gate["if"] == "always()"
     assert set(gate["needs"]) == {
         "quality",
-        "coverage-plan",
+        "native-command-evaluators",
         "coverage",
         "compatibility",
         "scheduling-sensitive",
@@ -201,15 +211,28 @@ def test_ci_workflow_cancels_stale_runs_and_uses_precomputed_affinity_shards() -
         ("compatibility", "ci-python-312", 1),
         ("cross-platform", "windows-native-runtime", 2),
         ("windows-packaged-daemon", "macos-native-runtime", 2),
-        ("macos-skill-identity", "required", 2),
+        ("macos-skill-identity", "macos-gates", 2),
+        ("macos-gates", "required", 2),
     )
     for job_name, next_job_name, expected_count in cache_consumers:
         job = _workflow_job(workflow, job_name, next_job_name)
         assert job.count("save-cache: false") >= expected_count
 
 
+def test_ci_jobs_cannot_inherit_the_six_hour_default_timeout() -> None:
+    """A missing timeout-minutes is GitHub's 360-minute default."""
+
+    jobs = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8"))["jobs"]
+    missing = sorted(name for name, job in jobs.items() if "timeout-minutes" not in job)
+    assert missing == []
+    # Observed successes: dashboard ~79s, cross-platform Windows ~103s, cisco-full ~213s.
+    assert jobs["dashboard"]["timeout-minutes"] == 10
+    assert jobs["cisco-full"]["timeout-minutes"] == 15
+    assert jobs["cross-platform"]["timeout-minutes"] == 15
+
+
 @pytest.mark.parametrize(
-    "failed_dependency", ["COVERAGE_PLAN_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
+    "failed_dependency", ["NATIVE_PRODUCER_RESULT", "COVERAGE_RESULT", "SCHEDULING_SENSITIVE_RESULT"]
 )
 @pytest.mark.parametrize("result", ["failure", "skipped", "cancelled"])
 def test_required_python_gate_rejects_incomplete_coverage_or_timing_proofs(failed_dependency: str, result: str) -> None:
@@ -247,31 +270,54 @@ def test_sonar_scope_includes_native_rust_workspace() -> None:
     assert "rust/**/*_tests.rs" in properties["sonar.cpd.exclusions"]
 
 
-def test_native_preflight_stops_known_contract_failures_before_shard_fanout() -> None:
-    document = yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text())
+def test_native_contract_preflight_is_required_without_delaying_artifact_fanout() -> None:
+    document = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))
     producer = document["jobs"]["native-command-evaluators"]
     steps = producer["steps"]
     rust = next(step for step in steps if step.get("uses") == "./.github/actions/setup-rust")
     assert "rustfmt" in rust["with"]["components"].split()
-    formatting = next(i for i, step in enumerate(steps) if "cargo fmt" in step.get("run", ""))
-    compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
-    preflight = next(
-        i for i, step in enumerate(steps) if step.get("name") == "Check native contract groups before pytest fan-out"
+    formatting = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Check native formatting before compilation"
     )
+    assert 'cargo +"$toolchain" fmt --manifest-path rust/Cargo.toml --all --check' in steps[formatting]["run"]
+    assert "if" not in steps[formatting]
+    compilation = next(i for i, step in enumerate(steps) if "cargo build" in step.get("run", ""))
+    verification = next(i for i, step in enumerate(steps) if "verify_native_command_program.py" in step.get("run", ""))
     uploads = [i for i, step in enumerate(steps) if step.get("uses", "").startswith("actions/upload-artifact@")]
-    assert formatting < compilation < preflight < min(uploads)
-    for index in (formatting, preflight):
+    assert formatting < compilation < verification < min(uploads)
+    for index in (formatting, verification):
         assert "if" not in steps[index]
         assert not steps[index].get("continue-on-error", False)
-    check = steps[preflight]
+
+    # Native contracts still block the required result, but do not withhold
+    # already-verified compiler/runtime artifacts from the coverage fan-out.
+    gates = document["jobs"]["native-gates"]
+    assert gates["needs"] == "native-command-evaluators"
+    checks = [
+        step for step in gates["steps"] if step.get("name") == "Check native contract groups after artifact fan-out"
+    ]
+    assert len(checks) == 1
+    check = checks[0]
+    assert check["if"] == "matrix.shard-index == 0"
+    assert not check.get("continue-on-error", False)
     assert "test_native_contract_validates_every_authored_signature_without_rewriting_evidence" in check["run"]
     assert "test_install_writes_managed_extension_that_denies_on_hook_errors" in check["run"]
     assert "test_managed_extension_fails_safe_on_ambiguous_success_payloads" in check["run"]
     assert "test_pi_legacy_source_contract" not in check["run"]
     assert "--ignore" not in check["run"] and "--deselect" not in check["run"]
     assert check["env"]["HOL_GUARD_NATIVE_REGRESSION"] == "1"
-    assert document["jobs"]["coverage-plan"]["needs"] == "native-command-evaluators"
+    assert "native-gates" in document["jobs"]["required"]["needs"]
+    assert '"native-gates"' in document["jobs"]["required"]["steps"][0]["run"]
+
+    assert "coverage-plan" not in document["jobs"]
+    planning = next(i for i, step in enumerate(steps) if step.get("uses") == "./.github/actions/plan-pytest")
+    binding = next(
+        i for i, step in enumerate(steps) if step.get("name") == "Bind the compiled native runtime for test discovery"
+    )
+    assert verification < max(uploads) < binding < planning
+    assert "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" in steps[binding]["run"]
+    assert sum(step.get("uses") == "./.github/actions/setup-ci-python" for step in steps) == 1
     assert (
         document["jobs"]["coverage"]["strategy"]["matrix"]["shard-index"]
-        == "${{ fromJSON(needs.coverage-plan.outputs.shard-indices) }}"
+        == "${{ fromJSON(needs.native-command-evaluators.outputs.shard-indices) }}"
     )

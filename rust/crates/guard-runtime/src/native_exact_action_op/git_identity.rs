@@ -5,6 +5,8 @@ use serde_json::{json, Value};
 use super::context::Ctx;
 use super::fs_path;
 use super::git_config::git_config_digest;
+#[cfg(windows)]
+use super::git_windows;
 use super::reasons::{Proof, MUTABLE_LAUNCHER, UNPROVEN_LAUNCH};
 
 const GLOBAL_OPTIONS: [&str; 2] = ["--no-pager", "--no-optional-locks"];
@@ -44,8 +46,14 @@ const BRANCH_FLAGS: [&str; 11] = [
 ];
 const WORKTREE_LIST_FLAGS: [&str; 3] = ["--porcelain", "-v", "--verbose"];
 
-/// `git_readonly_identity`.
-pub(super) fn git_readonly_identity(arguments: &[String], cwd: &str, ctx: &Ctx) -> Proof<Value> {
+/// `git_readonly_identity`; `system` lists the machine-wide config and
+/// attribute files the bound git reads.
+pub(super) fn git_readonly_identity(
+    arguments: &[String],
+    cwd: &str,
+    system: &[String],
+    ctx: &Ctx,
+) -> Proof<Value> {
     let mut target = cwd.to_owned();
     let mut index = 0;
     let mut changed_dir = false;
@@ -74,12 +82,14 @@ pub(super) fn git_readonly_identity(arguments: &[String], cwd: &str, ctx: &Ctx) 
         return Err(MUTABLE_LAUNCHER);
     }
     let (root, git_dir, common_dir) = repository(&target)?;
+    let invocation = &arguments[index..];
+    let config_digest = git_config_digest(&root, &git_dir, &common_dir, system, invocation, ctx)?;
     Ok(json!({
         "kind": "git-readonly",
         "subcommand": subcommand,
         "target": target,
         "repository": root,
-        "config_digest": git_config_digest(&root, &git_dir, &common_dir, ctx)?,
+        "config_digest": config_digest,
     }))
 }
 
@@ -141,6 +151,8 @@ fn repository(start: &str) -> Proof<(String, String, String)> {
     for dir in directories {
         let marker = fs_path::join(&dir, ".git");
         if fs_path::is_dir(&marker) {
+            #[cfg(windows)]
+            git_windows::git_dir_is_plain(&marker, &marker, true)?;
             return Ok((dir, marker.clone(), marker));
         }
         if fs_path::is_file(&marker) {
@@ -156,7 +168,13 @@ fn repository(start: &str) -> Proof<(String, String, String)> {
                 common = fs_path::resolve_strict(&fs_path::join(&git_dir, pointed.trim()))
                     .ok_or(UNPROVEN_LAUNCH)?;
             }
+            #[cfg(windows)]
+            git_windows::git_dir_is_plain(&git_dir, &common, false)?;
             return Ok((dir, git_dir, common));
+        }
+        #[cfg(windows)]
+        if git_windows::may_be_git_dir(&dir) {
+            return Err(UNPROVEN_LAUNCH);
         }
     }
     Err(UNPROVEN_LAUNCH)

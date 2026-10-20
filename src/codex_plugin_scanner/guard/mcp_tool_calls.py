@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .action_lattice import normalize_guard_action
 from .approval_gate import ApprovalGateGrant
 from .collections_support import dedupe_preserving_order
 from .config import GuardConfig
@@ -17,15 +16,11 @@ from .native_approval_proof import (
     ApprovalReuseClaimDisposition,
 )
 from .native_mcp_tool_call_identity import NativeToolCallIdentity, native_tool_call_identity, server_identity_dto
-from .native_mcp_tool_evidence import native_tool_risk_evidence
 from .receipts import build_receipt
 from .runtime.approval_context import (
     current_extension_control_binding_digest,
 )
-from .runtime.approval_reuse import (
-    APPROVAL_REUSE_NO_SAVED_DECISION,
-    ApprovalReuseStatus,
-)
+from .runtime.approval_reuse import ApprovalReuseStatus
 from .runtime.composio_contract import composio_requires_action_review
 from .runtime.mcp_protection import (
     McpServerIdentity,
@@ -38,6 +33,9 @@ _NON_EXECUTED_TOOL_CALL_TAXONOMY: Mapping[GuardAction, tuple[str, str]] = {
     "sandbox-required": ("runtime_tool_call_sandbox_required", "runtime tool call requires an enforceable sandbox"),
     "block": ("runtime_tool_call_blocked", "runtime tool call blocked"),
 }
+# A review held only because this device never set up the MCP server. It is an
+# agent-facing reason code; the receipt event keeps ``review`` taxonomy above.
+RUNTIME_TOOL_CALL_CONNECTOR_SETUP_REQUIRED = "runtime_tool_call_connector_setup_required"
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,28 +67,25 @@ class ToolCallDecision:
     approval_reuse_claim_disposition: ApprovalReuseClaimDisposition | None = None
     post_claim_revalidated: bool = False
     post_claim_authority: ToolCallAuthority | None = None
+    # The action the native runtime enforces for this call. It differs from
+    # ``action`` only where a rejected reuse of prior authority opens a fresh
+    # approval boundary; Rust owns that derivation.
+    policy_action: GuardAction | None = None
+    # Set only when the review is due solely to Guard not recognising the MCP
+    # server: ``{identity_hash, surface, name, queue_group_id, reason_code}``.
+    connector_setup: Mapping[str, object] | None = None
 
 
-def resolve_tool_call_policy_action(
-    decision: ToolCallDecision,
-    *,
-    action: object | None = None,
-) -> GuardAction:
-    """Resolve the exact action enforced for a tool-call decision.
+def resolve_tool_call_policy_action(decision: ToolCallDecision) -> GuardAction:
+    """The action the native runtime enforces for a tool-call decision.
 
-    A first-time review remains ``review``.  A rejected attempt to reuse prior
-    authority is a genuine fresh-approval boundary and is therefore surfaced as
-    ``require-reapproval`` instead of silently making every review look stale.
+    Rust composes it from the decision and its approval-reuse state; a decision
+    that reached Python without one carries no authority and cannot be read.
     """
 
-    normalized = normalize_guard_action(decision.action if action is None else action)
-    stale_prior_authority = (
-        decision.approval_reuse_status == "rejected"
-        and decision.approval_reuse_reason_code not in {None, APPROVAL_REUSE_NO_SAVED_DECISION}
-    )
-    if normalized == "review" and stale_prior_authority:
-        return "require-reapproval"
-    return normalized
+    if decision.policy_action is None:
+        raise ValueError("tool_call_policy_action_missing")
+    return decision.policy_action
 
 
 def _build_dto(
@@ -281,16 +276,6 @@ def evaluate_tool_call(
         proxy_input=proxy_input,
         proxy_out=proxy_out,
     )
-
-
-def tool_call_risk_categories(artifact: GuardArtifact, arguments: object) -> tuple[str, ...]:
-    """Return Rust-owned Cloud risk categories for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[0]
-
-
-def tool_call_risk_summary(artifact: GuardArtifact, arguments: object) -> str:
-    """Return the Rust-owned risk summary for one MCP tool call."""
-    return native_tool_risk_evidence(artifact, arguments)[2]
 
 
 _INLINE_SOURCES = frozenset({"inline-approved", "inline-denied", "native-approved", "claude-native-approved"})

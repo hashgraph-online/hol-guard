@@ -20,7 +20,7 @@ use std::path::Path;
 const MAX_ENTRIES: usize = 20_000;
 const MAX_DEPTH: usize = 16;
 const MAX_POINTER_BYTES: u64 = 4 * 1024;
-const MAX_CONFIG_BYTES: u64 = 64 * 1024;
+const MAX_CONFIG_BYTES: u64 = 4 * 1024 * 1024;
 const CONFIG_NAMES: &[&str] = &["config", "config.worktree"];
 /// Directories whose files hold legacy remote URLs.
 const REMOTE_DIRECTORIES: &[&str] = &["remotes", "branches"];

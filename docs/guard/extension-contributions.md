@@ -260,18 +260,12 @@ Existing Python detector modules under
 references. Other files in that directory still implement control-plane and
 compatibility bridges; the [ownership map](native-hook-data-plane-ownership.md)
 distinguishes those roles. Do not add a new `python-module` contribution or
-copy a detector into a generated kit. The structural migration diagnostic in
-`scripts/command_source_backlog.py` reads pinned source blobs and reports
-allowlisted literal conversions plus precise blockers for imports, dynamic
-expressions, top-level execution, custom classes, and unmapped operations. It
-does not import or execute the source. The one-time reviewed baseline converter
-in `scripts/migrate_command_extension_sources.py` is likewise offline and dry
-run by default; its `--write` path is for an explicitly reviewed migration and
-is not a release dependency.
-
-Every diagnostic result still needs human review of the upstream behavior,
-native source, fixture cases, and generated diff. If the diagnostic reports
-`native_operation_required`, follow the new-operation rule above rather than
+copy a detector into a generated kit. The one-time Python-to-JSON backlog and reviewed-baseline converters have
+been retired. Review any remaining legacy proposal without importing or
+executing contributor Python, then author a canonical JSON command source
+and independent portable fixture. Run `guard-command-source` for native
+validation and review the generated descriptor and program diff. If a
+semantic operation is missing, implement and test it in Rust rather than
 restoring a Python fallback.
 
 ## Review bar

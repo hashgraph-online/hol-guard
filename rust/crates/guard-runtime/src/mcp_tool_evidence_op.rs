@@ -1,14 +1,12 @@
-//! `McpToolEvidence` — resident op owning MCP tool-call risk presentation and
-//! the portal firewall projection.
+//! `McpToolEvidence` — resident op owning the portal firewall projection.
 //!
-//! Pure (no IO). `risk` extracts categories, signals and summary text;
-//! `firewall` projects `mcp_server`/`tool_call` artifacts into the portal
-//! evidence and legacy identity metadata. Python transports DTOs only.
-//! Failures are typed `error` results: the caller must treat them as an
-//! unavailable authority, never as "no risk" or "no firewall".
+//! Pure (no IO). `firewall` projects `mcp_server`/`tool_call` artifacts into
+//! the portal evidence and legacy identity metadata. Python transports DTOs
+//! only. Failures are typed `error` results: the caller must treat them as an
+//! unavailable authority, never as "no firewall". The MCP proxy gets risk
+//! signals and summaries from its `call_projection` check instead.
 
 use guard_command::mcp_skill_firewall::evaluate_firewall_evidence;
-use guard_command::mcp_tool_signals::evaluate_risk_evidence;
 use guard_contracts::{
     McpToolEvidenceRequestV1, McpToolEvidenceResultV1, MCP_TOOL_EVIDENCE_MAX_BYTES,
     MCP_TOOL_EVIDENCE_REQUEST_SCHEMA, MCP_TOOL_EVIDENCE_RESULT_SCHEMA,
@@ -42,12 +40,9 @@ fn evaluate(request: &McpToolEvidenceRequestV1) -> Result<Value, &'static str> {
     if request.guard_home.is_empty() {
         return Err(ERR_INVALID);
     }
-    // Exactly the input the subop reads: a request carrying the other
-    // subop's input (or neither) is malformed, not silently ignored.
-    match (request.subop.as_str(), &request.risk, &request.firewall) {
-        ("risk", Some(input), None) => evaluate_risk_evidence(input),
-        ("firewall", None, Some(input)) => evaluate_firewall_evidence(input),
-        ("risk" | "firewall", _, _) => Err(ERR_INVALID),
+    match (request.subop.as_str(), &request.firewall) {
+        ("firewall", Some(input)) => evaluate_firewall_evidence(input),
+        ("firewall", None) => Err(ERR_INVALID),
         _ => Err(ERR_SUBOP),
     }
 }

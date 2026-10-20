@@ -3,6 +3,7 @@
 //! Every filesystem fact is captured together with a full stat identity so the
 //! hashing pass can prove the tree it hashed is the tree it listed.
 
+use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, Metadata};
 use std::io;
@@ -86,15 +87,46 @@ pub(crate) struct TreeEntry {
 /// Order-independent snapshot used to detect structural change between passes.
 pub(crate) type Structure = Vec<(String, EntryType, StatKey, Option<String>)>;
 
-fn open_directory(path: &Path) -> Result<fs::ReadDir, Failure> {
-    fs::read_dir(path).map_err(|error| match error.kind() {
+/// Children of `path` in descending raw-name order. Readdir order is a
+/// property of the filesystem (hash order on ext4 and APFS), and the hashing
+/// pass stops at the first unsupported entry, so an unordered walk would
+/// account different bytes for the same tree on different machines. The
+/// original vectors were recorded in an order this reproduces.
+///
+/// Only the first `remaining + 1` children in that order are kept. The walk
+/// fails with `MaxEntriesExceeded` no later than that last kept child, so a
+/// later one is never visited, while the kept ones still go through the
+/// per-entry depth, name and collision checks in walk order: a directory with
+/// more children than the budget reports the same failure it would if every
+/// name were buffered, and holds at most twice the budget while reading.
+fn read_children(path: &Path, remaining: u64) -> Result<std::vec::IntoIter<fs::DirEntry>, Failure> {
+    let directory = fs::read_dir(path).map_err(|error| match error.kind() {
         io::ErrorKind::NotFound => Failure::TreeChangedDuringHash,
         _ => Failure::UnreadableEntry,
-    })
+    })?;
+    let keep = usize::try_from(remaining)
+        .unwrap_or(usize::MAX)
+        .saturating_add(1);
+    let mut children = Vec::new();
+    for child in directory {
+        let child = child.map_err(|_| Failure::UnreadableEntry)?;
+        children.push((Reverse(child.file_name()), child));
+        if children.len() >= keep.saturating_mul(2) {
+            children.sort_by(|left, right| left.0.cmp(&right.0));
+            children.truncate(keep);
+        }
+    }
+    children.sort_by(|left, right| left.0.cmp(&right.0));
+    children.truncate(keep);
+    Ok(children
+        .into_iter()
+        .map(|(_, child)| child)
+        .collect::<Vec<_>>()
+        .into_iter())
 }
 
 struct Frame {
-    children: fs::ReadDir,
+    children: std::vec::IntoIter<fs::DirEntry>,
     parts: Vec<String>,
     _guard: DirectoryGuard,
 }
@@ -142,9 +174,9 @@ fn classify(path: &Path) -> Result<(EntryType, StatKey, Option<String>), Failure
     Ok((entry_type, stat_key(path, &metadata)?, raw_target))
 }
 
-/// Walk `root` depth first, capturing every entry. Directory contents are
-/// visited immediately after their directory entry, so the order matches the
-/// order the hashing pass accounts bytes in.
+/// Walk `root` depth first in descending name order, capturing every entry.
+/// Directory contents are visited immediately after their directory entry, so
+/// the order matches the order the hashing pass accounts bytes in.
 pub(crate) fn collect_entries(
     root: &Path,
     limits: &SkillDirectoryLimitsV1,
@@ -152,16 +184,15 @@ pub(crate) fn collect_entries(
     let mut entries: Vec<TreeEntry> = Vec::new();
     let mut seen = Seen::default();
     let mut stack = vec![Frame {
-        children: open_directory(root)?,
+        children: read_children(root, limits.max_entries)?,
         parts: Vec::new(),
         _guard: directory_guard(root)?,
     }];
     while let Some(frame) = stack.last_mut() {
-        let Some(next) = frame.children.next() else {
+        let Some(child) = frame.children.next() else {
             stack.pop();
             continue;
         };
-        let child = next.map_err(|_| Failure::UnreadableEntry)?;
         let canonical_name = canonical_component(child.file_name().as_os_str())?;
         let mut parts = frame.parts.clone();
         parts.push(canonical_name);
@@ -185,7 +216,10 @@ pub(crate) fn collect_entries(
         });
         if descend {
             stack.push(Frame {
-                children: open_directory(&path)?,
+                children: read_children(
+                    &path,
+                    limits.max_entries.saturating_sub(entries.len() as u64),
+                )?,
                 parts,
                 _guard: directory_guard(&path)?,
             });
@@ -220,6 +254,55 @@ mod tests {
         );
         assert_eq!(seen.admit("dir/STRASSE.txt"), Err(Failure::CaseCollision));
         seen.admit("dir/other.txt").unwrap();
+    }
+
+    #[test]
+    fn collect_entries_order_does_not_follow_creation_order() {
+        let limits = SkillDirectoryLimitsV1 {
+            max_depth: 8,
+            max_entries: 16,
+            max_file_bytes: 1024,
+            max_total_bytes: 4096,
+        };
+        let expected = ["z.txt", "sub", "sub/b.txt", "sub/a.txt", "a.txt"];
+        for names in [
+            ["a.txt", "sub", "sub/a.txt", "sub/b.txt", "z.txt"],
+            ["z.txt", "sub", "sub/b.txt", "sub/a.txt", "a.txt"],
+        ] {
+            let root = tempfile::tempdir().unwrap();
+            for name in names {
+                if name == "sub" {
+                    fs::create_dir(root.path().join(name)).unwrap();
+                } else {
+                    fs::write(root.path().join(name), b"x").unwrap();
+                }
+            }
+            let (entries, _) = collect_entries(root.path(), &limits).unwrap();
+            let order: Vec<_> = entries.iter().map(|e| e.relative_path.as_str()).collect();
+            assert_eq!(order, expected);
+        }
+    }
+
+    #[test]
+    fn a_directory_past_the_entry_budget_keeps_the_per_entry_failure_order() {
+        // `sub` sits at the depth limit and holds more children than the
+        // budget has left. The first child it would visit is too deep, so the
+        // walk reports that, as it would if every name were buffered.
+        let limits = SkillDirectoryLimitsV1 {
+            max_depth: 1,
+            max_entries: 2,
+            max_file_bytes: 1024,
+            max_total_bytes: 4096,
+        };
+        let root = tempfile::tempdir().unwrap();
+        fs::create_dir(root.path().join("sub")).unwrap();
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            fs::write(root.path().join("sub").join(name), b"x").unwrap();
+        }
+        assert_eq!(
+            collect_entries(root.path(), &limits).unwrap_err(),
+            Failure::MaxDepthExceeded
+        );
     }
 
     #[test]

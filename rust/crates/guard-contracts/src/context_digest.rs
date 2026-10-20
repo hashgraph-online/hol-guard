@@ -9,7 +9,6 @@
 
 use crate::{BrowserMcpArtifactV1, BrowserMcpRequestV1, BrowserMcpResultV1};
 use crate::{LocalCliIdentitySourceV1, LocalCliIdentityV1, PackageJsonScriptsV1, UnlistedCliV1};
-use crate::{McpToolPolicyRequestV1, McpToolPolicyResultV1};
 use crate::{SuggestionToolV1, SuggestionVerdictV1};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -186,11 +185,14 @@ pub enum ContextDigestKindV1 {
         saved_token: Value,
         current_token: Value,
     },
-    /// Build the current token from components and compare it against a
-    /// saved token in one round trip.
-    ValidateApprovalContext {
-        saved_token: Value,
-        components: ContextDigestComponentsV1,
+    /// Whether an opaque value is a well-formed v1 approval-context token.
+    ///
+    /// Callers that only need to tell a context token apart from a legacy
+    /// artifact hash ask this instead of decoding the token themselves: the
+    /// token's grammar has exactly one owner, and a second decoder could
+    /// disagree with it about what counts as a token.
+    ApprovalContextTokenWellFormed {
+        token: Value,
     },
     /// Domain-separated digest over a configured environment subset.
     ///
@@ -230,23 +232,16 @@ pub enum ContextDigestKindV1 {
     OpaqueMaterialDigest {
         material: String,
     },
-    /// MCP call-argument projection: `_safe_mcp_arguments` + the launch-target
-    /// digest + serialized display string, in one round-trip. `arguments` is
-    /// `None` when the JSON-RPC params carry no `arguments` key.
-    McpArgumentsProjection {
-        tool_name: String,
-        #[serde(default)]
-        arguments: Option<Value>,
-    },
     /// stdio `_redact_json` parity for remote/stdio traffic recording.
     McpRedactJson {
         material: Value,
     },
-    /// Select and hash package-manager policy environment values natively.
-    PackageEnvironmentPolicy {
-        manager: String,
-        environment: BTreeMap<String, String>,
-        referenced_names: Vec<String>,
+    /// Validate a Bash owner reply without moving its contract into adapters.
+    NativeBashReplyValidation {
+        reply_kind: String,
+        material: Value,
+        #[serde(default)]
+        request: Value,
     },
     McpLaunchEnvironment {
         inherited: BTreeMap<String, String>,
@@ -334,40 +329,8 @@ pub enum ContextDigestKindV1 {
     McpToolIdentity {
         request: McpToolIdentityRequestV1,
     },
-    McpServerDescriptor {
-        request: McpServerDescriptorRequestV1,
-    },
-    McpToolDescriptor {
-        request: McpToolDescriptorRequestV1,
-    },
-    McpToolContentDigest {
-        request: McpToolContentDigestRequestV1,
-    },
     BrowserMcp {
         request: BrowserMcpRequestV1,
-    },
-    McpToolRisk {
-        artifact: BrowserMcpArtifactV1,
-        arguments: Value,
-    },
-    McpToolPolicy {
-        request: McpToolPolicyRequestV1,
-    },
-    /// Compose the full MCP tool-call approval hash in one request.
-    /// `config` absent → legacy `mcp_tool_approval_digest` row; present →
-    /// `guard-approval-context:v1:` token. `mcp_tool_risk` carries the
-    /// resolved risk categories.
-    BuildMcpToolApprovalHash {
-        request: McpToolApprovalHashRequestV1,
-    },
-    /// Legacy standalone digest row — recomputes `persisted_mcp_digest` for a
-    /// stored `mcp_tool_approval_digest` payload (no risk categories, no token).
-    McpToolApprovalDigest {
-        request: McpToolApprovalDigestRequestV1,
-    },
-    PackageLauncherToken {
-        command_name: String,
-        args: Vec<String>,
     },
     /// `build_runtime_executable_identity` — resolve + content-bind an
     /// executable with per-evaluation nonces for unverifiable cases.
@@ -473,12 +436,6 @@ pub struct PackageContextEvidenceV1 {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
-pub struct PackageLauncherResultV1 {
-    pub package: Option<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(deny_unknown_fields)]
 pub struct ContextDigestResultV1 {
     pub schema: String,
     pub request_id: String,
@@ -497,8 +454,6 @@ pub struct ContextDigestResultV1 {
     #[serde(default)]
     pub validation_reason: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub environment_values: Option<BTreeMap<String, Option<String>>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_launch_environment: Option<BTreeMap<String, String>>,
     /// Explicit null means the supplied persisted evidence is invalid.
     #[serde(default)]
@@ -508,35 +463,20 @@ pub struct ContextDigestResultV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_tool_identity: Option<McpToolIdentityV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub package_launcher: Option<PackageLauncherResultV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_descriptor: Option<Map<String, Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub browser_mcp: Option<BrowserMcpResultV1>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_tool_risk: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_tool_policy: Option<McpToolPolicyResultV1>,
-    /// `_launch_target` output — `"{tool} {serialized} [arguments-sha256:X]"`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_launch_target: Option<String>,
-    /// `_safe_mcp_arguments` output. Explicit `null` when the request carried
-    /// no `arguments` — Python's `_safe_mcp_arguments(None)` returns `None`,
-    /// so the field must always be present for this kind.
-    #[serde(default)]
-    pub mcp_safe_arguments: Option<Value>,
-    /// Serialized display string for the launch target (canonical JSON of the
-    /// safe arguments, or `""` when arguments were absent).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub mcp_serialized_arguments: Option<String>,
     /// stdio `_redact_json` output for traffic recording.
     #[serde(default)]
     pub mcp_redacted_value: Option<Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_bash_reply_valid: Option<bool>,
     /// `build_runtime_executable_identity` / `build_runtime_launch_identity`
     /// output — the full launch-identity object, verbatim Python dict shape.
     /// These kinds always produce it; `Option` keeps it absent on other kinds.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_identity: Option<Value>,
+    /// `approval_context_token_well_formed` verdict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub approval_context_token_well_formed: Option<bool>,
     /// `runtime_launch_identity_matches` verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_identity_match: Option<bool>,

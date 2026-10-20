@@ -27,11 +27,25 @@ impl Env<'_> {
         }
     }
 
-    pub(super) fn delete(&self, state_key: &str) {
-        let _ = self.connection.execute(
-            "delete from sync_state where state_key = ?1",
-            params![state_key],
-        );
+    /// `false` when the delete statement fails.
+    pub(super) fn delete(&self, state_key: &str) -> bool {
+        self.connection
+            .execute(
+                "delete from sync_state where state_key = ?1",
+                params![state_key],
+            )
+            .is_ok()
+    }
+
+    /// Deletes every key in one statement; `false` when the statement fails.
+    pub(super) fn delete_all(&self, state_keys: &[String]) -> bool {
+        let placeholders = vec!["?"; state_keys.len()].join(",");
+        self.connection
+            .execute(
+                &format!("delete from sync_state where state_key in ({placeholders})"),
+                rusqlite::params_from_iter(state_keys),
+            )
+            .is_ok()
     }
 
     pub(super) fn add_event(&self, name: &str, payload: &Value) {
@@ -67,15 +81,32 @@ impl Env<'_> {
         );
     }
 
+    fn key_bytes(&self) -> Option<&[u8]> {
+        self.key.as_ref().map(|key| key.as_slice())
+    }
+
     /// Sign `payload` for `kind` and persist it under `state_key`. `false` when
     /// there is no key or the store refuses the write.
     pub(super) fn store_signed(&self, state_key: &str, payload: &Value, kind: &Kind) -> bool {
-        let (Some(key), Some(key_id)) = (self.key.as_deref(), self.key_id) else {
+        let (Some(key), Some(key_id)) = (self.key_bytes(), self.key_id) else {
             return false;
         };
         let Value::Object(source) = payload else {
             return false;
         };
+        if let Some(flag) = self.foreign_key {
+            if let Stored::Object(existing) = self.read(state_key) {
+                let signed_key_id = existing
+                    .get("integrity")
+                    .and_then(Value::as_object)
+                    .and_then(|integrity| integrity.get("integrity_key_id"))
+                    .and_then(Value::as_str);
+                if signed_key_id.is_some_and(|signed| Some(signed) != self.key_id) {
+                    flag.set(true);
+                    return false;
+                }
+            }
+        }
         let mut signed: Object = source
             .iter()
             .filter(|(name, _)| name.as_str() != "integrity")
@@ -130,7 +161,7 @@ impl Env<'_> {
             .map(|(name, value)| (name.clone(), value.clone()))
             .collect();
         let (key, key_id) = if use_key {
-            (self.key.as_deref(), self.key_id)
+            (self.key_bytes(), self.key_id)
         } else {
             (None, None)
         };
@@ -173,6 +204,17 @@ impl Env<'_> {
             }
             Stored::Object(object) => object,
         };
+        if let Some(flag) = self.foreign_key {
+            let signed_key_id = persisted
+                .get("integrity")
+                .and_then(Value::as_object)
+                .and_then(|integrity| integrity.get("integrity_key_id"))
+                .and_then(Value::as_str);
+            if signed_key_id.is_some_and(|signed| Some(signed) != self.key_id) {
+                flag.set(true);
+                return None;
+            }
+        }
         let (status, message) = self.verify(&persisted, kind, true);
         let context_matches = exact_str(&persisted, "state_key") == Some(state_key);
         if status != "valid" || !context_matches {

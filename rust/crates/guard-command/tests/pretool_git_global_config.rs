@@ -1,8 +1,6 @@
 #![cfg(unix)]
 
-#[allow(dead_code)]
-#[path = "support/git_helper_fixture.rs"]
-mod fixture;
+use crate::git_helper_fixture as fixture;
 
 use fixture::{evaluate_pre_tool_envelope_with_context, FixtureCleanup};
 use serde_json::json;
@@ -180,12 +178,7 @@ impl Session {
     }
 }
 
-// Workspace containment is macOS-only; elsewhere the same alias stays at review.
-const ALIAS_SANDBOX: &str = if cfg!(target_os = "macos") {
-    "native_workspace_containment_required"
-} else {
-    "native_command_review_required"
-};
+const LOCAL_WRITE: &str = "native_exact_safe_git_local_write";
 
 fn write_global(session: &Session, text: &str) {
     std::fs::write(session.home.join(".gitconfig"), text).unwrap();
@@ -200,37 +193,48 @@ fn assert_reason(session: &Session, command: &str, reason: &str) {
 fn escaped_quote_alias_does_not_block_ordinary_git_operations() {
     let session = session("alias");
     let worktree = session.worktree.display();
+    // `git add` and `git merge` run no alias (Git never routes the commit a
+    // merge writes through `alias.commit`), so the local write proof settles
+    // them behind `-C` as it does after `cd`. The aliased `commit` keeps its
+    // floor.
     let commands = [
         format!("git -C {worktree} add tracked.txt"),
-        format!("git -C {worktree} commit -m x"),
         format!("git -C {worktree} merge --ff-only HEAD"),
     ];
+    let commit = format!("git -C {worktree} commit -m x");
     write_global(
         &session,
         "[alias]\n\tcommit = !bash \\\"/opt/hooks/commit.sh\\\"\n",
     );
+    // The workspace sandbox never takes these on any host: `-C` names a
+    // linked worktree outside the session directory, and the sandbox cannot
+    // reach its shared Git directory.
     for command in &commands {
-        assert_reason(&session, command, ALIAS_SANDBOX);
+        assert_reason(&session, command, LOCAL_WRITE);
     }
-    // Backticks keep the command at review, with or without escapes.
+    assert_reason(&session, &commit, "native_command_review_required");
+    // Backticks keep the aliased command at review, with or without escapes.
     write_global(&session, "[alias]\n\tcommit = !bash \\\"`id`\\\"\n");
     for command in &commands {
-        assert_reason(&session, command, "native_command_review_required");
+        assert_reason(&session, command, LOCAL_WRITE);
     }
-    // An unknown escape is ambiguous, so it also stays at review.
+    assert_reason(&session, &commit, "native_command_review_required");
+    // An unknown escape makes the configuration unreadable, so every
+    // command stays at review.
     write_global(&session, "[alias]\n\tcommit = !bash \\q\n");
     for command in &commands {
         assert_reason(&session, command, "native_command_review_required");
     }
+    assert_reason(&session, &commit, "native_command_review_required");
 }
 
 #[test]
-fn instead_of_origin_fetch_is_quiet_only_for_one_github_https_rewrite() {
+fn instead_of_origin_fetch_is_quiet_only_for_a_github_rewrite() {
     let session = session("instead-of");
     let fetch = format!("git -C {} fetch origin", session.primary.display());
     let allowed = "native_exact_safe_git_origin_refresh";
     session.config(&["remote.origin.url", "git@github.com:acme/app.git"]);
-    session.assert_not_allow(&fetch);
+    session.assert_allow(&fetch, allowed);
     session.config(&["url.https://github.com/.insteadOf", "git@github.com:"]);
     session.assert_allow(&fetch, allowed);
     session.config(&["url.https://github.com/.pushInsteadOf", "git@github.com:"]);
@@ -239,10 +243,17 @@ fn instead_of_origin_fetch_is_quiet_only_for_one_github_https_rewrite() {
     session.config(&["--unset-all", "url.https://github.com/.insteadOf"]);
     session.config(&["url.https://git.example/.insteadOf", "git@github.com:"]);
     session.assert_not_allow(&fetch);
+    session.config(&["--unset-all", "url.https://git.example/.insteadOf"]);
+    session.config(&["url.git@github.com:.insteadOf", "https://github.com/"]);
+    session.config(&["remote.origin.url", "https://github.com/acme/app.git"]);
+    session.assert_allow(&fetch, allowed);
+    session.config(&["--unset-all", "url.git@github.com:.insteadOf"]);
+    session.config(&["url.git@git.example:.insteadOf", "https://github.com/"]);
+    session.assert_not_allow(&fetch);
 }
 
 #[test]
-fn bloated_repository_config_keeps_fetch_quiet_but_not_repo_hooks_path() {
+fn bloated_repository_config_keeps_fetch_quiet_but_not_an_outside_hooks_path() {
     let session = session("bloated");
     let fetch = format!("git -C {} fetch origin", session.primary.display());
     let path = session.primary.join(".git/config");
@@ -255,6 +266,6 @@ fn bloated_repository_config_keeps_fetch_quiet_but_not_repo_hooks_path() {
     assert!(config.len() > 400_000);
     std::fs::write(&path, config).unwrap();
     session.assert_allow(&fetch, "native_exact_safe_git_origin_refresh");
-    session.config(&["core.hooksPath", "tracked-hooks"]);
+    session.config(&["core.hooksPath", "/tmp/tracked-hooks"]);
     session.assert_not_allow(&fetch);
 }

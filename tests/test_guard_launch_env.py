@@ -53,6 +53,11 @@ def _trust_local_policy_rows(monkeypatch: pytest.MonkeyPatch) -> None:
         return PolicyIntegrityVerificationResult(status="valid")
 
     monkeypatch.setattr(GuardStore, "_policy_integrity_result_for_row", _valid_policy_row)
+    monkeypatch.setattr(
+        GuardStore,
+        "_policy_integrity_results_for_rows",
+        lambda self, rows, **_: [PolicyIntegrityVerificationResult(status="valid") for _ in rows],
+    )
 
 
 def _build_guard_fixture(home_dir: Path, workspace_dir: Path) -> None:
@@ -86,7 +91,7 @@ def _install_codex_native_hooks(home_dir: Path, workspace_dir: Path) -> None:
     )
     config_path = home_dir / ".codex" / "config.toml"
     payload = read_toml_payload(config_path)
-    CodexHarnessAdapter._install_config_hooks(payload, context)
+    CodexHarnessAdapter._install_config_hooks(payload, context, config_path=config_path)
     CodexHarnessAdapter._write_authenticated_hook_config(
         context,
         config_path=config_path,

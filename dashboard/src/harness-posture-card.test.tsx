@@ -80,6 +80,19 @@ assert(
   "manager names the stricter machine setting",
 );
 
+// Legacy observe mode without an explicit posture reads as Watch in the header.
+const observeOnlyManager = renderToStaticMarkup(
+  <HarnessPostureManager
+    settings={settings({ protection_posture: undefined, mode: "observe" })}
+    capabilities={capabilities}
+    onSettingsChange={() => undefined}
+  />,
+);
+assert(
+  observeOnlyManager.includes("machine setting (Watch)"),
+  "legacy observe settings show the Watch machine label, matching the rows",
+);
+
 const limitedCapability = renderToStaticMarkup(
   <HarnessPostureManager
     settings={settings()}

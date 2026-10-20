@@ -2,9 +2,10 @@ name: Cache cleanup
 
 # The repository cache is capped at 10 GB with LRU eviction. Every main push
 # saves a new CodeQL overlay database, and lockfile changes leave the previous
-# Rust target caches behind. Prune entries a newer one in the same family has
-# replaced, and compiler cache objects no build has read for two hours, so they
-# stop evicting the caches the next run restores.
+# Rust target caches behind. A compiler-environment change leaves the previous
+# environment's caches behind as well. Prune entries a newer one has replaced,
+# and compiler cache objects no build has read for two hours, so they stop
+# evicting the caches the next run restores.
 on:
   workflow_run:
     workflows: [CodeQL Analysis]

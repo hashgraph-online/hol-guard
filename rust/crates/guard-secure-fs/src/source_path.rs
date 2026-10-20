@@ -26,6 +26,15 @@ const SOURCE_EXTENSIONS: &[&str] = &[
     "py", "rs", "sh", "toml", "ts", "tsx", "yaml", "yml",
 ];
 const BENIGN_SOURCE_DOTFILES: &[&str] = &[".nvmrc", ".worktrees"];
+/// Ordinary project config files. They are benign only as the final path
+/// component, so a directory spelled `.gitignore/` opens no hidden tree.
+const BENIGN_PROJECT_DOTFILES: &[&str] = &[
+    ".dockerignore",
+    ".editorconfig",
+    ".eslintignore",
+    ".gitignore",
+    ".prettierignore",
+];
 const SENSITIVE_SEARCH_BASENAMES: &[&str] = &[
     ".aws",
     ".docker",
@@ -59,6 +68,7 @@ pub const EXTERNAL_SENSITIVE_PARTS: &[&str] = &[
     "id_ecdsa",
     "id_ed25519",
     "id_rsa",
+    "kubeconfig",
     "passwd",
     "password",
     "private-key",
@@ -75,6 +85,11 @@ const KNOWN_SKILL_DOC_ROOTS: &[&str] = &[
     ".agent/skills",
     ".claude/skills",
 ];
+/// Home roots where coding agents keep their own Markdown documents: OMP
+/// artifacts and the plan files Claude Code and Codex users write and read
+/// back. Only plain `.md` files below them qualify; see
+/// `known_artifact_doc_path`.
+const KNOWN_AGENT_DOC_ROOTS: &[&str] = &[".agent/artifacts", ".claude/plans", ".codex/plans"];
 
 fn lowered_parts(path: &Path) -> Vec<String> {
     path.components()
@@ -86,6 +101,18 @@ fn lowered_parts(path: &Path) -> Vec<String> {
 }
 
 fn hidden_parts_allowed(parts: &[String]) -> bool {
+    match parts.split_last() {
+        Some((name, parents)) if BENIGN_PROJECT_DOTFILES.contains(&name.as_str()) => {
+            hidden_dir_parts_allowed(parents)
+        }
+        _ => hidden_dir_parts_allowed(parts),
+    }
+}
+
+/// Every hidden component is a benign dotfile or the `.github/workflows`
+/// prefix. Project dotfiles get no exception here, so parent components
+/// never admit a directory spelled `.gitignore/`.
+fn hidden_dir_parts_allowed(parts: &[String]) -> bool {
     let hidden: Vec<&str> = parts
         .iter()
         .map(String::as_str)
@@ -129,24 +156,6 @@ pub fn sensitive_external_filename(path: &Path) -> bool {
         .any(|token| !token.is_empty() && EXTERNAL_SENSITIVE_PARTS.contains(&token))
 }
 
-pub fn credential_named_path(path: &Path) -> bool {
-    let normalized = path.to_string_lossy().replace('\\', "/");
-    let Some(last) = normalized.rsplit('/').find(|part| !part.is_empty()) else {
-        return false;
-    };
-    let last = Path::new(last);
-    let extension = last
-        .extension()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default();
-    // Keep bounded source-code inspection; credential data directories still
-    // retain review even when their final filename has no credential marker.
-    !is_source_code_extension(extension)
-        && normalized
-            .split('/')
-            .any(|part| sensitive_external_filename(Path::new(part)))
-}
-
 /// Code syntax eligible for source inspection. Data formats such as JSON,
 /// TOML, YAML, and Markdown still require credential-name and glob checks.
 pub fn is_source_code_extension(extension: &str) -> bool {
@@ -187,10 +196,21 @@ fn source_shape_allowed(path: &Path, parts: &[String]) -> bool {
                 BENIGN_SOURCE_DOTFILES.contains(&lowered.as_str())
             })
         || path
-            .extension()
+            .file_name()
             .and_then(|value| value.to_str())
-            .map(str::to_ascii_lowercase)
-            .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
+            .is_some_and(source_extension)
+}
+
+/// Whether a file name carries an extension this crate reads as source text.
+///
+/// A name with no extension at all, or one this list does not hold, is bytes
+/// of some other kind: a compiled program, an archive, an image.
+pub(crate) fn source_extension(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+        .map(str::to_ascii_lowercase)
+        .is_some_and(|suffix| SOURCE_EXTENSIONS.contains(&suffix.as_str()))
 }
 
 fn canonical_dir(path: &Path) -> Option<PathBuf> {
@@ -272,8 +292,9 @@ fn known_skill_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
 
 fn known_artifact_doc_path(target: &str, home: &Path) -> Option<PathBuf> {
     let lexical = resolve_candidate(target, None, home).ok()?;
-    let root = home.join(".agent/artifacts");
-    let relative = lexical.strip_prefix(&root).ok()?;
+    let relative = KNOWN_AGENT_DOC_ROOTS
+        .iter()
+        .find_map(|root| lexical.strip_prefix(home.join(root)).ok())?;
     if contains_symlink_component(&lexical)
         || lexical
             .extension()
@@ -434,10 +455,11 @@ pub fn classify_source_path(
 
 #[path = "sensitive_path_family.rs"]
 mod sensitive;
-pub use sensitive::sensitive_path_family;
+pub use sensitive::{sensitive_path_family, win32_name};
 
 /// True when every hidden (`.`-prefixed) path component is on the benign
-/// dotfile list or the `.github/workflows` prefix. Used by the native
+/// dotfile list or the `.github/workflows` prefix, or is a project config
+/// file such as `.gitignore` in the final position. Used by the native
 /// PreToolUse floor so absolute/home-relative reads cannot silently enter
 /// dot-directories such as `.hol-guard`, `.git`, or `.config`.
 pub fn hidden_read_parts_allowed(path: &Path) -> bool {
@@ -465,12 +487,138 @@ pub fn hidden_empty_work_tree_file(path: &Path) -> bool {
         || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
         || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
         || sensitive_external_filename(path)
-        || !hidden_parts_allowed(parents)
+        || !hidden_dir_parts_allowed(parents)
     {
         return false;
     }
     path.ancestors()
         .skip(1)
+        .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
+}
+
+/// Extensions a project writes its own configuration and prose under. A
+/// credential file conventionally carries none of them: `.netrc`, `.npmrc`,
+/// `.pgpass` and `.git-credentials` are named for what they hold and end
+/// there, so requiring one of these already separates a project's documents
+/// from a store of logins.
+const PROJECT_DOCUMENT_EXTENSIONS: &[&str] = &[
+    "cfg", "conf", "ini", "json", "jsonc", "markdown", "md", "toml", "txt", "yaml", "yml",
+];
+
+/// Words that name a tool's own login or keystore rather than a project's
+/// configuration, read over the name's parts so `.mcp.json` and
+/// `.claude.json` keep their review wherever they sit.
+const TOOL_LOGIN_WORDS: &[&str] = &[
+    "agent",
+    "agents",
+    "aider",
+    "aws",
+    "azure",
+    "claude",
+    "codex",
+    "copilot",
+    "cursor",
+    "docker",
+    "dockercfg",
+    "gcloud",
+    "gnupg",
+    "gpg",
+    "hgrc",
+    "htpasswd",
+    "keychain",
+    "keyring",
+    "keystore",
+    "kube",
+    "kubeconfig",
+    "mcp",
+    "netrc",
+    "npmrc",
+    "omp",
+    "pgpass",
+    "pypirc",
+    "ssh",
+    "vault",
+    "windsurf",
+];
+
+/// A hidden file at the leaf of a git work tree that a project keeps its own
+/// configuration or prose in: `.tsconfig-lb-check.json`, `.release-notes.md`,
+/// `.local-ledger.md`.
+///
+/// A hidden name used to read only from a fixed list, so every project that
+/// spells its own dotfile differently collected an approval nobody could
+/// answer, while the file itself is part of the checkout the agent is already
+/// working in. What stands in for that list is the shape such a file has: an
+/// ordinary document extension, a name carrying no credential marker and none
+/// of the words a tool keeps its own login under, every parent component
+/// visible, and a work tree of the home directory's own above it. That work
+/// tree is never the home directory itself, where a dotfiles repository would
+/// otherwise turn `~/.claude.json` into a project document, and never a
+/// checkout above home, which would read every dotfile in the home directory
+/// as that checkout's document.
+pub fn hidden_project_document(path: &Path, home: Option<&Path>) -> bool {
+    if !fs::symlink_metadata(path).is_ok_and(|metadata| metadata.is_file()) {
+        return false;
+    }
+    let parts = lowered_parts(path);
+    let Some((name, parents)) = parts.split_last() else {
+        return false;
+    };
+    // Every name screen reads the spelling without the leading dot as well as
+    // with it. A credential name does not stop being one when a project hides
+    // it: `.private-key.txt` has the stem `.private-key`, which no list holds,
+    // and `.id_rsa.txt` splits into `id` and `rsa`, so the dot alone used to
+    // carry such a name past screens that already know it.
+    let bare_name = name.trim_start_matches('.');
+    let bare = Path::new(bare_name);
+    let extension = bare
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let stem = bare
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    let tool_login = stem
+        .replace(['-', '.'], "_")
+        .split('_')
+        .any(|word| TOOL_LOGIN_WORDS.contains(&word));
+    if !name.starts_with('.')
+        || name.starts_with(".env")
+        || !PROJECT_DOCUMENT_EXTENSIONS.contains(&extension.as_str())
+        || tool_login
+        || SENSITIVE_SEARCH_BASENAMES.contains(&name.as_str())
+        || SENSITIVE_SEARCH_BASENAMES.contains(&bare_name)
+        || EXTERNAL_SENSITIVE_PARTS.contains(&name.as_str())
+        || EXTERNAL_SENSITIVE_PARTS.contains(&bare_name)
+        || sensitive_external_filename(path)
+        || sensitive_external_filename(bare)
+        || crate::credential_store_names::secret_bearing_file_name(bare_name)
+        // The rule is the project's own document in a checkout an agent is
+        // working in, so every directory above it is one an ordinary listing
+        // shows. A hidden parent is some tool's tree, whatever the leaf is
+        // called.
+        || parents.iter().any(|parent| parent.starts_with('.'))
+    {
+        return false;
+    }
+    let Some(home) = home else {
+        return false;
+    };
+    // The work tree has to be one of the home directory's own: a walk that
+    // keeps climbing finds whatever repository happens to sit above it, and a
+    // home directory nested in a checkout would turn every dotfile it holds
+    // into that checkout's document. The home directory is never the work
+    // tree either, so a dotfiles repository cannot admit `~/.claude.json`.
+    path.ancestors()
+        .skip(1)
+        .take_while(|ancestor| {
+            ancestor
+                .strip_prefix(home)
+                .is_ok_and(|below| below != Path::new(""))
+        })
         .any(|ancestor| fs::symlink_metadata(ancestor.join(".git")).is_ok())
 }
 

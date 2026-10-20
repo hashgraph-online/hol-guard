@@ -33,7 +33,7 @@ impl SupplyChainUserCopy {
 
 /// `PackageRequestEvaluation` dataclass mirror (:181-312). Stored as a
 /// `serde_json::Value` mirror so unported callers consume the exact dict.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PackageEvalResult {
     pub decision: String,
     pub policy_action: String,

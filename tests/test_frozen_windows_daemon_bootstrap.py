@@ -80,7 +80,7 @@ def _diagnostics(env: dict[str, str]) -> str:
             # The resident may hold the file without read sharing; say so instead of dropping the evidence.
             lines.append(f"{entry.name}={text}")
             continue
-        phases = [line for line in text.splitlines() if line.startswith("native_resident_phase ")]
+        phases = [line for line in text.splitlines() if line.startswith(_DIAGNOSTIC_PREFIXES)]
         lines.extend(phases[-96:])
     return " | ".join(lines)
 
@@ -132,10 +132,12 @@ def _start_timeline(env: dict[str, str]) -> str:
         if event in _TIMELINE_EVENTS or event == "startup_phase":
             lines.append(f"{record.get('timestamp', '')[11:23]} {event} {record.get('detail', '')}".rstrip())
     for entry in Path(env["HOL_GUARD_HOME"]).rglob("managed-resident-phases.v1.log"):
-        phases = [line for line in _safe_read(entry).splitlines() if line.startswith("native_resident_phase ")]
+        phases = [line for line in _safe_read(entry).splitlines() if line.startswith(_DIAGNOSTIC_PREFIXES)]
         lines.extend(phases[-64:])
     return "\n".join(lines[-300:])
 
+
+_DIAGNOSTIC_PREFIXES = ("native_resident_phase ", "native_resident_note ")
 
 _TIMELINE_EVENTS = frozenset(
     {

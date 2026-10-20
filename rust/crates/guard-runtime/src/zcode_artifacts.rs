@@ -72,7 +72,7 @@ fn python_lower(text: &str) -> String {
 }
 
 /// `_string_args`: strings and numbers and booleans, rendered as `str()`.
-fn string_args(config: &PyVal) -> Vec<String> {
+pub(crate) fn scalar_args(config: &PyVal) -> Vec<String> {
     config
         .get("args")
         .and_then(PyVal::as_list)
@@ -81,7 +81,7 @@ fn string_args(config: &PyVal) -> Vec<String> {
 }
 
 /// `_mcp_transport`.
-fn transport(config: &PyVal) -> String {
+pub(crate) fn transport(config: &PyVal) -> String {
     if let Some(text) = config.get("transport").and_then(PyVal::as_str) {
         if !python_strip(text).is_empty() {
             return python_strip(text).to_owned();
@@ -96,7 +96,7 @@ fn transport(config: &PyVal) -> String {
 }
 
 /// Stripped, non-empty string keys with string values; a later duplicate wins.
-fn string_pairs(value: &PyVal) -> BTreeMap<String, String> {
+pub(crate) fn string_pairs(value: &PyVal) -> BTreeMap<String, String> {
     let mut pairs = BTreeMap::new();
     for (key, item) in value.as_dict().unwrap_or_default() {
         let key = python_strip(key);
@@ -107,7 +107,7 @@ fn string_pairs(value: &PyVal) -> BTreeMap<String, String> {
     pairs
 }
 
-fn mcp_environment(config: &PyVal) -> BTreeMap<String, String> {
+pub(crate) fn mcp_environment(config: &PyVal) -> BTreeMap<String, String> {
     for field in ["env", "environment"] {
         if let Some(value) = config.get(field).filter(|value| value.as_dict().is_some()) {
             return string_pairs(value);
@@ -138,7 +138,7 @@ pub(crate) fn mcp_server(
     if command.is_none() && url.is_none() {
         return Ok(None);
     }
-    let args = string_args(config);
+    let args = scalar_args(config);
     let transport = transport(config);
     let environment = mcp_environment(config);
     let headers = config.get("headers").map(string_pairs).unwrap_or_default();

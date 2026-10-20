@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import CodexMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.mcp_policy_native_fixture import admit_mcp_policy_home
 from tests.test_guard_runtime_mcp_saved_blocks import _child_command, _context, _messages
 
 pytestmark = [pytest.mark.usefixtures("bundle_first_cloud"), pytest.mark.usefixtures("package_intent_native")]
@@ -58,6 +59,8 @@ def test_benign_tool_call_stays_within_the_resident_round_trip_budget(
     )
     monkeypatch.setattr(runtime_mcp_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
     monkeypatch.setattr(proxy, "_maybe_open_approval_center", lambda **_kwargs: None)
+    # Daemon publication is setup work, outside the warm tools/call budget.
+    admit_mcp_policy_home(context.guard_home)
     operations: collections.Counter[str] = collections.Counter()
     real = native_execution.native_resident_client_request
 

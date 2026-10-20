@@ -7,6 +7,9 @@
 //! Registry metadata is fetched by the caller that owns the managed network
 //! policy (`guard_command::egress_broker`); the override replaces that fetch.
 
+use std::collections::HashMap;
+use std::sync::Mutex;
+
 use guard_command::registry_metadata_transport::fetch_registry_metadata;
 use guard_command::supply_chain_package_eval::{
     RegistryDocument, RegistryMetadataApi, SavedPolicyProbe,
@@ -16,8 +19,19 @@ use serde_json::{Map, Value};
 
 /// Public-registry metadata for range resolution. The fetch is the shared
 /// plain-GET transport; the test override replaces it wholesale.
+///
+/// One evaluation reads the same document more than once: npm before 11.9
+/// resolves the requested version and then walks the install tree from the
+/// same `install-v1` document. Each read was its own registry GET, and for a
+/// large document the second one alone could push the hook past its deadline.
+/// `fetched` keeps every answer for the life of this request, so a repeat read
+/// reuses the first. A read still waiting on the caller's egress is kept as
+/// unresolved too: that round's answer is discarded and replayed, and asking
+/// twice in it would only make the caller fetch the document twice.
+#[derive(Default)]
 pub(crate) struct ResidentRegistryMetadata {
     pub(crate) metadata_override: Option<Map<String, Value>>,
+    fetched: Mutex<HashMap<(String, String), Option<RegistryDocument>>>,
 }
 
 impl RegistryMetadataApi for ResidentRegistryMetadata {
@@ -38,7 +52,17 @@ impl RegistryMetadataApi for ResidentRegistryMetadata {
                     version_order,
                 })
             }
-            None => fetch_registry_metadata(url, accept),
+            None => {
+                let key = (url.to_owned(), accept.to_owned());
+                let mut fetched = self
+                    .fetched
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                fetched
+                    .entry(key)
+                    .or_insert_with(|| fetch_registry_metadata(url, accept))
+                    .clone()
+            }
         }
     }
 }
@@ -142,3 +166,7 @@ pub(crate) fn saved_policy_probe(request: &SupplyChainEvalRequestV1) -> Option<S
         Some(_) => None,
     }
 }
+
+#[cfg(test)]
+#[path = "supply_chain_eval_seams_tests.rs"]
+mod tests;
