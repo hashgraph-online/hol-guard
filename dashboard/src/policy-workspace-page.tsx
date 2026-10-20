@@ -110,26 +110,41 @@ export function PolicyWorkspacePage(props: {
 
   return (
     <div className="space-y-6">
-      <WorkspacePageHeader
-        eyebrow="Rules & exceptions"
-        title="What Guard remembers, allows, and blocks"
-        description="Every decision Guard will repeat without asking — where it came from, what it covers, and how to undo it. Configure tools and capability posture in Extensions."
-        actions={
-          activeView === "exceptions" ? (
-            <PolicyExceptionsToolbar
-              cloudConnected={cloudConnected}
-              cloudControlsUrl={cloudControlsUrl}
-              onRequestException={() => setExceptionRequestOpen(true)}
-            />
-          ) : (
-            <PolicyPageToolbar
-              snapshot={props.snapshot}
-              onReloadPolicy={handleReloadPolicy}
-              reloading={reloading}
-            />
-          )
-        }
-      />
+      {activeView === "rules" ? (
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+          <p className="text-sm text-slate-600">
+            <span className="font-semibold text-brand-dark">{ruleCounts.total} remembered {ruleCounts.total === 1 ? "rule" : "rules"}</span>
+            {" · "}{ruleCounts.allow} allow · {ruleCounts.block} block
+            {" · Configure tools and capability posture in Extensions."}
+          </p>
+          <PolicyPageToolbar
+            snapshot={props.snapshot}
+            onReloadPolicy={handleReloadPolicy}
+            reloading={reloading}
+          />
+        </div>
+      ) : (
+        <WorkspacePageHeader
+          eyebrow="Rules & exceptions"
+          title="What Guard remembers, allows, and blocks"
+          description="Every decision Guard will repeat without asking — where it came from, what it covers, and how to undo it. Configure tools and capability posture in Extensions."
+          actions={
+            activeView === "exceptions" ? (
+              <PolicyExceptionsToolbar
+                cloudConnected={cloudConnected}
+                cloudControlsUrl={cloudControlsUrl}
+                onRequestException={() => setExceptionRequestOpen(true)}
+              />
+            ) : (
+              <PolicyPageToolbar
+                snapshot={props.snapshot}
+                onReloadPolicy={handleReloadPolicy}
+                reloading={reloading}
+              />
+            )
+          }
+        />
+      )}
       <PolicyUnderlineTabBar activeView={activeView} onViewChange={handleViewChange} counts={{ rules: ruleCounts.total }} />
       <Suspense fallback={<PolicyFallback />}>
         <PolicyWorkspace

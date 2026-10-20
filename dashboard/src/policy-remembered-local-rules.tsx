@@ -16,6 +16,7 @@ type PolicyRememberedLocalRulesProps = {
   onRemoveSelected?: () => void;
   removingSelected?: boolean;
   removeError?: string | null;
+  onInspect?: (policy: GuardPolicyDecision) => void;
 };
 
 export function PolicyRememberedLocalRules({
@@ -32,6 +33,7 @@ export function PolicyRememberedLocalRules({
   onRemoveSelected,
   removingSelected,
   removeError,
+  onInspect,
 }: PolicyRememberedLocalRulesProps) {
   return (
     <GroupedPolicySection
@@ -54,6 +56,7 @@ export function PolicyRememberedLocalRules({
       onRemoveSelected={onRemoveSelected}
       removingSelected={removingSelected}
       removeError={removeError}
+      onInspect={onInspect}
     />
   );
 }

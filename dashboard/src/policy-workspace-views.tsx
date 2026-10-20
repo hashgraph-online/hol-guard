@@ -40,9 +40,10 @@ import {
 import { resolvePolicyRowSourceLabel } from "./policy-managed-authority";
 import { GoverningExtensionLink } from "./policy-governing-extension-link";
 import { isBulkRemovablePolicy, policySelectionKey } from "./policy-rules-overview-model";
+import { isBroadAllow, isStaleRule } from "./policy-rules-hero-model";
 export type { PolicySortKey, PolicySortState };
 const PAGE_SIZE = 10;
-const TABLE_MIN_WIDTH_CLASS = "min-w-[640px] lg:min-w-[980px]";
+const TABLE_MIN_WIDTH_CLASS = "min-w-[520px] lg:min-w-[820px]";
 
 function PolicyActionBadge({ action }: { action: string }) {
   if (action === "allow") {
@@ -170,10 +171,12 @@ type PolicyRuleRowProps = {
   cloudVariant?: boolean;
   selected?: boolean;
   onToggleSelect?: (policy: GuardPolicyDecision) => void;
+  onInspect?: (policy: GuardPolicyDecision) => void;
 };
 
-function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVariant = false, selected = false, onToggleSelect }: PolicyRuleRowProps) {
+function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVariant = false, selected = false, onToggleSelect, onInspect }: PolicyRuleRowProps) {
   const handleClear = useCallback(() => onClear?.(policy), [onClear, policy]);
+  const handleInspect = useCallback(() => onInspect?.(policy), [onInspect, policy]);
   const handleToggleSelect = useCallback(() => onToggleSelect?.(policy), [onToggleSelect, policy]);
   const cloudManaged = cloudVariant || isCloudManagedPolicy(policy.source);
   const display = resolvePolicyDisplay(policy);
@@ -208,7 +211,7 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         <PolicyActionBadge action={policy.action} />
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="min-w-[170px] max-w-[300px] sm:min-w-[220px]">
+      <EvidenceTableCell className="min-w-[150px] max-w-[260px] sm:min-w-[200px]">
         <p className="truncate font-semibold leading-snug text-brand-dark" title={title}>
           {title}
         </p>
@@ -218,6 +221,12 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
           </p>
         ) : null}
         <p className="mt-1 break-words text-xs leading-relaxed text-slate-600">{display.rememberSentence}</p>
+        {isBroadAllow(policy) || isStaleRule(policy, new Date()) ? (
+          <span className="guard-state-pill mt-1.5" data-tone="attention">
+            <span className="guard-state-pill-dot" aria-hidden="true" />
+            {isBroadAllow(policy) ? "Broad allow" : "Not changed in 90+ days"}
+          </span>
+        ) : null}
         <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600 lg:hidden">
           <span>
             <span className="font-medium text-slate-700">Source:</span> {resolvePolicyRowSourceLabel(policy)}
@@ -238,6 +247,11 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
               <span className="font-medium text-slate-700">Updated:</span> {formatRelativeTime(policy.updated_at)}
             </span>
           ) : null}
+          {onInspect ? (
+            <button type="button" onClick={handleInspect} className="font-semibold text-brand-blue" aria-label={`Inspect rule ${title}`}>
+              Inspect
+            </button>
+          ) : null}
         </div>
         <GoverningExtensionLink policy={policy} onNavigate={onNavigate} />
       </EvidenceTableCell>
@@ -246,12 +260,9 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         <Tag tone={cloudManaged ? "slate" : "blue"}>{resolvePolicyRowSourceLabel(policy)}</Tag>
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden w-[104px] whitespace-nowrap lg:table-cell">
-        <span className="text-sm font-medium text-brand-blue">{scopeTag}</span>
-      </EvidenceTableCell>
-
       <EvidenceTableCell className="hidden w-[96px] whitespace-nowrap lg:table-cell">
         <span className="font-medium text-brand-blue">{harnessDisplayName(policy.harness)}</span>
+        <span className="mt-0.5 block text-xs font-normal text-slate-500">{scopeTag}</span>
       </EvidenceTableCell>
 
       <EvidenceTableCell className="hidden w-[104px] whitespace-nowrap text-xs text-slate-500 lg:table-cell">
@@ -273,10 +284,20 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
         ) : null}
       </EvidenceTableCell>
 
-      <EvidenceTableCell className="hidden w-[108px] text-right lg:table-cell">
+      <EvidenceTableCell className="hidden w-[150px] text-right lg:table-cell">
         <div className="flex items-center justify-end gap-2">
           {cloudManaged ? (
             <span className="whitespace-nowrap text-xs font-medium text-slate-500">Read-only</span>
+          ) : null}
+          {onInspect ? (
+            <button
+              type="button"
+              onClick={handleInspect}
+              className="inline-flex min-h-8 items-center whitespace-nowrap rounded-lg px-2 text-xs font-semibold text-brand-blue hover:bg-brand-blue/[0.06]"
+              aria-label={`Inspect rule ${title}`}
+            >
+              Inspect
+            </button>
           ) : null}
           {canClear ? (
             <button
@@ -310,6 +331,7 @@ type PolicyRuleTableProps = {
   onRemoveSelected?: () => void;
   removingSelected?: boolean;
   removeError?: string | null;
+  onInspect?: (policy: GuardPolicyDecision) => void;
 };
 
 export function PolicyRuleTable({
@@ -329,6 +351,7 @@ export function PolicyRuleTable({
   onRemoveSelected,
   removingSelected = false,
   removeError = null,
+  onInspect,
 }: PolicyRuleTableProps) {
   const [page, setPage] = useState(1);
 
@@ -395,13 +418,6 @@ export function PolicyRuleTable({
             className="hidden lg:table-cell"
           />
           <PolicySortHeader
-            label="Scope"
-            sortKey="scope"
-            sort={sort}
-            onSortChange={onSortChange}
-            className="hidden lg:table-cell"
-          />
-          <PolicySortHeader
             label={cloudVariant ? "Applies to" : "App"}
             sortKey="app"
             sort={sort}
@@ -437,6 +453,7 @@ export function PolicyRuleTable({
               cloudVariant={cloudVariant}
               selected={selectedKeys?.has(policySelectionKey(policy)) ?? false}
               onToggleSelect={onToggleSelect}
+              onInspect={onInspect}
             />
           ))}
         </EvidenceTableBody>
@@ -477,6 +494,7 @@ type GroupedPolicySectionProps = {
   onRemoveSelected?: () => void;
   removingSelected?: boolean;
   removeError?: string | null;
+  onInspect?: (policy: GuardPolicyDecision) => void;
 };
 
 export function GroupedPolicySection({
@@ -500,6 +518,7 @@ export function GroupedPolicySection({
   onRemoveSelected,
   removingSelected,
   removeError,
+  onInspect,
 }: GroupedPolicySectionProps) {
   const [open, setOpen] = useState(defaultOpen);
   const handleToggle = useCallback(() => setOpen((current) => !current), []);
@@ -560,6 +579,7 @@ export function GroupedPolicySection({
           onRemoveSelected={onRemoveSelected}
           removingSelected={removingSelected}
           removeError={removeError}
+          onInspect={onInspect}
         />
       ) : null}
     </section>

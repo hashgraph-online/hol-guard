@@ -7,6 +7,7 @@ type PolicyRememberedCloudRulesProps = {
   cloudControlsUrl: string | null;
   sort: PolicySortState;
   onSortChange: (sort: PolicySortState) => void;
+  onInspect?: (policy: GuardPolicyDecision) => void;
 };
 
 export function PolicyRememberedCloudRules({
@@ -14,6 +15,7 @@ export function PolicyRememberedCloudRules({
   cloudControlsUrl,
   sort,
   onSortChange,
+  onInspect,
 }: PolicyRememberedCloudRulesProps) {
   return (
     <GroupedPolicySection
@@ -28,6 +30,7 @@ export function PolicyRememberedCloudRules({
       cloudVariant
       sort={sort}
       onSortChange={onSortChange}
+      onInspect={onInspect}
     />
   );
 }

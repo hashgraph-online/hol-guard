@@ -41,6 +41,21 @@ const policiesPayload = {
       source_receipt_id: "receipt-bbb222",
     },
     {
+      decision_id: 4,
+      harness: "codex",
+      scope: "global",
+      artifact_id: "family:tool-action",
+      workspace: null,
+      workspace_label: null,
+      publisher: null,
+      action: "allow",
+      reason: "shell commands",
+      source: "local",
+      updated_at: "2026-10-19T09:00:00Z",
+      remembered_command: "any shell command",
+      source_receipt_id: "receipt-ddd444",
+    },
+    {
       decision_id: 3,
       harness: "claude-code",
       scope: "workspace",
@@ -91,23 +106,29 @@ async function mount(page: Page) {
 }
 
 test.describe("Rules & exceptions UX", () => {
-  test("overview, action chips, consequence copy and bulk selection", async ({ page }) => {
+  test("hero, spotlight, list switch, inspector and bulk selection", async ({ page }) => {
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);
-    await expect(page.getByText("What Guard remembers, allows, and blocks")).toBeVisible();
-    await expect(page.getByText("At a glance")).toBeVisible();
-    await expect(page.getByText("On this device", { exact: true })).toBeVisible();
-    await expect(page.getByText(/Guard will allow "git push origin main"/)).toBeVisible();
+    await expect(page.getByText("1 broad allow deserves a second look")).toBeVisible();
+    await expect(page.getByText("Worth a second look").first()).toBeVisible();
+    await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
+    await expect(page.getByText("Broad allow").first()).toBeVisible();
 
     await page.getByRole("button", { name: /^Block/ }).click();
-    await expect(page.getByText(/Showing 1 of 3 remembered rules/)).toBeVisible();
-    await expect(page.getByText(/Guard will block "rm -rf build"/)).toBeVisible();
+    await expect(page.getByText(/Showing 1 of 4 remembered rules/)).toBeVisible();
+    await expect(page.getByText(/Guard will block "rm -rf build"/).first()).toBeVisible();
 
     await page.getByRole("button", { name: /^All actions/ }).click();
     await page.getByLabel(/Select rule git push origin main/).check();
     await page.getByLabel(/Select rule rm -rf build/).check();
     await expect(page.getByText("2 rules selected")).toBeVisible();
     await expect(page.getByRole("button", { name: "Remove selected" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Inspect rule git push origin main" }).first().click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog").getByText(/Guard will allow "git push origin main"/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.screenshot({ path: "e2e/policy-rules-ux-desktop.png", fullPage: true });
   });
 
@@ -121,15 +142,15 @@ test.describe("Rules & exceptions UX", () => {
     await page.getByLabel("Search remembered rules").fill("no-such-rule-zzz");
     await expect(page.getByText(/No rules match/)).toBeVisible();
     await page.getByRole("button", { name: "Clear search and filters" }).click();
-    await expect(page.getByText(/Guard will allow "git push origin main"/)).toBeVisible();
+    await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
   });
 
-  test("mobile layout keeps overview and rules reachable", async ({ page }) => {
+  test("mobile layout keeps hero and rules reachable", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);
-    await expect(page.getByText("At a glance")).toBeVisible();
-    await expect(page.getByText(/Guard will block "rm -rf build"/)).toBeVisible();
+    await expect(page.getByText("1 broad allow deserves a second look")).toBeVisible();
+    await expect(page.getByText(/Guard will block "rm -rf build"/).first()).toBeVisible();
     await page.screenshot({ path: "e2e/policy-rules-ux-mobile.png", fullPage: true });
   });
 });

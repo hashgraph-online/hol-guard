@@ -9,10 +9,10 @@ import { downloadPolicies } from "./policy-export";
 import { PolicyGuardCloudBundleCard } from "./policy-guard-cloud-bundle-card";
 import {
   isCloudManagedPolicy,
-  resolveCloudPolicyBundleCopy,
   resolveCloudExceptionsConnected,
   resolvePolicyDisplay,
   resolvePolicyMatcherFamily,
+  resolvePolicyRowTitle,
   resolveSecurityModeCopy,
   type PolicySortState,
 } from "./policy-workspace-helpers";
@@ -21,7 +21,16 @@ import { groupPoliciesByFamily, resolveFamilyFilterLabel } from "./policy-worksp
 import { PolicyRememberedCloudRules } from "./policy-remembered-cloud-rules";
 import { PolicyRememberedLocalRules } from "./policy-remembered-local-rules";
 import { PolicyRememberedRulesRightRail } from "./policy-remembered-rules-right-rail";
-import { PolicyRulesOverview } from "./policy-rules-overview";
+import { PolicyRulesHero } from "./policy-rules-hero";
+import { PolicyRulesListSwitch } from "./policy-rules-list-switch";
+import { PolicyRulesSpotlight } from "./policy-rules-spotlight";
+import { PolicyRuleInspector } from "./policy-rule-inspector";
+import {
+  buildRuleAttention,
+  buildRulesHeroModel,
+  buildRulesSpotlight,
+  heroCountsFrom,
+} from "./policy-rules-hero-model";
 import {
   countPolicyRules,
   filterPoliciesByAction,
@@ -43,12 +52,6 @@ type PolicyRememberedRulesTabProps = {
   onOpenInbox?: () => void;
   onNavigate?: (pathname: string) => void;
 };
-
-const ACTION_FILTERS: { value: PolicyActionFilter; label: string }[] = [
-  { value: "all", label: "All actions" },
-  { value: "allow", label: "Allow" },
-  { value: "block", label: "Block" },
-];
 
 export function PolicyRememberedRulesTab({
   policies,
@@ -199,8 +202,54 @@ export function PolicyRememberedRulesTab({
   const handleExportJson = useCallback(() => downloadPolicies("json", rememberedRules), [rememberedRules]);
 
   const modeCopy = resolveSecurityModeCopy(snapshot.protection_posture ?? snapshot.security_level);
-  const bundleCopy = resolveCloudPolicyBundleCopy(snapshot);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
+
+  const [inspectedKey, setInspectedKey] = useState<string | null>(null);
+  const attention = useMemo(() => buildRuleAttention(allRemembered, new Date()), [allRemembered]);
+  const heroModel = useMemo(
+    () =>
+      buildRulesHeroModel({
+        counts: heroCountsFrom(allRemembered),
+        attention,
+        protectionLabel: modeCopy.label,
+        cloudConnected,
+        pendingCount: snapshot.queue_summary?.remaining_pending_count ?? snapshot.pending_count ?? 0,
+      }),
+    [allRemembered, attention, cloudConnected, modeCopy.label, snapshot.pending_count, snapshot.queue_summary],
+  );
+  const spotlightPolicies = useMemo(() => buildRulesSpotlight(allRemembered), [allRemembered]);
+  const heroPreview = useMemo(
+    () =>
+      spotlightPolicies.slice(0, 3).map((policy) => {
+        const display = resolvePolicyDisplay(policy);
+        return {
+          id: policySelectionKey(policy),
+          policy,
+          action: policy.action,
+          title: `${policy.action === "allow" ? "Allows" : "Blocks"} · ${resolvePolicyRowTitle(policy, display)}`,
+          meta: harnessDisplayName(policy.harness),
+        };
+      }),
+    [spotlightPolicies],
+  );
+  const inspectedPolicy = useMemo(
+    () => allRemembered.find((policy) => policySelectionKey(policy) === inspectedKey) ?? null,
+    [allRemembered, inspectedKey],
+  );
+  const handleInspect = useCallback((policy: GuardPolicyDecision) => {
+    setInspectedKey(policySelectionKey(policy));
+  }, []);
+  const handleOpenPreviewItem = useCallback(
+    (id: string) => {
+      const item = heroPreview.find((entry) => entry.id === id);
+      if (item) handleInspect(item.policy);
+    },
+    [handleInspect, heroPreview],
+  );
+  const handleCloseInspector = useCallback(() => setInspectedKey(null), []);
+  const scrollToRules = useCallback(() => {
+    document.getElementById("remembered-rules-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
 
   const localEmptyAction = onOpenInbox ? (
     <ActionButton variant="primary" onClick={onOpenInbox}>
@@ -210,14 +259,48 @@ export function PolicyRememberedRulesTab({
   ) : undefined;
 
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
+    <div className="space-y-5">
+      <PolicyRulesHero
+        model={heroModel}
+        preview={heroPreview.map(({ id, title, meta, action }) => ({ id, title, meta, action }))}
+        previewLabel="Widest-reaching remembered rules"
+        onOpenPreviewItem={handleOpenPreviewItem}
+        cta={
+          <button
+            type="button"
+            data-primary="true"
+            onClick={scrollToRules}
+            className="inline-flex min-h-11 items-center rounded-xl px-4 text-sm font-semibold transition-colors focus-visible:outline-none"
+          >
+            Review remembered rules
+          </button>
+        }
+        secondaryCta={
+          onOpenInbox ? (
+            <button
+              type="button"
+              onClick={onOpenInbox}
+              className="inline-flex min-h-11 items-center rounded-xl border px-4 text-sm font-semibold transition-colors focus-visible:outline-none"
+            >
+              Open Inbox
+            </button>
+          ) : undefined
+        }
+      />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start">
       <div className="min-w-0 space-y-4">
-        <PolicyRulesOverview
-          counts={counts}
-          protectionLabel={modeCopy.label}
-          cloudConnected={cloudConnected}
-          bundleSynced={bundleCopy ? bundleCopy.tone === "green" : null}
-        />
+        <div aria-hidden="true">
+          <div className="guard-posture-bar" role="img" aria-label={`${counts.allow} allow rules, ${counts.block} block rules`}>
+            {counts.allow > 0 ? <span className="guard-posture-segment" data-state="Allowed" style={{ flexGrow: counts.allow }} /> : null}
+            {counts.block > 0 ? <span className="guard-posture-segment" data-state="Lockdown" style={{ flexGrow: counts.block }} /> : null}
+            {counts.allow === 0 && counts.block === 0 ? <span className="guard-posture-segment" style={{ flexGrow: 1 }} /> : null}
+          </div>
+          <p className="mt-1.5 text-xs text-slate-500">
+            {counts.allow} allow · {counts.block} block — every segment is a rule Guard repeats without asking.
+          </p>
+        </div>
+
+        <PolicyRulesSpotlight policies={spotlightPolicies} onInspect={handleInspect} />
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -265,27 +348,12 @@ export function PolicyRememberedRulesTab({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter by action">
-            {ACTION_FILTERS.map((option) => {
-              const selected = actionFilter === option.value;
-              const count = option.value === "all" ? counts.total : option.value === "allow" ? counts.allow : counts.block;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setActionFilter(option.value)}
-                  className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-brand-blue/30 ${
-                    selected
-                      ? "border-brand-blue bg-brand-blue text-white"
-                      : "border-slate-200 bg-white text-brand-dark hover:border-brand-blue/30"
-                  }`}
-                >
-                  {option.label}
-                  <span className={`tabular-nums text-xs ${selected ? "text-white/80" : "text-slate-500"}`}>{count}</span>
-                </button>
-              );
-            })}
+          <div className="flex flex-wrap items-center gap-2">
+            <PolicyRulesListSwitch
+              value={actionFilter}
+              counts={{ all: counts.total, allow: counts.allow, block: counts.block }}
+              onChange={setActionFilter}
+            />
             {hasActiveFilters ? (
               <button type="button" onClick={handleClearFilters} className="min-h-9 px-2 text-sm font-medium text-brand-blue hover:underline">
                 Clear search and filters
@@ -315,6 +383,7 @@ export function PolicyRememberedRulesTab({
           ) : null}
         </div>
 
+        <div id="remembered-rules-list" className="scroll-mt-4 space-y-4">
         <PolicyRememberedLocalRules
           policies={localRules}
           cloudControlsUrl={cloudControlsUrl}
@@ -329,13 +398,16 @@ export function PolicyRememberedRulesTab({
           onRemoveSelected={onClearPolicy ? handleRemoveSelected : undefined}
           removingSelected={removingSelected}
           removeError={removeError}
+          onInspect={handleInspect}
         />
         <PolicyRememberedCloudRules
           policies={cloudRules}
           cloudControlsUrl={cloudControlsUrl}
           sort={sort}
           onSortChange={setSort}
+          onInspect={handleInspect}
         />
+        </div>
 
         <details className="rounded-2xl border border-slate-200 bg-white shadow-sm">
           <summary className="cursor-pointer list-none px-4 py-3 text-sm font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden">
@@ -354,6 +426,16 @@ export function PolicyRememberedRulesTab({
         snapshot={snapshot}
         decisionOrder={rulesView.decisionOrder}
       />
+      </div>
+      {inspectedPolicy ? (
+        <PolicyRuleInspector
+          policy={inspectedPolicy}
+          cloudControlsUrl={cloudControlsUrl}
+          onClose={handleCloseInspector}
+          onClear={onClearPolicy}
+          onNavigate={onNavigate}
+        />
+      ) : null}
     </div>
   );
 }

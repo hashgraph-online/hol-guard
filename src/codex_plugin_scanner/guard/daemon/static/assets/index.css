@@ -1189,6 +1189,10 @@
     max-height: 85vh;
   }
 
+  .max-h-\[88vh\] {
+    max-height: 88vh;
+  }
+
   .max-h-\[90dvh\] {
     max-height: 90dvh;
   }
@@ -1453,8 +1457,8 @@
     width: 104px;
   }
 
-  .w-\[108px\] {
-    width: 108px;
+  .w-\[150px\] {
+    width: 150px;
   }
 
   .w-fit {
@@ -1527,6 +1531,10 @@
 
   .max-w-\[72ch\] {
     max-width: 72ch;
+  }
+
+  .max-w-\[260px\] {
+    max-width: 260px;
   }
 
   .max-w-\[300px\] {
@@ -1605,12 +1613,12 @@
     min-width: 132px;
   }
 
-  .min-w-\[160px\] {
-    min-width: 160px;
+  .min-w-\[150px\] {
+    min-width: 150px;
   }
 
-  .min-w-\[170px\] {
-    min-width: 170px;
+  .min-w-\[160px\] {
+    min-width: 160px;
   }
 
   .min-w-\[180px\] {
@@ -1621,8 +1629,8 @@
     min-width: 220px;
   }
 
-  .min-w-\[640px\] {
-    min-width: 640px;
+  .min-w-\[520px\] {
+    min-width: 520px;
   }
 
   .min-w-\[920px\] {
@@ -1728,6 +1736,10 @@
 
   .resize {
     resize: both;
+  }
+
+  .scroll-mt-4 {
+    scroll-margin-top: calc(var(--spacing) * 4);
   }
 
   .scroll-mt-24 {
@@ -3667,6 +3679,10 @@
     }
   }
 
+  .bg-rose-300 {
+    background-color: var(--color-rose-300);
+  }
+
   .bg-rose-600 {
     background-color: var(--color-rose-600);
   }
@@ -5191,16 +5207,6 @@
   @supports (color: color-mix(in lab, red, red)) {
     .text-white\/75 {
       color: color-mix(in oklab, var(--color-white) 75%, transparent);
-    }
-  }
-
-  .text-white\/80 {
-    color: #fffc;
-  }
-
-  @supports (color: color-mix(in lab, red, red)) {
-    .text-white\/80 {
-      color: color-mix(in oklab, var(--color-white) 80%, transparent);
     }
   }
 
@@ -6801,8 +6807,8 @@
       min-width: 10rem;
     }
 
-    .sm\:min-w-\[220px\] {
-      min-width: 220px;
+    .sm\:min-w-\[200px\] {
+      min-width: 200px;
     }
 
     .sm\:flex-1 {
@@ -7242,8 +7248,8 @@
       max-width: none;
     }
 
-    .lg\:min-w-\[980px\] {
-      min-width: 980px;
+    .lg\:min-w-\[820px\] {
+      min-width: 820px;
     }
 
     .lg\:grid-cols-1 {
@@ -7554,13 +7560,6 @@
 
   .\[\&\:\:-webkit-details-marker\]\:hidden::-webkit-details-marker {
     display: none;
-  }
-
-  @media not all and (min-width: 64rem) {
-    .max-lg\:\[\&\>\*\:nth-child\(odd\)\]\:border-l-0 > :nth-child(odd) {
-      border-left-style: var(--tw-border-style);
-      border-left-width: 0;
-    }
   }
 
   .\[\&\>article\:last-child\]\:border-b-0 > article:last-child {
