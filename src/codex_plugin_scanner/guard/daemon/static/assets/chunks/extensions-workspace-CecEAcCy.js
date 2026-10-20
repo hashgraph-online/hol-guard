@@ -6476,6 +6476,10 @@ function ExtensionsLoadError(props) {
     /* @__PURE__ */ jsxRuntimeExports.jsx("h1", { className: "text-xl font-semibold text-red-950", children: props.title }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "alert", className: "mt-2 text-sm text-red-800", children: props.detail }),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 text-xs font-medium text-red-900", children: "Local protection continues on this device." }),
+    props.reference ? /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-2 text-xs text-red-900", children: [
+      "Reference: ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-mono break-all", children: props.reference })
+    ] }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsx(
       "button",
       {
@@ -6586,16 +6590,43 @@ function looksLikeUnauthorizedSession(message) {
   if (!lower || lower === "unauthorized" || lower.includes("unauthorized") || lower.includes("session")) return true;
   return /(^|[^0-9])401([^0-9]|$)/.test(lower);
 }
+const LOAD_ERROR_COPY = {
+  catalog_read_model_unavailable: {
+    title: "Guard cannot open your extension list",
+    detail: "Guard is running on this device but could not open the extension list it keeps locally. Quit HOL Guard and open it again. If the page still cannot load, install the latest version."
+  },
+  catalog_read_transport_failed: {
+    title: "Guard stopped answering while the list loaded",
+    detail: "The connection to Guard on this device ended before the extension list finished loading."
+  },
+  catalog_snapshot_expired: {
+    title: "The extension list changed while it loaded",
+    detail: "Guard rebuilt the extension list while this page was reading it, so the page has a partial copy."
+  }
+};
+function looksLikeReasonCode(message) {
+  return /^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(message);
+}
 function protectionCenterLoadError(message) {
-  if (looksLikeUnauthorizedSession(message)) {
+  const trimmed = message.trim();
+  if (looksLikeUnauthorizedSession(trimmed)) {
     return {
       title: "This view needs a signed local session",
-      detail: "Local protection is still running on this device. Open Extensions from the local Guard dashboard and try again after Guard signs this session."
+      detail: "Open Extensions from the local Guard dashboard and try again after Guard signs this session."
+    };
+  }
+  const known = LOAD_ERROR_COPY[trimmed];
+  if (known) return { ...known, reference: trimmed };
+  if (looksLikeReasonCode(trimmed)) {
+    return {
+      title: "Extensions unavailable",
+      detail: "Guard could not load your extension settings on this device. If trying again does not help, quit HOL Guard and open it again.",
+      reference: trimmed
     };
   }
   return {
     title: "Extensions unavailable",
-    detail: message.trim() || "Guard could not load protection settings. Local protection continues. Try again."
+    detail: trimmed || "Guard could not load your extension settings on this device."
   };
 }
 const DEFAULT_TERMINAL_COMMANDS = {
@@ -10092,7 +10123,15 @@ function ProtectionCenterWorkspace(props) {
   const healthBroken = state.kind === "ready" && state.effective.health !== "protected";
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "w-full", "data-testid": "extensions-workspace", children: [
     state.kind === "loading" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadingState, { label: "Loading Extensions" }) : null,
-    state.kind === "error" && loadError ? /* @__PURE__ */ jsxRuntimeExports.jsx(ExtensionsLoadError, { title: loadError.title, detail: loadError.detail, onRetry: retryLoad }) : null,
+    state.kind === "error" && loadError ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+      ExtensionsLoadError,
+      {
+        title: loadError.title,
+        detail: loadError.detail,
+        reference: loadError.reference,
+        onRetry: retryLoad
+      }
+    ) : null,
     state.kind === "ready" && healthBroken ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       ProtectionAuthorityNotice,
       {
