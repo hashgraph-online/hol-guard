@@ -56,12 +56,17 @@ export function buildRuleAttention(
   };
 }
 
-/** Spotlight picks: broad allows first (widest blast radius), then newest. Max 3. */
+/**
+ * Spotlight picks: broad allows always lead (the hero calls them out by
+ * name, so they must appear here), then highest risk score, then newest.
+ */
 export function buildRulesSpotlight(
   policies: readonly GuardPolicyDecision[],
 ): GuardPolicyDecision[] {
   const remembered = policies.filter((p) => p.action === "allow" || p.action === "block");
   const sorted = [...remembered].sort((a, b) => {
+    const broadDelta = Number(isBroadAllow(b)) - Number(isBroadAllow(a));
+    if (broadDelta !== 0) return broadDelta;
     const byRisk = policyRiskScore(b) - policyRiskScore(a);
     if (byRisk !== 0) return byRisk;
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
@@ -108,6 +113,12 @@ export function buildRulesHeroModel(input: {
       liveLabel: `${counts.total} rules in force`,
     };
   }
+  const provenance =
+    counts.cloud === 0
+      ? "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it."
+      : counts.local === 0
+        ? "Every rule below synced from Guard Cloud, stated in plain language. They are read-only here — change them in Guard Cloud or their governing Extension."
+        : "Rules below mix choices you made on this device with rules synced from Guard Cloud. Each one says where it came from and how it can be changed.";
   return {
     tone: "clear",
     badge: "Memory is tidy",
@@ -115,8 +126,7 @@ export function buildRulesHeroModel(input: {
       counts.total === 1
         ? "1 decision Guard will repeat for you"
         : `${counts.total} decisions Guard will repeat for you`,
-    subheadline:
-      "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it. Nothing here widens itself — Guard only repeats what you approved.",
+    subheadline: `${provenance} Nothing here widens itself — Guard only repeats what was approved.`,
     facts,
     liveLabel: `${counts.total} rules in force`,
   };

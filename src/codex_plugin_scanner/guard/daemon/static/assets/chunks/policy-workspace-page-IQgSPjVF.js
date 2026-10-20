@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, _ as HiMiniXMark, a6 as Badge, T as Tag, o as HiMiniCommandLine, a4 as HiMiniExclamationTriangle, dG as scopeLabel, h as harnessDisplayName, A as ActionButton, bc as guardAwareHref, f as formatRelativeTime$1, q as HiMiniDocumentText, s as HiMiniCheckCircle, dH as HiMiniCloudArrowUp, e as HiMiniCheck, dI as HiMiniCodeBracket, dJ as HiMiniClipboardDocument, dK as HiMiniUsers, dj as HiMiniBeaker, bZ as HiMiniFolder, v as HiMiniLockClosed, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, dq as HiMiniCloudArrowDown, cs as HiMiniArrowTopRightOnSquare, dL as HiMiniIdentification, dM as policyActionLabel, r as reactExports, dN as createCloudExceptionRequest, t as HiMiniArrowRight, N as EmptyState, p as HiMiniMagnifyingGlass, b as HiMiniChevronUp, c as HiMiniChevronDown, H as HiMiniChevronRight, dO as HiMiniPuzzlePiece, bX as HiMiniGlobeAlt, cw as HiMiniClock, dP as fetchCloudExceptions, dQ as fetchCloudExceptionRequests, dR as downloadBlob, dS as PolicyStatField, db as policyIdentityKey, cW as HiMiniTrash, dT as PaginationControls, g as HiMiniNoSymbol, l as HiMiniCube, d as HiMiniArrowPath, a0 as HiMiniCloud, aM as HiMiniAdjustmentsHorizontal, dU as HiMiniArrowDownTray, dV as HiMiniInbox, dW as HiMiniQueueList, dX as subscribeDashboardLocation, ba as WorkspacePageHeader, dE as lazyWorkspace, dF as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, _ as HiMiniXMark, a6 as Badge, T as Tag, o as HiMiniCommandLine, a4 as HiMiniExclamationTriangle, dG as scopeLabel, h as harnessDisplayName, A as ActionButton, bc as guardAwareHref, f as formatRelativeTime$1, q as HiMiniDocumentText, s as HiMiniCheckCircle, dH as HiMiniCloudArrowUp, e as HiMiniCheck, dI as HiMiniCodeBracket, dJ as HiMiniClipboardDocument, dK as HiMiniUsers, dj as HiMiniBeaker, bZ as HiMiniFolder, v as HiMiniLockClosed, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, dq as HiMiniCloudArrowDown, cs as HiMiniArrowTopRightOnSquare, dL as HiMiniIdentification, dM as policyActionLabel, r as reactExports, dN as createCloudExceptionRequest, t as HiMiniArrowRight, N as EmptyState, p as HiMiniMagnifyingGlass, b as HiMiniChevronUp, c as HiMiniChevronDown, H as HiMiniChevronRight, dO as HiMiniPuzzlePiece, bX as HiMiniGlobeAlt, cw as HiMiniClock, dP as fetchCloudExceptions, dQ as fetchCloudExceptionRequests, dR as downloadBlob, dS as PolicyStatField, db as policyIdentityKey, g as HiMiniNoSymbol, l as HiMiniCube, cW as HiMiniTrash, dT as PaginationControls, d as HiMiniArrowPath, a0 as HiMiniCloud, aM as HiMiniAdjustmentsHorizontal, dU as HiMiniArrowDownTray, dV as HiMiniInbox, dW as HiMiniQueueList, dX as subscribeDashboardLocation, ba as WorkspacePageHeader, dE as lazyWorkspace, dF as __vitePreload } from "../guard-dashboard.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-COC8NKLs.js";
 import { H as HeroParticleLogo } from "./home-hero-particle-logo-Jt-lsmpK.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
@@ -3255,17 +3255,6 @@ function EvidenceTableRow({ children, onClick, isSelected }) {
 function EvidenceTableCell({ children, className = "" }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: `px-3 py-2.5 ${className}`, children });
 }
-function GoverningExtensionLink(props) {
-  const extensionId = resolvePolicyGoverningExtensionId(props.policy);
-  if (!extensionId) return null;
-  const href = `/extensions/${encodeURIComponent(extensionId)}`;
-  const handleClick = (event) => {
-    if (!props.onNavigate) return;
-    event.preventDefault();
-    props.onNavigate(href);
-  };
-  return /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref(href), onClick: handleClick, className: "mt-2 inline-flex text-xs font-semibold text-brand-blue hover:underline", children: "Open governing Extension" });
-}
 function countPolicyRules(policies) {
   let local = 0;
   let cloud = 0;
@@ -3326,6 +3315,17 @@ function resolveRulesResultSummary(input) {
   }
   return `Showing ${input.visible} of ${input.total} remembered rules.`;
 }
+function GoverningExtensionLink(props) {
+  const extensionId = resolvePolicyGoverningExtensionId(props.policy);
+  if (!extensionId) return null;
+  const href = `/extensions/${encodeURIComponent(extensionId)}`;
+  const handleClick = (event) => {
+    if (!props.onNavigate) return;
+    event.preventDefault();
+    props.onNavigate(href);
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref(href), onClick: handleClick, className: "mt-2 inline-flex text-xs font-semibold text-brand-blue hover:underline", children: "Open governing Extension" });
+}
 const RISKY_FAMILIES = /* @__PURE__ */ new Set(["tool-action", "package-request", "mcp", "prompt-env-read"]);
 function policyRiskScore(policy) {
   let score = 0;
@@ -3358,6 +3358,8 @@ function buildRuleAttention(policies, now) {
 function buildRulesSpotlight(policies) {
   const remembered = policies.filter((p) => p.action === "allow" || p.action === "block");
   const sorted = [...remembered].sort((a, b) => {
+    const broadDelta = Number(isBroadAllow(b)) - Number(isBroadAllow(a));
+    if (broadDelta !== 0) return broadDelta;
     const byRisk = policyRiskScore(b) - policyRiskScore(a);
     if (byRisk !== 0) return byRisk;
     return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
@@ -3394,11 +3396,12 @@ function buildRulesHeroModel(input) {
       liveLabel: `${counts.total} rules in force`
     };
   }
+  const provenance = counts.cloud === 0 ? "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it." : counts.local === 0 ? "Every rule below synced from Guard Cloud, stated in plain language. They are read-only here — change them in Guard Cloud or their governing Extension." : "Rules below mix choices you made on this device with rules synced from Guard Cloud. Each one says where it came from and how it can be changed.";
   return {
     tone: "clear",
     badge: "Memory is tidy",
     headline: counts.total === 1 ? "1 decision Guard will repeat for you" : `${counts.total} decisions Guard will repeat for you`,
-    subheadline: "Every rule below is a choice you made once, stated in plain language with where it came from and how to undo it. Nothing here widens itself — Guard only repeats what you approved.",
+    subheadline: `${provenance} Nothing here widens itself — Guard only repeats what was approved.`,
     facts,
     liveLabel: `${counts.total} rules in force`
   };
@@ -3406,8 +3409,6 @@ function buildRulesHeroModel(input) {
 function heroCountsFrom(policies) {
   return countPolicyRules(policies.filter((p) => p.action === "allow" || p.action === "block"));
 }
-const PAGE_SIZE = 10;
-const TABLE_MIN_WIDTH_CLASS = "min-w-[520px] lg:min-w-[820px]";
 function PolicyActionBadge({ action }) {
   if (action === "allow") {
     return /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800", children: [
@@ -3437,36 +3438,6 @@ function resolveFamilyIcon(family) {
     return HiMiniGlobeAlt;
   }
   return HiMiniShieldCheck;
-}
-function PolicySortHeader({
-  label,
-  sortKey,
-  sort,
-  onSortChange,
-  className = ""
-}) {
-  const active = sort?.key === sortKey;
-  const ascending = active && sort?.direction === "asc";
-  const handleClick = reactExports.useCallback(() => {
-    if (!active) {
-      onSortChange({ key: sortKey, direction: sortKey === "updated" ? "desc" : "asc" });
-      return;
-    }
-    onSortChange({ key: sortKey, direction: ascending ? "desc" : "asc" });
-  }, [active, ascending, onSortChange, sortKey]);
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
-    "button",
-    {
-      type: "button",
-      onClick: handleClick,
-      className: "inline-flex items-center gap-1 transition-colors hover:text-brand-dark",
-      "aria-label": `Sort by ${label}${active ? ascending ? ", ascending" : ", descending" : ""}`,
-      children: [
-        label,
-        active ? ascending ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }) : null
-      ]
-    }
-  ) });
 }
 function PolicyEvidenceLink({
   policy,
@@ -3609,6 +3580,38 @@ function PolicyRuleRow({ policy, cloudControlsUrl, onClear, onNavigate, cloudVar
       ) : null
     ] }) })
   ] });
+}
+const PAGE_SIZE = 10;
+const TABLE_MIN_WIDTH_CLASS = "min-w-[520px] lg:min-w-[820px]";
+function PolicySortHeader({
+  label,
+  sortKey,
+  sort,
+  onSortChange,
+  className = ""
+}) {
+  const active = sort?.key === sortKey;
+  const ascending = active && sort?.direction === "asc";
+  const handleClick = reactExports.useCallback(() => {
+    if (!active) {
+      onSortChange({ key: sortKey, direction: sortKey === "updated" ? "desc" : "asc" });
+      return;
+    }
+    onSortChange({ key: sortKey, direction: ascending ? "desc" : "asc" });
+  }, [active, ascending, onSortChange, sortKey]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsx(EvidenceTableHeader, { className, children: /* @__PURE__ */ jsxRuntimeExports.jsxs(
+    "button",
+    {
+      type: "button",
+      onClick: handleClick,
+      className: "inline-flex items-center gap-1 transition-colors hover:text-brand-dark",
+      "aria-label": `Sort by ${label}${active ? ascending ? ", ascending" : ", descending" : ""}`,
+      children: [
+        label,
+        active ? ascending ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-3 w-3", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-3 w-3", "aria-hidden": "true" }) : null
+      ]
+    }
+  ) });
 }
 function PolicyRuleTable({
   policies,
@@ -4186,11 +4189,22 @@ function PolicyRuleInspector(props) {
       previouslyFocused?.focus?.();
     };
   }, []);
+  const [removing, setRemoving] = reactExports.useState(false);
+  const [removeError, setRemoveError] = reactExports.useState(null);
   const handleBackdropClick = reactExports.useCallback(() => props.onClose(), [props]);
   const handleClear = reactExports.useCallback(async () => {
-    await props.onClear?.(policy);
-    props.onClose();
-  }, [policy, props]);
+    if (removing) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await props.onClear?.(policy);
+      props.onClose();
+    } catch {
+      setRemoveError("This rule could not be removed. It is still in force — try again.");
+    } finally {
+      setRemoving(false);
+    }
+  }, [policy, props, removing]);
   const handleEvidenceClick = reactExports.useCallback((event) => {
     if (!props.onNavigate) return;
     event.preventDefault();
@@ -4248,6 +4262,7 @@ function PolicyRuleInspector(props) {
             /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: cloudManaged ? "slate" : "blue", children: cloudManaged ? "Managed in Guard Cloud" : "Remembered on this device" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(GoverningExtensionLink, { policy, onNavigate: props.onNavigate })
           ] }),
+          removeError ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-4 text-sm text-rose-700", role: "alert", children: removeError }) : null,
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-6 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4", children: [
             !cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsxs(
               "a",
@@ -4278,10 +4293,11 @@ function PolicyRuleInspector(props) {
               {
                 type: "button",
                 onClick: handleClear,
-                className: "inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-600/30",
+                disabled: removing,
+                className: "inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-600/30 disabled:opacity-50",
                 children: [
                   /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniTrash, { className: "h-4 w-4", "aria-hidden": "true" }),
-                  "Remove rule"
+                  removing ? "Removing…" : "Remove rule"
                 ]
               }
             ) : cloudManaged ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "Read-only here — change it in Guard Cloud or its governing Extension." }) : null

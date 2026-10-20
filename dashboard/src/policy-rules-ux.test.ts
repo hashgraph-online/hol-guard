@@ -45,10 +45,12 @@ assert.ok(jsx.indexOf("PolicyRememberedLocalRules") < jsx.indexOf("Sync and prot
 
 const views = read("policy-workspace-views.tsx");
 assert.ok(views.includes("Remove selected"), "selected rules expose bulk removal");
-assert.ok(views.includes("aria-label={`Select rule"), "row selection is labelled per rule");
-assert.ok(views.includes("display.rememberSentence"), "rows state what Guard will do next time");
-assert.ok(views.includes("Broad allow"), "broad allows are flagged in the list");
-assert.ok(views.includes("onInspect"), "rows expose an Inspect action");
+assert.ok(views.includes("PolicyRuleRow"), "table renders the extracted rule row");
+const row = read("policy-workspace-row.tsx");
+assert.ok(row.includes("aria-label={`Select rule"), "row selection is labelled per rule");
+assert.ok(row.includes("display.rememberSentence"), "rows state what Guard will do next time");
+assert.ok(row.includes("Broad allow"), "broad allows are flagged in the list");
+assert.ok(row.includes("onInspect"), "rows expose an Inspect action");
 
 const rail = read("policy-remembered-rules-right-rail.tsx");
 assert.ok(rail.includes("<details"), "right-rail help collapses instead of pushing rules down");

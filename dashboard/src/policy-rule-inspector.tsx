@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { MouseEvent } from "react";
 import { HiMiniArrowTopRightOnSquare, HiMiniCheckCircle, HiMiniNoSymbol, HiMiniTrash, HiMiniXMark } from "react-icons/hi2";
 import { Tag } from "./approval-center-primitives";
@@ -68,11 +68,22 @@ export function PolicyRuleInspector(props: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const [removing, setRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const handleBackdropClick = useCallback(() => props.onClose(), [props]);
   const handleClear = useCallback(async () => {
-    await props.onClear?.(policy);
-    props.onClose();
-  }, [policy, props]);
+    if (removing) return;
+    setRemoving(true);
+    setRemoveError(null);
+    try {
+      await props.onClear?.(policy);
+      props.onClose();
+    } catch {
+      setRemoveError("This rule could not be removed. It is still in force — try again.");
+    } finally {
+      setRemoving(false);
+    }
+  }, [policy, props, removing]);
   const handleEvidenceClick = useCallback((event: MouseEvent<HTMLAnchorElement>) => {
     if (!props.onNavigate) return;
     event.preventDefault();
@@ -138,6 +149,9 @@ export function PolicyRuleInspector(props: {
           <GoverningExtensionLink policy={policy} onNavigate={props.onNavigate} />
         </div>
 
+        {removeError ? (
+          <p className="mt-4 text-sm text-rose-700" role="alert">{removeError}</p>
+        ) : null}
         <div className="mt-6 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
           {!cloudManaged ? (
             <a
@@ -163,10 +177,11 @@ export function PolicyRuleInspector(props: {
             <button
               type="button"
               onClick={handleClear}
-              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-600/30"
+              disabled={removing}
+              className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-rose-600 px-3 text-sm font-medium text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-600/30 disabled:opacity-50"
             >
               <HiMiniTrash className="h-4 w-4" aria-hidden="true" />
-              Remove rule
+              {removing ? "Removing…" : "Remove rule"}
             </button>
           ) : cloudManaged ? (
             <p className="text-sm text-slate-500">Read-only here — change it in Guard Cloud or its governing Extension.</p>
