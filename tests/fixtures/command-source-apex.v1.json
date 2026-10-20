@@ -2056,15 +2056,6 @@
                       ]
                     },
                     "op": "executable.v1"
-                  },
-                  {
-                    "config": {
-                      "expansion_markers": [
-                        "$",
-                        "`"
-                      ]
-                    },
-                    "op": "apex-expansion.v1"
                   }
                 ],
                 "op": "any.v1"
@@ -9039,15 +9030,6 @@
                       ]
                     },
                     "op": "executable.v1"
-                  },
-                  {
-                    "config": {
-                      "expansion_markers": [
-                        "$",
-                        "`"
-                      ]
-                    },
-                    "op": "apex-expansion.v1"
                   }
                 ],
                 "op": "any.v1"
@@ -18042,15 +18024,6 @@
                       ]
                     },
                     "op": "executable.v1"
-                  },
-                  {
-                    "config": {
-                      "expansion_markers": [
-                        "$",
-                        "`"
-                      ]
-                    },
-                    "op": "apex-expansion.v1"
                   }
                 ],
                 "op": "any.v1"
@@ -24194,6 +24167,7 @@
           "command.google-workspace.gws",
           "command.hashdup",
           "command.keibidrop",
+          "command.kelados",
           "command.kim",
           "command.kindling",
           "command.kintsua",
@@ -24203,6 +24177,7 @@
           "command.mcp-agenthub",
           "command.mcp-architecture-intelligence-platform",
           "command.mcp-asdecided",
+          "command.mcp-aseprite",
           "command.mcp-authyouragent",
           "command.mcp-ccm",
           "command.mcp-cf-mail-mcp",
@@ -24210,26 +24185,35 @@
           "command.mcp-clipugc",
           "command.mcp-compose-bridge",
           "command.mcp-contribos",
+          "command.mcp-dchub",
+          "command.mcp-debuganything",
           "command.mcp-enola",
           "command.mcp-evernode-mcp",
           "command.mcp-fablecut",
           "command.mcp-fetchsandbox",
           "command.mcp-filesystem",
           "command.mcp-ftp",
+          "command.mcp-g-krusch",
           "command.mcp-google-workspace.gmail",
           "command.mcp-instapods",
           "command.mcp-insumer",
           "command.mcp-kranz",
+          "command.mcp-krusch",
+          "command.mcp-krusch-agentic-proxy",
+          "command.mcp-krusch-context-mcp",
+          "command.mcp-krusch-git",
           "command.mcp-lattice-talk",
           "command.mcp-loomdesk",
           "command.mcp-mail-server",
           "command.mcp-melra",
           "command.mcp-musiccontext",
           "command.mcp-openscreenshot",
+          "command.mcp-ops-brain",
           "command.mcp-pc-control",
           "command.mcp-plim",
           "command.mcp-pr-ui-compare",
           "command.mcp-reaper",
+          "command.mcp-repo-notebook",
           "command.mcp-run",
           "command.mcp-seahorse",
           "command.mcp-seq-mcp",
