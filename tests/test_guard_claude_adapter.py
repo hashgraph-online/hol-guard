@@ -12,7 +12,6 @@ import pytest
 
 from codex_plugin_scanner.guard.adapters import (
     claude_code,
-    claude_daemon_hook_bridge,
     claude_hook_argv,
     claude_hook_config,
     get_adapter,
@@ -396,26 +395,6 @@ def test_claude_daemon_hook_command_uses_python_not_node(tmp_path, monkeypatch):
     assert command_parts[0] == sys.executable
     assert command_parts[0] != "node"
     assert CLAUDE_GUARD_DAEMON_HOOK_MARKER in command_parts[2]
-
-
-def test_claude_daemon_hook_bridge_delegates_to_authenticated_transport(tmp_path, monkeypatch):
-    captured: dict[str, object] = {}
-
-    def fake_authenticated_transport(**kwargs):
-        captured.update(kwargs)
-        return "{}"
-
-    monkeypatch.setattr(claude_daemon_hook_bridge, "authenticated_claude_hook_response", fake_authenticated_transport)
-
-    response = claude_daemon_hook_bridge._post_to_loopback_daemon(
-        "http://127.0.0.1:5999/v1/hooks/claude-code?guard-home=x",
-        "{}",
-        state_path=tmp_path / "guard-home" / "daemon-state.json",
-    )
-
-    assert response == "{}"
-    assert captured["query"] == "guard-home=x"
-    assert captured["timeout_seconds"] == claude_daemon_hook_bridge._DAEMON_IO_TIMEOUT_SECONDS
 
 
 def test_claude_install_replaces_prior_session_start_guard_handlers_when_context_changes(tmp_path):

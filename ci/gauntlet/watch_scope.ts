@@ -25,7 +25,7 @@ export function permittedWatchInput(toolName: string, input: unknown, cwd = proc
   if (args.env !== undefined && (!isRecord(args.env) || Object.keys(args.env).length !== 0)) return false;
   if (args.pty !== undefined && args.pty !== false) return false;
   if (args.async !== undefined && args.async !== false) return false;
-  // 18.4.12 service-mode defaults: a blank name is normalized to unset, and a
+  // 18.11.3 service-mode defaults: a blank name is normalized to unset, and a
   // ready spec is ignored entirely without a service name — neither can launch
   // a service, wait on a port or log, or change execution.
   if (args.name !== undefined && args.name !== "") return false;

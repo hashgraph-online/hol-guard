@@ -14,15 +14,19 @@ from pathlib import Path
 
 from ..codex_hook_command_line import hook_token_name, render_hook_command
 from ..models import GuardArtifact
-from .base import HarnessContext
-from .cursor_hook_command_line import cursor_hook_command_tokens, split_cursor_hook_command
-from .cursor_hook_events import (
+from ._modules.cursor.cursor_hook_command_line import cursor_hook_command_tokens, split_cursor_hook_command
+from ._modules.cursor.cursor_hook_events import (
     CURSOR_FILE_MUTATION_TOOL_MATCHER,
     cursor_entry_guards_file_mutations,
     unsupported_cursor_hook_events,
 )
-from .cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
-from .cursor_hook_native import NATIVE_CURSOR_HOOK_COMMAND, client_hook_tokens, native_cursor_hook_bridge
+from ._modules.cursor.cursor_hook_guard_cli import resolve_frozen_cursor_hook_launcher
+from ._modules.cursor.cursor_hook_native import (
+    NATIVE_CURSOR_HOOK_COMMAND,
+    client_hook_tokens,
+    native_cursor_hook_bridge,
+)
+from .base import HarnessContext
 from .hook_payloads import inline_hooks_payload
 from .state_files import load_backup_payload
 

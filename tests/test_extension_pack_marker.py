@@ -16,12 +16,15 @@ from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePo
 
 
 def old_decoder():
-    source = (Path(__file__).parent / "fixtures/native-command-authority-v1.py.txt").read_text()
+    # The fixture is compiled under its real path so coverage, which traces it as
+    # part of ``codex_plugin_scanner`` because of the scope's ``__name__``, can
+    # still read the source when it writes the XML report.
+    fixture = Path(__file__).parent / "fixtures/native-command-authority-v1.py.txt"
     scope = {
         "__name__": "codex_plugin_scanner.guard._v1_authority_fixture",
         "__package__": "codex_plugin_scanner.guard",
     }
-    exec(compile(source, "native-command-authority-v1.py.txt", "exec"), scope)
+    exec(compile(fixture.read_text(), str(fixture), "exec"), scope)
     return scope["decode_authority"]
 
 

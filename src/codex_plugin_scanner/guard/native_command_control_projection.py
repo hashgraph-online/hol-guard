@@ -131,6 +131,9 @@ def _read_control_projection_locked(
         view = store.read_extension_control_authority_for_registry(registry, read_only=read_only)
         snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(view)
         binding = build_native_command_control_binding(snapshot, metadata)
+        from .catalog_delivery.active_security import binding as security_binding
+
+        binding = security_binding(store, binding)
         authority = (
             read_committed_projection_authority(store, binding)
             if read_only

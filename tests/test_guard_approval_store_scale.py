@@ -161,6 +161,11 @@ class TestQueueScaleTargets:
     def test_resolving_one_request_with_100k_rows_stays_under_100ms(self) -> None:
         conn = _make_memory_conn()
         seed_pending_approval_rows(conn, 100_000)
+        # Starts the resident for this connection's guard home outside the timed
+        # resolve, as the listing target above does: a resolution projects its
+        # rows through the resident, and the first call to a fresh home pays for
+        # starting it once, which is not the queue cost this target measures.
+        get_approval_request(conn, "req-000001")
 
         started = time.perf_counter()
         result = resolve_request_with_queue_result(

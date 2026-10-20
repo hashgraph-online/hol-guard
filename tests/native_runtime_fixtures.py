@@ -2,10 +2,20 @@ from __future__ import annotations
 
 import os
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+
+from codex_plugin_scanner.guard.native_hook_artifact_compose import native_hook_compose
+
+from .mcp_policy_catalog_fixture import (  # noqa: F401
+    mcp_policy_delivery,
+    mcp_policy_inventory,
+    native_mcp_catalog_admission,
+)
+from .mcp_policy_native_fixture import native_mcp_policy_admission  # noqa: F401
 
 
 def _resolve_native_hook_runtime() -> Path:
@@ -68,6 +78,9 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
     # The managed resident refuses to serve until the policy verifier key the
     # publisher would normally provision exists; seed a test key once.
     provision_native_policy_verifier_key(guard_home, b"\x07" * 32)
+    from .mcp_policy_native_fixture import _FIXTURE_KEYS
+
+    _FIXTURE_KEYS[guard_home] = b"\x07" * 32
     # Pre-warm the capabilities cache and the persistent resident client pool
     # at session scope.  Tests that patch subprocess.Popen globally would
     # otherwise intercept the first probe/pool spawn mid-test and break the
@@ -116,6 +129,33 @@ def _native_context_home(tmp_path_factory: pytest.TempPathFactory) -> Iterator[P
                 os.environ["HOL_GUARD_RESIDENT_TEST_SEAMS"] = previous_seams
     yield guard_home
     close_native_residents(guard_home)
+
+
+@pytest.fixture
+def native_signal_composition(
+    native_hook_force: Path,
+    _native_context_home: Path,
+) -> Callable[[Sequence[object], object], SimpleNamespace]:
+    """Calibrate a base action against detector signals in the resident.
+
+    The composition rules live in the Rust runtime; this side only carries the
+    signals the detector registry emitted and reads back the composed action,
+    so tests that need a composition assert on the authority's answer rather
+    than on a second copy of the rules.
+    """
+
+    def compose(signals: Sequence[object], base_action: object) -> SimpleNamespace:
+        payload = native_hook_compose(
+            "signal_composition",
+            {
+                "signals": [signal.to_dict() for signal in signals],
+                "base_action": base_action,
+            },
+            guard_home=_native_context_home,
+        )
+        return SimpleNamespace(**payload)
+
+    return compose
 
 
 @pytest.fixture
@@ -202,8 +242,7 @@ def _ambient_context_digest_home(
     preserving the no-binary behavior.
     """
 
-    from codex_plugin_scanner.guard import native_context, native_runtime
-    from codex_plugin_scanner.guard import native_hook_approval_context
+    from codex_plugin_scanner.guard import native_context, native_hook_approval_context, native_runtime
     from codex_plugin_scanner.guard.runtime import approval_context
 
     real_status = native_runtime.native_runtime_status

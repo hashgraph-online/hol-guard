@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import argparse
-import json
-from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.cli import commands_dispatch_records as records
 from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
@@ -61,45 +58,3 @@ def test_abom_emits_exactly_one_selected_format(
     else:
         assert captured.out == ""
         emit.assert_called_once_with("abom", payload, True)
-
-
-def test_invalid_codex_input_denies_without_reviewing(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    review = Mock(side_effect=AssertionError("invalid input must not reach review"))
-    monkeypatch.setattr(bridge, "_bound_hook_input", Mock(return_value=None))
-    monkeypatch.setattr(bridge, "bridge_review_response", review)
-
-    result = bridge.main(
-        state_path=tmp_path / "daemon-state.json", fallback_command=(), start_command=(), query="", hook_timeouts={}
-    )
-
-    assert result == 0
-    assert json.loads(capsys.readouterr().out) == bridge._fail_closed("PreToolUse")
-    review.assert_not_called()
-
-
-@pytest.mark.parametrize("decision", ["allow", "deny"])
-def test_codex_review_emits_original_decision_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], decision: str
-) -> None:
-    response = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": decision}}
-    review = Mock(return_value=(response, False, False))
-    output = Mock(side_effect=lambda value, **_kwargs: json.dumps(value))
-    monkeypatch.setattr(
-        bridge,
-        "_bound_hook_input",
-        Mock(return_value=("PreToolUse", "{}", 5, bridge.time.monotonic())),
-    )
-    monkeypatch.setattr(bridge, "bridge_review_response", review)
-    monkeypatch.setattr(bridge, "_bridge_output", output)
-
-    result = bridge.main(
-        state_path=tmp_path / "daemon-state.json", fallback_command=(), start_command=(), query="", hook_timeouts={}
-    )
-
-    assert result == 0
-    assert json.loads(capsys.readouterr().out) == response
-    review.assert_called_once()
-    output.assert_called_once()
-    assert output.call_args.args[0] is response

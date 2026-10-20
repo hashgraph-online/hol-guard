@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import http.client
 import io
 import json
 import os
+import secrets
 import subprocess
-import sys
+import tempfile
 import threading
 import time
 from http.server import HTTPServer
@@ -16,15 +18,16 @@ from urllib.parse import urlencode
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_auth as hook_auth
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge_flow as bridge_flow
+from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_auth as hook_auth
+from codex_plugin_scanner.guard.adapters._modules.codex import codex_daemon_hook_transport as hook_transport
+from codex_plugin_scanner.guard.codex_hook_file_integrity import CodexHookIntegrityError
 from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import runtime_hook_deadline as runtime_hook_deadline_module
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
-from codex_plugin_scanner.guard.runtime.local_temp_paths import trusted_temporary_root_for_path
+from codex_plugin_scanner.guard.hook_execution_environment import stamp_hook_input_text
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.codex_daemon_hook_bridge_fixtures import (
     _bridge_config,
@@ -65,6 +68,137 @@ def _start_daemon(daemon: GuardDaemonServer, monkeypatch: pytest.MonkeyPatch) ->
     except BaseException:
         daemon.stop()
         raise
+
+
+def _daemon_hook_response(
+    daemon: GuardDaemonServer,
+    guard_home: Path,
+    *,
+    query: str,
+    payload: dict[str, object],
+    timeout_seconds: float = 10.0,
+) -> dict[str, object]:
+    """The daemon's review of one hook body, delivered the way the native bridge delivers it."""
+    state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
+    event_name = str(payload.get("hook_event_name", "PreToolUse"))
+    nonce = secrets.token_hex(32)
+    connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=timeout_seconds)
+    try:
+        connection.request(
+            "POST",
+            "/v1/daemon/identity-challenge",
+            body=json.dumps(
+                {
+                    "protocol_version": 1,
+                    "nonce": nonce,
+                    "state_id": state["state_id"],
+                    "hook_event": event_name,
+                }
+            ),
+            headers={"Content-Type": "application/json", "Connection": "keep-alive"},
+        )
+        challenge = json.loads(connection.getresponse().read())
+        # Native Git-helper checks need the environment the command will run
+        # in, so the hook body reaches the daemon stamped with it.
+        connection.request(
+            "POST",
+            f"/v1/hooks/codex?{query}",
+            body=stamp_hook_input_text(json.dumps(payload)),
+            headers={
+                "Content-Type": "application/json",
+                "Connection": "close",
+                "X-Guard-Token": daemon._server.auth_token,
+                "X-Guard-Daemon-Nonce": nonce,
+                "X-Guard-Daemon-Proof": challenge["proof"],
+            },
+        )
+        hook_response = connection.getresponse()
+        body = hook_response.read()
+    finally:
+        connection.close()
+
+    assert hook_response.status == 200, body
+    return json.loads(body) if body.strip() else {}
+
+
+def _native_bridge_response(
+    runtime: Path,
+    guard_home: Path,
+    *,
+    query: str,
+    payload: dict[str, object],
+    timeout_seconds: int = 30,
+) -> dict[str, object]:
+    """The response the harness reads, rendered by the native bridge it runs.
+
+    The daemon answers with the review's own fields; the bridge is what turns
+    that review into the harness-shaped hook response, so a test about that
+    shape has to run the bridge rather than read the daemon directly.
+    """
+
+    config = _bridge_config(guard_home, 0)
+    event_name = str(payload.get("hook_event_name", "PreToolUse"))
+    argv = bridge._native_argv(
+        runtime,
+        state_path=config["state_path"],
+        fallback_command=config["fallback_command"],
+        start_command=config["start_command"],
+        query=query,
+        hook_timeouts={event_name: timeout_seconds},
+        manifest_path=guard_home / "managed" / "codex" / "hooks.manifest.json",
+        config_json=None,
+    )
+    completed = subprocess.run(
+        argv,
+        input=stamp_hook_input_text(json.dumps(payload)),
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds + 15,
+        check=False,
+    )
+    assert completed.returncode == 0, completed.stderr
+    return json.loads(completed.stdout) if completed.stdout.strip() else {}
+
+
+def _unproven_hook_delivery(daemon: GuardDaemonServer, *, query: str, payload: dict[str, object]) -> int:
+    """The status a hook body gets when it carries no proof of the daemon's identity."""
+    connection = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=5)
+    try:
+        connection.request(
+            "POST",
+            f"/v1/hooks/codex?{query}",
+            body=json.dumps(payload),
+            headers={
+                "Content-Type": "application/json",
+                "Connection": "close",
+                "X-Guard-Token": daemon._server.auth_token,
+            },
+        )
+        response = connection.getresponse()
+        _ = response.read()
+        return response.status
+    finally:
+        connection.close()
+
+
+def _authenticated_daemon_request(
+    guard_home: Path,
+    payload: dict[str, object],
+    *,
+    timeout_seconds: float = 4.0,
+) -> dict[str, object] | None:
+    return hook_transport._daemon_response_once(
+        state_path=guard_home / "daemon-state.json",
+        query=f"guard-home={guard_home}",
+        data=json.dumps(payload),
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _without_a_native_runtime(monkeypatch: pytest.MonkeyPatch, payload: dict[str, object]) -> None:
+    """An install whose native runtime cannot be resolved, with one hook body to review."""
+    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: None)
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
 
 
 def test_assert_loopback_http_url_rejects_remote_and_credentialed_urls() -> None:
@@ -128,146 +262,138 @@ def test_fail_closed_uses_supported_codex_deny_shapes() -> None:
     assert prompt["continue"] is True
 
 
-def test_bridge_keeps_inline_browser_wait_within_consumer_limit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        bridge,
-        "current_process_identity",
-        lambda: {"pid": 4102, "startToken": "fixture-start"},
-    )
-    payload = json.loads(
-        bridge._with_browser_wait_process(
-            '{"hook_event_name":"PreToolUse"}',
-            wait_timeout_seconds=607,
-        )
-    )
-
-    assert payload[bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY] == 600
-    assert set(payload) == {
-        "hook_event_name",
-        bridge.CODEX_BROWSER_WAIT_PROCESS_KEY,
-        bridge.CODEX_BROWSER_WAIT_TIMEOUT_SECONDS_KEY,
-    }
-
-
-def test_launcher_integrity_failure_does_not_stop_user_prompt(
+def test_unresolvable_native_runtime_does_not_stop_user_prompt(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit", "prompt": "resume"})),
-    )
-    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
-    monkeypatch.setattr(
-        bridge_flow,
-        "trusted_hook_launch",
-        lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
-    )
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = guard_home / "managed" / "codex" / "hooks-fixture.manifest.json"
-    config["config_json"] = "{}"
+    _without_a_native_runtime(monkeypatch, {"hook_event_name": "UserPromptSubmit", "prompt": "resume"})
 
-    assert bridge.main(**config) == 0
+    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
     assert json.loads(capsys.readouterr().out) == {
         "continue": True,
-        "systemMessage": bridge._LAUNCH_INTEGRITY_REASON,
+        "systemMessage": bridge._NATIVE_RUNTIME_UNAVAILABLE,
     }
 
 
-def test_launcher_integrity_failure_denies_unrelated_pretool_use(
+def test_unresolvable_native_runtime_denies_pretool_use(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "git push"},
-                }
-            )
-        ),
+    _without_a_native_runtime(
+        monkeypatch,
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}},
     )
-    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
-    monkeypatch.setattr(
-        bridge_flow,
-        "trusted_hook_launch",
-        lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
-    )
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = guard_home / "managed" / "codex" / "hooks-fixture.manifest.json"
-    config["config_json"] = "{}"
 
-    assert bridge.main(**config) == 0
+    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
     response = json.loads(capsys.readouterr().out)
     assert response["hookSpecificOutput"] == {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
-        "permissionDecisionReason": bridge._LAUNCH_INTEGRITY_REASON,
+        "permissionDecisionReason": bridge._NATIVE_RUNTIME_UNAVAILABLE,
     }
 
 
-def test_launcher_integrity_failure_denies_permission_request(
+def test_denial_before_the_runtime_names_its_reason_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A denial the shim makes itself still reports why, on the evidence channel."""
+    guard_home = tmp_path / "guard-home"
+    _without_a_native_runtime(
+        monkeypatch,
+        {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}},
+    )
+
+    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert json.loads(captured.err) == {
+        "schema": "hol-guard.codex-bridge-failure.v1",
+        "causes": [{"reason_code": "codex_hook_native_runtime_missing"}],
+    }
+
+
+def test_unauthenticated_registration_reports_the_validator_reason(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The validator's own reason reaches the evidence channel, not a guess at it."""
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: Path("/nonexistent/runtime"))
+    monkeypatch.setattr(
+        bridge,
+        "trusted_hook_launch",
+        _refusing_launch(CodexHookIntegrityError("codex_hook_manifest_missing", "no manifest")),
+    )
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})))
+    config = _bridge_config(guard_home, 5474)
+    config["manifest_path"] = str(guard_home / "managed" / "codex" / "hooks.manifest.json")
+    config["config_json"] = "{}"
+
+    assert bridge.main(**config) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert json.loads(captured.err)["causes"] == [{"reason_code": "codex_hook_manifest_missing"}]
+
+
+def test_a_runtime_that_cannot_be_started_denies_the_hook(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A runtime resolved but unlaunchable denies rather than answering nothing.
+
+    Codex reads a non-zero exit with no JSON as a non-blocking error and runs
+    the tool anyway, so a spawn failure has to produce the deny itself.
+    """
+    guard_home = tmp_path / "guard-home"
+    monkeypatch.setattr(bridge, "_native_bridge_executable", lambda _guard_home: Path("/nonexistent/runtime"))
+    monkeypatch.setattr(subprocess, "run", _refusing_to_start(OSError(13, "Permission denied")))
+    hook = {"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git push"}}
+    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(hook)))
+
+    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
+    assert json.loads(captured.err)["causes"] == [{"reason_code": "codex_hook_native_runtime_launch_failed"}]
+
+
+def _refusing_to_start(error: Exception):
+    """A spawn that fails the way an unlaunchable executable fails."""
+
+    def refuse(*_args: object, **_kwargs: object) -> None:
+        raise error
+
+    return refuse
+
+
+def _refusing_launch(error: Exception):
+    """A launch validator that refuses every registration with ``error``."""
+
+    def refuse(**_kwargs: object) -> None:
+        raise error
+
+    return refuse
+
+
+def test_unresolvable_native_runtime_denies_permission_request(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(json.dumps({"hook_event_name": "PermissionRequest", "tool_name": "Bash"})),
-    )
-    monkeypatch.setattr(bridge_flow, "_daemon_response", lambda **_kwargs: (_ for _ in ()).throw(OSError()))
-    monkeypatch.setattr(
-        bridge_flow,
-        "trusted_hook_launch",
-        lambda **_kwargs: (_ for _ in ()).throw(ValueError("stale manifest")),
-    )
-    config = _bridge_config(guard_home, 5474)
-    config["manifest_path"] = guard_home / "managed" / "codex" / "hooks-fixture.manifest.json"
-    config["config_json"] = "{}"
+    _without_a_native_runtime(monkeypatch, {"hook_event_name": "PermissionRequest", "tool_name": "Bash"})
 
-    assert bridge.main(**config) == 0
+    assert bridge.main(**_bridge_config(guard_home, 5474)) == 0
     response = json.loads(capsys.readouterr().out)
     assert response["hookSpecificOutput"]["decision"]["behavior"] == "deny"
-    assert response["hookSpecificOutput"]["decision"]["message"] == bridge._LAUNCH_INTEGRITY_REASON
-
-
-def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
-    response = bridge._codex_hook_response(
-        {
-            "policy_action": "allow",
-            "reason_code": "output_scan_allow",
-            "hookSpecificOutput": {
-                "hookEventName": "PostToolUse",
-                "additionalContext": "safe context",
-                "internal_reason_code": "output_scan_allow",
-            },
-        },
-        event_name="PostToolUse",
-    )
-
-    assert response == {
-        "hookSpecificOutput": {
-            "hookEventName": "PostToolUse",
-            "additionalContext": "safe context",
-        }
-    }
-    assert (
-        bridge._codex_hook_response(
-            {"hookSpecificOutput": "unexpected"},
-            event_name="PostToolUse",
-        )
-        == {}
-    )
+    assert response["hookSpecificOutput"]["decision"]["message"] == bridge._NATIVE_RUNTIME_UNAVAILABLE
 
 
 @pytest.mark.parametrize(
@@ -280,8 +406,6 @@ def test_codex_post_tool_response_excludes_daemon_metadata() -> None:
 )
 def test_failed_daemon_identity_never_receives_token_or_hook_payload(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     challenge_mode: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
@@ -290,103 +414,44 @@ def test_failed_daemon_identity_never_receives_token_or_hook_payload(
     daemon_thread.start()
     _write_authenticated_daemon_files(guard_home, daemon.server_address[1])
     _DaemonHandler.challenge_mode = challenge_mode
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
+        with pytest.raises(ValueError):
+            _ = _authenticated_daemon_request(guard_home, {"hook_event_name": "PreToolUse"})
     finally:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
-    assert exit_code == 0
     assert _DaemonHandler.captured_challenge_guard_token is None
     assert _DaemonHandler.captured_guard_token is None
     assert _DaemonHandler.captured_hook_body is None
-    assert json.loads(capsys.readouterr().out) == {}
 
 
-def test_authenticated_generation_rollover_is_rediscovered_once(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    guard_home = tmp_path / "guard-home"
-    daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
-    daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
-    daemon_thread.start()
-    _write_authenticated_daemon_files(guard_home, daemon.server_address[1])
-    _DaemonHandler.challenge_mode = "replace-state"
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "UserPromptSubmit"})))
-
-    try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
-    finally:
-        daemon.shutdown()
-        daemon_thread.join(timeout=5)
-
-    assert exit_code == 0
-    assert _DaemonHandler.challenge_count == 2
-    assert _DaemonHandler.captured_guard_token == "fixture-token"
-    assert json.loads(str(_DaemonHandler.captured_hook_body))["hook_event_name"] == "UserPromptSubmit"
-    assert json.loads(capsys.readouterr().out) == {}
-
-
-def test_authenticated_trust_refresh_preserves_daemon_generation(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_authenticated_trust_refresh_preserves_daemon_generation(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
     daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
     daemon_thread.start()
     _write_authenticated_daemon_files(guard_home, daemon.server_address[1])
     _DaemonHandler.challenge_mode = "refresh-trust-status"
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"})),
-    )
 
     try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
+        response = _authenticated_daemon_request(
+            guard_home,
+            {"hook_event_name": "PreToolUse", "tool_name": "Bash"},
+        )
     finally:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
     state = json.loads((guard_home / "daemon-state.json").read_text(encoding="utf-8"))
-    assert exit_code == 0
+    assert response == {}
     assert _DaemonHandler.challenge_count == 1
     assert _DaemonHandler.captured_guard_token == "fixture-token"
     assert state["trust_status"] == {"status": "refreshed-1"}
-    assert json.loads(capsys.readouterr().out) == {}
 
 
-def test_repeated_generation_rollover_stays_bounded(monkeypatch: pytest.MonkeyPatch) -> None:
-    attempts = 0
-
-    def changed_generation(**_kwargs: object) -> dict[str, object]:
-        nonlocal attempts
-        attempts += 1
-        raise bridge_flow._DaemonGenerationChangedError("fixture rollover")
-
-    monkeypatch.setattr(bridge_flow, "_daemon_response_once", changed_generation)
-
-    with pytest.raises(bridge_flow._DaemonGenerationChangedError):
-        bridge_flow._daemon_response(
-            state_path="unused",
-            query="",
-            data='{"hook_event_name":"UserPromptSubmit"}',
-            timeout_seconds=1,
-        )
-
-    assert attempts == 2
-
-
-def test_tampered_state_is_rejected_before_candidate_contact(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_tampered_state_is_rejected_before_candidate_contact(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
     daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
@@ -397,27 +462,23 @@ def test_tampered_state_is_rejected_before_candidate_contact(
     state["state_id"] = "untrusted-replacement"
     state_path.write_text(json.dumps(state), encoding="utf-8")
     os.chmod(state_path, 0o600)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
+        with pytest.raises(ValueError):
+            _ = _authenticated_daemon_request(guard_home, {"hook_event_name": "PreToolUse"})
     finally:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
-    assert exit_code == 0
     assert _DaemonHandler.challenge_count == 0
     assert _DaemonHandler.captured_guard_token is None
     assert _DaemonHandler.captured_hook_body is None
-    assert json.loads(capsys.readouterr().out) == {}
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX mode enforcement")
 @pytest.mark.parametrize("private_file", ["daemon-state.json", "daemon-discovery-key", "daemon-auth-token"])
 def test_non_private_discovery_files_never_release_token_or_hook_payload(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     private_file: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
@@ -426,85 +487,67 @@ def test_non_private_discovery_files_never_release_token_or_hook_payload(
     daemon_thread.start()
     _write_authenticated_daemon_files(guard_home, daemon.server_address[1])
     os.chmod(guard_home / private_file, 0o644)
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
+        with pytest.raises(ValueError):
+            _ = _authenticated_daemon_request(guard_home, {"hook_event_name": "PreToolUse"})
     finally:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
-    assert exit_code == 0
     assert _DaemonHandler.captured_guard_token is None
     assert _DaemonHandler.captured_hook_body is None
-    assert json.loads(capsys.readouterr().out) == {}
 
 
-def test_missing_token_never_falls_back_to_mutable_state(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_missing_token_never_falls_back_to_mutable_state(tmp_path: Path) -> None:
     guard_home = tmp_path / "guard-home"
     daemon = HTTPServer(("127.0.0.1", 0), _DaemonHandler)
     daemon_thread = threading.Thread(target=daemon.serve_forever, daemon=True)
     daemon_thread.start()
     _write_authenticated_daemon_files(guard_home, daemon.server_address[1])
     (guard_home / "daemon-auth-token").unlink()
-    monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps({"hook_event_name": "PreToolUse"})))
 
     try:
-        exit_code = bridge.main(**_bridge_config(guard_home, daemon.server_address[1]))
+        with pytest.raises(ValueError):
+            _ = _authenticated_daemon_request(guard_home, {"hook_event_name": "PreToolUse"})
     finally:
         daemon.shutdown()
         daemon_thread.join(timeout=5)
 
-    assert exit_code == 0
     assert _DaemonHandler.challenge_count == 1
     assert _DaemonHandler.captured_guard_token is None
     assert _DaemonHandler.captured_hook_body is None
-    assert json.loads(capsys.readouterr().out) == {}
 
 
 def test_bridge_authenticates_real_daemon_before_hook_delivery(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode(
+    query = urlencode(
         {
             "guard-home": str(guard_home),
             "home": str(tmp_path),
             "workspace": str(workspace),
         }
     )
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "echo hello"},
-                }
-            )
-        ),
-    )
+    payload = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": "echo hello"},
+    }
 
     try:
-        exit_code = bridge.main(**config)
+        unproven_status = _unproven_hook_delivery(daemon, query=query, payload=payload)
+        response = _daemon_hook_response(daemon, guard_home, query=query, payload=payload)
     finally:
         daemon.stop()
 
-    response = json.loads(capsys.readouterr().out)
-    assert exit_code == 0
+    assert unproven_status == 401
     reason_text = json.dumps(response).lower()
     if (
         "could not authenticate the local daemon" in reason_text
@@ -517,76 +560,58 @@ def test_bridge_authenticates_real_daemon_before_hook_delivery(
 def test_bridge_real_daemon_uses_payload_cwd_for_bounded_compound_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "shell",
-                    "tool_input": {"command": 'pwd; git status --short --branch; sed -n "1,5p" README.md'},
-                    "cwd": str(workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "shell",
+                "tool_input": {"command": 'pwd; git status --short --branch; sed -n "1,5p" README.md'},
+                "cwd": str(workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
     assert response == {} or response.get("hookSpecificOutput", {}).get("permissionDecision") in {None, "deny"}
 
 
-@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PostToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "pwd"},
-                    "tool_response": str(workspace),
-                    "cwd": str(workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _native_bridge_response(
+            native_hook_force,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PostToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "pwd"},
+                "tool_response": str(workspace),
+                "cwd": str(workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    response = json.loads(capsys.readouterr().out)
     if "hookSpecificOutput" in response:
         assert response == {"hookSpecificOutput": {"hookEventName": "PostToolUse"}}
     else:
@@ -597,7 +622,6 @@ def test_bridge_real_daemon_emits_schema_exact_post_tool_response(
 def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     configured_workspace = tmp_path / "projects"
@@ -619,36 +643,29 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode(
-        {
-            "guard-home": str(guard_home),
-            "home": str(tmp_path),
-            "workspace": str(configured_workspace),
-        }
-    )
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": "git fetch origin main"},
-                    "cwd": str(repository),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode(
+                {
+                    "guard-home": str(guard_home),
+                    "home": str(tmp_path),
+                    "workspace": str(configured_workspace),
+                }
+            ),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": "git fetch origin main"},
+                "cwd": str(repository),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    _assert_bridge_denied(json.loads(capsys.readouterr().out))
+    _assert_bridge_denied(response)
     assert len(store.list_approval_requests(limit=None)) == 1
 
 
@@ -674,7 +691,6 @@ def test_bridge_real_daemon_prefers_payload_cwd_for_verified_git_fetch(
 def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     command: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
@@ -689,31 +705,24 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode(
-        {"guard-home": str(guard_home), "home": str(tmp_path), "workspace": str(session_workspace)}
-    )
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": command},
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode(
+                {"guard-home": str(guard_home), "home": str(tmp_path), "workspace": str(session_workspace)}
+            ),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": command},
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) != {}
+    assert response != {}
 
 
 @pytest.mark.parametrize(
@@ -747,25 +756,23 @@ def test_bridge_real_daemon_reviews_git_fetch_without_repository_bound_cwd(
 def test_bridge_real_daemon_denies_unproven_github_content_reads(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     command: str,
     pending_approvals: int,
 ) -> None:
-    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    response, store = _bridge_github_read(tmp_path, monkeypatch, command)
     _assert_bridge_denied(response)
     assert len(store.list_approval_requests(limit=None)) == pending_approvals, response
 
 
 @pytest.mark.parametrize("command", ("gh -Rowner/repo pr view 17", "gh -Rgithub.com/Owner/Repo pr view 17"))
-@pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_allows_attached_repository_reads_on_github(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    native_hook_force: Path,
     command: str,
 ) -> None:
     """A top-level `-Rowner/repo` names a github.com repository, so the read keeps its allow baseline."""
-    response, store = _bridge_github_read(tmp_path, monkeypatch, capsys, command)
+    response, store = _bridge_github_read(tmp_path, monkeypatch, command, runtime=native_hook_force)
     hook_output = response.get("hookSpecificOutput")
     assert isinstance(hook_output, dict)
     assert "permissionDecision" not in hook_output, response
@@ -775,8 +782,9 @@ def test_bridge_real_daemon_allows_attached_repository_reads_on_github(
 def _bridge_github_read(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     command: str,
+    *,
+    runtime: Path | None = None,
 ) -> tuple[dict[str, object], GuardStore]:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
@@ -784,31 +792,29 @@ def _bridge_github_read(
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["hook_timeouts"] = {"PreToolUse": 30}
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": command},
-                    "cwd": str(session_workspace),
-                }
-            )
-        ),
-    )
+    query = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
+    payload: dict[str, object] = {
+        "hook_event_name": "PreToolUse",
+        "tool_name": "Bash",
+        "tool_input": {"command": command},
+        "cwd": str(session_workspace),
+    }
 
     try:
-        exit_code = bridge.main(**config)
+        if runtime is None:
+            response = _daemon_hook_response(
+                daemon,
+                guard_home,
+                query=query,
+                payload=payload,
+                timeout_seconds=30,
+            )
+        else:
+            response = _native_bridge_response(runtime, guard_home, query=query, payload=payload)
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    return json.loads(capsys.readouterr().out), store
+    return response, store
 
 
 @pytest.mark.parametrize(
@@ -903,7 +909,6 @@ def _bridge_github_read(
 def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     unsafe_command: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
@@ -912,37 +917,29 @@ def test_bridge_real_daemon_keeps_unsafe_github_pipeline_companions_reviewed(
     store = GuardStore(guard_home)
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "Bash",
-                    "tool_input": {"command": unsafe_command},
-                    "cwd": str(session_workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "Bash",
+                "tool_input": {"command": unsafe_command},
+                "cwd": str(session_workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) != {}
+    assert response != {}
 
 
 @pytest.mark.usefixtures("native_hook_force")
 def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     session_workspace = tmp_path / "projects"
@@ -958,37 +955,29 @@ def test_bridge_real_daemon_uses_exec_command_workdir_for_verified_git_fetch(
     assert guard_config.security_level == "balanced"
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "exec_command",
-                    "tool_input": {"cmd": "git fetch origin main", "workdir": str(repository)},
-                    "cwd": str(session_workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "exec_command",
+                "tool_input": {"cmd": "git fetch origin main", "workdir": str(repository)},
+                "cwd": str(session_workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    _assert_bridge_denied(json.loads(capsys.readouterr().out))
+    _assert_bridge_denied(response)
 
 
 @pytest.mark.parametrize("workdir", ("relative/repository", "/"))
 def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
     workdir: str,
 ) -> None:
     guard_home = tmp_path / "guard-home"
@@ -996,36 +985,28 @@ def test_bridge_real_daemon_rejects_untrusted_exec_command_workdir(
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "exec_command",
-                    "tool_input": {"cmd": "git status --short", "workdir": workdir},
-                    "cwd": str(workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "exec_command",
+                "tool_input": {"cmd": "git status --short", "workdir": workdir},
+                "cwd": str(workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) != {}
+    assert response != {}
 
 
 def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_repository(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     repository = tmp_path / "repository"
@@ -1035,67 +1016,51 @@ def test_bridge_real_daemon_rejects_temp_root_workdir_without_falling_back_to_re
         ["git", "-C", str(repository), "remote", "add", "origin", "https://github.com/example/project.git"],
         check=True,
     )
-    temporary_root = trusted_temporary_root_for_path(tmp_path)
-    assert temporary_root is not None
+    temporary_root = Path(tempfile.gettempdir()).resolve()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "exec_command",
-                    "tool_input": {"cmd": "git fetch origin main", "workdir": str(temporary_root)},
-                    "cwd": str(repository),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "exec_command",
+                "tool_input": {"cmd": "git fetch origin main", "workdir": str(temporary_root)},
+                "cwd": str(repository),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    assert json.loads(capsys.readouterr().out) != {}
+    assert response != {}
 
 
 def test_bridge_real_daemon_ignores_workdir_for_opaque_tool(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
 ) -> None:
     guard_home = tmp_path / "guard-home"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     daemon = GuardDaemonServer(GuardStore(guard_home), host="127.0.0.1", port=0)
     _start_daemon(daemon, monkeypatch)
-    config = _bridge_config(guard_home, daemon.port)
-    config["query"] = urlencode({"guard-home": str(guard_home), "home": str(tmp_path)})
-    config["fallback_command"] = [sys.executable, "-c", "raise SystemExit(1)"]
-    monkeypatch.setattr(
-        "sys.stdin",
-        io.StringIO(
-            json.dumps(
-                {
-                    "hook_event_name": "PreToolUse",
-                    "tool_name": "opaque_tool",
-                    "tool_input": {"command": "git status --short", "workdir": "/"},
-                    "cwd": str(workspace),
-                }
-            )
-        ),
-    )
 
     try:
-        exit_code = bridge.main(**config)
+        response = _daemon_hook_response(
+            daemon,
+            guard_home,
+            query=urlencode({"guard-home": str(guard_home), "home": str(tmp_path)}),
+            payload={
+                "hook_event_name": "PreToolUse",
+                "tool_name": "opaque_tool",
+                "tool_input": {"command": "git status --short", "workdir": "/"},
+                "cwd": str(workspace),
+            },
+        )
     finally:
         daemon.stop()
 
-    assert exit_code == 0
-    _assert_bridge_denied(json.loads(capsys.readouterr().out))
+    _assert_bridge_denied(response)

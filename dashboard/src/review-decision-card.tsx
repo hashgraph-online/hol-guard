@@ -212,6 +212,7 @@ export function ReviewDecisionCard(props: {
   }
 
   const nativeDisplayOnly = item.native_business_review_display_only === true;
+  const versionBoundScript = item.artifact_type === "native_bash_request";
   const plainTitle = nativeDisplayOnly ? item.artifact_name : plainEnglishRequestTitle(item);
   const harnessName = harnessDisplayName(item.harness);
   const whatWouldHappen = nativeDisplayOnly ? null : buildWhatWouldHappen(item);
@@ -229,10 +230,10 @@ export function ReviewDecisionCard(props: {
   }
   const persistExactAllow = item !== null && willPersistExactAction(item, "allow", allowScope, rememberExactAction);
   const persistExactBlock = item !== null && willPersistExactAction(item, "block", blockScope, watchOnlyObservation);
-  let resolvedAllowButtonLabel = allowButtonLabel(allowScope);
+  let resolvedAllowButtonLabel = allowButtonLabel(allowScope, versionBoundScript, persistExactAllow);
   if (watchOnlyObservation) {
     resolvedAllowButtonLabel = "Keep allowing";
-  } else if (persistExactAllow) {
+  } else if (persistExactAllow && !versionBoundScript) {
     resolvedAllowButtonLabel = "Approve and remember";
   } else if (retryCannotReuseApproval(item)) {
     resolvedAllowButtonLabel = "Choose an available approval duration";
@@ -366,6 +367,7 @@ export function ReviewDecisionCard(props: {
             hasAllowScope={hasAllowScope}
             taskCapabilityCopy={taskCapabilityCopy}
             exactActionPersistenceEligible={item.exact_action_persistence_eligible === true}
+            versionBoundScript={versionBoundScript}
             rememberExactAction={rememberExactAction}
             oneTimeRetryBlocked={retryCannotReuseApproval(item)}
             retryWindowMinutes={oneTimeRetryWindowMinutes(item)}

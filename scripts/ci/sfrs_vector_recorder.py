@@ -46,8 +46,6 @@ _ENTRY_POINTS: tuple[tuple[str, str, int], ...] = (
     (f"{_SERVICES}.request_models", "extract_sensitive_file_read_request", 0),
     (f"{_SERVICES}.request_models", "extract_sensitive_file_read_request_from_action", 0),
     (f"{_SERVICES}.request_artifacts", "extract_sensitive_file_write_request", 0),
-    (f"{_SERVICES}.request_artifacts", "build_file_read_request_artifact", 0),
-    (f"{_SERVICES}.request_artifacts", "build_file_write_request_artifact", 0),
     (f"{_SERVICES}.request_artifacts", "command_list_candidate_texts", 0),
     (f"{_SERVICES}.benign_requests", "is_explicitly_benign_native_file_read_request", 0),
     (f"{_SERVICES}.benign_requests", "build_tool_action_request_artifact", 0),

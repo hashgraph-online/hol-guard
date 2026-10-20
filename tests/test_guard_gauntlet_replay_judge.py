@@ -96,13 +96,31 @@ def test_a_contained_omp_receipt_needs_the_same_marker(monkeypatch: pytest.Monke
 
 def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
-    assert marked == {"neg-cargo-check-locked-host-toolchain"}
+    assert marked == {
+        "neg-cargo-check-locked-host-toolchain",
+        "neg-env-bare-set-then-list",
+        "neg-env-git-dir-then-list",
+        "neg-env-ld-preload-then-list",
+        "neg-env-pager-names-program",
+        # A `find` that is not limited to regular files hands a link to `grep`, which opens its
+        # target; the contained run reaches nothing outside the workspace.
+        "neg-find-exec-grep-l-edge-clone-without-type-f",
+        # The sandbox has no network for the push to reach the remote over, and no home access
+        # for the widened search, so a contained run sends nothing and prints no key.
+        "neg-git-push-to-tmp-chain",
+        "neg-rg-replace-widens-home-search",
+        # A sibling checkout's workflows and test runner: a contained run reads only the
+        # workspace, so `-exec cat`, a preloaded module or a dotfile probe reaches no secret.
+        "neg-sibling-find-github-exec-cat",
+        "neg-sibling-ls-missing-env-below-github",
+        "neg-sibling-node-heap-require-other-checkout",
+    }
 
 
 _SETUP_RESULT = {
     "policy_action": "block",
     "decision": "deny",
-    "reason": f"{connector_setup_reason('lanectl', 'cli', ask=False)} {SAFE_ALTERNATIVE_GUIDANCE}",
+    "reason": f"{connector_setup_reason('lanectl', 'cli', ask=False)} Review it at http://127.0.0.1:9/requests/r1.",
 }
 _SETUP_ROW = {
     "reason_code": "native_command_review_required",
@@ -118,6 +136,9 @@ def test_setup_needs_the_connector_outcome_not_a_generic_review() -> None:
     assert judge(_case("setup"), _SETUP_RESULT, [_SETUP_ROW, _SETUP_ROW]) is not None
     assert judge(_case("setup"), _SETUP_RESULT, [{**_SETUP_ROW, "reason_code": "native_policy_block"}]) is not None
     assert judge(_case("setup"), _QUIET, []) is not None
+    # A local CLI is approvable: sending the agent to a safe alternative instead of the approval is wrong.
+    redirected = {**_SETUP_RESULT, "reason": f"{_SETUP_RESULT['reason']} {SAFE_ALTERNATIVE_GUIDANCE}"}
+    assert "redirect the agent" in str(judge(_case("setup"), redirected, [_SETUP_ROW]))
 
 
 def test_a_setup_case_is_replayed_as_setup() -> None:

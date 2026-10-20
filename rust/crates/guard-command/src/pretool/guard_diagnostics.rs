@@ -5,6 +5,11 @@
 //! incident, uninstall, policy and other control subcommands keep the normal
 //! review or critical-floor path.
 //!
+//! `hol-guard settings` is admitted with its read-only views (`list`, `explain`
+//! and `doctor`, each with an optional `--json`). They print the saved
+//! configuration and the posture summary. `settings set`, `approval-password`
+//! and `approval-totp` change state and keep the normal review path.
+//!
 //! `hol-guard dashboard` is admitted beside them. It starts Guard's own daemon
 //! when it is not running and opens the local approval center in the browser.
 //! The session token travels only to the browser; the printed URL is redacted.
@@ -64,6 +69,8 @@ pub(super) fn safe_hol_guard_arguments(arguments: &[String]) -> bool {
             | ["status" | "doctor" | "settings"]
             | ["daemon", "status"]
             | ["status" | "doctor" | "settings", "--json"]
+            | ["settings", "list" | "explain" | "doctor"]
+            | ["settings", "list" | "explain" | "doctor", "--json"]
             | ["daemon", "status", "--json"]
             | ["dashboard"]
             | ["dashboard", "--json"]
@@ -222,6 +229,12 @@ mod tests {
             "doctor --json",
             "settings",
             "settings --json",
+            "settings list",
+            "settings list --json",
+            "settings explain",
+            "settings explain --json",
+            "settings doctor",
+            "settings doctor --json",
             "dashboard",
             "dashboard --json",
             "--help",
@@ -270,7 +283,15 @@ mod tests {
             "daemon stop",
             "daemon status --port 1",
             "settings set mode off",
-            "settings doctor",
+            "settings set protection off",
+            "settings list --home /tmp",
+            "settings explain --guard-home /tmp",
+            "settings doctor --workspace /tmp",
+            "settings list extra",
+            "settings list --json --json",
+            "settings approval-password",
+            "settings approval-totp",
+            "settings get",
             "uninstall",
             "repair",
             "repair --json",

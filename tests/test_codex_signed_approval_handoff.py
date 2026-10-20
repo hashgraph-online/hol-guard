@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import json
-import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard import approval_hook_copy as approval_hook_copy_module
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
 from codex_plugin_scanner.guard.adapters import codex_daemon_hook_resume as resume
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 from codex_plugin_scanner.guard.approval_hook_copy import (
     _SIGNED_APPROVAL_LINK_UNAVAILABLE,
     live_hook_approval_context,
@@ -205,10 +203,7 @@ def test_codex_live_approval_does_not_open_unsigned_local_url_without_auth(
     assert approval_url not in captured.err
 
 
-def test_codex_bridge_stdout_excludes_native_approval_aliases(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_codex_bridge_stdout_excludes_native_approval_aliases() -> None:
     review_url = "http://127.0.0.1:5474/requests/req-native-codex-bridge"
     signed_url = f"{review_url}#guard-token=fixture"
     response = {
@@ -226,16 +221,7 @@ def test_codex_bridge_stdout_excludes_native_approval_aliases(
             "permissionDecisionReason": f"Open HOL Guard: {signed_url}.",
         },
     }
-    monkeypatch.setattr(bridge, "apply_browser_approval_wait", lambda payload, **_kwargs: payload)
-
-    stdout = bridge._bridge_output(
-        response,
-        event_name="PreToolUse",
-        hook_input="{}",
-        state_path=tmp_path / "daemon-state.json",
-        deadline=time.monotonic() + 1,
-    )
-    filtered = json.loads(stdout)
+    filtered = codex_hook_response(response, event_name="PreToolUse")
 
     assert set(filtered) == {"hookSpecificOutput"}
     assert filtered["hookSpecificOutput"]["permissionDecisionReason"] == f"Open HOL Guard: {signed_url}."

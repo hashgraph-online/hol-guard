@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 use super::super::context::{Ctx, Engines, LocalExecution};
 use super::super::launch::launch_identity;
 use super::node_script;
+#[path = "node_installed_tests.rs"]
+mod installed_tests;
 
 struct Fixed;
 
@@ -119,7 +121,11 @@ fn report_project() -> Project {
     project.write("node_modules/vm/package.json", r#"{"name": "vm"}"#);
     project.write(
         "node_modules/csv-lite/package.json",
-        r#"{"name": "csv-lite", "version": "1.0.0"}"#,
+        r#"{"name":"csv-lite","version":"1.0.0","type":"module","main":"index.js"}"#,
+    );
+    project.write(
+        "node_modules/csv-lite/index.js",
+        "export const parse = String;\n",
     );
     project
 }
@@ -134,12 +140,12 @@ fn a_script_binds_its_whole_module_graph() {
         .iter()
         .map(|entry| entry["path"].as_str().unwrap())
         .collect();
-    assert_eq!(modules.len(), 3, "{bound}");
+    assert_eq!(modules.len(), 4, "{bound}");
     assert!(modules.iter().any(|path| path.ends_with("lib/format.mjs")));
     assert_eq!(bound["builtins"], json!(["fs/promises", "path"]));
     assert_eq!(bound["packages"].as_array().unwrap().len(), 1);
     // The package scope and the imported JSON are both bound as data.
-    assert_eq!(bound["data"].as_array().unwrap().len(), 2);
+    assert_eq!(bound["data"].as_array().unwrap().len(), 3);
 
     // Editing a transitively imported module changes the identity.
     project.write("scripts/lib/sum.mjs", "export const total = () => 0;\n");
@@ -153,6 +159,47 @@ fn a_script_binds_its_whole_module_graph() {
     assert_ne!(
         edited,
         bind(&project, &["scripts/report.mjs", "--limit", "5"], &[]).unwrap()
+    );
+}
+
+#[test]
+fn installed_package_code_changes_identity_with_unchanged_manifest_size_and_mtime() {
+    let project = Project::new();
+    project.write("package.json", r#"{"type":"module"}"#);
+    project.write(
+        "report.mjs",
+        "import value from 'local-report'; console.log(value);\n",
+    );
+    project.write(
+        "node_modules/local-report/package.json",
+        r#"{"name":"local-report","version":"1.0.0","type":"module","main":"index.js"}"#,
+    );
+    project.write(
+        "node_modules/local-report/index.js",
+        "export default 'safe';\n",
+    );
+    let before = bind(&project, &["report.mjs"], &[]).unwrap();
+    let installed = project.0.join("node_modules/local-report/index.js");
+    let metadata = std::fs::metadata(&installed).unwrap();
+    project.write(
+        "node_modules/local-report/index.js",
+        "export default 'evil';\n",
+    );
+    std::fs::File::options()
+        .write(true)
+        .open(&installed)
+        .unwrap()
+        .set_times(std::fs::FileTimes::new().set_modified(metadata.modified().unwrap()))
+        .unwrap();
+    assert_eq!(std::fs::metadata(&installed).unwrap().len(), metadata.len());
+    assert_eq!(
+        std::fs::metadata(&installed).unwrap().modified().unwrap(),
+        metadata.modified().unwrap()
+    );
+    let after = bind(&project, &["report.mjs"], &[]).unwrap();
+    assert_ne!(
+        before, after,
+        "installed executable bytes are part of the reviewed version"
     );
 }
 
@@ -259,7 +306,11 @@ fn launches_that_load_unbound_code_stay_once_only() {
         project.write("bad/native.node", "binary");
         assert_eq!(
             bind(&project, &[&format!("bad/{name}.mjs")], &[]),
-            Err("mutable_launcher"),
+            Err(if name == "missing-package" {
+                "node_package_entrypoint_unproven"
+            } else {
+                "mutable_launcher"
+            }),
             "{name}"
         );
     }
@@ -276,9 +327,19 @@ fn ordinary_process_and_module_use_still_binds() {
         "scripts/tool.cjs",
         "const fs = require('fs');\nconst { parse } = require('csv-lite');\nconst job = { process: (rows) => rows };\nfunction main() { fs.writeFileSync('out.json', String(job.process(parse))); }\nif (require.main === module) main();\nmodule.exports = { main };\n",
     );
-    for script in ["scripts/cli.mjs", "scripts/tool.cjs"] {
-        assert!(bind(&project, &[script], &[]).is_ok(), "{script}");
-    }
+    assert!(bind(&project, &["scripts/cli.mjs"], &[]).is_ok());
+    // Installed package code is mutable too. This conservative proof cannot
+    // establish that every imperative load precedes every possible write.
+    assert_eq!(
+        bind(&project, &["scripts/tool.cjs"], &[]),
+        Err("node_runtime_package_mutation_unproven")
+    );
+    let source = std::fs::read_to_string(project.0.join("scripts/tool.cjs")).unwrap();
+    project.write(
+        "scripts/tool.cjs",
+        &source.replace("writeFileSync", "readFileSync"),
+    );
+    assert!(bind(&project, &["scripts/tool.cjs"], &[]).is_ok());
 }
 
 #[test]

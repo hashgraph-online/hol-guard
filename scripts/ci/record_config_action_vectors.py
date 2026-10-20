@@ -21,6 +21,7 @@ import json
 import random
 import sys
 import tempfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from codex_plugin_scanner.guard.config import GuardConfig
@@ -165,6 +166,46 @@ def _old_data_flow_action(config: GuardConfig, strong: bool) -> object:
     return action
 
 
+# The recorded vectors are the independent oracle for the resident's artifact
+# facts, so these readers live here rather than being imported from the runtime
+# the vectors check. They are the Python readers as they stood when the facts
+# moved into `hook_artifact_facts_op.rs`.
+def _recorded_risk_confidence(artifact) -> object:  # type: ignore[no-untyped-def]
+    confidence = artifact.metadata.get("risk_confidence")
+    if confidence is None:
+        confidence = artifact.metadata.get("confidence")
+    if isinstance(confidence, str) and confidence.strip():
+        return confidence
+    signals = artifact.metadata.get("risk_signals")
+    if not isinstance(signals, Sequence) or isinstance(signals, (str, bytes)):
+        return confidence
+    for signal in signals:
+        if not isinstance(signal, Mapping):
+            continue
+        signal_confidence = signal.get("confidence")
+        if isinstance(signal_confidence, str) and signal_confidence.strip():
+            return signal_confidence
+    return confidence
+
+
+def _recorded_skill_is_known_bad(artifact) -> bool:  # type: ignore[no-untyped-def]
+    if artifact.metadata.get("known_bad_skill") is True:
+        return True
+    if artifact.metadata.get("skill_is_known_bad") is True:
+        return True
+    intel = artifact.metadata.get("threat_intel")
+    return isinstance(intel, Mapping) and intel.get("known_bad") is True
+
+
+def _recorded_writes_launch_agent(artifact) -> bool:  # type: ignore[no-untyped-def]
+    return artifact.metadata.get("persistence_writes_launch_agent") is True
+
+
+def _recorded_action_class(artifact) -> str | None:  # type: ignore[no-untyped-def]
+    action_class = artifact.metadata.get("action_class")
+    return action_class if isinstance(action_class, str) else None
+
+
 def record() -> list[dict[str, object]]:
     import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
     from codex_plugin_scanner.guard import protection_events
@@ -172,7 +213,6 @@ def record() -> list[dict[str, object]]:
     from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_requires_hard_block
     from codex_plugin_scanner.guard.harness_posture import harness_posture_override
-    from codex_plugin_scanner.guard.protection_posture import is_high_confidence
 
     events: list[dict[str, object]] = []
     protection_events.record_protection_event = lambda _home, _name, payload: events.append(dict(payload))
@@ -187,7 +227,7 @@ def record() -> list[dict[str, object]]:
         action = policy._runtime_artifact_policy_action(config, artifact, HARNESS)
         metadata = artifact.metadata
         default = metadata.get("guard_default_action")
-        confidence = runtime_policy._artifact_risk_confidence(artifact)
+        confidence = _recorded_risk_confidence(artifact)
         query = {
             "policy_config": {
                 "default_action": config.default_action,
@@ -216,10 +256,9 @@ def record() -> list[dict[str, object]]:
                 "shell_local_script_review": metadata.get("reason_code") == "shell_local_script_execution_review",
                 "guard_default_action": default if default is None or isinstance(default, str) else "",
                 "confidence_text": str(confidence or ""),
-                "confidence_strong": is_high_confidence(confidence),
-                "writes_launch_agent": runtime_policy._artifact_writes_launch_agent(artifact),
-                "action_class": runtime_policy._artifact_action_class(artifact),
-                "skill_is_known_bad": runtime_policy._artifact_skill_is_known_bad(artifact),
+                "writes_launch_agent": _recorded_writes_launch_agent(artifact),
+                "action_class": _recorded_action_class(artifact),
+                "skill_is_known_bad": _recorded_skill_is_known_bad(artifact),
             },
         }
         data_flow = {

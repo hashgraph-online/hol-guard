@@ -27,8 +27,8 @@ label.
 | --- | --- |
 | Oh My Pi (`omp`) | The `@oh-my-pi/pi-coding-agent` package metadata next to the installed `omp` command. A standalone binary is checked with a bounded `omp --version`. |
 
-The current release bundles no Oh My Pi coverage records, so Oh My Pi shows
-**Coverage unavailable** until evidence is promoted for a release.
+A release bundles Oh My Pi coverage records only once evidence is promoted for
+it (see below). Until then Oh My Pi shows **Coverage unavailable**.
 
 ## How Guard checks the version
 
@@ -102,20 +102,57 @@ These do **not** establish coverage:
 - a version observed on a developer machine;
 - evidence for a nearby version.
 
+### When promotion happens
+
+Promote on the **release PR** (the Release Please PR), never on a feature
+branch. There `__version__` already holds the version being released, and the
+promotion command reads it, so the record is bound to the build that ships. A
+record promoted earlier names an older Guard version and stops applying at
+runtime the moment the version changes.
+
+The harness version to record is the one the release pins: the exact version
+the qualifying run exercised.
+
+### What evidence each level needs
+
+| Record | Evidence | Command flags |
+| --- | --- | --- |
+| `unit_test`, `PreToolUse` only | A green `pi-exact-continuation` run (the `ci/pi-exact-continuation` suite) against the pinned harness version. | `--suite pi-exact-continuation` |
+| `live_block`, all three events | A passing full Gauntlet qualification (`guard-gauntlet-full-task`) against the exact harness version, on the release candidate. | `--suite guard-gauntlet-full-task` |
+
+A `unit_test` record never supports a `live_block` claim: the command rejects
+events or an evidence level the suite does not reach. List one `--platform` per
+platform the run covered, and point `--evidence-reference` at the retained run
+or artifact in this repository.
+
 ### Promote
 
-1. Run an eligible suite against the exact app version and the release
-   candidate Guard version, on each platform you intend to claim.
-2. Confirm the run passed and retain its artifact.
-3. Add one record per exact version with the suite, events, platforms,
-   evidence level, reference, and `observed_at` timestamp.
-4. Bump `revision`. A new revision re-shows the warning for anyone who
-   acknowledged an untested version.
-5. Run the checks:
+1. On the release PR, confirm the run passed and retain its artifact.
+2. Run the promotion command, once per exact version:
 
    ```sh
-   python scripts/ci/validate_harness_version_coverage.py
-   python scripts/ci/validate_harness_version_coverage.py --release   # on the release PR
+   python scripts/ci/promote_harness_version_coverage.py \
+     --harness omp \
+     --harness-version <exact version> \
+     --suite guard-gauntlet-full-task \
+     --evidence-reference https://github.com/hashgraph-online/hol-guard/actions/runs/<run id> \
+     --platform darwin-arm64 --platform linux-x86_64 \
+     --prune-stale
+   ```
+
+   It reads the Guard version from `codex_plugin_scanner.version.__version__`,
+   validates the record with the same code Guard runs at load time, writes it,
+   and bumps `revision` (a new revision re-shows the warning for anyone who
+   acknowledged an untested version). It refuses an ineligible suite, events or
+   evidence level the suite does not support, a reference outside this
+   repository, an inexact version, a record over the per-harness limit, or a
+   manifest over the size limit, and leaves the file untouched when it does.
+   Promoting a version that is already recorded replaces its record.
+   `--prune-stale` removes records still bound to an earlier Guard version.
+3. Run the checks:
+
+   ```sh
+   python scripts/ci/validate_harness_version_coverage.py --release
    python scripts/ci/validate_harness_version_coverage.py --wheel dist/<wheel>.whl
    ```
 
@@ -128,7 +165,10 @@ same change that records the finding, and bump `revision`.
 ### Each release
 
 Records are bound to a Guard version, so a new Guard release starts with no
-applicable coverage. On the Release Please PR, the quality job runs the
-validator with `--release`, which fails while any record names another Guard
-version. Re-promote the records with fresh evidence for the release, or remove
-them.
+applicable coverage. `--release` fails while any record names another Guard
+version, and it runs in two places: the quality job on the Release Please PR,
+and the stable build in `publish.yml`, so a stale record cannot ship even if the
+PR check was bypassed. Alpha and canary builds do not run it: their versions
+never equal the release a record is promoted for, and an alpha cannot promote
+evidence yet. Re-promote each record with fresh evidence for the release, or
+remove it.

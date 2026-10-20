@@ -1,4 +1,4 @@
-//! End-to-end `describe`/`verify` runs against stub `git`/`gh` executables.
+//! End-to-end `describe`/`verify`/`lineage` runs against stub `git`/`gh` executables.
 
 use super::tests::{temp_dir, write_executable};
 use super::*;
@@ -50,6 +50,9 @@ fn describe_request(stub: &Stub, command: &str) -> GithubWorkflowPrepareRequestV
         environment: Some(stub.environment.clone()),
         policy_version: Some("policy.v1@abc".to_owned()),
         record: None,
+        approval_request: None,
+        operation: None,
+        session: None,
     }
 }
 
@@ -85,6 +88,123 @@ fn describe_binds_viewer_repository_and_executable() {
     verify.mode = "verify".to_owned();
     verify.record = Some(record.to_value());
     assert_eq!(run(&verify).verified, Some(true));
+    let _ = std::fs::remove_dir_all(stub.root);
+}
+
+#[cfg(unix)]
+fn lineage_request(
+    stub: &Stub,
+    approval_request: Option<Value>,
+    operation: Option<Value>,
+    session: Option<Value>,
+) -> GithubWorkflowPrepareRequestV1 {
+    GithubWorkflowPrepareRequestV1 {
+        mode: "lineage".to_owned(),
+        approval_request,
+        operation,
+        session,
+        ..describe_request(stub, "")
+    }
+}
+
+/// The three store rows for one lock-issue retry, bound to the stub workspace.
+#[cfg(unix)]
+fn lineage_rows(command: &str, workspace: &str, record: &Value) -> (Value, Value, Value) {
+    let approval_request = json!({
+        "request_id": "req-1",
+        "harness": "claude-code",
+        "artifact_type": "tool_action_request",
+        "scanner_evidence": [{"source": "github_workflow_approval_record", "record": record}],
+    });
+    let operation = json!({
+        "operation_id": "op-1",
+        "session_id": "sess-1",
+        "harness": "claude-code",
+        "operation_type": "tool_call",
+        "status": "waiting_on_approval",
+        "approval_request_ids": ["req-1"],
+        "metadata": {
+            "hook_event_name": "PreToolUse",
+            "command_text": command,
+            "workspace": workspace,
+        },
+    });
+    let session = json!({
+        "session_id": "sess-1",
+        "harness": "claude-code",
+        "surface": "harness-adapter",
+        "capabilities": ["approval-resolution"],
+        "workspace": workspace,
+    });
+    (approval_request, operation, session)
+}
+
+#[cfg(unix)]
+#[test]
+fn lineage_validates_real_rows_and_returns_their_identities() {
+    let stub = stub("lineage", "git@github.com:Example/Repo.git", VIEWER_GH);
+    let gh = stub.root.join("bin/gh");
+    let command = format!("{} issue lock 17 --repo example/repo", gh.display());
+    let record = run(&describe_request(&stub, &command)).record.unwrap();
+    let workspace = stub.workspace.to_str().unwrap().to_owned();
+    let (approval_request, operation, session) = lineage_rows(&command, &workspace, &record);
+
+    let result = run(&lineage_request(
+        &stub,
+        Some(approval_request.clone()),
+        Some(operation.clone()),
+        Some(session.clone()),
+    ));
+    assert_eq!((result.status.as_str(), result.code.as_str()), ("ok", "ok"));
+    let lineage = result.lineage.unwrap();
+    assert_eq!(lineage["request_id"], "req-1");
+    assert_eq!(lineage["operation_id"], "op-1");
+    assert_eq!(lineage["session_id"], "sess-1");
+    // The op carries the identities the lineage names the capability by, so the
+    // host looks a capability up under the digest the resident derived.
+    assert_eq!(
+        lineage["capability_id"],
+        "gwc-04caee1311432ac664fb0049886efc8542650745e0ae8d1f196e9d59e679d2e3"
+    );
+    assert_eq!(
+        lineage["nonce"],
+        "8181504e4207c78e7a25469f287b65a4d76ba8efd47133cac27a0335be52ccee"
+    );
+    assert_eq!(
+        GitHubWorkflowApprovalRecord::decode(&lineage["record"]).unwrap(),
+        GitHubWorkflowApprovalRecord::decode(&record).unwrap()
+    );
+
+    // A persisted command that no longer derives the record breaks the lineage.
+    let mut moved = operation.clone();
+    moved["metadata"]["command_text"] = json!(format!(
+        "{} issue lock 18 --repo example/repo",
+        gh.display()
+    ));
+    let broken = run(&lineage_request(
+        &stub,
+        Some(approval_request.clone()),
+        Some(moved),
+        Some(session),
+    ));
+    assert_eq!(
+        (broken.status.as_str(), broken.code.as_str()),
+        ("ok", "none")
+    );
+    assert!(broken.lineage.is_none());
+
+    // A missing row is a malformed request, not a broken lineage.
+    let missing = run(&lineage_request(
+        &stub,
+        Some(approval_request),
+        Some(operation),
+        None,
+    ));
+    assert_eq!(
+        (missing.status.as_str(), missing.code.as_str()),
+        ("error", "native_github_workflow_prepare_invalid")
+    );
+    assert!(missing.lineage.is_none());
     let _ = std::fs::remove_dir_all(stub.root);
 }
 
@@ -242,6 +362,9 @@ fn malformed_requests_are_rejected() {
         environment: None,
         policy_version: None,
         record: None,
+        approval_request: None,
+        operation: None,
+        session: None,
     };
     let code = |request: &GithubWorkflowPrepareRequestV1| {
         serde_json::from_slice::<GithubWorkflowPrepareResultV1>(

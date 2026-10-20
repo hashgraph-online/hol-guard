@@ -293,12 +293,17 @@ use cloud_evaluation::evaluate_with_cloud;
 #[path = "supply_chain_package_eval/saved_policy.rs"]
 mod saved_policy;
 use saved_policy::{saved_policy_keeps_cached_error, SavedPolicyOutcome};
+#[path = "supply_chain_package_eval/cache_reuse.rs"]
+mod cache_reuse;
 #[path = "supply_chain_package_eval/orchestration.rs"]
 mod orchestration;
 use orchestration::evaluate_package_request_artifact_uncached;
 #[path = "supply_chain_package_eval/source_review.rs"]
 mod source_review;
 use source_review::evaluate_non_registry_sources;
+#[path = "supply_chain_package_eval/review_triggers.rs"]
+mod review_triggers;
+use review_triggers::{apply_review_triggers, ReviewTriggers};
 #[path = "supply_chain_package_eval/draft_conversion.rs"]
 mod draft_conversion;
 use draft_conversion::evaluation_to_draft;

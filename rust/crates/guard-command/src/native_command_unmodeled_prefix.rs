@@ -153,18 +153,63 @@ fn sources_a_file(piece: &str) -> bool {
 /// in its own argument, `sudo` runs it as somebody else, and an `env` carrying
 /// a live assignment changes what it inherits. Those keep their failure.
 pub(super) fn launch_only(literal: &str) -> bool {
-    let words: Vec<&str> = literal.split_whitespace().collect();
+    let first_piece = literal
+        .split(|character: char| {
+            matches!(
+                character,
+                ';' | '&' | '|' | '(' | ')' | '{' | '}' | '\n' | '`'
+            )
+        })
+        .next()
+        .unwrap_or_default();
+    wrapper_names_its_program(first_piece) && !interpreter_launch_reads_a_file(literal, false)
+}
+
+/// Whether the wrapper the text begins with runs the program the text already
+/// names.
+///
+/// A launcher does when its own grammar counts past its options. An `env`
+/// does too when it hands its environment to no program at all: it writes the
+/// environment and exits, the way `printenv` does, so the rest of the text is
+/// the whole of what runs. No grammar covers that `env`, because it launches
+/// nothing to count options for, and without this arm `env`, `env -0` and
+/// `env | grep '^PATH='` kept the parser's wrapper failure and blocked
+/// outright, with no approval to give them. The dump still reaches the
+/// owners' floor, which is never less than review, so what changes is that it
+/// can be reviewed rather than only refused - a path-spelled `./env` of the
+/// user's own included.
+///
+/// `env` spends a positional only on the program it runs, and the assignments
+/// it carries stand before that program. They are read in the order the text
+/// wrote them rather than dropped, because an assignment ends option parsing:
+/// in `env PATH=. -i` the `-i` is the program name, not a flag, and dropping
+/// the assignment first would read that command as a dump. An `env` that does
+/// name a program keeps its failure: that program is one this scan has not
+/// read.
+fn wrapper_names_its_program(piece: &str) -> bool {
+    let words: Vec<&str> = piece
+        .split_whitespace()
+        .map(|word| word.trim_matches(['\'', '"']))
+        .filter(|word| !word.is_empty())
+        .collect();
     let Some(first) = words.first() else {
         return false;
     };
-    is_launcher(first) && !interpreter_launch_reads_a_file(literal, false)
+    if command_basename(first) == "env" || command_basename(first) == "env.exe" {
+        return !env_runs_a_program(&words[1..]);
+    }
+    is_launcher(first)
 }
 
 fn command_reads_a_program_file(piece: &str) -> bool {
     let words: Vec<&str> = piece
         .split_whitespace()
         .map(|word| word.trim_matches(['\'', '"']))
-        .filter(|word| !word.is_empty() && !is_assignment(word))
+        .filter(|word| !word.is_empty())
+        // Only the assignments a command carries in front of it belong to the
+        // shell; one further along is an argument, and dropping it would move
+        // the program this scan reads.
+        .skip_while(|word| is_assignment(word))
         // `nohup` is a shell prefix and a launcher at once. Skipping it here
         // would hand the script behind it to the program scan as the program
         // itself, so a launcher stops the skip and keeps its own grammar.
@@ -215,10 +260,95 @@ fn reads_a_program_file(words: &[&str], index: usize) -> bool {
         return true;
     };
     let program = command_basename(program);
+    if program == "env" || program == "env.exe" {
+        return env_runs_a_program(&words[index + 1..]);
+    }
     if !is_python(program.as_str()) {
         return INTERPRETERS.contains(&program.as_str());
     }
     !python_module_launch(&words[index + 1..])
+}
+
+/// Whether this `env` hands its environment to a program, or only prints it.
+///
+/// `env` is an interpreter when a program follows it: `env sh -c …` runs
+/// whatever that shell is given. With no program operand it runs nothing at
+/// all - it writes the environment and exits, the way `printenv` does - so
+/// reading it as an interpreter that launches an unread file left `env`,
+/// `env -0` and `env | grep '^PATH='` blocked outright, with no approval to
+/// give them. The dump itself still reaches the owners' floor, so it is
+/// reviewed rather than allowed; what changes is that it can be reviewed.
+///
+/// `env` spends a positional only on the program, so the first word that is
+/// not one of its own options is that program. The caller has already dropped
+/// the `NAME=value` assignments, which stand before the program in any case.
+///
+/// Only the options that are known to run nothing count as a dump; every other
+/// option says a program runs. `-S`/`--split-string` carries its program in
+/// its own value, so `env -Sbash`, `env --split-string=sh` and the cluster
+/// `env -iS'sh -c id'` are all shell launches spelled as a single
+/// dash-prefixed word, and a scan that skipped unrecognised options would read
+/// them as harmless dumps and offer them an approval. `-C`/`--chdir` and `-P`
+/// locate a program rather than describe one, so they are read the same way.
+fn env_runs_a_program(words: &[&str]) -> bool {
+    let mut index = 0;
+    while let Some(word) = words.get(index) {
+        // `--` ends option parsing, and so does an assignment, which is the
+        // first operand that is not an option. What follows either is the same
+        // run both times: assignments, then the program if the text names one.
+        // `env PATH=. -i` runs a program named `-i`, and `env -- FOO=bar` sets
+        // a variable for nothing and prints the environment.
+        if *word == "--" {
+            return operands_name_a_program(&words[index + 1..]);
+        }
+        if is_assignment(word) {
+            return operands_name_a_program(&words[index..]);
+        }
+        if !word.starts_with('-') || *word == "-" {
+            return true;
+        }
+        match env_option(word) {
+            None => return true,
+            // A split value spends the next word; an attached one carries its own.
+            Some(spends_a_word) => index += 1 + usize::from(spends_a_word),
+        }
+    }
+    false
+}
+
+/// Whether a run of `env` operands that can no longer hold options names a
+/// program. Every assignment in it is an environment update; the first word
+/// that is not one is the program, whatever shape it has.
+fn operands_name_a_program(operands: &[&str]) -> bool {
+    operands.iter().any(|operand| !is_assignment(operand))
+}
+
+/// Whether this option leaves `env` printing its environment, and if so whether
+/// its value is the next word. `None` means the option runs a program.
+fn env_option(word: &str) -> Option<bool> {
+    if let Some(long) = word.strip_prefix("--") {
+        let (name, attached) = match long.split_once('=') {
+            Some((name, _)) => (name, true),
+            None => (long, false),
+        };
+        return match name {
+            "ignore-environment" | "null" | "debug" | "help" | "version" => Some(false),
+            "unset" => Some(!attached),
+            _ => None,
+        };
+    }
+    let mut characters = word[1..].chars();
+    while let Some(letter) = characters.next() {
+        match letter {
+            // Value-less flags; the cluster continues after them.
+            'i' | '0' | 'v' => {}
+            // `-u NAME` takes the rest of the cluster, or the next word when
+            // the cluster ends here.
+            'u' => return Some(characters.next().is_none()),
+            _ => return None,
+        }
+    }
+    Some(false)
 }
 
 /// A word naming a file an interpreter reads, rather than a program on the

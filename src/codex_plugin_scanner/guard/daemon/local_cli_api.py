@@ -14,6 +14,7 @@ from ..adapters.harness_mcp_discovery import (
     DiscoveredRemoteMcpServer,
     apply_source_labels,
     configured_harness_detections,
+    configured_mcp_server_names,
     discover_harness_mcp_servers,
     discover_remote_mcp_servers,
     discovered_server_for_observation,
@@ -143,6 +144,8 @@ class LocalCliApiService:
         self._remote_discovery_cache: (
             tuple[float, tuple[DiscoveredRemoteMcpServer, ...], tuple[str, ...] | None] | None
         ) = None
+        # Server names per harness, read in the same pass as the servers.
+        self._configured_names: dict[str, tuple[str, ...]] = {}
         self._discovery_jobs = McpDiscoveryJobs()
         self._registry_setup_lock = threading.Lock()
         self._registry_setup_undo = RegistrySetupUndo(store)
@@ -377,10 +380,13 @@ class LocalCliApiService:
                     self._observe_harness_mcp_servers(strict=True, fresh=force_refresh)
                     if not cancel.is_set():
                         try:
-                            saturated = discover_observed_mcp_tools(self._store, seen_at=utc_now())
+                            saturated = discover_observed_mcp_tools(
+                                self._store, seen_at=utc_now(), configured_servers=self._configured_server_names()
+                            )
                         except LocalCliCatalogLimitError:
                             raise DiscoveryStageError("catalog_limit_reached") from None
                         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+                            _LOGGER.warning("observed MCP tool discovery failed", exc_info=True)
                             raise DiscoveryStageError("observed_provider_scan_failed") from None
                         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
                         if saturated:
@@ -541,10 +547,13 @@ class LocalCliApiService:
         except sqlite3.Error:
             _LOGGER.warning("observed record retention failed", exc_info=True)
         try:
-            saturated = discover_observed_mcp_tools(self._store, seen_at=utc_now())
+            saturated = discover_observed_mcp_tools(
+                self._store, seen_at=utc_now(), configured_servers=self._configured_server_names()
+            )
             if saturated:
                 discovery_issue = "catalog_limit_reached"
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+            _LOGGER.warning("observed MCP tool discovery failed", exc_info=True)
             discovery_issue = "observed_provider_scan_failed"
         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
         try:
@@ -866,6 +875,7 @@ class LocalCliApiService:
             if fresh:
                 # A forced refresh reads the configuration as it is now.
                 self._discovery_cache = self._remote_discovery_cache = None
+                self._configured_names = {}
             servers = self._discovered_servers(strict=True) if strict else self._discovered_servers()
             remote, remote_harnesses = self._remote_scan()
             return persist_discovered_harness_mcp_servers(
@@ -879,6 +889,10 @@ class LocalCliApiService:
             if strict:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return {}
+
+    def _configured_server_names(self) -> dict[str, tuple[str, ...]]:
+        _ = self._discovered_servers()
+        return self._configured_names
 
     def _discovery_workspace(self) -> Path | None:
         codex_install = self._store.get_managed_install("codex")
@@ -915,10 +929,12 @@ class LocalCliApiService:
         except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
             # A failed read leaves no remote snapshot to reconcile against.
             self._remote_discovery_cache = None
+            self._configured_names = {}
             if strict:
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
+        self._configured_names = configured_mcp_server_names(detections)
         try:
             remote = discover_remote_mcp_servers(
                 home_dir=home_dir,

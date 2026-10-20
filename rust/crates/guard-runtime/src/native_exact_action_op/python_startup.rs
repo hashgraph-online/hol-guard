@@ -22,6 +22,14 @@ const MAX_SITE_LISTING: usize = 65_536;
 const MAX_STARTUP_FILES: usize = 256;
 const CUSTOMIZE: [&str; 2] = ["sitecustomize", "usercustomize"];
 
+pub(super) fn runtime_library(executable: &Value, home: Option<&str>) -> Proof<Vec<String>> {
+    Layout::of(executable, false, home).map(|layout| layout.library)
+}
+
+pub(super) fn runtime_native_library(image: &str, version: &str) -> Proof<Option<String>> {
+    layout::library_of_native_image(image, version)
+}
+
 /// Whether the import system runs the cached bytecode at `pyc` in place of a
 /// source with `source` metadata. A hash-based file is bound whether or not
 /// Python checks its hash; a timestamp file only when it records the
@@ -129,7 +137,8 @@ impl Graph<'_> {
             return Err(MUTABLE_LAUNCHER);
         }
         if STANDARD_MODULES.contains(&name) {
-            return Ok(());
+            let parts: Vec<&str> = module.split('.').collect();
+            return self.add_standard(name, &parts, names);
         }
         let parts: Vec<&str> = module.split('.').collect();
         for site in sites {
@@ -253,7 +262,11 @@ impl Graph<'_> {
     /// Bind the code `site` runs before the script, and refuse a standard
     /// name a site directory also holds: the interpreter loads that copy
     /// when its own library lacks the module.
-    pub(super) fn add_startup(&mut self, executable: &Value, user_site: bool) -> Proof<()> {
+    pub(super) fn add_startup(
+        &mut self,
+        executable: &Value,
+        user_site: bool,
+    ) -> Proof<Vec<String>> {
         let layout = Layout::of(executable, user_site, self.ctx.home)?;
         let mut path_directories = layout.site.clone();
         for site in &layout.site {
@@ -274,6 +287,10 @@ impl Graph<'_> {
         for directory in layout.library.iter().chain(&path_directories) {
             self.add_customize(&path_directories, directory)?;
         }
+        Ok(path_directories)
+    }
+
+    pub(super) fn check_startup(&mut self, path_directories: &[String]) -> Proof<()> {
         if self.startup_replaces.writes() {
             return Err(MUTABLE_LAUNCHER);
         }
@@ -302,7 +319,7 @@ impl Graph<'_> {
             return Err(MUTABLE_LAUNCHER);
         }
         let standard: Vec<String> = self.standard.iter().cloned().collect();
-        for directory in &path_directories {
+        for directory in path_directories {
             let entries = self.listing_within(directory, MAX_SITE_LISTING)?;
             let shadowed = standard.iter().any(|name| {
                 entries.iter().any(|entry| {

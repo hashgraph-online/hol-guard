@@ -149,6 +149,13 @@ pub(crate) fn decide(query: &ApprovalProofQueryV1) -> Outcome {
                 && lookup_preserves_claim(reason_code.as_deref())
                 && fresh_tool_approval(decision.as_ref(), harness, artifact_id, artifact_hash),
         ),
+        ApprovalProofQueryV1::ClaimRowRevalidated {
+            claimed_decision,
+            current_decision,
+        } => Outcome::flag(claim_row_revalidated(
+            claimed_decision.as_ref(),
+            current_decision.as_ref(),
+        )),
         ApprovalProofQueryV1::PostclaimReviewAuthorized {
             claim_disposition,
             claimed_decision,
@@ -159,6 +166,44 @@ pub(crate) fn decide(query: &ApprovalProofQueryV1) -> Outcome {
             current_decision.as_ref(),
         )),
     }
+}
+
+/// Keys a claimed row may differ on and still be the same authority: counters
+/// that unrelated authority writes advance, not fields of the grant itself.
+const REVALIDATION_EXEMPT_KEYS: [&str; 2] =
+    ["_approval_authority_revision", "integrity_generation"];
+
+/// Whether a claimed row is still the authority a fresh lookup selects.
+///
+/// A claim that consumes its row answers for itself: the row is gone by
+/// design, so a lookup that no longer finds it proves nothing. A retained row
+/// has to still be there, field for field, apart from the counters above; a
+/// row that is absent, unclaimable, or changed in any other field is no longer
+/// the authority the launch was granted under.
+pub(crate) fn claim_row_revalidated(
+    claimed: Option<&Map<String, Value>>,
+    current: Option<&Map<String, Value>>,
+) -> bool {
+    let Some(claimed) = claimed else {
+        return false;
+    };
+    if claim_disposition(claimed) == Some(Disposition::Consumed) {
+        return true;
+    }
+    let Some(current) = current else {
+        return false;
+    };
+    claimed
+        .iter()
+        .filter(|(key, _)| !REVALIDATION_EXEMPT_KEYS.contains(&key.as_str()))
+        // A key the fresh row omits reads as null, the way the selecting store
+        // itself reads an absent column, so a row that never carried the field
+        // is not treated as a changed one.
+        .all(|(key, value)| {
+            current
+                .get(key)
+                .map_or(value.is_null(), |found| py_equal(found, value))
+        })
 }
 
 /// Whether a claimed row still authorizes the post-claim review: a consumed

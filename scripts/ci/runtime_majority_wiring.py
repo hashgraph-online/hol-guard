@@ -9,10 +9,15 @@ Reachability is a static, file-granular name graph.  A wired file ``G``
 reaches a file ``F`` when the code of ``G`` (comments, string contents and
 ``#[cfg(test)]`` regions blanked, ``mod x;`` declarations ignored) contains
 
-* the module alias or file name of ``F``: an alias declared by a ``mod``
-  statement is visible only inside the declaring file and its descendants,
-  a file stem is visible crate-wide, and either one is visible in another
-  crate only when ``G`` also names that crate; or
+* the module alias or file name of ``F``: an alias declared by a private
+  ``mod`` statement (or by ``pub(self) mod``) is visible only inside the
+  declaring file and its descendants, one declared ``pub(super)`` reaches the
+  file above the declaring one, one declared ``pub(crate)`` reaches the crate
+  root, and one declared ``pub`` reaches wherever the declaring file itself
+  reaches, so a ``pub`` alias under a ``pub(super)`` parent is visible exactly
+  where that parent is; a file stem is
+  visible crate-wide, and any of them is visible in another crate only when
+  ``G`` also names that crate; or
 * a public item name defined or implemented in ``F`` that ``G`` does not
   define itself and that at most ``MAX_AMBIGUITY`` counted files define.
 
@@ -70,6 +75,9 @@ class WiringFile:
     parent: str = ""
     included_by: str = ""
     public_mod: bool = False
+    # ``private``, ``super``, ``crate`` or ``pub``: the normalised visibility of
+    # this file's own ``mod`` declaration in its parent.
+    mod_visibility: str = "private"
 
 
 def visible_code(code: str, flags: bytearray) -> str:
@@ -121,13 +129,40 @@ def build_files(
             if target in by_resolved and not by_resolved[target].parent:
                 child = by_resolved[target]
                 child.parent, child.alias = path, alias
-                child.public_mod = (
-                    re.search(r"\bpub(?:\s*\([^)]*\))?\s+mod\s+" + re.escape(alias) + r"\s*;", parent_text) is not None
+                declaration = re.search(
+                    r"\bpub(?:\s*\((?P<vis>[^)]*)\))?\s+mod\s+" + re.escape(alias) + r"\s*;", parent_text
                 )
+                visibility = "" if declaration is None else (declaration.group("vis") or "").strip()
+                child.mod_visibility = _mod_visibility(declaration is not None, visibility)
+                child.public_mod = child.mod_visibility != "private"
         for target in includes:
             if target in by_resolved:
                 by_resolved[target].included_by = path
     return list(files.values())
+
+
+def _mod_visibility(declared_pub: bool, visibility: str) -> str:
+    """Normalise a ``mod`` declaration's visibility to one of four answers.
+
+    ``pub(in crate)``, ``pub(in self)`` and ``pub(in super)`` are spellings of
+    ``pub(crate)``, ``pub(self)`` and ``pub(super)``, and ``pub(self)`` says
+    exactly what a bare ``mod`` says.  Any other ``pub(in path)`` is held where
+    a private declaration is held, because this gate does not resolve the path
+    and the path may name the declaring module itself: ``pub(in crate::outer)``
+    written in ``outer.rs`` reaches no further than ``pub(self)`` does.
+    Under-reaching drops a file from the wired share, while over-reaching would
+    count an unwired one, and that is the thing this gate exists to stop.
+    """
+    if not declared_pub:
+        return "private"
+    inner = visibility[len("in ") :].strip() if visibility.startswith("in ") else visibility
+    if inner == "":
+        return "pub"
+    if inner == "crate":
+        return "crate"
+    if inner == "super":
+        return "super"
+    return "private"
 
 
 def _crate_ident(name: str) -> str:
@@ -190,6 +225,35 @@ def compute_wired(files: list[WiringFile], crate_deps: dict[str, set[str]], entr
         return found
 
     subtrees: dict[str, set[str]] = {}
+
+    def alias_anchor(target: WiringFile) -> str:
+        """The topmost file whose subtree may name ``target``'s ``mod`` alias.
+
+        Each declaration answers this for itself, and ``pub`` hands the question
+        to the file that declared it: a ``pub`` module is nameable wherever its
+        own parent is nameable, so the walk follows the declarations upward
+        rather than testing one ancestor.  A bare ``mod`` or ``pub(self)`` keeps
+        the alias inside the declaring file, ``pub(super)`` reaches the file
+        above it, and ``pub(crate)`` reaches the crate root whatever sits in
+        between.  Stopping the walk early leaves a file that really is named out
+        of the wired share; carrying it past a boundary lets a file that cannot
+        name the module mark it wired, and unwired code counted as runtime is
+        the one thing this gate exists to stop.
+        """
+        node = target
+        while True:
+            parent = by_path[node.parent]
+            visibility = node.mod_visibility
+            if visibility == "private" or not parent.parent:
+                return parent.path
+            if visibility == "crate":
+                while parent.parent:
+                    parent = by_path[parent.parent]
+                return parent.path
+            if visibility == "super":
+                return by_path[parent.parent].path
+            node = parent
+
     crate_roots = {item.crate: item for item in files if item.is_root}
     wired: dict[str, str] = {item.path: "" for item in files if item.crate == entry_crate and item.is_root}
     queue: deque[str] = deque(wired)
@@ -219,8 +283,8 @@ def compute_wired(files: list[WiringFile], crate_deps: dict[str, set[str]], entr
                     reach(target, current.path)
             for target in aliased.get(name, ()):
                 if target.crate == current.crate:
-                    scope = subtrees.setdefault(target.parent, subtree(target.parent))
-                    if current.path in scope:
+                    anchor = alias_anchor(target)
+                    if current.path in subtrees.setdefault(anchor, subtree(anchor)):
                         reach(target, current.path)
                 elif target.crate in crates and by_path[target.parent].is_root:
                     reach(target, current.path)

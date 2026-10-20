@@ -55,7 +55,7 @@ def reserve_legacy_baseline(store, connection, metadata, *, key, recorded_at):
 
     require_exclusive_command_control_mutation_lease(store.guard_home)
     marker = connection.execute("select version from extension_control_schema_migration where singleton=1").fetchone()
-    if marker is not None and marker["version"] == 5:
+    if marker is not None and marker["version"] in {5, 6}:
         row = connection.execute("select * from extension_command_pack_activation where singleton=1").fetchone()
         if row is None:
             raise ValueError("retained pack activation is missing")

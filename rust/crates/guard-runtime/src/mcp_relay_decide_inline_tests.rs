@@ -17,6 +17,13 @@ fn the_relay_classifies_every_reply_the_proxy_classifies() {
     for vector in fixture["vectors"].as_array().unwrap() {
         let name = vector["name"].as_str().unwrap();
         let classified = Reply::classify(&vector["response"]);
+        // The proxy reduces the response to its payload before it asks, so the
+        // resident classifies that payload to the same reply.
+        assert_eq!(
+            Reply::classify_payload(&vector["payload"]),
+            classified,
+            "{name}"
+        );
         assert_eq!(
             classified,
             reply(vector["reply"].as_str().unwrap()),

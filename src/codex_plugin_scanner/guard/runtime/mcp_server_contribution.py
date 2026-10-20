@@ -242,6 +242,11 @@ def normalized_remote_server_name(value: object) -> str | None:
 def load_mcp_contribution_payloads(root: Path | None = None) -> tuple[dict[str, object], ...]:
     if root is not None:
         return _load_from_directory(root)
+    from ..catalog_delivery.installed_bundle import compatibility_payloads
+
+    bundled = compatibility_payloads("mcp")
+    if bundled is not None:
+        return bundled
     packaged = _load_packaged_payloads()
     if packaged:
         return packaged

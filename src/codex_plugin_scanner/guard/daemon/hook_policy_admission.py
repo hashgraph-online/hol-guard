@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from ..native_policy_snapshot_constants import POLICY_SNAPSHOT_PERSISTENT_ERRORS
+from ..native_policy_snapshot_resident_recovery import RESIDENT_FAIL_FAST_STREAK, is_resident_class_error
 from .hook_fail_closed import unmanaged_passthrough
 from .hook_managed_install_state import _canonical_managed_harness, _hook_harness_is_unmanaged
 from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, policy_update_pending_reason
@@ -19,6 +20,12 @@ def _native_policy_not_ready_reason(daemon_server: Any) -> str:
     # agent to retry sends it around the same failure until the user repairs
     # the install.
     repair = "Guard's installed files disagree, so retrying will not clear it. Ask the user to run `hol-guard doctor`."
+    # The resident stopped answering and the failures have repeated: a retry
+    # may land on a recovered resident, but only the user can restart it if not.
+    resident_down = (
+        "Guard's native runtime is not answering. Retry once more; if it still fails, "
+        "ask the user to run `hol-guard repair` in a terminal."
+    )
     publisher = getattr(getattr(daemon_server, "hook_worker", None), "policy_snapshot_publisher", None)
     last_error = getattr(publisher, "last_error", None)
     if isinstance(last_error, str) and last_error.strip():
@@ -26,6 +33,10 @@ def _native_policy_not_ready_reason(daemon_server: Any) -> str:
         if code in POLICY_SOURCE_FENCE_ERRORS:
             return policy_update_pending_reason()
         advice = repair if code in POLICY_SNAPSHOT_PERSISTENT_ERRORS else retry
+        streak_reader = getattr(publisher, "resident_failure_streak", None)
+        streak = streak_reader() if callable(streak_reader) else 0
+        if is_resident_class_error(code) and isinstance(streak, int) and streak >= RESIDENT_FAIL_FAST_STREAK:
+            advice = resident_down
         return f"{reason} {code}. {advice}"
     return f"{reason} {retry}"
 

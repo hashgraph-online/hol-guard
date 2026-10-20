@@ -24,13 +24,78 @@ resolver = "2"
 opt-level = "s"
 # Executable behavior is unchanged; omit symbol tables from distributed binaries.
 strip = "symbols"
-# Whole-program optimization keeps the shipped runtime inside the wheel size
-# budgets (about 20% smaller than per-crate codegen). Unwinding stays enabled:
-# the runtime relies on catch_unwind. Pull request test builds restore the faster
-# per-crate settings through CARGO_PROFILE_RELEASE_* in ci.yml. The
-# native-release-size job unsets those overrides before it measures binaries.
+# Whole-program optimization makes the shipped runtime about 20% smaller than
+# per-crate codegen. Unwinding stays enabled: the runtime relies on catch_unwind.
+# Pull request test builds restore the faster per-crate settings through
+# CARGO_PROFILE_RELEASE_* in ci.yml.
 lto = "fat"
 codegen-units = 1
+
+# Code that runs outside the hook decision path (sign-in, installers and
+# updates, TLS, archive inspection, policy-schema validation, bundle signature
+# checks, process inventory) is optimized for size. The hook client, command
+# evaluation, regex matching, JSON, hashing, SQLite and the decompression of
+# embedded rule data keep opt-level "s". Per-function size attributes survive
+# fat LTO, so the split holds in the linked runtime.
+[profile.release.package.email_address]
+opt-level = "z"
+
+[profile.release.package.fluent-uri]
+opt-level = "z"
+
+[profile.release.package.guard-archive]
+opt-level = "z"
+
+[profile.release.package.guard-google-identity]
+opt-level = "z"
+
+[profile.release.package.guard-pack-compiler]
+opt-level = "z"
+
+[profile.release.package.jsonschema]
+opt-level = "z"
+
+[profile.release.package.mailparse]
+opt-level = "z"
+
+[profile.release.package.num-bigint-dig]
+opt-level = "z"
+
+[profile.release.package.oauth2]
+opt-level = "z"
+
+[profile.release.package.referencing]
+opt-level = "z"
+
+[profile.release.package.rsa]
+opt-level = "z"
+
+[profile.release.package.rustls]
+opt-level = "z"
+
+[profile.release.package.rustls-webpki]
+opt-level = "z"
+
+[profile.release.package.saphyr-parser]
+opt-level = "z"
+
+[profile.release.package.security-framework]
+opt-level = "z"
+
+[profile.release.package.sysinfo]
+opt-level = "z"
+
+[profile.release.package.tar]
+opt-level = "z"
+
+[profile.release.package.toml_edit]
+opt-level = "z"
+
+[profile.release.package.ureq]
+opt-level = "z"
+
+[profile.release.package.ureq-proto]
+opt-level = "z"
 
 [workspace.package]
 version = "0.1.0"

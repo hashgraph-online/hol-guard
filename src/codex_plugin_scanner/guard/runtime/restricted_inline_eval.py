@@ -33,13 +33,14 @@ def is_inline_eval(command: Sequence[str]) -> bool:
 
 
 def prepare_restricted_inline_eval(
-    command: Sequence[str], *, workspace: Path, cwd: Path | None = None
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
 ) -> RestrictedPytestPlan:
     return native_launch_plan(
         "prepare_inline",
         command,
         workspace=workspace,
         cwd=cwd or workspace,
+        home_dir=home_dir,
         platform=sys.platform,
         backend_executable=None,
         profile=(NODE_EVAL_READ_ONLY_PROFILE_VERSION, PYTHON_EVAL_READ_ONLY_PROFILE_VERSION),

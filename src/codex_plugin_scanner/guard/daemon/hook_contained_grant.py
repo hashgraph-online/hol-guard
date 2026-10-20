@@ -7,6 +7,10 @@ sandbox widened by the grant (``workspace-contained-grant-v1``). The sink asks
 the store for the grant again itself, so nothing here is trusted beyond the
 routing. A blocked or undecided CLI, or a call the sink cannot take, keeps the
 review.
+
+The sandbox requirement itself is the resident's: it answers the grant step
+with the review fields the command is routed to, and this module copies them.
+A resident that cannot be reached sends no route, so the review stands.
 """
 
 from __future__ import annotations
@@ -26,11 +30,6 @@ if TYPE_CHECKING:
 
 _LOGGER = logging.getLogger(__name__)
 OUTSIDE_ROOTS_REASON = "native_workspace_containment_executable_outside_roots"
-WORKSPACE_REASON = "native_workspace_containment_required"
-GRANT_REASON = (
-    "HOL Guard runs this command in a protected workspace sandbox, widened only by the "
-    "local CLI access you approved on this device."
-)
 _RECEIPT_ONLY_FIELD = "guard_containment_receipt_only"
 
 
@@ -75,14 +74,10 @@ def granted_containment_result(
         return None
     if decision is None or decision[0] != ALLOW_CONTAINED_WITH_GRANT or decision[1] is None:
         return None
-    return {
-        **result,
-        "decision": "deny",
-        "minimum_action": "sandbox-required",
-        "policy_action": "sandbox-required",
-        "reason_code": WORKSPACE_REASON,
-        "reason": GRANT_REASON,
-    }
+    route = decision[2]
+    if route is None:
+        return None
+    return {**result, **route}
 
 
 def granted_containment_response(

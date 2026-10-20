@@ -6,7 +6,7 @@ import hashlib
 
 import build_native_command_packs as packs
 from command_pack_store import PackReader
-from extension_delivery_located_store import LocatedStore
+from extension_delivery_inventory_store import InventoryStore
 from extension_delivery_objects import entries
 from extension_delivery_policy_lookup import read_transport_page, validate_record
 from extension_delivery_revocations import load as load_revocations
@@ -16,35 +16,6 @@ from extension_pack_directory import public_entry
 from codex_plugin_scanner.guard.catalog_delivery.authority import VerifiedDistribution, decode
 from codex_plugin_scanner.guard.catalog_delivery.containers import maximum, verify_inventory
 from codex_plugin_scanner.guard.extension_builder.io import checked_path, read_bytes
-
-
-class InventoryStore(LocatedStore):
-    def __init__(self, directory):
-        super().__init__(directory)
-        self.assets = {}
-
-    def mark(self, kind, digest, length, target):
-        key = (target["tag"], target["asset"])
-        if "member" in target:
-            row = self.assets.setdefault(
-                key, {"kind": "container", "location": {"tag": key[0], "asset": key[1]}, "members": {}}
-            )
-            member = {"sha256": digest, "length": length}
-            if row["kind"] != "container" or (
-                target["member"] in row["members"] and row["members"][target["member"]] != member
-            ):
-                raise ValueError("delivery container has conflicting members")
-            row["members"][target["member"]] = member
-            return
-        row = {"sha256": digest, "length": length, "kind": kind, "location": target}
-        if key in self.assets and self.assets[key] != row:
-            raise ValueError("delivery asset location has conflicting content")
-        self.assets[key] = row
-
-    def blob(self, reference, depth=0):
-        value = super().blob(reference, depth)
-        self.mark("object", reference["sha256"], reference["length"], reference["location"])
-        return value
 
 
 def publication_inventory(directory, verified, source_root):

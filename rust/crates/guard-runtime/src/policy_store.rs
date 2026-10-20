@@ -1,5 +1,8 @@
 #![forbid(unsafe_code)]
 
+#[path = "policy_store_services.rs"]
+mod services;
+
 use guard_policy_snapshot::{
     snapshot_bytes, validate_v3, PolicySnapshotAckV1, PolicySnapshotPushV1, PolicySnapshotV3,
     POLICY_SNAPSHOT_ACK_REQUIRES_NEW_GENERATION, POLICY_SNAPSHOT_MAX_BYTES,
@@ -28,7 +31,7 @@ pub(crate) mod approval_v4_secure_state;
 #[path = "native_review_origin.rs"]
 pub(crate) mod native_review_origin;
 #[path = "policy_store_approval.rs"]
-mod policy_store_approval;
+pub(crate) mod policy_store_approval;
 #[path = "policy_store_authority.rs"]
 mod policy_store_authority;
 #[path = "policy_store_business_floor.rs"]
@@ -212,6 +215,8 @@ pub(crate) struct PolicySnapshotStore {
     mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence,
     mcp_relay_claims: crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim>,
     mcp_relay_servers: crate::mcp_relay_servers::RelayServers,
+    #[cfg(target_os = "macos")]
+    bash_launches: policy_store_approval::bash_cancellation::Launches,
 }
 
 impl PolicySnapshotStore {
@@ -322,33 +327,13 @@ impl PolicySnapshotStore {
             mcp_relay_pending: crate::mcp_relay_pending::PendingRelayEvidence::default(),
             mcp_relay_claims: crate::mcp_relay_claims::HeldClaims::default(),
             mcp_relay_servers: crate::mcp_relay_servers::RelayServers::default(),
+            #[cfg(target_os = "macos")]
+            bash_launches: policy_store_approval::bash_cancellation::Launches::default(),
         })
     }
 
     pub(crate) fn state_base(&self) -> &Path {
         &self.state_base
-    }
-
-    /// Evidence of direct hook answers, waiting for the daemon to drain it.
-    pub(crate) fn direct_evidence(&self) -> &crate::hook_direct_evidence::DirectEvidenceQueue {
-        &self.direct_evidence
-    }
-
-    /// Relayed forwards' evidence, waiting for the relay to commit it.
-    pub(crate) fn mcp_relay_pending(&self) -> &crate::mcp_relay_pending::PendingRelayEvidence {
-        &self.mcp_relay_pending
-    }
-
-    /// Relayed decisions' saved-approval claims, waiting for the relay.
-    pub(crate) fn mcp_relay_claims(
-        &self,
-    ) -> &crate::mcp_relay_claims::HeldClaims<crate::mcp_relay_decide::HeldClaim> {
-        &self.mcp_relay_claims
-    }
-
-    /// The MCP servers whose relay sessions run under the proxy.
-    pub(crate) fn mcp_relay_servers(&self) -> &crate::mcp_relay_servers::RelayServers {
-        &self.mcp_relay_servers
     }
 
     /// Migrate legacy policy files only on an explicit upgrade command.

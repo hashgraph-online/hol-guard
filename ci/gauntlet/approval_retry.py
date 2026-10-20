@@ -67,26 +67,46 @@ def is_review_row(row: dict[str, Any]) -> bool:
 
 
 class ReviewApprover:
-    """Grant each review row the run creates, as an operator watching the approval UI does.
+    """Resolve lane-owned reviews; Bash lifecycles grant only their staged script.
 
     The grant goes through ``apply_approval_resolution`` with the arguments the daemon's own
-    resolve route sends for Allow just this once: action ``allow``, scope ``artifact`` and no
-    persisted policy. Nothing here writes the store directly, so the retry still has to match
-    the contract the real grant binds.
+    resolve route sends: action ``allow`` and scope ``artifact``. Lifecycle cases explicitly
+    choose once or persistent exact-version consent. Nothing here writes the store directly,
+    so the retry still has to match the contract the real grant binds.
     """
 
-    def __init__(self, store: Any, *, known_ids: set[str], workspace: Path, interval: float = 0.2) -> None:
+    def __init__(
+        self,
+        store: Any,
+        *,
+        known_ids: set[str],
+        workspace: Path,
+        scenario_id: str | None = None,
+        guard_home: Path | None = None,
+        worker: Any | None = None,
+        initial_result_log: Path | None = None,
+        interval: float = 0.05,
+    ) -> None:
         self._store = store
         self._known = set(known_ids)
         self._workspace = str(workspace)
+        self._scenario_id = scenario_id
+        self._guard_home = guard_home
+        self._worker = worker
+        self._initial_result_log = initial_result_log
         self._interval = interval
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
         self._granted: list[dict[str, Any]] = []
+        self._withheld: list[dict[str, Any]] = []
         self._errors: list[str] = []
         self._poll_errors: list[str] = []
         self._sweeps = 0
+        self._target_grants = 0
+        self._target_artifact_hash: str | None = None
+        self._max_active_operations = 0
+        self._lifecycle: dict[str, bool] = {}
 
     def __enter__(self) -> ReviewApprover:
         self._thread = threading.Thread(target=self._loop, name="gauntlet-approver", daemon=True)
@@ -106,6 +126,7 @@ class ReviewApprover:
 
     def sweep(self) -> None:
         """Grant every pending review row this run created that is still waiting."""
+        self._sample_active_operations()
         try:
             rows = self._store.list_approval_requests(status="pending", limit=200)
         except Exception as error:
@@ -123,10 +144,61 @@ class ReviewApprover:
             if not request_id or request_id in self._known:
                 continue
             self._known.add(request_id)
-            self._grant(request_id, _row_target(row))
+            self._grant(row, _row_target(row))
 
-    def _grant(self, request_id: str, target: str) -> None:
+    def _sample_active_operations(self) -> None:
+        active = self._active_target_operations()
+        if active is None:
+            return
+        with self._lock:
+            self._max_active_operations = max(self._max_active_operations, active)
+
+    def _active_target_operations(self) -> int | None:
+        if self._target_artifact_hash is None:
+            return None
+        try:
+            with self._store._connect() as connection:
+                active = connection.execute(
+                    "SELECT count(*) FROM guard_bash_operations "
+                    "WHERE json_extract(payload, '$.state') IN ('claimed', 'dispatched') "
+                    "AND json_extract(payload, '$.artifact_hash')=?1",
+                    (self._target_artifact_hash,),
+                ).fetchone()[0]
+        except Exception:
+            return None
+        return int(active)
+
+    def _grant(self, row: dict[str, Any], target: str) -> None:
         from codex_plugin_scanner.guard.approvals import apply_approval_resolution
+
+        from .approval_retry_bash import SCRIPT_RELATIVE, plan, targets_script
+
+        request_id = str(row.get("request_id") or "")
+        lifecycle = plan(self._scenario_id or "")
+        lifecycle_target = (
+            lifecycle is not None
+            and targets_script(target)
+            and Path(shlex.split(target)[1]) == Path(self._workspace) / SCRIPT_RELATIVE
+        )
+        if lifecycle is not None and (not lifecycle_target or self._target_grants >= lifecycle.max_target_grants):
+            active = self._active_target_operations()
+            artifact_hash = row.get("artifact_hash") if isinstance(row.get("artifact_hash"), str) else None
+            with self._lock:
+                self._withheld.append(
+                    {
+                        "request_id": request_id,
+                        "target": target,
+                        "artifact_hash": artifact_hash,
+                    }
+                )
+                if lifecycle_target and lifecycle.require_once_contention and active is not None and active > 0:
+                    self._max_active_operations = max(self._max_active_operations, active)
+                    self._lifecycle["once_contention_observed"] = True
+            return
+        persist_policy = True if lifecycle is not None and lifecycle_target and lifecycle.persist else None
+        artifact_hash = row.get("artifact_hash") if isinstance(row.get("artifact_hash"), str) else None
+        scope_version = row.get("scope_contract_version")
+        scope_digest = row.get("scope_contract_digest")
 
         try:
             apply_approval_resolution(
@@ -138,12 +210,91 @@ class ReviewApprover:
                 reason=GRANT_REASON,
                 return_queue_result=True,
                 resolve_scope_matches=True,
+                persist_policy=persist_policy,
+                scope_contract_version=scope_version if isinstance(scope_version, str) else None,
+                scope_contract_digest=scope_digest if isinstance(scope_digest, str) else None,
             )
         except Exception as error:
             self._record_error(error, self._errors)
             return
         with self._lock:
-            self._granted.append({"request_id": request_id, "target": target, "granted_at": round(time.monotonic(), 3)})
+            self._granted.append(
+                {
+                    "request_id": request_id,
+                    "target": target,
+                    "granted_at": round(time.monotonic(), 3),
+                    "persist_policy": persist_policy is True,
+                    "artifact_hash": artifact_hash,
+                }
+            )
+            if lifecycle_target:
+                self._target_grants += 1
+                self._target_artifact_hash = artifact_hash
+        if lifecycle_target and self._target_grants == 1:
+            self._apply_lifecycle_transition(lifecycle)
+
+    def _apply_lifecycle_transition(self, lifecycle: Any) -> None:
+        from codex_plugin_scanner.guard.config import update_guard_settings
+        from codex_plugin_scanner.guard.native_resident_client import close_native_residents
+
+        from .approval_retry_bash import mutate
+
+        try:
+            if lifecycle.restart_after_first_grant and self._initial_result_log is not None:
+                self._await_initial_delivery()
+            if lifecycle.mutate_after_first_grant:
+                mutate(Path(self._workspace))
+                self._lifecycle["script_mutated"] = True
+            if lifecycle.deny_after_first_grant:
+                if self._guard_home is None or self._worker is None:
+                    raise RuntimeError("Bash lifecycle policy transition lacks its worker")
+                update_guard_settings(
+                    self._guard_home,
+                    {"subprocess_action": "block"},
+                    skip_approval_gate=True,
+                )
+                if self._worker.prepare_workspace_policy(Path(self._workspace), deadline=time.monotonic() + 15) is None:
+                    raise RuntimeError("Bash lifecycle policy transition was not published")
+                self._lifecycle["policy_denied"] = True
+            if lifecycle.restart_after_first_grant:
+                if self._guard_home is None or not close_native_residents(guard_home=self._guard_home):
+                    raise RuntimeError("Bash lifecycle resident restart failed")
+                if self._initial_result_log is not None:
+                    import json
+
+                    if self._initial_result_log.stat().st_size > 1_048_576:
+                        raise RuntimeError("Bash lifecycle restart evidence exceeds its bound")
+                    events = [json.loads(line) for line in self._initial_result_log.read_text().splitlines()]
+                    if sum(event.get("type") == "tool_execution_start" for event in events) != 1:
+                        raise RuntimeError("Bash lifecycle retry began before the resident restart completed")
+                    self._lifecycle["restart_after_initial_delivery"] = True
+                self._lifecycle["resident_restarted"] = True
+        except Exception as error:
+            self._record_error(error, self._errors)
+
+    def _await_initial_delivery(self) -> None:
+        import json
+
+        assert self._initial_result_log is not None
+        deadline = time.monotonic() + 15
+        starts = 0
+        with self._initial_result_log.open(encoding="utf-8") as stream:
+            while not self._stop.is_set() and time.monotonic() < deadline:
+                offset = stream.tell()
+                line = stream.readline(1_048_577)
+                if len(line) > 1_048_576:
+                    raise RuntimeError("Bash lifecycle initial result exceeds its evidence bound")
+                if not line.endswith("\n"):
+                    stream.seek(offset)
+                    self._stop.wait(self._interval)
+                    continue
+                event = json.loads(line)
+                starts += event.get("type") == "tool_execution_start"
+                if event.get("type") == "tool_execution_end" and event.get("toolName") == "bash":
+                    if starts != 1:
+                        raise RuntimeError("Bash lifecycle retry began before the initial result was delivered")
+                    return
+        raise RuntimeError("Bash lifecycle initial result was not delivered before restart")
 
     def _record_error(self, error: BaseException, sink: list[str]) -> None:
         with self._lock:
@@ -155,11 +306,14 @@ class ReviewApprover:
         with self._lock:
             return {
                 "granted": list(self._granted),
+                "withheld": list(self._withheld),
                 "errors": list(self._errors),
                 "poll_errors": list(self._poll_errors),
                 "sweeps": self._sweeps,
                 "scope": "artifact",
-                "persist_policy": False,
+                "persist_policy": any(row["persist_policy"] for row in self._granted),
+                "max_active_operations": self._max_active_operations,
+                "lifecycle": dict(self._lifecycle),
             }
 
 
@@ -177,12 +331,7 @@ def _names_a_path(word: str) -> bool:
     apart ("status", "config", "run") does. Judged on the word's shape rather than on a
     list of programs, so a program this lane has never run is read the same way.
     """
-    return (
-        word in {".", ".."}
-        or word.startswith(("/", "./", "../", "~", "."))
-        or "/" in word
-        or "." in word
-    )
+    return word in {".", ".."} or word.startswith(("/", "./", "../", "~", ".")) or "/" in word or "." in word
 
 
 def action_key(command: str) -> tuple[str, ...]:

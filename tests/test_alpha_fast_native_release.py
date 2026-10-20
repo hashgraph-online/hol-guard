@@ -1,64 +1,15 @@
-"""Alpha native wheels use fast codegen and a separate ceiling, and never reach PyPI or stable."""
+"""Alpha native wheels use fast codegen and never reach PyPI or stable."""
 
 from __future__ import annotations
 
 import json
 import re
-import zipfile
 from pathlib import Path
 
-import pytest
-
-from scripts.ci.check_wheel_size import ALPHA_VERSION, NATIVE, inspect_wheel
 from tests.release_workflow_helpers import load_workflow
 
 ROOT = Path(__file__).resolve().parents[1]
-STANDARD = json.loads((ROOT / "ci/package_size/budgets.json").read_text())
-ALPHA = json.loads((ROOT / "ci/package_size/alpha-native-budgets.json").read_text())
 PUBLISH = load_workflow(ROOT / ".github/workflows/publish.yml")["jobs"]
-
-
-def _wheel(path: Path, name: str, size: int) -> Path:
-    wheel = path / name
-    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(NATIVE + "hol-guard-runtime", b"x" * size)
-    return wheel
-
-
-def test_alpha_ceiling_is_larger_than_standard_but_still_finite() -> None:
-    assert set(ALPHA) == set(STANDARD) - {"any"}
-    for platform, limits in ALPHA.items():
-        for metric, value in limits.items():
-            assert STANDARD[platform][metric] < value <= STANDARD[platform][metric] * 2
-
-
-def test_alpha_ceiling_accepts_alpha_native_wheel_above_the_standard_budget(tmp_path: Path) -> None:
-    size = STANDARD["win_amd64"]["runtime"] + 1024 * 1024
-    wheel = _wheel(tmp_path, "hol_guard-3.35.0a1-py3-none-win_amd64.whl", size)
-    assert inspect_wheel(wheel, STANDARD)[1]
-    assert inspect_wheel(wheel, STANDARD, ALPHA)[1] == []
-
-
-def test_alpha_ceiling_still_rejects_runaway_growth(tmp_path: Path) -> None:
-    size = ALPHA["win_amd64"]["runtime"] + 1
-    wheel = _wheel(tmp_path, "hol_guard-3.35.0a1-py3-none-win_amd64.whl", size)
-    assert any("runtime exceeds budget" in failure for failure in inspect_wheel(wheel, STANDARD, ALPHA)[1])
-
-
-@pytest.mark.parametrize("version", ["3.35.0", "3.35.0rc1", "3.35.0a0", "3.35.0.dev1", "3.35.0a1.post1"])
-def test_alpha_ceiling_is_refused_for_any_other_version(tmp_path: Path, version: str) -> None:
-    wheel = _wheel(tmp_path, f"hol_guard-{version}-py3-none-win_amd64.whl", 1)
-    with pytest.raises(ValueError, match="not a canonical alpha"):
-        inspect_wheel(wheel, STANDARD, ALPHA)
-    assert not ALPHA_VERSION.fullmatch(version)
-
-
-def test_pure_wheel_keeps_the_pypi_budget_even_with_the_alpha_ceiling(tmp_path: Path) -> None:
-    wheel = tmp_path / "hol_guard-3.35.0a1-py3-none-any.whl"
-    with zipfile.ZipFile(wheel, "w", compression=zipfile.ZIP_STORED) as archive:
-        archive.writestr("data", b"x" * (STANDARD["any"]["unpacked"] + 1))
-    failures = inspect_wheel(wheel, STANDARD, ALPHA)[1]
-    assert any("unpacked exceeds budget" in failure for failure in failures)
 
 
 def test_fast_codegen_is_requested_only_for_alpha_dispatches() -> None:
@@ -69,8 +20,12 @@ def test_fast_codegen_is_requested_only_for_alpha_dispatches() -> None:
     assert stable in condition
     alpha = "inputs.release_channel == 'alpha' && inputs.release_train == 'main' && needs.resolve-alpha-version.result"
     assert alpha in condition
-    assert "canary" not in condition
     assert "github.run_attempt == 1" in condition
+    # PR canaries precompile through the same path but never request fast codegen, so their
+    # wheels are still measured against the PyPI budgets.
+    canary = "github.event_name == 'pull_request' &&"
+    assert canary in condition
+    assert "inputs.release_channel == 'alpha'" not in condition[condition.index(canary) :]
 
 
 def test_prepare_applies_fast_profile_only_to_canonical_alpha_versions() -> None:
@@ -88,24 +43,6 @@ def test_prepare_applies_fast_profile_only_to_canonical_alpha_versions() -> None
     assert 'lto = "fat"' in cargo and "codegen-units = 1" in cargo
 
 
-def test_alpha_ceiling_applies_only_to_alpha_wheels_from_fast_precompiled_binaries() -> None:
-    step = next(s for s in PUBLISH["build-native-guard-wheels"]["steps"] if s.get("name") == "Assemble native wheel")
-    assert (
-        step["env"]["ALPHA_FAST_CODEGEN"]
-        == "${{ needs.precompile-native.result == 'success' && inputs.release_channel == 'alpha' }}"
-    )
-    run = step["run"]
-    assert run.count("--alpha-native-budgets") == 1
-    assert run.index('"$ALPHA_FAST_CODEGEN" == "true"') < run.index("--alpha-native-budgets")
-    for job in PUBLISH.values():
-        for item in job.get("steps", []):
-            if item.get("name") != "Assemble native wheel":
-                assert "--alpha-native-budgets" not in item.get("run", "")
-    # The pure wheel is checked in the build job with the standard budget.
-    build = "\n".join(s.get("run", "") for s in PUBLISH["build"]["steps"])
-    assert 'python "$HOL_GUARD_WHEEL_SIZE_CHECKER" --dist-dir dist\n' in build
-
-
 def test_alpha_native_wheels_never_reach_pypi() -> None:
     steps = PUBLISH["publish-alpha-pypi"]["steps"]
     plan = next(s for s in steps if s.get("id") == "pypi")["run"]
@@ -121,10 +58,9 @@ def test_alpha_native_wheels_never_reach_pypi() -> None:
     assert testpypi and all(s["with"]["repository-url"] == "https://test.pypi.org/legacy/" for s in testpypi)
 
 
-def test_stable_publishing_never_consumes_alpha_budgets_or_fast_binaries() -> None:
+def test_stable_publishing_never_consumes_fast_binaries() -> None:
     for name in ("publish-main-testpypi", "publish-main-pypi", "publish-main-assets", "release-main"):
         text = json.dumps(PUBLISH[name])
-        assert "alpha-native-budgets" not in text
         assert "fast_codegen" not in text
 
 
@@ -210,3 +146,6 @@ def test_native_prepare_version_pattern_accepts_only_canonical_alpha_suffix() ->
         assert pattern.match(good)
     for bad in ("3.35.0a0", "3.35.0a01", "3.35.0rc1", "3.35.0.dev1", "3.35.0a1-x"):
         assert not pattern.match(bad)
+    # Only PR canary compiles, which never publish a release, may embed a dev version.
+    assert 'PR_CANARY: ${{ github.event_name == \'pull_request\' }}' in prepare
+    assert '! [[ "${PR_CANARY:-}" == "true" && "$RELEASE_VERSION" =~ ^${BASE_VERSION//./\\\\.}\\.dev[0-9]+$ ]]; then' in prepare

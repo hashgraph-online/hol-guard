@@ -1,6 +1,7 @@
 //! Cargo's local verbs compile and test inside the workspace sandbox; the
-//! verbs that reach a registry keep the admission they have.
-use crate::pretool::workspace_contained_tests::{controls, workspace, CONTAINED};
+//! verbs that reach a registry keep the admission they have. A host without
+//! the sandbox, such as Windows, keeps the admission for local verbs too.
+use crate::pretool::workspace_contained_tests::{controls, host, workspace, CONTAINED};
 
 const MANIFEST: &str =
     "[package]\nname = \"app-portal\"\nversion = \"0.1.0\"\nedition = \"2021\"\n";
@@ -46,8 +47,14 @@ fn cargo_builds_and_tests_the_package_inside_the_sandbox() {
         "cargo tree --depth 1",
     ] {
         for harness in ["codex", "claude-code", "omp"] {
-            let (reason, _) = outcome(harness, command, &ws);
-            assert_eq!(reason, CONTAINED, "{harness}: {command}");
+            let (reason, minimum) = outcome(harness, command, &ws);
+            assert_eq!(reason == CONTAINED, host(), "{reason} {harness}: {command}");
+            if !host() {
+                assert_eq!(
+                    minimum, "review",
+                    "{reason}: no sandbox must require review"
+                );
+            }
         }
     }
 }
@@ -88,8 +95,14 @@ fn the_package_a_verb_compiles_moves_with_the_command() {
     std::fs::write(ws.join("crates/engine/Cargo.toml"), MANIFEST).unwrap();
     std::fs::create_dir_all(ws.join("docs")).unwrap();
     for harness in ["codex", "claude-code", "omp"] {
-        let (reason, _) = outcome(harness, "cd crates/engine && cargo test --offline", &ws);
-        assert_eq!(reason, CONTAINED, "{harness}");
+        let (reason, minimum) = outcome(harness, "cd crates/engine && cargo test --offline", &ws);
+        assert_eq!(reason == CONTAINED, host(), "{reason} {harness}");
+        if !host() {
+            assert_eq!(
+                minimum, "review",
+                "{reason}: no sandbox must require review"
+            );
+        }
         let (reason, _) = outcome(harness, "cd docs && cargo test", &ws);
         assert_ne!(reason, CONTAINED, "{harness}");
     }

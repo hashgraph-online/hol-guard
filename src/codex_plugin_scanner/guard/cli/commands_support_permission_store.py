@@ -12,9 +12,7 @@ if TYPE_CHECKING:
     from .commands_support_hook_payload import _hook_action_envelope
     from .commands_support_hook_state import (
         _append_cursor_pending_shell_key,
-        _claude_pending_permission_state_key,
         _cursor_conversation_id,
-        _cursor_pending_shell_state_key,
         _cursor_shell_command_from_payload,
         _load_claude_pending_permission,
         _load_verified_cursor_pending_shell_state,
@@ -37,7 +35,7 @@ from ..native_hook_render import (
     native_cursor_after_shell_observed,
     native_cursor_observer_event,
 )
-from ..runtime.approval_context import parse_approval_context_token
+from ..runtime.approval_context import approval_context_token_is_well_formed
 from ..store import _runtime_scoped_exact_match_key, runtime_tool_action_exact_match_context
 from ._commands_shared import *
 from .commands_parser_helpers import *
@@ -120,23 +118,34 @@ def _record_cursor_pending_shell_permission(
         "after_shell_proof": after_shell_proof,
         "native_source": "cursor-native",
     }
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     try:
-        pending_saved = _store_cursor_pending_shell_state(
+        pending_key = _store_cursor_pending_shell_state(
             store,
             conversation_id=conversation_id,
             command=command,
             payload=notice_payload,
             now=saved_at,
         )
-        indexed = pending_saved and _append_cursor_pending_shell_key(
+        indexed = pending_key is not None and _append_cursor_pending_shell_key(
             store,
             conversation_id=conversation_id,
             pending_key=pending_key,
             now=saved_at,
         )
         if not indexed:
-            store.delete_sync_payload(pending_key)
+            if pending_key is not None:
+                store.delete_sync_payload(pending_key)
+            else:
+                # The resident refused the store, so no key came back; name the
+                # row by its command so an older pending row for it does not
+                # outlive this. A resident that cannot be reached removes
+                # nothing, and it is also the only reader that would verify
+                # and honour that row.
+                _remove_cursor_pending_shell_permission(
+                    store,
+                    conversation_id=conversation_id,
+                    command=command,
+                )
             return
         write_cursor_shell_binding_file(
             guard_home,
@@ -163,12 +172,10 @@ def _attach_cursor_pending_approval_request_ids(
     command = _cursor_shell_command_from_payload(payload)
     if conversation_id is None or command is None:
         return
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     pending = _load_verified_cursor_pending_shell_state(
         store,
         conversation_id=conversation_id,
         command=command,
-        state_key=pending_key,
     )
     if pending is None:
         return
@@ -212,7 +219,6 @@ def _load_cursor_pending_shell_permission(
         required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
         command=normalized_command,
-        expected_key=_cursor_pending_shell_state_key(conversation_id, normalized_command),
     )
     return object_field(reply, "pending")
 
@@ -221,8 +227,16 @@ def _remove_cursor_pending_shell_permission(
     store: GuardStore,
     *,
     conversation_id: str,
-    pending_key: str,
+    pending_key: str | None = None,
+    command: str | None = None,
 ) -> None:
+    """Removes a pending shell row, named either by its key or by its command.
+
+    A key the resident issued — one read out of the pending index — is acted on
+    as given. A caller that knows only the command hands that over instead and
+    the resident derives the key.
+    """
+
     hook_authority_state(
         store,
         "cursor_remove_pending",
@@ -230,6 +244,7 @@ def _remove_cursor_pending_shell_permission(
         required_feature=HOOK_AUTHORITY_STATE_SESSION_OPS_FEATURE,
         conversation_id=conversation_id,
         pending_key=pending_key,
+        command=command,
     )
 
 
@@ -399,11 +414,10 @@ def _persist_cursor_native_permission_after_shell(
         store.add_receipt(receipt)
     except (OSError, sqlite3.Error):
         return False
-    pending_key = _cursor_pending_shell_state_key(conversation_id, command)
     _remove_cursor_pending_shell_permission(
         store,
         conversation_id=conversation_id,
-        pending_key=pending_key,
+        command=command,
     )
     from ..adapters.cursor_native_approval import remove_cursor_shell_binding_file
 
@@ -447,10 +461,12 @@ def _persist_claude_native_permission_policy(
     )
     # V1 approval-context tokens already bind the full tool identity and are
     # the only values that may authorize P44 approval reuse.  Keep the legacy
-    # exact-command key only for legacy callers/blocks.
+    # exact-command key only for legacy callers/blocks.  The command key omits
+    # the token's policy and sandbox components, so a token the native check
+    # cannot answer for is kept rather than swapped for the wider key.
     stored_artifact_hash = (
         artifact_hash
-        if parse_approval_context_token(artifact_hash) is not None
+        if approval_context_token_is_well_formed(artifact_hash, keep_prefixed_when_unavailable=True)
         else exact_artifact_hash or artifact_hash
     )
     try:
@@ -580,7 +596,7 @@ def _persist_claude_native_permission_for_runtime_artifact(
         _remove_claude_pending_permission(
             store,
             session_id=session_id,
-            pending_key=_claude_pending_permission_state_key(session_id, artifact.artifact_id),
+            artifact_id=artifact.artifact_id,
         )
     return True, saved_policy
 

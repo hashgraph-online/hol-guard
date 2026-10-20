@@ -70,6 +70,12 @@ pub(crate) fn is_code_value(matched: &str, rest_of_line: &str) -> bool {
         return false;
     }
     if CALL.is_match(value) {
+        // A fallback after the call may be a bare secret word. Leave the line
+        // to the expression rule, which reads the operand after `||` or `??`.
+        let rest = rest_of_line.trim_start();
+        if rest.starts_with("||") || rest.starts_with("??") {
+            return false;
+        }
         // Environment lookups carry their default as a second literal. An
         // upper-case dotenv key holds data, so `DB_PASSWORD=wrap(value)` stays
         // a credential.
@@ -116,7 +122,7 @@ fn encoded_segment(segment: &str) -> bool {
 
 /// An upper-case key such as `DB_PASSWORD` in a dotenv or shell assignment,
 /// whose value is data rather than code.
-fn environment_style_key(key: &str) -> bool {
+pub(crate) fn environment_style_key(key: &str) -> bool {
     let key = key
         .trim()
         .trim_matches(['"', '\''])

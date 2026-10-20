@@ -297,6 +297,37 @@ def test_native_hook_client_restart_budget_opens_circuit(
     assert b"native_resident_restart_circuit_open" in blocked.stderr
 
 
+def _await_ownerless_resident_exit(process_id: int) -> None:
+    """Wait for a resident whose one-shot client is gone to shut itself down."""
+    deadline = time.monotonic() + 30
+    while process_is_alive(process_id):
+        assert time.monotonic() < deadline, "ownerless resident outlived its lease"
+        time.sleep(0.05)
+
+
+def test_repeated_one_shot_clients_never_open_the_restart_budget_circuit(
+    native_runtime: tuple[Path, Path],
+) -> None:
+    """A CLI-only harness cold-spawns a resident per hook call, and that is not a crash loop."""
+    runtime, state_dir = native_runtime
+    request = _request(runtime, state_dir.parent)
+    observed_generations: set[int] = set()
+    for call_index in range(6):
+        response = _invoke(runtime, state_dir, request)
+        assert response["authority"] == "rust"
+        assert _result(response)["minimum_action"] == "allow"
+        state_files = _state_files(state_dir)
+        assert len(state_files) == 1
+        state = json.loads(state_files[0].read_text(encoding="utf-8"))
+        generation = state["generation"]
+        assert isinstance(generation, int)
+        observed_generations.add(generation)
+        assert len(observed_generations) == call_index + 1
+        process_id = state["process_id"]
+        assert isinstance(process_id, int) and process_id > 0
+        _await_ownerless_resident_exit(process_id)
+
+
 @pytest.mark.skipif(os.name == "nt", reason="flock-based owner lock probe is POSIX only")
 def test_foreign_resident_owner_never_spends_the_restart_budget(
     native_runtime: tuple[Path, Path],

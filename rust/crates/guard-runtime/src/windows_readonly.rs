@@ -1,5 +1,5 @@
 //! Windows backend for the read-only Python and Node evaluation profiles, and
-//! the `contained-readonly-windows` entry the Vite build profile shares
+//! the `contained-readonly-windows` entry the local Node tool profiles share
 //! (`windows_node_build`).
 //!
 //! The resident plans `python <script>` / `python -c` launches for an
@@ -341,13 +341,18 @@ fn parse(arguments: &[String]) -> Result<Launch, RestrictedPytestError> {
             return Err(invalid());
         }
     }
-    let (build, node) = match profile {
-        None => (false, false),
-        Some(NODE_PROFILE) => (false, true),
-        Some(profile) if profile == crate::windows_node_build::PROFILE => (true, true),
+    // A staged run copies the install's dependencies and the runtime into a
+    // writable private snapshot. Only the build profile publishes anything
+    // back from it, so only the build profile declares an output; a tool that
+    // reports declares none and leaves the live workspace untouched.
+    let (build, node, publishes) = match profile {
+        None => (false, false, false),
+        Some(NODE_PROFILE) => (false, true, false),
+        Some(profile) if profile == crate::windows_node_build::PROFILE => (true, true, true),
+        Some(profile) if profile == crate::windows_node_build::TOOL_PROFILE => (true, true, false),
         Some(_) => return Err(invalid()),
     };
-    if build == outputs.is_empty() {
+    if publishes == outputs.is_empty() {
         return Err(invalid());
     }
     let timeout = timeout

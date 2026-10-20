@@ -5,7 +5,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use super::{containment, handoff, lease, restart_budget, CLIENT_RETRY_DELAY};
-use crate::resident_diagnostics::{observe, Phase};
+use crate::resident_diagnostics::{note, observe, Phase};
 use crate::resident_state::{
     acquire_startup_lock, clear_stale_startup_lock, discover_home_states_prefer, next_generation,
     runtime_digest, state_scope, token_from_state, validate_package_process_identity,
@@ -63,8 +63,9 @@ fn try_home_states(
     preferred_digest: &str,
 ) -> Result<Option<Vec<u8>>, String> {
     let runtime_digest = runtime_digest()?;
-    for (scope, _digest, state) in discover_home_states_prefer(state_base, Some(preferred_digest))?
-    {
+    let states = discover_home_states_prefer(state_base, Some(preferred_digest))?;
+    note("client_states", states.len());
+    for (scope, _digest, state) in states {
         if deadline.saturating_duration_since(Instant::now()).is_zero() {
             return Ok(None);
         }
@@ -77,6 +78,7 @@ fn try_home_states(
             &runtime_digest,
             deadline,
         ) {
+            note("client_state_foreign_retired", 1);
             continue;
         }
         let same_runtime = runtime_digest == state.runtime_sha256;
@@ -127,10 +129,16 @@ fn try_home_states(
                     &runtime_digest,
                     &response,
                     deadline,
-                ) => {}
+                ) =>
+            {
+                note("client_state_foreign_rejected", 1);
+            }
             Ok(response) => return Ok(Some(response)),
             Err(error)
-                if containment::skip_failed_home_state_request(&error, same_runtime, &state) => {}
+                if containment::skip_failed_home_state_request(&error, same_runtime, &state) =>
+            {
+                note("client_state_request_skipped", 1);
+            }
             Err(error) => {
                 let code = if error.code.len() <= 96
                     && !error.code.is_empty()
@@ -289,7 +297,7 @@ fn client_request_with_deadline_inner(
             }
             probe => drop(probe),
         }
-        restart_budget::consume_for_spawn(state_base, &scope)?;
+        restart_budget::consume_for_spawn(state_base, &scope, overall_deadline)?;
         let generation = next_generation(&scope, &digest)?;
         let mut token = [0u8; crate::AUTH_TOKEN_BYTES];
         getrandom::fill(&mut token).map_err(|_| "native_client_random_failed".to_owned())?;

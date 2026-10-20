@@ -52,8 +52,9 @@ fn a_missing_storage_gate_defers() {
     assert!(storage_gate(&home).is_ok());
 }
 
-/// The daemon's Windows hold, `msvcrt.locking` on the gate's first byte,
-/// keeps the resident out until it is released.
+/// An exclusive Windows hold that overlaps the gate's range, here
+/// `msvcrt.locking` on the first byte, keeps the resident out until it is
+/// released.
 #[cfg(windows)]
 #[test]
 fn a_daemon_storage_hold_defers_on_windows() {

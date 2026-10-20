@@ -502,12 +502,24 @@ fn an_interpreter_beside_the_sourcing_is_judged_without_it() {
     ] {
         assert_ne!(reviewed(&root, command).1, FAILED, "{command}");
     }
-    // A script file next to the sourcing is still a file nobody read.
-    for command in [
-        "source .venv/bin/activate && python tools/release.py",
-        "source .venv/bin/activate && bash scripts/deploy.sh",
+    // A script file next to the sourcing is still a file nobody read, and the
+    // sourcing adds nothing to what running it would have been judged as.
+    for (sourced, alone) in [
+        (
+            "source .venv/bin/activate && python tools/release.py",
+            ".venv/bin/python tools/release.py",
+        ),
+        (
+            "source .venv/bin/activate && bash scripts/deploy.sh",
+            "bash scripts/deploy.sh",
+        ),
     ] {
-        assert_eq!(reviewed(&root, command).1, FAILED, "{command}");
+        assert_eq!(
+            reviewed(&root, sourced),
+            reviewed(&root, alone),
+            "{sourced}"
+        );
+        assert_ne!(reviewed(&root, sourced).0, "allow", "{sourced}");
     }
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -588,4 +600,139 @@ fn discarding_output_still_bounds_a_sourced_files_owners() {
         let activate = format!("VIRTUAL_ENV=\"/p/.venv\"\nexport VIRTUAL_ENV\n{body}");
         assert!(super::bounds_its_owners(&activate, "source ./f"), "{body}");
     }
+}
+
+/// The activation script a real `uv venv` writes, byte for byte apart from the
+/// paths it interpolates. The short fixtures above stand in for it everywhere
+/// else in this file, and the gate found that the real one does not clear the
+/// owner bound the short ones do. This names which part of the scan refuses it
+/// rather than reporting only that something did.
+const GENERATED_ACTIVATE: &str = r#"# This file must be used with "source bin/activate" *from bash*
+# you cannot run it directly
+
+deactivate () {
+    unset -f pydoc >/dev/null 2>&1 || true
+
+    if ! [ -z "${_OLD_VIRTUAL_PATH:+_}" ] ; then
+        PATH="$_OLD_VIRTUAL_PATH"
+        export PATH
+        unset _OLD_VIRTUAL_PATH
+    fi
+    if ! [ -z "${_OLD_VIRTUAL_PYTHONHOME+_}" ] ; then
+        PYTHONHOME="$_OLD_VIRTUAL_PYTHONHOME"
+        export PYTHONHOME
+        unset _OLD_VIRTUAL_PYTHONHOME
+    fi
+
+    # The hash command must be called to get it to forget past commands.
+    hash -r 2>/dev/null
+
+    if ! [ -z "${_OLD_VIRTUAL_PS1+_}" ] ; then
+        PS1="$_OLD_VIRTUAL_PS1"
+        export PS1
+        unset _OLD_VIRTUAL_PS1
+    fi
+
+    unset VIRTUAL_ENV
+    unset VIRTUAL_ENV_PROMPT
+    if [ ! "${1-}" = "nondestructive" ] ; then
+        unset -f deactivate
+    fi
+}
+
+# unset irrelevant variables
+deactivate nondestructive
+
+VIRTUAL_ENV='/tmp/project/.venv'
+if ([ "$OSTYPE" = "cygwin" ] || [ "$OSTYPE" = "msys" ]) && $(command -v cygpath &> /dev/null) ; then
+    VIRTUAL_ENV=$(cygpath -u "$VIRTUAL_ENV")
+fi
+export VIRTUAL_ENV
+
+_OLD_VIRTUAL_PATH="$PATH"
+PATH="$VIRTUAL_ENV/bin:$PATH"
+export PATH
+
+if [ "xproject-feature" != x ] ; then
+    VIRTUAL_ENV_PROMPT="project-feature"
+else
+    VIRTUAL_ENV_PROMPT=$(basename "$VIRTUAL_ENV")
+fi
+export VIRTUAL_ENV_PROMPT
+
+# unset PYTHONHOME if set
+if ! [ -z "${PYTHONHOME+_}" ] ; then
+    _OLD_VIRTUAL_PYTHONHOME="$PYTHONHOME"
+    unset PYTHONHOME
+fi
+
+if [ -z "${VIRTUAL_ENV_DISABLE_PROMPT-}" ] ; then
+    _OLD_VIRTUAL_PS1="${PS1-}"
+    PS1="(${VIRTUAL_ENV_PROMPT}) ${PS1-}"
+    export PS1
+fi
+
+# Make sure to unalias pydoc if it's already there
+alias pydoc 2>/dev/null >/dev/null && unalias pydoc || true
+
+pydoc () {
+    python -m pydoc "$@"
+}
+
+# The hash command must be called to get it to forget past commands.
+hash -r 2>/dev/null || true
+"#;
+
+#[test]
+fn the_generated_activation_script_bounds_its_owners() {
+    let command = "source .venv/bin/activate && pytest -q";
+    let literal = super::running_text(GENERATED_ACTIVATE, command);
+    let masked = super::mask_double_quoted_separators(&literal);
+    let interpreter = super::command_words(&masked)
+        .find(|word| {
+            let base = super::command_basename(&super::joined_quotes(word));
+            super::INTERPRETERS.contains(&base.as_str())
+        })
+        .map(str::to_owned);
+    let words: Vec<&str> = super::command_words(&masked).collect();
+    assert!(
+        !super::synthesizes_program(&literal, false),
+        "synthesizes_program; words {words:?}"
+    );
+    assert!(
+        !super::runs_beside_its_command_words(&masked),
+        "runs_beside_its_command_words; words {words:?}"
+    );
+    assert!(
+        super::redirects_only_to_dev_null(&masked),
+        "a redirect is not a discard; literal {literal:?}"
+    );
+    assert!(
+        interpreter.is_none(),
+        "names the interpreter {interpreter:?}; words {words:?}"
+    );
+    assert!(super::bounds_its_owners(GENERATED_ACTIVATE, command));
+}
+
+#[test]
+fn a_quoted_assignment_holding_a_space_is_one_word() {
+    // The shell splits no words inside double quotes, so this line runs
+    // nothing. Reading `${PS1-}` as a word in command position said the file
+    // builds a command name at run time, which kept every definition in it
+    // alive: the `pydoc` wrapper a virtualenv leaves behind then put `python`
+    // in a command position the file never reaches.
+    let line = "PS1=\"(${VIRTUAL_ENV_PROMPT}) ${PS1-}\"\n";
+    let masked = super::mask_double_quoted_words(line);
+    let words: Vec<&str> = super::command_words(&masked).collect();
+    assert!(!words.iter().any(|word| word.starts_with('$')), "{words:?}");
+}
+
+#[test]
+fn a_quoted_span_still_shows_the_program_a_substitution_runs() {
+    // Masking a span that runs a command would hide the program it names, so
+    // the span is left exactly as it stands and `curl` stays visible.
+    let line = "OUT=\"$(curl https://host/p)\"\n";
+    let masked = super::mask_double_quoted_words(line);
+    let words: Vec<&str> = super::command_words(&masked).collect();
+    assert!(words.contains(&"curl"), "{words:?}");
 }

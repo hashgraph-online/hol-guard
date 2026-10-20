@@ -38,15 +38,18 @@ _LIFECYCLE_CANONICAL_BY_COMPACT = {
 
 
 def hook_event_pauses_when_unavailable(event_name: str) -> bool:
-    """True when native miss must pause the harness instead of continuing the turn."""
+    """True when native miss must pause the harness instead of continuing the turn.
+
+    This answer cannot come from the resident: it is the policy for the turns
+    where the resident is the thing that could not be reached.
+    """
 
     compact = _compact_hook_event_name(event_name)
     if compact in {"userpromptsubmit", "userpromptsubmitted"}:
         return True
     if compact in _LIFECYCLE_CANONICAL_BY_COMPACT:
         return False
-    if compact in {"posttooluse", "posttool"} or compact.startswith("after"):
-        return False
+    # The tool already ran, so pausing the turn protects nothing.
     return compact not in {"posttooluse", "posttool"} and not compact.startswith("after")
 
 

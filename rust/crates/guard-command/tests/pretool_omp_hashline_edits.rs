@@ -77,6 +77,14 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
             "[src/a.ts#0AC4]\nCUT 1.=1 @line\n",
             "[src/b.ts#1B2C]\nPUT >$ @line\n",
         ]),
+        // Oh My Pi keeps a row without the `+` under a `PUT` as body text,
+        // in the session folder and in a sibling clone alike.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nexport const a = 3;\n  return a;\n\n"]),
+        patch(&[&format!(
+            "[{}#0AC4]\nPUT 1.=1:\nexport const a = 3;\n",
+            sibling.join("src/a.ts").display()
+        )]),
+        patch(&["[src/a.ts#0AC4]\nPUT >$:\n+// end\nexport const b = 4;\n"]),
         // Unified-diff `-old` rows under a `PUT` are body, not operations.
         patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n-export const a = 1;\n+export const a = 3;\n"]),
         patch(&["[package.json#0AC4]\nPUT 3.=3:\n-    \"test\": \"echo none\"\n+    \"test\": \"node --test\"\n"]),
@@ -130,6 +138,15 @@ fn oh_my_pi_hashline_edits_get_the_file_write_proof() {
         patch(&["[.git/config#0AC4]\nPUT >$:\n+[alias]\n"]),
         patch(&["[.git/hooks/pre-commit]\nPUT >$:\n+exit 0\n"]),
         patch(&["[src/a.ts#0AC4]\nREM\n"]),
+        // A bare row never turns an operation, a header or a protected file
+        // into text.
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nREM\n"]),
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\nexport const a = 3;\n[.env#0AC4]\nTOKEN=changed\n"]),
+        patch(&["[src/a.ts#0AC4]\nPUT 1.=1:\n  [~/.zshrc#0AC4]\nexport X=1\n"]),
+        patch(&["[.env#0AC4]\nPUT 1.=1:\nTOKEN=changed\n"]),
+        patch(&["[AGENTS.md#0AC4]\nPUT >$:\nmore rules\n"]),
+        patch(&["[~/.zshrc#0AC4]\nPUT >$:\nexport X=1\n"]),
+        patch(&["[src/a.ts#0AC4]\nexport const a = 3;\n"]),
         patch(&["[src/a.ts#0AC4]\nMV ../outside.ts\n"]),
         patch(&["[~/.zshrc#0AC4]\nPUT >$:\n+export X=1\n"]),
         patch(&["[~/.ssh/config]\nPUT >$:\n+Host *\n"]),

@@ -1,0 +1,592 @@
+"""First half of the generated Cursor hook script template."""
+
+from __future__ import annotations
+
+from ...daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
+from ...hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
+from ...hook_input_reader import HOOK_INPUT_READER_TEMPLATE
+
+HOOK_SCRIPT_TEMPLATE_HEAD = '''#!/usr/bin/env python3
+"""Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""
+from __future__ import annotations
+
+import time
+_HOOK_STARTED_MONOTONIC = time.monotonic()
+
+import hashlib
+import hmac
+import json
+import os
+import shlex
+import signal
+import subprocess
+import sys
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+from collections.abc import Mapping
+from pathlib import Path
+
+try:
+    from codex_plugin_scanner.guard.codex_hook_launch_runtime import run_isolated_hook_process
+except Exception:
+    run_isolated_hook_process = None
+
+GUARD_HOME = __GUARD_HOME__
+GUARD_CLI = __GUARD_CLI__
+GUARD_RECOVERY_COMMAND = __GUARD_RECOVERY_COMMAND__
+GUARD_HOOK_ARGV = __GUARD_HOOK_ARGV__
+GUARD_INHERIT_ENV_KEYS = __GUARD_INHERIT_ENV_KEYS__
+GUARD_HOOK_TIMEOUT_SECONDS = __GUARD_HOOK_TIMEOUT_SECONDS__
+_HOOK_DEADLINE_MONOTONIC = _HOOK_STARTED_MONOTONIC + GUARD_HOOK_TIMEOUT_SECONDS
+# The native runtime hands over a hook it did not answer with the time it
+# already spent; that time comes out of this client's budget, never added.
+_NATIVE_ELAPSED_MS = os.environ.pop("HOL_GUARD_BOUNDED_NATIVE_ELAPSED_MS", "")
+if _NATIVE_ELAPSED_MS.isascii() and _NATIVE_ELAPSED_MS.isdigit():
+    _HOOK_DEADLINE_MONOTONIC -= min(int(_NATIVE_ELAPSED_MS) / 1000.0, float(GUARD_HOOK_TIMEOUT_SECONDS))
+GUARD_ACTIONS = frozenset({"allow", "warn", "review", "require-reapproval", "sandbox-required", "block"})
+_FALLBACK_LOCK = threading.Lock()
+
+
+def _remaining_seconds(deadline_monotonic: float) -> float:
+    return max(deadline_monotonic - time.monotonic(), 0.0)
+
+
+__HOOK_INPUT_READER__
+__HOOK_HTTP_DEADLINE__
+
+
+def _request_timeout(deadline_monotonic: float, preferred_seconds: float) -> float | None:
+    remaining = _remaining_seconds(deadline_monotonic)
+    if remaining <= 0:
+        return None
+    return min(preferred_seconds, remaining)
+
+
+def _run_contained_cli(
+    argv: list[str],
+    *,
+    input_text: str,
+    env: Mapping[str, str],
+    timeout_seconds: float,
+    deadline_monotonic: float | None = None,
+) -> subprocess.CompletedProcess[str]:
+    deadline = time.monotonic() + max(timeout_seconds, 0.0) if deadline_monotonic is None else deadline_monotonic
+    if _remaining_seconds(deadline) <= 0:
+        raise subprocess.TimeoutExpired(argv, timeout_seconds)
+    popen_kwargs: dict[str, object] = {
+        "cwd": GUARD_HOME,
+        "env": dict(env),
+        "stdin": subprocess.PIPE,
+        "stdout": subprocess.PIPE,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if os.name != "nt":
+        popen_kwargs["start_new_session"] = True
+    proc = subprocess.Popen(argv, **popen_kwargs)
+    try:
+        out, err = proc.communicate(input=input_text, timeout=_remaining_seconds(deadline))
+    except subprocess.TimeoutExpired:
+        if os.name != "nt":
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except OSError:
+                proc.kill()
+        else:
+            proc.kill()
+        try:
+            proc.communicate(timeout=0)
+        except Exception:
+            pass
+        for stream in (proc.stdin, proc.stdout, proc.stderr):
+            if stream is not None:
+                stream.close()
+        raise
+    return subprocess.CompletedProcess(
+        argv,
+        proc.returncode if proc.returncode is not None else 1,
+        stdout=out or "",
+        stderr=err or "",
+    )
+
+
+def _hook_process_env() -> dict[str, str]:
+    env: dict[str, str] = {}
+    for key in GUARD_INHERIT_ENV_KEYS:
+        value = os.environ.get(key)
+        if isinstance(value, str) and value:
+            env[key] = value
+    dev_src = os.environ.get("HOL_GUARD_SRC")
+    validated = _validated_hol_guard_src_path(dev_src) if isinstance(dev_src, str) else None
+    if validated is not None:
+        env["PYTHONPATH"] = validated
+    else:
+        dev_src_file = Path(GUARD_HOME) / "cursor-dev-src"
+        if dev_src_file.is_file():
+            try:
+                configured_src = dev_src_file.read_text(encoding="utf-8").strip()
+            except OSError:
+                configured_src = ""
+            validated = _validated_hol_guard_src_path(configured_src)
+            if validated is not None:
+                env["PYTHONPATH"] = validated
+    return env
+
+
+def _guard_hook_arg_value(flag: str) -> str | None:
+    try:
+        index = GUARD_HOOK_ARGV.index(flag)
+    except ValueError:
+        return None
+    if index + 1 >= len(GUARD_HOOK_ARGV):
+        return None
+    value = GUARD_HOOK_ARGV[index + 1]
+    return value if isinstance(value, str) and value.strip() else None
+
+
+def _daemon_hook_env_overlay(guard_env: Mapping[str, str]) -> dict[str, str]:
+    overlay: dict[str, str] = {}
+    for key in (
+        "HOL_GUARD_MANAGED_CURSOR_HOOK",
+        "HOL_GUARD_CURSOR_APPROVAL_BINDING",
+        "HOL_GUARD_CURSOR_AFTER_SHELL_PROOF",
+        "CURSOR_PROJECT_DIR",
+        "CURSOR_VERSION",
+        "CURSOR_TRACE_ID",
+        "CURSOR_SESSION_ID",
+        "CURSOR_TRANSCRIPT_PATH",
+    ):
+        value = guard_env.get(key)
+        if isinstance(value, str) and value:
+            overlay[key] = value
+    return overlay
+
+
+def _daemon_hook_result(
+    payload_json: str,
+    *,
+    deadline_monotonic: float,
+    workspace: str | None,
+    hook_env_overlay: Mapping[str, str] | None = None,
+) -> tuple[tuple[int, str, str] | None, str | None]:
+    if _remaining_seconds(deadline_monotonic) <= 0:
+        return (None, "timeout")
+    state_path = Path(GUARD_HOME) / "daemon-state.json"
+    token_path = Path(GUARD_HOME) / "daemon-auth-token"
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            return (None, "timeout")
+        auth_token = token_path.read_text(encoding="utf-8").strip()
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            return (None, "timeout")
+    except (OSError, ValueError):
+        return (None, None)
+    if not isinstance(state, dict):
+        return (None, None)
+    port = state.get("port")
+    if not isinstance(port, int) or port <= 0 or not auth_token:
+        return (None, None)
+    # Validate the recorded PID is still alive before trusting the state file.
+    # A stale state file after a crash could point at an attacker-controlled listener.
+    pid = state.get("pid")
+    if not isinstance(pid, int) or pid <= 0:
+        return (None, None)
+    if not _daemon_pid_is_alive(pid):
+        return (None, "transport-failure")
+    # Probe /healthz before sending the hook payload and auth token.
+    # Ensures the listener is actually the Guard daemon, not a spoofed process.
+    # Validate the response body — not just HTTP 200 — so an attacker listener
+    # that returns 200 but doesn't know the daemon's compatibility version is rejected.
+    try:
+        timeout = _request_timeout(deadline_monotonic, 2)
+        if timeout is None:
+            return (None, "timeout")
+        health_req = urllib.request.Request(f"http://127.0.0.1:{port}/healthz", method="GET")
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
+        with opener.open(health_req, timeout=timeout) as health_response:
+            if health_response.status != 200:
+                return (None, None)
+            health_bytes = health_response.read(1_000_001)
+            if len(health_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            health_body = health_bytes.decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        error.close()
+        return (None, "transport-failure")
+    except TimeoutError:
+        return (None, "timeout")
+    except (OSError, urllib.error.URLError):
+        return (None, "transport-failure")
+    try:
+        health_json = json.loads(health_body)
+    except ValueError:
+        return (None, None)
+    if not isinstance(health_json, dict) or health_json.get("ok") is not True:
+        return (None, None)
+    state_compat = state.get("compatibility_version")
+    if isinstance(state_compat, str) and health_json.get("compatibility_version") != state_compat:
+        return (None, None)
+    # Challenge-response: prove the listener knows the auth_token before sending it.
+    # A spoofed listener can return public healthz values but cannot forge the HMAC.
+    # The proof is bound to the daemon's listening port so a relay attacker cannot
+    # proxy the nonce to the real daemon and reuse its proof from a different port.
+    # Old daemons without /v1/healthz/verify fail with HTTPError — return None to
+    # fall through to the CLI path. Never bypass the HMAC challenge.
+    nonce = os.urandom(16).hex()
+    proof_message = f"{port}:{nonce}"
+    try:
+        timeout = _request_timeout(deadline_monotonic, 2)
+        if timeout is None:
+            return (None, "timeout")
+        verify_req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/v1/healthz/verify",
+            data=json.dumps({"nonce": nonce}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
+        with opener.open(verify_req, timeout=timeout) as verify_response:
+            verify_bytes = verify_response.read(1_000_001)
+            if len(verify_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            verify_body = verify_bytes.decode("utf-8", errors="replace")
+            try:
+                verify_json = json.loads(verify_body)
+            except ValueError:
+                return (None, "authenticated-control-plane-failure")
+            if not isinstance(verify_json, dict) or not isinstance(verify_json.get("proof"), str):
+                return (None, "authenticated-control-plane-failure")
+            expected_proof = hmac.new(
+                auth_token.encode("utf-8"),
+                proof_message.encode("utf-8"),
+                hashlib.sha256,
+            ).hexdigest()
+            if not hmac.compare_digest(verify_json["proof"], expected_proof):
+                return (None, None)
+    except urllib.error.HTTPError as error:
+        error.close()
+        return (None, "authenticated-control-plane-failure")
+    except TimeoutError:
+        return (None, "timeout")
+    except (OSError, urllib.error.URLError):
+        return (None, "transport-failure")
+    params = [("guard-home", GUARD_HOME)]
+    if workspace:
+        params.append(("workspace", workspace))
+    home_dir = _guard_hook_arg_value("--home")
+    if home_dir:
+        params.append(("home", home_dir))
+    try:
+        request_payload = json.loads(payload_json)
+    except ValueError:
+        return (None, "authenticated-control-plane-failure")
+    if not isinstance(request_payload, dict):
+        return (None, "authenticated-control-plane-failure")
+    if hook_env_overlay:
+        request_payload["hook_env"] = dict(hook_env_overlay)
+    query = urllib.parse.urlencode(params)
+    request = urllib.request.Request(
+        f"http://127.0.0.1:{port}/v1/hooks/cursor?{query}",
+        data=json.dumps(request_payload).encode("utf-8"),
+        headers={
+            "Content-Type": "application/json",
+            "X-Guard-Token": auth_token,
+        },
+        method="POST",
+    )
+    try:
+        timeout = _request_timeout(deadline_monotonic, GUARD_HOOK_TIMEOUT_SECONDS)
+        if timeout is None:
+            return (None, "timeout")
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({}),
+            _deadline_http_handler(min(deadline_monotonic, time.monotonic() + timeout)),
+        )
+        with opener.open(request, timeout=timeout) as response:
+            body_bytes = response.read(1_000_001)
+            if len(body_bytes) > 1_000_000:
+                return (None, "authenticated-control-plane-failure")
+            body = body_bytes.decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as error:
+        try:
+            detail_bytes = error.read(1_000_001)
+            detail = detail_bytes.decode("utf-8", errors="replace").lower() if len(detail_bytes) <= 1_000_000 else ""
+        except OSError:
+            detail = ""
+        finally:
+            error.close()
+        if error.code in {429, 503} or any(
+            marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
+        ):
+            return (None, "overload")
+        return (None, "authenticated-control-plane-failure")
+    except TimeoutError:
+        return (None, "timeout")
+    except (OSError, urllib.error.URLError):
+        return (None, "transport-failure")
+    # Reject empty or non-dict responses — they default policy_action to "allow".
+    # Fall through to the CLI subprocess path instead of trusting a malformed response.
+    body_stripped = body.strip()
+    if not body_stripped:
+        return (None, "authenticated-control-plane-failure")
+    try:
+        parsed_body = json.loads(body_stripped)
+    except ValueError:
+        return (None, "authenticated-control-plane-failure")
+    if not isinstance(parsed_body, dict):
+        return (None, "authenticated-control-plane-failure")
+    raw_event_name = _raw_hook_event_name(request_payload)
+    if raw_event_name not in {"aftershellexecution", "aftermcpexecution"}:
+        policy_action = parsed_body.get("policy_action")
+        if not isinstance(policy_action, str) or policy_action not in GUARD_ACTIONS:
+            return (None, "authenticated-control-plane-failure")
+    return ((0, body_stripped, ""), None)
+
+
+def _run_guard_fallback(
+    guard_argv: list[str],
+    *,
+    payload_json: str,
+    guard_env: Mapping[str, str],
+    deadline_monotonic: float,
+) -> subprocess.CompletedProcess[str]:
+    if getattr(sys, "frozen", False):
+        raise RuntimeError("HOL Guard has no cold evaluator in a frozen build")
+    if not _FALLBACK_LOCK.acquire(blocking=False):
+        raise RuntimeError("HOL Guard fallback review is already in progress")
+    try:
+        if _remaining_seconds(deadline_monotonic) <= 0:
+            raise subprocess.TimeoutExpired([*GUARD_CLI, *guard_argv], GUARD_HOOK_TIMEOUT_SECONDS)
+        command = [*_resolved_guard_cli(), *guard_argv]
+        remaining = _remaining_seconds(deadline_monotonic)
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(command, GUARD_HOOK_TIMEOUT_SECONDS)
+        if run_isolated_hook_process is None:
+            return _run_contained_cli(
+                command,
+                input_text=payload_json,
+                env=guard_env,
+                timeout_seconds=remaining,
+                deadline_monotonic=deadline_monotonic,
+            )
+        result = run_isolated_hook_process(
+            command,
+            cwd=GUARD_HOME,
+            environment=dict(guard_env),
+            input_text=payload_json,
+            timeout_seconds=remaining,
+            deadline_monotonic=deadline_monotonic,
+        )
+        if result.timed_out:
+            raise subprocess.TimeoutExpired(command, remaining)
+        return subprocess.CompletedProcess(
+            command,
+            result.returncode if result.returncode is not None else 1,
+            stdout=result.stdout,
+            stderr="",
+        )
+    finally:
+        _FALLBACK_LOCK.release()
+
+
+def _run_guard_recovery(
+    failure_kind: str,
+    *,
+    guard_env: Mapping[str, str],
+    deadline_monotonic: float,
+) -> None:
+    if failure_kind == "overload" or not _FALLBACK_LOCK.acquire(blocking=False):
+        return
+    try:
+        recovery_deadline = min(deadline_monotonic, time.monotonic() + 5.0)
+        remaining = _remaining_seconds(recovery_deadline)
+        if remaining <= 0:
+            return
+        if run_isolated_hook_process is None:
+            try:
+                _run_contained_cli(
+                    [*GUARD_RECOVERY_COMMAND, failure_kind],
+                    input_text="",
+                    env=guard_env,
+                    timeout_seconds=remaining,
+                    deadline_monotonic=recovery_deadline,
+                )
+            except (OSError, ValueError, subprocess.TimeoutExpired):
+                return
+            return
+        _ = run_isolated_hook_process(
+            [*GUARD_RECOVERY_COMMAND, failure_kind],
+            cwd=GUARD_HOME,
+            environment=dict(guard_env),
+            input_text="",
+            timeout_seconds=remaining,
+            deadline_monotonic=recovery_deadline,
+            allow_windows_breakaway=True,
+        )
+    except (OSError, ValueError):
+        return
+    finally:
+        _FALLBACK_LOCK.release()
+
+
+def _validated_hol_guard_src_path(path_str: str) -> str | None:
+    try:
+        if not isinstance(path_str, str) or not path_str.strip():
+            return None
+        candidate = Path(path_str.strip()).expanduser().resolve()
+    except (OSError, RuntimeError, ValueError, TypeError):
+        return None
+    if not candidate.is_dir():
+        return None
+    if not (candidate / "codex_plugin_scanner").is_dir():
+        return None
+    return str(candidate)
+
+
+def _workspace_from_cursor_input(payload: dict[str, object]) -> str | None:
+    project_dir = os.environ.get("CURSOR_PROJECT_DIR")
+    if isinstance(project_dir, str) and project_dir.strip():
+        candidate = project_dir.strip()
+        if Path(candidate).is_dir():
+            return candidate
+    roots = payload.get("workspace_roots") or payload.get("workspaceRoots")
+    if isinstance(roots, list):
+        for item in roots:
+            if isinstance(item, str) and item.strip():
+                candidate = item.strip()
+                if Path(candidate).is_dir():
+                    return candidate
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        candidate = cwd.strip()
+        if Path(candidate).is_dir():
+            return candidate
+    return None
+
+
+def _tool_input_dict(value: object) -> dict[str, object]:
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, list):
+        return {"arguments": list(value)}
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {"raw": value.strip()}
+        if isinstance(parsed, dict):
+            return dict(parsed)
+        if isinstance(parsed, list):
+            return {"arguments": list(parsed)}
+    return {}
+
+
+def _raw_hook_event_name(payload: dict[str, object]) -> str:
+    for key in ("hook_event_name", "hookEventName", "hook_name", "hookName", "event", "eventName"):
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip().lower()
+    return ""
+
+
+def _infer_cursor_hook_event_name(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    if _raw_hook_event_name(normalized):
+        return normalized
+    file_path = normalized.get("file_path")
+    if isinstance(file_path, str) and file_path.strip():
+        normalized["hook_event_name"] = "beforeReadFile"
+        return normalized
+    command = normalized.get("command")
+    if isinstance(command, str) and command.strip():
+        normalized["hook_event_name"] = "beforeShellExecution"
+        return normalized
+    if normalized.get("tool_name") is not None or normalized.get("tool_input") is not None:
+        normalized["hook_event_name"] = "preToolUse"
+    return normalized
+
+
+def _cursor_shell_hook_payload(normalized: dict[str, object], hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    payload.setdefault("tool_name", "Shell")
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    command = payload.get("command")
+    if isinstance(command, str) and command.strip():
+        tool_input.setdefault("command", command.strip())
+    cwd = payload.get("cwd")
+    if isinstance(cwd, str) and cwd.strip():
+        tool_input.setdefault("working_directory", cwd.strip())
+    payload["tool_input"] = tool_input
+    return payload
+
+
+def _cursor_mcp_hook_payload(normalized: dict[str, object], hook_event_name: str) -> dict[str, object]:
+    payload = dict(normalized)
+    payload["hook_event_name"] = hook_event_name
+    tool_input = _tool_input_dict(payload.get("tool_input"))
+    payload["tool_input"] = tool_input
+    tool_name = payload.get("tool_name")
+    if isinstance(tool_name, str) and tool_name.strip():
+        payload["tool_name"] = tool_name.strip()
+    else:
+        payload.setdefault("tool_name", "MCP")
+    return payload
+
+
+def _prepare_cursor_hook_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = _infer_cursor_hook_event_name(payload)
+    raw_event = _raw_hook_event_name(normalized)
+    if raw_event == "aftershellexecution":
+        return _cursor_shell_hook_payload(normalized, "afterShellExecution")
+    if raw_event == "aftermcpexecution":
+        return _cursor_mcp_hook_payload(normalized, "afterMCPExecution")
+    if raw_event == "beforeshellexecution":
+        prepared = _cursor_shell_hook_payload(normalized, "PreToolUse")
+        prepared["cursor_source_hook_event"] = "beforeShellExecution"
+        return prepared
+    if raw_event == "beforemcpexecution":
+        prepared = _cursor_mcp_hook_payload(normalized, "PreToolUse")
+        tool_input = _tool_input_dict(prepared.get("tool_input"))
+        for key in ("url", "command"):
+            value = normalized.get(key)
+            if isinstance(value, str) and value.strip():
+                tool_input.setdefault(key, value.strip())
+        prepared["tool_input"] = tool_input
+        prepared["cursor_source_hook_event"] = "beforeMCPExecution"
+        return prepared
+    if raw_event in {"beforereadfile", "beforewritefile"}:
+        write = raw_event == "beforewritefile"
+        normalized["hook_event_name"] = "PreToolUse"
+        normalized["tool_name"] = "Write" if write else "Read"
+        tool_input = _tool_input_dict(normalized.get("tool_input"))
+        file_path = normalized.get("file_path")
+        if isinstance(file_path, str) and file_path.strip():
+            tool_input.setdefault("file_path", file_path.strip())
+            tool_input.setdefault("path", file_path.strip())
+        normalized["tool_input"] = tool_input
+        if write:
+            normalized["cursor_source_hook_event"] = "beforeWriteFile"
+        return normalized
+    if raw_event == "pretooluse":
+        normalized["hook_event_name"] = "PreToolUse"
+    return normalized
+
+
+def _cursor_read_file_permission(permission: str) -> str:
+    if permission in {"deny", "ask"}:
+        return "deny"
+    return "allow"
+
+'''.replace("__HOOK_INPUT_READER__", HOOK_INPUT_READER_TEMPLATE).replace(
+    "__HOOK_HTTP_DEADLINE__", HOOK_HTTP_DEADLINE_TEMPLATE + "\n" + DAEMON_PID_LIVENESS_TEMPLATE
+)

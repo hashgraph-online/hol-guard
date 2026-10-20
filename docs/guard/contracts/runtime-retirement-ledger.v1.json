@@ -79,7 +79,10 @@
   "src/codex_plugin_scanner/guard/runtime/command_storage_common.py",
   "src/codex_plugin_scanner/guard/runtime/command_storage_extensions.py",
   "src/codex_plugin_scanner/guard/runtime/command_structured_matchers.py",
-  "src/codex_plugin_scanner/guard/runtime/command_tui_runner_extensions.py"
+  "src/codex_plugin_scanner/guard/runtime/command_tui_runner_extensions.py",
+  "src/codex_plugin_scanner/guard/adapters/codex_daemon_hook_bridge_flow.py",
+  "src/codex_plugin_scanner/guard/adapters/codex_daemon_bridge_failure_reason.py",
+  "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py"
  ],
  "retired_tests": [
   {
@@ -756,7 +759,7 @@
    "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_path_outside_temp_root",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
-    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_path_outside_temp_root"
+    "rust/crates/guard-runtime/src/directory_trust_tests.rs::a_payload_reference_is_read_only_where_guards_writer_put_it"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -764,7 +767,7 @@
    "old_node": "tests/test_guard_hook_payload_reference.py::test_reject_wrong_prefix_temp_dir",
    "replacement_nodes": [
     "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported",
-    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_rejects_path_outside_temp_root"
+    "rust/crates/guard-runtime/src/directory_trust_tests.rs::a_payload_reference_is_read_only_where_guards_writer_put_it"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -828,7 +831,7 @@
   {
    "old_node": "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_reports_bounded_bytes_before_hydration",
    "replacement_nodes": [
-    "tests/test_guard_hook_payload_reference.py::test_hook_payload_reference_reports_bounded_bytes"
+    "rust/crates/guard-runtime/src/edge_tests.rs::rejects_encrypted_payload_reference_until_supported"
    ],
    "status": "native_behavior_ported_requires_ci"
   },
@@ -5684,6 +5687,694 @@
    ],
    "status": "obsolete_implementation_assertion",
    "rationale": "Exercises the retired Python LeadingSubcommandMatcher constructor and match API. Native specialized matcher parity, admission, parser integration, and remote-command behavior suites remain."
+  },
+  {
+   "old_node": "tests/test_codex_contained_tests.py::test_bridge_rewrite_uses_the_home_bound_into_the_hook",
+   "source_sha256": "0a9cff52d7a33ec95e7e600b809baa807e8cddaa037a7c0843715a0af697774f",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_contain_tests.rs::the_installed_hook_home_is_read_as_parse_qs_reads_it",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_contain_tests.rs::the_guard_home_is_the_state_file_parent",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_contain_tests.rs::a_contained_call_is_rewritten_to_run_the_sink"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The hook's own home and Guard home are read out of the installed hook's query and state path by the native bridge, which is what rewrites a contained call."
+  },
+  {
+   "old_node": "tests/test_codex_contained_tests.py::test_bridge_without_an_absolute_home_keeps_the_denial",
+   "source_sha256": "0a9cff52d7a33ec95e7e600b809baa807e8cddaa037a7c0843715a0af697774f",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_contain_tests.rs::the_installed_hook_home_is_read_as_parse_qs_reads_it",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_contain_tests.rs::a_denial_containment_does_not_apply_to_stands"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A query that names no single absolute home yields no home natively, and a denial without one stands."
+  },
+  {
+   "old_node": "tests/test_sonar_control_flow_regressions.py::test_invalid_codex_input_denies_without_reviewing",
+   "source_sha256": "a863a15e3b48be427ae15bea05bafd54b7211eb8e7828e06bf47a4e9f34d6450",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::input_that_is_not_an_object_is_refused",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::hook_input_is_bounded_and_normalized"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The native bridge reads the hook body and refuses one it cannot parse before any review is attempted."
+  },
+  {
+   "old_node": "tests/test_sonar_control_flow_regressions.py::test_codex_review_emits_original_decision_once",
+   "source_sha256": "a863a15e3b48be427ae15bea05bafd54b7211eb8e7828e06bf47a4e9f34d6450",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::clean_answers_are_rendered_natively",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::an_authenticated_answer_is_rendered"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The native child inherits this call's stdio and writes the daemon's decision once."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_bridge_converts_denied_pretool_to_allow_after_browser_approval",
+   "source_sha256": "49cfabed8c417cec7dea506cfa4e5be32e60d01107deae568b1d95e6af7e2616",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_browser_allow_recorded_by_the_daemon_is_approved"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The browser approval wait and the allow it turns a denial into belong to the native bridge."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_bridge_keeps_deny_when_browser_blocks",
+   "source_sha256": "49cfabed8c417cec7dea506cfa4e5be32e60d01107deae568b1d95e6af7e2616",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::a_browser_block_keeps_the_deny"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A block recorded in the browser keeps the native denial."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_bridge_keeps_deny_when_policy_became_terminal",
+   "source_sha256": "49cfabed8c417cec7dea506cfa4e5be32e60d01107deae568b1d95e6af7e2616",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::an_allow_the_daemon_does_not_record_keeps_the_deny"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An allow the daemon never recorded keeps the denial natively."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_resume.py::test_bridge_keeps_deny_when_browser_wait_times_out",
+   "source_sha256": "49cfabed8c417cec7dea506cfa4e5be32e60d01107deae568b1d95e6af7e2616",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_approval_tests.rs::an_unresolved_request_keeps_the_deny_at_the_deadline"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A request still unresolved at the deadline keeps the denial natively."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_codex_post_tool_response_excludes_daemon_metadata",
+   "source_sha256": "5897923caf122fe7bb4b08cc01c783c05039c5012492a0f89ae5df97298bf45d",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime shapes every Codex answer itself, and the shared response vectors pin that the daemon's own metadata never reaches Codex's PostToolUse schema."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_bridge_keeps_inline_browser_wait_within_consumer_limit",
+   "source_sha256": "5897923caf122fe7bb4b08cc01c783c05039c5012492a0f89ae5df97298bf45d",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::inline_browser_wait_stays_within_the_consumer_limit"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The inline browser wait is now derived and clamped while the runtime prepares the hook input, so a long configured hook timeout still cannot hold a PreToolUse hook open past the consumer limit."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_authenticated_generation_rollover_is_rediscovered_once",
+   "source_sha256": "5897923caf122fe7bb4b08cc01c783c05039c5012492a0f89ae5df97298bf45d",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A daemon generation that changes during identity verification is now an unsent failure the transport marks not-up, and the runtime re-asks it through the same bounded wait it uses for a daemon that is still coming up. The fixed second discovery the Python flow performed no longer exists as a separate step."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_repeated_generation_rollover_stays_bounded",
+   "source_sha256": "5897923caf122fe7bb4b08cc01c783c05039c5012492a0f89ae5df97298bf45d",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Repeated rollover is still bounded, but by the hook deadline the runtime carries through the wait rather than by a fixed two-attempt count, so the exact attempt count the Python flow guaranteed is no longer a property of the implementation."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_authenticated_overload_fails_closed_without_fallback_or_restart",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::odd_answers_fail_closed_and_process_failures_restart_the_daemon"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An overloaded daemon is answered natively: the runtime refuses to restart on overload and renders the fail-closed answer, and there is no Python fallback left to reach for."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_daemon_failure_kind_separates_overload_transport_and_control_plane",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The three-way failure-kind taxonomy was part of the retired Python reason module. The runtime emits one fail-closed reason for every authentication failure, so separating overload, transport and control-plane causes in the hook answer is no longer a behaviour to pin."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_daemon_rpc_budget_stays_below_approval_wait",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::request_timeouts_match_python",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::inline_browser_wait_stays_within_the_consumer_limit"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime derives the request timeout and the inline approval wait from the configured hook timeouts, and both are pinned against the Python vectors they replaced."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_main_starts_daemon_once_then_retries_hook",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Starting the daemon once and re-asking the hook is the runtime's restart route."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_malformed_daemon_and_fallback_outputs_fail_closed",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::odd_answers_fail_closed_and_process_failures_restart_the_daemon"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An answer the runtime cannot render fails closed. The fallback half of the assertion is unreachable: the shim runs no Python fallback."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_post_tool_use_stdout_is_exactly_one_json_object_with_noisy_fallback",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::responses_are_shaped_as_python_shapes_them"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime writes one rendered object for a PostToolUse hook. The noisy fallback whose output this test kept off stdout no longer runs."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_prompt_rpc_gets_cold_workspace_budget",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::request_timeouts_match_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Per-event request budgets are derived natively from the configured hook timeouts."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_typed_transient_overload_retries_once_when_deadline_fits",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A single deadline-bounded re-ask is the runtime's only retry. The typed overload exception it keyed on belonged to the retired Python flow."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_unavailable_daemon_preserves_local_fallback_denial",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_daemon_failure_without_a_start_command_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An unavailable daemon denies natively. There is no local fallback denial to preserve, because the local fallback is gone."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge_resilience.py::test_untrusted_fallback_timeout_kills_descendants",
+   "source_sha256": "9196401a123c5974195802c5fba4f805a6b70661802e00aa459c62be9a95b287",
+   "replacement_nodes": [
+    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Killing a timed-out fallback's descendants is unreachable: the shim spawns no unauthenticated child at all. The installed outage canary now asserts the stronger property directly, failing if the bridge executes any child when no runtime resolves beside the Guard home."
+  },
+  {
+   "old_node": "tests/test_codex_managed_fallback_authentication.py::test_authenticated_worker_failure_cannot_launch_unverified_fallback",
+   "source_sha256": "c2e6090563b286a50c3de5df9203e6d8ca08262bdec80a2e7e3d5b59bc880384",
+   "replacement_nodes": [
+    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]",
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_mismatched_token_fails_closed_before_the_hook_is_sent"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. No unverified fallback can be launched because no fallback exists. The runtime fails closed before the hook is sent when the daemon's token does not match its signed state, and the outage canary pins that the shim runs no child."
+  },
+  {
+   "old_node": "tests/test_codex_managed_fallback_authentication.py::test_empty_daemon_result_cannot_skip_managed_launch_validation",
+   "source_sha256": "c2e6090563b286a50c3de5df9203e6d8ca08262bdec80a2e7e3d5b59bc880384",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::odd_answers_fail_closed_and_process_failures_restart_the_daemon"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An empty or unrenderable daemon answer fails closed natively; there is no managed launch left for it to skip."
+  },
+  {
+   "old_node": "tests/test_codex_managed_fallback_authentication.py::test_worker_fault_preserves_authenticated_fallback_decisions",
+   "source_sha256": "c2e6090563b286a50c3de5df9203e6d8ca08262bdec80a2e7e3d5b59bc880384",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_daemon_failure_without_a_start_command_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The authenticated fallback whose decisions this preserved was retired with the Python flow; a daemon fault now fails closed in the runtime."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_daemon_reporting_refused_native_respawn_denies_fast_without_fallback",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A refused respawn is a failed start, and the runtime denies on it without reaching for a fallback."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_non_blocking_event_continues_with_repair_message",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The fail-closed answer for a non-blocking event still continues and still carries a repair instruction, but the wording is the runtime's own; this test pinned the retired Python reason text."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_permission_request_still_fails_closed_on_fast_path",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The PermissionRequest deny shape is rendered natively for every unauthenticated outcome, so the fast path no longer needs its own case."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_refusal_on_the_post_start_retry_denies_fast_without_fallback",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A refusal on the re-ask after a start is a failed start to the runtime, and it denies without a fallback."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_second_hook_after_failed_start_denies_fast_with_repair_message",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. This test asserted the second hook's denial did NOT carry the repair wording. The runtime deliberately uses one fail-closed reason naming `hol-guard daemon repair` for every authentication failure, so the distinction it pinned is not preservable by design."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_successful_daemon_response_clears_marker",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_started_daemon_answers_the_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Clearing the start-failure marker on a successful answer is part of the runtime's answered route."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_tombstone_state_after_failed_restart_records_marker_and_fails_fast",
+   "source_sha256": "92cb2ccbe5a543cf190d367961cbcca72f509dce44370ba420b376365f4b226a",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime records the start failure and fails closed; the tombstone bookkeeping this asserted lived in the retired Python start-wait module."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_a_fresh_launch_is_not_denied_by_an_older_start_failure",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_started_daemon_answers_the_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A daemon that answers clears the older start failure in the runtime's answered route."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_a_stale_launch_marker_does_not_extend_the_wait",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_hook_without_time_for_a_start_fails_closed_without_starting"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The wait is bounded by the hook deadline the runtime carries, not by a marker's age."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_a_start_in_progress_is_not_recorded_as_a_failed_start",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A daemon still coming up is a not-up attempt the runtime waits on rather than a recorded failure."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_a_wait_request_cannot_spend_the_fallback_window",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_hook_without_time_for_a_start_fails_closed_without_starting"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. There is no fallback window left to protect; the runtime refuses to start a daemon it has no time to wait for."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_failed_start_without_a_launch_marker_does_not_ask_again",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A failed start fails closed in the runtime without a second ask."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_only_not_yet_up_failures_are_retried",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime's transport marks exactly the not-up failures, and only those re-enter the wait."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_only_the_post_start_retry_runs_once_the_fallback_slice_has_begun",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The post-start re-ask is the only retry the runtime performs, and the fallback slice it was scheduled against no longer exists."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_start_command_timeout_still_waits_while_a_launch_is_in_progress",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime keeps waiting for a daemon that is coming up until the hook deadline, independently of how the start command itself returned."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_the_wait_leaves_the_fallback_its_turn",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_hook_without_time_for_a_start_fails_closed_without_starting"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The wait no longer has to leave time for a fallback, so the whole remaining deadline is the daemon's; a hook with too little time left is failed closed without a start."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_waiting_stops_when_the_launch_settles",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_started_daemon_answers_the_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime's wait ends on the first settled attempt."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_waits_for_a_starting_daemon_instead_of_denying",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_process_failure_restarts_the_daemon_and_asks_once_more"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Waiting for a daemon that is still coming up rather than denying is the runtime's restart route."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_without_a_launch_marker_the_bridge_retries_once_then_falls_back",
+   "source_sha256": "1b7860ea2a43f4ca0f47c86b49984430e597f676a5a42d70b14a12ff87e3d469",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_failed_start_fails_closed"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The single retry survives as the runtime's re-ask; the fallback it ended in does not exist, and the runtime fails closed instead."
+  },
+  {
+   "old_node": "tests/test_codex_hook_validation_deadline.py::test_fallback_validation_receives_original_deadline_and_never_launches_after_expiry",
+   "source_sha256": "bfd0e28419ac6e90f892a2a29d0e77c03c8ee2735bb516329468acdee9ef58e4",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_hook_without_time_for_a_start_fails_closed_without_starting"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. There is no fallback to hand a deadline to. The runtime's own refusal to act on an expired budget is what remains of the claim."
+  },
+  {
+   "old_node": "tests/test_codex_hook_validation_deadline.py::test_bridge_timeout_denies_without_claiming_authority_needs_repair",
+   "source_sha256": "bfd0e28419ac6e90f892a2a29d0e77c03c8ee2735bb516329468acdee9ef58e4",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A timeout denies with the runtime's single fail-closed reason, which claims no authority of its own. The retry-versus-repair wording it distinguished belonged to the retired Python reason module."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_a_home_whose_daemon_never_started_is_not_an_authentication_failure",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The reason taxonomy this classified lived only in the retired Python module. The runtime renders one fail-closed answer and does not classify the cause for Codex."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_answered_but_untrusted_daemon_keeps_repair_message",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. An untrusted daemon still produces the fail-closed answer, and that answer always names the repair command."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_bridge_timeout_denies_with_retry_message_and_reports_causes",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime does not report per-cause detail to Codex; every authentication failure renders the same reason, by design."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_dead_daemon_and_overload_take_precedence",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Precedence between causes is meaningless once there is a single reason; the retired module's ordering is gone with it."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_missing_or_stopped_daemon_state_is_not_an_authentication_failure",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Missing or stopped state fails closed like any other unauthenticated outcome; the runtime draws no distinction in the answer."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_state_without_its_discovery_key_still_fails_authentication",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_mismatched_token_fails_closed_before_the_hook_is_sent"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Signed state the runtime cannot reconcile with the daemon's token fails closed before the hook is sent."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_bridge_failure_reason.py::test_unanswered_daemon_asks_for_retry_not_repair",
+   "source_sha256": "ed230b96a4f85408b6da32115547493daac3a0cee79ca70f047230886fd9730e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The runtime deliberately names `hol-guard daemon repair` in every fail-closed answer, so the retry-not-repair distinction this pinned is not preservable."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_unusable_managed_launcher_reports_both_causes_without_running_children",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]",
+    "tests/test_codex_daemon_hook_bridge.py::test_denial_before_the_runtime_names_its_reason_code",
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. No child runs, which the installed outage canary asserts directly. The shim still writes the `hol-guard.codex-bridge-failure.v1` document for the denials it makes before the runtime runs, but with the one reason it knows; a two-cause report belonged to the retired Python review and has no runtime successor."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_total_outage_blocks_mutating_action_without_authenticated_fallback",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "tests/test_codex_outage_recovery_boundary.py::test_total_outage_rejects_unverified_recovery_action[PreToolUse-repair_path]"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The installed outage canary carries this claim forward against the shim, across both deny shapes and all four recovery-shaped actions."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_validation_failure_preserves_specific_causes_and_redacts_unknown_detail",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Redaction is now structural rather than filtered: the runtime's fail-closed answer carries a fixed reason and no attacker-influenced detail, so there is no unknown detail left to redact."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_daemon_failure_categories_preserve_authentication_boundary",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. The authentication boundary is preserved by rendering one reason for every failed category, which is what the native fail-closed vectors pin."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_existing_integrity_reason_survives_without_exception_detail",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. Exception detail never reaches the answer now, because the runtime renders a fixed reason instead of composing one from the failure."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_recovered_daemon_does_not_emit_incident_noise",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_bridge_tests.rs::a_started_daemon_answers_the_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. A daemon that answers produces only its rendered answer; the incident document that could have been noisy was retired with the Python diagnostics layer."
+  },
+  {
+   "old_node": "tests/test_codex_bridge_failure_diagnostics.py::test_diagnostic_failure_preserves_denial",
+   "source_sha256": "3c02373bd497270379342378013b271e4159d630bf5a275260ad072d3fb9f5fb",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/codex_hook_response_tests.rs::fail_closed_matches_python"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Codex daemon hook bridge, which now only launches the native command. There is no diagnostic write left that could fail between the failure and the denial; the runtime renders the deny directly."
+  },
+  {
+   "old_node": "tests/test_claude_daemon_hook_bridge_budget.py::test_bridge_timeouts_stay_under_harness_budget",
+   "source_sha256": "9e33894e537251d87e39fa9fc8770784bbd3ad18741ce6d1c3b40feb5fdcd9c0",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::timeouts_stay_under_the_harness_budget"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The hook deadline and every timeout derived from it are now the native bridge's."
+  },
+  {
+   "old_node": "tests/test_claude_daemon_hook_bridge_budget.py::test_daemon_timeout_without_a_recovery_window_uses_fallback",
+   "source_sha256": "9e33894e537251d87e39fa9fc8770784bbd3ad18741ce6d1c3b40feb5fdcd9c0",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::unavailable_daemon_is_denied_without_the_local_hook",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::timeouts_stay_under_the_harness_budget"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. A daemon that cannot answer inside the deadline is denied there, and the Python local fallback it fell back to is gone."
+  },
+  {
+   "old_node": "tests/test_claude_daemon_hook_bridge_budget.py::test_recovery_still_runs_when_its_window_can_finish",
+   "source_sha256": "9e33894e537251d87e39fa9fc8770784bbd3ad18741ce6d1c3b40feb5fdcd9c0",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::a_daemon_the_recovery_starts_later_answers_the_hook_once",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::recovered_daemon_answers_the_retry"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The recovery command and the one retry it earns are run by the native bridge."
+  },
+  {
+   "old_node": "tests/test_claude_hook_completion_contract.py::test_daemon_output_keeps_decision_and_completion_separate",
+   "source_sha256": "4f5968f09e584f4f307ecb67341cb9704f108b906ba1fb0d271f950efd7a7d33",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::daemon_answer_is_forwarded_with_its_proof"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The daemon's answer is forwarded by the native bridge, which writes it once."
+  },
+  {
+   "old_node": "tests/test_claude_hook_completion_contract.py::test_oversized_input_denies_without_contacting_daemon",
+   "source_sha256": "4f5968f09e584f4f307ecb67341cb9704f108b906ba1fb0d271f950efd7a7d33",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::oversized_input_is_denied"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The native bridge reads the hook body and holds it to the same bound."
+  },
+  {
+   "old_node": "tests/test_claude_hook_completion_contract.py::test_local_fallback_denial_is_emitted_once",
+   "source_sha256": "4f5968f09e584f4f307ecb67341cb9704f108b906ba1fb0d271f950efd7a7d33",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::unavailable_daemon_is_denied_without_the_local_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. There is no Python local fallback left to emit a denial twice."
+  },
+  {
+   "old_node": "tests/test_claude_hook_exit_paths.py::test_success_writes_once_or_suppresses_only_success",
+   "source_sha256": "40b0396390d8aa5f8dd4d7d60d148d03bb132f34277c843d554124d267367c2b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::daemon_answer_is_forwarded_with_its_proof"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The native child inherits this call's stdio and is the only writer on it."
+  },
+  {
+   "old_node": "tests/test_claude_hook_exit_paths.py::test_failure_output_is_never_suppressed_or_replaced",
+   "source_sha256": "40b0396390d8aa5f8dd4d7d60d148d03bb132f34277c843d554124d267367c2b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::unavailable_daemon_is_denied_without_the_local_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. A refusal is written by the native bridge and never suppressed."
+  },
+  {
+   "old_node": "tests/test_claude_hook_exit_paths.py::test_oversized_input_preserves_event_denial_without_contacting_daemon",
+   "source_sha256": "40b0396390d8aa5f8dd4d7d60d148d03bb132f34277c843d554124d267367c2b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::oversized_input_is_denied"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The oversize denial, and the event it is shaped for, are the native bridge's."
+  },
+  {
+   "old_node": "tests/test_sonar_path_authority.py::test_claude_daemon_url_rejects_noncanonical_state_path",
+   "source_sha256": "b7f5d724d465e03ee8db217df31269f3568fef8c92d9b1ada6634fe8f16b11e8",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::state_path_is_bound_to_one_guard_home"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The daemon URL is derived in Rust, which refuses a state path that is not an absolute daemon-state.json."
+  },
+  {
+   "old_node": "tests/test_sonar_path_authority.py::test_claude_daemon_url_does_not_follow_state_symlink",
+   "source_sha256": "b7f5d724d465e03ee8db217df31269f3568fef8c92d9b1ada6634fe8f16b11e8",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_auth_tests.rs::state_reached_through_a_symlink_is_refused"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. Refusing a daemon state that is not a regular file is now the native authentication's rule."
+  },
+  {
+   "old_node": "tests/test_sonar_path_authority.py::test_claude_daemon_url_uses_authenticated_local_state",
+   "source_sha256": "b7f5d724d465e03ee8db217df31269f3568fef8c92d9b1ada6634fe8f16b11e8",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_auth_tests.rs::signed_state_authenticates"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The signature over the daemon state is checked in Rust before its URL is used."
+  },
+  {
+   "old_node": "tests/test_sonar_path_authority.py::test_claude_bridge_falls_back_when_hook_state_binding_is_stale",
+   "source_sha256": "b7f5d724d465e03ee8db217df31269f3568fef8c92d9b1ada6634fe8f16b11e8",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_auth_tests.rs::tampered_or_stopped_state_is_refused",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::missing_state_is_denied_without_the_local_hook"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. A stale or tampered binding is refused by the native bridge, which denies instead of running a Python fallback."
+  },
+  {
+   "old_node": "tests/test_guard_claude_adapter.py::test_claude_daemon_hook_bridge_delegates_to_authenticated_transport",
+   "source_sha256": "049f45f913e4fa3c03bd6a7939af4be664127df958be1d6aade8a4ae4e60a56e",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::daemon_answer_is_forwarded_with_its_proof",
+    "rust/crates/guard-runtime/src/claude_hook_bridge_auth_tests.rs::signed_state_authenticates"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. The authenticated transport and the timeout it carried are the native bridge's."
+  },
+  {
+   "old_node": "tests/test_hook_stdin_utf8.py::test_claude_bridge_forwards_utf8_paths_unchanged",
+   "source_sha256": "53f395bb432efad199ba18673139925b0319ede9c2451cc836a48b7f49c419f7",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/claude_hook_bridge_tests.rs::a_non_ascii_payload_reaches_the_daemon_unchanged"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Exercises the retired Python executing layer of the Claude daemon hook bridge, which now only launches the native command. Python no longer decodes the hook body: the native child reads the bytes and forwards them."
   }
  ],
  "preserved_tests": [
@@ -5961,6 +6652,36 @@
    "old_node": "tests/test_guard_skill_directory_identity_vectors.py::test_discovery_matches_shared_vectors[entries_exceeded-native]",
    "new_node": "tests/test_guard_skill_directory_identity_vectors.py::test_native_discovery_matches_original_vectors[entries_exceeded-native]",
    "reason": "Retained compiled native caller replay is named explicitly; obsolete portable parameter nodes are retired separately."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_does_not_stop_user_prompt",
+   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_does_not_stop_user_prompt",
+   "reason": "Same claim against the shim: a UserPromptSubmit hook is never stopped when the native runtime cannot be resolved. Renamed because launcher integrity is no longer the reason it cannot be."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_denies_unrelated_pretool_use",
+   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_denies_pretool_use",
+   "reason": "Same claim against the shim: a PreToolUse hook is denied when no native runtime resolves beside the Guard home."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_hook_bridge.py::test_launcher_integrity_failure_denies_permission_request",
+   "new_node": "tests/test_codex_daemon_hook_bridge.py::test_unresolvable_native_runtime_denies_permission_request",
+   "reason": "Same claim against the shim: a PermissionRequest is denied in its own deny shape when no native runtime resolves."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_dead_fastpath.py::test_other_unauthenticated_503_still_uses_the_fallback",
+   "new_node": "tests/test_codex_daemon_dead_fastpath.py::test_only_a_restart_circuit_503_is_a_native_runtime_refusal",
+   "reason": "The classification it tested is unchanged; only the consequence moved. A 503 that is not the restart circuit is still not a native runtime refusal, but there is no fallback left for it to use."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_a_marker_older_than_live_daemon_state_does_not_extend_the_wait",
+   "new_node": "tests/test_codex_daemon_dead_fastpath.py::test_a_marker_older_than_live_daemon_state_does_not_extend_the_wait",
+   "reason": "A pure unit of codex_daemon_dead_fastpath.daemon_start_in_progress, moved unchanged into that module's own test file when the start-wait file was retired."
+  },
+  {
+   "old_node": "tests/test_codex_daemon_start_wait.py::test_unparseable_or_empty_markers_do_not_count",
+   "new_node": "tests/test_codex_daemon_dead_fastpath.py::test_unparseable_or_empty_markers_do_not_count",
+   "reason": "A pure unit of codex_daemon_dead_fastpath.daemon_start_in_progress, moved unchanged into that module's own test file when the start-wait file was retired."
   }
  ],
  "unchanged_regression_suites": [

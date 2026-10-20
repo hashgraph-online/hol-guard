@@ -40,6 +40,165 @@ fn container_and_image_listings_are_admitted() {
 }
 
 #[test]
+fn registry_manifest_queries_are_admitted() {
+    for words in [
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "registry.example.com/acme/acme-app:1a2b3c4",
+        ],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "registry.example.com/acme/acme-app:1a2b3c4",
+            "--format",
+            "{{.Manifest.Digest}}",
+        ],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--format={{json .Manifest}}",
+            "registry.example.com/acme/acme-app:1a2b3c4",
+        ],
+        vec!["buildx", "imagetools", "inspect", "--raw", "alpine:3.20"],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--format",
+            "{{ json .Index }} {{.Name}}",
+            "alpine:3.20",
+        ],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "registry.example.com/acme/acme-app@sha256:0123456789abcdef",
+        ],
+    ] {
+        assert!(safe_docker_arguments(&arguments(&words)), "{words:?}");
+    }
+}
+
+#[test]
+fn registry_manifest_templates_cannot_print_the_image_configuration() {
+    for template in [
+        "{{json .Image}}",
+        "{{.Image.Config.Env}}",
+        "{{ .Provenance }}",
+        "{{json .}}",
+        "{{range .Image}}{{.}}{{end}}",
+        "{{printf \"%v\" .Image}}",
+        "{{.Manifest.Digest",
+        "}}{{.Name}}",
+        "{{.Manifest..Digest}}",
+        "{{.Manifest.Digest;}}",
+        "{{.ManifestX}}",
+    ] {
+        let format = format!("--format={template}");
+        let words = [
+            "buildx",
+            "imagetools",
+            "inspect",
+            format.as_str(),
+            "alpine:3.20",
+        ];
+        assert!(!safe_docker_arguments(&arguments(&words)), "{template}");
+    }
+}
+
+#[test]
+fn registry_manifest_changes_and_redirected_queries_stay_reviewed() {
+    for words in [
+        // `create` pushes a new manifest list; every other verb is not a query.
+        vec![
+            "buildx",
+            "imagetools",
+            "create",
+            "-t",
+            "registry.example.com/acme/acme-app:latest",
+            "registry.example.com/acme/acme-app:1a2b3c4",
+        ],
+        vec!["buildx", "imagetools"],
+        vec!["buildx", "imagetools", "help"],
+        vec!["buildx", "imagetools", "inspect"],
+        vec!["buildx", "imagetools", "inspect", "--raw"],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "registry.example.com/acme/acme-app:1",
+            "registry.example.com/acme/acme-app:2",
+        ],
+        // Another builder carries another registry configuration and endpoint.
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--builder",
+            "remote",
+            "alpine:3.20",
+        ],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--builder=remote",
+            "alpine:3.20",
+        ],
+        vec!["buildx", "imagetools", "inspect", "--format", "alpine:3.20"],
+        vec!["buildx", "imagetools", "inspect", "-x", "alpine:3.20"],
+        vec!["buildx", "imagetools", "inspect", "../local-file"],
+        vec!["buildx", "imagetools", "inspect", "-", "alpine:3.20"],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--format",
+            "{{.Manifest.Digest}} $HOME",
+            "alpine:3.20",
+        ],
+        vec![
+            "buildx",
+            "imagetools",
+            "inspect",
+            "--format",
+            "`id`",
+            "alpine:3.20",
+        ],
+        vec![
+            "-H",
+            "ssh://ops@example.com",
+            "buildx",
+            "imagetools",
+            "inspect",
+            "alpine:3.20",
+        ],
+        vec![
+            "--config",
+            "/tmp/docker-config",
+            "buildx",
+            "imagetools",
+            "inspect",
+            "alpine:3.20",
+        ],
+        vec![
+            "buildx",
+            "--builder",
+            "remote",
+            "imagetools",
+            "inspect",
+            "alpine:3.20",
+        ],
+    ] {
+        assert!(!safe_docker_arguments(&arguments(&words)), "{words:?}");
+    }
+}
+
+#[test]
 fn remote_daemons_secrets_and_other_subcommands_stay_reviewed() {
     for words in [
         vec![],

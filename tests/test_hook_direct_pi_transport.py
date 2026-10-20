@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 from contextlib import nullcontext
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -15,6 +16,21 @@ PAYLOAD = {"tool_name": "bash", "tool_input": {"command": "pwd"}, "cwd": "/work"
 RESPONSE = {"decision": "allow", "policy_action": "allow", "reason_code": "native_allow", "extra": [1, None]}
 ANSWER = {"schema": "guard-hook-direct-result.v1", "outcome": "answer", "edge": {"harness_response": RESPONSE}}
 DEFER = {"schema": "guard-hook-direct-result.v1", "outcome": "defer", "reason": "direct_hook_event_unsupported"}
+
+
+class _SettledDirectories:
+    """Stand in for the directories the runtime settles for one request.
+
+    The handler asks for every candidate at once and reads each verdict back
+    by name. Nothing here is a verdict: these tests are about the transport,
+    so each candidate settles as the string it arrived as.
+    """
+
+    def __init__(self, candidates: tuple[tuple[str, ...], ...]) -> None:
+        self._paths = {candidate[0]: candidate[1] for candidate in candidates}
+
+    def require(self, parameter: str) -> str | None:
+        return self._paths.get(parameter)
 
 
 class _Client:
@@ -153,14 +169,18 @@ def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work
         request=object(),
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
-        _validated_hook_directory_string=lambda _kind, value, **kwargs: value,
-        _validated_hook_guard_home=lambda value: value,
-        _hook_safe_roots=lambda: (),
-        _normalized_hook_workspace_string=lambda value: value,
+        _settled_hook_directories=lambda *candidates, **kwargs: _SettledDirectories(candidates),
+        _hook_workspace_spelling=lambda value: value,
         _runtime_hook_exec_command_workdir=lambda payload: (False, None),
         _record_hook_path_rejection=lambda **values: None,
         _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
         _write_json=responses.append,
+    )
+    # The real check: whether the lane may answer a request that names a Guard
+    # home is the question these tests exercise, not one to stub away.
+    handler._hook_guard_home_query_is_this_home = partial(  # pyright: ignore[reportPrivateUsage]
+        server._GuardDaemonHandler._hook_guard_home_query_is_this_home,  # pyright: ignore[reportPrivateUsage]
+        handler,
     )
     server._GuardDaemonHandler._handle_runtime_hook(
         handler,  # pyright: ignore[reportArgumentType]
@@ -169,6 +189,19 @@ def _handle(worker: SimpleNamespace, harness: str, query: str = "workspace=/work
         default_harness=harness,
     )
     return responses
+
+
+def test_a_hook_naming_another_guard_home_is_not_answered_by_the_lane(tmp_path: Path) -> None:
+    # The lane answers out of the home it bound and never sends the query, so a
+    # request claiming another Guard home has to keep the daemon path, where
+    # the claim is settled and refused.
+    client = _Client(ANSWER)
+    worker = _worker(client, tmp_path)
+    assert _handle(worker, "pi", query=f"guard-home={tmp_path / 'elsewhere'}") == [
+        {"reason_code": "native_policy_not_ready"}
+    ]
+    assert client.calls == []
+    assert _handle(worker, "pi", query=f"guard-home={worker.guard_home}") == [RESPONSE]
 
 
 def test_the_daemon_writes_an_answer_without_the_worker(tmp_path: Path) -> None:
@@ -185,13 +218,17 @@ def test_the_daemon_path_continues_after_a_defer(tmp_path: Path, harness: str, o
 
 
 def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
-    client = _Client(ANSWER)
+    # The direct lane is asked first, with the `home` query as the caller
+    # spelled it, and defers here. Settling the directories is then the
+    # daemon path's own work, and a refused path keeps the request on it.
+    client = _Client(DEFER)
 
-    def reject(_kind: str, value: str | None, **kwargs: object) -> str | None:
+    def reject(*candidates: object, **kwargs: object) -> object:
         raise server._HookPathValidationError("workspace", "outside_roots")  # pyright: ignore[reportPrivateUsage]
 
     worker = _worker(client, tmp_path)
     responses: list[dict[str, object]] = []
+    rejections: list[tuple[str, str]] = []
     daemon = SimpleNamespace(
         request_deadline=lambda request, cap: time.monotonic() + cap,
         home_dir=Path("/home/user"),
@@ -202,9 +239,13 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
         request=object(),
         _daemon_server=lambda: daemon,
         _optional_string=lambda value: value if isinstance(value, str) else None,
-        _validated_hook_directory_string=reject,
-        _record_hook_path_rejection=lambda **values: None,
-        _hook_safe_roots=lambda: (),
+        _settled_hook_directories=reject,
+        _hook_workspace_spelling=lambda value: value,
+        # This request names no Guard home, so the lane is asked and defers.
+        _hook_guard_home_query_is_this_home=lambda *_args: True,
+        _normalized_hook_workspace_string=lambda value: value,
+        _runtime_hook_exec_command_workdir=lambda payload: (False, None),
+        _record_hook_path_rejection=lambda **values: rejections.append((values["parameter"], values["reason"])),
         _runtime_hook_fail_safe_response=lambda *args, **kwargs: {"reason_code": kwargs["reason_code"]},
         _write_json=responses.append,
     )
@@ -214,5 +255,6 @@ def test_a_rejected_path_keeps_the_daemon_path(tmp_path: Path) -> None:
         "workspace=/work",
         default_harness="pi",
     )
-    assert client.calls == []
+    assert len(client.calls) == 1
+    assert rejections == [("workspace", "outside_roots")]
     assert responses == [{"reason_code": "native_policy_not_ready"}]

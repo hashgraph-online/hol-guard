@@ -37,7 +37,7 @@ from tests.benign_fp_gate_fixture import BenignFixture, build_fixture, route_cod
 from tests.benign_fp_gate_mcp import McpCase, mcp_cases, mcp_failure, replay
 from tests.benign_fp_gate_projects import host_tool_path
 from tests.gauntlet_replay import OMP_CONTAINED, cursor_hook_fields
-from tests.native_gate_retry import UNAVAILABLE_REASON, review_with_unavailable_retry
+from tests.native_gate_retry import BUDGET_MISS_REASONS, review_with_unavailable_retry
 
 pytestmark = pytest.mark.usefixtures("native_hook_force")
 
@@ -70,7 +70,10 @@ _FIXED_TOOLS = {
 _ALLOWED_PR = {"unassigned"}
 # The session-* cases replay prompts users approved by hand. Those still
 # reviewed on Linux CI are recorded here until their fixes land.
-_PENDING_CEILING = 3
+# Every entry is the same class: Cursor is the one harness with no containment
+# route, so work the other four run quietly inside the workspace sandbox reaches
+# a Cursor user as a review card. One route fixes all of them at once.
+_PENDING_CEILING = 4
 _RENDERED_KEYS = ("reason", "notice", "message", "systemMessage", "stopReason")
 _RENDERED_SPECIFIC_KEYS = ("permissionDecisionReason", "additionalContext")
 # Pending entries are recorded against the Linux CI host. Git helper context and
@@ -361,7 +364,7 @@ def test_benign_agent_work_is_allowed_and_negative_controls_are_not(
         assert _decision(result) != "allow" or approvals > 0 or _contained(result), (
             f"negative control was allowed: {description}"
         )
-        assert _reason(result) != UNAVAILABLE_REASON, f"native review unavailable: {description}"
+        assert _reason(result) not in BUDGET_MISS_REASONS, f"native review unavailable: {description}"
         return
     if case.expect == "setup":
         assert case.case_id not in _PENDING_FIX, "setup cases cannot be pending_fix"
@@ -417,6 +420,37 @@ def test_one_connector_groups_its_setup_reviews_by_action(gate_environment: tupl
     assert len(groups) == 1, f"one connector must queue under one identity, got {len(groups)}"
     assert len(next(iter(groups.values()))) == len(commands), "distinct actions must keep distinct action digests"
     assert len(rows) == len(commands) * 2, "every harness call keeps its own evidence row"
+
+
+def test_an_environment_dump_is_reviewed_rather_than_refused(
+    gate_environment: tuple[BenignFixture, HookWorker],
+) -> None:
+    """Reading every exported variable asks, and the ask is one the user can answer.
+
+    A whole-environment dump is the cheapest read of every token a session
+    exports, so ``neg-printenv-all`` and ``neg-env-all`` keep it off the silent
+    path. That is a review, not a refusal: ``env``, ``env -0`` and
+    ``env | grep '^PATH='`` were read as interpreters launching a file nobody
+    opened and came back as a hard block with no approval row at all, so no
+    user could allow their own shell to print its own environment.
+    """
+    fixture, worker = gate_environment
+    for index, command in enumerate(("env", "env -0", "env | grep '^PATH='", "printenv")):
+        case = GateCase(
+            case_id=f"env-dump-{index}@claude-code",
+            base_id=f"env-dump-{index}",
+            fix_area="shell",
+            harness="claude-code",
+            tool="shell",
+            tool_input={"command": command},
+            cwd="worktree",
+            expect="not_allow",
+        )
+        result, approvals = _review(case, fixture, worker)
+        description = _describe(case, result, approvals)
+        assert _decision(result) != "allow", f"environment dump was allowed: {description}"
+        assert approvals == 1, f"environment dump left no approval to give: {description}"
+        assert not always_gap(_ROWS[case.case_id]), f"environment dump offers no Always allow: {description}"
 
 
 @pytest.mark.parametrize("case", mcp_cases(_DOCUMENT), ids=lambda case: case.case_id)

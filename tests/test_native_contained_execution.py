@@ -42,16 +42,18 @@ def test_tsx_positive_nested_reply_reaches_the_caller(monkeypatch):
 )
 def test_preparation_is_one_bound_call(monkeypatch, tmp_path, module, method, profile):
     calls = []
+    home = tmp_path / "home"
 
     def call(action, **kwargs):
         calls.append(action)
         return reply(tmp_path, profile)
 
     monkeypatch.setattr(transport, "_call", call)
-    plan = getattr(module, method)(["node", "--test"], workspace=tmp_path)
+    plan = getattr(module, method)(["node", "--test"], workspace=tmp_path, home_dir=home)
     assert plan.profile_version == profile
     assert len(calls) == 1
     assert calls[0]["kind"] == "restricted_pytest"
+    assert calls[0]["body"]["input"]["home"] == str(home)
     assert not {"allow", "verdict", "decision"}.intersection(calls[0]["body"]["input"])
 
 

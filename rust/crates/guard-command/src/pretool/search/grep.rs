@@ -1,6 +1,7 @@
 use super::{
     options, short_search_option, sibling, tree, unsafe_search_value, ReadContext, SearchValueRole,
 };
+use crate::pretool::search_pattern_clearance::PatternClearance;
 
 /// Which missing operands a proof may accept.
 #[derive(Clone, Copy)]
@@ -102,6 +103,42 @@ fn safe_arguments(
     arguments_pass(arguments, context, stdin_only, absent, false)
 }
 
+mod reach;
+pub(in crate::pretool) use reach::sensitive_reach_reason;
+
+/// What a pass over `grep` arguments read besides its verdict.
+#[derive(Default)]
+struct Scan {
+    /// The patterns named by the command, as the shell passed them.
+    patterns: Vec<String>,
+    /// A pattern given in a form the scan cannot read back (`-efoo`, `-f`).
+    pattern_unread: bool,
+    /// `-v`, `-L` or `-c`: the output covers what does not match, or names
+    /// and counts every file read, matching or not.
+    reports_unmatched: bool,
+    /// The search operands, after the pattern.
+    targets: Vec<String>,
+    recursive: bool,
+    /// `--include` appears, so exact exclusions are not part of the proof.
+    includes_present: bool,
+    /// Exact names the command leaves out of its walk.
+    excluded_files: Vec<String>,
+    excluded_directories: Vec<String>,
+}
+
+impl Scan {
+    /// The pattern, when it is the only one and the command prints the lines
+    /// that match it: files it cannot match add nothing to the output.
+    fn clearance(&self) -> Option<PatternClearance> {
+        match self.patterns.as_slice() {
+            [only] if !self.reports_unmatched && !self.pattern_unread => {
+                PatternClearance::new(only)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// One pass over `grep` arguments. With `pattern_from_option`, every
 /// positional is a path, as it is when `-e` or `-f` appears anywhere.
 fn arguments_pass(
@@ -110,6 +147,37 @@ fn arguments_pass(
     stdin_only: bool,
     absent: AbsentOperands,
     pattern_from_option: bool,
+) -> bool {
+    scan_arguments(arguments, context, stdin_only, absent, pattern_from_option).0
+}
+
+/// [`arguments_pass`] with what it read.
+fn scan_arguments(
+    arguments: &[String],
+    context: ReadContext<'_>,
+    stdin_only: bool,
+    absent: AbsentOperands,
+    pattern_from_option: bool,
+) -> (bool, Scan) {
+    let mut scan = Scan::default();
+    let proven = scan_into(
+        arguments,
+        context,
+        stdin_only,
+        absent,
+        pattern_from_option,
+        &mut scan,
+    );
+    (proven, scan)
+}
+
+fn scan_into(
+    arguments: &[String],
+    context: ReadContext<'_>,
+    stdin_only: bool,
+    absent: AbsentOperands,
+    pattern_from_option: bool,
+    scan: &mut Scan,
 ) -> bool {
     let mut pending_value: Option<SearchValueRole> = None;
     let mut pattern_supplied = pattern_from_option;
@@ -151,6 +219,11 @@ fn arguments_pass(
             if matches!(role, SearchValueRole::Pattern | SearchValueRole::Path) {
                 pattern_supplied = true;
                 pattern_option_seen = true;
+                if matches!(role, SearchValueRole::Pattern) {
+                    scan.patterns.push(argument.clone());
+                } else {
+                    scan.pattern_unread = true;
+                }
             }
             continue;
         }
@@ -180,6 +253,8 @@ fn arguments_pass(
                 continue;
             }
             includes_present |= name == "--include";
+            scan.reports_unmatched |=
+                matches!(name, "--invert-match" | "--files-without-match" | "--count");
             if matches!(name, "--recursive" | "--dereference-recursive") {
                 if !attached.is_empty() {
                     return false;
@@ -212,6 +287,7 @@ fn arguments_pass(
                 } else if matches!(role, SearchValueRole::Pattern) {
                     pattern_supplied = true;
                     pattern_option_seen = true;
+                    scan.patterns.push(attached.to_owned());
                 }
             }
             continue;
@@ -237,6 +313,7 @@ fn arguments_pass(
             };
             recursive |= bundled().any(|option| matches!(option, 'r' | 'R'));
             dereference |= bundled().any(|option| matches!(option, 'R' | 'S' | 'O'));
+            scan.reports_unmatched |= bundled().any(|option| matches!(option, 'v' | 'L' | 'c'));
             let parsed = short_search_option(
                 argument,
                 &[],
@@ -254,6 +331,8 @@ fn arguments_pass(
             let Ok((next_value, supplied_pattern)) = parsed else {
                 return false;
             };
+            // `-efoo` and `-ffile` carry their value in the same word.
+            scan.pattern_unread |= supplied_pattern && next_value.is_none();
             pending_value = next_value;
             pattern_supplied |= supplied_pattern;
             pattern_option_seen |= supplied_pattern;
@@ -264,6 +343,7 @@ fn arguments_pass(
                 return false;
             }
             targets.push(argument.as_str());
+            scan.targets.push(argument.clone());
             let proven = recursive
                 || proven_glob(argument, context)
                 || sibling::named_path(argument, context, absent.plain)
@@ -273,6 +353,7 @@ fn arguments_pass(
             }
         } else {
             pattern_supplied = true;
+            scan.patterns.push(argument.clone());
         }
         positional_started = true;
     }
@@ -281,8 +362,20 @@ fn arguments_pass(
     // `grep .env -e KEY`, `.env` is a file. Check again with every
     // positional as a path.
     if pattern_option_seen && !pattern_from_option {
-        return arguments_pass(arguments, context, stdin_only, absent, true);
+        *scan = Scan::default();
+        return scan_into(arguments, context, stdin_only, absent, true, scan);
     }
+    scan.recursive = recursive;
+    scan.includes_present = includes_present;
+    scan.excluded_files = excluded_files
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect();
+    scan.excluded_directories = excluded_directories
+        .iter()
+        .map(|name| (*name).to_owned())
+        .collect();
+    let clearance = scan.clearance();
     pending_value.is_none()
         && pending_exclusion.is_none()
         // Include/exclude precedence differs across grep implementations. Do not
@@ -306,6 +399,17 @@ fn arguments_pass(
                         &excluded_directories,
                         true,
                     ) || proven_glob(target, context)))
+                    // A sensitive file the pattern cannot match prints nothing.
+                    || clearance.as_ref().is_some_and(|clearance| {
+                        tree::safe_recursive_target_cleared(
+                            target,
+                            context,
+                            &excluded_files,
+                            &excluded_directories,
+                            dereference,
+                            clearance,
+                        )
+                    })
             };
             recursive_targets_proven(&targets, proven, absent.recursive.then_some(context))
         })
@@ -353,135 +457,5 @@ fn exact_exclusion(value: &str) -> bool {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn a_missing_root_beside_real_ones_is_proven_but_not_a_sensitive_one() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/grep-absent-roots")
-            .join(std::process::id().to_string());
-        let home = root.join("home");
-        let repo = home.join("work/app");
-        std::fs::create_dir_all(repo.join("src")).unwrap();
-        std::fs::create_dir_all(home.join(".ssh")).unwrap();
-        std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
-        let (home, repo) = (
-            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
-            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
-        );
-        let context = crate::pretool::PathContext {
-            home_dir: home.to_str(),
-            cwd: repo.to_str(),
-            ..Default::default()
-        };
-        let r = repo.display();
-        let h = home.display();
-        for (command, allowed) in [
-            (format!("-rln x {r}/src {r}/lib"), true),
-            (format!("-n x {r}/src/index.ts {r}/lib/index.ts"), true),
-            ("-rn x src tests".to_owned(), true),
-            (format!("-rln x {r}/src {h}/.ssh/missing"), false),
-            (format!("-rln x {r}/src {r}/missing/.env"), false),
-            (format!("-rln x {r}/src {r}/missing/id_rsa"), false),
-            (format!("-n x {h}/.ssh/missing"), false),
-        ] {
-            let arguments: Vec<String> = command.split(' ').map(str::to_owned).collect();
-            assert_eq!(
-                super::safe_grep_arguments(&arguments, context),
-                allowed,
-                "{command}"
-            );
-        }
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn a_missing_operand_is_not_proven_beside_a_step_that_could_create_it() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/grep-absent-chains")
-            .join(std::process::id().to_string());
-        let home = root.join("home");
-        let repo = home.join("work/app");
-        std::fs::create_dir_all(repo.join("src")).unwrap();
-        std::fs::write(repo.join("src/index.ts"), "export const x = 1;\n").unwrap();
-        let (home, repo) = (
-            crate::runtime_read_paths::canonicalize_text(&home).unwrap(),
-            crate::runtime_read_paths::canonicalize_text(&repo).unwrap(),
-        );
-        let context = crate::pretool::PathContext {
-            home_dir: home.to_str(),
-            cwd: repo.to_str(),
-            ..Default::default()
-        };
-        let r = repo.display();
-        for (command, allowed) in [
-            (format!("grep -rln x {r}/src {r}/cfg"), true),
-            (format!("grep -rn x {r}/src {r}/cfg | head -5"), true),
-            (format!("cd {r} && grep -rn x src cfg"), true),
-            (
-                format!("cat {r}/src/index.ts && grep -n x {r}/cfg/app.json"),
-                true,
-            ),
-            (
-                format!("ln -s {r}/src {r}/cfg && grep -rn . {r}/cfg/"),
-                false,
-            ),
-            (
-                format!("ln -s {r}/src {r}/cfg && grep -n x {r}/cfg/app.json"),
-                false,
-            ),
-            (format!("mkdir -p {r}/cfg && grep -rn x {r}/cfg"), false),
-            (format!("touch {r}/cfg && grep -n x {r}/cfg"), false),
-            (format!("echo x > {r}/cfg; grep -n x {r}/cfg"), false),
-            (format!("cat {r}/src/index.ts && grep -rn x {r}/cfg"), false),
-        ] {
-            let model = crate::parse_command(&crate::CommandModelRequestV1 {
-                command: command.clone(),
-                dialect: "posix".to_owned(),
-                transport: "shell_string".to_owned(),
-                extraction_provenance: "guard-shell".to_owned(),
-            })
-            .unwrap();
-            // An output redirect leaves the model uncertain with no
-            // segments, which no proof admits.
-            let Some(segment) = model
-                .segments
-                .iter()
-                .find(|segment| segment.executable.as_deref() == Some("grep"))
-            else {
-                assert!(!allowed, "{command}");
-                continue;
-            };
-            assert_eq!(
-                super::safe_grep_segment(&model, segment, context),
-                allowed,
-                "{command}"
-            );
-        }
-        std::fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn stdin_proof_cannot_open_files_or_recurse() {
-        for (arguments, allowed) in [
-            (vec!["-n", "-e", "fixture"], true),
-            (vec!["-efixt"], true),
-            (vec!["--regexp=fixture"], true),
-            (vec!["-f", "one.txt"], false),
-            (vec!["-nfone.txt"], false),
-            (vec!["--file=one.txt"], false),
-            (vec!["fixture", "one.txt"], false),
-            (vec!["-r", "fixture"], false),
-            (vec!["--directories=recurse", "fixture"], false),
-            (vec!["-e", "fixture", "-f", "one.txt"], false),
-            (vec!["--", "fixture", "one.txt"], false),
-            (vec![], false),
-        ] {
-            let arguments: Vec<String> = arguments.into_iter().map(str::to_owned).collect();
-            assert_eq!(
-                super::safe_stdin_arguments(&arguments),
-                allowed,
-                "{arguments:?}"
-            );
-        }
-    }
-}
+#[path = "grep_tests.rs"]
+mod tests;

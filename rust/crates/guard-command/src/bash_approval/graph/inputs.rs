@@ -4,8 +4,14 @@ use super::{Builder, Code, CodeIdentity, Result, Uncertainty, MAX_CODE_INPUTS, M
 use sha2::{Digest, Sha256};
 use std::time::Instant;
 
+pub(super) enum Kind {
+    Code,
+    Source,
+    Startup,
+}
+
 impl Builder<'_> {
-    pub(super) fn register(&mut self, code: &Code, sourced: bool) -> Result<()> {
+    pub(super) fn register(&mut self, code: &Code, kind: Kind) -> Result<()> {
         let error = |reason| Uncertainty { reason, line: 1 };
         if code.original_path.is_empty()
             || code.original_path.contains('\0')
@@ -35,11 +41,16 @@ impl Builder<'_> {
             self.snapshots
                 .insert(code.resolved_path.clone(), digest.clone());
         }
-        let total = self.code.len() + self.sources.len() + self.native_images.len() + 1;
-        let inputs = if sourced {
-            &mut self.sources
-        } else {
-            &mut self.code
+        let total = self.code.len()
+            + self.sources.len()
+            + self.startup.len()
+            + self.native_images.len()
+            + self.brokered_images.len()
+            + 1;
+        let inputs = match kind {
+            Kind::Code => &mut self.code,
+            Kind::Source => &mut self.sources,
+            Kind::Startup => &mut self.startup,
         };
         if !inputs.contains_key(&code.original_path) && total >= MAX_CODE_INPUTS {
             return Err(error("bash_graph_bounds"));

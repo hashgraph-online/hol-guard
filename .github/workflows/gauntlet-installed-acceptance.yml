@@ -7,6 +7,7 @@ name: Gauntlet installed acceptance
 # twice. This lane answers those three questions and adds a home with upgrade history.
 #
 # Never a required check. Do not add it to branch protection or the required CI graph.
+# Gauntlet runs asynchronously, off CI/CD: this lane runs only when dispatched by hand.
 on:
   workflow_dispatch:
     inputs:
@@ -14,15 +15,10 @@ on:
         description: Times each replay case runs against identical input.
         type: string
         default: '5'
-  schedule:
-    # Weekly, Monday 07:20 UTC. The lane builds Rust, so it is deliberately infrequent.
-    - cron: '20 7 * * 1'
-  pull_request:
-    paths:
-      - 'ci/gauntlet/installed_*'
-      - 'ci/gauntlet/summarise_installed_acceptance.py'
-      - 'tests/test_gauntlet_installed_lane.py'
-      - '.github/workflows/gauntlet-installed-acceptance.yml'
+      report_only:
+        description: Write and print the findings without failing the job.
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,11 +31,7 @@ env:
   TARGET: x86_64-unknown-linux-musl
   PLATFORM_TAG: manylinux_2_17_x86_64
   REPEAT: ${{ inputs.repeat || '5' }}
-  # A pull request that touches the lane is testing the lane, not the build it
-  # runs against. The acceptance steps assert against the shipped product, so
-  # making them a merge gate here would block lane changes on defects they did
-  # not introduce. The scheduled and dispatched runs fail loudly instead.
-  REPORT_ONLY: ${{ github.event_name == 'pull_request' && '--report-only' || '' }}
+  REPORT_ONLY: ${{ inputs.report_only && '--report-only' || '' }}
   # The development profile the Gauntlet already builds with: no LTO, 16 codegen units. The lane
   # tests install and hook behaviour, which the optimisation level does not change.
   CARGO_PROFILE_RELEASE_LTO: 'false'
@@ -54,7 +46,7 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
           persist-credentials: false
-          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
@@ -79,7 +71,7 @@ jobs:
 
       - name: Build the native runtime and the source compiler
         env:
-          HOL_GUARD_BUILD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          HOL_GUARD_BUILD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           VERSION=$(uv run --no-sync python scripts/sync_repo_version.py --check)
@@ -107,17 +99,12 @@ jobs:
 
       - name: Assemble the native wheel
         env:
-          SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
           runtime="rust/target/$TARGET/release/hol-guard-runtime"
           compiler="rust/target/$TARGET/release/guard-command-source"
-          jq -n \
-            --slurpfile source rust/crates/guard-command/tests/fixtures/command-source-example.v1.json \
-            --slurpfile trust contracts/extensions/build-trust-class-map.v1.json \
-            '{schema:"guard.command-extension-build.v1",sources:$source,mcp_sources:[],trust:$trust[0],base:"packaged"}' \
-            > source-build.json
-          "$compiler" compile < source-build.json > source-compiled.json
+          "$compiler" export-built > source-compiled.json
           HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv build --wheel --out-dir pure-dist
           RULE_DIGEST=$("$runtime" capabilities --json | python3 -I -c 'import json,sys; print(json.load(sys.stdin)["rule_digest"])')
           HOL_GUARD_BUILD_SOURCE_COMPILER="$compiler" uv run --no-sync python scripts/build_native_hol_guard_wheel.py \
@@ -130,7 +117,7 @@ jobs:
             --source-sha "$SOURCE_SHA" \
             --rule-digest "$RULE_DIGEST" \
             --implementation-digest "$(jq -r '.implementation_digest' source-compiled.json)" \
-            --base-program-digest "$(jq -r '.base_program_digest' source-compiled.json)"
+            --base-program-digest "$(jq -r '.program.program_digest' source-compiled.json)"
           WHEEL=$(find native-dist -maxdepth 1 -type f -name 'hol_guard-*.whl' -print)
           test "$(printf '%s\n' "$WHEEL" | wc -l)" -eq 1
           echo "WHEEL=$PWD/$WHEEL" >> "$GITHUB_ENV"
@@ -138,7 +125,9 @@ jobs:
       - name: Installed acceptance against the wheel
         run: |
           set -euo pipefail
-          python3 -m venv "$RUNNER_TEMP/wheel-venv"
+          python3 -m venv --copies "$RUNNER_TEMP/wheel-venv"
+          # Harden lane-owned copies; the runner's shared interpreter may be group-writable.
+          chmod go-w "$RUNNER_TEMP/wheel-venv"/bin/python*
           PYTHONPATH= "$RUNNER_TEMP/wheel-venv/bin/python" -m pip install --no-compile \
             --index-url https://pypi.org/simple "$WHEEL"
           python3 -m ci.gauntlet installed \

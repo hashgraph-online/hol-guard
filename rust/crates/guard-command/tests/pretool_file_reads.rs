@@ -442,3 +442,55 @@ fn codex_multi_file_cat_proves_every_operand() {
         assert_ne!(decide(command).minimum_action, "allow", "{command}");
     }
 }
+
+/// Agents read their plan and evidence notes with the same `2>/dev/null` they
+/// append to any search, and a discarded stderr changes no file. Logins,
+/// settings and transcripts keep their review with or without it, and so does
+/// every command that writes below a harness home.
+#[cfg(unix)]
+#[test]
+fn plan_note_reads_with_a_discarded_stderr_are_plain_reads() {
+    let home = devin_home();
+    let project = home.join("project");
+    let decide = |harness: &str, tool: &str, command: &str| {
+        evaluate_pre_tool_envelope_with_context(
+            harness,
+            "PreToolUse",
+            &json!({"hook_event_name": "PreToolUse", "tool_name": tool, "tool_input": {"command": command}}),
+            None,
+            None,
+            home.to_str(),
+            project.to_str(),
+        )
+    };
+    let quiet = |result: &PreToolResultV1| {
+        result.decision == "allow" && matches!(result.minimum_action.as_str(), "allow" | "warn")
+    };
+    for (harness, tool) in [("omp", "bash"), ("codex", "Bash"), ("claude-code", "Bash")] {
+        for command in [
+            "rg -n \"541|1367\" ~/.codex/plans/evidence/review-a/notes.txt ~/.codex/plans/evidence/review-a/runtime-final.json 2>/dev/null | head -20",
+            "cat ~/.codex/plans/evidence/review-a/runtime-final.json 2>/dev/null | head -40",
+            "cat ~/.codex/plans/evidence/review-a/runtime-final.json 2>&1 | head -40",
+            "head -40 ~/.claude/plans/quiet-guard.md 2>/dev/null",
+            "rg -n quiet ~/.claude/plans/quiet-guard.md 2>&1",
+        ] {
+            let result = decide(harness, tool, command);
+            assert!(quiet(&result), "{harness}: {command}: {}", result.reason_code);
+        }
+        for command in [
+            "cat ~/.codex/auth.json 2>/dev/null | head -5",
+            "cat ~/.codex/auth.json 2>&1",
+            "cat ~/.claude/.credentials.json 2>/dev/null",
+            "cat ~/.codex/sessions/2026/rollout.json 2>/dev/null",
+            "rg -n token ~/.codex/plans/evidence/review-a/credentials.json 2>/dev/null",
+            "rg -n 541 ~/.codex/plans/evidence/review-a/notes.txt ~/.codex/auth.json 2>/dev/null",
+            "cat ~/.codex/plans/evidence/review-a/notes.txt > ~/.codex/hooks.json",
+            "echo x >> ~/.codex/plans/evidence/review-a/notes.txt",
+            "tee ~/.codex/config.toml 2>/dev/null",
+            "cp README.md ~/.claude/settings.json 2>/dev/null",
+        ] {
+            let result = decide(harness, tool, command);
+            assert!(!quiet(&result), "{harness}: {command}");
+        }
+    }
+}

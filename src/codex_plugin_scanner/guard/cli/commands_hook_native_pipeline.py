@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 
 from ..daemon.hook_request_parsing import runtime_hook_event_name
 from ..daemon.runtime_hook_deadline import RuntimeHookDeadline
+from ..native_hook_artifact_facts import HookArtifactFactsUnavailableError
 from ..native_hook_decision import NativeHookDecisionError
 from ..runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
 from ..runtime.extension_control_runtime import (
@@ -54,7 +55,11 @@ from .commands_support_connect import _synced_policy_payload
 from .commands_support_hook_payload import _hook_action_envelope, _normalize_hook_payload
 from .commands_support_hook_state import _load_single_claude_pending_permission
 from .commands_support_permission_store import _discard_claude_pending_permissions
-from .commands_support_runtime_artifacts import _hook_event_name, _hook_runtime_artifact
+from .commands_support_runtime_artifacts import (
+    _hook_event_name,
+    _hook_runtime_artifact,
+    _runtime_data_flow_naming,
+)
 from .commands_support_runtime_policy import _runtime_action_data_flow_signals
 from .commands_support_runtime_resolution import (
     _canonical_harness_name,
@@ -245,8 +250,17 @@ def run_native_hook_pipeline(
             worker=worker,
             recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
         )
-    data_flow_signals = _runtime_action_data_flow_signals(
-        action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    data_flow_signals, data_flow_artifact = _runtime_action_data_flow_signals(
+        action_envelope,
+        workspace=runtime_workspace,
+        guard_home=context.guard_home,
+        naming=_runtime_data_flow_naming(
+            harness=args.harness,
+            payload=payload,
+            action_envelope=action_envelope,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        ),
     )
     extension_control_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -257,6 +271,7 @@ def run_native_hook_pipeline(
             payload=payload,
             action_envelope=action_envelope,
             data_flow_signals=data_flow_signals,
+            data_flow_artifact=data_flow_artifact,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,
@@ -292,27 +307,40 @@ def run_native_hook_pipeline(
         )
         return 0
     if runtime_artifact is not None:
-        return _run_native_artifact_hook_flow(
-            args,
-            action_envelope=action_envelope,
-            config=config,
-            context=context,
-            data_flow_signals=data_flow_signals,
-            payload=payload,
-            runtime_artifact=runtime_artifact,
-            runtime_workspace=runtime_workspace,
-            store=store,
-            managed_install=managed_install,
-            output_stream=output_stream,
-            workspace=runtime_workspace,
-            native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
-            native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
-            native_recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
-            _claimed_saved_allow_hash=_claimed_saved_allow_hash,
-            _claimed_trusted_request_override=_claimed_trusted_request_override,
-            _claimed_approval_request_id=_claimed_approval_request_id,
-            _claim_saved_approval=_claim_saved_approval,
-        )
+        try:
+            return _run_native_artifact_hook_flow(
+                args,
+                action_envelope=action_envelope,
+                config=config,
+                context=context,
+                data_flow_signals=data_flow_signals,
+                payload=payload,
+                runtime_artifact=runtime_artifact,
+                runtime_workspace=runtime_workspace,
+                store=store,
+                managed_install=managed_install,
+                output_stream=output_stream,
+                workspace=runtime_workspace,
+                native_edge_result=edge_result if isinstance(edge_result, Mapping) else None,
+                native_edge_receipt=edge_receipt if isinstance(edge_receipt, Mapping) else None,
+                native_recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
+                _claimed_saved_allow_hash=_claimed_saved_allow_hash,
+                _claimed_trusted_request_override=_claimed_trusted_request_override,
+                _claimed_approval_request_id=_claimed_approval_request_id,
+                _claim_saved_approval=_claim_saved_approval,
+            )
+        except HookArtifactFactsUnavailableError:
+            # The resident owns these facts, so an outage is a host outage.
+            return _emit_native_unavailable(
+                args,
+                payload=payload,
+                workspace=runtime_workspace,
+                context=context,
+                event_name=event_name,
+                reason_code=HookArtifactFactsUnavailableError.code,
+                worker=worker,
+                recording_only=bool(edge.get("recording_only")) if isinstance(edge, Mapping) else False,
+            )
 
     def run_native_generic_payload(*generic_args, **generic_kwargs) -> int:
         # No resident decision means no verdict: answer with the host outage shape.
@@ -406,8 +434,17 @@ def _fresh_native_artifact_evaluation(
         workspace=runtime_workspace,
         guard_home=context.guard_home,
     )
-    fresh_data_flow_signals = _runtime_action_data_flow_signals(
-        fresh_action_envelope, workspace=runtime_workspace, guard_home=context.guard_home
+    fresh_data_flow_signals, fresh_data_flow_artifact = _runtime_action_data_flow_signals(
+        fresh_action_envelope,
+        workspace=runtime_workspace,
+        guard_home=context.guard_home,
+        naming=_runtime_data_flow_naming(
+            harness=args.harness,
+            payload=payload,
+            action_envelope=fresh_action_envelope,
+            home_dir=context.home_dir,
+            workspace=runtime_workspace,
+        ),
     )
     fresh_snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         store.read_extension_control_authority_for_registry(BUILT_IN_COMMAND_EXTENSION_REGISTRY)
@@ -418,6 +455,7 @@ def _fresh_native_artifact_evaluation(
             payload=payload,
             action_envelope=fresh_action_envelope,
             data_flow_signals=fresh_data_flow_signals,
+            data_flow_artifact=fresh_data_flow_artifact,
             home_dir=context.home_dir,
             guard_home=context.guard_home,
             workspace=runtime_workspace,

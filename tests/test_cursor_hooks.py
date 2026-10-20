@@ -34,6 +34,27 @@ from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.store import GuardStore
 
 
+def _cursor_shell_fingerprint(command: str) -> str:
+    """The digest both Cursor state keys are built from.
+
+    Spelled out here rather than imported from the CLI module: the resident
+    derives these keys now, so a test that wants to read a row back has to say
+    independently what that row is called.
+    """
+
+    from codex_plugin_scanner.guard.adapters.cursor_native_approval import normalize_cursor_shell_command
+
+    return hashlib.sha256(normalize_cursor_shell_command(command).encode("utf-8")).hexdigest()[:24]
+
+
+def _cursor_pending_shell_key(conversation_id: str, command: str) -> str:
+    return f"cursor_pending_shell:{conversation_id}:{_cursor_shell_fingerprint(command)}"
+
+
+def _cursor_native_shell_allow_key(conversation_id: str, command: str) -> str:
+    return f"cursor_native_shell_allow:{conversation_id}:{_cursor_shell_fingerprint(command)}"
+
+
 def _cursor_shell_artifact(*, workspace_dir: Path, command: str) -> GuardArtifact:
     return GuardArtifact(
         artifact_id="cursor:project:shell:rm",
@@ -1630,7 +1651,7 @@ def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_
         workspace_dir=workspace_dir,
         generation_id=generation_id,
     )
-    pending_key = guard_commands_module._cursor_pending_shell_state_key(conversation_id, command)
+    pending_key = _cursor_pending_shell_key(conversation_id, command)
     with sqlite3.connect(store.path) as connection:
         row = connection.execute(
             "select payload_json from sync_state where state_key = ?",
@@ -1672,7 +1693,7 @@ def test_cursor_tampered_pending_shell_cannot_bootstrap_signed_native_allow(tmp_
     assert saved is False
     assert store.get_sync_payload(pending_key) is None
     assert (
-        store.get_sync_payload(guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command))
+        store.get_sync_payload(_cursor_native_shell_allow_key(conversation_id, command))
         is None
     )
     events = store.list_events(event_name="rule.ignored.local_integrity")
@@ -1817,8 +1838,8 @@ def test_signed_cursor_allowance_cannot_be_replayed_into_another_conversation(tm
     forged_conversation = "conv-cursor-forged-copy"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    approved_state_key = guard_commands_module._cursor_native_shell_allow_state_key(approved_conversation, command)
-    forged_state_key = guard_commands_module._cursor_native_shell_allow_state_key(forged_conversation, command)
+    approved_state_key = _cursor_native_shell_allow_key(approved_conversation, command)
+    forged_state_key = _cursor_native_shell_allow_key(forged_conversation, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=approved_conversation,
@@ -1847,7 +1868,7 @@ def test_malformed_cursor_allowance_json_fails_closed_with_integrity_event(tmp_p
     conversation_id = "conv-cursor-malformed-json"
     command = "rm -rf ./sensitive-directory"
     now = guard_commands_module._now()
-    state_key = guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, command)
+    state_key = _cursor_native_shell_allow_key(conversation_id, command)
     assert guard_commands_module._record_cursor_native_shell_allow_state(
         store=store,
         conversation_id=conversation_id,
@@ -1882,7 +1903,7 @@ def test_cursor_native_shell_does_not_approve_unrelated_command(tmp_path: Path) 
     approved_command = "gh api graphql -f query='query { viewer { login } }'"
     now = guard_commands_module._now()
     store.set_sync_payload(
-        guard_commands_module._cursor_native_shell_allow_state_key(conversation_id, approved_command),
+        _cursor_native_shell_allow_key(conversation_id, approved_command),
         {
             "saved_at": now,
             "action": "allow",

@@ -187,6 +187,12 @@ fn executed_path<'a>(executable: &'a str, arguments: &'a [String]) -> Option<&'a
                     !minor.is_empty() && minor.bytes().all(|b| b.is_ascii_digit())
                 })
         });
+    // Node takes a heap size ahead of the script it runs; the script is
+    // still the first operand after it.
+    let arguments = match arguments {
+        [flag, rest @ ..] if name == "node" && node_heap_size(flag) => rest,
+        _ => arguments,
+    };
     match arguments {
         [module, compiler, path, ..]
             if python
@@ -200,6 +206,17 @@ fn executed_path<'a>(executable: &'a str, arguments: &'a [String]) -> Option<&'a
         }
         _ => None,
     }
+}
+
+/// Whether `word` is `--max-old-space-size=<megabytes>` with a size Node
+/// accepts, the one launch option that only bounds the script's heap.
+fn node_heap_size(word: &str) -> bool {
+    word.strip_prefix("--max-old-space-size=")
+        .is_some_and(|value| {
+            !value.is_empty()
+                && value.bytes().all(|byte| byte.is_ascii_digit())
+                && matches!(value.parse::<u32>(), Ok(16..=131_072))
+        })
 }
 
 /// Interpreters whose first operand is the script they run.
@@ -268,4 +285,25 @@ fn names_readable(segment: &CommandSegmentV1, directory: &Path, trees: &[PathBuf
                 || std::fs::canonicalize(&path)
                     .is_ok_and(|resolved| trees.iter().any(|tree| resolved.starts_with(tree)))
         })
+}
+
+#[cfg(test)]
+mod heap_size_tests {
+    #[test]
+    fn only_a_bounded_numeric_heap_size_is_peeled() {
+        for word in ["--max-old-space-size=16", "--max-old-space-size=4096"] {
+            assert!(super::node_heap_size(word), "{word}");
+        }
+        for word in [
+            "--max-old-space-size=",
+            "--max-old-space-size=8",
+            "--max-old-space-size=999999",
+            "--max-old-space-size=4096k",
+            "--max-old-space-size=+4096",
+            "--require=./hook.js",
+            "-r",
+        ] {
+            assert!(!super::node_heap_size(word), "{word}");
+        }
+    }
 }

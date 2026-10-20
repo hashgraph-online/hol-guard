@@ -389,6 +389,19 @@ fn worktree_filter_check_is_scoped_to_the_selected_reference() {
             reference,
         )
     };
+    let help = Command::new(&git_path)
+        .args(["check-attr", "-h"])
+        .output()
+        .unwrap();
+    let supports_source = [&help.stdout, &help.stderr]
+        .iter()
+        .any(|bytes| String::from_utf8_lossy(bytes).contains("--source"));
+    if !supports_source {
+        // Older Git cannot inspect attributes at a selected reference. The
+        // production probe must retain review instead of assuming no filter.
+        assert!(uses("HEAD"));
+        return;
+    }
     assert!(!uses("HEAD"));
     std::fs::write(
         fixture.repository.join(".gitattributes"),

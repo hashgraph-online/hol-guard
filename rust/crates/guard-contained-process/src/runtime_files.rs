@@ -24,6 +24,7 @@ use mach::mach;
 use pe::pe;
 
 pub struct RuntimeFile {
+    pub source: PathBuf,
     pub names: BTreeSet<String>,
     pub bytes: Vec<u8>,
     pub digest: String,
@@ -305,8 +306,9 @@ fn capture_impl(
             )?,
         )?;
         files.insert(
-            path,
+            path.clone(),
             RuntimeFile {
+                source: path,
                 names: BTreeSet::from([name]),
                 bytes: read.bytes,
                 digest: read.digest,

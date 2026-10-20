@@ -202,6 +202,10 @@ fn checked(projected: Result<Value, String>) -> StoreResult<Value> {
 pub(crate) fn scope_contract(
     draft: &Map<String, Value>,
     cwd: Option<&str>,
+    owner: Option<(
+        &rusqlite::Connection,
+        &crate::policy_store::PolicySnapshotStore,
+    )>,
 ) -> StoreResult<Map<String, Value>> {
     let mut item: Map<String, Value> = REQUEST_FIELDS
         .iter()
@@ -212,6 +216,14 @@ pub(crate) fn scope_contract(
             )
         })
         .collect();
+    if draft.get("artifact_type").and_then(Value::as_str)
+        == Some(guard_contracts::NATIVE_BASH_REVIEW_ARTIFACT_TYPE)
+    {
+        item.insert(
+            "request_id".into(),
+            draft.get("request_id").cloned().unwrap_or(Value::Null),
+        );
+    }
     let envelope = narrow_envelope(&item["action_envelope_json"]);
     item.insert("action_envelope_json".to_owned(), envelope);
     let target = workspace_target(draft, cwd).map_or(Value::Null, Value::String);
@@ -232,7 +244,11 @@ pub(crate) fn scope_contract(
         return Err(unavailable());
     }
     let item: ApprovalScopeItemV1 = serde_json::from_value(item).map_err(|_| unavailable())?;
-    let Value::Object(mut contract) = contract_value(&contract(&View::new(&item))) else {
+    let mut view = View::new(&item);
+    view.native_bash_owner_verified = owner.is_some_and(|(connection, store)| {
+        crate::native_bash_review_scope::owner_verified(&item, store, Some(connection))
+    });
+    let Value::Object(mut contract) = contract_value(&contract(&view)) else {
         return Err(unavailable());
     };
     contract.remove("exact_context_token");

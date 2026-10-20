@@ -75,7 +75,7 @@ fn apply_post_tool_policy(
     )
 }
 
-pub(super) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(crate) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     EffectiveNativePolicyV3 {
         protection_posture: "protected".into(),
         security_level: "balanced".into(),
@@ -97,7 +97,7 @@ pub(super) fn policy(default_action: &str) -> EffectiveNativePolicyV3 {
     }
 }
 
-pub(super) fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
+pub(crate) fn snapshot(policy: EffectiveNativePolicyV3) -> PolicySnapshotV3 {
     PolicySnapshotV3 {
         schema: POLICY_SNAPSHOT_SCHEMA.into(),
         version: 3,
@@ -465,30 +465,19 @@ fn prompt_risk_classes_reject_non_prompt_duplicate_and_unordered_evidence() {
     );
 }
 
-#[path = "policy_enforcement_omp_eval_output_tests.rs"]
-mod omp_eval_output_tests;
-#[path = "policy_enforcement_post_tool_tests.rs"]
-mod post_tool_tests;
-
-#[test]
-fn observe_keeps_only_a_warn_floor_over_a_proven_allow_silent() {
-    for (floor, intrinsic, expected) in [
-        ("warn", "allow", "native_policy_warning"),
-        ("review", "allow", "native_policy_observed_floor"),
-        ("block", "warn", "native_policy_observed_floor"),
-    ] {
-        let mut observed_snapshot = snapshot(policy(floor));
-        observed_snapshot.mode = "observe".into();
-        let result = apply_pre_tool_policy(
-            &observed_snapshot,
-            &Value::Object(Map::new()),
-            generic_result(intrinsic),
-        )
-        .unwrap();
-        assert_eq!(result.decision, "allow", "{floor} over {intrinsic}");
-        assert_eq!(result.reason_code, expected, "{floor} over {intrinsic}");
-    }
-}
-
 #[path = "policy_enforcement_floor_cause_tests.rs"]
 mod floor_cause;
+#[path = "policy_enforcement_github_tests.rs"]
+mod github_tests;
+#[path = "policy_enforcement_observe_tests.rs"]
+mod observe_tests;
+#[path = "policy_enforcement_omp_eval_output_tests.rs"]
+mod omp_eval_output_tests;
+#[path = "policy_enforcement_omp_github_output_tests.rs"]
+mod omp_github_output_tests;
+#[path = "policy_enforcement_post_tool_tests.rs"]
+mod post_tool_tests;
+#[path = "policy_enforcement_task_schema_tests.rs"]
+mod task_schema_tests;
+#[path = "policy_enforcement_yield_result_tests.rs"]
+mod yield_result_tests;

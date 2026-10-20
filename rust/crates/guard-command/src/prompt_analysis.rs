@@ -149,6 +149,10 @@ impl GuardRunPromptArtifact {
     }
 }
 
+#[path = "prompt_analysis_merge.rs"]
+mod merge;
+pub use merge::merge_prompt_artifacts;
+
 // ---------------------------------------------------------------------------
 // String / regex parity helpers
 // ---------------------------------------------------------------------------

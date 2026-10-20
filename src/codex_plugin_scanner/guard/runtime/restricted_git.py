@@ -70,7 +70,9 @@ def _repository_read_roots(workspace: Path, cwd: Path) -> tuple[Path, ...]:
         ) from error
 
 
-def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path | None = None) -> RestrictedPytestPlan:
+def prepare_restricted_git(
+    command: Sequence[str], *, workspace: Path, cwd: Path | None = None, home_dir: Path | None = None
+) -> RestrictedPytestPlan:
     argv = _normalized_command(command)
     # Native authority validates the complete original command. This local gate
     # independently excludes mutation, helper selection, and shell operators.
@@ -85,7 +87,7 @@ def prepare_restricted_git(command: Sequence[str], *, workspace: Path, cwd: Path
         )
     ):
         raise RestrictedPytestError("git_restricted_invalid_command", "Protected Git requires direct read-only argv.")
-    root = _resolve_workspace(workspace)
+    root = _resolve_workspace(workspace, home_dir=home_dir)
     directory = _resolve_cwd(cwd or root, workspace=root)
     backend, backend_path = _select_backend(platform=sys.platform, backend_executable=None)
     if backend not in {"macos-seatbelt", "linux-bubblewrap"}:

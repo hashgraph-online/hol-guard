@@ -34,10 +34,10 @@ def _proxy() -> Any:
 
 
 @pytest.mark.parametrize("vector", _vectors()["vectors"], ids=lambda vector: str(vector["name"]))
-def test_the_fixture_holds_the_kind_the_proxy_classifies(vector: dict[str, Any]) -> None:
-    payload = runtime_mcp._approval_payload(vector["response"])
+def test_the_fixture_holds_the_payload_the_proxy_asks_about(vector: dict[str, Any]) -> None:
+    """The proxy reduces a reply to its payload; the resident classifies that payload."""
 
-    assert runtime_mcp._inline_approval_kind(payload) == vector["kind"]
+    assert runtime_mcp._approval_payload(vector["response"]) == vector["payload"]
 
 
 def test_the_fixture_holds_the_prompt_the_proxy_raises() -> None:
@@ -56,38 +56,43 @@ def test_the_prompt_counter_belongs_to_the_session() -> None:
 
 
 @pytest.mark.parametrize("block", _vectors()["blocks"], ids=lambda block: str(block["reply"]))
-def test_the_fixture_holds_the_block_a_refused_prompt_produces(block: dict[str, Any]) -> None:
+def test_the_block_the_resident_named_is_the_block_the_proxy_raises(block: dict[str, Any]) -> None:
     denied: list[dict[str, Any]] = []
 
     def deny_tool_call(**kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
         denied.append(kwargs)
         return {}, {}
 
+    named = {
+        "decision_source": block["decision_source"],
+        "event_decision": block["event_decision"],
+        "reason": block["reason"],
+    }
     result = _proxy()._inline_approval_deny_result(
-        block["payload"], deny_tool_call=deny_tool_call, tool_name=_vectors()["prompt"]["tool"]
+        {"inline_approval": "denied", "block": named}, deny_tool_call=deny_tool_call
     )
 
     assert result == ({}, {})
-    assert denied == [
-        {
-            "decision_source": block["decision_source"],
-            "event_decision": block["event_decision"],
-            "reason": block["reason"],
-        }
-    ]
+    assert denied == [named]
 
 
-def test_an_approved_or_unanswered_prompt_is_not_a_block() -> None:
+@pytest.mark.parametrize(
+    "answer",
+    [
+        {"inline_approval": "allow", "block": None},
+        {"inline_approval": "fallthrough", "block": None},
+        # The route only reaches this for an answer the resident classified, so
+        # anything else leaves the call unblocked and the route fails closed.
+        {"inline_approval": "denied"},
+        {"inline_approval": "denied", "block": "inline-denied"},
+        None,
+    ],
+)
+def test_an_answer_that_names_no_block_does_not_block_the_call(answer: object) -> None:
     def deny_tool_call(**_kwargs: Any) -> tuple[dict[str, Any], dict[str, Any]]:
-        raise AssertionError("an approved or unanswered prompt does not block the call")
+        raise AssertionError("an answer that names no block does not block the call")
 
-    for payload in ({"action": "accept", "content": {"decision": "approve"}}, {"action": "cancel"}):
-        assert (
-            _proxy()._inline_approval_deny_result(
-                payload, deny_tool_call=deny_tool_call, tool_name="delete_secret_file"
-            )
-            is None
-        )
+    assert _proxy()._inline_approval_deny_result(answer, deny_tool_call=deny_tool_call) is None
 
 
 def test_opencode_raises_no_prompt() -> None:

@@ -199,6 +199,13 @@ def _good(request: dict[str, object], body: dict[str, object], **overrides: obje
 
 
 def _resident(monkeypatch: pytest.MonkeyPatch, reply) -> None:
+    status = SimpleNamespace(
+        available=True,
+        compatible=True,
+        identity=object(),
+        capabilities=SimpleNamespace(features={"resident-protocol-v2", route.DAEMON_ROUTE_FEATURE}),
+    )
+    monkeypatch.setattr(shared, "native_runtime_status", lambda: status)
     monkeypatch.setattr(shared, "_resolve_digest_home", lambda _home: Path("/tmp/daemon-route-home"))
     monkeypatch.setattr(shared, "ensure_resident_prerequisite", lambda _home: True)
     monkeypatch.setattr(shared, "record_resident", lambda *_args, **_kwargs: None)

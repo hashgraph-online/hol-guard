@@ -417,8 +417,9 @@ fn rewritten_package_decisions(map: &Map<String, Value>, decision: &str) -> Vec<
 }
 
 /// `package_label` for `_package_evaluation_with_current_policy_action`:
-/// uses the first `packages` entry's `name`@`requestedVersion`|`resolvedVersion`,
-/// falling back to `"this package request"`.
+/// uses the first `packages` entry's `namespace`/`name`@`requestedVersion`|`resolvedVersion`,
+/// falling back to `"this package request"`. The namespace keeps an npm scope
+/// such as `@playwright` in front of `test`.
 fn package_label(map: &Map<String, Value>) -> String {
     let default_label = "this package request".to_string();
     let Some(packages) = map.get("packages").and_then(Value::as_array) else {
@@ -436,6 +437,10 @@ fn package_label(map: &Map<String, Value>) -> String {
     if name.is_empty() {
         return default_label;
     }
+    let name = match primary.get("namespace").and_then(Value::as_str) {
+        Some(namespace) if !namespace.is_empty() => format!("{namespace}/{name}"),
+        _ => name.to_string(),
+    };
     let raw = primary
         .get("requestedVersion")
         .filter(|v| python_truthy(v))

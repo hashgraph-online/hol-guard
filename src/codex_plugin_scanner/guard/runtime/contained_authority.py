@@ -21,6 +21,13 @@ AUTHORITY_UNAVAILABLE_REASONS = frozenset(
 )
 _SETTLE_ATTEMPTS = 3
 _SETTLE_PAUSE_SECONDS = 0.75
+# An ask that came back unavailable within this window found the runtime
+# between states, so asking again is cheap and usually lands. An ask that
+# already spent longer than this waited out the whole publisher readiness
+# window with no acknowledgement, and asking twice more only turns a 27 second
+# failure into a minute and a half of a backgrounded job that has nothing to
+# report. That time is not "a moment".
+_SETTLE_RETRY_WITHIN_SECONDS = 5.0
 
 
 def authority_unavailable(response: object) -> bool:
@@ -42,10 +49,12 @@ def settled_authority(
     arrives on the first ask; only an unavailable runtime is asked again.
     """
     wait = time.sleep if pause is None else pause
+    started = time.monotonic()
     response = authorize(payload)
     for _ in range(_SETTLE_ATTEMPTS - 1):
-        if not authority_unavailable(response):
-            return response
+        if not authority_unavailable(response) or time.monotonic() - started > _SETTLE_RETRY_WITHIN_SECONDS:
+            break
         wait(_SETTLE_PAUSE_SECONDS)
+        started = time.monotonic()
         response = authorize(payload)
     return response

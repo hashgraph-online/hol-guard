@@ -41,7 +41,7 @@ from ..native_hook_adapter import hook_adapter_memo
 from ..native_hook_edge import review_raw_hook_native
 from ..native_policy_snapshot import get_native_policy_snapshot_publisher
 from ..native_policy_snapshot_acked import acked_snapshot_binding_for_store as acked_snapshot_binding_for_store
-from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS
+from ..native_policy_snapshot_constants import _PUBLISH_TIMEOUT_SECONDS, TRANSIENT_PUBLICATION_ERRORS
 from ..native_runtime import NativeRuntimeStatus, native_runtime_status
 from ..native_runtime_status_share import share_verified_runtime_status
 from .hook_direct_counters import HookCounterLog
@@ -81,16 +81,7 @@ WORKSPACE_POLICY_READINESS_TIMEOUT_SECONDS = _NATIVE_POLICY_READY_TIMEOUT_SECOND
 # The publisher retries these on its own: another writer re-committed the
 # command-control authority, or a late renewal let the snapshot expire. A hook
 # waits for that fresh ACK within its deadline instead of failing at once.
-_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = frozenset(
-    {
-        "native_policy_snapshot_resident_changed",
-        "native_resident_restart_budget_busy",
-        "native_command_control_mutation_in_progress",
-        "native_command_control_authority_not_current",
-        "native_business_source_mutation_in_progress",
-        "native_policy_snapshot_expired",
-    }
-)
+_TRANSIENT_RESIDENT_PUBLICATION_ERRORS = TRANSIENT_PUBLICATION_ERRORS | {"native_policy_snapshot_expired"}
 # Harnesses whose PermissionRequest hook gets no decision, so the harness
 # shows its own approval prompt. Each raises it only after its PreToolUse
 # hook reviewed the same call.

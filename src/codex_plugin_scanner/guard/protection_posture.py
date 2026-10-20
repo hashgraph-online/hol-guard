@@ -46,6 +46,12 @@ POSTURE_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "guard_bypass": "block",
         "cloud_advisory": "allow",
         "encoded_exfiltration": "block",
+        "package_unknown": "allow",
+        "package_lockfile_drift": "allow",
+        "package_direct_source": "allow",
+        "package_custom_registry": "allow",
+        "package_install": "allow",
+        "low_trust_artifact": "require-reapproval",
     },
     "extra_careful": {
         "local_secret_read": "require-reapproval",
@@ -62,6 +68,12 @@ POSTURE_RISK_ACTIONS: dict[str, dict[str, GuardAction]] = {
         "guard_bypass": "block",
         "cloud_advisory": "require-reapproval",
         "encoded_exfiltration": "block",
+        "package_unknown": "require-reapproval",
+        "package_lockfile_drift": "require-reapproval",
+        "package_direct_source": "require-reapproval",
+        "package_custom_registry": "allow",
+        "package_install": "allow",
+        "low_trust_artifact": "require-reapproval",
     },
 }
 

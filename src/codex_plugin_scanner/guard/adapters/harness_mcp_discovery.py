@@ -72,6 +72,17 @@ def discover_remote_mcp_servers(
     return _remote_servers(loaded)
 
 
+def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str, tuple[str, ...]]:
+    """Map each harness to the MCP server names its configs declare, stdio or remote."""
+
+    names: dict[str, dict[str, None]] = {}
+    for detection in loaded:
+        for artifact in detection.artifacts:
+            if artifact.artifact_type == "mcp_server" and artifact.name.strip():
+                names.setdefault(artifact.harness, {})[artifact.name.strip()] = None
+    return {harness: tuple(found) for harness, found in names.items()}
+
+
 def configured_harness_detections(
     home_dir: Path, guard_home: Path, workspace_dir: Path | None = None
 ) -> list[HarnessDetection]:

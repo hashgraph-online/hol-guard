@@ -4,6 +4,7 @@ use std::path::Path;
 use std::time::{Duration, Instant};
 
 use super::{containment, lease, MANAGED_STOP_TIMEOUT};
+use crate::resident_diagnostics::note;
 use crate::resident_state::{token_from_state, ResidentState};
 
 /// Bounds how long the lease directory stays locked for the shutdown, well
@@ -77,6 +78,8 @@ pub(super) fn retire_foreign_resident_rejecting_request(
     if state.runtime_sha256 == runtime_digest || !rejects_runtime_request(response) {
         return false;
     }
+    // Record the rejection before the retirement attempt, which may fail.
+    note("client_state_foreign_rejection_seen", 1);
     let deadline = deadline.min(Instant::now() + MANAGED_STOP_TIMEOUT);
     let process_ids = containment::state_process_identities(std::slice::from_ref(state));
     request_shutdown(

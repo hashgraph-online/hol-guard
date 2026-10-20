@@ -79,7 +79,14 @@ fn split_execution_segments_inner(
         match current {
             '\'' => quote = Quote::Single,
             '"' => quote = Quote::Double,
-            '\\' if preserve_unquoted_backslash => {}
+            // The escape that survives `preserve_unquoted_backslash`: an
+            // operator that ends the command belongs to the word, so it never
+            // separates commands.
+            '\\' if preserve_unquoted_backslash => {
+                if crate::command_tokens::backslash_escapes_operator(&chars, index) {
+                    escaped = true;
+                }
+            }
             '\\' => escaped = true,
             '`' => return Err("command_substitution_not_yet_supported"),
             '$' if chars.get(index + 1) == Some(&'(') => {
@@ -394,3 +401,7 @@ pub(super) fn push_segment(
 #[cfg(test)]
 #[path = "parser_segments_ansi_c_tests.rs"]
 mod ansi_c_tests;
+
+#[cfg(test)]
+#[path = "parser_segments_windows_escape_tests.rs"]
+mod windows_escape_tests;

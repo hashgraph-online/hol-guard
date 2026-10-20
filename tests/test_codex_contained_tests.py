@@ -6,14 +6,12 @@ import json
 import shlex
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_contained_tests as route
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_bridge as bridge
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 
 
 def receipt() -> dict[str, object]:
@@ -207,40 +205,6 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
     assert shaped_denial["hookSpecificOutput"]["permissionDecision"] == "deny"
     assert "updatedInput" not in shaped_denial["hookSpecificOutput"]
     assert recorded["timeout"] == 0.25
-
-
-def test_bridge_rewrite_uses_the_home_bound_into_the_hook(tmp_path, monkeypatch):
-    capable(monkeypatch, "codex-cli 0.162.1")
-    hook_home = tmp_path / "hook-home"
-    stdout = bridge._bridge_output(
-        receipt(),
-        event_name="PreToolUse",
-        hook_input=hook_input(tmp_path),
-        state_path=tmp_path / "guard" / "daemon-state.json",
-        deadline=time.monotonic() + 30,
-        query=f"guard-home={tmp_path / 'guard'}&home={hook_home}",
-    )
-    shaped = json.loads(stdout)
-    argv = shlex.split(shaped["hookSpecificOutput"]["updatedInput"]["command"])
-    assert argv[argv.index("--home") + 1] == str(hook_home)
-    assert argv[argv.index("--home") + 1] != str(Path.home())
-    assert argv[argv.index("--guard-home") + 1] == str(tmp_path / "guard")
-    Path(argv[argv.index("--request-file") + 1]).unlink()
-
-
-def test_bridge_without_an_absolute_home_keeps_the_denial(tmp_path, monkeypatch):
-    capable(monkeypatch, "codex-cli 0.162.1")
-    stdout = bridge._bridge_output(
-        receipt(),
-        event_name="PreToolUse",
-        hook_input=hook_input(tmp_path),
-        state_path=tmp_path / "guard" / "daemon-state.json",
-        deadline=time.monotonic() + 30,
-        query="home=relative-home&home=/also/not/single",
-    )
-    shaped = json.loads(stdout)
-    assert shaped["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "updatedInput" not in shaped["hookSpecificOutput"]
 
 
 def test_other_platforms_and_missing_guard_home_pass_through(tmp_path, monkeypatch):

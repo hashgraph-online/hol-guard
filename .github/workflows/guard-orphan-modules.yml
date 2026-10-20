@@ -1,0 +1,42 @@
+name: Guard orphan modules
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/**"
+      - "ci/**"
+      - "pyproject.toml"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+  push:
+    branches: [main]
+    paths:
+      - ".github/**"
+      - "ci/**"
+      - "pyproject.toml"
+      - "scripts/**"
+      - "src/**"
+      - "tests/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: guard-orphan-modules-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - name: Self-test the orphan detector
+        run: python3 scripts/ci/guard_orphan_module_gate.py --self-test
+      - name: Reject unreferenced Guard modules
+        run: python3 scripts/ci/guard_orphan_module_gate.py --root .

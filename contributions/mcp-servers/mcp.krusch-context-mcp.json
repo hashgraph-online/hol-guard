@@ -1,0 +1,67 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-context-mcp",
+  "version": "1.8.1",
+  "name": "Krusch Context MCP",
+  "description": "Local-first working memory, span-grounded invariant steering, and decision lineage for coding agents (SQLite by default, optional PostgreSQL). Context retrieval and health checks follow your normal Guard policy (may refresh provenance/drift metadata); memory writes, revisions, and feedback updates require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-context-mcp"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCube",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://krusch.dev/articles/what-makes-krusch-context-mcp-special.html",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-context-mcp"
+  },
+  "riskClasses": [
+    "local-sqlite-write",
+    "external-shared-state-write",
+    "external-content-deletion"
+  ],
+  "tools": [
+    {
+      "name": "krusch_context_retrieve",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_context_health",
+      "state": "inherit"
+    },
+    {
+      "name": "krusch_context_remember",
+      "state": "review"
+    },
+    {
+      "name": "krusch_context_revise",
+      "state": "review"
+    },
+    {
+      "name": "krusch_context_nudge",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-context-mcp",
+    "https://github.com/kruschdev/krusch-context-mcp/blob/main/docs/TOOL_REFERENCE.md",
+    "https://github.com/kruschdev/krusch-context-mcp/blob/main/src/index.js",
+    "https://krusch.dev/articles/what-makes-krusch-context-mcp-special.html"
+  ],
+  "saferAlternatives": [
+    "Use krusch_context_retrieve and krusch_context_health to read active invariants, episodic memories, and project state briefings; they do not add or revise memories, but health and state retrieval may update memory provenance/drift flags in the local store.",
+    "Keep krusch_context_remember, krusch_context_revise, and krusch_context_nudge on Review: remember and revise mutate project memories or nuggets, and nudge (action='feedback') updates rule weights.",
+    "Leave STORAGE_MODE on its default sqlite setting (.agent/context.db) unless you explicitly want shared PostgreSQL storage across machines."
+  ]
+}

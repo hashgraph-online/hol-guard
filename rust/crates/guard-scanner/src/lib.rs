@@ -6,11 +6,15 @@ pub mod repository_scanner;
 pub mod secret_detection;
 pub mod staged_scanner;
 
+mod code_cursor;
+mod code_expression;
 mod code_value;
 mod continuation;
 mod field_copy;
+mod guard_link;
 mod masked_value;
 mod match_spans;
+mod prose_answer_value;
 mod reference_value;
 mod self_named_value;
 
@@ -255,6 +259,7 @@ fn interpolates(value: &str) -> bool {
 fn is_sample(
     classifier: &str,
     matched: &str,
+    preceding: &str,
     continued: bool,
     rest_of_line: &str,
     suppress_samples: bool,
@@ -265,12 +270,15 @@ fn is_sample(
     }
     if classifier == "credential-assignment"
         && (field_copy::is_field_copy(matched, rest_of_line)
+            || guard_link::is_guard_link(matched, preceding)
             || self_named_value::is_self_named(matched, rest_of_line)
+            || prose_answer_value::is_prose_answer(matched, rest_of_line, preceding)
             || assignment_value(matched).is_some_and(|value| {
                 inert_code_expression_regex().is_match(value) || masked_value::is_masked(value)
             })
             || reference_value::is_reference(matched, rest_of_line)
-            || code_value::is_code_value(matched, rest_of_line))
+            || code_value::is_code_value(matched, rest_of_line)
+            || code_expression::is_code_expression(matched, rest_of_line))
     {
         return true;
     }
@@ -317,6 +325,7 @@ fn counted_matches<'t>(
         !is_sample(
             classifier,
             matched.as_str(),
+            &text[..matched.start()],
             continuation::continues_as_expression(&text[matched.end()..]),
             &text[matched.end()..line_end],
             suppress_samples,

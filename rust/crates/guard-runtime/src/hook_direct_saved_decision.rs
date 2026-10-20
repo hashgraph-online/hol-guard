@@ -121,7 +121,10 @@ pub(super) fn answer(edge: &[u8], context: &Context<'_>) -> Result<Value, HookDi
     if encoded.len() * ESCAPE_FACTOR + ENVELOPE_BYTES > NATIVE_EXACT_ACTION_MAX_BYTES {
         return Err(HookDirectDefer::SavedDecision);
     }
-    let token = crate::native_exact_action_op::approval_token(&exact);
+    let token = crate::native_exact_action_op::approval_token_for_home(
+        &exact,
+        Path::new(context.guard_home),
+    );
 
     let custom;
     let store_path = Path::new(context.guard_home).join(STORE_FILE_NAME);

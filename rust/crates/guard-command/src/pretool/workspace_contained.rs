@@ -356,7 +356,7 @@ fn extensions_contain(
         // A package-firewall permission marks package-manager use (or a Bun
         // image evaluating code), not a proven risk; a disabled one blocked.
         && extensions.permission_observations.iter().all(|observation| {
-            (package || super::restricted_tests::bun_inline_eval(model))
+            (package || super::restricted_test_commands::bun_inline_eval(model))
                 && observation.mcp_tool.is_none()
                 && package::PACKAGE_EXTENSIONS.contains(&observation.extension_id.as_str())
                 && observation.uncertainty_reasons.is_empty()

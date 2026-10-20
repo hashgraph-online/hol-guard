@@ -7,7 +7,8 @@ use guard_command::approval_reuse::{
 };
 use guard_contracts::{
     ClaimedReuseQueryV1, DecisionBuildCopyQueryV1, DecisionCopyQueryV1, GuardAction,
-    SavedReuseQueryV1, TrustedOverrideQueryV1,
+    PackageReuseSettleQueryV1, RememberedRuleReasonQueryV1, SavedReuseQueryV1,
+    TrustedOverrideQueryV1,
 };
 use serde_json::{json, Map, Value};
 
@@ -120,6 +121,105 @@ pub(crate) fn saved_block_reuse(
     let policy = stricter(act(policy_action), act(&reuse_action(&reuse)));
     json!({ "approval_reuse": reuse, "policy_action": policy.as_str() })
 }
+
+/// The reuse a package request's own reasons record, settled with the saved
+/// policy decision that carries them.
+///
+/// `_evaluate_package_request`'s reason scan (`commands_hook_native_eval`).
+/// Python read the evaluation's reasons itself to decide whether a saved
+/// approval or block had been applied, which disposition a claim had, and what
+/// the action became; every one of those is a verdict. It asks here instead,
+/// and the saved-block reuse of the same request is settled in this answer
+/// rather than a second query, so the package branch still costs one round
+/// trip.
+///
+/// The scan keeps the loop's precedence exactly: the first reason carrying an
+/// `approval_reuse` mapping ends it, and a disposition is kept only when the
+/// reason names one of the two the claim can report.
+pub(crate) fn package_reuse_settle(query: &PackageReuseSettleQueryV1) -> Value {
+    let mut reuse_applied = false;
+    let mut saved_allow_applied = false;
+    let mut claim_disposition = Value::Null;
+    let mut reuse_evidence = Value::Null;
+    let mut source = query.approval_reuse_source.clone();
+    let mut evidence_appends: Vec<Value> = Vec::new();
+    for reason in &query.reasons {
+        let code = reason.get("code").and_then(Value::as_str);
+        if matches!(
+            code,
+            Some("saved_package_approval") | Some("saved_package_block")
+        ) {
+            reuse_applied = true;
+            source = json!(PACKAGE_POLICY_SOURCE);
+        }
+        if code == Some("saved_package_approval") {
+            saved_allow_applied = true;
+            if let Some(disposition) = reason
+                .get("approval_claim_disposition")
+                .and_then(Value::as_str)
+                .filter(|named| matches!(*named, "consumed" | "retained"))
+            {
+                claim_disposition = json!(disposition);
+            }
+        }
+        let raw_reuse = reason.get("approval_reuse");
+        if let Some(raw_reuse) = raw_reuse.filter(|value| value.is_object()) {
+            reuse_applied = true;
+            reuse_evidence = raw_reuse.clone();
+            evidence_appends.push(input_evidence(PACKAGE_POLICY_SOURCE, raw_reuse));
+            source = json!(PACKAGE_POLICY_SOURCE);
+            break;
+        }
+    }
+    // A claimed saved allow is revalidated at the execution boundary, so the
+    // caller stops here: the settlement below describes the pass that does not
+    // revalidate, and its evidence belongs to that pass alone.
+    let revalidate_required = saved_allow_applied && query.claim_saved_approval;
+    let mut policy_action = if reuse_applied {
+        coerce(&query.evaluation_policy_action).unwrap_or_else(|| act(&query.current_action))
+    } else {
+        act(&query.current_action)
+    };
+    let mut approval_reuse = Value::Null;
+    let mut settled_evidence_appends: Vec<Value> = Vec::new();
+    if query.stored_policy_action.as_str() == Some("block") {
+        let settled = saved_block_reuse(
+            &query.current_action,
+            &json!(policy_action.as_str()),
+            &query.stored_artifact_hash,
+        );
+        policy_action = act(settled.get("policy_action").unwrap_or(&Value::Null));
+        approval_reuse = settled
+            .get("approval_reuse")
+            .cloned()
+            .unwrap_or(Value::Null);
+        if source.as_str().is_none() {
+            source = json!(POLICY_DECISION_SOURCE);
+        }
+        if !reuse_applied {
+            settled_evidence_appends.push(input_evidence(
+                source.as_str().unwrap_or(POLICY_DECISION_SOURCE),
+                &approval_reuse,
+            ));
+        }
+    }
+    json!({
+        "reuse_applied": reuse_applied,
+        "saved_allow_applied": saved_allow_applied,
+        "claim_disposition": claim_disposition,
+        "reuse_evidence": reuse_evidence,
+        "revalidate_required": revalidate_required,
+        "approval_reuse_source": source,
+        "policy_action": policy_action.as_str(),
+        "approval_reuse": approval_reuse,
+        "evidence_appends": evidence_appends,
+        "settled_evidence_appends": settled_evidence_appends,
+    })
+}
+
+/// The input sources the package branch names for its reuse evidence.
+const PACKAGE_POLICY_SOURCE: &str = "saved_package_policy";
+const POLICY_DECISION_SOURCE: &str = "saved_policy_decision";
 
 pub(crate) fn trusted_override(query: &TrustedOverrideQueryV1) -> Value {
     let mut reason = query.token_validation_reason.clone();
@@ -375,4 +475,32 @@ pub(crate) fn decision_copy(query: &DecisionCopyQueryV1) -> Value {
         risk_headline = json!(reason);
     }
     json!({ "decision_overrides": copy, "risk_headline": risk_headline })
+}
+
+/// The state in which a remembered local rule is refused.
+const REMEMBERED_RULES_DEGRADED: &str = "disabled_degraded";
+
+/// Why a remembered local rule was ignored, or `null` when the reported state
+/// does not refuse one. The integrity detail is appended as its own sentence.
+pub(crate) fn remembered_rule_reason(query: &RememberedRuleReasonQueryV1) -> Value {
+    if query.remembered_rules != REMEMBERED_RULES_DEGRADED {
+        return json!({ "reason": Value::Null });
+    }
+    let detail = match query.integrity_message.as_deref().map(str::trim) {
+        Some(message) if !message.is_empty() => {
+            if message.ends_with('.') {
+                format!(" {message}")
+            } else {
+                format!(" {message}.")
+            }
+        }
+        _ => String::new(),
+    };
+    let reason = format!(
+        "HOL Guard kept {} in review because a remembered local rule was ignored while local trust \
+         is degraded.{detail} One-time approvals still work, but broader remembered rules stay \
+         limited until local trust is protected.",
+        query.artifact_summary
+    );
+    json!({ "reason": reason })
 }

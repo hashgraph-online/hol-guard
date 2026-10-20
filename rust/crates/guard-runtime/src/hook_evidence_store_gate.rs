@@ -14,6 +14,28 @@ pub(crate) const STORAGE_GATE_FILE_NAME: &str = "storage-access.lock";
 /// (`time.sleep(0.01)`).
 const GATE_POLL: Duration = Duration::from_millis(10);
 
+/// A held storage gate, released when it drops.
+///
+/// Closing the handle also releases the lock, but Windows documents that
+/// release as happening at some later point. Unlocking first makes the
+/// release immediate and puts it where a reader can see it.
+#[derive(Debug)]
+pub(crate) struct StorageGateHold(File);
+
+impl StorageGateHold {
+    /// A shared hold on an already opened gate, taken once without waiting.
+    pub(crate) fn try_shared(gate: File) -> Result<Self, io::Error> {
+        FileExt::try_lock_shared(&gate)?;
+        Ok(Self(gate))
+    }
+}
+
+impl Drop for StorageGateHold {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self.0);
+    }
+}
+
 /// `hold_storage_gate(guard_home)` — a shared hold that waits for an
 /// exclusive maintenance hold to end, creating the gate file when the home has
 /// never taken one.
@@ -21,12 +43,15 @@ const GATE_POLL: Duration = Duration::from_millis(10);
 /// The daemon's hook path takes this gate try-once on a file that must already
 /// exist, because a hook that cannot have it immediately defers to the daemon.
 /// The writer has nothing to defer to, so it waits like Python does.
-pub(crate) fn hold_storage_gate(guard_home: &Path, wait: Duration) -> Result<File, io::Error> {
+pub(crate) fn hold_storage_gate(
+    guard_home: &Path,
+    wait: Duration,
+) -> Result<StorageGateHold, io::Error> {
     let gate = open_gate(&guard_home.join(STORAGE_GATE_FILE_NAME))?;
     let deadline = Instant::now() + wait;
     loop {
         match FileExt::try_lock_shared(&gate) {
-            Ok(()) => return Ok(gate),
+            Ok(()) => return Ok(StorageGateHold(gate)),
             Err(error) if Instant::now() >= deadline => {
                 return Err(io::Error::new(
                     io::ErrorKind::TimedOut,
@@ -53,9 +78,9 @@ fn open_gate(path: &Path) -> Result<File, io::Error> {
         .open(path)
 }
 
-/// Python takes the gate with `msvcrt.locking` on its first byte, which has no
-/// shared mode; the shared whole-file `LockFileEx` here still excludes that
-/// hold and any exclusive one.
+/// Python takes the same whole-file `LockFileEx` range, shared or exclusive,
+/// so a shared hold here coexists with Python's shared holds and waits only
+/// for an exclusive one.
 #[cfg(windows)]
 fn open_gate(path: &Path) -> Result<File, io::Error> {
     use std::os::windows::fs::{MetadataExt, OpenOptionsExt};

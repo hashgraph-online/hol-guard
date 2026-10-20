@@ -84,6 +84,9 @@ function approvalContinuationActivity() {{
   return () => !activeScenario.hostAborted;
 }}
 function approvalRequestId(response) {{ return response.approval_request_id ?? null; }}
+function scheduleToolApprovalResume(_response, _ctx, _snapshot) {{
+  activeScenario.toolResumeCalls = (activeScenario.toolResumeCalls ?? 0) + 1;
+}}
 function approvalPollPath(response, requestId) {{ return response.resume_poll_path ?? `/v1/requests/${{requestId}}`; }}
 function approvalBlockedReason(_response, fallback, _kind, continuation = 'exact') {{
   return continuation === 'replan' ? `unsupported-${{fallback}}` : fallback;
@@ -288,6 +291,9 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function contextCwd(ctx) {{ return ctx.sessionManager.getCwd(); }}
 function contextSessionId(ctx) {{ return ctx.sessionManager.getSessionId(); }}
 function approvalRequestId(response) {{ return response.approval_request_id ?? null; }}
+function scheduleToolApprovalResume(_response, _ctx, _snapshot) {{
+  activeScenario.toolResumeCalls = (activeScenario.toolResumeCalls ?? 0) + 1;
+}}
 function approvalPollPath(response, requestId) {{ return response.resume_poll_path ?? `/v1/requests/${{requestId}}`; }}
 function approvalBlockedReason(_response, fallback) {{ return fallback; }}
 function approvalResumeMessage(details) {{ return details.prompt ?? ''; }}

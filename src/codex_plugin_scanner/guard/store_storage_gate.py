@@ -1,13 +1,19 @@
 """Cross-process Guard storage access gate, re-entrant per thread and home.
 
-The gate is a one-byte lock on ``<guard home>/storage-access.lock``. A thread
-that already holds it for a home nests every further hold for that same home,
-whichever ``GuardStore`` instance asks: a nested store (for example the one
-that provisions the resident verifier key inside a native store call) must
-not wait on its own thread's hold. POSIX ``flock`` happened to admit a nested
-shared hold on a second descriptor, but Windows ``msvcrt.locking`` has no
-shared mode, so the nested hold waited out the whole deadline and failed.
-Holds from other threads and processes still contend on the file lock.
+The gate is a lock on ``<guard home>/storage-access.lock``: ``flock`` on
+POSIX and a whole-file ``LockFileEx`` on Windows, the same lock the Rust
+resident takes. Shared holds coexist on both platforms, Python's and Rust's
+alike, and an exclusive hold excludes every other. Windows ``msvcrt.locking``
+cannot express a shared hold (``LK_NBRLCK`` is exclusive), and using it let a
+draining resident writer, whose overlapping shared holds never leave a gap,
+starve every Python reader for the whole connect timeout.
+
+A thread that already holds the gate for a home nests every further hold for
+that same home, whichever ``GuardStore`` instance asks: a nested store (for
+example the one that provisions the resident verifier key inside a native
+store call) must not wait on its own thread's hold, because an exclusive
+hold on another descriptor would. Holds from other threads and processes
+still contend on the file lock.
 """
 
 from __future__ import annotations
@@ -50,15 +56,9 @@ def _lock(handle: IO[bytes], *, exclusive: bool) -> None:
     """Take the gate without blocking; raises ``OSError`` when it is held."""
 
     if os.name == "nt":
-        import msvcrt
+        from .native_command_control_windows_lock import try_lock_whole_file
 
-        handle.seek(0)
-        if not handle.read(1):
-            handle.write(b"0")
-            handle.flush()
-        handle.seek(0)
-        mode = msvcrt.LK_NBLCK if exclusive else msvcrt.LK_NBRLCK
-        msvcrt.locking(handle.fileno(), mode, 1)
+        try_lock_whole_file(handle.fileno(), shared=not exclusive)
     else:
         import fcntl
 
@@ -68,10 +68,9 @@ def _lock(handle: IO[bytes], *, exclusive: bool) -> None:
 
 def _unlock(handle: IO[bytes]) -> None:
     if os.name == "nt":
-        import msvcrt
+        from .native_command_control_windows_lock import unlock_whole_file
 
-        handle.seek(0)
-        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        unlock_whole_file(handle.fileno())
     else:
         import fcntl
 

@@ -12,6 +12,7 @@ import pytest
 from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard.cli.commands_dispatch_records import _run_guard_history_command
 from codex_plugin_scanner.guard.models import GuardReceipt
+from codex_plugin_scanner.guard.policy_bundle_parser import policy_bundle_rejection_message
 from codex_plugin_scanner.guard.policy_delivery_status import (
     format_policy_status,
     normalized_policy_delivery_url,
@@ -79,6 +80,58 @@ def test_status_reports_version_mode_sync_ack_and_rejection(tmp_path: Path, caps
     assert "Live version: 7" in text
     assert "Last ACK: applied" in text
     assert "Rejection:" in text
+
+
+def test_status_names_the_rule_a_rejected_cloud_bundle_could_not_compile(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "home"
+    store = GuardStore(home)
+    store.set_sync_payload(
+        "policy_bundle_last_error",
+        {
+            "reason": "canonical_compile_unsupported_policy_match",
+            "message": policy_bundle_rejection_message("canonical_compile_unsupported_policy_match"),
+            "ruleId": "rule.unsupported-operation",
+        },
+        NOW,
+    )
+
+    code, payload = _json(capsys, home, "status", "--offline")
+    text_code = main(["guard", "policy", "status", "--offline", "--home", str(home)])
+    text = capsys.readouterr().out
+
+    assert code == 0
+    assert payload["rejectionReason"] == "canonical_compile_unsupported_policy_match"
+    assert payload["rejectionRuleId"] == "rule.unsupported-operation"
+    assert "packages, domains or paths" in str(payload["rejectionMessage"])
+    assert text_code == 0
+    assert "Rejection: canonical_compile_unsupported_policy_match (rule rule.unsupported-operation)" in text
+    assert "keeps the policy it already had" in text
+
+
+def test_status_omits_the_stored_remediation_when_another_reason_is_shown(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    home = tmp_path / "home"
+    store = GuardStore(home)
+    store.set_sync_payload("policy_bundle", {"bundleVersion": "7", "bundleHash": "ab" * 32}, NOW)
+    store.set_sync_payload(
+        "policy_bundle_last_error",
+        {
+            "reason": "canonical_compile_unsupported_policy_match",
+            "message": "stale remediation",
+            "ruleId": "rule.stale",
+        },
+        NOW,
+    )
+
+    code, payload = _json(capsys, home, "status", "--offline")
+
+    assert code == 0
+    assert payload["rejectionReason"] != "canonical_compile_unsupported_policy_match"
+    assert payload["rejectionRuleId"] is None
+    assert payload["rejectionMessage"] is None
 
 
 def test_status_without_cloud_still_works_and_says_so(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

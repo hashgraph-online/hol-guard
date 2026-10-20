@@ -8,8 +8,14 @@
 //! or command, or older than the 30 minute window is never returned. It is
 //! deleted instead, and each integrity failure leaves a
 //! `rule.ignored.local_integrity` audit row. The key material and the clock are
-//! shipped by the transport; the Python-owned command fingerprints that name
-//! the Cursor state keys are opaque here.
+//! shipped by the transport.
+//!
+//! A row's name is derived here. A Cursor shell row is named by the
+//! conversation and the command it belongs to, and a Claude pending permission
+//! by its artifact, so the key a row is written under and the key it is read
+//! back under have one definition. A request may instead echo a key the
+//! resident issued earlier — out of a pending index, or out of an op's own
+//! reply — and that key is acted on as given.
 
 use std::time::Duration;
 
@@ -25,6 +31,10 @@ use guard_policy_snapshot::local_authority_integrity::{
 };
 use rusqlite::{params, Connection, OpenFlags, OptionalExtension};
 use serde_json::{json, Map, Value};
+
+use guard_command::cursor_shell_command::{
+    normalize_cursor_shell_command, CursorShellNormalization,
+};
 
 use crate::guard_store_json::{dumps_default, py_strip};
 use crate::package_authority_op::request_digest_with_limit;
@@ -201,6 +211,53 @@ fn exact_str<'a>(object: &'a Object, name: &str) -> Option<&'a str> {
 fn claude_pending_key(session_id: &str, artifact_id: &str) -> String {
     let fingerprint = &digest_bytes(artifact_id.as_bytes())[..24];
     format!("claude_pending_permission:{session_id}:{fingerprint}")
+}
+
+/// The command fingerprint both Cursor state keys are built from: the
+/// normalized command's digest, truncated the way the retired
+/// `_cursor_shell_command_fingerprint` truncated it.
+///
+/// A command the normalizer cannot read is no fingerprint at all. The retired
+/// Python raised on it, so a request carrying one is invalid rather than named
+/// after its unnormalized text.
+fn cursor_command_fingerprint(command: &str) -> Result<String, &'static str> {
+    match normalize_cursor_shell_command(command) {
+        CursorShellNormalization::Command(normalized) => {
+            Ok(digest_bytes(normalized.as_bytes())[..24].to_owned())
+        }
+        CursorShellNormalization::Unnormalizable => Err(ERROR_INVALID),
+    }
+}
+
+fn cursor_pending_key(conversation_id: &str, command: &str) -> Result<String, &'static str> {
+    Ok(format!(
+        "{}{conversation_id}:{}",
+        CURSOR_FAMILY.item_prefix,
+        cursor_command_fingerprint(command)?
+    ))
+}
+
+fn cursor_allow_key(conversation_id: &str, command: &str) -> Result<String, &'static str> {
+    Ok(format!(
+        "cursor_native_shell_allow:{conversation_id}:{}",
+        cursor_command_fingerprint(command)?
+    ))
+}
+
+/// The Cursor row a request names. A request that carries the command gets its
+/// key derived here; one that echoes a key the resident issued is acted on as
+/// given.
+fn cursor_target(
+    conversation_id: &str,
+    command: Option<&str>,
+    given: Option<&String>,
+    derive: fn(&str, &str) -> Result<String, &'static str>,
+) -> Result<String, &'static str> {
+    match (given, command) {
+        (Some(key), _) => Ok(key.clone()),
+        (None, Some(command)) => derive(conversation_id, command),
+        (None, None) => Err(ERROR_INVALID),
+    }
 }
 
 fn notice_key(session_id: &str, tool_name: Option<&str>) -> String {
@@ -390,125 +447,8 @@ fn required(value: &Option<String>) -> Result<&str, &'static str> {
     value.as_deref().ok_or(ERROR_INVALID)
 }
 
-impl Env<'_> {
-    fn dispatch(&self, request: &HookAuthorityStateRequestV1) -> Result<Value, &'static str> {
-        match request.op.as_str() {
-            "claude_record_notice" => {
-                let payload = request.payload.as_ref().ok_or(ERROR_INVALID)?;
-                self.claude_record_notice(
-                    required(&request.session_id)?,
-                    request.tool_name.as_deref(),
-                    payload,
-                );
-                Ok(json!({}))
-            }
-            "claude_load_notice" => Ok(json!({
-                "notice": self.claude_load_notice(
-                    required(&request.session_id)?,
-                    request.tool_name.as_deref(),
-                )
-            })),
-            "claude_mark_prompt_seen" => {
-                self.claude_mark_prompt_seen(
-                    required(&request.session_id)?,
-                    required(&request.artifact_id)?,
-                    required(&request.artifact_hash)?,
-                    required(&request.command)?,
-                );
-                Ok(json!({}))
-            }
-            "claude_load_single_pending" => Ok(
-                match self.claude_load_single_pending(required(&request.session_id)?) {
-                    Some((key, pending)) => json!({ "pending_key": key, "pending": pending }),
-                    None => json!({ "pending_key": null, "pending": null }),
-                },
-            ),
-            "claude_load_pending" => Ok(json!({
-                "pending": self.claude_load_pending(
-                    required(&request.session_id)?,
-                    required(&request.pending_key)?,
-                    request.expected_artifact_id.as_deref(),
-                    request.expected_artifact_hash.as_deref(),
-                    request.expected_command.as_deref(),
-                )
-            })),
-            "claude_remove_pending" => {
-                self.claude_remove_pending(
-                    required(&request.session_id)?,
-                    required(&request.pending_key)?,
-                );
-                Ok(json!({}))
-            }
-            "claude_discard_session" => Ok(json!({
-                "discarded": self.claude_discard_session(required(&request.session_id)?)
-            })),
-            "claude_load_index" => Ok(json!({
-                "pending_keys": self.load_index(&CLAUDE_FAMILY, required(&request.session_id)?)
-            })),
-            "cursor_load_index" => Ok(json!({
-                "pending_keys": self.load_index(&CURSOR_FAMILY, required(&request.conversation_id)?)
-            })),
-            "cursor_store_index" => {
-                let keys = request.pending_keys.as_ref().ok_or(ERROR_INVALID)?;
-                Ok(json!({
-                    "stored": self.store_index(&CURSOR_FAMILY, required(&request.conversation_id)?, keys)
-                }))
-            }
-            "cursor_append_key" => Ok(json!({
-                "stored": self.append_key(
-                    &CURSOR_FAMILY,
-                    required(&request.conversation_id)?,
-                    required(&request.pending_key)?,
-                )
-            })),
-            "cursor_store_pending_state" => {
-                let payload = request.payload.as_ref().ok_or(ERROR_INVALID)?;
-                Ok(json!({
-                    "stored": self.store_signed(
-                        required(&request.state_key)?,
-                        payload,
-                        &CURSOR_PENDING,
-                    )
-                }))
-            }
-            "cursor_load_pending_state" => Ok(json!({
-                "pending": self.cursor_load_pending_state(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.state_key)?,
-                    required(&request.expected_key)?,
-                )
-            })),
-            "cursor_find_pending" => Ok(json!({
-                "pending": self.cursor_find_pending(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.expected_key)?,
-                )
-            })),
-            "cursor_remove_pending" => {
-                self.cursor_remove_pending(
-                    required(&request.conversation_id)?,
-                    required(&request.pending_key)?,
-                )?;
-                Ok(json!({}))
-            }
-            "cursor_record_allow" => Ok(json!({
-                "stored": self.cursor_record_allow(request)?
-            })),
-            "cursor_load_allowance" => Ok(json!({
-                "allowance": self.cursor_load_allowance(
-                    required(&request.conversation_id)?,
-                    required(&request.command)?,
-                    required(&request.state_key)?,
-                )
-            })),
-            _ => Err(ERROR_INVALID),
-        }
-    }
-}
-
 pub(crate) mod direct_record;
+mod dispatch;
 mod flows;
 mod store;
 

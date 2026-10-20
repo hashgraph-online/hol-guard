@@ -20,7 +20,11 @@ pub(crate) use resources::process_ceiling;
 #[path = "macos_supervisor.rs"]
 mod supervisor;
 
+mod finalize;
+#[cfg(target_os = "macos")]
+pub(crate) mod hardened_spawn;
 mod launch;
+pub(crate) use launch::CaptureMode;
 mod owner;
 #[path = "unix/io.rs"]
 mod process_io;
@@ -30,9 +34,10 @@ use owner::{require_wait_custody, ChildOwner};
 #[cfg(target_os = "macos")]
 use process_io::drain_report;
 use process_io::{check_protocol_budget, drain, nonblocking, pipe, write_without_sigpipe};
+pub(crate) use process_io::{nonblocking as control_nonblocking, pipe as control_pipe};
 #[cfg(test)]
 #[path = "unix/process_regressions.rs"]
-mod process_regressions;
+pub(crate) mod process_regressions;
 
 pub(crate) fn capture(
     command: PinnedCommand,
@@ -41,12 +46,22 @@ pub(crate) fn capture(
     deadline: Instant,
     cancel: &AtomicBool,
     isolation: Isolation,
-    source_gate: Option<&mut dyn crate::SourceLaunchGate>,
+    mode: CaptureMode<'_>,
 ) -> io::Result<CapturedOutput> {
+    let (source_gate, hardened) = match mode {
+        CaptureMode::Standard(gate) => {
+            command.verify_bindings()?;
+            (gate, None)
+        }
+        #[cfg(target_os = "macos")]
+        CaptureMode::Hardened => (None, Some(hardened_spawn::Prepared::prepare(&command)?)),
+    };
+    #[cfg(not(target_os = "macos"))]
+    let _: Option<()> = hardened;
+    crate::source_launch::validate_deferred_outputs(&isolation, source_gate.as_ref())?;
     let window = RequestWindow { deadline, cancel };
     window.require_launch()?;
-    command.verify_bindings()?;
-    let argv: Vec<CString> = std::iter::once(command.executable_path.as_os_str())
+    let argv: Vec<CString> = std::iter::once(command.argument_zero.as_os_str())
         .chain(command.arguments.iter().map(|arg| arg.as_os_str()))
         .map(|arg| cstring(arg.as_bytes()))
         .collect::<io::Result<_>>()?;
@@ -83,11 +98,12 @@ pub(crate) fn capture(
     }
     // Duplicate above the reserved child descriptors before dup2: inherited
     // descriptors can otherwise collide with the exec/status descriptors.
-    let reserved = i32::try_from(isolation.inherited_files.len())
-        .map_err(|_| crate::bound_fs::changed())?
-        .checked_add(6)
-        .ok_or_else(crate::bound_fs::changed)?
-        .max(10);
+    let reserved =
+        i32::try_from(isolation.inherited_files.len() + isolation.deferred_outputs.len())
+            .map_err(|_| crate::bound_fs::changed())?
+            .checked_add(6)
+            .ok_or_else(crate::bound_fs::changed)?
+            .max(10);
     let exe_fd = unsafe {
         libc::fcntl(
             command.executable.as_raw_fd(),
@@ -122,11 +138,12 @@ pub(crate) fn capture(
             }
         })
         .collect::<io::Result<Vec<_>>>()?;
+    let outputs = crate::deferred_output::prepare_all(&isolation.deferred_outputs, reserved)?;
     let parent = unsafe { libc::getpid() };
     #[cfg(target_os = "macos")]
-    let mut descriptors = supervisor::DescriptorTable::prepare(inherited.len())?;
+    let mut descriptors = supervisor::DescriptorTable::prepare(inherited.len() + outputs.len())?;
     #[cfg(target_os = "macos")]
-    let keep_descriptors = (0..6 + inherited.len() as i32)
+    let keep_descriptors = (0..6 + inherited.len() as i32 + outputs.len() as i32)
         .chain(std::iter::once(launch_fd.as_raw_fd()))
         .collect::<Vec<_>>();
     let launch_deadline = LaunchDeadline::prepare(deadline)?;
@@ -159,6 +176,8 @@ pub(crate) fn capture(
             env: &env_ptr,
             deadline: &launch_deadline,
             inherited: &inherited,
+            outputs: &outputs,
+            creation_mask: isolation.creation_mask,
             #[cfg(target_os = "macos")]
             keep_descriptors: &keep_descriptors,
             #[cfg(target_os = "macos")]
@@ -167,6 +186,14 @@ pub(crate) fn capture(
             report: foreign_report_write.as_raw_fd(),
             #[cfg(target_os = "macos")]
             image_path: &image_path,
+            #[cfg(target_os = "macos")]
+            hardened_binding: hardened.as_ref().map(hardened_spawn::Prepared::binding),
+            #[cfg(target_os = "macos")]
+            hardened_attributes: hardened.as_ref().map(hardened_spawn::Prepared::attributes),
+            #[cfg(all(test, target_os = "macos"))]
+            hardened_resume_probe: hardened
+                .as_ref()
+                .is_some_and(hardened_spawn::Prepared::resume_probe),
         };
         unsafe {
             setup.exec();
@@ -181,6 +208,11 @@ pub(crate) fn capture(
     drop(completion_write);
     drop(launch_read);
     drop(launch_fd);
+    // Only the child owns inherited pipe/socket writers after spawn. Keeping
+    // parent copies would hide EOF from native acknowledgment/output readers.
+    drop(inherited);
+    drop(outputs);
+    drop(isolation.inherited_files);
     #[cfg(target_os = "macos")]
     drop(foreign_report_write);
     let mut owner = ChildOwner::new(pid);
@@ -192,6 +224,7 @@ pub(crate) fn capture(
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let mut error_bytes = Vec::new();
+    let mut initialized = false;
     let mut completion_fd = Some(completion_read);
     let mut completion = Vec::new();
     #[cfg(target_os = "macos")]
@@ -401,12 +434,10 @@ pub(crate) fn capture(
             if owner.has_custody() {
                 owner.reap()?;
             }
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                "native child initialization or execution failed",
-            ));
+            return Err(launch::child_failed(&error_bytes));
         }
         if error_bytes == [0, 0, 0, 0] && !output_limited && status.is_none() {
+            initialized = true;
             transfer.release(
                 &mut stdin,
                 error_fd.is_none() && launch_write.is_none(),
@@ -419,6 +450,12 @@ pub(crate) fn capture(
                 // approve execution using the cancellation snapshot from fork.
                 if window.stopped() {
                     continue;
+                }
+                if !isolation.deferred_outputs.is_empty() {
+                    for output in &isolation.deferred_outputs {
+                        output.verify_before()?;
+                    }
+                    transfer.prepare_effects(&window)?;
                 }
                 match write_without_sigpipe(fd.as_raw_fd(), &[1]) {
                     Ok(1) => {
@@ -440,35 +477,15 @@ pub(crate) fn capture(
     if owner.has_custody() {
         owner.reap()?;
     }
-    check_protocol_budget(protocol_limited)?;
-    if error_bytes != [0, 0, 0, 0] && !cancelled && !timed_out {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "native child did not confirm initialization",
-        ));
-    }
-    #[cfg(target_os = "macos")]
-    let status = if foreign_report_size == 4 {
-        Some(i32::from_ne_bytes(foreign_report))
-    } else if cancelled || timed_out || output_limited {
-        None
-    } else {
-        return Err(io::Error::other(
-            "native supervisor did not report foreign completion",
-        ));
-    };
-    let code = status.and_then(|status| {
-        if libc::WIFEXITED(status) {
-            Some(libc::WEXITSTATUS(status))
-        } else if libc::WIFSIGNALED(status) {
-            Some(-libc::WTERMSIG(status))
-        } else {
-            None
-        }
-    });
-    let code = code.filter(|_| !cancelled && !timed_out && !output_limited);
-    Ok(CapturedOutput {
-        exit_code: code,
+    finalize::finish(finalize::State {
+        initialized,
+        protocol_limited,
+        #[cfg(not(target_os = "macos"))]
+        status,
+        #[cfg(target_os = "macos")]
+        foreign_report,
+        #[cfg(target_os = "macos")]
+        foreign_report_size,
         stdout,
         stderr,
         timed_out,

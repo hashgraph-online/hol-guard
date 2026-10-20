@@ -45,7 +45,7 @@ _UNRECORDED_AUDIT_PROOF = frozenset({UNAVAILABLE, "native_overloaded"})
 _STRICT_MANIFEST_DETAIL = "package shim manifest is not strict JSON"
 _OPERATION = "shim_admin"
 _RESIDENT_PROTOCOL_FEATURE = "resident-protocol-v2"
-_FEATURE = "shim-admin-v3"
+_FEATURE = "shim-admin-v4"
 _REQUEST_SCHEMA = "guard-shim-admin-request.v2"
 _RESULT_SCHEMA = "guard-shim-admin-result.v2"
 _MAX_REQUEST_BYTES = 512 * 1024
@@ -179,6 +179,8 @@ def native_shim_admin(
     managers: Sequence[str] | None = None,
     path_env: str | None = None,
     manager: str | None = None,
+    executable: str | None = None,
+    command: str | None = None,
     repair: bool | None = None,
     allow_inactive_path: bool | None = None,
     project_shell_profile: bool | None = None,
@@ -217,6 +219,8 @@ def native_shim_admin(
             # digests the request it decoded, which serializes them all.
             "path_env": path_env,
             "manager": manager,
+            "executable": executable,
+            "command": command,
             "repair": repair,
             "allow_inactive_path": allow_inactive_path,
             "project_shell_profile": project_shell_profile,
@@ -312,6 +316,38 @@ def _object(subop: str, context: HarnessContextLike, **fields: Any) -> dict[str,
 
 def package_shim_status(context: HarnessContextLike, *, path_env: str | None = None) -> dict[str, object]:
     return _object("status", context, path_env=path_env)
+
+
+def package_shim_digest_binding_sink(
+    context: HarnessContextLike,
+    *,
+    manager: str,
+    executable: str,
+    command: str | None,
+    workspace_dir: Path | None = None,
+    path_env: str | None = None,
+) -> bool:
+    """Does a healthy installed shim own this external-archive download?
+
+    The shim can bind an approval to a digest because it performs the download
+    itself, so it owns the approval only when the command is a bare launch of
+    that shim. The resident parses the command and resolves the paths; a caller
+    that cannot reach it leaves the approval with the user.
+    """
+
+    result = _object(
+        "digest_binding_sink",
+        context,
+        manager=manager,
+        executable=executable,
+        command=command,
+        workspace_dir=workspace_dir,
+        path_env=path_env,
+    )
+    bound = result.get("bound")
+    if not isinstance(bound, bool):
+        raise NativeShimAdminError("native_shim_admin_invalid_result")
+    return bound
 
 
 def package_shim_dashboard_status(context: HarnessContextLike) -> dict[str, object]:

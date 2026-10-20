@@ -14,6 +14,9 @@ pub(super) struct ConfigFacts {
     pub(super) only_standard_lfs: bool,
     pub(super) attributes_file: Option<String>,
     pub(super) attribute_source_override: bool,
+    /// A hook manager's hooks directory below the repository root (Husky
+    /// writes `core.hooksPath=.husky/_` into the repository configuration).
+    pub(super) repository_hooks_path: Option<String>,
 }
 
 /// `Some(None)` when a setting could run a program or redirect the checkout,
@@ -50,10 +53,20 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             return Some(None);
         }
         let global_scope = matches!(scope, "global" | "system" | "unknown");
+        // The bundled `unknown` scope keeps the stricter reading for settings
+        // that run programs or pull in more files; a user's own global config
+        // and the system config are an ordinary developer's.
+        let user_scope = matches!(scope, "global" | "system");
         if key == "core.hookspath" {
             // Hook managers set this globally; the directory must exist and
             // hold no hook Git would run for this operation.
             if !global_scope {
+                if scope == "local"
+                    && super::super::git_hook_files::repository_relative_hooks_path(value)
+                {
+                    facts.repository_hooks_path = Some(value.to_owned());
+                    continue;
+                }
                 return Some(None);
             }
             let Some(directory) = expand_config_path(value, home)
@@ -100,17 +113,18 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
             return Some(None);
         }
         if key == "core.worktree"
-            || key == "core.fsmonitor"
-            || key == "core.sshcommand"
-            || key == "core.gitproxy"
-            || key == "core.askpass"
-            || key == "core.pager"
+            || (key == "core.fsmonitor" && !boolean_literal(value))
+            || (matches!(
+                key.as_str(),
+                "core.sshcommand" | "core.gitproxy" | "core.askpass"
+            ) && !user_scope)
             || key.starts_with("hook.")
-            || key.starts_with("pager.")
+            || (display_pager_setting(&key) && !(user_scope && display_pager_key(&key)))
             || (key.starts_with("credential.") && !global_scope)
-            || key.starts_with("include")
-            || key.starts_with("extensions.")
-            || key.starts_with("submodule.")
+            || (key.starts_with("include") && (!user_scope || key.contains("onbranch:")))
+            || (key.starts_with("extensions.") && !inert_extension(&key))
+            || (key.starts_with("submodule.")
+                && !matches!(key.as_str(), "submodule.recurse" | "submodule.fetchjobs"))
             || key.ends_with(".promisor")
             || key.ends_with(".partialclonefilter")
             || key.ends_with(".uploadpack")
@@ -120,6 +134,41 @@ pub(super) fn safe_worktree_config(output: &[u8], home: &Path) -> Option<Option<
         }
     }
     Some(Some(facts))
+}
+
+fn display_pager_setting(key: &str) -> bool {
+    key == "core.pager" || key.starts_with("pager.")
+}
+
+/// A pager starts only for a command that pages its output, and only on a
+/// terminal. `worktree add` runs `worktree`, `reset` and `update-ref`, none
+/// of which a display setting names; the user's global `core.pager` and
+/// `pager.<display command>` keys therefore do nothing here. Any other
+/// `pager.<command>` key, and any repository-scoped pager, stays reviewed.
+fn display_pager_key(key: &str) -> bool {
+    const DISPLAY: &[&str] = &[
+        "diff", "log", "show", "blame", "status", "grep", "stash", "tag", "branch", "shortlog",
+        "reflog",
+    ];
+    key == "core.pager"
+        || key
+            .strip_prefix("pager.")
+            .is_some_and(|command| DISPLAY.contains(&command))
+}
+
+/// Repository format facts that name no program and add no object source.
+fn inert_extension(key: &str) -> bool {
+    matches!(
+        key,
+        "extensions.worktreeconfig" | "extensions.objectformat" | "extensions.refstorage"
+    )
+}
+
+fn boolean_literal(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "true" | "false" | "yes" | "no" | "on" | "off" | "1" | "0"
+    )
 }
 
 /// An absolute path or `~/...` under the session home; anything else is doubt.
@@ -216,16 +265,94 @@ mod tests {
 
     #[test]
     fn bundled_scope_keeps_execution_settings_reviewed() {
-        for key in [
-            "core.fsmonitor",
-            "core.pager",
-            "core.sshcommand",
-            "hook.post-checkout.command",
-            "pager.log",
-            "include.path",
+        for (key, value) in [
+            ("core.fsmonitor", "/opt/example/run"),
+            ("core.pager", "/opt/example/run"),
+            ("core.sshcommand", "/opt/example/run"),
+            ("hook.post-checkout.command", "/opt/example/run"),
+            ("pager.log", "/opt/example/run"),
+            ("pager.worktree", "/opt/example/run"),
+            ("include.path", "/opt/example/run"),
+            ("includeif.onbranch:main.path", "/opt/example/run"),
+            ("extensions.partialclone", "origin"),
         ] {
-            let facts = judged(&[("unknown", key, "/opt/example/run")]);
+            let facts = judged(&[("unknown", key, value)]);
             assert!(matches!(facts, Some(None)), "{key}");
+        }
+    }
+
+    #[test]
+    fn global_display_and_transport_settings_are_ordinary_developer_config() {
+        for (key, value) in [
+            ("core.pager", "delta"),
+            ("pager.log", "less -FRX"),
+            ("core.fsmonitor", "true"),
+            ("core.sshcommand", "ssh -i ~/.ssh/id_work"),
+            ("include.path", "~/.gitconfig.d/work"),
+            ("includeif.gitdir:~/work/.path", "~/.gitconfig.d/work"),
+            ("submodule.recurse", "true"),
+            ("extensions.worktreeconfig", "true"),
+        ] {
+            assert!(
+                matches!(judged(&[("global", key, value)]), Some(Some(_))),
+                "{key}"
+            );
+        }
+        assert!(matches!(
+            judged(&[("local", "extensions.objectformat", "sha256")]),
+            Some(Some(_))
+        ));
+    }
+
+    #[test]
+    fn repository_scoped_execution_settings_stay_reviewed() {
+        for (key, value) in [
+            ("core.pager", "/tmp/run"),
+            ("pager.log", "/tmp/run"),
+            ("core.fsmonitor", "/tmp/run"),
+            ("core.sshcommand", "/tmp/run"),
+            ("include.path", "../.gitconfig"),
+            ("includeif.gitdir:/.path", "../.gitconfig"),
+        ] {
+            assert!(
+                matches!(judged(&[("local", key, value)]), Some(None)),
+                "{key}"
+            );
+        }
+        for key in [
+            "includeif.onbranch:main.path",
+            "pager.worktree",
+            "core.fsmonitor",
+        ] {
+            let value = if key == "core.fsmonitor" {
+                "/tmp/run"
+            } else {
+                "/tmp/x"
+            };
+            assert!(
+                matches!(judged(&[("global", key, value)]), Some(None)),
+                "{key}"
+            );
+        }
+    }
+
+    #[test]
+    fn repository_hooks_path_is_recorded_only_when_relative_and_local() {
+        let Some(Some(facts)) = judged(&[("local", "core.hookspath", ".husky/_")]) else {
+            panic!("relative repository hooks path rejected");
+        };
+        assert_eq!(facts.repository_hooks_path.as_deref(), Some(".husky/_"));
+        for (scope, value) in [
+            ("local", "../hooks"),
+            ("local", "/opt/hooks"),
+            ("local", "~/hooks"),
+            ("worktree", ".husky/_"),
+            ("command", ".husky/_"),
+        ] {
+            assert!(
+                matches!(judged(&[(scope, "core.hookspath", value)]), Some(None)),
+                "{scope} {value}"
+            );
         }
     }
 

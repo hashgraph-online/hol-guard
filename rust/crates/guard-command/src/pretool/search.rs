@@ -26,6 +26,31 @@ pub(super) use tree::{
     SECRET_EXTENSIONS,
 };
 pub(super) use walk_memo::with_walk_memo;
+
+/// A names-only walk (`find`) rooted at a project-metadata directory such as
+/// `.github` inside a repository work tree, the session's own or a sibling
+/// checkout. The root must be one a hidden-directory listing may name, every
+/// hidden component of its canonical path a benign metadata name, and every
+/// descendant must clear the recursive-listing screen.
+pub(super) fn metadata_directory_walk(value: &str, context: ReadContext<'_>) -> bool {
+    if value.split(['/', '\\']).any(|part| part == "..")
+        || !super::read_paths::repository_hidden_directory(value, context.home_dir, context.cwd)
+    {
+        return false;
+    }
+    let Some(root) = tree::expanded_operand(value, context)
+        .and_then(|root| std::fs::canonicalize(root).ok())
+        .filter(|root| root.is_dir())
+    else {
+        return false;
+    };
+    root.components().all(|component| match component {
+        std::path::Component::Normal(name) => name
+            .to_str()
+            .is_some_and(|name| !name.starts_with('.') || tree::hidden_allowed(name)),
+        _ => true,
+    }) && tree::walk(root, &[], &[], false, false)
+}
 fn glob_matches(pattern: &[u8], value: &[u8]) -> bool {
     let mut previous = vec![false; value.len() + 1];
     previous[0] = true;

@@ -15,11 +15,37 @@ from codex_plugin_scanner.guard.catalog_delivery.located_store import LocatedSto
 from codex_plugin_scanner.guard.catalog_delivery.metadata_objects import ObjectStore, encoded, entries
 from codex_plugin_scanner.guard.catalog_delivery.pack_archives import pack_objects, parts
 from codex_plugin_scanner.guard.catalog_delivery.pack_store import PackReader
+from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
+from tests.native_activation_support import compiled_lifecycle as compiled_lifecycle
 from tests.test_extension_delivery_authority import SOURCE, root_value
 
 
 @pytest.fixture
 def delivery(tmp_path, monkeypatch):
+    # Existing activation/security adapter tests need deliberately synthetic IR
+    # and historical snapshots. Freeze that constructor here, never in runtime.
+    # Candidate preparation is qualified with real IR and the verified native
+    # bridge in test_native_pack_preparation.py, without this fixture.
+    namespace = {"__package__": preparation.__package__}
+    fixture = Path(__file__).parent / "fixtures/extension-preparation-legacy.py.txt"
+    exec(compile(fixture.read_text(), str(fixture), "exec"), namespace)
+    namespace["PreparedCommandPacks"] = preparation.PreparedCommandPacks
+    namespace["UnavailablePackError"] = preparation.UnavailablePackError
+    namespace["cached_fetcher"] = lambda directory: preparation.cached_fetcher(directory)
+    from codex_plugin_scanner.guard.catalog_delivery.cache_io import stage_archive
+    from tests.native_activation_support import native
+
+    namespace["stage_archive"] = lambda directory, reference, fetch: stage_archive(
+        directory, reference, fetch, invoke=native
+    )
+
+    def legacy_snapshot(*args, **kwargs):
+        result = namespace["_prepare"](*args, **kwargs)
+        object.__setattr__(result, "_cache_lease", namespace["Lease"](args[2]))
+        return result
+
+    monkeypatch.setattr(preparation, "prepare", legacy_snapshot)
+    monkeypatch.setattr(preparation, "lookup", namespace["lookup"], raising=False)
     monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "scripts"))
     from extension_delivery_assets import AssetPlan
 
@@ -30,15 +56,27 @@ def delivery(tmp_path, monkeypatch):
     for suffix in ["core", "external", "dependency", "unused"]:
         identity = "command." + suffix
         permission = identity + ".permission.read"
+        permission_template = BUILT_IN_COMMAND_EXTENSION_REGISTRY.permissions[0].to_dict()
         catalog = {
+            **BUILT_IN_COMMAND_EXTENSION_REGISTRY.extensions[0].to_dict(),
             "extension_id": identity,
+            "action_classes": [],
+            "aliases": [],
+            "rules": [],
+            "rule_count": 0,
+            "permission_count": 1,
             "dependencies": [],
             "required": suffix == "core",
             "activation": "default-on" if suffix == "core" else "opt-in",
             "trust_class": "first-party" if suffix == "core" else "external",
             "permissions": [
                 {
+                    **permission_template,
                     "permission_id": permission,
+                    "extension_id": identity,
+                    "rule_ids": [],
+                    "configurable": True,
+                    "fixed_reason": None,
                     "dependencies": ["command.dependency.permission.read"] if suffix == "external" else [],
                     "implied_permissions": [],
                 }
@@ -128,7 +166,7 @@ def delivery(tmp_path, monkeypatch):
                     "trust": manifest["trust_digest"],
                 }
             )
-        identities = preparation._identity("1" * 64, identities)
+        identities = namespace["_identity"]("1" * 64, identities)
         assert identities.program_digest == expected
         return {
             "engine": "1" * 64,
@@ -138,7 +176,8 @@ def delivery(tmp_path, monkeypatch):
             "trust_digest": identities.trust_digest,
         }
 
-    monkeypatch.setattr(preparation, "check_pack_cache", check)
+    monkeypatch.setattr(preparation, "check_pack_cache", check, raising=False)
+    namespace["check_pack_cache"] = lambda directory, expected: preparation.check_pack_cache(directory, expected)
     monkeypatch.setattr(authority, "_verify_attested_artifact", lambda *args, **kwargs: None)
 
     def verified(root=value):

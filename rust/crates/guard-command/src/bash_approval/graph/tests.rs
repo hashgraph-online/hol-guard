@@ -48,14 +48,112 @@ impl Resolver for FixtureResolver {
             "sort" | "head" => Ok(Executable::Native {
                 resolved_path: format!("/usr/bin/{command}"),
                 content_sha256: "1".repeat(64),
+                openssl_config: None,
+                delivery: NativeDelivery::ReadonlySystem,
+            }),
+            "/usr/bin/base64" => Ok(Executable::Native {
+                resolved_path: "/usr/bin/base64".into(),
+                content_sha256: "4".repeat(64),
+                openssl_config: None,
+                delivery: NativeDelivery::ReadonlySystem,
             }),
             "rm" => Ok(Executable::Native {
                 resolved_path: "/bin/rm".into(),
                 content_sha256: "2".repeat(64),
+                openssl_config: None,
+                delivery: NativeDelivery::ReadonlySystem,
+            }),
+            "compiled" => Ok(Executable::Native {
+                resolved_path: "/fixtures/compiled".into(),
+                content_sha256: "3".repeat(64),
+                openssl_config: None,
+                delivery: NativeDelivery::HardenedBroker,
             }),
             _ => Err("bash_helper_unresolved"),
         }
     }
+}
+
+#[test]
+fn brokered_native_call_reserves_fd7_and_keeps_outputs_contiguous_from_fd8() {
+    let graph = build_with_acknowledged_broker_outputs(
+        Code {
+            original_path: "/script.sh".into(),
+            resolved_path: "/script.sh".into(),
+            source: ": > /report\ncompiled value".into(),
+        },
+        &["/script.sh".into()],
+        &BTreeMap::new(),
+        &FixtureResolver,
+        Instant::now() + Duration::from_secs(1),
+        &BTreeMap::from([("/report".into(), 8)]),
+    )
+    .unwrap();
+    assert_eq!(
+        graph.brokered_images.get("/fixtures/compiled"),
+        Some(&"3".repeat(64))
+    );
+    assert_eq!(graph.invocations.last().unwrap().broker_id, Some(0));
+    let source = graph.source_for_launch().unwrap();
+    assert!(source.contains("builtin printf '%s\\n' \"$__guard_id\" >&7"));
+    assert!(source.contains(": >&8"));
+    assert!(source.contains("__guard_broker_call 0 0 value"));
+}
+
+#[test]
+fn brokered_native_call_binds_the_system_stdin_encoder() {
+    let graph = build(
+        Code {
+            original_path: "/script.sh".into(),
+            resolved_path: "/script.sh".into(),
+            source: "printf x | compiled value".into(),
+        },
+        &["/script.sh".into()],
+        &BTreeMap::new(),
+        &FixtureResolver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(
+        graph.native_images.get("/usr/bin/base64"),
+        Some(&"4".repeat(64))
+    );
+    assert!(graph
+        .source_for_launch()
+        .unwrap()
+        .contains("__guard_broker_call 0 1 value"));
+}
+
+#[test]
+fn brokered_native_literal_loop_reuses_one_frozen_call_site() {
+    let graph = build(
+        Code {
+            original_path: "/script.sh".into(),
+            resolved_path: "/script.sh".into(),
+            source: "for item in alpha beta; do compiled list \"$item\"; done".into(),
+        },
+        &["/script.sh".into()],
+        &BTreeMap::new(),
+        &FixtureResolver,
+        Instant::now() + Duration::from_secs(1),
+    )
+    .unwrap();
+    assert_eq!(
+        graph
+            .invocations
+            .iter()
+            .filter_map(|invocation| invocation.broker_id)
+            .collect::<Vec<_>>(),
+        [0, 0]
+    );
+    assert_eq!(
+        graph
+            .source_for_launch()
+            .unwrap()
+            .matches("__guard_broker_call 0 0")
+            .count(),
+        1
+    );
 }
 
 fn graph(mode: &str) -> Graph {
@@ -254,6 +352,8 @@ fn frozen_native_call_preserves_original_argv_zero() {
             Ok(Executable::Native {
                 resolved_path: "/bin/bash".into(),
                 content_sha256: "a".repeat(64),
+                openssl_config: None,
+                delivery: NativeDelivery::ReadonlySystem,
             })
         }
     }

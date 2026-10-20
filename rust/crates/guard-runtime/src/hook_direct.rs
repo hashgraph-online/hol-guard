@@ -46,8 +46,8 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 #[cfg(all(test, unix))]
-use workspace::{expanduser, normalized_workspace, normpath};
-use workspace::{settled_directory, workspace_candidate};
+use workspace::normalized_workspace;
+use workspace::{expanduser, normpath, settled_directory, workspace_candidate};
 
 pub(crate) const HOOK_DIRECT_FEATURE: &str = "hook-direct-v1";
 /// The resident accepts the sink command that routes a sandbox requirement.
@@ -297,7 +297,20 @@ fn answer(
     };
 
     let request_home = match request.home_dir {
-        Some(home_dir) => home_dir,
+        // The daemon sends the `home` query as the caller spelled it. The
+        // lane normalizes that spelling here so the binding's own home below
+        // decides whether this is the home the lane was published for. It is
+        // settled lexically, the way the daemon settles a home: asking the
+        // filesystem to canonicalize it would refuse a home that simply is
+        // not mounted on this host, which is a verdict the daemon never
+        // reaches. A spelling that cannot be normalized defers, and the
+        // daemon path refuses and audits it there.
+        Some(home_dir) => {
+            let bound = policy_store
+                .direct_lane_home_dir()
+                .ok_or(HookDirectDefer::BindingIncomplete)?;
+            normpath(&expanduser(&home_dir, &bound)?)?
+        }
         None => policy_store
             .direct_lane_home_dir()
             .ok_or(HookDirectDefer::BindingIncomplete)?,

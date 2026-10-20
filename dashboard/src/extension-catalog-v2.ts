@@ -36,6 +36,10 @@ const MAX_CACHE_ENTRIES = 256;
 // answers 404, a newer one without native support answers 501.
 const UNSUPPORTED = new Set(["404:", "404:not_found", "501:catalog_read_model_unavailable"]);
 export const CATALOG_SNAPSHOT_EXPIRED = "catalog_snapshot_expired";
+// A daemon answers 503 while it prepares its read model (the first read after
+// it starts) or while the resident is busy. Both pass in seconds, so a 503 is
+// retried on this schedule before the page reports the catalog unavailable.
+const UNAVAILABLE_RETRY_DELAYS_MS = [250, 500, 1_000, 2_000, 4_000, 4_000];
 
 export class CatalogV2UnsupportedError extends ExtensionControlApiError {}
 
@@ -102,11 +106,38 @@ async function readOnce(path: string, ifNoneMatch: string | null, signal?: Abort
   return { status: 200, etag, payload, size };
 }
 
+function waitBeforeRetry(delayMs: number, signal?: AbortSignal): Promise<void> {
+  signal?.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      clearTimeout(timer);
+      reject(signal?.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", abort);
+      resolve();
+    }, delayMs);
+    signal?.addEventListener("abort", abort, { once: true });
+  });
+}
+
+async function readAvailable(path: string, ifNoneMatch: string | null, signal?: AbortSignal): Promise<Read> {
+  for (const delayMs of UNAVAILABLE_RETRY_DELAYS_MS) {
+    try {
+      return await readOnce(path, ifNoneMatch, signal);
+    } catch (error) {
+      if (!(error instanceof ExtensionControlApiError) || error.status !== 503) throw error;
+    }
+    await waitBeforeRetry(delayMs, signal);
+  }
+  return readOnce(path, ifNoneMatch, signal);
+}
+
 async function readSized(route: string, query: string, signal?: AbortSignal): Promise<CachedRead> {
   const path = `${CATALOG_V2_PATH}${route}${query ? `?${query}` : ""}`;
   const key = `${guardApiCacheScope()}|${path}`;
   const cached = readCache.get(key);
-  let response = await readOnce(path, cached?.etag ?? null, signal);
+  let response = await readAvailable(path, cached?.etag ?? null, signal);
   if (response.status === 304) {
     if (cached && response.etag === cached.etag) {
       readCache.delete(key);
@@ -114,7 +145,7 @@ async function readSized(route: string, query: string, signal?: AbortSignal): Pr
       return cached;
     }
     // A 304 that cannot be satisfied locally gets exactly one unconditional retry.
-    response = await readOnce(path, null, signal);
+    response = await readAvailable(path, null, signal);
     if (response.status !== 200) throw protocolError("Guard answered 304 to an unconditional catalog request");
   }
   if (!response.etag) throw protocolError("Guard catalog response is missing its validator");

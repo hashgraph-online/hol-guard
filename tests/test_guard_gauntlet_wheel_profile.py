@@ -69,6 +69,7 @@ def test_wheel_cache_requires_a_matching_digest(tmp_path: Path, monkeypatch: pyt
         "sha256": digest,
         "cached": False,
         "profile": "release",
+        "release_assets": None,
     }
     assert any(argv[:3] == ["nice", "-n", "10"] and argv[-1].endswith("build-native-wheel-macos.sh") for argv in calls)
     assert (store / "wheel.sha256").read_text().strip() == digest
@@ -160,7 +161,6 @@ def test_dev_wheel_cache_hit_skips_the_build(tmp_path: Path, monkeypatch: pytest
     assert not calls
 
 
-def test_wheel_script_applies_size_budgets_only_without_the_dev_marker() -> None:
+def test_wheel_script_keeps_the_dev_marker() -> None:
     commands = (qualify.REPO / qualify_setup.WHEEL_BUILD_SCRIPT).read_text(encoding="utf-8")
     assert 'if [[ "${HOL_GUARD_DEV_WHEEL:-}" == "1" ]]; then' in commands
-    assert "python scripts/ci/check_wheel_size.py --dist-dir native-dist" in commands

@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from .input_evidence import redact_value
+from .input_evidence import Redaction, redact_value
 
 RESUMED = {"agent_start", "turn_start", "message_start", "tool_execution_start"}
 
@@ -27,7 +27,7 @@ def _terminal(event: dict[str, Any], later: list[dict[str, Any]], completed: boo
 
 
 def public_events(
-    events: list[dict[str, Any]], replacements: dict[str, str], completed: bool = False
+    events: list[dict[str, Any]], replacements: dict[Redaction, str], completed: bool = False
 ) -> list[dict[str, Any]]:
     """Public events of one print process; `completed` when it exited cleanly within its deadline."""
     selected = []

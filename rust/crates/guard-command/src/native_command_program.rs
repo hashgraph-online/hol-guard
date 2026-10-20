@@ -13,6 +13,10 @@ use guard_contracts::{
 use serde::Deserialize;
 use serde_json::Value;
 
+#[cfg(test)]
+#[path = "authored_test_support.rs"]
+pub(crate) mod authored_test_support;
+
 use crate::command_ascii_comparison::lowercase_for_ascii_comparison;
 use crate::command_common_cli_matchers::CommonCliMatcher;
 use crate::command_database_matchers::DatabaseMatcher;
@@ -419,6 +423,32 @@ impl NativeCommandProgram {
             }
         }
         Some(names)
+    }
+
+    /// The names `extension_names` lists, leaving out rules that can match
+    /// without naming a known program instead of giving up on the set.
+    pub(crate) fn extension_known_names(
+        &self,
+        extension_index: usize,
+        compatibility: Option<&[&str]>,
+    ) -> BTreeSet<String> {
+        let mut names: BTreeSet<String> = self.extensions[extension_index]
+            .executables
+            .iter()
+            .map(|name| lowercase_for_ascii_comparison(basename(name)))
+            .collect();
+        for rule in self.extension_rules(extension_index) {
+            match rule.matcher {
+                Some(node) => names.extend(self.required_executables(node, 0).unwrap_or_default()),
+                None => names.extend(
+                    compatibility
+                        .unwrap_or_default()
+                        .iter()
+                        .map(|name| (*name).to_owned()),
+                ),
+            }
+        }
+        names
     }
 
     /// Executables one of which a match of `node` must run. Alternatives need

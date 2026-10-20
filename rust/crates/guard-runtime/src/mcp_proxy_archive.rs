@@ -3,8 +3,12 @@
 //! caller applies the returned edits, so key order and number formatting of the
 //! forwarded request stay exactly what the client sent.
 
-use guard_contracts::McpExternalArchiveBindQueryV1;
+use guard_contracts::{McpExternalArchiveBindQueryV1, McpExternalArchiveBindingRequiredQueryV1};
 use serde_json::{json, Value};
+
+use guard_command::local_supply_chain::{
+    package_evaluation_requires_external_archive_binding, PackageRequestEvaluation,
+};
 
 use crate::mcp_proxy_archive_verify::verified_replacements;
 use crate::mcp_proxy_shlex as shlex;
@@ -86,6 +90,21 @@ fn walk(
         _ => {}
     }
     Some(())
+}
+
+/// Whether this evaluation only permits a request bound to the external
+/// archives it verified.
+///
+/// The evaluator that produced the evaluation is the one authority on what its
+/// reasons mean, so the callers that have to decide whether to demand a
+/// binding — the hook's package leg, the proxy's forward leg and the launch
+/// binder — read the answer here instead of each reading the reasons again.
+pub(crate) fn binding_required(query: &McpExternalArchiveBindingRequiredQueryV1) -> Value {
+    json!({
+        "required": package_evaluation_requires_external_archive_binding(
+            &PackageRequestEvaluation::new(query.evaluation.clone()),
+        )
+    })
 }
 
 /// `unchanged`, `unbound` (fail closed) or `bound` with the edits to apply.

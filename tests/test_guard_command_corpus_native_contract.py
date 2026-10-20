@@ -39,16 +39,16 @@ def test_native_contract_keeps_complete_original_inputs_and_visible_stronger_dif
     metadata = contract.load_native_contract()
     assert len(groups) == 58
     assert sum(count for count, _ in groups.values()) == 51_000
-    assert sum(count for count, _ in original.values()) == 8_484
-    assert rejected["native_command_evaluation_failed"][0] == 25_002
+    assert sum(count for count, _ in original.values()) == 4_317
+    assert rejected["native_command_evaluation_failed"][0] == 20_835
     assert metadata["totals"] == {
         "cases": 51_000,
         "sources": 52,
         "groups": 58,
-        "equal_to_original_oracle": 42_516,
-        "stronger_than_original_oracle": 8_484,
+        "equal_to_original_oracle": 46_683,
+        "stronger_than_original_oracle": 4_317,
         "below_original_oracle": 0,
-        "native_evaluation_errors": 25_002,
+        "native_evaluation_errors": 20_835,
         "improved_upstream_benign_sources": 3,
         "improved_upstream_benign_cases": 75,
         "improved_bounded_git_sources": 2,
@@ -185,7 +185,7 @@ def test_native_contract_validates_every_authored_signature_without_rewriting_ev
 def test_native_contract_rejects_changed_failure_signatures_even_when_action_is_still_block(
     native_samples: dict[str, tuple[CommandCorpusCase, OracleRecord, NativeCommandEvaluation]], mutation: str
 ) -> None:
-    case, oracle, reviewed = native_samples["adversarial:substitutions|all"]
+    case, oracle, reviewed = native_samples["adversarial:heredocs|all"]
     payload = copy.deepcopy(reviewed.payload)
     if mutation == "model_uncertainty":
         cast(dict[str, object], payload["command_model"])["uncertainty_reason"] = "different-parser-failure"

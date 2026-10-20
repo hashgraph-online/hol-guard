@@ -9,7 +9,8 @@ const GIT_RULES: [&str; 3] = ["command.git.diff", "command.git.log", "command.gi
 /// Bun inline evaluation reports package protection because Bun is a package
 /// manager image; pretool admits that only for an exact, screened `bun -e/-p`
 /// argv, under its own reason. `node -e` never carries the permission.
-const PACKAGE_PERMISSION_CODES: [&str; 6] = [
+const PACKAGE_PERMISSION_CODES: [&str; 7] = [
+    guard_contracts::NATIVE_BASH_DELIVERY_REASON,
     "native_workspace_containment_required",
     "native_bun_eval_readonly_containment_required",
     "native_vitest_readonly_containment_required",
@@ -20,6 +21,9 @@ const PACKAGE_PERMISSION_CODES: [&str; 6] = [
 
 pub(super) fn required_profile(reason_code: &str) -> Option<&'static str> {
     Some(match reason_code {
+        guard_contracts::NATIVE_BASH_DELIVERY_REASON => {
+            guard_contracts::NATIVE_BASH_DELIVERY_PROFILE
+        }
         "native_python_eval_readonly_containment_required" => "python-eval-readonly-v1",
         "native_node_eval_readonly_containment_required"
         | "native_bun_eval_readonly_containment_required" => "node-eval-readonly-v1",
@@ -110,7 +114,10 @@ fn observations_ok(reason_code: &str, observations: Option<&Value>) -> bool {
     if is_empty_list(observations) {
         return true;
     }
-    if reason_code == "native_workspace_containment_required" {
+    if matches!(
+        reason_code,
+        "native_workspace_containment_required" | guard_contracts::NATIVE_BASH_DELIVERY_REASON
+    ) {
         return matches!(observations, Some(Value::Array(items)) if items.iter().all(certain_observation));
     }
     reason_code == "native_git_readonly_containment_required"
@@ -144,6 +151,11 @@ pub(super) fn receipt(
         return None;
     }
     let profile = required_profile(reason_code)?;
+    if reason_code == guard_contracts::NATIVE_BASH_DELIVERY_REASON
+        && (!cfg!(target_os = "macos") || !matches!(canonical, "omp" | "pi"))
+    {
+        return None;
+    }
     let Some(Value::Object(extensions)) = response.get("command_extensions") else {
         return None;
     };

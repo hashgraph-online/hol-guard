@@ -76,7 +76,7 @@ def _persist_claude_guard_question_decision(
         pending_pair = _load_single_claude_pending_permission(store, payload)
     if pending_pair is None:
         return False
-    pending_key, pending = pending_pair
+    pending = pending_pair[1]
     if pending.get("permission_prompt_seen") is not True:
         with suppress(OSError, sqlite3.Error):
             store.add_event(
@@ -128,7 +128,7 @@ def _persist_claude_guard_question_decision(
         return False
     session_id = _optional_string(payload.get("session_id"))
     if session_id is not None:
-        _remove_claude_pending_permission(store, session_id=session_id, pending_key=pending_key)
+        _remove_claude_pending_permission(store, session_id=session_id, artifact_id=artifact_id)
     return True
 
 

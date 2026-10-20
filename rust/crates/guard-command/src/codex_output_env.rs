@@ -165,6 +165,45 @@ pub trait InspectionHost {
     fn real_path(&self, _path: &str) -> Option<String> {
         None
     }
+    /// `Path(path).is_dir()` on the caller's filesystem. A host that cannot
+    /// answer reports the directory as present, so a scan that depends on one
+    /// is attempted rather than silently skipped.
+    fn is_directory(&self, _path: &str) -> bool {
+        true
+    }
+    /// `Path(path).is_file()` on the caller's filesystem, with the `OSError`
+    /// Python suppresses reported as "not a file". Hosts without a filesystem
+    /// service answer `false`, so nothing is scanned that cannot be opened.
+    fn is_regular_file(&self, _path: &str) -> bool {
+        false
+    }
+    /// The first `max_bytes` of a regular file decoded as
+    /// `handle.read(max_bytes).decode("utf-8", errors="ignore")`. `None` is
+    /// the `OSError` Python suppresses, a path that is not a regular file, or
+    /// a host without a read service.
+    fn file_text_prefix(&self, _path: &str, _max_bytes: usize) -> Option<String> {
+        None
+    }
+    /// Whether any component of `path` below `base_dir` is a symbolic link
+    /// (`_path_contains_symlink`). A host that cannot answer reports `true`,
+    /// so an unverifiable attachment path is held rather than opened.
+    fn path_contains_symlink(&self, _path: &str, _base_dir: &str) -> bool {
+        true
+    }
+    /// A reader over the managed attachment named by `relative` under
+    /// `attachment_root`, opened without following links at any component,
+    /// verified to be a regular file and no larger than `max_bytes`. `None` is
+    /// every `OSError` the Python scan turns into an unscanned-attachment
+    /// artifact, the oversized file Python refused from its `fstat`, and a
+    /// host without a filesystem service.
+    fn attachment_reader(
+        &self,
+        _attachment_root: &str,
+        _relative: &[String],
+        _max_bytes: u64,
+    ) -> Option<Box<dyn std::io::Read + '_>> {
+        None
+    }
 }
 
 /// Per-request context.

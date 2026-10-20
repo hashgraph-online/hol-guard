@@ -129,7 +129,7 @@ def root_assets(source, publication):
     return download(base + ROOT_ASSET, 65536), download(base + PROVENANCE_ASSET, MAX_PROVENANCE_BYTES)
 
 
-def fetch_root(*, now, selection=None, offline=False):
+def fetch_root(*, now, selection=None, offline=False, verified_io=None):
     selection = selected() if selection is None else validate(selection)
     data, provenance = root_assets(selection["source_sha"], selection["publication_id"])
     if hashlib.sha256(data).hexdigest() != selection["root_sha256"]:
@@ -139,6 +139,8 @@ def fetch_root(*, now, selection=None, offline=False):
     )
     if result.manifest()["publication_id"] != selection["publication_id"]:
         raise ValueError("release root publication identity differs from selector")
+    if verified_io is not None:
+        verified_io(result, provenance)
     return result
 
 
@@ -147,9 +149,16 @@ def fetch_object(target, maximum):
 
 
 def cached_fetcher(directory):
+    from .cache_io import Lease
+
     directory = checked_path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    return lambda target, maximum: _fetch(target, maximum, directory)
+
+    def fetch(target, maximum):
+        with Lease(directory.parent):
+            return _fetch(target, maximum, directory)
+
+    return fetch
 
 
 def _fetch(target, maximum, cache=None):

@@ -98,7 +98,6 @@ def _load_hook_payload(
     return payload
 
 _BLOCKING_ACTIONS = frozenset({"review", "require-reapproval", "sandbox-required", "block"})
-_NON_VERDICT_EVENTS = frozenset({"UserPromptSubmit", "Notification", "PermissionRequest", "PostToolUse"})
 
 
 def _render_cli(kind: str, harness: str, params: dict[str, object]) -> tuple[str, dict[str, object] | None] | None:
@@ -157,12 +156,6 @@ def _emit_native_hook_response(
     output_stream: TextIO | None = None,
 ) -> None:
     canonical = _canonical_harness_name(harness)
-    if canonical == "hermes" and event_name not in _NON_VERDICT_EVENTS:
-        from ..adapters.hermes_runtime_hooks import hermes_native_decision
-
-        decision = hermes_native_decision(policy_action=policy_action, reason=reason)
-        _write_json_line(decision, output_stream=output_stream)
-        return
     params: dict[str, object] = {
         "canonical_harness": canonical,
         "event_name": event_name,
@@ -188,6 +181,16 @@ def _emit_native_hook_response(
         _write_json_line(document, output_stream=output_stream)
 
 
+def _native_edge_output_masked(native_edge_result: Mapping[str, object]) -> bool:
+    """Whether the edge withheld this output from the model.
+
+    The edge answers this itself. A reply that carries no answer is a shape
+    this build cannot read, so the output stays withheld.
+    """
+    masked = native_edge_result.get("output_masked")
+    return masked if isinstance(masked, bool) else True
+
+
 def _apply_native_edge_envelope_fields(
     response_payload: dict[str, object],
     native_edge_result: Mapping[str, object] | None,
@@ -205,8 +208,12 @@ def _apply_native_edge_envelope_fields(
     edge_decision = native_edge_result.get("decision")
     if isinstance(edge_decision, str) and edge_decision.strip():
         response_payload["native_edge_decision"] = edge_decision
-        if project_decision:
-            response_payload["decision"] = "block" if edge_decision == "deny" else "allow"
+    if project_decision:
+        # Only an output review answers whether the model may read the output,
+        # and only its callers project a harness verdict from the edge.
+        masked = _native_edge_output_masked(native_edge_result)
+        response_payload["native_edge_output_masked"] = masked
+        response_payload["decision"] = "block" if masked else "allow"
     structured_content_mediation = native_edge_result.get("structured_content_mediation")
     if isinstance(structured_content_mediation, Mapping):
         # The worker already produced the validated mediation contract. Keep
@@ -275,10 +282,10 @@ def _emit_native_post_tool_envelope(
 ) -> None:
     """Emit a PostToolUse outcome; the action already ran so it never pauses."""
     blocking = policy_action in {"review", "require-reapproval", "sandbox-required", "block"}
-    edge_masked = (
-        response_payload.get("native_edge_decision") == "deny"
-        or response_payload.get("model_output_action") == "block"
-    )
+    # The edge decided whether this output is withheld; nothing here re-reads
+    # its verdict or its output action to decide that again. An event with no
+    # edge review carries no mask.
+    edge_masked = response_payload.get("native_edge_output_masked") is True
     response_payload["continue"] = True
     # ``decision`` mirrors the composed policy outcome for the bridge surface;
     # ``native_edge_decision`` keeps the raw edge mask verdict as provenance.

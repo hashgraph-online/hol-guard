@@ -65,6 +65,8 @@ from ..policy_bundle_delivery import (
     effective_policy_bundle_acknowledgement,
 )
 from ..policy_bundle_parser import (
+    CANONICAL_COMPILE_DOCUMENT_CODES,
+    CANONICAL_COMPILE_REJECTION_PREFIX,
     non_empty_string,
     policy_bundle_acceptance_checkpoint,
     policy_bundle_is_enforceable,
@@ -306,12 +308,17 @@ def _validate_cached_policy_bundle(
     return cached_policy_bundle_validation(store, policy_bundle)
 
 
-def _policy_bundle_rejection_payload(reason: str | None) -> dict[str, object]:
+def _policy_bundle_rejection_payload(reason: str | None, rule_id: str | None = None) -> dict[str, object]:
     resolved_reason = reason or "invalid_policy_bundle"
     payload: dict[str, object] = {"reason": resolved_reason}
     remediation = policy_bundle_rejection_message(resolved_reason)
     if remediation is not None:
         payload["message"] = remediation
+    # One rule refuses to compile and the whole bundle stays unapplied, so the
+    # rejection names that rule: without it an administrator sees only that a
+    # published policy never arrived.
+    if rule_id:
+        payload["ruleId"] = rule_id[:128]
     return payload
 
 
@@ -649,6 +656,7 @@ def sync_receipts(
     delivery_device_id = runtime_summary_device_id(runtime_session_summary, device_id)
     if policy_bundle_field_provided:
         policy_bundle_rejection_reason: str | None
+        policy_bundle_rejection_rule_id: str | None = None
         if policy_bundle_field_malformed or policy_bundle_payload is None:
             policy_bundle_rejection_reason = "invalid_policy_bundle"
         else:
@@ -700,6 +708,7 @@ def sync_receipts(
             workspace_id=cloud_workspace_id,
             device_id=delivery_device_id,
             runtime_summary=runtime_session_summary,
+            guard_home=store.guard_home,
         )
         if managed_controls_error is not None:
             policy_bundle_rejection_reason = managed_controls_error
@@ -774,7 +783,9 @@ def sync_receipts(
                     )
             except PolicyCompilationError as error:
                 validated_policy_bundle = None
-                policy_bundle_rejection_reason = f"canonical_compile_{error.code}"
+                policy_bundle_rejection_reason = f"{CANONICAL_COMPILE_REJECTION_PREFIX}{error.code}"
+                if error.code not in CANONICAL_COMPILE_DOCUMENT_CODES:
+                    policy_bundle_rejection_rule_id = error.rule_id
             except PolicyBundleNativeError as error:
                 candidate_policy_decisions = []
                 validated_policy_bundle = None
@@ -797,7 +808,10 @@ def sync_receipts(
             # checkpoint. Prefer current so a rejected refresh cannot roll
             # policy authority back to an older signed bundle.
             effective_policy_bundle = existing_policy_bundle or last_good_bundle
-            activation_last_error = _policy_bundle_rejection_payload(policy_bundle_rejection_reason)
+            activation_last_error = _policy_bundle_rejection_payload(
+                policy_bundle_rejection_reason,
+                policy_bundle_rejection_rule_id,
+            )
             store.add_event(
                 "policy_bundle/rejected",
                 activation_last_error,
@@ -1671,6 +1685,8 @@ def sync_runtime_session(
     if not isinstance(payload, dict):
         raise RuntimeError("Invalid sync response")
     catalog_sync = _sync_extension_catalog_from_runtime_handshake(
+        store=store,
+        guard_home=store.guard_home,
         auth_context=resolved_auth_context,
         runtime_sync_url=sync_url,
         runtime_response=payload,
@@ -3280,6 +3296,7 @@ def _urlopen_with_sync_retries(
     retry_timeout_seconds: int,
     parse_json_response: bool,
     nonce_fast_path: bool,
+    max_response_bytes: int | None = None,
 ) -> object:
     """Drive one Guard Cloud request through the shared sync retry policies.
 
@@ -3299,7 +3316,10 @@ def _urlopen_with_sync_retries(
         try:
             with managed_urlopen(current_request, timeout=current_timeout_seconds) as response:
                 if parse_json_response:
-                    return json.loads(response.read().decode("utf-8"))
+                    raw = response.read() if max_response_bytes is None else response.read(max_response_bytes + 1)
+                    if max_response_bytes is not None and len(raw) > max_response_bytes:
+                        raise RuntimeError("Guard Cloud sync response exceeds its byte budget.")
+                    return json.loads(raw.decode("utf-8"))
                 return None
         except urllib.error.HTTPError as error:
             if nonce_fast_path and error.code == 401:
@@ -3363,6 +3383,7 @@ def _urlopen_json_with_timeout_retry(
     request: urllib.request.Request,
     timeout_seconds: int,
     retry_timeout_seconds: int,
+    max_response_bytes: int | None = None,
 ) -> dict[str, object]:
     payload = _urlopen_with_sync_retries(
         request=request,
@@ -3370,6 +3391,7 @@ def _urlopen_json_with_timeout_retry(
         retry_timeout_seconds=retry_timeout_seconds,
         parse_json_response=True,
         nonce_fast_path=False,
+        max_response_bytes=max_response_bytes,
     )
     if not isinstance(payload, dict):
         raise RuntimeError("Guard Cloud sync returned an invalid response payload.")
@@ -4047,6 +4069,8 @@ def _cloud_runtime_session_payload(store: GuardStore, session: dict[str, object]
 
 def _sync_extension_catalog_from_runtime_handshake(
     *,
+    store: GuardStore | None = None,
+    guard_home: Path | None = None,
     auth_context: dict[str, object],
     runtime_sync_url: str,
     runtime_response: dict[str, object],
@@ -4054,12 +4078,69 @@ def _sync_extension_catalog_from_runtime_handshake(
 ) -> dict[str, object]:
     """Upload the canonical catalog only after a digest-bound Cloud request."""
 
+    from .extension_catalog_pages import observed_view
+    from .extension_catalog_sync import build_v1_catalog_from_view
+    from .extension_catalog_transfer import catalog_sync_plan, sync_catalog_view
+
+    signal = runtime_response.get("extensionCatalogSync")
+    if isinstance(signal, dict) and "protocolVersion" in signal:
+
+        def send_page(url: str, body: bytes) -> object:
+            request = _guard_sync_request(
+                auth_context,
+                request_url=url,
+                method="POST",
+                data=body,
+                extra_headers=None,
+            )
+            try:
+                return _urlopen_json_with_timeout_retry(
+                    request=request,
+                    timeout_seconds=_RUNTIME_SYNC_TIMEOUT_SECONDS,
+                    retry_timeout_seconds=_RUNTIME_SYNC_RETRY_TIMEOUT_SECONDS,
+                    max_response_bytes=4096,
+                )
+            except urllib.error.HTTPError as error:
+                raise RuntimeError(_sync_http_error_message(error)) from error
+            except OSError as error:
+                raise RuntimeError(_sync_url_error_message(error)) from error
+
+        view = observed_view(session_payload, guard_home)
+        result = sync_catalog_view(
+            runtime_sync_url=runtime_sync_url,
+            runtime_response=runtime_response,
+            session_payload=session_payload,
+            view=view,
+            send=send_page,
+        )
+        if store is None:
+            raise RuntimeError("Authenticated catalog completion requires the current store")
+        from .extension_catalog_completion import complete_authenticated_view
+
+        result.update(
+            complete_authenticated_view(
+                store=store,
+                view=view,
+                auth_context=auth_context,
+                url=catalog_sync_plan(
+                    view=view,
+                    runtime_sync_url=runtime_sync_url,
+                    runtime_response=runtime_response,
+                    session_payload=session_payload,
+                )["upload_url"],
+                send=send_page,
+            )
+        )
+        return result
+
     summary, upload = prepare_extension_catalog_handshake(
         runtime_sync_url=runtime_sync_url,
         runtime_response=runtime_response,
         session_payload=session_payload,
-        catalog_factory=lambda generated_at: build_builtin_extension_catalog_wire(
-            guard_version=__version__, generated_at=generated_at
+        catalog_factory=lambda generated_at: (
+            build_v1_catalog_from_view(observed_view(session_payload, guard_home))
+            if "extensionCatalogViewDigest" in session_payload
+            else build_builtin_extension_catalog_wire(guard_version=__version__, generated_at=generated_at)
         ),
         fallback_generated_at=_now(),
     )

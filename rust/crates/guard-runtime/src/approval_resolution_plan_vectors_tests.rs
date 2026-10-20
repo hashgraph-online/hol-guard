@@ -115,3 +115,58 @@ fn malformed_tokens_are_not_context_tokens() {
     assert!(!valid("guard-approval-context:v1:A"));
     assert!(!valid("not-a-token"));
 }
+
+#[test]
+fn native_bash_legacy_descriptors_cannot_save_consent_but_can_record_refusal() {
+    use guard_contracts::ContextDigestComponentsV1;
+    use serde_json::json;
+    let token = crate::context_digest::build_context_token(&ContextDigestComponentsV1 {
+        identity: json!({}),
+        content: json!({}),
+        capabilities: json!({}),
+        policy: json!({}),
+        sandbox: json!({}),
+        extension_control_digest: "a".repeat(64),
+    })
+    .unwrap();
+    let vectors = gunzip_json(VECTORS);
+    let mut wire = vectors["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case["expected"]["status"] != "error")
+        .unwrap()["wire"]
+        .clone();
+    wire["schema"] = json!(APPROVAL_RESOLUTION_PLAN_REQUEST_SCHEMA);
+    let mut request: ApprovalResolutionPlanRequestV1 = serde_json::from_value(wire).unwrap();
+    request.scope = "artifact".into();
+    request.approval.harness = Some("omp".into());
+    request.approval.artifact_type = Some("tool_call".into());
+    request.approval.artifact_id = Some(guard_contracts::NATIVE_BASH_ARTIFACT_ID.into());
+    request.approval.artifact_hash = Some(token.clone());
+    request.native_exact_token = Some(token);
+    request.action = "allow".into();
+    for persist in [None, Some(false), Some(true)] {
+        request.persist_policy = persist;
+        assert_eq!(
+            evaluate(&request),
+            Err("execution_binding_unavailable".into())
+        );
+    }
+    request.action = "block".into();
+    for persist in [None, Some(false)] {
+        request.persist_policy = persist;
+        let plan = evaluate(&request).unwrap();
+        assert_eq!(plan["persistence"], "none");
+        assert!(
+            plan["matching"].is_null(),
+            "another user intent must remain pending"
+        );
+        assert!(plan["local_once"].is_null());
+    }
+    request.persist_policy = Some(true);
+    assert_eq!(
+        evaluate(&request),
+        Err("execution_binding_unavailable".into())
+    );
+}

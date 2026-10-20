@@ -32,6 +32,15 @@ REMOTE_MCP_HOST = "mcp.example.test"
 REMOTE_MCP_URL = f"https://{REMOTE_MCP_HOST}/mcp"
 REMOTE_STUB_PORT = 47812
 
+RUN_QUEUED = "run-queued"
+# A user-installed wrapper that runs whatever follows ``--``: the shape of the job-queue and
+# task-runner wrappers people keep in ~/.local/bin. The name is invented for the Gauntlet.
+RUN_QUEUED_SCRIPT = """#!/bin/sh
+# run-queued: synthetic job wrapper for Guard Gauntlet fixtures. Runs the command after --.
+[ "$1" = "--" ] && shift
+exec "$@"
+"""
+
 LANECTL_SCRIPT = '''#!/usr/bin/env python3
 """lanectl: synthetic loopback-only control CLI for Guard Gauntlet fixtures."""
 import json
@@ -211,6 +220,11 @@ def write_lanectl(home: Path, port: int = LANECTL_PORT) -> tuple[Path, Path]:
     return script, state
 
 
+def write_run_queued(home: Path) -> Path:
+    """Install the ``~/.local/bin/run-queued`` wrapper."""
+    return _write(home / ".local" / "bin" / RUN_QUEUED, RUN_QUEUED_SCRIPT, executable=True)
+
+
 def write_echo_mcp(home: Path) -> Path:
     """Install the stdio ``echo-mcp`` server under ``~/.local/lib/echo-mcp``."""
     return _write(home / ".local" / "lib" / ECHO_MCP / "server.js", ECHO_MCP_SERVER)
@@ -277,6 +291,7 @@ def write_mcp_configs(home: Path, harness: str, echo_server: Path) -> tuple[Path
 def stage_connector_fixture(root: Path, home: Path, harness: str) -> ConnectorFixture:
     """Build every synthetic connector piece for one case."""
     lanectl, state = write_lanectl(home)
+    write_run_queued(home)
     echo_server = write_echo_mcp(home)
     return ConnectorFixture(
         lanectl=lanectl,

@@ -13,6 +13,7 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon import service_lifecycle
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
@@ -343,7 +344,6 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     port = daemon.port
-    real_thread = threading.Thread
     begin_service = daemon._begin_service
     started_threads: list[threading.Thread] = []
 
@@ -351,9 +351,23 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
         def start(self) -> None:
             raise RuntimeError("injected serve thread exhaustion")
 
-    def failed_thread_factory(*, target: object, daemon: bool) -> FailedServeThread:
-        del target, daemon
-        return FailedServeThread()
+    class ServeThreadExhaustion:
+        """``threading`` for the lifecycle module, where a serve thread cannot start.
+
+        Only the module that starts the serve thread sees this. Replacing the
+        real ``threading.Thread`` would also break ``threading.Timer``, whose
+        ``__init__`` calls ``Thread.__init__``, and the resident client arms a
+        timer while the daemon is rolling back: containment would then fail for
+        a reason this test is not about and the daemon would keep its ownership.
+        """
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(threading, name)
+
+        @staticmethod
+        def Thread(*, target: object, daemon: bool) -> FailedServeThread:  # noqa: N802 - stands in for threading.Thread
+            del target, daemon
+            return FailedServeThread()
 
     def begin_then_fail_serve_thread() -> None:
         begin_service()
@@ -371,11 +385,7 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
             )
             if thread is not None
         )
-        monkeypatch.setattr(
-            threading,
-            "Thread",
-            failed_thread_factory,
-        )
+        monkeypatch.setattr(service_lifecycle, "threading", ServeThreadExhaustion())
 
     monkeypatch.setattr(daemon, "_begin_service", begin_then_fail_serve_thread)
     with pytest.raises(RuntimeError, match="injected serve thread exhaustion"):
@@ -393,7 +403,7 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     replacement = daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)
     daemon_manager.release_guard_daemon_owner_lock(replacement)
 
-    monkeypatch.setattr(threading, "Thread", real_thread)
+    monkeypatch.setattr(service_lifecycle, "threading", threading)
     monkeypatch.setattr(daemon, "_begin_service", begin_service)
     replacement = GuardDaemonServer(
         store,

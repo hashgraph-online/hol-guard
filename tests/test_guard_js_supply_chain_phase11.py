@@ -18,6 +18,7 @@ from codex_plugin_scanner.guard.runtime.package_intent_common import build_packa
 from codex_plugin_scanner.guard.runtime.package_intent_parser import parse_package_intent
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.native_workspace import bind_workspace
+from tests.package_review_settings import review_package_signals
 
 pytestmark = pytest.mark.usefixtures("package_intent_native")
 
@@ -236,6 +237,7 @@ def test_evaluate_package_request_artifact_applies_js_source_heuristics(
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command(command, workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)
@@ -269,6 +271,7 @@ def test_every_npm_git_source_form_requires_local_review_before_registry_or_clou
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     def fail_cloud_lookup() -> str:
         raise AssertionError("Git source must not reach registry/cloud evaluation")
@@ -337,6 +340,7 @@ def test_evaluate_package_request_artifact_uses_source_specific_risk_summary_for
     workspace_dir.mkdir()
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command(
         "npm install guard-query@https://example.com/guard.tgz?token=demo", workspace=workspace_dir
@@ -649,6 +653,7 @@ def test_evaluate_package_request_artifact_records_bun_lockb_binary_fallback(tmp
     _write_text(workspace_dir / "package.json", '{"name":"demo"}\n')
     (workspace_dir / "bun.lockb").write_bytes(b"bunlock")
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
 
     artifact = _artifact_from_command("bun add left-pad@1.3.0", workspace=workspace_dir)
     result = evaluate_package_request_artifact(artifact=artifact, store=store, workspace_dir=workspace_dir)

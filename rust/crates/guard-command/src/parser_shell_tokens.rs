@@ -95,7 +95,14 @@ fn shell_tokens_mode(
                     token_started = true;
                 }
                 '\\' if preserve_backslash => {
-                    token.push('\\');
+                    // An escaped operator that ends the command is part of
+                    // the word it ends, the way `find … -exec cat {} \;`
+                    // ends its body.
+                    if crate::command_tokens::backslash_escapes_operator(&chars, index) {
+                        escaped = true;
+                    } else {
+                        token.push('\\');
+                    }
                     token_started = true;
                 }
                 '\\' => {

@@ -28,8 +28,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from codex_plugin_scanner.guard import hook_execution_environment  # noqa: E402
 from codex_plugin_scanner.guard.adapters import claude_daemon_hook_bridge as bridge  # noqa: E402
-from codex_plugin_scanner.guard.adapters import claude_daemon_hook_transport as transport  # noqa: E402
-from codex_plugin_scanner.guard.adapters import codex_daemon_hook_transport as codex_transport  # noqa: E402
+from codex_plugin_scanner.guard.adapters._modules.claude import claude_daemon_hook_transport as transport  # noqa: E402
+from codex_plugin_scanner.guard.adapters._modules.codex import (
+    codex_daemon_hook_transport as codex_transport,
+)
 
 OUTPUT = ROOT / "rust/crates/guard-runtime/testdata/claude_hook_bridge/vectors.json.gz"
 

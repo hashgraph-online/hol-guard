@@ -39,6 +39,18 @@
       ]
     },
     {
+      "id": "connector-ungranted-local-cli-wrapper",
+      "expectation": "setup",
+      "oracle": "connector-setup",
+      "commands": [
+        "{{home}}/.local/bin/run-queued -- echo gauntlet-queued"
+      ],
+      "prompt": "This fixture has a small job wrapper, run-queued, in ~/.local/bin that runs the command after the double dash. Use bash to run the exact command below once. Then report the outcome and stop.",
+      "profiles": [
+        "connector-setup"
+      ]
+    },
+    {
       "id": "connector-ungranted-mcp-tool",
       "expectation": "setup",
       "oracle": "connector-setup",

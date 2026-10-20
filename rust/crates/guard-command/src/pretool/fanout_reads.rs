@@ -4,9 +4,10 @@
 //! The child receives file names nobody can see in advance, so admission rests
 //! on the producer and on the child's own read-only proof:
 //!
-//! - every root is relative, resolves inside the verified workspace, is not
-//!   the home directory or one of its ancestors, and passes the same bounded
-//!   read-target proof as `cat src/a.js`;
+//! - every root resolves inside the verified workspace (relative, or the
+//!   workspace's own absolute spelling), is not the home directory or one of
+//!   its ancestors, and passes the same bounded read-target proof as
+//!   `cat src/a.js`;
 //! - the expression is flat and has `-type f`. Under find's default `-P` a
 //!   symlink has type `l`, so a workspace symlink to a secret is never listed,
 //!   and `-L`, `-H` and `-follow` are not part of the shape;
@@ -64,9 +65,12 @@ fn contained_roots(shape: &FindShape<'_>, context: PathContext<'_>) -> bool {
     if home_root.starts_with(&workspace) {
         return false;
     }
+    // A root spelled with the workspace's own absolute path names the same
+    // directory as the relative spelling. Where it resolves, links and `..`
+    // included, is what decides, so an absolute root has to land inside the
+    // workspace as well.
     shape.roots.iter().all(|root| {
-        !root.starts_with(['/', '\\', '~'])
-            && !std::path::Path::new(root).is_absolute()
+        !root.starts_with(['\\', '~'])
             && bounded_read_target(root, Some(home), Some(cwd), true)
             && std::fs::canonicalize(std::path::Path::new(cwd).join(root))
                 .is_ok_and(|resolved| resolved.starts_with(&workspace))

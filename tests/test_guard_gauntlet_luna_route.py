@@ -78,7 +78,13 @@ def test_sdk_root_comes_from_the_omp_executable_and_must_hold_the_packages(tmp_p
 
 
 @pytest.mark.parametrize(
-    ("requested", "effort"), [({}, "medium"), ({"effort": "high"}, "high"), ({"effort": "low"}, "low")]
+    ("requested", "effort"),
+    [
+        ({}, "medium"),
+        ({"effort": "high"}, "high"),
+        ({"effort": "low"}, "low"),
+        ({"backend": ("openai-codex", "gpt-6.1-sol"), "effort": "medium"}, "medium"),
+    ],
 )
 def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monkeypatch, requested, effort):
     _root, omp = _sdk(tmp_path)
@@ -89,7 +95,9 @@ def test_route_provider_is_loopback_with_real_identity_and_effort(tmp_path, monk
     assert provider["base_url"] == "http://127.0.0.1:40123/v1"
     assert provider["allow_loopback"] is True and bool(provider["api_key"])
     assert provider["reasoning_effort"] == effort
-    assert f"openai-codex/gpt-6-luna/{effort} via" in provider["identity"]
+    backend = requested.get("backend", luna_route.BACKEND)
+    assert f"{'/'.join(backend)}/{effort} via" in provider["identity"]
+    assert "to Responses)" in provider["identity"]
 
 
 def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
@@ -99,12 +107,18 @@ def test_route_rejects_unsupported_effort(tmp_path, monkeypatch):
         NativeLunaRoute(omp=str(omp), effort="xhigh")
 
 
-def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch):
+@pytest.mark.parametrize("model", ["gpt-6-luna", "gpt-6.1-sol"])
+def test_route_passes_its_effort_to_the_adapter(tmp_path, monkeypatch, model):
     _root, omp = _sdk(tmp_path)
-    ready = json.dumps({**READY, "thinking": "high"})
-    script = f"[ \"$GUARD_GAUNTLET_LUNA_THINKING\" = high ] || exit 4\necho '{ready}'\nexec sleep 300\n"
+    backend = luna_route.parse_backend("openai-codex/" + model)
+    ready = json.dumps({**READY, "thinking": "high", "model": model})
+    script = (
+        f'[ "$GUARD_GAUNTLET_LUNA_THINKING" = high ] || exit 4\n'
+        f'[ "$GUARD_GAUNTLET_NATIVE_BACKEND" = openai-codex/{model} ] || exit 5\n'
+        f"echo '{ready}'\nexec sleep 300\n"
+    )
     monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, script)) + os.pathsep + os.environ["PATH"])
-    with NativeLunaRoute(omp=str(omp), effort="high") as route:
+    with NativeLunaRoute(omp=str(omp), effort="high", backend=backend) as route:
         assert route.port == 40123
 
 
@@ -341,3 +355,44 @@ def test_sigterm_to_the_runner_stops_the_adapter(tmp_path):
     finally:
         runner.kill()
         runner.wait()
+
+
+def test_health_is_silent_while_the_adapter_is_alive(tmp_path, monkeypatch):
+    body = "printf '%s\\n' '" + json.dumps(READY) + "'\nexec sleep 30\n"
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, body)) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp)) as route:
+        assert route.port == READY["port"]
+        assert route.health() is None
+
+
+def test_health_reports_the_exit_code_and_stderr_of_an_adapter_that_died_mid_run(tmp_path, monkeypatch):
+    # The adapter reaches readiness, so the startup failure paths never run: this
+    # is the death that used to leave a whole run with no error text at all.
+    body = "printf '%s\\n' '" + json.dumps(READY) + "'\necho 'listen EADDRINUSE 127.0.0.1' >&2\nexit 7\n"
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, body)) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp)) as route:
+        route.process.wait(timeout=30)
+        message = route.health()
+    assert message is not None
+    assert "exited with code 7" in message
+    assert "listen EADDRINUSE 127.0.0.1" in message
+
+
+def test_health_redacts_a_secret_the_adapter_printed_before_it_died(tmp_path, monkeypatch):
+    secret = "sk-" + "A1b2C3d4E5f6G7h8I9j0K1l2"
+    body = "printf '%s\\n' '" + json.dumps(READY) + "'\necho 'auth failed for " + secret + "' >&2\nexit 1\n"
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, body)) + os.pathsep + os.environ["PATH"])
+    with NativeLunaRoute(omp=str(omp)) as route:
+        route.process.wait(timeout=30)
+        message = route.health()
+    assert secret not in message
+    assert "[redacted]" in message
+
+
+def test_health_is_silent_before_the_adapter_is_started(tmp_path, monkeypatch):
+    _root, omp = _sdk(tmp_path)
+    monkeypatch.setenv("PATH", str(_fake_bun(tmp_path, "exit 0\n")) + os.pathsep + os.environ["PATH"])
+    assert NativeLunaRoute(omp=str(omp)).health() is None

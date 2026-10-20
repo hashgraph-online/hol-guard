@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import shlex
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Literal, cast
 
 from ..models import GuardArtifact
@@ -112,6 +112,10 @@ class PackageIntent:
     execution_context_hashes: tuple[str, ...] = ()
     execution_context_cwds: tuple[str, ...] = ()
     execution_context_reason_codes: tuple[str, ...] = ()
+    #: Whether the native parser judged this a routine local JS runner already
+    #: bound to local project state. The runtime computes it beside the
+    #: manifest, lockfile and executable reads it depends on; Python reads it.
+    routine_local_runner: bool = False
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -165,6 +169,7 @@ class PackageIntent:
             execution_context_hashes=_str_tuple(payload.get("execution_context_hashes")),
             execution_context_cwds=_str_tuple(payload.get("execution_context_cwds")),
             execution_context_reason_codes=_str_tuple(payload.get("execution_context_reason_codes")),
+            routine_local_runner=payload.get("routine_local_runner") is True,
         )
 
 
@@ -330,182 +335,29 @@ def build_package_request_artifact(
     *,
     config_path: str,
     source_scope: str,
+    guard_home: Path | None = None,
+    deadline_monotonic: float | None = None,
 ) -> GuardArtifact:
-    manifest_paths, lockfile_paths = _artifact_workspace_paths(intent)
-    package_executable = (
-        intent.command_tokens[0] if intent.command_tokens and ";" not in intent.command_tokens else None
-    )
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "harness": harness,
-                "package_manager": intent.package_manager,
-                "intent_kind": intent.intent_kind,
-                "redacted_command": _fingerprint_command_shape(intent),
-                "targets": [target.to_fingerprint_dict() for target in intent.targets],
-                "manifest_paths": list(manifest_paths),
-                "lockfile_paths": list(lockfile_paths),
-                "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
-                "execution_context_hashes": list(intent.execution_context_hashes),
-                "execution_context_cwds": list(intent.execution_context_cwds),
-                "execution_context_reason_codes": list(intent.execution_context_reason_codes),
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    target_label = intent.targets[0].package_name if intent.targets else intent.package_manager
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:package-request:{fingerprint}",
-        name=f"{intent.package_manager} {intent.intent_kind} {target_label}",
+    """Name the review a package request gets, by asking the runtime.
+
+    The id this returns is the key a saved package approval is stored under, so
+    it has exactly one derivation: the runtime's own builder, over the exact
+    intent. Deriving it a second time here would let the two spellings drift
+    and silently re-key reviews the user had already approved.
+
+    The import is local because `native_package_authority` imports the artifact
+    model this module's callers also reach through.
+    """
+    from ..native_package_authority import package_request_artifact_native
+
+    return package_request_artifact_native(
+        intent,
         harness=harness,
-        artifact_type="package_request",
-        source_scope=source_scope,
         config_path=config_path,
-        metadata={
-            "package_manager": intent.package_manager,
-            "package_executable": package_executable,
-            "intent_kind": intent.intent_kind,
-            "targets": [target.to_dict() for target in intent.targets],
-            "manifest_paths": list(manifest_paths),
-            "lockfile_paths": list(lockfile_paths),
-            "flags": list(intent.flags),
-            "notes": list(intent.notes),
-            "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
-            "shell_execution_context_hashes": list(intent.execution_context_hashes),
-            "shell_execution_effective_cwds": list(intent.execution_context_cwds),
-            "shell_execution_context_reason_codes": list(intent.execution_context_reason_codes),
-            "shell_execution_context_complete": not intent.execution_context_reason_codes,
-            "effective_cwd": intent.execution_context_cwds[-1] if intent.execution_context_cwds else None,
-            "redacted_command": intent.redacted_command,
-            "request_summary": package_request_summary(intent),
-            "runtime_request_signals": [f"invokes a package {intent.intent_kind} request via {intent.package_manager}"],
-            "runtime_request_summary": package_runtime_summary(intent),
-            "runtime_request_reason": package_runtime_reason(intent),
-            **_local_execution_runtime_metadata(intent),
-        },
-        runtime_private_metadata={
-            "package_targets": [target.to_execution_dict() for target in intent.targets],
-        },
+        source_scope=source_scope,
+        guard_home=guard_home,
+        deadline_monotonic=deadline_monotonic,
     )
-
-
-def _artifact_workspace_paths(intent: PackageIntent) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if _is_global_package_install(intent):
-        return (), ()
-    return intent.manifest_paths, intent.lockfile_paths
-
-
-def _is_global_package_install(intent: PackageIntent) -> bool:
-    if intent.package_manager not in {"npm", "pnpm", "yarn"}:
-        return False
-    if "multiple-package-segments" in intent.notes:
-        return _all_package_segments_are_global(intent)
-    return any(_is_true_global_flag(flag) for flag in intent.flags)
-
-
-def _all_package_segments_are_global(intent: PackageIntent) -> bool:
-    segments = tuple(segment.strip() for segment in intent.redacted_command.split(" ; ") if segment.strip())
-    if not segments:
-        return False
-    return all(_segment_has_global_flag(segment) for segment in segments)
-
-
-def _segment_has_global_flag(segment: str) -> bool:
-    try:
-        tokens = shlex.split(segment)
-    except ValueError:
-        tokens = segment.split()
-    return any(_is_true_global_flag(token) for token in tokens)
-
-
-def _is_true_global_flag(flag: str) -> bool:
-    normalized = flag.strip().lower()
-    if normalized in {"-g", "--global"}:
-        return True
-    if normalized.startswith("--global="):
-        return normalized.split("=", 1)[1] not in {"", "0", "false", "no", "off"}
-    return normalized == "--location=global"
-
-
-def package_request_summary(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        execution = intent.local_executions[0]
-        executable = execution.executable_name or "an unresolved executable"
-        manager_path = (
-            execution.manager.resolved_path
-            if execution.manager is not None and execution.manager.resolved_path is not None
-            else "unresolved from the command's effective PATH"
-        )
-        return (
-            f"Requested local `{executable}` execution through `{execution.manager_name}`. Manager: `{manager_path}`."
-        )
-    if intent.targets:
-        target_names = ", ".join(target.package_name or target.raw_spec for target in intent.targets[:3])
-        return f"Requested `{intent.package_manager}` {intent.intent_kind} for {target_names}."
-    if intent.lockfile_paths:
-        return (
-            f"Requested `{intent.package_manager}` {intent.intent_kind} using existing project "
-            "manifest and lockfile context."
-        )
-    return f"Requested `{intent.package_manager}` {intent.intent_kind} using existing project manifest context."
-
-
-def package_runtime_summary(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        return f"Executes a project package through {intent.package_manager} using an exact local execution identity."
-    if intent.intent_kind == "execute":
-        return f"Executes a remote package through {intent.package_manager} before it is trusted locally."
-    if intent.lockfile_paths:
-        return (
-            f"Mutates project dependencies through {intent.package_manager} using "
-            "existing manifest and lockfile context."
-        )
-    return f"Mutates project dependencies through {intent.package_manager}."
-
-
-def package_runtime_reason(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        return (
-            "Guard requires review for the first local package-runner execution and binds reuse to the exact "
-            "manager, local executable, manifest, and lockfile evidence."
-        )
-    return (
-        f"Guard parsed this command as a package {intent.intent_kind} request and "
-        "kept only package metadata plus a redacted command shape."
-    )
-
-
-def _fingerprint_command_shape(intent: PackageIntent) -> str:
-    if not any(target.source_kind == "git" for target in intent.targets):
-        return intent.redacted_command
-    tokens: list[str] = list(intent.command_tokens)
-    for target in intent.targets:
-        if target.source_kind != "git":
-            continue
-        public_target = target.to_dict()
-        source_spellings = (
-            target.raw_spec,
-            target.source_url,
-            public_target.get("raw_spec"),
-            public_target.get("source_url"),
-        )
-        for source_spelling in source_spellings:
-            if not isinstance(source_spelling, str) or not source_spelling:
-                continue
-            tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
-    return shlex.join(tokens)
-
-
-def _local_execution_runtime_metadata(intent: PackageIntent) -> dict[str, object]:
-    if not intent.local_executions:
-        return {}
-    return {
-        "runtime_request_reason_code": "local_package_execution_review",
-        "runtime_request_remediation_hint": (
-            "Review the resolved manager and local executable once. Unchanged exact executions reuse that scoped "
-            "approval; PATH, executable, manifest, or lockfile changes require review again."
-        ),
-    }
 
 
 def redacted_command(tokens: tuple[str, ...]) -> str:

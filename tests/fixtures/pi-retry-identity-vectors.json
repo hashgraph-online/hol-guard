@@ -48,5 +48,60 @@
     "name": "nested timestamp is input", "harness": "omp", "same_identity": false,
     "before": {"tool_name": "eval", "tool_input": {"timestamp": 1}},
     "after": {"tool_name": "eval", "tool_input": {"timestamp": 2}}
+  },
+  {
+    "name": "session-bound claude-code retry", "harness": "claude-code", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry without a session", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry in another session", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-b", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "claude-code retry with another command", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -l"}}
+  },
+  {
+    "name": "claude-code nested tool use id is input", "harness": "claude-code", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "b"}}
+  },
+  {
+    "name": "session-bound codex retry", "harness": "codex", "same_identity": true,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry without a session", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry in another session", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-b", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
+  },
+  {
+    "name": "codex retry with another command", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -l"}}
+  },
+  {
+    "name": "codex nested tool use id is input", "harness": "codex", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "a"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la", "tool_use_id": "b"}}
+  },
+  {
+    "name": "other harness retains tool use id", "harness": "cursor", "same_identity": false,
+    "before": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "first", "tool_input": {"command": "ls -la"}},
+    "after": {"tool_name": "Bash", "session_id": "session-a", "tool_use_id": "retry", "tool_input": {"command": "ls -la"}}
   }
 ]

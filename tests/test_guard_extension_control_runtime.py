@@ -324,7 +324,17 @@ def test_unavailable_authority_blocks_otherwise_valid_native_destructive_evidenc
     )
 
 
-def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) -> None:
+@pytest.mark.parametrize("installed_bundle", [False, True])
+def test_daemon_starts_fail_closed_with_future_authority_schema(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    installed_bundle: bool,
+) -> None:
+    from codex_plugin_scanner.guard.catalog_delivery import preparation_authority
+
+    # An installed wheel ships a pack bundle, so startup also runs the pack
+    # authority migration against the unreadable schema.
+    monkeypatch.setattr(preparation_authority, "load_installed_bundle", lambda: object() if installed_bundle else None)
     store = GuardStore(tmp_path / "guard-home")
     store.read_extension_control_authority(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest)
     with store._connect() as connection:
@@ -336,6 +346,28 @@ def test_daemon_starts_fail_closed_with_future_authority_schema(tmp_path: Path) 
         snapshot = daemon._server.extension_control_runtime.current()
         assert snapshot.health is AuthorityHealth.TAMPERED
         assert snapshot.authority_failure is ResolverFailureCode.AUTHORITY_TAMPERED
+    finally:
+        daemon.stop()
+
+
+def test_daemon_rebinds_control_api_once_authority_reads_again(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def unavailable(self: GuardStore) -> None:
+        raise ValueError("installed bundle metadata unavailable")
+
+    monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", unavailable)
+    daemon = GuardDaemonServer(GuardStore(tmp_path / "guard-home"), host="127.0.0.1", port=0)
+    try:
+        server = daemon._server
+        assert server._extension_control_on_core_registry
+
+        monkeypatch.setattr(GuardStore, "migrate_installed_command_pack_authority", lambda self: None)
+        snapshot = server.refresh_extension_control_runtime()
+        assert snapshot.health is not AuthorityHealth.TAMPERED
+        assert not server._extension_control_on_core_registry
+        assert server.extension_control_api.catalog_digest == BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     finally:
         daemon.stop()
 

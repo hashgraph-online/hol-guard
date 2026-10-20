@@ -23,6 +23,12 @@ pub const HOOK_DECISION_RESULT_SCHEMA: &str = "guard-hook-decision-result.v1";
 /// Capability advertised by the runtime when this operation is available.
 pub const HOOK_DECISION_FEATURE: &str = "hook-decision-v1";
 
+/// Advertised separately because the composed post-claim request carries the
+/// claimed approval's context token and expects the reuse decision back: a
+/// resident that predates it would reject those fields as unknown after the
+/// claim had already been consumed, so a caller asks for this first.
+pub const HOOK_DECISION_POST_CLAIM_COMPOSE_FEATURE: &str = "hook-decision-post-claim-compose-v1";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct HookDecisionRequestV1 {
@@ -39,7 +45,7 @@ pub enum HookDecisionQueryV1 {
         inputs: Box<HookCompositionInputsV1>,
     },
     /// Derive the inputs of the approval-reuse re-evaluation after a claim.
-    PostClaimReuse { inputs: PostClaimInputsV1 },
+    PostClaimReuse { inputs: Box<PostClaimInputsV1> },
     /// Settle the final action, record dispositions and the response directive.
     Finalize {
         inputs: Box<HookCompositionInputsV1>,
@@ -250,7 +256,30 @@ pub struct PostClaimInputsV1 {
     #[serde(default)]
     pub reuse_saved_action: Option<Value>,
     pub post_claim_refresh_failed: bool,
-    pub context_changed: bool,
+    /// Whether the request's context moved since the claimed approval was
+    /// saved, when the caller compared the two tokens itself. A caller that
+    /// names both tokens below leaves this out and the resident compares them.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context_changed: Option<bool>,
+    /// The context token the claimed approval was stored under. Naming it asks
+    /// the resident to compare the tokens and to compose what the re-evaluated
+    /// claim means for reuse, so the caller makes one request instead of three.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claimed_context_token: Option<Value>,
+    /// The context token recomputed for this request.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current_context_token: Option<Value>,
+    /// The claimed row was approved locally in this session.
+    ///
+    /// Optional because the request digest binds the caller's own wire form:
+    /// a caller that names the flag gets it back, one that leaves it out gets
+    /// nothing back, and either shape re-serialises to what was sent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fresh_local_approval: Option<bool>,
+    /// The claimed row is a durable approval for this exact artifact, optional
+    /// for the same reason.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub durable_exact_approval: Option<bool>,
     pub has_ignored_integrity: bool,
     /// The claimed row no longer matches the authenticated saved row.
     pub claim_row_invalid: bool,
@@ -285,6 +314,10 @@ pub enum HookDecisionPayloadV1 {
     PostClaimReuse {
         current_action: String,
         validation_reason: Option<String>,
+        /// The reuse decision for the re-evaluated claim, present when the
+        /// request named the claimed approval's context token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reuse: Option<Value>,
     },
     Finalize(Box<HookFinalV1>),
     CopilotSettle {

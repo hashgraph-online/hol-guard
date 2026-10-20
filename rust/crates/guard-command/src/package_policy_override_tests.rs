@@ -378,3 +378,50 @@ fn policy_override_min_oracle() {
     let want = r#"{"bundle_version":"b1","cache_status":"miss","decision":"ask","enforcement":"enforce","entitlement_state":"entitled","evidence_ids":[],"exception_id":null,"external_archive_source_hashes":[],"matched_rule_id":null,"package_intent_hash":"abc123","packages":[{"decision":"ask","name":"left-pad","requestedVersion":"1.0.0"},{"decision":"ask","name":"raw"}],"policy_action":"review","policy_version":"p1","reasons":[{"code":"rc2","message":"rm2","severity":"low","source":"guard-local"},{"code":"existing_reason","message":"keep me","severity":"low","source":"guard-local"}],"record_monitor_evidence":false,"refresh_required":false,"risk_summary":"HM2","user_copy":{"dashboard_url":null,"harness_message":"HM2","next_step":"step","summary":"S2","title":"T2"},"workspace_fingerprint":"wf1"}"#;
     assert_eq!(got, want);
 }
+
+/// Regression for #4809: when a package arrives in the evaluation map as
+/// `{name: "node", namespace: "@types", requestedVersion: "1.60.0"}`, the
+/// current-policy action message must include the scope, not just the bare
+/// `name@version`. Before the fix `package_label` read only `name`, so the
+/// message said `node@1.60.0` instead of `@types/node@1.60.0`.
+#[test]
+fn current_policy_message_preserves_namespace_for_scoped_package() {
+    let eval = NoopEval;
+    let mut m = base_eval();
+    let mut primary = Map::new();
+    primary.insert("decision".into(), json!("ask"));
+    primary.insert("name".into(), json!("node"));
+    primary.insert("namespace".into(), json!("@types"));
+    primary.insert("requestedVersion".into(), json!("1.60.0"));
+    m.insert("packages".into(), json!([primary, json!({"name": "raw"})]));
+    let out = package_evaluation_with_current_policy_action(&eval, &m, GuardAction::Block);
+    // Match the existing oracle convention (`current_policy_action_block_oracle`)
+    // by comparing each message field verbatim against the full expected
+    // string, not via substring checks. The action label `blocks` comes from
+    // `package_evaluation_with_current_policy_action` for `GuardAction::Block`.
+    let expected = "HOL Guard's current package policy blocks `@types/node@1.60.0`.";
+    let summary = out
+        .get("user_copy")
+        .and_then(|uc| uc.get("summary"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let risk = out
+        .get("risk_summary")
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let harness = out
+        .get("user_copy")
+        .and_then(|uc| uc.get("harness_message"))
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    for (label, msg) in [
+        ("summary", &summary),
+        ("risk_summary", &risk),
+        ("harness_message", &harness),
+    ] {
+        assert_eq!(msg, expected, "{label} did not preserve the scope");
+    }
+}

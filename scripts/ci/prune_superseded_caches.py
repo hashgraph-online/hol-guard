@@ -44,6 +44,7 @@ from typing import Any
 MAIN_REF = "refs/heads/main"
 CODEQL_KEY = re.compile(r"^(codeql-overlay-base-database-.+)-[0-9a-f]{40}-[0-9]+-[0-9]+$")
 CODEQL_STATUS_PREFIX = "codeql-overlay-status-"
+OFFLINE_PREVIOUS_KEY = re.compile(r"^(native-offline-previous-v1-.+)-[0-9a-f]{40}-[0-9a-f]{64}$")
 RUNTIME_ARCHIVE_KEY = re.compile(
     r"^((?:runtime-test-archive-v[12]|linux-native-evaluators-v1|macos-hol-guard-runtime-v2|windows-hol-guard-runtime-v2|shipped-runtime-v[12])-.+)-[0-9a-f]{64}$"
 )
@@ -58,6 +59,9 @@ def cache_family(key: str) -> str | None:
     codeql = CODEQL_KEY.match(key)
     if codeql:
         return codeql.group(1)
+    offline_previous = OFFLINE_PREVIOUS_KEY.fullmatch(key)
+    if offline_previous:
+        return offline_previous.group(1)
     runtime_archive = RUNTIME_ARCHIVE_KEY.fullmatch(key)
     if runtime_archive:
         return runtime_archive.group(1)
@@ -130,9 +134,7 @@ def superseded_compiler_generations(entries: Iterable[Mapping[str, Any]]) -> lis
             by_environment.setdefault(environment, []).append(item)
         ranked = sorted(
             by_environment,
-            key=lambda environment: max(
-                (item["createdAt"], item["id"]) for item in by_environment[environment]
-            ),
+            key=lambda environment: max((item["createdAt"], item["id"]) for item in by_environment[environment]),
             reverse=True,
         )
         for environment in ranked[2:]:

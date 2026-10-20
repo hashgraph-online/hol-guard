@@ -36,8 +36,7 @@ from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
     SupplyChainUserCopy,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_file_read_request_artifact,
-    extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.guard_sensitive_read_support import sensitive_read_token
@@ -978,14 +977,15 @@ def test_tool_call_resolved_executable_change_invalidates_review_approval(tmp_pa
 
 
 def _sensitive_read_artifact(workspace: Path) -> tuple[GuardArtifact, str]:
-    request = extract_sensitive_file_read_request("read_file", {"path": ".env"}, cwd=workspace)
-    assert request is not None
-    artifact = build_file_read_request_artifact(
+    _request, artifact = extract_sensitive_file_read_request_artifact(
+        "read_file",
+        {"path": ".env"},
+        cwd=workspace,
         harness="codex",
-        request=request,
         config_path=str(workspace / ".mcp.json"),
         source_scope="project",
     )
+    assert artifact is not None
     return artifact, artifact_hash(artifact)
 
 

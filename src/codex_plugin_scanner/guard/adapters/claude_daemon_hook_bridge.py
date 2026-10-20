@@ -1,31 +1,38 @@
-"""Claude Code daemon hook bridge executed by the same Python as Guard."""
+"""Compatibility launcher for Claude hook commands written before the native bridge.
+
+The daemon hook review itself lives in the runtime
+(``rust/crates/guard-runtime/src/claude_hook_bridge.rs``). Guard installs that
+runtime's ``claude-hook-bridge`` command directly whenever the runtime is
+present, and SessionStart rewrites older commands, so this module only has to
+carry a session that is still running a hook command written before the
+runtime shipped: it runs the same native command with the same config.
+
+There is no Python evaluator behind it. Every hook review needs the native
+runtime, so an install without one has nothing left to ask and the hook denies.
+
+The render helpers below decide no verdict of their own. They are the recorded
+oracle for the Rust port's parity vectors
+(``scripts/ci/record_claude_hook_bridge_vectors.py``).
+"""
 
 from __future__ import annotations
 
 import json
-import queue
+import subprocess
 import sys
-import threading
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
-from typing import Any, Protocol
-from urllib.parse import parse_qs, urljoin, urlparse
+from typing import Any
+from urllib.parse import parse_qs
 
-from ..codex_hook_launch_runtime import (
-    isolated_daemon_start_command,
-    isolated_hook_environment,
-    run_isolated_hook_process,
-)
+from ..codex_hook_launch_runtime import isolated_daemon_start_command
 from ..hook_execution_environment import stamp_hook_input_text
-from .claude_daemon_hook_transport import authenticated_claude_hook_response
-from .claude_daemon_state import daemon_port_from_state, state_path_for_query
+from ._modules.claude.claude_daemon_state import state_path_for_query
+from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY as PERMISSION_PASSTHROUGH_KEY
-from .codex_daemon_hook_auth import _DaemonResponseError
 from .hook_input_reader import read_stdin_text
+from .native_hook_bridge import native_hook_bridge_executable
 
-_LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 _DEGRADED_DAEMON_MESSAGE = "HOL Guard could not complete native review ({reason}) and denied this action."
 _RISKY_PROMPT_SYSTEM_MESSAGE = (
     "HOL Guard intercepted this prompt because it asks Claude to access local secrets. If Claude "
@@ -35,37 +42,8 @@ _RISKY_PROMPT_ADDITIONAL_CONTEXT = (
     "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded "
     "approval question to protect you."
 )
-_HARNESS_TIMEOUT_BUDGET_SECONDS = 10
-# The identity challenge and hook POST share this budget. On loaded Windows hosts
-# the challenge round trip alone took about two seconds, leaving the daemon too
-# little time to review. A timeout at this cap leaves less than the recovery
-# minimum before the fallback reserve, so recovery is skipped and the local
-# fallback still reviews.
-_DAEMON_IO_TIMEOUT_SECONDS = 5.5
-_RECOVERY_TIMEOUT_SECONDS = 3
-# Do not start a recovery process that the fallback reserve would kill.
-_MINIMUM_RECOVERY_SECONDS = 1.5
-# Recovery and its retry stop this long before the hook deadline, so a daemon that
-# times out and then fails to recover still leaves the local fallback time to review.
-_FALLBACK_RESERVE_SECONDS = 2
-_FALLBACK_TIMEOUT_SECONDS = 8
-_MAX_DAEMON_RESPONSE_BYTES = 1_000_000
 _MAX_HOOK_INPUT_BYTES = 1_000_000
-_HOOK_DEADLINE_SECONDS = 8
-_MINIMUM_OPERATION_SECONDS = 0.01
-
-
-class _ResponseReader(Protocol):
-    def read(self, size: int = -1, /) -> bytes: ...
-
-    def close(self) -> None: ...
-
-
-class _DaemonHTTPError(RuntimeError):
-    def __init__(self, code: int, detail: str) -> None:
-        super().__init__(f"daemon returned HTTP {code}")
-        self.code = code
-        self.detail = detail
+_NATIVE_RUNTIME_UNAVAILABLE = "the native runtime is unavailable"
 
 
 def main(
@@ -75,177 +53,114 @@ def main(
     fallback_command: tuple[str, ...],
     query: str,
 ) -> int:
-    """Proxy Claude hook stdin to the Guard daemon, falling back to the Python hook."""
+    """Run this hook call in the native bridge, or deny when there is no runtime."""
 
-    deadline = time.monotonic() + _HOOK_DEADLINE_SECONDS
+    bridge_home = Path(state_path).parent
+    native = _native_bridge_executable(bridge_home)
+    if native is None:
+        return _deny_without_a_runtime()
+    argv = (
+        str(native),
+        _native_bridge_command(),
+        CLAUDE_GUARD_DAEMON_HOOK_MARKER,
+        _native_bridge_config(
+            state_path=state_path,
+            fallback_daemon_url=fallback_daemon_url,
+            fallback_command=fallback_command,
+            query=query,
+        ),
+    )
+    sys.stdout.flush()
+    # The child inherits this hook call's stdio, so it reads the hook body and
+    # writes the response itself. ``exec`` would save the fork, but this entry
+    # point is also called in process, where replacing the caller is wrong.
+    try:
+        status = subprocess.run(argv, check=False).returncode
+        # Claude treats most nonzero hook exits as non-blocking errors.
+        # Only a successful JSON response or explicit blocking exit is safe.
+        return 0 if status == 0 else 2
+    except OSError:
+        # A removed/unlaunchable runtime has not consumed stdin. Returning a
+        # traceback with exit 1 would let Claude run the unreviewed tool.
+        return _deny_without_a_runtime()
+
+
+def _native_bridge_executable(guard_home: Path) -> Path | None:
+    from .claude_hook_argv import NATIVE_CLAUDE_HOOK_FEATURE
+
+    # Claude's hook window is 10s, and the child reserves up to 8s of it.
+    # Bound cold native capability probing before launching the child.
+    deadline = time.monotonic() + 1.5
+    runtime = native_hook_bridge_executable(
+        NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
+    )
+    # A quick transient probe miss may clear on the second check. Both attempts
+    # share one deadline; a slow or missing runtime still fails closed.
+    if runtime is None:
+        # The native capability probe caches misses for 0.25s. Retrying
+        # immediately only reads that negative cache. Leave a little time
+        # after the backoff for the second bounded probe.
+        retry_at = time.monotonic() + 0.26
+        if retry_at + 0.25 < deadline:
+            time.sleep(max(0.0, retry_at - time.monotonic()))
+            runtime = native_hook_bridge_executable(
+                NATIVE_CLAUDE_HOOK_FEATURE, guard_home=guard_home, deadline_monotonic=deadline
+            )
+    return runtime
+
+
+def _native_bridge_command() -> str:
+    from .claude_hook_argv import NATIVE_CLAUDE_HOOK_COMMAND
+
+    return NATIVE_CLAUDE_HOOK_COMMAND
+
+
+def _native_bridge_config(
+    *,
+    state_path: str | Path,
+    fallback_daemon_url: str,
+    fallback_command: tuple[str, ...],
+    query: str,
+) -> str:
+    """The config the installed native command carries, rebuilt from this call.
+
+    A query naming another Guard home resolves to no state path. The runtime
+    refuses that query itself, so the raw path goes over unchanged and only
+    the recovery command, which the runtime then never runs, is left pointing
+    at the install's own home.
+    """
+
+    try:
+        recovery_root: str | Path = state_path_for_query(state_path, query)
+    except ValueError:
+        recovery_root = state_path
+    config = {
+        "state_path": str(state_path),
+        "fallback_daemon_url": fallback_daemon_url,
+        "fallback_command": list(fallback_command),
+        "query": query,
+        "recovery_command": list(_recovery_command(recovery_root, query)),
+    }
+    return json.dumps(config, ensure_ascii=False, separators=(",", ":"))
+
+
+def _deny_without_a_runtime() -> int:
     body, oversized = read_stdin_text(_MAX_HOOK_INPUT_BYTES)
     if oversized:
         event = _event_name(body)
         if not (event.startswith("Permission") or event in {"UserPromptSubmit", "PostToolUse", "Stop"}):
             event = "PreToolUse"
         sys.stdout.write(_limit_denied("hook input", event))
-    else:
-        data = stamp_hook_input_text(body.strip() or "{}")
-        try:
-            state_path = state_path_for_query(state_path, query)
-        except ValueError as error:
-            sys.stdout.write(
-                _run_local_fallback(_daemon_failure_reason(error), data, fallback_command, deadline=deadline)
-            )
-        else:
-            recovery_command = _recovery_command(state_path, query)
-            try:
-                endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-                _assert_loopback_http_url(endpoint)
-                response_body = _valid_hook_json_or_degraded(
-                    _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=deadline),
-                    reason="daemon returned malformed hook JSON",
-                    data=data,
-                )
-            except Exception as error:
-                reason, failure_kind = _daemon_failure_reason(error), _daemon_failure_kind(error)
-                if failure_kind == "authenticated-control-plane-failure":
-                    response_body = _authenticated_control_plane_failure(reason, data)
-                elif _daemon_failure_is_recoverable(error):
-                    response_body = _recover_retry_or_fallback(
-                        reason,
-                        data,
-                        state_path=state_path,
-                        fallback_daemon_url=fallback_daemon_url,
-                        fallback_command=fallback_command,
-                        recovery_command=recovery_command,
-                        query=query,
-                        deadline=deadline,
-                        failure_kind=failure_kind,
-                    )
-                else:
-                    response_body = _run_local_fallback(reason, data, fallback_command, deadline=deadline)
-                sys.stdout.write(response_body)
-            else:
-                if not _should_suppress_output(data, response_body):
-                    sys.stdout.write(response_body if response_body.strip() else "{}")
+        return 0
+    data = stamp_hook_input_text(body.strip() or "{}")
+    if _event_name(data) == "UserPromptSubmit":
+        # A legacy prompt hook must not silently accept unreviewed text when
+        # its native authority is unavailable.
+        message = _DEGRADED_DAEMON_MESSAGE.format(reason=_NATIVE_RUNTIME_UNAVAILABLE)
+        sys.stdout.write(_deny_event("UserPromptSubmit", message))
+        return 0
+    sys.stdout.write(_degraded(_NATIVE_RUNTIME_UNAVAILABLE, data))
     return 0
-
-
-def _build_loopback_opener() -> urllib.request.OpenerDirector:
-    return urllib.request.build_opener(
-        urllib.request.ProxyHandler({}),
-        _LoopbackOnlyRedirectHandler(),
-    )
-
-
-class _LoopbackOnlyRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        _assert_loopback_http_url(newurl)
-        return super().redirect_request(req, fp, code, msg, headers, newurl)
-
-
-def _assert_loopback_http_url(url: str) -> None:
-    parsed = urlparse(url)
-    if parsed.scheme != "http":
-        raise ValueError(f"daemon URL must use http, not {parsed.scheme!r}")
-    host = (parsed.hostname or "").lower()
-    if host not in _LOOPBACK_HOSTS:
-        raise ValueError(f"daemon URL must target loopback, not {host!r}")
-    if parsed.port is None:
-        raise ValueError("daemon URL must include an explicit port")
-
-
-def _remaining_seconds(deadline: float | None, *, cap: float) -> float:
-    if deadline is None:
-        return cap
-    return min(cap, max(0.0, deadline - time.monotonic()))
-
-
-def _post_to_loopback_daemon(
-    endpoint: str,
-    data: str,
-    *,
-    state_path: str | Path,
-    deadline: float | None = None,
-) -> str:
-    result_queue: queue.Queue[tuple[str | None, Exception | None]] = queue.Queue(maxsize=1)
-    timeout_seconds = _remaining_seconds(deadline, cap=_DAEMON_IO_TIMEOUT_SECONDS)
-    if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
-        raise TimeoutError("Guard daemon hook request exhausted its absolute deadline")
-
-    def request_once() -> None:
-        request_deadline = time.monotonic() + timeout_seconds
-        try:
-            result_queue.put(
-                (
-                    _blocking_post_to_loopback_daemon(
-                        endpoint,
-                        data,
-                        state_path=state_path,
-                        timeout_seconds=timeout_seconds,
-                    ),
-                    None,
-                )
-            )
-        except urllib.error.HTTPError as error:
-            detail = _read_bounded_response(error, deadline=request_deadline).strip()
-            result_queue.put((None, _DaemonHTTPError(error.code, detail)))
-        except Exception as error:
-            result_queue.put((None, error))
-
-    threading.Thread(target=request_once, daemon=True, name="hol-guard-claude-hook-request").start()
-    try:
-        response_body, error = result_queue.get(timeout=timeout_seconds)
-    except queue.Empty as error:
-        raise TimeoutError("Guard daemon hook request exceeded its absolute deadline") from error
-    if error is not None:
-        raise error
-    if response_body is None:
-        raise RuntimeError("Guard daemon hook request returned no response")
-    return response_body
-
-
-def _blocking_post_to_loopback_daemon(
-    endpoint: str,
-    data: str,
-    *,
-    state_path: str | Path,
-    timeout_seconds: float,
-) -> str:
-    _assert_loopback_http_url(endpoint)
-    try:
-        return authenticated_claude_hook_response(
-            state_path=state_path,
-            query=urlparse(endpoint).query,
-            data=data,
-            timeout_seconds=timeout_seconds,
-        )
-    except _DaemonResponseError as error:
-        raise _DaemonHTTPError(error.status, error.detail) from error
-
-
-def _read_bounded_response(response: _ResponseReader, *, deadline: float | None = None) -> str:
-    timer: threading.Timer | None = None
-    if deadline is not None:
-        remaining = max(0.0, deadline - time.monotonic())
-        if remaining < _MINIMUM_OPERATION_SECONDS:
-            raise TimeoutError("Guard daemon response exhausted its absolute deadline")
-        timer = threading.Timer(remaining, response.close)
-        timer.daemon = True
-        timer.start()
-    try:
-        body = response.read(_MAX_DAEMON_RESPONSE_BYTES + 1)
-    finally:
-        if timer is not None:
-            timer.cancel()
-    if len(body) > _MAX_DAEMON_RESPONSE_BYTES:
-        raise ValueError("Guard daemon hook response exceeded the safe size limit")
-    return body.decode("utf-8", errors="replace")
-
-
-def _daemon_url(state_path: str | Path, fallback_daemon_url: str) -> str:
-    port = daemon_port_from_state(state_path)
-    if port is not None:
-        return f"http://127.0.0.1:{port}/"
-    normalized = fallback_daemon_url.rstrip("/") + "/"
-    _assert_loopback_http_url(normalized)
-    return normalized
 
 
 def _event_name(data: str) -> str:
@@ -390,139 +305,6 @@ def _is_permission_passthrough(decoded: dict[str, object], hook_output: object, 
         and hook_output.get("hookEventName") == event
         and "decision" not in hook_output
     )
-
-
-def _run_local_fallback(
-    reason: str,
-    data: str,
-    fallback_command: tuple[str, ...],
-    *,
-    deadline: float | None = None,
-) -> str:
-    if getattr(sys, "frozen", False):
-        # A frozen Guard runs no cold evaluator: without a daemon answer the hook fails closed.
-        return _degraded(f"{reason}; no daemon answered", data)
-    timeout_seconds = _remaining_seconds(deadline, cap=_FALLBACK_TIMEOUT_SECONDS)
-    if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
-        return _degraded(f"{reason}; fallback exhausted the hook deadline", data)
-    result = run_isolated_hook_process(
-        fallback_command,
-        input_text=data,
-        cwd=Path.home(),
-        environment=isolated_hook_environment(),
-        timeout_seconds=timeout_seconds,
-    )
-    if result.returncode == 0 and not result.timed_out and not result.output_limit_exceeded:
-        stdout = (result.stdout or "").strip()
-        if _should_suppress_output(data, stdout):
-            return ""
-        return _valid_hook_json_or_degraded(
-            stdout,
-            reason=f"{reason}; fallback returned malformed hook JSON",
-            data=data,
-        )
-    suffix = "; fallback timed out" if result.timed_out else f"; fallback exited {result.returncode}"
-    if result.output_limit_exceeded:
-        return _limit_denied("hook output", _event_name(data))
-    return _degraded(f"{reason}{suffix}", data)
-
-
-def _daemon_failure_reason(error: Exception) -> str:
-    if isinstance(error, _DaemonHTTPError):
-        reason = str(error)
-        return f"{reason}: {error.detail}" if error.detail else reason
-    if isinstance(error, urllib.error.HTTPError):
-        return f"daemon returned HTTP {error.code}"
-    if isinstance(error, urllib.error.URLError):
-        return str(error.reason or error)
-    return str(error)
-
-
-def _daemon_failure_is_recoverable(error: Exception) -> bool:
-    if isinstance(error, ValueError):
-        return False
-    if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
-        if _daemon_failure_is_authenticated_overload(error):
-            return False
-        return error.code in {408, 500, 502, 503, 504}
-    return True
-
-
-def _recover_retry_or_fallback(
-    reason: str,
-    data: str,
-    *,
-    state_path: str | Path,
-    fallback_daemon_url: str,
-    fallback_command: tuple[str, ...],
-    recovery_command: tuple[str, ...],
-    query: str,
-    deadline: float | None = None,
-    failure_kind: str = "transport-failure",
-) -> str:
-    recovery_deadline = None if deadline is None else deadline - _FALLBACK_RESERVE_SECONDS
-    recovery_window = _remaining_seconds(recovery_deadline, cap=_RECOVERY_TIMEOUT_SECONDS)
-    if (
-        recovery_command
-        and recovery_window >= _MINIMUM_RECOVERY_SECONDS
-        and _run_recovery_command(
-            recovery_command,
-            deadline=recovery_deadline,
-            failure_kind=failure_kind,
-        )
-    ):
-        try:
-            endpoint = urljoin(_daemon_url(state_path, fallback_daemon_url), f"/v1/hooks/claude-code?{query}")
-            _assert_loopback_http_url(endpoint)
-            return _valid_hook_json_or_degraded(
-                _post_to_loopback_daemon(endpoint, data, state_path=state_path, deadline=recovery_deadline),
-                reason=f"{reason}; recovered daemon returned malformed hook JSON",
-                data=data,
-            )
-        except Exception as retry_error:
-            reason = f"{reason}; daemon recovery retry failed: {retry_error}"
-    return _run_local_fallback(reason, data, fallback_command, deadline=deadline)
-
-
-def _run_recovery_command(
-    recovery_command: tuple[str, ...],
-    *,
-    deadline: float | None = None,
-    failure_kind: str = "transport-failure",
-) -> bool:
-    timeout_seconds = _remaining_seconds(deadline, cap=_RECOVERY_TIMEOUT_SECONDS)
-    if timeout_seconds < _MINIMUM_OPERATION_SECONDS:
-        return False
-    environment = isolated_hook_environment()
-    environment["HOL_GUARD_HOOK_FAILURE_KIND"] = failure_kind
-    result = run_isolated_hook_process(
-        recovery_command,
-        input_text="",
-        cwd=Path.home(),
-        environment=environment,
-        timeout_seconds=timeout_seconds,
-        allow_windows_breakaway=True,
-    )
-    return result.returncode == 0 and not result.timed_out and not result.output_limit_exceeded
-
-
-def _daemon_failure_is_authenticated_overload(error: urllib.error.HTTPError | _DaemonHTTPError) -> bool:
-    detail = error.detail.lower() if isinstance(error, _DaemonHTTPError) else ""
-    return error.code == 429 or any(
-        marker in detail for marker in ("capacity", "overload", "too_many", "too many", "busy")
-    )
-
-
-def _daemon_failure_kind(error: Exception) -> str:
-    if isinstance(error, (urllib.error.HTTPError, _DaemonHTTPError)):
-        if _daemon_failure_is_authenticated_overload(error):
-            return "overload"
-        if error.code in {401, 403}:
-            return "authenticated-control-plane-failure"
-        return "transport-failure"
-    if isinstance(error, ValueError):
-        return "authenticated-control-plane-failure"
-    return "transport-failure"
 
 
 def _recovery_command(state_path: str | Path, query: str) -> tuple[str, ...]:

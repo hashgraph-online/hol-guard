@@ -147,10 +147,13 @@ def _base_environment() -> dict[str, str]:
     ``PYTHONPATH`` or a stray ``PYTHONHOME`` from the lane's own virtual
     environment would let a frozen bundle pick up the repository's sources, so
     nothing the lane observes afterwards would be about the bundle.
+    The build interpreter's loader path is likewise outside the installed
+    harness home and must not become the agent's library search path. Runtime
+    resolution checks ``--version`` with this same environment before replay.
     """
 
     environment = dict(os.environ)
-    for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV"):
+    for name in ("PYTHONPATH", "PYTHONHOME", "PYTHONSTARTUP", "VIRTUAL_ENV", "LD_LIBRARY_PATH"):
         environment.pop(name, None)
     return environment
 

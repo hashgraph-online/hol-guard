@@ -10,6 +10,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters._modules.devin.devin_hooks import (
+    devin_hook_response_from_guard,
+    emit_devin_hook_response,
+    prepare_devin_hook_payload,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
@@ -17,11 +22,6 @@ from codex_plugin_scanner.guard.adapters.devin_config import (
     GUARD_MANAGED_MARKER,
     is_guard_managed_hook_command,
     load_devin_jsonc,
-)
-from codex_plugin_scanner.guard.adapters.devin_hooks import (
-    devin_hook_response_from_guard,
-    emit_devin_hook_response,
-    prepare_devin_hook_payload,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 

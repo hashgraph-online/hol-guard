@@ -88,6 +88,19 @@ pub(crate) fn mcp_artifacts(
     path: &Path,
     payload: &PyVal,
 ) -> Result<Vec<Value>, &'static str> {
+    mcp_server_artifacts(scope, path, payload, |name| {
+        format!("claude-code:{}:mcp:{name}", scope.scope)
+    })
+}
+
+/// The `mcpServers` entries of one payload, each identified by `artifact_id`
+/// of its server name. Oh My Pi's `mcp.json` uses the same layout.
+pub(crate) fn mcp_server_artifacts(
+    scope: &Scope<'_>,
+    path: &Path,
+    payload: &PyVal,
+    artifact_id: impl Fn(&str) -> String,
+) -> Result<Vec<Value>, &'static str> {
     let Some(servers) = payload.get("mcpServers").and_then(PyVal::as_dict) else {
         return Ok(Vec::new());
     };
@@ -142,7 +155,7 @@ pub(crate) fn mcp_artifacts(
             metadata.insert(key.clone(), value.clone());
         }
         artifacts.push(scope.wire(
-            format!("claude-code:{}:mcp:{name}", scope.scope),
+            artifact_id(name),
             name,
             "mcp_server",
             path,

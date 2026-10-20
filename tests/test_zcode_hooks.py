@@ -6,7 +6,7 @@ import io
 import json
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.zcode_hooks import (
+from codex_plugin_scanner.guard.adapters._modules.zcode.zcode_hooks import (
     emit_zcode_hook_response,
     prepare_zcode_hook_payload,
     zcode_authority_block_reason,

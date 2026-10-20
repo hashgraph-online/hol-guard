@@ -12,6 +12,7 @@
   "effective_shape": [
     "schema_version",
     "health",
+    "authority_unread",
     "revision",
     "catalog_digest",
     "global_lockdown",

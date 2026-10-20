@@ -10,19 +10,26 @@ import {
   retryCannotReuseApprovalHint,
 } from "./approval-retry-guidance";
 import { GuardRequestResolutionError } from "./guard-api";
-import { bulkApprovalRiskTier, groupDuplicates } from "./queue-state";
+import { bulkApprovalRiskTier, groupDuplicates, isBulkApprovableGroup } from "./queue-state";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { approvalGateRefreshNeeded, resolvedStateForItem } from "./review-decision-state";
-import { ReviewScopeControls } from "./review-scope-controls";
+import { allowButtonLabel, ReviewScopeControls } from "./review-scope-controls";
 import { buildDecisionPayload, requestSupportsScope } from "./approval-scopes";
 import { buildBulkRiskDisclosure } from "./queue-bulk-risk-disclosure";
+import { reviewDecisionShortcutAllowed, shouldSubmitApprovalProof } from "./approval-keyboard";
 
 function assert(condition: boolean, message: string): void {
   if (!condition) {
     throw new Error(message);
   }
 }
+
+assert(!reviewDecisionShortcutAllowed(true), "IME composition suppresses review decision shortcuts");
+assert(reviewDecisionShortcutAllowed(false), "ordinary review decision shortcuts remain enabled");
+assert(!shouldSubmitApprovalProof("Enter", true, false), "IME Enter does not submit approval proof");
+assert(shouldSubmitApprovalProof("Enter", false, false), "ordinary Enter submits enabled approval proof");
+assert(!shouldSubmitApprovalProof("Enter", false, true), "disabled approval proof remains disabled");
 
 function nativeBashRequest(requestId: string, command: string, restrictions: string[]) {
   return normalizeApprovalRequest({
@@ -72,6 +79,27 @@ const otherGit = nativeBashRequest("33333333333333333333333333333333", gitChain,
 // #3838: approval copy never promises a retry the daemon cannot match.
 assert(retryCannotReuseApproval(unbound), "unbound native review is flagged as not reusable");
 assert(!retryCannotReuseApproval(bound), "bound native review is not flagged");
+for (const item of [
+  normalizeApprovalRequest({ ...unbound, once_only_reason: "script_execution_binding_unavailable" } as never),
+  { ...unbound, once_only_reason: "script_execution_binding_unavailable", exact_action_persistence_eligible: true },
+  { ...bound, once_only_reason: "script_execution_binding_unavailable", exact_action_persistence_eligible: true },
+]) {
+  assert(retryCannotReuseApproval(item), "script delivery refusal wins even without a retry restriction");
+  for (const copy of [retryCannotReuseApprovalHint(item, "Oh My Pi"), retryBlockedApprovalCopy(item, "Oh My Pi")]) {
+    assert(copy.includes("verified snapshot"), "script delivery advice identifies the execution limitation");
+    assert(!/older version|run the command again|new request offers|Always allow exact action/.test(copy),
+      "an unbound script does not receive a legacy retry or persistence promise");
+  }
+  assert(!requestSupportsScope(item, "allow", "artifact"), "stale eligibility cannot allow unbound scripts");
+  assert(requestSupportsScope(item, "block", "artifact"), "script delivery refusal preserves Keep blocked");
+  for (const persistExactAction of [false, true]) {
+    let rejected = false;
+    try {
+      buildDecisionPayload({ item, action: "allow", scope: "artifact", reason: "test", persistExactAction });
+    } catch { rejected = true; }
+    assert(rejected, "both approval durations reject a stale unbound script request");
+  }
+}
 const unboundCopy = buildRetryAfterApprovalCopy(unbound, "allow");
 assert(!unboundCopy.includes("within 15 minutes"), "unbound approval copy drops the retry window");
 assert(unboundCopy.includes("run the command again"), "unbound approval copy sends the agent's retry to a fresh request");
@@ -328,5 +356,70 @@ for (const item of [envPrefixed, { ...envPrefixed, exact_action_persistence_elig
     assert(!/run (it|this|the command) yourself|change nothing/i.test(copy), `no dead-end copy: ${copy}`);
   }
 }
+
+// Native Bash keeps its own type; server-derived scope capabilities govern all
+// decisions, including stale UI submissions and the bulk selector.
+const nativeOwner = {
+  ...bound,
+  artifact_type: "native_bash_request",
+  artifact_id: "native-bash-owner:native-pretool:v3",
+  artifact_hash: "guard-approval-context:v1:reviewed-fixture",
+  exact_action_persistence_eligible: true,
+  scope_restrictions: ["reusable_allow_is_action_bound"],
+};
+const nativeScopeControls = renderToStaticMarkup(
+  createElement(ReviewScopeControls, {
+    commonScopeOptions: [],
+    broaderScopeOptions: [],
+    advancedScopeOptions: [],
+    blockScopeOptions: [],
+    hasAllowScope: true,
+    taskCapabilityCopy: null,
+    exactActionPersistenceEligible: true,
+    versionBoundScript: true,
+    rememberExactAction: false,
+    allowScope: "artifact",
+    blockScope: "artifact",
+    onAllowScopeChange: () => undefined,
+    onBlockScopeChange: () => undefined,
+    onRememberExactActionChange: () => undefined,
+  }),
+);
+assert(nativeScopeControls.includes("Run once"), "native Bash offers a working Run once duration");
+assert(
+  nativeScopeControls.includes("Always allow this version in this project"),
+  "native Bash names the exact-version project choice",
+);
+assert(
+  allowButtonLabel("artifact", true, false) === "Run once" &&
+    allowButtonLabel("artifact", true, true) === "Always allow this version in this project",
+  "native Bash submit labels match the selected duration",
+);
+assert(requestSupportsScope(nativeOwner, "allow", "artifact"), "verified native owner offers once");
+assert(!requestSupportsScope(nativeOwner, "allow", "workspace"), "native owner cannot widen project scope");
+const nativeOnce = buildDecisionPayload({ item: nativeOwner, action: "allow", scope: "artifact", reason: "once" });
+assert(nativeOnce.persist_policy !== true, "native once does not remember consent");
+const nativeAlways = buildDecisionPayload({
+  item: nativeOwner, action: "allow", scope: "artifact", reason: "version", persistExactAction: true,
+});
+assert(nativeAlways.persist_policy === true, "native version requires explicit persistent duration");
+const unavailableOwner = {
+  ...nativeOwner,
+  exact_action_persistence_eligible: false,
+  allowed_scopes_by_action: { allow: [], block: ["artifact" as const] },
+  scope_restrictions: ["retry_cannot_reuse_approval"],
+};
+assert(!requestSupportsScope(unavailableOwner, "allow", "artifact"), "unverified native owner offers no execution");
+assert(requestSupportsScope(unavailableOwner, "block", "artifact"), "unverified owner still permits refusal");
+for (const persistExactAction of [false, true]) {
+  let refused = false;
+  try {
+    buildDecisionPayload({ item: unavailableOwner, action: "allow", scope: "artifact", reason: "stale", persistExactAction });
+  } catch { refused = true; }
+  assert(refused, "stale native owner selection cannot build any allow duration");
+}
+const nativeRefusal = buildDecisionPayload({ item: unavailableOwner, action: "block", scope: "artifact", reason: "keep" });
+assert(nativeRefusal.persist_policy !== true, "native Keep blocked does not become a remembered deny");
+assert(!isBulkApprovableGroup(groupDuplicates([unavailableOwner])[0]), "bulk excludes an unavailable native owner");
 
 console.log("approval-retry-ux tests passed");

@@ -17,7 +17,7 @@ from ci.gauntlet.harnesses import adapter, claude_tools
 from ci.gauntlet.proofs import required_checks
 
 # Oh My Pi's own tools. No other lane has anything to map them onto.
-OMP_ONLY = {"glob", "grep", "eval", "task", "wait", "todo", "learn"}
+OMP_ONLY = {"glob", "grep", "eval", "task", "wait", "todo", "learn", "github"}
 
 
 def _native_tools_cases() -> tuple:

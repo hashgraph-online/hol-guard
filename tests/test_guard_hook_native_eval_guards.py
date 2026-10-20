@@ -9,48 +9,10 @@ import pytest
 from codex_plugin_scanner.guard.cli import commands_hook_native_eval as eval_module
 from codex_plugin_scanner.guard.cli.commands_hook_native_edge_facts import _native_edge_facts
 from codex_plugin_scanner.guard.cli.commands_hook_native_eval import (
-    _runtime_external_archive_command_matches_executable,
     _runtime_external_archive_has_digest_binding_sink,
 )
 from codex_plugin_scanner.guard.cli.commands_hook_native_generic import _observed_action_detail
-from codex_plugin_scanner.guard.native_shell_helpers import NativeShellHelpersError
-
-
-def test_archive_command_matcher_asks_the_resident_and_forwards_the_executable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The parse itself is covered in `package_shim_invocation_tests.rs`."""
-
-    asked: list[tuple[str, str, str]] = []
-
-    def record(action: str, command: str, **fields: object) -> bool:
-        asked.append((action, command, str(fields["executable"])))
-        return True
-
-    monkeypatch.setattr(eval_module, "call", record)
-    assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is True
-    assert asked == [("invokes_executable", "cat ./archive.tar", "cat")]
-
-
-def test_archive_command_matcher_never_asks_without_a_command() -> None:
-    def refuse(action: str, command: str, **fields: object) -> bool:
-        raise AssertionError("asked about an absent command")
-
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(eval_module, "call", refuse)
-        assert _runtime_external_archive_command_matches_executable(None, "cat") is False
-
-
-def test_archive_command_matcher_treats_an_unreachable_resident_as_no_match(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """No binding sink leaves the approval with the user, not with the shim."""
-
-    def unavailable(action: str, command: str, **fields: object) -> bool:
-        raise NativeShellHelpersError("native_shell_helpers_unavailable")
-
-    monkeypatch.setattr(eval_module, "call", unavailable)
-    assert _runtime_external_archive_command_matches_executable("cat ./archive.tar", "cat") is False
+from codex_plugin_scanner.guard.native_shim_admin import NativeShimAdminError
 
 
 def test_native_edge_facts_forward_the_edge_verdict_without_deciding() -> None:
@@ -67,83 +29,75 @@ def test_native_edge_facts_forward_the_edge_verdict_without_deciding() -> None:
     assert _native_edge_facts({}, "PostToolUse", artifact_type="command")["package_request"] is False
 
 
-def test_digest_binding_sink_requires_manager_and_path_executable(tmp_path) -> None:
-    context = SimpleNamespace()
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata=None),
-            context=context,
-            raw_command="tar xf a.tgz",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv"}),
-            context=context,
-            raw_command="tar xf a.tgz",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "uv"}),
-            context=context,
-            raw_command="uv run tool",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
-    assert (
-        _runtime_external_archive_has_digest_binding_sink(
-            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"}),
-            context=context,
-            raw_command="cat other",
-            runtime_workspace=tmp_path,
-        )
-        is False
-    )
+def test_digest_binding_sink_never_asks_without_package_metadata(tmp_path) -> None:
+    """Without a manager and an executable there is nothing for a shim to own."""
+
+    def refuse(*args: object, **fields: object) -> bool:
+        raise AssertionError("asked the resident about an artifact that names no shim")
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(eval_module, "package_shim_digest_binding_sink", refuse)
+        for metadata in (None, {"package_manager": "uv"}, {"package_executable": "/usr/bin/uv"}):
+            assert (
+                _runtime_external_archive_has_digest_binding_sink(
+                    artifact=SimpleNamespace(metadata=metadata),
+                    context=SimpleNamespace(),
+                    raw_command="tar xf a.tgz",
+                    runtime_workspace=tmp_path,
+                )
+                is False
+            )
 
 
-def test_digest_binding_sink_matches_resolved_shim_path(tmp_path, monkeypatch) -> None:
-    real_executable = tmp_path / "uv"
-    real_executable.write_text("#!/bin/sh\n", encoding="utf-8")
-    other = tmp_path / "other-uv"
-    other.write_text("#!/bin/sh\n", encoding="utf-8")
+def test_digest_binding_sink_forwards_the_facts_and_returns_the_resident_answer(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The parse and the path resolution are the resident's; this forwards them."""
 
-    def fake_status(_context, *, path_env=None):
-        return {
-            "manager_details": [
-                {"manager": "pip", "integrity": "mismatch", "shim_path": str(other)},
-                {"manager": "uv", "integrity": "ok", "shim_path": str(real_executable)},
-            ]
-        }
+    asked: list[dict[str, object]] = []
 
-    monkeypatch.setattr(eval_module, "package_shim_status", fake_status)
-    # The launch test itself is the resident's; this exercises the shim match.
-    monkeypatch.setattr(eval_module, "call", lambda *args, **fields: True)
-    artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": str(real_executable)})
+    def record(context: object, **fields: object) -> bool:
+        asked.append(dict(fields))
+        return True
+
+    monkeypatch.setattr(eval_module, "package_shim_digest_binding_sink", record)
+    artifact = SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"})
     assert (
         _runtime_external_archive_has_digest_binding_sink(
             artifact=artifact,
             context=SimpleNamespace(),
-            raw_command=f"{real_executable} run tool",
+            raw_command="/usr/bin/uv run tool",
             runtime_workspace=tmp_path,
         )
         is True
     )
+    assert asked == [
+        {
+            "manager": "uv",
+            "executable": "/usr/bin/uv",
+            "command": "/usr/bin/uv run tool",
+            "workspace_dir": tmp_path,
+            "path_env": asked[0]["path_env"],
+        }
+    ]
 
-    def mismatched_status(_context, *, path_env=None):
-        return {"manager_details": [{"manager": "uv", "integrity": "ok", "shim_path": str(other)}]}
 
-    monkeypatch.setattr(eval_module, "package_shim_status", mismatched_status)
+def test_digest_binding_sink_treats_an_unreachable_resident_as_no_sink(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No binding sink leaves the approval with the user, not with the shim."""
+
+    def unavailable(context: object, **fields: object) -> bool:
+        raise NativeShimAdminError("native_shim_admin_unavailable")
+
+    monkeypatch.setattr(eval_module, "package_shim_digest_binding_sink", unavailable)
     assert (
         _runtime_external_archive_has_digest_binding_sink(
-            artifact=artifact,
+            artifact=SimpleNamespace(metadata={"package_manager": "uv", "package_executable": "/usr/bin/uv"}),
             context=SimpleNamespace(),
-            raw_command=f"{real_executable} run tool",
+            raw_command="/usr/bin/uv run tool",
             runtime_workspace=tmp_path,
         )
         is False

@@ -213,16 +213,15 @@ def regenerate_projections() -> None:
                 *check,
             ]
         )
-        _run([sys.executable, "scripts/export_extension_directory.py", *check])
+        _run([sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(COMPILER), *check])
 
 
 def refresh_directory_render() -> None:
-    _run([sys.executable, "scripts/render_command_extension_directory.py"])
+    _run([sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(COMPILER)])
 
 
 def verify() -> None:
-    _run([sys.executable, "scripts/render_command_extension_directory.py", "--check"])
-    _run([sys.executable, "scripts/export_extension_directory.py", "--check"])
+    _run([sys.executable, "scripts/prepare_extension_directory.py", "--compiler", str(COMPILER), "--check"])
     check_trust_consistency()
 
 
