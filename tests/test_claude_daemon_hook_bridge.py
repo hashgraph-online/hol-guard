@@ -72,7 +72,6 @@ def test_an_oversized_hook_without_a_runtime_keeps_its_event_denial(
     assert capsys.readouterr().out == bridge._limit_denied("hook input", expected)
 
 
-
 def test_native_spawn_error_denies_the_tool_instead_of_failing_open(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -91,9 +90,7 @@ def test_native_spawn_error_denies_the_tool_instead_of_failing_open(
     assert bridge._NATIVE_RUNTIME_UNAVAILABLE in response["hookSpecificOutput"]["permissionDecisionReason"]
 
 
-def test_native_probe_budget_is_shared_with_one_bounded_retry(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_native_probe_budget_is_shared_with_one_bounded_retry(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[float] = []
     started = time.monotonic()
 
@@ -353,7 +350,7 @@ def test_malformed_permission_passthrough_is_denied(output):
 
 
 def test_remaining_hint_preserves_unicode_and_omits_itself_when_it_will_not_fit() -> None:
-    from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import (
+    from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_transport import (
         _MAX_HOOK_REQUEST_BYTES,
         _with_remaining_hint,
     )

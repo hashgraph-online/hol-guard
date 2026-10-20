@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from codex_plugin_scanner.guard.adapters import copilot_state_paths
 from codex_plugin_scanner.guard.adapters import cursor_hooks as cursor_hooks_module
+from codex_plugin_scanner.guard.adapters._modules.copilot import copilot_state_paths
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.copilot import CopilotHarnessAdapter
 from codex_plugin_scanner.guard.adapters.cursor_hooks import (

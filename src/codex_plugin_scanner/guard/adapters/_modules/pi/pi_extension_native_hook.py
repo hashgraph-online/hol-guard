@@ -25,7 +25,7 @@ def pi_native_hook_runtime(*, guard_home: Path, platform_name: str = os.name) ->
 
     if platform_name == "nt" or os.environ.get(PI_HOOK_BRIDGE_SWITCH) == "fetch":
         return None
-    from .native_hook_bridge import native_hook_bridge_executable
+    from ...native_hook_bridge import native_hook_bridge_executable
 
     return native_hook_bridge_executable(PI_HOOK_BRIDGE_FEATURE, guard_home=guard_home)
 

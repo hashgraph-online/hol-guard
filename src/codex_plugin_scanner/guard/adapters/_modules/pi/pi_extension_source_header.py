@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import json
 
+from ...pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 from .pi_extension_content_source import CONTENT_REVIEW_HELPERS_SOURCE
 from .pi_extension_native_hook import native_hook_runtime_source
-from .pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 from .pi_extension_source_header_shared_v1 import make_source_header_builder_v1
 
 _build_shared_source_header = make_source_header_builder_v1(

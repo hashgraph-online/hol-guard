@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import _cursor_block_reason
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
-from codex_plugin_scanner.guard.adapters.cursor_hook_payload import _cursor_block_reason
 from codex_plugin_scanner.guard.approval_hook_copy import (
     join_native_hook_reason,
     live_hook_approval_context,

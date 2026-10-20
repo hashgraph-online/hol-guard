@@ -14,7 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
-from .pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
+from ...pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 
 SourceHeaderBuilder = Callable[..., str]
 SourceBodyBuilder = Callable[..., str]

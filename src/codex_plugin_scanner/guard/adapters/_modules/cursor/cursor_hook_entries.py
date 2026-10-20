@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .adapter_safe_output import write_text_at_authorized_path
-from .cursor_hook_config import _is_managed_hook_entry
+from ...adapter_safe_output import write_text_at_authorized_path
+from ...cursor_hook_config import _is_managed_hook_entry
 
 
 def _remove_managed_hook_entries(*, hooks_path: Path, script_path: Path) -> bool:

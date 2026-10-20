@@ -14,16 +14,16 @@ from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, Protocol
 
-from ...safe_output import write_text_atomic_no_follow
-from ..daemon.file_locking import try_lock_daemon_file
-from ..mdm.file_lock import release_file_lock
-from .adapter_safe_output import write_text_at_authorized_path
-from .adapter_state_integrity import (
+from .....safe_output import write_text_atomic_no_follow
+from ....daemon.file_locking import try_lock_daemon_file
+from ....mdm.file_lock import release_file_lock
+from ...adapter_safe_output import write_text_at_authorized_path
+from ...adapter_state_integrity import (
     adapter_state_is_authenticated,
     authenticate_adapter_state,
     authenticated_adapter_path,
 )
-from .base import HarnessContext, _ensure_path_within_root, _json_payload
+from ...base import HarnessContext, _ensure_path_within_root, _json_payload
 
 CopilotStateEntry = tuple[Path, Path, Path, dict[str, object]]
 PathFactory = Callable[[Path, HarnessContext], Path]

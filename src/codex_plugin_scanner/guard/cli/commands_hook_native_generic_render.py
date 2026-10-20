@@ -59,13 +59,13 @@ def _emit_adapter(
             policy_action=policy_action, reason=reason, event_name=event_name, output_stream=output_stream
         )
     elif emitter == "pi":
-        from ..adapters.pi_hooks import emit_pi_hook_response
+        from ..adapters._modules.pi.pi_hooks import emit_pi_hook_response
 
         emit_pi_hook_response(
             policy_action=policy_action, reason=reason, approval_payload=payload, output_stream=output_stream
         )
     elif emitter == "zcode":
-        from ..adapters.zcode_hooks import emit_zcode_hook_response
+        from ..adapters._modules.zcode.zcode_hooks import emit_zcode_hook_response
 
         emit_zcode_hook_response(
             policy_action=policy_action,
@@ -75,7 +75,7 @@ def _emit_adapter(
             output_stream=output_stream,
         )
     elif emitter == "devin":
-        from ..adapters.devin_hooks import emit_devin_hook_response
+        from ..adapters._modules.devin.devin_hooks import emit_devin_hook_response
 
         emit_devin_hook_response(
             policy_action=policy_action,

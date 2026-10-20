@@ -8,7 +8,9 @@ import subprocess
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
 
 
 @pytest.mark.parametrize("harness", ["omp", "pi"])
@@ -21,9 +23,10 @@ def test_result_acknowledgement_waits_for_reviewed_matching_final_context(tmp_pa
         ({"isError": False, "content": []}, 0),
         ({"isError": False, "content": [{"type": "image", "data": "fixture-image"}]}, None),
         (
-            {"isError": False, "content": [
-                {"type": "text", "text": "ordinary"}, {"type": "image", "data": "fixture-image"}
-            ]},
+            {
+                "isError": False,
+                "content": [{"type": "text", "text": "ordinary"}, {"type": "image", "data": "fixture-image"}],
+            },
             None,
         ),
         ({"isError": True, "details": {"exitCode": 7}}, 7),

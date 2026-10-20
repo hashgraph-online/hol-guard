@@ -22,7 +22,7 @@ def native_cursor_hook_bridge(guard_home: Path | None = None) -> Path | None:
 
     if os.environ.get("HOL_GUARD_CURSOR_HOOK_BRIDGE") == "python":
         return None
-    from .native_hook_bridge import native_hook_bridge_executable
+    from ...native_hook_bridge import native_hook_bridge_executable
 
     return native_hook_bridge_executable(NATIVE_CURSOR_HOOK_FEATURE, guard_home=guard_home)
 

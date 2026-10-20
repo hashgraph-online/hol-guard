@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from ...pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 from .pi_extension_cli_runtime_source import CLI_RUNTIME_HELPERS_SOURCE
-from .pi_extension_runtime_ownership import PiExtensionRuntimeOwnership
 
 HeaderBuilder = Callable[..., str]
 

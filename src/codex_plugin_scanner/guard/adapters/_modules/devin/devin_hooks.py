@@ -15,7 +15,7 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
-from ..native_hook_adapter import native_prepare_payload
+from ....native_hook_adapter import native_prepare_payload
 
 
 def _raw_hook_event_name(payload: Mapping[str, object]) -> str:

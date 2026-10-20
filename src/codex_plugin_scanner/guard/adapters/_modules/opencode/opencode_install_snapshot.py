@@ -9,20 +9,16 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
-from ...ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
-from ..models import HarnessDetection
-from .base import HarnessContext
-from .mcp_servers import (
+from .....ecosystems.opencode import _load_json_or_jsonc, _load_json_or_jsonc_text
+from ....models import HarnessDetection
+from ...base import HarnessContext
+from ...mcp_servers import (
     GUARD_MCP_COMPANION_PREFIX,
     ManagedMcpServer,
     is_guard_proxy_command,
     stable_mcp_server_identifier,
 )
-from .opencode_artifacts import (
-    _command_parts,
-    config_paths,
-    native_artifacts,
-)
+from ...opencode_artifacts import _command_parts, config_paths, native_artifacts
 
 
 class OpenCodeInstallSnapshotError(RuntimeError):

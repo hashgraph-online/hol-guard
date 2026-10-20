@@ -16,7 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
+from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
+    authenticated_claude_hook_response,
+)
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server
 from codex_plugin_scanner.guard.daemon.runtime_hook_scheduler_contracts import RuntimeHookAdmission

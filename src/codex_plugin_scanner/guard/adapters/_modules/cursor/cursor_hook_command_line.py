@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import shlex
 
-from ..codex_hook_command_line import split_hook_command_line
+from ....codex_hook_command_line import split_hook_command_line
 
 
 def split_cursor_hook_command(command: str) -> list[str] | None:

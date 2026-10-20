@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from ..action_lattice import is_guard_action
-from ..approval_hook_copy import with_approval_review_url
-from ..daemon.hook_availability_policy import hook_reason_continues_session
-from ..native_hook_adapter import native_prepare_payload
+from ....action_lattice import is_guard_action
+from ....approval_hook_copy import with_approval_review_url
+from ....daemon.hook_availability_policy import hook_reason_continues_session
+from ....native_hook_adapter import native_prepare_payload
 
 
 def prepare_cursor_hook_payload(payload: Mapping[str, object]) -> dict[str, object]:

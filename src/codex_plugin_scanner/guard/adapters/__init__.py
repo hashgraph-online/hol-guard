@@ -4,26 +4,6 @@ from __future__ import annotations
 
 from functools import lru_cache
 from importlib import import_module
-from pathlib import Path
-
-# Keep existing adapters.<module> imports while grouping internal source files.
-# Only installed package directories enter this module search path. User and
-# workspace paths must never be added here.
-_INTERNAL_ADAPTER_FAMILIES = (
-    "claude",
-    "cline",
-    "codex",
-    "copilot",
-    "cursor",
-    "devin",
-    "grok",
-    "opencode",
-    "pi",
-    "zcode",
-)
-_ADAPTER_MODULE_ROOT = Path(__file__).parent / "_modules"
-globals()["__path__"].extend(str(_ADAPTER_MODULE_ROOT / family) for family in _INTERNAL_ADAPTER_FAMILIES)
-
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:

@@ -9,14 +9,14 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from .codex_daemon_hook_auth import (
+from ..codex.codex_daemon_hook_auth import (
     _assert_loopback_http_url,
     _authenticated_state,
     _DaemonResponseError,
     _http_json_response,
     _verify_challenge_response,
 )
-from .codex_daemon_hook_transport import _daemon_generation_identity, _with_remaining_hint
+from ..codex.codex_daemon_hook_transport import _daemon_generation_identity, _with_remaining_hint
 
 _DISCOVERY_PROTOCOL_VERSION = 1
 _MAX_DAEMON_RESPONSE_BYTES = 1_000_000

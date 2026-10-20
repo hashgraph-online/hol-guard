@@ -13,8 +13,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.adapters.pi_extension_bound_bash_source import _ENVIRONMENT_NAMES
-from codex_plugin_scanner.guard.adapters.pi_extension_contained_tests_source import CONTAINED_TEST_HELPERS_SOURCE
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_bound_bash_source import _ENVIRONMENT_NAMES
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_extension_contained_tests_source import (
+    CONTAINED_TEST_HELPERS_SOURCE,
+)
 from codex_plugin_scanner.guard.approvals import ApprovalRequestAlreadyResolvedError, apply_approval_resolution
 from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.hook_worker import HookWorker

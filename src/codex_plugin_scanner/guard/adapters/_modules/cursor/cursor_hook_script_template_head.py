@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from .daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
-from .hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
-from .hook_input_reader import HOOK_INPUT_READER_TEMPLATE
+from ...daemon_pid_liveness import DAEMON_PID_LIVENESS_TEMPLATE
+from ...hook_http_deadline import HOOK_HTTP_DEADLINE_TEMPLATE
+from ...hook_input_reader import HOOK_INPUT_READER_TEMPLATE
 
 HOOK_SCRIPT_TEMPLATE_HEAD = '''#!/usr/bin/env python3
 """Managed by HOL Guard. Re-run `hol-guard install cursor` after moving Guard home."""

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
-from ..native_hook_adapter import ClinePayloadError, native_prepare_payload
+from ....native_hook_adapter import ClinePayloadError, native_prepare_payload
 
 if TYPE_CHECKING:
     pass

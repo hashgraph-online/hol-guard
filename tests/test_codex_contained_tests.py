@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import codex_contained_tests as route
-from codex_plugin_scanner.guard.adapters.codex_hook_response import codex_hook_response
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_hook_response import codex_hook_response
 
 
 def receipt() -> dict[str, object]:

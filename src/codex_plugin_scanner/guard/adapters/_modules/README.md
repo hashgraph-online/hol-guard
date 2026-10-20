@@ -1,9 +1,9 @@
 # Internal harness modules
 
-Files here remain importable as `codex_plugin_scanner.guard.adapters.<module>`, not `codex_plugin_scanner.guard.adapters._modules.<family>.<module>`. This retains imports in existing CLI, daemon, and tests.
+Each family is an ordinary Python package. Import a helper by its source layout, for example `codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events`. Keep `__init__.py` in `_modules/` and every family so Python, static analysis, and frozen-package collectors agree on module identity.
 
-The parent `adapters/__init__.py` declares the searched family directories. These subdirectories intentionally have no Python `__init__.py`; do not create a second module identity or duplicate a file at the adapter root. Public adapter entrypoints and contract-pinned/path-sensitive files remain in the parent directory.
+Public adapter classes and helpers bound by physical-path contracts remain in the parent directory. In particular, `codex_daemon_hook_resume.py` is authenticated by Codex manifests at its original path. Do not duplicate implementations or add compatibility search paths.
 
-Families currently grouped here: `claude`, `cline`, `codex`, `copilot`, `cursor`, `devin`, `grok`, `opencode`, `pi`, `zcode`.
+Families: `claude`, `cline`, `codex`, `copilot`, `cursor`, `devin`, `grok`, `opencode`, `pi`, `zcode`.
 
 See [adapter contributions](../../../../../docs/guard/adapter-contributions.md) before relocating more files.

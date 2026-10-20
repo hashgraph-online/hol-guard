@@ -4,7 +4,7 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from .bounded_cli_hook_envelope import _json_object
+from ...bounded_cli_hook_envelope import _json_object
 
 
 def configured_grok_payload(input_text: str, cli_args: Sequence[str]) -> str:

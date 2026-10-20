@@ -257,6 +257,7 @@
    "class": "python_control",
    "paths": [
     "src/codex_plugin_scanner/guard/adapters/*.py",
+    "src/codex_plugin_scanner/guard/adapters/_modules/*.py",
     "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py"
    ],
    "current": "harness registry, detection, installation, and adapter control surfaces; transport and semantic subsets are classified below",
@@ -676,6 +677,7 @@
   "rust/crates/*/src/approval*.rs",
   "rust/crates/guard-runtime/src/resident_protocol.rs",
   "src/codex_plugin_scanner/guard/adapters/*.py",
+  "src/codex_plugin_scanner/guard/adapters/_modules/*.py",
   "src/codex_plugin_scanner/guard/adapters/_modules/*/*.py",
   "src/codex_plugin_scanner/guard/daemon/*hook*.py",
   "src/codex_plugin_scanner/guard/daemon/server.py",

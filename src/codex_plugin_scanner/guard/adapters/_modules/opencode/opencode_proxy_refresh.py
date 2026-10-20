@@ -8,11 +8,11 @@ import stat
 import tempfile
 from pathlib import Path
 
-from ..runtime.jsonc import normalize_jsonc
-from .base import HarnessContext
-from .hook_python import guard_cli_command
-from .mcp_relay_native import mcp_proxy_command
-from .opencode_artifacts import _command_parts, config_paths
+from ....runtime.jsonc import normalize_jsonc
+from ...base import HarnessContext
+from ...hook_python import guard_cli_command
+from ...mcp_relay_native import mcp_proxy_command
+from ...opencode_artifacts import _command_parts, config_paths
 from .opencode_config_lock import opencode_config_lock
 
 

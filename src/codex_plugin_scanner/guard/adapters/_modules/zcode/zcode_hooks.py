@@ -25,7 +25,7 @@ import sys
 from collections.abc import Mapping
 from typing import TextIO
 
-from ..native_hook_adapter import native_prepare_payload
+from ....native_hook_adapter import native_prepare_payload
 
 # Review-tier actions become ZCode's ``ask`` so the native permission prompt
 # (allow once / always / deny) can satisfy them; hard denials stay ``deny``.

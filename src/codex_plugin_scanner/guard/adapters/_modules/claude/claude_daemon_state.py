@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from urllib.parse import parse_qs
 
-from ..daemon.discovery import load_authenticated_daemon_state
+from ....daemon.discovery import load_authenticated_daemon_state
 
 
 def canonical_daemon_state_path(state_path: str | Path) -> Path:

@@ -33,7 +33,7 @@ Search [open adapter PRs](https://github.com/hashgraph-online/hol-guard/pulls?q=
 | Wire contracts | `rust/crates/guard-contracts/src/hook_adapter.rs` |
 | Existing adapter tests | `tests/test_<harness>_adapter.py`, `tests/test_guard_harness_*.py`, and native vector tests |
 
-These are **source paths**, not new import names. Existing imports like `codex_plugin_scanner.guard.adapters.cursor_hook_events` still work: `adapters/__init__.py` exposes packaged `_modules/<family>/` directories under the original adapter namespace. Put a new public harness class at the adapter root; put supporting implementation files under the corresponding family directory. Do not create a second import identity for a relocated helper.
+Public harness classes stay at their existing adapter entrypoints. Internal helpers use ordinary Python package imports, such as `codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_events`. Each family and `_modules/` has an `__init__.py`, so Python, static analysis, and frozen builds discover the same modules. Put a new public harness class at the adapter root and its supporting files in the corresponding family package; do not extend `__path__` or create a second import identity.
 
 Begin with [Gemini](../../src/codex_plugin_scanner/guard/adapters/gemini.py) or [Antigravity](../../src/codex_plugin_scanner/guard/adapters/antigravity.py) for discovery-only examples, and [Cline](../../src/codex_plugin_scanner/guard/adapters/cline.py) or [Cursor](../../src/codex_plugin_scanner/guard/adapters/cursor.py) for hook installation. Review the actual host contract before copying a strategy.
 
@@ -45,7 +45,7 @@ Begin with [Gemini](../../src/codex_plugin_scanner/guard/adapters/gemini.py) or 
 4. Add a `HarnessProtectionContract` to `adapters/contract_registry.py`: installation aliases, observed config paths, event surfaces, smoke command, and **specific** known blind spots. Declare real event capabilities in the relevant `contract_hook_capabilities.py` or `contract_agent_capabilities.py`. An aspirational hook is not a supported capability.
 5. Update [harness support](harness-support.md) with tested behavior and limits. If the host has version-specific coverage, follow [version coverage](harness-version-coverage.md) rather than claiming support for untested versions.
 
-Existing Python adapter imports are stable, but their physical helper files may be under `_modules/`. If relocating additional files, also extend the matching paths in the ownership manifests described below.
+Public adapter entrypoints are stable. When relocating an internal helper, update its imports and callers, source-path references, and ownership manifests together. Files bound by authenticated manifests, including `codex_daemon_hook_resume.py`, stay at their established paths unless the complete identity and upgrade contract is migrated.
 
 ## 4. Implement protection safely
 
@@ -65,7 +65,7 @@ Start from a clean disposable home and workspace. Exercise no-install discovery,
 At minimum, test:
 
 1. A real harmless command or tool event is allowed without requiring unnecessary approval.
-2. A real dangerous synthetic event reaches the hook, is denied **before side effects**, and cannot bypass via aliases or malformed arguments.
+2. For each declared pre-tool blocking event, a dangerous synthetic event reaches the hook, is denied **before side effects**, and cannot bypass via aliases or malformed arguments. Test observation-only and unavailable events against their documented behavior instead; do not require pre-tool denial for those surfaces.
 3. Agent responses and exit codes match the host's contract. Unsupported, timed-out, and disconnected paths fail according to the documented policy.
 4. Detection never writes files, and install/uninstall never destroy user-managed entries.
 5. Hook events and their generated files have bounded size and deadlines. Evidence and logs omit credentials.
@@ -76,7 +76,7 @@ Typical checks from the repo root:
 ```bash
 uv run --no-sync python -m ruff check src tests
 uv run --no-sync python -m ruff format --check src tests
-uv run --no-sync pytest tests/test_adapter_module_layout.py tests/test_guard_harness_contracts.py tests/test_guard_harness_setup.py tests/test_guard_harness_smoke.py --tb=short
+uv run --no-sync pytest tests/test_adapter_module_layout.py tests/test_adapter_packaged_manifest.py tests/test_guard_harness_contracts.py tests/test_guard_harness_setup.py tests/test_guard_harness_smoke.py --tb=short
 uv run --no-sync pytest tests/test_<harness>_adapter.py --tb=short
 
 cargo +1.88.0 fmt --manifest-path rust/Cargo.toml --all --check

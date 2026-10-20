@@ -192,7 +192,7 @@ def test_missing_native_fail_safe_codes_continue_mutating_pretool(tmp_path: Path
 
 
 def test_cursor_maps_cannot_finish_block_to_allow() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import (
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import (
         cursor_hook_response_from_guard,
         prepare_cursor_hook_payload,
     )
@@ -216,7 +216,7 @@ def test_cursor_maps_cannot_finish_block_to_allow() -> None:
 
 
 def test_cursor_completed_block_ignores_stale_allow_permission() -> None:
-    from codex_plugin_scanner.guard.adapters.cursor_hook_payload import cursor_hook_response_from_guard
+    from codex_plugin_scanner.guard.adapters._modules.cursor.cursor_hook_payload import cursor_hook_response_from_guard
 
     response = cursor_hook_response_from_guard(
         policy_action="block",

@@ -14,8 +14,8 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from ..daemon.file_locking import try_lock_daemon_file
-from ..mdm.file_lock import release_file_lock
+from ....daemon.file_locking import try_lock_daemon_file
+from ....mdm.file_lock import release_file_lock
 
 
 @contextmanager

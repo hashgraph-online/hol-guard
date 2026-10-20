@@ -27,7 +27,7 @@ from urllib.parse import parse_qs
 
 from ..codex_hook_launch_runtime import isolated_daemon_start_command
 from ..hook_execution_environment import stamp_hook_input_text
-from .claude_daemon_state import state_path_for_query
+from ._modules.claude.claude_daemon_state import state_path_for_query
 from .claude_hook_config import CLAUDE_GUARD_DAEMON_HOOK_MARKER
 from .claude_hook_config import CLAUDE_GUARD_PERMISSION_PASSTHROUGH_KEY as PERMISSION_PASSTHROUGH_KEY
 from .hook_input_reader import read_stdin_text

@@ -353,7 +353,7 @@ def _should_emit_native_hook_exit_block(args: argparse.Namespace, *, event_name:
     blocking = compact_event in {"pretooluse", "userpromptsubmit", "pretoolcall"}
     if canonical in {"kimi", "grok", "hermes", "pi", "omp", "zcode", "devin"} and blocking:
         if canonical == "zcode":
-            from ..adapters.zcode_hooks import zcode_hook_process_exit
+            from ..adapters._modules.zcode.zcode_hooks import zcode_hook_process_exit
 
             # ZCode turns exit code 2 into an unconditional deny and never
             # parses the stdout JSON, so review-tier PreToolUse actions fall

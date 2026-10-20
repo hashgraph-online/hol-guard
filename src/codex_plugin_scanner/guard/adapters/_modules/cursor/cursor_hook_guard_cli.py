@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from ..stable_guard_cli import (
+from ....stable_guard_cli import (
     CURRENT_HOL_GUARD_SHIM,
     MACOS_BUNDLED_HOL_GUARD,
     desktop_core_shim_for_executable,
