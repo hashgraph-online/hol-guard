@@ -90,7 +90,11 @@ const LOAD_ERROR_COPY: Record<string, { title: string; detail: string }> = {
   },
   catalog_snapshot_expired: {
     title: "The extension list changed while it loaded",
-    detail: "Guard rebuilt the extension list while this page was reading it, so the page has a partial copy.",
+    detail: "Guard rebuilt the extension list while this page was reading it, so this page never finished loading. Load it again to read the rebuilt list.",
+  },
+  catalog_snapshot_mismatch: {
+    title: "Guard's parts are on different versions",
+    detail: "The background service and the protection runtime on this device come from different versions of Guard, so neither can answer for the other's extension list. Install the latest version of HOL Guard to put them back in step.",
   },
 };
 

@@ -110,6 +110,20 @@ assert.doesNotMatch(modelUnavailable.title, /catalog_read_model_unavailable/);
 assert.match(modelUnavailable.detail, /Quit HOL Guard and open it again/);
 assert.equal(modelUnavailable.reference, "catalog_read_model_unavailable");
 
+// A mismatched daemon and runtime cannot be repaired by restarting the same
+// install, and an expired snapshot renders no partial list: the workspace
+// replaces the whole page with this card. Neither detail may claim otherwise.
+const mismatch = protectionCenterLoadError("catalog_snapshot_mismatch");
+assert.doesNotMatch(mismatch.detail, /catalog_snapshot_mismatch/);
+assert.doesNotMatch(mismatch.detail, /open it again|[Tt]ry again/);
+assert.match(mismatch.detail, /Install the latest version/);
+assert.equal(mismatch.reference, "catalog_snapshot_mismatch");
+
+const expired = protectionCenterLoadError("catalog_snapshot_expired");
+assert.doesNotMatch(expired.detail, /partial/);
+assert.match(expired.detail, /Load it again/);
+assert.equal(expired.reference, "catalog_snapshot_expired");
+
 const unknownCode = protectionCenterLoadError("catalog_read_went_sideways");
 assert.doesNotMatch(unknownCode.detail, /catalog_read_went_sideways/);
 assert.equal(unknownCode.reference, "catalog_read_went_sideways");
@@ -117,7 +131,7 @@ assert.equal(protectionCenterLoadError("catalog mismatch").reference, undefined)
 
 // The card already states that local protection continues, so the detail must
 // not repeat it.
-for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog mismatch"]) {
+for (const message of ["unauthorized", "catalog_read_model_unavailable", "catalog_read_transport_failed", "catalog_snapshot_expired", "catalog_snapshot_mismatch", "catalog mismatch"]) {
   assert.doesNotMatch(protectionCenterLoadError(message).detail, /[Ll]ocal protection/);
 }
 
