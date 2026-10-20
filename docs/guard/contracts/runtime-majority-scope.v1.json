@@ -53,7 +53,7 @@
         "surface": "hook_http_and_cli_events"
       },
       {
-        "module": "codex_plugin_scanner.guard.adapters.claude_frozen_hook",
+        "module": "codex_plugin_scanner.guard.adapters._modules.claude.claude_frozen_hook",
         "surface": "hook_http_and_cli_events"
       },
       {
