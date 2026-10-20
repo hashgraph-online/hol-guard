@@ -95,6 +95,30 @@ Older releases are preserved in the [changelog archive](docs/changelog-archive.m
 * **native:** a package-intent parse now sends the caller's `PATH` to the resident. The resident is long-lived, so its own `PATH` is the one it was spawned with; a manager it cannot resolve (`npx` from a test or tool directory) made the TypeScript launch evidence incomplete and sent a contained typecheck back to review even though the caller resolved the manager fine.
 * **native:** a resident that answers a context-digest request with its own error envelope is now reported by that code — and recorded against the resilience breaker — instead of being flattened into `native_context_digest_result_invalid`. An envelope outside the contract keeps its code in the rejection reason, and a rejected result names the contract clause that rejected it with the offending keys, so a foreign frame, a stale frame and a truncated read are no longer indistinguishable.
 
+## [3.51.0](https://github.com/hashgraph-online/hol-guard/compare/v3.50.0...v3.51.0) (2026-10-20)
+
+
+### Features
+
+* **mcp-servers:** add Kuuhaku MCP contribution ([#5231](https://github.com/hashgraph-online/hol-guard/issues/5231)) ([ab8f860](https://github.com/hashgraph-online/hol-guard/commit/ab8f860b60b9618a72367a33fe23b951bedb33df))
+* **mcp:** add leadline MCP server to catalog ([#5308](https://github.com/hashgraph-online/hol-guard/issues/5308)) ([fcb99a9](https://github.com/hashgraph-online/hol-guard/commit/fcb99a986a146fce7b5432e5b450cceabbd128b0))
+* **runtime:** let the resident resolve the package firewall entitlement ([#5360](https://github.com/hashgraph-online/hol-guard/issues/5360)) ([f6d0fd9](https://github.com/hashgraph-online/hol-guard/commit/f6d0fd9c13b5e1655e3fdcf15d940deed4c4047a))
+
+
+### Bug Fixes
+
+* **dashboard:** say what a failed extension load means instead of its reason code ([#5418](https://github.com/hashgraph-online/hol-guard/issues/5418)) ([9b90a09](https://github.com/hashgraph-online/hol-guard/commit/9b90a09c30cae150d9dc19af089d2f9ebd289afe))
+* **gauntlet:** end an attempt on a product failure, not on model non-compliance ([#5404](https://github.com/hashgraph-online/hol-guard/issues/5404)) ([e965682](https://github.com/hashgraph-online/hol-guard/commit/e9656825c914e1a2cadac874465e78ca10338d14))
+* **gauntlet:** give qualification a budget that can outlast model noise ([#5407](https://github.com/hashgraph-online/hol-guard/issues/5407)) ([eff459c](https://github.com/hashgraph-online/hol-guard/commit/eff459c7ac50e557d9a6b83d2880baea63346192))
+* **gauntlet:** judge the Windows private temp folder in either separator spelling ([#5403](https://github.com/hashgraph-online/hol-guard/issues/5403)) ([2fc4784](https://github.com/hashgraph-online/hol-guard/commit/2fc4784204164a8e13a59b92f29e630a866e89d2))
+* **gauntlet:** tell these two cases apart from work a model declines ([#5406](https://github.com/hashgraph-online/hol-guard/issues/5406)) ([6f39ee0](https://github.com/hashgraph-online/hol-guard/commit/6f39ee0a97855abd204e8de8e1062165b20b626c))
+* **guard:** judge $HOME read operands like their ~ spelling ([#5389](https://github.com/hashgraph-online/hol-guard/issues/5389)) ([bc9ef37](https://github.com/hashgraph-online/hol-guard/commit/bc9ef37a73c118c8a6accac08b576cd0b087ae28))
+* **pretool:** read a tool's own home directory by the word it was named ([#5413](https://github.com/hashgraph-online/hol-guard/issues/5413)) ([e70212a](https://github.com/hashgraph-online/hol-guard/commit/e70212a5b9a302e7eb8dea417b3c454d01642791))
+* **redirect:** admit sibling repository writes on Windows ([#5399](https://github.com/hashgraph-online/hol-guard/issues/5399)) ([a2e0fa8](https://github.com/hashgraph-online/hol-guard/commit/a2e0fa8a2e60296fb97c33fb0d4cc42db59f110e))
+* **release:** keep the command pack bundle binding when staging Desktop Core ([#5420](https://github.com/hashgraph-online/hol-guard/issues/5420)) ([dedc537](https://github.com/hashgraph-online/hol-guard/commit/dedc537d0ae8d40f0e9ff476fd6e4e743bd3846b)), closes [#5419](https://github.com/hashgraph-online/hol-guard/issues/5419)
+* **release:** reseal the source compiler manifest after Apple signing ([#5416](https://github.com/hashgraph-online/hol-guard/issues/5416)) ([d4e3372](https://github.com/hashgraph-online/hol-guard/commit/d4e3372c0715daeabbd16bd465416da63343b9e8))
+* **unmodeled:** review a command whose substitutions name their programs ([#5388](https://github.com/hashgraph-online/hol-guard/issues/5388)) ([9ac1050](https://github.com/hashgraph-online/hol-guard/commit/9ac105001ae659aa33db5cf12d88ff1185bfefce))
+
 ## [3.50.0](https://github.com/hashgraph-online/hol-guard/compare/v3.49.0...v3.50.0) (2026-10-20)
 
 
