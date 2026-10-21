@@ -94,6 +94,31 @@ pub fn extract_untrusted_command_context(
     })
 }
 
+/// Destinations a tool call names: URL-valued arguments plus explicit
+/// `http(s)://` URLs in its command text. Empty when the payload cannot be
+/// read; that payload already gets the extraction failure's own decision.
+pub fn network_targets(payload: &Value, limit: usize) -> Vec<String> {
+    let Ok(signals) = extract_generic_signals(payload) else {
+        return Vec::new();
+    };
+    let mut targets = Vec::new();
+    for target in signals.url_values.into_iter().chain(
+        signals
+            .command
+            .as_deref()
+            .map(|command| crate::network_url::urls_in_text(command, limit))
+            .unwrap_or_default(),
+    ) {
+        if targets.len() >= limit {
+            break;
+        }
+        if !targets.contains(&target) {
+            targets.push(target);
+        }
+    }
+    targets
+}
+
 #[path = "agent_metadata.rs"]
 mod agent_metadata;
 

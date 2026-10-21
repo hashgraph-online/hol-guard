@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-DqU3nbr5.js","assets/chunks/harness-version-label-B5upMG3f.js","assets/chunks/connect-guard-cloud-button-nIjTkiyS.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-C03WpejL.js","assets/chunks/confirm-dialog-DKs42E8c.js","assets/chunks/extensions-workspace-DP3OEknX.js","assets/chunks/app-detail-workspace-By-Wp0bd.js","assets/chunks/policy-workspace-page-C5EQ5osf.js","assets/chunks/about-workspace-DRsCiD3h.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-DqU3nbr5.js","assets/chunks/harness-version-label-B5upMG3f.js","assets/chunks/connect-guard-cloud-button-nIjTkiyS.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-C03WpejL.js","assets/chunks/confirm-dialog-DKs42E8c.js","assets/chunks/extensions-workspace-DP3OEknX.js","assets/chunks/app-detail-workspace-By-Wp0bd.js","assets/chunks/policy-workspace-page-toUA_hyd.js","assets/chunks/about-workspace-DRsCiD3h.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -27069,9 +27069,18 @@ function homeCommandActivityModel(analytics) {
     window: commandWindowLabel(analytics)
   };
 }
+const COMMAND_HEALTH_CAUSES = {
+  pre_record_failed: "Guard could not save some command checks.",
+  post_record_failed: "Guard could not save some command results.",
+  pre_native_control_unavailable: "Guard's policy engine was unavailable while saving some command checks.",
+  shadow_evaluation_failed: "Guard could not save some policy previews.",
+  maintenance_failed: "Guard could not finish evidence cleanup."
+};
 function commandHealthCopy(analytics) {
   if (analytics.health.status === "healthy") return null;
-  return "Command activity evidence is degraded. Counts may be incomplete.";
+  const errorClass = analytics.health.last_error_class;
+  const cause = errorClass !== null && Object.hasOwn(COMMAND_HEALTH_CAUSES, errorClass) ? COMMAND_HEALTH_CAUSES[errorClass] : "Guard could not save some command evidence.";
+  return `Counts may be incomplete. Last recorded problem: ${cause}`;
 }
 function commandWindowLabel(analytics) {
   return `${analytics.window.days}-day window ending ${analytics.window.through}`;
@@ -27551,6 +27560,35 @@ function commandActivityLoadFailed(current, requestId, _error) {
     previous: current.previous
   };
 }
+const PROTECTION_REPAIR_ROUTE = "/protection/repair";
+const REPAIR_FAILED_COPY = "Guard could not repair the command evidence store.";
+function CommandActivityHealthNotice(props) {
+  const [repair, setRepair] = reactExports.useState({ kind: "idle" });
+  const { onRepaired } = props;
+  const handleRepair = reactExports.useCallback(() => {
+    setRepair({ kind: "repairing" });
+    repairProtectionCheck("decision_stream").then((result) => {
+      if (result.repaired) {
+        setRepair({ kind: "idle" });
+        onRepaired();
+        return;
+      }
+      setRepair({ kind: "failed", message: result.message || REPAIR_FAILED_COPY });
+    }).catch((error) => {
+      setRepair({ kind: "failed", message: error instanceof Error && error.message ? error.message : REPAIR_FAILED_COPY });
+    });
+  }, [onRepaired]);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-1", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { children: props.copy }),
+      repair.kind === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs", children: repair.message }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 flex-wrap gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "outline", onClick: handleRepair, disabled: repair.kind === "repairing", children: repair.kind === "repairing" ? "Repairing…" : "Repair evidence" }),
+      repair.kind === "failed" ? /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "ghost", href: PROTECTION_REPAIR_ROUTE, children: "Open Protect repair" }) : null
+    ] })
+  ] });
+}
 function Metric(props) {
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-l-2 border-slate-200 pl-3", children: [
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs font-medium text-slate-500", children: props.label }),
@@ -27606,7 +27644,7 @@ function CommandActivitySummary(props) {
   const healthCopy = commandHealthCopy(analytics);
   return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "min-w-0 max-w-full space-y-5", "aria-label": "Command activity summary", children: [
     props.outsideTableFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700", role: "status", children: "Summary and trend totals do not include every active filter below." }) : null,
-    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: healthCopy }) : null,
+    healthCopy ? /* @__PURE__ */ jsxRuntimeExports.jsx(CommandActivityHealthNotice, { copy: healthCopy, onRepaired: props.onHealthRepaired }) : null,
     props.state.kind === "error" ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900", role: "status", children: "Refresh failed. Showing the last loaded command activity summary." }) : null,
     /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 sm:grid-cols-2 xl:grid-cols-4", children: [
       /* @__PURE__ */ jsxRuntimeExports.jsx(Metric, { label: "Commands checked", value: metrics.commandsChecked, detail: "One per recorded activity" }),
@@ -28531,7 +28569,8 @@ function CommandActivityWorkspace(props) {
       CommandActivitySummary,
       {
         state: activity.analytics,
-        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters)
+        outsideTableFilters: commandSummaryIsOutsideTableFilters(activity.filters),
+        onHealthRepaired: activity.retry
       }
     ),
     /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm text-slate-600", children: commandExecutionEvidenceCopy(props.harness ?? null, hasPostProof) }),
@@ -36187,7 +36226,7 @@ const SupplyChainHubWorkspace = lazyWorkspace(
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-C5EQ5osf.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-toUA_hyd.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
@@ -37315,8 +37354,8 @@ export {
   fetchCloudExceptions as dO,
   fetchCloudExceptionRequests as dP,
   downloadBlob as dQ,
-  PolicyStatField as dR,
-  PaginationControls as dS,
+  PaginationControls as dR,
+  PolicyStatField as dS,
   HiMiniArrowDownTray as dT,
   HiMiniInbox as dU,
   HiMiniQueueList as dV,

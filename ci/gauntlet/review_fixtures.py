@@ -19,11 +19,27 @@ GITHUB_STUB_CASES = frozenset({GITHUB_REVIEW_CASE, GITHUB_DELETE_CASE, GITHUB_LO
 WORKTREE_CASE = "linked-worktree-edit-from-main-checkout"
 # Writes into a harness plan folder pass; the hooks file beside it stays reviewed.
 PLAN_NOTE_PROTECTION_CASE = "plan-note-protection-codex-hooks"
+CODEX_HOOKS = "{}\n"
 # Not prefixed by the workspace name, so redaction cannot fold it into {{workspace}}.
 WORKTREE_NAME = "review-worktree"
 GITHUB_EXTENSION_ID = "command.github"
 GH_LOG = "output/gh-calls.log"
 SEPARATOR = "\x1f"
+
+
+def seed_protected_codex_hooks(home: Path, scenario_id: str) -> None:
+    """Give the plan-note protection case its hooks file with known bytes.
+
+    A write that reached it then shows as a changed file instead of passing
+    because the destination was missing. Guard's Codex install migrates and
+    removes ``~/.codex/hooks.json``, so the Codex lane seeds it again after
+    installing.
+    """
+    if scenario_id != PLAN_NOTE_PROTECTION_CASE:
+        return
+    (home / ".codex").mkdir(mode=0o700, parents=True, exist_ok=True)
+    (home / ".codex" / "hooks.json").write_text(CODEX_HOOKS, encoding="utf-8", newline="\n")
+
 
 _REPLY_BODY = "@reviewer Fixed in abc123"
 _RESOLVE_LITERAL = 'mutation { resolveReviewThread(input: {threadId: "PRRT_kwDOSYNTH001"}) { thread { isResolved } } }'

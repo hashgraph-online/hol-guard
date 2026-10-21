@@ -211,15 +211,29 @@ def test_the_recorded_cases_are_the_vectors() -> None:
     assert all(case.facts() == vector["facts"] for case, vector in zip(CASES, VECTOR_LIST, strict=True))
 
 
+def _expected(vector: dict[str, Any], world: Any) -> tuple[list[Any], object]:
+    recorded = vector["worlds"][world.name]
+    trace, rc = recorded["trace"], recorded["rc"]
+    # One deliberate difference since the recording: a Claude permission dialog
+    # the resident cannot answer is the host outage response from its handler
+    # (``run.unavailable``), not an exception escaping the pipeline.
+    if rc == "raised" and trace[-1] == ["raise", "claude"] and trace[-2][0] == "claude_permission_request":
+        edge = rec.EDGES[world.edge]
+        recording_only = bool(isinstance(edge, dict) and edge.get("recording_only"))
+        trace = [*trace, ["unavailable", vector["route"]["event_name"], "outage_claude", recording_only]]
+        rc = rec.RC["unavailable"]
+    return trace, rc
+
+
 @pytest.mark.parametrize("world", rec.WORLDS, ids=lambda world: world.name)
 def test_the_pipeline_runs_the_recorded_effects(monkeypatch: pytest.MonkeyPatch, world: Any) -> None:
     _stub_effects(monkeypatch)
     failures = []
     for case, vector in zip(CASES, VECTOR_LIST, strict=True):
         trace, rc = _run_pipeline(case, vector, world)
-        expected = vector["worlds"][world.name]
-        if (trace, rc) != (expected["trace"], expected["rc"]):
-            failures.append(f"{vector['facts']}: {(trace, rc)!r} != {(expected['trace'], expected['rc'])!r}")
+        expected = _expected(vector, world)
+        if (trace, rc) != expected:
+            failures.append(f"{vector['facts']}: {(trace, rc)!r} != {expected!r}")
     assert failures[:3] == []
 
 

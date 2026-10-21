@@ -6,9 +6,6 @@ from codex_plugin_scanner.guard.runtime.secret_file_request_services.developer_i
     _find_args_use_write_or_unsafe_exec_action,
     _read_only_lookup_find_args_are_safe,
 )
-from codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters import (
-    _read_only_lookup_filter_grep_args_are_safe,
-)
 from codex_plugin_scanner.guard.runtime.secret_file_requests import extract_sensitive_tool_action_request
 
 
@@ -31,8 +28,3 @@ def test_python_inline_pytest_scan_skips_option_values(tmp_path: Path) -> None:
 
     assert match is not None
     assert match.reason_code == "pytest_restricted_profile_required"
-
-
-def test_grep_filter_rejects_dangling_value_options() -> None:
-    assert not _read_only_lookup_filter_grep_args_are_safe(["-f"])
-    assert not _read_only_lookup_filter_grep_args_are_safe(["-e"])

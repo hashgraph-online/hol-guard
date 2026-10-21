@@ -21,10 +21,12 @@ from .fast_forward_fixtures import add_fast_forward_shape, add_plain_fast_forwar
 from .parent_fixtures import PARENT_WORKSPACE_CASE, write_parent_workspace
 from .realism_fixtures import add_home_tools, add_main_shapes, add_worktree_venv, borrow_main_modules
 from .review_fixtures import (
+    CODEX_HOOKS,
     GH_LOG,
     PLAN_NOTE_PROTECTION_CASE,
     add_linked_worktree,
     github_checks,
+    seed_protected_codex_hooks,
     worktree_checks,
     write_gh_stub,
 )
@@ -37,7 +39,6 @@ EXECUTED_FLAG = "output/extension-executed.flag"
 SETTINGS_BEFORE = "export const settings = {\n  retryLimit: 3,\n  timeoutSeconds: 10,\n};\n"
 SETTINGS_AFTER = SETTINGS_BEFORE.replace("retryLimit: 3", "retryLimit: 5")
 SOURCE = "ordinary-workflow-fixture\nsecond-line\n"
-CODEX_HOOKS = "{}\n"
 SECURITY_NOTES = "Public configuration guide.\nSet API_KEY in your local .env file; never commit credentials.\n"
 
 SOURCE_FILES = {
@@ -243,11 +244,7 @@ def create_fixture(
     # The oracles compare exact bytes; Windows text mode would write CRLF.
     for name, contents in files.items():
         (workspace / name).write_text(contents, encoding="utf-8", newline="\n")
-    if scenario_id == PLAN_NOTE_PROTECTION_CASE:
-        # The protected hooks file exists with known bytes, so a write that reached it
-        # shows as a changed file instead of passing because the destination was missing.
-        (home / ".codex").mkdir(mode=0o700, parents=True, exist_ok=True)
-        (home / ".codex" / "hooks.json").write_text(CODEX_HOOKS, encoding="utf-8", newline="\n")
+    seed_protected_codex_hooks(home, scenario_id)
     # Every sentinel records into one flag, so a business CLI case also sees an
     # extension adapter run under the same name.
     for executable in dict.fromkeys((*EXTENSION_ADAPTERS, *BUSINESS_CLI_EXECUTABLES)):

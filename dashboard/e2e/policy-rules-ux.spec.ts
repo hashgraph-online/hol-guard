@@ -106,13 +106,14 @@ async function mount(page: Page) {
 }
 
 test.describe("Rules & exceptions UX", () => {
-  test("hero, spotlight, list switch, inspector and bulk selection", async ({ page }) => {
+  test("header, attention strip, list switch, inspector and bulk selection", async ({ page }) => {
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);
     await expect(page.getByText("1 broad allow deserves a second look")).toBeVisible();
     await expect(page.getByText("Worth a second look").first()).toBeVisible();
+    await expect(page.getByText(/Broad allow:/)).toBeVisible();
     await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
-    await expect(page.getByText("Broad allow").first()).toBeVisible();
+    await expect(page.getByText("Broad allow", { exact: true }).first()).toBeVisible();
 
     await page.getByRole("button", { name: /^Block/ }).click();
     await expect(page.getByText(/Showing 1 of 4 remembered rules/)).toBeVisible();
@@ -140,12 +141,12 @@ test.describe("Rules & exceptions UX", () => {
 
     await page.getByRole("tab", { name: /Remembered rules/ }).click();
     await page.getByLabel("Search remembered rules").fill("no-such-rule-zzz");
-    await expect(page.getByText(/No rules match/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "No rules match" })).toBeVisible();
     await page.getByRole("button", { name: "Clear search and filters" }).click();
     await expect(page.getByText(/Guard will allow "git push origin main"/).first()).toBeVisible();
   });
 
-  test("mobile layout keeps hero and rules reachable", async ({ page }) => {
+  test("mobile layout keeps header and rules reachable", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await mount(page);
     await page.goto(`/policy${DAEMON_PARAM}`);

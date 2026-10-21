@@ -16,7 +16,9 @@ use serde_json::{Map, Value};
 
 use crate::{
     ArtifactBrowserOutcomeInputsV1, ArtifactBrowserOutcomeV1, ArtifactFinalizeInputsV1,
-    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1, CodexToolOutputFactsV1,
+    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1,
+    ClaudePermissionVerdictInputsV1, ClaudePermissionVerdictV1, CodexToolOutputFactsV1,
+    ContainmentRouteInputsV1, ContainmentRouteV1, ContainmentSinkInputsV1, ContainmentSinkV1,
     HookRouteInputsV1, HookRouteV1, NativeExtensionControlLayerV1, NativePermissionPersistInputsV1,
     NativePermissionPersistPlanV1, PretoolFloorInputsV1, PretoolFloorV1,
 };
@@ -105,6 +107,21 @@ pub enum HookDecisionQueryV1 {
     /// The PreToolUse floor: the action the resident pre-tool review holds
     /// the hook verdict at, if any.
     PretoolFloor { inputs: Box<PretoolFloorInputsV1> },
+    /// Whether a native PreToolUse result is routed toward the contained
+    /// sink, through this device's local CLI grant, or not at all.
+    ContainmentRoute {
+        inputs: Box<ContainmentRouteInputsV1>,
+    },
+    /// Whether a rendered receipt is rewritten into the contained sink.
+    ContainmentSink {
+        inputs: Box<ContainmentSinkInputsV1>,
+    },
+    /// The verdict for Claude Code's permission dialog: no decision, the
+    /// Guard approval question, a review deferring to Claude's dialog, or a
+    /// deny.
+    ClaudePermissionVerdict {
+        inputs: Box<ClaudePermissionVerdictInputsV1>,
+    },
 }
 
 /// Facts the artifact hook's review route depends on. The transport gathers
@@ -435,6 +452,13 @@ pub enum HookDecisionPayloadV1 {
     },
     HookRoute(Box<HookRouteV1>),
     PretoolFloor(Box<PretoolFloorV1>),
+    ContainmentRoute(Box<ContainmentRouteV1>),
+    ContainmentSink(Box<ContainmentSinkV1>),
+    ClaudePermissionVerdict {
+        /// Facts still missing; resubmit with them when non-empty.
+        needs_facts: Vec<String>,
+        verdict: Option<Box<ClaudePermissionVerdictV1>>,
+    },
     CopilotSettle {
         /// Facts still missing; resubmit with them when non-empty.
         needs_facts: Vec<String>,

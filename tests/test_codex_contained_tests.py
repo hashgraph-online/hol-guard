@@ -49,7 +49,7 @@ def capable(monkeypatch: pytest.MonkeyPatch, version: str | None) -> None:
     monkeypatch.setattr(route.subprocess, "run", run)
 
 
-def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
+def test_current_codex_rewrites_to_the_contained_sink(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     hook_home = tmp_path / "hook-home"
     result = route.route_codex_containment(
@@ -82,7 +82,9 @@ def test_current_codex_rewrites_to_the_contained_sink(tmp_path, monkeypatch):
         "codex-cli 1.0",
     ],
 )
-def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(tmp_path, monkeypatch, version):
+def test_old_or_unknown_codex_keeps_the_denial_with_an_update_hint(
+    containment_resident, tmp_path, monkeypatch, version
+):
     capable(monkeypatch, version)
     result = route.route_codex_containment(
         receipt(),
@@ -132,7 +134,7 @@ def test_failed_version_probe_never_rewrites(monkeypatch):
         ({}, {"guard_containment_receipt_only": True}),
     ],
 )
-def test_non_containment_and_sink_rechecks_pass_through(tmp_path, monkeypatch, change, extra):
+def test_non_containment_and_sink_rechecks_pass_through(containment_resident, tmp_path, monkeypatch, change, extra):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = {**receipt(), **change}
     result = route.route_codex_containment(
@@ -167,7 +169,7 @@ def test_unbound_or_relative_home_keeps_the_original_denial(tmp_path, monkeypatc
     )
 
 
-def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
+def test_version_probe_stops_at_the_hook_deadline(containment_resident, tmp_path, monkeypatch):
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(route, "launching_codex_executable", lambda: Path("/bin/codex"))
     clock = {"now": 50.0}
@@ -206,17 +208,21 @@ def test_version_probe_stops_at_the_hook_deadline(tmp_path, monkeypatch):
     assert recorded["timeout"] == 0.25
 
 
-def test_other_platforms_and_missing_guard_home_pass_through(tmp_path, monkeypatch):
+def test_other_platforms_and_missing_guard_home_pass_through(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     native = receipt()
     assert route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=None) is native
     monkeypatch.setattr(sys, "platform", "linux")
+    # Linux has no sink for the pytest profile: the denial stands, with no update hint.
     assert (
-        route.route_codex_containment(native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard") is native
+        route.route_codex_containment(
+            native, hook_input=hook_input(tmp_path), guard_home=tmp_path / "guard", home_dir=tmp_path / "hook-home"
+        )
+        is native
     )
 
 
-def test_linux_routes_the_workspace_sandbox(tmp_path, monkeypatch):
+def test_linux_routes_the_workspace_sandbox(containment_resident, tmp_path, monkeypatch):
     capable(monkeypatch, "codex-cli 0.162.1")
     monkeypatch.setattr(sys, "platform", "linux")
     native = {

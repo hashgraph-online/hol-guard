@@ -40,7 +40,12 @@ from .harnesses import CredentialSeed, adapter, credential_environment, keep_log
 from .host_process import clean_environment, realistic_environment, run_process
 from .input_evidence import redact_value
 from .provider import LoopbackCollector
-from .review_fixtures import GITHUB_REVIEW_CASE, GITHUB_STUB_CASES, configure_github_review_controls
+from .review_fixtures import (
+    GITHUB_REVIEW_CASE,
+    GITHUB_STUB_CASES,
+    configure_github_review_controls,
+    seed_protected_codex_hooks,
+)
 from .runner import _fixture_replacements, _scenario_prompt, _watch_binding
 from .script_cases import stage_script_cases
 from .session_folder import seed_session_folder
@@ -240,6 +245,8 @@ def run_harness_case(
             case["hook_install"] = install_harness_hooks(
                 harness, daemon, home=fixture.home, guard_home=guard_home, workspace=fixture.workspace
             )
+            # The install may have migrated a seeded hooks file away; the model must meet it.
+            seed_protected_codex_hooks(fixture.home, scenario.id)
             before = worker.store.count_approval_requests(status=None)
             approval_ids_before = {
                 str(row.get("request_id"))

@@ -30,17 +30,14 @@ test.describe("Rules & exceptions against the live daemon", () => {
       await expect(row.getByRole("cell", { name: "Remembered on this device" })).toBeVisible();
     }
     await expect(page.getByRole("table", { name: "Remembered policy rules" }).getByRole("row")).toHaveCount(
-      // The header row plus one row per local rule.
-      localRules(seed).length + 1,
+      // The header row plus one row per rule — local and cloud share one list.
+      seed.total + 1,
     );
   });
 
   test("summary, tab badge and action filter counts match the seeded rules", async ({ page, state }) => {
     const seed = policySeed(state);
     await page.goto("/policy");
-    await expect(
-      page.getByRole("img", { name: `${seed.allowCount} allow rules, ${seed.blockCount} block rules` }),
-    ).toBeVisible();
     await expect(policyTab(page, /^Remembered rules/)).toContainText(String(seed.total));
     const filter = page.getByRole("group", { name: "Filter by action" });
     await expect(filter.getByRole("button", { name: `All actions ${seed.total}` })).toHaveAttribute("aria-pressed", "true");
@@ -54,8 +51,8 @@ test.describe("Rules & exceptions against the live daemon", () => {
     const seed = policySeed(state);
     await page.goto("/policy");
     await expect(page.getByRole("heading", { name: "1 broad allow deserves a second look", level: 1 })).toBeVisible();
-    const callout = page.getByRole("region", { name: "Worth a second look" });
-    await expect(callout.getByRole("heading", { name: seed.global_allow.title, level: 3 })).toBeVisible();
+    const strip = page.getByRole("status").filter({ hasText: "Broad allow:" });
+    await expect(strip.getByText(seed.global_allow.title)).toBeVisible();
     await expect(rememberedRow(page, seed.global_allow.title).getByText("Broad allow")).toBeVisible();
     // A rule scoped to one project is not a broad allow.
     await expect(rememberedRow(page, seed.workspace_allow.title).getByText("Broad allow")).toHaveCount(0);
@@ -66,7 +63,6 @@ test.describe("Rules & exceptions against the live daemon", () => {
   test("rules synced from Guard Cloud are read-only", async ({ page, state }) => {
     const seed = policySeed(state);
     await page.goto("/policy");
-    await expect(page.getByRole("heading", { name: "Synced contextual rules", level: 2 })).toBeVisible();
     const row = cloudRow(page, seed.cloud_block.title);
     await expect(row).toHaveCount(1);
     await expect(row.getByRole("cell", { name: ACTION_LABEL[seed.cloud_block.action], exact: true })).toBeVisible();
@@ -74,8 +70,6 @@ test.describe("Rules & exceptions against the live daemon", () => {
     await expect(row.getByText("Read-only")).toBeVisible();
     await expect(row.getByRole("button", { name: "Remove rule" })).toHaveCount(0);
     await expect(row.getByRole("checkbox")).toHaveCount(0);
-    // It never shows up among the rules the user can remove.
-    await expect(rememberedRow(page, seed.cloud_block.title)).toHaveCount(0);
     await expect(page.getByText("Guard Cloud not connected")).toBeVisible();
   });
 
@@ -95,7 +89,7 @@ test.describe("Rules & exceptions against the live daemon", () => {
     await expect(rememberedRow(page, seed.artifact_block.title)).toHaveCount(0);
 
     await page.getByRole("searchbox", { name: "Search remembered rules" }).fill("no such rule anywhere");
-    await expect(page.getByRole("table", { name: "Remembered policy rules" }).getByRole("row")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "No rules match" })).toBeVisible();
     await page.getByRole("button", { name: "Clear search and filters" }).click();
     for (const rule of localRules(seed)) {
       await expect(rememberedRow(page, rule.title), rule.title).toBeVisible();

@@ -1627,6 +1627,29 @@
    "native_replacements": [],
    "retirement": "dead_code",
    "removal_reason": "Bounded declared-output capture for contained workspace execution that no production caller ever imported. The native contained-execution path captures only stdout.bin and stderr.bin from its own run directory under its own budgets, so it does not carry this module's declared-output walk and is not named as a behavioural replacement."
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.read_only_filters",
+   "source_sha256": "63ba263eb7a1f0e873a89fdf9f472f5e0da08f2eccde9bd030a55586c097e4ef",
+   "forbidden_symbols": [
+    "_attached_redirection_operator",
+    "_github_output_filter_segment_is_safe",
+    "_read_only_lookup_arg_is_redirection",
+    "_read_only_lookup_filter_grep_args_are_safe",
+    "_read_only_lookup_filter_rg_args_are_safe",
+    "_read_only_lookup_filter_segment_is_safe",
+    "_read_only_lookup_head_tail_args_are_safe",
+    "_read_only_lookup_may_be_primary",
+    "_read_only_lookup_sed_args_are_safe",
+    "_read_only_lookup_sed_script_is_print_only",
+    "_ripgrep_configuration_is_absent",
+    "_split_attached_redirection_token"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_read_only_filters.rs",
+    "rust/crates/guard-command/src/sfrs_search_filters.rs"
+   ]
   }
  ],
  "retired_test_paths": [

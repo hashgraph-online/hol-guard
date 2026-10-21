@@ -212,7 +212,7 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
         "result",
         "receipt",
     }
-    allowed = required | {"request_id", "harness_response"}
+    allowed = required | {"request_id", "harness_response", "containment_route"}
     if not isinstance(payload, dict) or not required <= set(payload) or set(payload) - allowed:
         return None
     event_name = payload.get("event_name")
@@ -238,6 +238,12 @@ def _decode_edge(payload: object) -> dict[str, Any] | None:
     if event_name == "UserPromptSubmit" and payload_kind != "inline":
         return None
     if event_name == "PreToolUse" and payload_kind == "encrypted_payload_ref":
+        return None
+    if "containment_route" in payload and (
+        not isinstance(payload["containment_route"], str)
+        or payload["containment_route"] not in {"none", "sink", "grant"}
+        or (event_name != "PreToolUse" and payload["containment_route"] != "none")
+    ):
         return None
     receipt = payload.get("receipt")
     if not receipt_matches_edge(payload, receipt):

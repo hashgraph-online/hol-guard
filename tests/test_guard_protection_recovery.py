@@ -19,7 +19,6 @@ from codex_plugin_scanner.guard.cli.install_commands import (
 )
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.daemon.server_control_connect_flow import (
-    _PROTECTION_REPAIR_PROBE_COMMAND,
     _repair_command_activity_persistence_health,
 )
 from codex_plugin_scanner.guard.managed_install_proof import (
@@ -30,8 +29,6 @@ from codex_plugin_scanner.guard.runtime_artifact_reconciliation import (
     repair_failing_managed_harness_hooks,
 )
 from codex_plugin_scanner.guard.store import GuardStore
-from tests.daemon_control_patching import patch_daemon_global
-from tests.native_command_test_support import real_native_command_evaluation
 
 _NOW = datetime(2026, 8, 17, 12, 0, tzinfo=timezone.utc)
 
@@ -48,11 +45,6 @@ def _ctx(tmp_path: Path) -> HarnessContext:
         workspace_dir=None,
         guard_home=tmp_path / "guard-home",
     )
-
-
-def _bound_native_repair_evaluation():
-    reviewed = real_native_command_evaluation("aws apigateway delete-rest-api --rest-api-id abc")
-    return reviewed.snapshot, reviewed.evaluation
 
 
 def _native_grok_command(context: HarnessContext) -> str:
@@ -72,11 +64,6 @@ def _stale_pretool_payload() -> dict[str, object]:
             ]
         }
     }
-
-
-def test_protection_repair_probe_avoids_force_push() -> None:
-    assert "git push" not in _PROTECTION_REPAIR_PROBE_COMMAND
-    assert "git status --porcelain=v1" in _PROTECTION_REPAIR_PROBE_COMMAND
 
 
 def _write_intercepting_grok_hooks(context: HarnessContext) -> None:
@@ -387,16 +374,6 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert store.get_command_activity_persistence_health().active_error_count == 3
 
     _, failed_hooks = repair_failing_managed_harness_hooks(store)
-    snapshot, evaluation = _bound_native_repair_evaluation()
-    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: snapshot)
-
-    def native_evaluate(command: str, **kwargs: object):
-        assert command == _PROTECTION_REPAIR_PROBE_COMMAND
-        assert kwargs["guard_home"] == store.guard_home
-        assert kwargs["extension_control_snapshot"] is snapshot
-        return evaluation
-
-    patch_daemon_global(monkeypatch, "evaluate_command_native", native_evaluate)
     _repair_command_activity_persistence_health(store)
     store.maintain_command_activity(now=_NOW, detail_retain_days=30)
 
@@ -408,21 +385,20 @@ def test_one_pass_repair_restores_stale_grok_hooks_and_command_evidence(
     assert "matcher" not in json.loads(pretool.read_text(encoding="utf-8"))["hooks"]["PreToolUse"][0]
 
 
-def test_repair_keeps_persistence_error_when_native_evaluation_is_unavailable(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_repair_clears_persistence_error_without_a_native_policy_evaluation(tmp_path: Path) -> None:
+    # The probe must not depend on a policy evaluation: the daemon's resident
+    # pre-tool lane cannot produce one bound to command extensions, so a probe
+    # that required it left a degraded flag nobody could clear.
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
-    store.record_command_activity_persistence_failure(error_code="post_record_failed", occurred_at=_NOW)
-    patch_daemon_global(monkeypatch, "current_extension_control_snapshot", lambda: None)
-    patch_daemon_global(monkeypatch, "evaluate_command_native", lambda *_args, **_kwargs: None)
+    store.record_command_activity_persistence_failure(error_code="pre_record_failed", occurred_at=_NOW)
 
-    probe_reason = _repair_command_activity_persistence_health(store)
+    _repair_command_activity_persistence_health(store)
 
-    assert probe_reason == "native_evaluation_unavailable"
     health = store.get_command_activity_persistence_health()
-    assert health.active_error_count == 1
-    assert health.last_error_code == "post_record_failed"
+    assert health.active_error_count == 0
+    assert health.persistence_error_count == 1
+    assert health.last_error_code == "pre_record_failed"
+    assert store.count_command_activities() == 0
 
 
 def test_daemon_ownership_change_repairs_stale_managed_grok_hooks(

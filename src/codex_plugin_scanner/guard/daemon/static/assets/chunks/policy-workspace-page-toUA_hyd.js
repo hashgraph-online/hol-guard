@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, S as SectionLabel, _ as HiMiniXMark, a6 as Badge, T as Tag, o as HiMiniCommandLine, a4 as HiMiniExclamationTriangle, dD as scopeLabel, h as harnessDisplayName, A as ActionButton, bc as guardAwareHref, f as formatRelativeTime$1, q as HiMiniDocumentText, s as HiMiniCheckCircle, dE as HiMiniCloudArrowUp, e as HiMiniCheck, dF as HiMiniCodeBracket, dG as HiMiniClipboardDocument, dH as HiMiniUsers, dg as HiMiniBeaker, dI as HiMiniFolder, v as HiMiniLockClosed, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, dm as HiMiniCloudArrowDown, cn as HiMiniArrowTopRightOnSquare, dJ as HiMiniIdentification, dK as StyledSelect, dL as policyActionLabel, r as reactExports, dM as createCloudExceptionRequest, t as HiMiniArrowRight, N as EmptyState, p as HiMiniMagnifyingGlass, b as HiMiniChevronUp, c as HiMiniChevronDown, H as HiMiniChevronRight, dN as HiMiniPuzzlePiece, cD as HiMiniGlobeAlt, cs as HiMiniClock, dO as fetchCloudExceptions, dP as fetchCloudExceptionRequests, dQ as downloadBlob, dR as PolicyStatField, d8 as policyIdentityKey, g as HiMiniNoSymbol, l as HiMiniCube, cT as HiMiniTrash, dS as PaginationControls, d as HiMiniArrowPath, a0 as HiMiniCloud, aM as HiMiniAdjustmentsHorizontal, dT as HiMiniArrowDownTray, dU as HiMiniInbox, dV as HiMiniQueueList, dW as subscribeDashboardLocation, ba as WorkspacePageHeader, dB as lazyWorkspace, dC as __vitePreload } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, S as SectionLabel, _ as HiMiniXMark, a6 as Badge, T as Tag, o as HiMiniCommandLine, a4 as HiMiniExclamationTriangle, dD as scopeLabel, h as harnessDisplayName, A as ActionButton, bc as guardAwareHref, f as formatRelativeTime$1, q as HiMiniDocumentText, s as HiMiniCheckCircle, dE as HiMiniCloudArrowUp, e as HiMiniCheck, dF as HiMiniCodeBracket, dG as HiMiniClipboardDocument, dH as HiMiniUsers, dg as HiMiniBeaker, dI as HiMiniFolder, v as HiMiniLockClosed, R as HiMiniShieldCheck, bS as HiMiniInformationCircle, dm as HiMiniCloudArrowDown, cn as HiMiniArrowTopRightOnSquare, dJ as HiMiniIdentification, dK as StyledSelect, dL as policyActionLabel, r as reactExports, dM as createCloudExceptionRequest, t as HiMiniArrowRight, N as EmptyState, p as HiMiniMagnifyingGlass, b as HiMiniChevronUp, c as HiMiniChevronDown, H as HiMiniChevronRight, dN as HiMiniPuzzlePiece, cD as HiMiniGlobeAlt, cs as HiMiniClock, dO as fetchCloudExceptions, dP as fetchCloudExceptionRequests, dQ as downloadBlob, d8 as policyIdentityKey, g as HiMiniNoSymbol, l as HiMiniCube, cT as HiMiniTrash, dR as PaginationControls, dS as PolicyStatField, aM as HiMiniAdjustmentsHorizontal, dT as HiMiniArrowDownTray, dU as HiMiniInbox, dV as HiMiniQueueList, a0 as HiMiniCloud, d as HiMiniArrowPath, dW as subscribeDashboardLocation, ba as WorkspacePageHeader, dB as lazyWorkspace, dC as __vitePreload } from "../guard-dashboard.js";
 import { C as ConnectGuardCloudButton } from "./connect-guard-cloud-button-nIjTkiyS.js";
 const CLOUD_EXCEPTION_EXPIRING_SOON_DAYS = 7;
 function parseCloudExceptionTimestamp(value) {
@@ -3043,22 +3043,6 @@ function PolicyCloudExceptionsTab({
     ] })
   ] });
 }
-const POLICY_SUMMARY_CARD_CLASS = "rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_rgba(15,23,42,0.04)]";
-function PolicyActiveModeCard({ snapshot }) {
-  const modeCopy = resolveSecurityModeCopy(
-    snapshot.protection_posture ?? snapshot.security_level
-  );
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection" }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-start gap-2.5", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: modeCopy.label }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 line-clamp-3 text-sm leading-snug text-slate-600", children: modeCopy.description })
-      ] })
-    ] })
-  ] });
-}
 function escapeCsvCell(value) {
   const str = value ?? "";
   if (/[",\n]/.test(str)) {
@@ -3128,102 +3112,6 @@ function exportPoliciesJson(policies) {
 function downloadPolicies(format, policies) {
   const result = format === "csv" ? exportPoliciesCsv(policies) : exportPoliciesJson(policies);
   downloadBlob(result.blob, result.filename);
-}
-function formatCloudBundleHashDisplay(hash) {
-  if (!hash?.trim()) {
-    return "Unavailable";
-  }
-  const value = hash.trim();
-  const isSha256 = value.toLowerCase().startsWith("sha256:");
-  const normalized = isSha256 ? value.slice(7) : value;
-  if (isSha256) {
-    if (normalized.length <= 12) {
-      return value;
-    }
-    return `sha256:${normalized.slice(0, 6)}…${normalized.slice(-4)}`;
-  }
-  if (normalized.length <= 16) {
-    return normalized;
-  }
-  return `${normalized.slice(0, 8)}…${normalized.slice(-4)}`;
-}
-function resolveCloudBundleStatusSubtitle(copy) {
-  if (copy.tone === "green") {
-    return "All policies up to date";
-  }
-  if (copy.tone === "attention") {
-    return "Sync needs attention";
-  }
-  return copy.label;
-}
-function CloudBundleHeader({ cloudControlsUrl }) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-x-3 gap-y-2", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
-    cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-      "Open Guard Cloud"
-    ] }) : null
-  ] });
-}
-function PolicyGuardCloudBundleCard({ snapshot }) {
-  const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
-  const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
-  const cloudConnected = resolveCloudExceptionsConnected(snapshot);
-  const lastAckAt = snapshot.cloud_policy_last_ack_at?.trim() ?? snapshot.runtime_state?.last_heartbeat_at?.trim() ?? snapshot.generated_at?.trim() ?? null;
-  const policyHash = cloudBundleCopy?.hash?.trim() ?? null;
-  const policyHashDisplay = formatCloudBundleHashDisplay(policyHash);
-  const bundleVersion = snapshot.cloud_policy_bundle_version?.trim() ?? null;
-  const handleCopyHash = reactExports.useCallback(() => {
-    if (!policyHash || !navigator.clipboard?.writeText) {
-      return;
-    }
-    void navigator.clipboard.writeText(policyHash);
-  }, [policyHash]);
-  if (!cloudBundleCopy) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(CloudBundleHeader, { cloudControlsUrl }),
-      cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-dark", children: snapshot.cloud_state_label?.trim() || "Connected to Guard Cloud" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/75", children: snapshot.cloud_state_detail?.trim() || "Guard Cloud is connected. Policy bundle details will appear after the next successful sync." })
-      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/75", children: "Guard Cloud is not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle." })
-    ] });
-  }
-  const synced = cloudBundleCopy.tone === "green";
-  const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudBundleHeader, { cloudControlsUrl }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-3", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Status", className: "sm:min-w-[7.5rem] sm:max-w-[9rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
-        synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-emerald-600", "aria-hidden": "true" }) : null,
-        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: synced ? "green" : "amber", children: synced ? "Synced" : cloudBundleCopy.label })
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Bundle hash", className: "min-w-0 flex-1 sm:min-w-[10rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "span",
-          {
-            className: "min-w-0 font-mono text-sm text-brand-dark break-all sm:break-normal sm:truncate",
-            title: policyHash ?? void 0,
-            children: policyHashDisplay
-          }
-        ),
-        policyHash ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: handleCopyHash,
-            className: "shrink-0 rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-brand-dark",
-            "aria-label": "Copy bundle hash",
-            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
-          }
-        ) : null
-      ] }) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsxs(PolicyStatField, { label: "Last ack", className: "sm:min-w-[6.5rem] sm:max-w-[9rem]", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: lastAckAt ? formatRelativeTime$1(lastAckAt) : "Not yet" }),
-        bundleVersion ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate text-xs text-slate-500", title: bundleVersion, children: bundleVersion }) : null
-      ] })
-    ] }),
-    synced ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: statusSubtitle }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm leading-snug text-slate-700", children: cloudBundleCopy.detail })
-  ] });
 }
 function EvidenceTable({ children, label, tableClassName = "" }) {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "rounded-2xl border border-slate-100 bg-white overflow-hidden shadow-sm", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx("table", { className: `w-full text-sm ${tableClassName}`, "aria-label": label, children }) }) });
@@ -3340,6 +3228,10 @@ function policyRiskScore(policy) {
   if (!isCloudManagedPolicy(policy.source)) score += 1;
   return score;
 }
+function widestBroadAllow(policies) {
+  const breadth = (policy) => policy.scope === "global" ? 2 : policy.scope === "harness" ? 1 : 0;
+  return [...policies].sort((a, b) => breadth(b) - breadth(a) || policyRiskScore(b) - policyRiskScore(a))[0];
+}
 function isBroadAllow(policy) {
   return policy.action === "allow" && (policy.scope === "global" || policy.scope === "harness");
 }
@@ -3357,17 +3249,6 @@ function buildRuleAttention(policies, now) {
     staleLocals: remembered.filter((p) => !isCloudManagedPolicy(p.source) && isStaleRule(p, now))
   };
 }
-function buildRulesSpotlight(policies) {
-  const remembered = policies.filter((p) => p.action === "allow" || p.action === "block");
-  const sorted = [...remembered].sort((a, b) => {
-    const broadDelta = Number(isBroadAllow(b)) - Number(isBroadAllow(a));
-    if (broadDelta !== 0) return broadDelta;
-    const byRisk = policyRiskScore(b) - policyRiskScore(a);
-    if (byRisk !== 0) return byRisk;
-    return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-  });
-  return sorted.slice(0, 3);
-}
 function buildRulesHeroModel(input) {
   const { counts, attention } = input;
   const facts = [];
@@ -3382,7 +3263,7 @@ function buildRulesHeroModel(input) {
       tone: "setup",
       badge: "Nothing remembered yet",
       headline: "Guard asks before it repeats anything",
-      subheadline: "Approve a request in Inbox and choose how broadly to remember it — the decision lands here.",
+      subheadline: "approve in Inbox and it lands here.",
       facts
     };
   }
@@ -3392,11 +3273,11 @@ function buildRulesHeroModel(input) {
       tone: "review",
       badge: "Worth a second look",
       headline: n === 1 ? "1 broad allow deserves a second look" : `${n} broad allows deserve a second look`,
-      subheadline: "These let an action through everywhere it matches. If one is wider than you meant, remove it and Guard asks again.",
+      subheadline: "remove one and Guard asks again.",
       facts
     };
   }
-  const provenance = counts.cloud === 0 ? "Each one says where it came from and how to undo it." : counts.local === 0 ? "Synced from Guard Cloud and read-only here — change them in Guard Cloud or their governing Extension." : "Each one says where it came from and how it can be changed.";
+  const provenance = counts.local === 0 && counts.cloud > 0 ? "read-only here — change them in Guard Cloud or their governing Extension." : "";
   return {
     tone: "clear",
     badge: "Memory is tidy",
@@ -3698,89 +3579,6 @@ function PolicyRuleTable({
     ) : null
   ] });
 }
-function GroupedPolicySection({
-  title,
-  badge,
-  description,
-  policies,
-  cloudControlsUrl,
-  onClearPolicy,
-  onNavigate,
-  emptyTitle,
-  emptyBody,
-  emptyAction,
-  defaultOpen = true,
-  cloudVariant = false,
-  sort,
-  onSortChange,
-  selectedKeys,
-  onToggleSelect,
-  onClearSelection,
-  onRemoveSelected,
-  removingSelected,
-  removeError,
-  onInspect
-}) {
-  const [open, setOpen] = reactExports.useState(defaultOpen);
-  const handleToggle = reactExports.useCallback(() => setOpen((current) => !current), []);
-  const ruleLabel = policies.length === 1 ? "1 rule" : `${policies.length} rules`;
-  if (policies.length === 0) {
-    return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
-        badge ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: badge }) : null
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: description }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(EmptyState, { title: emptyTitle, body: emptyBody, tone: "teach", action: emptyAction })
-    ] });
-  }
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs(
-      "button",
-      {
-        type: "button",
-        onClick: handleToggle,
-        className: "flex w-full items-start justify-between gap-3 text-left",
-        "aria-expanded": open,
-        children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { className: "text-base font-semibold text-brand-dark", children: title }),
-              badge ? /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: "slate", children: badge }) : null
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm text-slate-500", children: description })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex shrink-0 items-center gap-2 pt-0.5", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-sm text-slate-500", children: ruleLabel }),
-            open ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronUp, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniChevronDown, { className: "h-4 w-4 text-slate-400", "aria-hidden": "true" })
-          ] })
-        ]
-      }
-    ),
-    open ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyRuleTable,
-      {
-        policies,
-        cloudControlsUrl,
-        onClearPolicy,
-        onNavigate,
-        emptyTitle,
-        emptyBody,
-        emptyAction,
-        cloudVariant,
-        sort,
-        onSortChange,
-        selectedKeys,
-        onToggleSelect,
-        onClearSelection,
-        onRemoveSelected,
-        removingSelected,
-        removeError,
-        onInspect
-      }
-    ) : null
-  ] });
-}
 function resolveFamilyFilterLabel(family) {
   switch (family) {
     case "package-request":
@@ -3803,143 +3601,6 @@ function groupPoliciesByFamily(policies) {
   }
   return counts;
 }
-function PolicyRememberedCloudRules({
-  policies,
-  cloudControlsUrl,
-  sort,
-  onSortChange,
-  onInspect
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    GroupedPolicySection,
-    {
-      title: "Synced contextual rules",
-      badge: "Guard Cloud",
-      description: "Shared contextual rules compose after Extension posture. These rules are read-only locally.",
-      policies,
-      cloudControlsUrl,
-      emptyTitle: "No Guard Cloud rules synced",
-      emptyBody: "Connect Guard Cloud to sync shared policy bundles.",
-      defaultOpen: policies.length > 0,
-      cloudVariant: true,
-      sort,
-      onSortChange,
-      onInspect
-    }
-  );
-}
-function PolicyRememberedLocalRules({
-  policies,
-  cloudControlsUrl,
-  onClearPolicy,
-  onNavigate,
-  sort,
-  onSortChange,
-  emptyAction,
-  selectedKeys,
-  onToggleSelect,
-  onClearSelection,
-  onRemoveSelected,
-  removingSelected,
-  removeError,
-  onInspect
-}) {
-  return /* @__PURE__ */ jsxRuntimeExports.jsx(
-    GroupedPolicySection,
-    {
-      title: "Remembered on this device",
-      badge: "Local rules",
-      description: "Decisions you've remembered on this machine. Remove one and Guard asks again next time.",
-      policies,
-      cloudControlsUrl,
-      onClearPolicy,
-      onNavigate,
-      emptyTitle: "No local remembered rules yet",
-      emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
-      emptyAction,
-      defaultOpen: true,
-      sort,
-      onSortChange,
-      selectedKeys,
-      onToggleSelect,
-      onClearSelection,
-      onRemoveSelected,
-      removingSelected,
-      removeError,
-      onInspect
-    }
-  );
-}
-const REVIEW_SCOPE_LADDER = [
-  { label: "Once", detail: "One time only.", icon: HiMiniArrowPath },
-  { label: "This cwd", detail: "Reuse in this working directory.", icon: HiMiniFolder },
-  { label: "This project", detail: "Reuse across this project.", icon: HiMiniFolder },
-  { label: "This harness", detail: "Reuse across this tool harness.", icon: HiMiniGlobeAlt },
-  { label: "Team policy", detail: "Organization-wide policy.", icon: HiMiniUsers }
-];
-function PolicyRememberedRulesRightRail({
-  snapshot,
-  onOpenCloudExceptions,
-  decisionOrder
-}) {
-  const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("aside", { className: "space-y-4 lg:sticky lg:top-4", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "group rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", open: true, children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer list-none font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden", children: [
-        "How Guard decides",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs font-normal leading-relaxed text-slate-500", children: "Extension posture is evaluated before contextual rules. This page never duplicates the Extension editor." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-3 space-y-2 text-xs leading-5 text-brand-dark/75", children: decisionOrder.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { children: [
-          index + 1,
-          "."
-        ] }),
-        " ",
-        step
-      ] }, step)) }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: "/extensions", className: "mt-3 inline-flex text-sm font-semibold text-brand-blue hover:underline", children: "Open Extensions" })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer list-none font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden", children: [
-        "Approvals are still fast",
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-1 block text-xs font-normal leading-relaxed text-slate-500", children: "When you approve in Inbox, you pick how broadly Guard should remember the decision." })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-3 space-y-2.5", children: REVIEW_SCOPE_LADDER.map((step) => {
-        const Icon = step.icon;
-        return /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { className: "flex gap-2.5", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-500", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Icon, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: step.label }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: step.detail })
-          ] })
-        ] }, step.label);
-      }) })
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-2xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4 text-sm text-slate-600 shadow-sm", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start gap-3", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloud, { className: "h-5 w-5", "aria-hidden": "true" }) }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "font-medium text-brand-dark", children: "Cloud exceptions" }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-slate-600", children: "Bounded exceptions apply to contextual Cloud rules. They never weaken a managed-restrictive Extension block, and sync as signed bundle entries on this device." })
-        ] })
-      ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        "button",
-        {
-          type: "button",
-          onClick: onOpenCloudExceptions,
-          className: "mt-3 text-sm font-medium text-brand-blue hover:underline",
-          children: "Open Cloud exceptions tab"
-        }
-      ),
-      cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-3", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-        "Open Guard Cloud"
-      ] }) }) : null
-    ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs leading-relaxed text-slate-500", children: "Local remembered rules are for your machine only. Cloud exceptions and team policy sync from Guard Cloud." })
-  ] });
-}
 const PILL_TONE = {
   clear: "safe",
   review: "attention",
@@ -3955,13 +3616,12 @@ function PolicyRulesHero(props) {
         model.badge
       ] })
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-600", children: model.subheadline }),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap items-center gap-x-5 gap-y-2", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-        props.cta,
-        props.secondaryCta
-      ] }),
-      model.facts.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500", children: model.facts.map((fact) => /* @__PURE__ */ jsxRuntimeExports.jsx("li", { children: fact }, fact)) }) : null
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1 text-sm text-slate-500", children: [
+      model.facts.join(" · "),
+      model.subheadline ? /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "text-slate-400", children: [
+        " — ",
+        model.subheadline
+      ] }) : null
     ] })
   ] });
 }
@@ -3986,68 +3646,203 @@ function PolicyRulesListSwitch(props) {
     option.value
   )) }) });
 }
-function spotlightReason(policy) {
-  if (isBroadAllow(policy)) {
-    return policy.scope === "global" ? "Allows this everywhere on this device" : `Allows this every time ${harnessDisplayName(policy.harness)} runs it`;
-  }
-  if (isCloudManagedPolicy(policy.source)) return "Synced from Guard Cloud — read-only here";
-  return "Most recently remembered on this device";
-}
-function PolicyRulesSpotlight(props) {
-  if (props.policies.length === 0) return null;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("section", { "aria-labelledby": "rules-spotlight-heading", className: "space-y-3", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsx("h2", { id: "rules-spotlight-heading", className: "text-base font-semibold text-brand-dark", children: "Worth a second look" }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-500", children: "The widest-reaching rules Guard is repeating right now." })
+function PolicyRulesAttentionStrip(props) {
+  const first = reactExports.useMemo(() => widestBroadAllow(props.broadAllows), [props.broadAllows]);
+  if (!first) return null;
+  const display = resolvePolicyDisplay(first);
+  const title = resolvePolicyRowTitle(first, display);
+  const extra = props.broadAllows.length - 1;
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2", role: "status", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniExclamationTriangle, { className: "h-4 w-4 shrink-0 text-amber-600", "aria-hidden": "true" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "min-w-0 flex-1 text-sm text-slate-700", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: "Broad allow:" }),
+      " ",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium", children: title }),
+      " applies everywhere it matches",
+      extra > 0 ? ` — and ${extra} more ${extra === 1 ? "does" : "do"} too.` : "."
     ] }),
-    /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-spotlight-grid", children: props.policies.map((policy) => {
-      const display = resolvePolicyDisplay(policy);
-      const title = resolvePolicyRowTitle(policy, display);
-      const allowed = policy.action === "allow";
-      return /* @__PURE__ */ jsxRuntimeExports.jsxs("article", { className: "guard-spotlight-card", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-start justify-between gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "span",
-            {
-              className: `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${allowed ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-rose-300 bg-rose-50 text-rose-800"}`,
-              children: [
-                allowed ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5", "aria-hidden": "true" }) : /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniNoSymbol, { className: "h-3.5 w-3.5", "aria-hidden": "true" }),
-                allowed ? "Allow" : "Block"
-              ]
-            }
-          ),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("span", { className: "guard-state-pill", "data-tone": isCloudManagedPolicy(policy.source) ? "info" : void 0, children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-state-pill-dot", "aria-hidden": "true" }),
-            resolvePolicyRowSourceLabel(policy)
-          ] })
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      "button",
+      {
+        type: "button",
+        onClick: () => props.onInspect(first),
+        className: "shrink-0 text-sm font-semibold text-brand-blue hover:underline",
+        "aria-label": `Inspect broad allow ${title}`,
+        children: "Inspect"
+      }
+    )
+  ] });
+}
+const POLICY_SUMMARY_CARD_CLASS = "rounded-2xl border border-slate-200/80 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_8px_20px_rgba(15,23,42,0.04)]";
+function PolicyActiveModeCard({ snapshot }) {
+  const modeCopy = resolveSecurityModeCopy(
+    snapshot.protection_posture ?? snapshot.security_level
+  );
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Protection" }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-2 flex items-start gap-2.5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-blue/10 text-brand-blue", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniShieldCheck, { className: "h-4 w-4", "aria-hidden": "true" }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-semibold text-brand-dark", children: modeCopy.label }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 line-clamp-3 text-sm leading-snug text-slate-600", children: modeCopy.description })
+      ] })
+    ] })
+  ] });
+}
+function formatCloudBundleHashDisplay(hash) {
+  if (!hash?.trim()) {
+    return "Unavailable";
+  }
+  const value = hash.trim();
+  const isSha256 = value.toLowerCase().startsWith("sha256:");
+  const normalized = isSha256 ? value.slice(7) : value;
+  if (isSha256) {
+    if (normalized.length <= 12) {
+      return value;
+    }
+    return `sha256:${normalized.slice(0, 6)}…${normalized.slice(-4)}`;
+  }
+  if (normalized.length <= 16) {
+    return normalized;
+  }
+  return `${normalized.slice(0, 8)}…${normalized.slice(-4)}`;
+}
+function resolveCloudBundleStatusSubtitle(copy) {
+  if (copy.tone === "green") {
+    return "All policies up to date";
+  }
+  if (copy.tone === "attention") {
+    return "Sync needs attention";
+  }
+  return copy.label;
+}
+function CloudBundleHeader({ cloudControlsUrl }) {
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center justify-between gap-x-3 gap-y-2", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(SectionLabel, { children: "Guard Cloud bundle" }),
+    cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+      "Open Guard Cloud"
+    ] }) : null
+  ] });
+}
+function PolicyGuardCloudBundleCard({ snapshot }) {
+  const cloudBundleCopy = resolveCloudPolicyBundleCopy(snapshot);
+  const cloudControlsUrl = resolveCloudPolicyControlsUrl(snapshot);
+  const cloudConnected = resolveCloudExceptionsConnected(snapshot);
+  const lastAckAt = snapshot.cloud_policy_last_ack_at?.trim() ?? snapshot.runtime_state?.last_heartbeat_at?.trim() ?? snapshot.generated_at?.trim() ?? null;
+  const policyHash = cloudBundleCopy?.hash?.trim() ?? null;
+  const policyHashDisplay = formatCloudBundleHashDisplay(policyHash);
+  const bundleVersion = snapshot.cloud_policy_bundle_version?.trim() ?? null;
+  const handleCopyHash = reactExports.useCallback(() => {
+    if (!policyHash || !navigator.clipboard?.writeText) {
+      return;
+    }
+    void navigator.clipboard.writeText(policyHash);
+  }, [policyHash]);
+  if (!cloudBundleCopy) {
+    return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CloudBundleHeader, { cloudControlsUrl }),
+      cloudConnected ? /* @__PURE__ */ jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm font-medium text-brand-dark", children: snapshot.cloud_state_label?.trim() || "Connected to Guard Cloud" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-brand-dark/75", children: snapshot.cloud_state_detail?.trim() || "Guard Cloud is connected. Policy bundle details will appear after the next successful sync." })
+      ] }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-sm leading-relaxed text-brand-dark/75", children: "Guard Cloud is not connected. Remembered Cloud rules appear when Guard Cloud syncs a bundle." })
+    ] });
+  }
+  const synced = cloudBundleCopy.tone === "green";
+  const statusSubtitle = resolveCloudBundleStatusSubtitle(cloudBundleCopy);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: `${POLICY_SUMMARY_CARD_CLASS} self-start p-4`, children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(CloudBundleHeader, { cloudControlsUrl }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("dl", { className: "mt-3 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:gap-x-8 sm:gap-y-3", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Status", className: "sm:min-w-[7.5rem] sm:max-w-[9rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex items-center gap-1.5", children: [
+        synced ? /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCheckCircle, { className: "h-3.5 w-3.5 shrink-0 text-emerald-600", "aria-hidden": "true" }) : null,
+        /* @__PURE__ */ jsxRuntimeExports.jsx(Tag, { tone: synced ? "green" : "amber", children: synced ? "Synced" : cloudBundleCopy.label })
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyStatField, { label: "Bundle hash", className: "min-w-0 flex-1 sm:min-w-[10rem]", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 items-center gap-1", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "span",
+          {
+            className: "min-w-0 font-mono text-sm text-brand-dark break-all sm:break-normal sm:truncate",
+            title: policyHash ?? void 0,
+            children: policyHashDisplay
+          }
+        ),
+        policyHash ? /* @__PURE__ */ jsxRuntimeExports.jsx(
+          "button",
+          {
+            type: "button",
+            onClick: handleCopyHash,
+            className: "shrink-0 rounded-md p-0.5 text-slate-400 hover:bg-slate-100 hover:text-brand-dark",
+            "aria-label": "Copy bundle hash",
+            children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniClipboardDocument, { className: "h-3.5 w-3.5", "aria-hidden": "true" })
+          }
+        ) : null
+      ] }) }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(PolicyStatField, { label: "Last ack", className: "sm:min-w-[6.5rem] sm:max-w-[9rem]", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-brand-dark", children: lastAckAt ? formatRelativeTime$1(lastAckAt) : "Not yet" }),
+        bundleVersion ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-0.5 truncate text-xs text-slate-500", title: bundleVersion, children: bundleVersion }) : null
+      ] })
+    ] }),
+    synced ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-2 text-xs text-slate-500", children: statusSubtitle }) : /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-3 rounded-xl border border-amber-200/80 bg-amber-50/60 px-3 py-2 text-sm leading-snug text-slate-700", children: cloudBundleCopy.detail })
+  ] });
+}
+const SCOPE_LADDER = [
+  ["Once", "One time only."],
+  ["This cwd", "Reuse in this working directory."],
+  ["This project", "Reuse across this project."],
+  ["This harness", "Reuse across this tool harness."],
+  ["Team policy", "Organization-wide policy."]
+];
+function PolicyRulesAbout(props) {
+  const cloudControlsUrl = resolveCloudPolicyControlsUrl(props.snapshot);
+  const openExtensions = (event) => {
+    if (!props.onNavigate) return;
+    event.preventDefault();
+    props.onNavigate("/extensions");
+  };
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-2xl border border-slate-200 bg-white shadow-sm", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer list-none px-4 py-3 text-sm font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden", children: [
+      "About these rules",
+      /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs font-normal text-slate-500", children: "How Guard decides, what the scopes mean, and the sync and protection state on this device." })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5 border-t border-slate-100 p-4 sm:p-5", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-5 md:grid-cols-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "How Guard decides" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ol", { className: "mt-2 space-y-1.5 text-sm leading-relaxed text-slate-600", children: props.decisionOrder.map((step, index) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsxs("strong", { className: "text-brand-dark", children: [
+              index + 1,
+              "."
+            ] }),
+            " ",
+            step
+          ] }, step)) }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("a", { href: guardAwareHref("/extensions"), onClick: openExtensions, className: "mt-2 inline-flex text-sm font-semibold text-brand-blue hover:underline", children: "Open Extensions" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "truncate text-[15px] font-semibold leading-snug text-brand-dark", title, children: title }),
-          /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: display.rememberSentence })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-auto flex flex-wrap items-center justify-between gap-2", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-slate-500", children: [
-            spotlightReason(policy),
-            " · ",
-            scopeLabel(policy.scope, "policy"),
-            policy.updated_at ? ` · ${formatRelativeTime$1(policy.updated_at)}` : ""
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs(
-            "button",
-            {
-              type: "button",
-              onClick: () => props.onInspect(policy),
-              className: "guard-discover-cta guard-discover-cta-quiet",
-              "aria-label": `Inspect rule ${title}`,
-              children: [
-                "Inspect",
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowTopRightOnSquare, { className: "h-4 w-4", "aria-hidden": "true" })
-              ]
-            }
-          )
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-sm font-semibold text-brand-dark", children: "What the scopes mean" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("ul", { className: "mt-2 space-y-1.5 text-sm leading-relaxed text-slate-600", children: SCOPE_LADDER.map(([label, detail]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("li", { children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "font-medium text-brand-dark", children: label }),
+            " — ",
+            detail
+          ] }, label)) })
         ] })
-      ] }, policySelectionKey(policy));
-    }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "rounded-xl border border-brand-blue/10 bg-brand-blue/[0.03] p-4", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm font-medium text-brand-dark", children: "Cloud exceptions" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "mt-1 text-sm leading-relaxed text-slate-600", children: "Bounded exceptions apply to contextual Cloud rules. They never weaken a managed-restrictive Extension block, and sync as signed bundle entries on this device. Local remembered rules are for your machine only; cloud exceptions and team policy sync from Guard Cloud." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "mt-3 flex flex-wrap gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: props.onOpenCloudExceptions, className: "text-sm font-medium text-brand-blue hover:underline", children: "Open Cloud exceptions tab" }),
+          cloudControlsUrl ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { href: cloudControlsUrl, variant: "secondary", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniCloudArrowUp, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+            "Open Guard Cloud"
+          ] }) : null
+        ] })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(10rem,1fr)] lg:items-start", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyGuardCloudBundleCard, { snapshot: props.snapshot }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyActiveModeCard, { snapshot: props.snapshot })
+      ] })
+    ] })
   ] });
 }
 function PolicyRuleInspector(props) {
@@ -4229,6 +4024,7 @@ function buildRulesExceptionsView(items) {
     includesExtensionEditor: false
   };
 }
+const SORT_OPTIONS = ["updated:desc", "updated:asc", "rule:asc", "action:asc", "app:asc"];
 function PolicyRememberedRulesTab({
   policies,
   snapshot,
@@ -4242,11 +4038,12 @@ function PolicyRememberedRulesTab({
   const [appFilter, setAppFilter] = reactExports.useState("");
   const [familyFilter, setFamilyFilter] = reactExports.useState("");
   const [actionFilter, setActionFilter] = reactExports.useState("all");
-  const [showFilters, setShowFilters] = reactExports.useState(false);
+  const [showMore, setShowMore] = reactExports.useState(false);
   const [sort, setSort] = reactExports.useState({ key: "updated", direction: "desc" });
   const [selectedKeys, setSelectedKeys] = reactExports.useState(/* @__PURE__ */ new Set());
   const [removingSelected, setRemovingSelected] = reactExports.useState(false);
   const [removeError, setRemoveError] = reactExports.useState(null);
+  const [inspectedKey, setInspectedKey] = reactExports.useState(null);
   const searchInputRef = reactExports.useRef(null);
   reactExports.useEffect(() => {
     const handleKeyDown = (event) => {
@@ -4258,11 +4055,9 @@ function PolicyRememberedRulesTab({
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
-  const handleSearchChange = reactExports.useCallback((event) => {
-    setSearchQuery(event.target.value);
-  }, []);
+  const handleSearchChange = reactExports.useCallback((event) => setSearchQuery(event.target.value), []);
   const handleClearSearch = reactExports.useCallback(() => setSearchQuery(""), []);
-  const handleToggleFilters = reactExports.useCallback(() => setShowFilters((current) => !current), []);
+  const handleToggleMore = reactExports.useCallback(() => setShowMore((current) => !current), []);
   const handleClearFilters = reactExports.useCallback(() => {
     setSearchQuery("");
     setAppFilter("");
@@ -4308,14 +4103,6 @@ function PolicyRememberedRulesTab({
     () => filteredPolicies.filter((policy) => policy.action === "allow" || policy.action === "block"),
     [filteredPolicies]
   );
-  const localRules = reactExports.useMemo(
-    () => rememberedRules.filter((policy) => !isCloudManagedPolicy(policy.source)),
-    [rememberedRules]
-  );
-  const cloudRules = reactExports.useMemo(
-    () => rememberedRules.filter((policy) => isCloudManagedPolicy(policy.source)),
-    [rememberedRules]
-  );
   const allRemembered = reactExports.useMemo(
     () => policies.filter((policy) => policy.action === "allow" || policy.action === "block"),
     [policies]
@@ -4345,7 +4132,10 @@ function PolicyRememberedRulesTab({
     familyFilter
   });
   const hasActiveFilters = searchQuery.trim() !== "" || actionFilter !== "all" || appFilter !== "" || familyFilter !== "";
-  const bulkRemovableRules = reactExports.useMemo(() => localRules.filter(isBulkRemovablePolicy), [localRules]);
+  const bulkRemovableRules = reactExports.useMemo(
+    () => rememberedRules.filter((policy) => isBulkRemovablePolicy(policy)),
+    [rememberedRules]
+  );
   reactExports.useEffect(() => {
     setSelectedKeys((current) => prunePolicySelection(current, bulkRemovableRules));
   }, [bulkRemovableRules]);
@@ -4382,7 +4172,6 @@ function PolicyRememberedRulesTab({
   const handleExportJson = reactExports.useCallback(() => downloadPolicies("json", rememberedRules), [rememberedRules]);
   const modeCopy = resolveSecurityModeCopy(snapshot.protection_posture ?? snapshot.security_level);
   const cloudConnected = resolveCloudExceptionsConnected(snapshot);
-  const [inspectedKey, setInspectedKey] = reactExports.useState(null);
   const attention = reactExports.useMemo(() => buildRuleAttention(allRemembered, /* @__PURE__ */ new Date()), [allRemembered]);
   const heroModel = reactExports.useMemo(
     () => buildRulesHeroModel({
@@ -4394,205 +4183,149 @@ function PolicyRememberedRulesTab({
     }),
     [allRemembered, attention, cloudConnected, modeCopy.label, snapshot.pending_count, snapshot.queue_summary]
   );
-  const spotlightPolicies = reactExports.useMemo(() => buildRulesSpotlight(allRemembered), [allRemembered]);
   const inspectedPolicy = reactExports.useMemo(
     () => allRemembered.find((policy) => policySelectionKey(policy) === inspectedKey) ?? null,
     [allRemembered, inspectedKey]
   );
-  const handleInspect = reactExports.useCallback((policy) => {
-    setInspectedKey(policySelectionKey(policy));
-  }, []);
+  const handleInspect = reactExports.useCallback((policy) => setInspectedKey(policySelectionKey(policy)), []);
   const handleCloseInspector = reactExports.useCallback(() => setInspectedKey(null), []);
-  const scrollToRules = reactExports.useCallback(() => {
-    document.getElementById("remembered-rules-list")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, []);
-  const localEmptyAction = onOpenInbox ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onOpenInbox, children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInbox, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-    "Review pending requests"
-  ] }) : void 0;
-  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-5", children: [
-    /* @__PURE__ */ jsxRuntimeExports.jsx(
-      PolicyRulesHero,
-      {
-        model: heroModel,
-        cta: /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: scrollToRules,
-            className: "inline-flex min-h-10 items-center rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white transition-colors hover:bg-brand-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
-            children: "Review remembered rules"
-          }
-        ),
-        secondaryCta: onOpenInbox ? /* @__PURE__ */ jsxRuntimeExports.jsx(
-          "button",
-          {
-            type: "button",
-            onClick: onOpenInbox,
-            className: "inline-flex min-h-10 items-center rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-brand-dark transition-colors hover:border-brand-blue/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue/40",
-            children: "Open Inbox"
-          }
-        ) : void 0
-      }
-    ),
-    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-start", children: [
-      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "min-w-0 space-y-4", children: [
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "guard-posture-bar", role: "img", "aria-label": `${counts.allow} allow rules, ${counts.block} block rules`, children: [
-            counts.allow > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-posture-segment", "data-state": "Allowed", style: { flexGrow: counts.allow } }) : null,
-            counts.block > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-posture-segment", "data-state": "Lockdown", style: { flexGrow: counts.block } }) : null,
-            counts.allow === 0 && counts.block === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "guard-posture-segment", style: { flexGrow: 1 } }) : null
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "mt-1.5 text-xs text-slate-500", children: [
-            counts.allow,
-            " allow · ",
-            counts.block,
-            " block — every segment is a rule Guard repeats without asking."
-          ] })
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRulesSpotlight, { policies: spotlightPolicies, onInspect: handleInspect }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-3 lg:flex-row lg:items-center", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 focus-within:border-brand-blue/40 focus-within:ring-2 focus-within:ring-brand-blue/20", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
-              /* @__PURE__ */ jsxRuntimeExports.jsx(
-                "input",
-                {
-                  ref: searchInputRef,
-                  type: "search",
-                  placeholder: "Search remembered rules by app, action, or reason…",
-                  value: searchQuery,
-                  onChange: handleSearchChange,
-                  "aria-label": "Search remembered rules",
-                  className: "w-full bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
-                }
-              ),
-              searchQuery ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSearch, "aria-label": "Clear search", className: "shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { className: "hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 sm:inline", children: "⌘K" })
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(
-                "button",
-                {
-                  type: "button",
-                  onClick: handleToggleFilters,
-                  "aria-expanded": showFilters,
-                  className: `inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${showFilters || appFilter || familyFilter ? "border-brand-blue/30 bg-brand-blue/[0.04] text-brand-dark" : "border-slate-200 bg-white text-brand-dark hover:border-brand-blue/20"}`,
-                  children: [
-                    /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4 text-slate-500", "aria-hidden": "true" }),
-                    "Filters",
-                    appFilter || familyFilter ? " (active)" : ""
-                  ]
-                }
-              ),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "secondary", onClick: handleExportCsv, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-                "Export CSV"
-              ] }),
-              /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "secondary", onClick: handleExportJson, children: [
-                /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
-                "Export JSON"
-              ] })
-            ] })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(
-              PolicyRulesListSwitch,
-              {
-                value: actionFilter,
-                counts: { all: counts.total, allow: counts.allow, block: counts.block },
-                onChange: setActionFilter
-              }
-            ),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(
-              StyledSelect,
-              {
-                value: sort ? `${sort.key}:${sort.direction}` : "updated:desc",
-                onChange: (event) => {
-                  const [key, direction] = event.target.value.split(":");
-                  setSort({ key, direction });
-                },
-                "aria-label": "Sort rules",
-                className: "min-h-9 text-xs font-medium",
-                children: [
-                  sort && !["updated:desc", "updated:asc", "rule:asc", "action:asc", "app:asc"].includes(`${sort.key}:${sort.direction}`) ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: `${sort.key}:${sort.direction}`, children: "Custom (column sort)" }) : null,
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "updated:desc", children: "Newest first" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "updated:asc", children: "Oldest first" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "rule:asc", children: "Rule A–Z" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "action:asc", children: "Action A–Z" }),
-                  /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "app:asc", children: "App A–Z" })
-                ]
-              }
-            ),
-            hasActiveFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearFilters, className: "min-h-9 px-2 text-sm font-medium text-brand-blue hover:underline", children: "Clear search and filters" }) : null
-          ] }),
-          showFilters ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap gap-2", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(StyledSelect, { value: appFilter, onChange: (event) => setAppFilter(event.target.value), "aria-label": "Filter by app", className: "min-h-10", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All assets" }),
-              appOptions.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: app, children: harnessDisplayName(app) }, app))
-            ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsxs(StyledSelect, { value: familyFilter, onChange: (event) => setFamilyFilter(event.target.value), "aria-label": "Filter by action type", className: "min-h-10", children: [
-              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All action types" }),
-              [...familyCounts.entries()].map(([family, count]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: family, children: [
-                resolveFamilyFilterLabel(family),
-                " (",
-                count,
-                ")"
-              ] }, family))
-            ] })
-          ] }) : null,
-          resultSummary ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", role: "status", children: resultSummary }) : null
-        ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "remembered-rules-list", className: "scroll-mt-4 space-y-4", children: [
+  const sortValue = sort ? `${sort.key}:${sort.direction}` : "updated:desc";
+  const sortIsCustom = !SORT_OPTIONS.includes(sortValue);
+  return /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-4", children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRulesHero, { model: heroModel }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyRulesAttentionStrip, { broadAllows: attention.broadAllows, onInspect: handleInspect }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col gap-2", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex min-w-0 flex-1 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 focus-within:border-brand-blue/40 focus-within:ring-2 focus-within:ring-brand-blue/20 sm:max-w-md", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniMagnifyingGlass, { className: "h-4 w-4 shrink-0 text-slate-400", "aria-hidden": "true" }),
           /* @__PURE__ */ jsxRuntimeExports.jsx(
-            PolicyRememberedLocalRules,
+            "input",
             {
-              policies: localRules,
-              cloudControlsUrl,
-              onClearPolicy,
-              onNavigate,
-              sort,
-              onSortChange: setSort,
-              emptyAction: hasActiveFilters ? void 0 : localEmptyAction,
-              selectedKeys,
-              onToggleSelect: onClearPolicy ? handleToggleSelect : void 0,
-              onClearSelection: handleClearSelection,
-              onRemoveSelected: onClearPolicy ? handleRemoveSelected : void 0,
-              removingSelected,
-              removeError,
-              onInspect: handleInspect
+              ref: searchInputRef,
+              type: "search",
+              placeholder: "Search remembered rules…",
+              value: searchQuery,
+              onChange: handleSearchChange,
+              "aria-label": "Search remembered rules",
+              className: "w-full min-w-0 bg-transparent text-sm text-brand-dark placeholder:text-slate-400 focus:outline-none"
             }
           ),
-          /* @__PURE__ */ jsxRuntimeExports.jsx(
-            PolicyRememberedCloudRules,
-            {
-              policies: cloudRules,
-              cloudControlsUrl,
-              sort,
-              onSortChange: setSort,
-              onInspect: handleInspect
-            }
-          )
+          searchQuery ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearSearch, "aria-label": "Clear search", className: "shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-brand-dark", children: /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniXMark, { className: "h-4 w-4", "aria-hidden": "true" }) }) : /* @__PURE__ */ jsxRuntimeExports.jsx("kbd", { className: "hidden shrink-0 rounded-md border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-[10px] font-medium text-slate-500 sm:inline", children: "⌘K" })
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsxs("details", { className: "rounded-2xl border border-slate-200 bg-white shadow-sm", children: [
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("summary", { className: "cursor-pointer list-none px-4 py-3 text-sm font-medium text-brand-dark marker:hidden [&::-webkit-details-marker]:hidden", children: [
-            "Sync and protection details",
-            /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mt-0.5 block text-xs font-normal text-slate-500", children: "Guard Cloud bundle status and the protection mode active on this device." })
-          ] }),
-          /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 border-t border-slate-100 p-4 lg:grid-cols-[minmax(0,1.55fr)_minmax(10rem,1fr)] lg:items-start", children: [
-            /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyGuardCloudBundleCard, { snapshot }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx(PolicyActiveModeCard, { snapshot })
-          ] })
-        ] })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(
+          PolicyRulesListSwitch,
+          {
+            value: actionFilter,
+            counts: { all: counts.total, allow: counts.allow, block: counts.block },
+            onChange: setActionFilter
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          "button",
+          {
+            type: "button",
+            onClick: handleToggleMore,
+            "aria-expanded": showMore,
+            className: `inline-flex min-h-10 items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${showMore || appFilter || familyFilter ? "border-brand-blue/30 bg-brand-blue/[0.04] text-brand-dark" : "border-slate-200 bg-white text-brand-dark hover:border-brand-blue/20"}`,
+            children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniAdjustmentsHorizontal, { className: "h-4 w-4 text-slate-500", "aria-hidden": "true" }),
+              "More",
+              appFilter || familyFilter ? " (active)" : ""
+            ]
+          }
+        ),
+        hasActiveFilters ? /* @__PURE__ */ jsxRuntimeExports.jsx("button", { type: "button", onClick: handleClearFilters, className: "min-h-9 px-1 text-sm font-medium text-brand-blue hover:underline", children: "Clear" }) : null
       ] }),
-      /* @__PURE__ */ jsxRuntimeExports.jsx(
-        PolicyRememberedRulesRightRail,
+      resultSummary && rememberedRules.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-slate-600", role: "status", children: resultSummary }) : null,
+      showMore ? /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-wrap items-center gap-2 rounded-xl bg-slate-50/70 p-2", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(StyledSelect, { value: appFilter, onChange: (event) => setAppFilter(event.target.value), "aria-label": "Filter by app", className: "min-h-9 text-xs font-medium", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All assets" }),
+          appOptions.map((app) => /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: app, children: harnessDisplayName(app) }, app))
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(StyledSelect, { value: familyFilter, onChange: (event) => setFamilyFilter(event.target.value), "aria-label": "Filter by action type", className: "min-h-9 text-xs font-medium", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "", children: "All action types" }),
+          [...familyCounts.entries()].map(([family, count]) => /* @__PURE__ */ jsxRuntimeExports.jsxs("option", { value: family, children: [
+            resolveFamilyFilterLabel(family),
+            " (",
+            count,
+            ")"
+          ] }, family))
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(
+          StyledSelect,
+          {
+            value: sortValue,
+            onChange: (event) => {
+              const [key, direction] = event.target.value.split(":");
+              setSort({ key, direction });
+            },
+            "aria-label": "Sort rules",
+            className: "min-h-9 text-xs font-medium",
+            children: [
+              sortIsCustom ? /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: sortValue, children: "Custom (column sort)" }) : null,
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "updated:desc", children: "Newest first" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "updated:asc", children: "Oldest first" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "rule:asc", children: "Rule A–Z" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "action:asc", children: "Action A–Z" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("option", { value: "app:asc", children: "App A–Z" })
+            ]
+          }
+        ),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "mx-1 hidden h-5 w-px bg-slate-200 sm:block", "aria-hidden": "true" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "secondary", onClick: handleExportCsv, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+          "Export CSV"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "secondary", onClick: handleExportJson, children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniArrowDownTray, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+          "Export JSON"
+        ] })
+      ] }) : null
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { id: "remembered-rules-list", className: "scroll-mt-4", children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx("p", { role: "status", className: "sr-only", children: rememberedRules.length === 0 && allRemembered.length > 0 ? "No rules match the current search and filters." : "" }),
+      rememberedRules.length === 0 && allRemembered.length > 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("div", { children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        EmptyState,
         {
-          onOpenCloudExceptions,
-          snapshot,
-          decisionOrder: rulesView.decisionOrder
+          title: "No rules match",
+          body: "Nothing here matches the current search and filters. Clear them to see every remembered rule.",
+          tone: "teach",
+          action: /* @__PURE__ */ jsxRuntimeExports.jsx(ActionButton, { variant: "secondary", onClick: handleClearFilters, children: "Clear search and filters" })
+        }
+      ) }) : /* @__PURE__ */ jsxRuntimeExports.jsx(
+        PolicyRuleTable,
+        {
+          policies: rememberedRules,
+          cloudControlsUrl,
+          onClearPolicy,
+          onNavigate,
+          emptyTitle: "No remembered rules yet",
+          emptyBody: "Approve or block in Inbox and Guard remembers the decision here in plain language.",
+          emptyAction: hasActiveFilters ? void 0 : onOpenInbox ? /* @__PURE__ */ jsxRuntimeExports.jsxs(ActionButton, { variant: "primary", onClick: onOpenInbox, children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx(HiMiniInbox, { className: "mr-1.5 h-4 w-4", "aria-hidden": "true" }),
+            "Review pending requests"
+          ] }) : void 0,
+          sort,
+          onSortChange: setSort,
+          selectedKeys,
+          onToggleSelect: onClearPolicy ? handleToggleSelect : void 0,
+          onClearSelection: handleClearSelection,
+          onRemoveSelected: onClearPolicy ? handleRemoveSelected : void 0,
+          removingSelected,
+          removeError,
+          onInspect: handleInspect
         }
       )
     ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsx(
+      PolicyRulesAbout,
+      {
+        snapshot,
+        decisionOrder: rulesView.decisionOrder,
+        onOpenCloudExceptions,
+        onNavigate
+      }
+    ),
     inspectedPolicy ? /* @__PURE__ */ jsxRuntimeExports.jsx(
       PolicyRuleInspector,
       {

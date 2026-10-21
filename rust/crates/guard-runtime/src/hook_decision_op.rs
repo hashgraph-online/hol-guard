@@ -9,9 +9,12 @@
 //! (`artifact_review_route`), the final action it settles on
 //! (`artifact_finalize`, `artifact_browser_outcome`), its saved-approval reuse
 //! plan (`artifact_reuse_step`), what a native approval saves
-//! (`native_permission_persist_plan`) and the route the hook pipeline
-//! dispatches a prepared payload through (`hook_route`) and the floor a
-//! PreToolUse verdict is held at (`pretool_floor`). Every query is pure
+//! (`native_permission_persist_plan`), the route the hook pipeline
+//! dispatches a prepared payload through (`hook_route`), the floor a
+//! PreToolUse verdict is held at (`pretool_floor`), whether that verdict is
+//! rewritten into the contained sink (`containment_route`,
+//! `containment_sink`) and the verdict for Claude Code's permission dialog
+//! (`claude_permission_verdict`). Every query is pure
 //! and fails closed: a malformed request yields a `native_hook_decision_*`
 //! error, never a default verdict.
 
@@ -25,7 +28,9 @@ use crate::hook_decision_artifact_directive::artifact_directive;
 use crate::hook_decision_artifact_finalize::{artifact_browser_outcome, artifact_finalize};
 use crate::hook_decision_artifact_reuse_step::artifact_reuse_step;
 use crate::hook_decision_artifact_review_route::artifact_review_route;
+use crate::hook_decision_claude_permission_verdict::claude_permission_verdict;
 use crate::hook_decision_compose::{compose, Composed};
+use crate::hook_decision_containment_route::{containment_route, containment_sink};
 use crate::hook_decision_finalize::{finalize, post_claim, post_claim_reuse};
 use crate::hook_decision_hook_route::hook_route;
 use crate::hook_decision_native_facts::{verdict_handoff, VerdictHandoff};
@@ -145,6 +150,24 @@ pub(crate) fn decide(query: &HookDecisionQueryV1) -> Result<HookDecisionPayloadV
         HookDecisionQueryV1::PretoolFloor { inputs } => Ok(HookDecisionPayloadV1::PretoolFloor(
             Box::new(pretool_floor(inputs)?),
         )),
+        HookDecisionQueryV1::ContainmentRoute { inputs } => Ok(
+            HookDecisionPayloadV1::ContainmentRoute(Box::new(containment_route(inputs)?)),
+        ),
+        HookDecisionQueryV1::ContainmentSink { inputs } => Ok(
+            HookDecisionPayloadV1::ContainmentSink(Box::new(containment_sink(inputs)?)),
+        ),
+        HookDecisionQueryV1::ClaudePermissionVerdict { inputs } => {
+            Ok(match claude_permission_verdict(inputs)? {
+                Ok(verdict) => HookDecisionPayloadV1::ClaudePermissionVerdict {
+                    needs_facts: Vec::new(),
+                    verdict: Some(Box::new(verdict)),
+                },
+                Err(fact) => HookDecisionPayloadV1::ClaudePermissionVerdict {
+                    needs_facts: vec![fact.to_owned()],
+                    verdict: None,
+                },
+            })
+        }
     }
 }
 

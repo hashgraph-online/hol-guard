@@ -63,11 +63,10 @@ export function rememberedRow(page: Page, title: string): Locator {
     .filter({ has: page.getByRole("button", { name: `Inspect rule ${title}`, exact: true }) });
 }
 
+// Local and cloud rules share one table now; a cloud rule's row is the same
+// row shape, distinguished by its source cell and read-only actions.
 export function cloudRow(page: Page, title: string): Locator {
-  return page
-    .getByRole("table", { name: "Cloud policy rules" })
-    .getByRole("row")
-    .filter({ has: page.getByRole("button", { name: `Inspect rule ${title}`, exact: true }) });
+  return rememberedRow(page, title);
 }
 
 export function policyTab(page: Page, name: RegExp): Locator {

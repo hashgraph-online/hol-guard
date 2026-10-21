@@ -166,6 +166,10 @@ mod hook_route;
 pub use hook_route::*;
 mod hook_pretool_floor;
 pub use hook_pretool_floor::*;
+mod hook_containment_route;
+pub use hook_containment_route::*;
+mod claude_permission_verdict;
+pub use claude_permission_verdict::*;
 mod hook_decision_permission_persist;
 pub use hook_decision_permission_persist::*;
 mod daemon_handler;
@@ -304,6 +308,12 @@ pub struct GuardHookEdgeResultV2 {
     /// the resident so no other layer interprets the verdict.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub harness_response: Option<Value>,
+    /// Which containment step `result` takes (`none`, `sink` or `grant`; only
+    /// a PreToolUse answer is ever routed), the same answer the
+    /// `containment_route` decision gives, so a hook routes the call without a
+    /// second round trip.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub containment_route: Option<String>,
     /// Rust-owned decision evidence.  The Python edge may only transport it
     /// to a non-authoritative asynchronous consumer.
     pub receipt: NativeHookDecisionReceiptV1,

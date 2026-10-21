@@ -190,6 +190,12 @@ Current material gaps include:
   fails or answers a malformed plan fails closed to the host outage. The one
   Python decision left is the package fallback floor, which never ends weaker
   than the recomputed action.
+- Rust owns the CLI hook's verdict for Claude Code's permission dialog: the
+  resident (`claude_permission_verdict`) picks no decision, the Guard approval
+  question, a review that defers to Claude's dialog, or a deny, and asks for
+  the runtime artifact's policy only when the verdict rests on it. Python
+  gathers that policy, renders the reason, copy and envelope, and answers a
+  verdict the resident cannot supply with the host outage response.
 
 ## No-environment production contract
 

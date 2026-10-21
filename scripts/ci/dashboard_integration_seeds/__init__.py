@@ -17,7 +17,17 @@ from typing import Any
 
 from codex_plugin_scanner.guard.store import GuardStore
 
-SEED_MODULES: tuple[str, ...] = ("home", "inbox", "evidence", "extensions", "policy", "settings", "supply_chain")
+# command_health stays last: any later command write would clear the failure it records.
+SEED_MODULES: tuple[str, ...] = (
+    "home",
+    "inbox",
+    "evidence",
+    "extensions",
+    "policy",
+    "settings",
+    "supply_chain",
+    "command_health",
+)
 
 
 @dataclass(frozen=True)

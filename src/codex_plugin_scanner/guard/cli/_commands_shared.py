@@ -167,6 +167,8 @@ from ..runtime.runner import (
     GuardSyncNotAvailableError,
     GuardSyncNotConfiguredError,
     sync_local_guard_cloud_proof,
+    sync_network_protection_bundle,
+    sync_network_protection_bundle_best_effort,
     sync_receipts,
     sync_runtime_session,
     sync_supply_chain_bundle,

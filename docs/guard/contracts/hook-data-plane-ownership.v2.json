@@ -387,6 +387,8 @@
     "src/codex_plugin_scanner/guard/native_hook_decision.py",
     "src/codex_plugin_scanner/guard/native_hook_route.py",
     "src/codex_plugin_scanner/guard/native_hook_pretool_floor.py",
+    "src/codex_plugin_scanner/guard/native_hook_containment_route.py",
+    "src/codex_plugin_scanner/guard/native_claude_permission_verdict.py",
     "src/codex_plugin_scanner/guard/native_daemon_route.py",
     "src/codex_plugin_scanner/guard/native_daemon_handler.py",
     "src/codex_plugin_scanner/guard/native_resident_decision.py",

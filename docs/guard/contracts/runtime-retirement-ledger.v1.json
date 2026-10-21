@@ -108,7 +108,8 @@
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/pytest_target_detection.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/python_pytest_entrypoints.py",
   "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py",
-  "src/codex_plugin_scanner/guard/runtime/containment_outputs.py"
+  "src/codex_plugin_scanner/guard/runtime/containment_outputs.py",
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/read_only_filters.py"
  ],
  "retired_tests": [
   {
