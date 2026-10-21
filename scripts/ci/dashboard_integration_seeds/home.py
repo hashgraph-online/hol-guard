@@ -12,6 +12,7 @@ rows this seed owns.
 
 from __future__ import annotations
 
+import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -38,11 +39,26 @@ def _stamp(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _now_clear_of_midnight() -> datetime:
+    # Receipts are stamped up to len(_RECEIPTS) seconds back. Just after
+    # midnight, UTC or local, that would put them on yesterday, so wait until
+    # every stamp lands on the current day in both.
+    now = datetime.now(UTC)
+    local_midnight = now.astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    utc_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    day_start = max(local_midnight.astimezone(UTC), utc_midnight)
+    earliest_safe = day_start + timedelta(seconds=len(_RECEIPTS) + 1)
+    if now < earliest_safe:
+        time.sleep((earliest_safe - now).total_seconds())
+        now = datetime.now(UTC)
+    return now
+
+
 def seed(context: SeedContext) -> dict[str, Any]:
     workspace = str(context.workspace)
     # Recent stamps keep the receipts inside "today" and the latest-activity
     # window whenever the suite runs.
-    now = datetime.now(UTC)
+    now = _now_clear_of_midnight()
     for harness, active in _INSTALLS:
         context.store.set_managed_install(
             harness,
@@ -57,7 +73,7 @@ def seed(context: SeedContext) -> dict[str, Any]:
         context.store.add_receipt(
             GuardReceipt(
                 receipt_id=receipt_id,
-                timestamp=_stamp(now - timedelta(seconds=30 * (len(_RECEIPTS) - index))),
+                timestamp=_stamp(now - timedelta(seconds=len(_RECEIPTS) - index)),
                 harness=harness,
                 artifact_id=f"{harness}:project:tool-action:home-e2e-{key}",
                 artifact_hash=f"hash-home-e2e-{key}",

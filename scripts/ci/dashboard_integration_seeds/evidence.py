@@ -41,6 +41,9 @@ from codex_plugin_scanner.guard.runtime.extension_evidence import EvidenceSeveri
 from . import SeedContext
 
 SOURCE_SCOPE = "evidence-e2e"
+# Receipts behind reviewed and blocked command rows carry their own scope, so
+# the receipt specs filtering on SOURCE_SCOPE keep their exact counts.
+COMMAND_RECEIPT_SCOPE = "command-activity-e2e"
 FILLER_COUNT = 46
 HARNESS_CYCLE = ("codex", "claude-code", "cursor", "opencode")
 SHELL_ENVELOPE_COMMANDS = {"rm -rf ./dist", "npm install left-pad"}
@@ -364,6 +367,33 @@ def _activity_id(number: int) -> str:
     return f"evidence-e2e-cmd-{number:02d}"
 
 
+def _needs_receipt(command: _Command) -> bool:
+    # The activity contract requires a linked receipt for review or stronger.
+    return command.action in {"review", "block"}
+
+
+def _command_receipt_id(command: _Command) -> str:
+    return f"evidence-e2e-cmd-receipt-{command.number:02d}"
+
+
+def _command_receipt(command: _Command, day: datetime) -> GuardReceipt:
+    artifact_id = f"{COMMAND_RECEIPT_SCOPE}:{command.number:02d}"
+    return GuardReceipt(
+        receipt_id=_command_receipt_id(command),
+        timestamp=day.replace(hour=20, minute=command.number).isoformat(),
+        harness=command.harness,
+        artifact_id=artifact_id,
+        artifact_hash=hashlib.sha256(artifact_id.encode()).hexdigest(),
+        policy_decision=command.action,  # type: ignore[arg-type]
+        capabilities_summary="Runs a command on the machine",
+        changed_capabilities=("first_seen",),
+        provenance_summary="Seeded command activity receipt",
+        artifact_name=command.command,
+        source_scope=COMMAND_RECEIPT_SCOPE,
+        approval_source="hook",
+    )
+
+
 def _command_evidence(command: _Command, day: datetime) -> CommandActivityEvidence:
     activity_id = _activity_id(command.number)
     occurred_at = day.replace(hour=20, minute=command.number)
@@ -381,7 +411,7 @@ def _command_evidence(command: _Command, day: datetime) -> CommandActivityEviden
     request_correlation = (
         CorrelationHandle(CorrelationKind.REQUEST, command.harness, "key.v1", "a" * 64) if confirmed else None
     )
-    needs_receipt = command.action in {"review", "block"}
+    needs_receipt = _needs_receipt(command)
     if unpaired:
         activity = CommandActivity(
             activity_id=activity_id,
@@ -432,7 +462,7 @@ def _command_evidence(command: _Command, day: datetime) -> CommandActivityEviden
         request_correlation=request_correlation,
         session_correlation=None,
         receipt_link_status=ReceiptLinkStatus.LINKED if needs_receipt else ReceiptLinkStatus.NOT_APPLICABLE,
-        receipt_id=f"receipt:{activity_id}" if needs_receipt else None,
+        receipt_id=_command_receipt_id(command) if needs_receipt else None,
         evaluation_latency_bucket=ActivityLatencyBucket.LE_5_MS,
         persistence_latency_bucket=ActivityLatencyBucket.LE_2_MS,
     )
@@ -457,6 +487,8 @@ def _seed_commands(context: SeedContext) -> dict[str, Any]:
     # always in the past.
     day = (datetime.now(timezone.utc) - timedelta(days=1)).replace(second=0, microsecond=0)
     for command in _COMMANDS:
+        if _needs_receipt(command):
+            context.store.add_receipt(_command_receipt(command, day))
         context.store.record_command_activity(
             _command_evidence(command, day),
             invocation_preview=command.command,

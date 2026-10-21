@@ -120,18 +120,24 @@ def _wait_for_catalog(origin: str, auth_token: str, guard_home: Path) -> None:
         headers={"X-Guard-Token": auth_token},
     )
     deadline = time.monotonic() + 60
-    while True:
+    last_failure = "no response"
+    while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(request, timeout=10) as response:
-                if response.status == 200:
+                if 200 <= response.status < 300:
                     return
+                last_failure = f"HTTP {response.status}"
         except urllib.error.HTTPError as error:
-            if error.code != 503 or time.monotonic() > deadline:
-                print(_daemon_log_tail(guard_home), file=sys.stderr)
-                raise RuntimeError(
-                    f"extension catalog never became ready: HTTP {error.code} {_error_code(error)}"
-                ) from error
+            last_failure = f"HTTP {error.code} {_error_code(error)}"
+            if error.code != 503:
+                break
+        except (urllib.error.URLError, OSError) as error:
+            # The listener can still be coming up, or a slow preparation can
+            # time a request out. Both are retried until the deadline.
+            last_failure = f"{type(error).__name__}: {error}"
         time.sleep(0.25)
+    print(_daemon_log_tail(guard_home), file=sys.stderr)
+    raise RuntimeError(f"extension catalog never became ready: {last_failure}")
 
 
 def main() -> None:
