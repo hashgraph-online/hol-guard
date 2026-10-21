@@ -18,6 +18,20 @@ pub(crate) mod snapshot;
 pub(crate) mod ts_inputs;
 
 #[cfg(test)]
+mod executable_identity_tests;
+#[cfg(test)]
+mod input_snapshot_tests;
+#[cfg(all(test, target_os = "macos"))]
+mod macos_backend_tests;
+#[cfg(test)]
+mod process_lifetime_tests;
+#[cfg(test)]
+mod protected_content_tests;
+#[cfg(all(test, target_os = "linux"))]
+mod real_backend_tests;
+#[cfg(test)]
+mod status_channel_tests;
+#[cfg(test)]
 mod vector_fs_tests;
 #[cfg(test)]
 mod vector_support;
@@ -85,4 +99,15 @@ pub fn bun_script_evidence_complete(argv: &[String], workspace: &Path) -> bool {
         script_evidence::build_local_package_script_evidence("bun", argv, workspace),
         Ok(Some(evidence)) if evidence.complete
     )
+}
+
+/// Current containment health for this resident process, as privacy-safe
+/// evidence bound to `daemon_fingerprint`.
+///
+/// `probe_containment_health` (`runtime/containment_health.py`) answered this
+/// by selecting a backend and running its own enforcement self-probe in the
+/// daemon. The daemon now asks the resident, so one port owns backend
+/// selection, the probe and the evidence that proofs bind to.
+pub fn containment_health_evidence(daemon_fingerprint: &str) -> Result<Value, String> {
+    Ok(health::probe_containment_health(daemon_fingerprint)?.to_value())
 }

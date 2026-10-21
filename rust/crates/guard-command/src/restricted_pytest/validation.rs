@@ -238,48 +238,9 @@ pub(super) fn validate_pytest_args(args: &[String]) -> Result<(), RestrictedPyte
     Ok(())
 }
 
-/// `_python_args_target_pytest` (:171-194).
-pub(super) fn python_args_target_pytest(args: &[String]) -> bool {
-    let mut index = 0usize;
-    while index < args.len() {
-        let item = &args[index];
-        if item == "--" {
-            return false;
-        }
-        if item == "-c"
-            || item == "--command"
-            || item.starts_with("-c")
-            || item.starts_with("--command=")
-        {
-            return false;
-        }
-        if item == "-m" {
-            return args
-                .get(index + 1)
-                .map(|next| next.split('.').next() == Some("pytest"))
-                .unwrap_or(false);
-        }
-        if item.starts_with("-m") && item.len() > 2 {
-            return item[2..].split('.').next() == Some("pytest");
-        }
-        if matches!(item.as_str(), "-W" | "-X" | "--check-hash-based-pycs") {
-            index += 2;
-            continue;
-        }
-        if item.starts_with("-W")
-            || item.starts_with("-X")
-            || item.starts_with("--check-hash-based-pycs=")
-        {
-            index += 1;
-            continue;
-        }
-        if !item.starts_with('-') {
-            return false;
-        }
-        index += 1;
-    }
-    false
-}
+/// The Windows planner reads the same argv, so the reading lives in a
+/// module both platforms compile.
+pub use crate::pytest_argv::python_args_target_pytest;
 
 /// `_resolve_executable` (:195-218).
 pub(super) fn resolve_executable(

@@ -37,6 +37,7 @@ fn layout(name: &str) -> Layout {
     write(&workspace.join(".github/workflows/ci.yml"), "on: push\n");
     write(&workspace.join(".husky/pre-commit"), "npm test\n");
     write(&workspace.join("deploy.sh"), "echo deploy\n");
+    write(&workspace.join("tools/deploy.ps1"), "Write-Host deploy\n");
     write(&workspace.join("deploy"), "echo deploy\n");
     write(&workspace.join("notes/AGENTS"), "# agents\n");
     write(&workspace.join("src/linked"), "a\n");
@@ -429,5 +430,72 @@ fn a_bounded_workspace_edit_needs_no_prompt() {
             );
         }
     }
+    let _ = std::fs::remove_dir_all(&layout.root);
+}
+
+#[test]
+fn windows_executability_is_read_off_the_extension() {
+    for name in [
+        "deploy.ps1",
+        "module.psm1",
+        "setup.bat",
+        "setup.CMD",
+        "tool.exe",
+        "tool.COM",
+        "install.msi",
+        "saver.scr",
+        "legacy.vbs",
+        "legacy.vbe",
+        "job.wsf",
+        "host.wsh",
+        "legacy.jse",
+        "panel.cpl",
+        "console.msc",
+    ] {
+        assert!(super::executable_extension(Path::new(name)), "{name}");
+    }
+    // Win32 drops trailing dots and spaces, so these open the same programs.
+    for name in ["deploy.ps1.", "deploy.ps1 ", "tool.exe...", "setup.CMD. "] {
+        assert!(super::executable_extension(Path::new(name)), "{name}");
+    }
+    // Ordinary repository source, including the `.js` that is in `PATHEXT`.
+    for name in [
+        "index.ts",
+        "page.tsx",
+        "app.js",
+        "deploy.sh",
+        "notes.md",
+        "deploy",
+        "a.ps1.ts",
+    ] {
+        assert!(!super::executable_extension(Path::new(name)), "{name}");
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_in_place_edits_of_runnable_files_stay_reviewed() {
+    let layout = layout("windows-executable");
+    assert!(
+        proven(&layout, "sed -i '' 's/a/b/' src/index.ts"),
+        "an ordinary source edit has to stay silent"
+    );
+    assert!(
+        !proven(&layout, "sed -i '' 's/deploy/ship/' tools/deploy.ps1"),
+        "rewriting a file Windows runs on launch has to be reviewed"
+    );
+    let _ = std::fs::remove_dir_all(&layout.root);
+}
+
+/// `tools/deploy.ps1.` opens `tools/deploy.ps1`, so the edit route has to read
+/// it as the program it rewrites rather than as an extensionless file.
+#[cfg(windows)]
+#[test]
+fn a_trailing_dot_does_not_hide_a_runnable_file_from_the_edit_route() {
+    let layout = layout("windows-trailing-dot");
+    assert!(
+        !proven(&layout, "sed -i '' 's/deploy/ship/' tools/deploy.ps1."),
+        "a trailing dot opens the same program and has to be reviewed"
+    );
     let _ = std::fs::remove_dir_all(&layout.root);
 }

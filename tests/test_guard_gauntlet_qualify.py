@@ -127,6 +127,7 @@ def test_attempt_command_and_environment(tmp_path: Path, native_route: str | Non
         native_route=native_route,
         sdk_root=tmp_path / "sdk",
         jobs=4,
+        case_retries=2,
         host_slots=8,
         max_load=32.0,
         max_load_wait=600.0,
@@ -147,6 +148,7 @@ def test_attempt_command_and_environment(tmp_path: Path, native_route: str | Non
     for flag in ("--fail-fast", "--host-slots", "--max-load", "--expected-source-sha"):
         assert flag in argv
     assert argv[argv.index("--max-load") + 1] == "32.0"
+    assert argv[argv.index("--case-retries") + 1] == "2"
     assert argv[argv.index("--max-load-wait") + 1] == "600.0"
     assert "low" not in argv
     assert argv[argv.index("--candidate-sha") + 1] == "b" * 40
@@ -204,6 +206,7 @@ def _args(tmp_path: Path, **overrides: Any) -> SimpleNamespace:
         "candidate_sha": None,
         "attempts": 2,
         "jobs": 4,
+        "case_retries": 2,
         "host_slots": 8,
         "max_load": 32.0,
         "max_load_wait": 600.0,

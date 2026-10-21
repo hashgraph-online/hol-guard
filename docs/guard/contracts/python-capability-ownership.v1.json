@@ -1192,6 +1192,74 @@
     "rust/crates/guard-runtime/src/codex_hook_bridge_client.rs",
     "rust/crates/guard-runtime/src/codex_hook_bridge_restart.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
+   "module": "codex_plugin_scanner.guard.runtime.npm_source_spec",
+   "source_sha256": "288de3261a2d9a6cdb10abb40c3587f3e4a1f49a9293dde75fe5f492d16363de",
+   "forbidden_symbols": [
+    "NpmSourceSpec",
+    "parse_npm_source_spec",
+    "_url_source",
+    "_git_from_host_path",
+    "_strip_archive_suffix",
+    "_looks_like_archive_filename",
+    "_canonical_revision",
+    "_host_with_port",
+    "_non_git_source"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/npm_source_spec.rs",
+    "rust/crates/guard-command/src/package_intent_common.rs",
+    "rust/crates/guard-command/src/supply_chain_package_eval/package_resolution.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py",
+   "module": "codex_plugin_scanner.guard.runtime.github_pr_body_file",
+   "source_sha256": "5453086e51325808e512a050a4b7408b8a26f82e2a7e2b6c4fae80367a52ce7a",
+   "forbidden_symbols": [
+    "static_markdown_pr_edit_body_file_operand",
+    "github_pr_body_file_is_safe",
+    "_resolve_operand",
+    "_authored_location_root",
+    "_cascade_projects_authored_root",
+    "_omp_session_authored_root",
+    "_ancestor_chain_is_controlled",
+    "_private_directory_owned_by_current_user",
+    "_is_pr_body_markdown_name"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_gh_body_file.rs",
+    "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs",
+    "rust/crates/guard-command/src/sfrs_gh_static_body_safety.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py",
+   "module": "codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_body_safety",
+   "source_sha256": "6284a54da84a7e4df7ba9539c214397a4d118ba9d19728a3f92d5f25a2d7c2b9",
+   "forbidden_symbols": [
+    "_gh_pr_create_uses_safe_static_body_file",
+    "_gh_pr_create_segment_with_bounded_output",
+    "_gh_pr_edit_uses_safe_static_body_file",
+    "_shell_segment_reads_sensitive_path",
+    "_find_segment_reads_sensitive_path",
+    "_find_exec_reads_file_content",
+    "_find_target_candidates",
+    "_find_target_candidate_is_sensitive",
+    "_shell_read_segment_can_emit_stdout",
+    "_search_args_use_quiet_mode",
+    "_text_contains_credential_exfiltration",
+    "_shell_heredoc_payloads",
+    "_path_text_looks_sensitive"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/sfrs_gh_body_safety.rs",
+    "rust/crates/guard-command/src/sfrs_gh_static_body_safety.rs",
+    "rust/crates/guard-command/src/sfrs_credential_exfil.rs",
+    "rust/crates/guard-command/src/sfrs_interpreter_heredoc.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -1220,7 +1288,9 @@
   "tests/test_structured_data_sensitivity.py",
   "tests/test_codex_managed_fallback_authentication.py",
   "tests/test_codex_daemon_start_wait.py",
-  "tests/test_codex_daemon_bridge_failure_reason.py"
+  "tests/test_codex_daemon_bridge_failure_reason.py",
+  "tests/test_npm_source_spec.py",
+  "tests/test_guard_github_pr_body_file.py"
  ],
  "retired_bodies": [
   {
@@ -1502,6 +1572,22 @@
     "rust/crates/guard-runtime/src/claude_hook_bridge.rs",
     "rust/crates/guard-runtime/src/claude_hook_bridge_transport.rs",
     "rust/crates/guard-runtime/src/claude_hook_bridge_http.rs"
+   ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/daemon/hook_native_package_review.py",
+   "source_sha256": "936e48c96db7536f8915512d4df015b783a63b2889b23b831fbb29a2f49631c1",
+   "forbidden_symbols": [
+    "verified_npm_version",
+    "_changes_npm",
+    "_loader_paths_outside",
+    "_npmrc_redirects_fetch",
+    "_resolve_executable",
+    "_filters_outside_workspace"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/verified_npm.rs",
+    "rust/crates/guard-runtime/src/verified_npm_op.rs"
    ]
   }
  ]

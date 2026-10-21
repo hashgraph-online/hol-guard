@@ -149,6 +149,9 @@ def test_public_directory_matches_cross_repository_contract(tmp_path: Path) -> N
 
 
 def test_v2_listing_metadata_has_separate_credit_and_claim_authority(tmp_path: Path) -> None:
+    from jsonschema import Draft202012Validator
+
+    v2_schema = json.loads((REPOSITORY / "contracts/extensions/directory.v2.schema.json").read_text())
     root = copy_sources(tmp_path)
     listing_path = root / "contributions/extension-listings/command.blitcp.json"
     listing_path.write_text(
@@ -171,6 +174,30 @@ def test_v2_listing_metadata_has_separate_credit_and_claim_authority(tmp_path: P
     row = next(item for item in exporter.export_directory_v2(root)["entries"] if item["id"] == "command.blitcp")
     assert row["contributors"] == [{"githubId": "123", "githubLogin": "example-author", "roles": ["author"]}]
     assert row["maintainerGithubIds"] == []
+    profile = {
+        "description": "Writes bounded file-transfer coverage.",
+        "website": "https://example.com/blitcp",
+        "linkedin": "https://www.linkedin.com/in/example-author",
+    }
+    listing_path.write_text(
+        json.dumps(
+            {
+                **json.loads(listing_path.read_text()),
+                "contributors": [
+                    {
+                        "githubId": "123",
+                        "githubLogin": "example-author",
+                        "roles": ["author"],
+                        "profile": profile,
+                    }
+                ],
+            }
+        )
+    )
+    profiled = next(item for item in exporter.export_directory_v2(root)["entries"] if item["id"] == "command.blitcp")
+    assert profiled["contributors"][0]["profile"] == profile
+    assert profiled["maintainerGithubIds"] == []
+    Draft202012Validator(v2_schema).validate(exporter.export_directory_v2(root))
     assert row["listing"]["path"] == "contributions/extension-listings/command.blitcp.json"
 
 

@@ -182,3 +182,54 @@ fn resident_cloud_catalog_registration_and_incomplete_failure() {
     assert_eq!(result["error"], "catalog_unavailable");
     assert!(result.get("payload").is_none());
 }
+
+#[cfg(unix)]
+#[test]
+fn resident_answers_containment_health_with_bound_evidence_or_nothing() {
+    let fingerprint = "a".repeat(64);
+    let workspace = tempfile::tempdir().unwrap();
+    let envelope = json!({
+        "operation": "containment_health_probe",
+        "request": {
+            "schema": "guard-containment-health-probe-request.v1",
+            "request_id": "probe-1",
+            "daemon_fingerprint": fingerprint,
+            "guard_home": workspace.path().to_string_lossy(),
+        },
+    });
+    let bytes = evaluate_resident_bytes(&serde_json::to_vec(&envelope).unwrap(), None).unwrap();
+    let response: Value = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(
+        response["schema"], "guard-containment-health-probe-result.v1",
+        "{response}"
+    );
+    // A probe that could not run at all reports nothing, which the caller treats
+    // as unavailable. When it did run, the evidence must be bound to the
+    // fingerprint the daemon asked about and carry every field the daemon reads.
+    if !response["result"].is_null() {
+        let evidence = &response["result"];
+        assert_eq!(evidence["daemon_fingerprint"], fingerprint, "{evidence}");
+        assert_eq!(evidence["runtime_fingerprint"], fingerprint, "{evidence}");
+        assert_eq!(
+            evidence["schema_version"], "guard.containment-health.v1",
+            "{evidence}"
+        );
+        assert!(evidence["probe_enforced"].is_boolean(), "{evidence}");
+        assert!(evidence["backend_digest"].is_string(), "{evidence}");
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn resident_rejects_a_containment_health_request_with_the_wrong_schema() {
+    let envelope = json!({
+        "operation": "containment_health_probe",
+        "request": {
+            "schema": "guard-containment-health-probe-request.v2",
+            "daemon_fingerprint": "b".repeat(64),
+            "guard_home": "/tmp",
+        },
+    });
+    assert!(evaluate_resident_bytes(&serde_json::to_vec(&envelope).unwrap(), None).is_err());
+}

@@ -57,7 +57,7 @@ use std::time::Instant;
 
 pub(crate) use session::session_decidable;
 
-pub(crate) const MCP_RELAY_DECIDE_FEATURE: &str = "mcp-relay-decide-v1";
+pub(crate) const MCP_RELAY_DECIDE_FEATURE: &str = "mcp-relay-decide-v2";
 const RESULT_SCHEMA: &str = "guard-mcp-relay-decide-result.v1";
 /// The harnesses whose MCP proxy the relay replaces.
 const RELAY_HARNESSES: [&str; 4] = ["codex", "copilot", "cursor", "opencode"];

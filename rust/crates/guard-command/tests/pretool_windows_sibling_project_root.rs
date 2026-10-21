@@ -1,11 +1,11 @@
 #![cfg(windows)]
-//! A session started beside its checkouts steps into one and reads it:
-//! `cd C:/Users/me/other-project && git log -1`. Unix has admitted that for
-//! as long as the contained route has existed, because the directory is the
-//! nearest `.git` ancestor under the agent's own profile and the sink rebases
-//! its approved root to it. Windows had no way to ask who owns a directory,
-//! so `sibling_project_root` was a stub returning `None` and every sibling
-//! shape arrived as a review prompt — a false positive on the platform, not a
+//! A session started beside its checkouts steps into one and runs its tests:
+//! `cd C:/Users/me/other-project && python3 -m pytest -q`. The contained
+//! Python sink rebases its approved root to the nearest `.git` ancestor under
+//! the agent's own profile, so the run is contained there instead of becoming
+//! a review prompt. Windows had no way to ask who owns a directory, so
+//! `sibling_project_root` was a stub returning `None` and every sibling shape
+//! arrived as a review prompt: a false positive on the platform, not a
 //! different policy. The crate's unit tests need Unix, so this proof runs as
 //! its own test binary.
 
@@ -78,7 +78,7 @@ fn junction(link: &Path, target: &Path) -> bool {
 }
 
 #[test]
-fn reading_a_sibling_checkout_under_the_profile_is_proved_on_windows() {
+fn tests_in_a_sibling_checkout_under_the_profile_are_contained_on_windows() {
     let (root, home) = layout("guard-win-sibling");
     let _cleanup = FixtureCleanup(root.clone());
     let session = home.join("project");
@@ -131,6 +131,8 @@ fn reading_a_sibling_checkout_under_the_profile_is_proved_on_windows() {
         .minimum_action
     };
 
+    // A plain read is admitted anywhere its Git configuration starts no
+    // helper, sibling or not, so it says nothing about the sibling route.
     assert_eq!(
         action(&format!(
             "cd {} && git log -1 --format='%H %s'",
@@ -138,28 +140,38 @@ fn reading_a_sibling_checkout_under_the_profile_is_proved_on_windows() {
         )),
         "allow"
     );
-    for command in [
-        // Not a checkout, so there is no root for the sink to rebase to.
-        format!("cd {} && git log -1", spelled(&home.join("Documents"))),
-        // Outside the profile the agent's ownership says nothing.
-        format!("cd {} && git log -1", spelled(&outside)),
-        // The profile itself is not a sibling of the session.
-        format!("cd {home_text} && git log -1"),
-    ] {
-        assert_ne!(action(&command), "allow", "{command}");
-    }
+
+    // A test run is contained only where the sink has a root to rebase to.
+    let pytest = |directory: &Path| {
+        action(&format!(
+            "cd {} && python3 -m pytest -q",
+            spelled(directory)
+        ))
+    };
+    std::fs::create_dir_all(sibling.join("sub")).unwrap();
+    assert_eq!(pytest(&sibling), "sandbox-required");
+    assert_eq!(pytest(&sibling.join("sub")), "sandbox-required");
+    // Not a checkout, so there is no root for the sink to rebase to.
+    assert_eq!(pytest(&home.join("Documents")), "review");
+    // Outside the profile the agent's ownership says nothing.
+    assert_eq!(pytest(&outside), "review");
+    // The profile itself is not a sibling of the session.
+    assert_eq!(pytest(&home), "review");
 
     // A junction outside the profile pointing into it: the target resolves
     // inside home, so containment holds, but its spelled ancestors never
     // equal the profile. The nearest `.git` above it is `outside-project`'s,
     // which the agent owns, so a walk that stopped only at the profile would
-    // hand back a root outside it.
+    // hand back a root outside it. A standard user can make the junction, so
+    // failing to make one is a broken fixture, not a reason to skip the case.
     let escape = outside.join("link");
-    if junction(&escape, &home.join("Documents")) {
-        assert_ne!(
-            action(&format!("cd {} && git log -1", spelled(&escape))),
-            "allow",
-            "a junction must not walk out of the profile"
-        );
-    }
+    assert!(
+        junction(&escape, &home.join("Documents")),
+        "mklink /J failed"
+    );
+    assert_eq!(
+        pytest(&escape),
+        "review",
+        "a junction must not walk out of the profile"
+    );
 }

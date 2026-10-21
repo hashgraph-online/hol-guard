@@ -69,6 +69,7 @@ def _approval_token(artifact: GuardArtifact, *, workspace: Path, config: GuardCo
         data_flow_action=None,
         scanner_action=None,
         current_action="review",
+        risk_classes=(),
         data_flow_signals=(),
         scanner_evidence=(),
     )

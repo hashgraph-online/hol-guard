@@ -197,18 +197,22 @@ pub(super) fn absent_listing_operand(value: &str, context: super::PathContext<'_
     for ancestor in expanded.ancestors() {
         match std::fs::symlink_metadata(ancestor) {
             Ok(_) => {
+                let private_temporary =
+                    super::listing_temporary::private_temporary_ancestor(ancestor, context);
+                let spelled = missing.iter().enumerate().all(|(index, part)| {
+                    let name = part.to_string_lossy();
+                    // `.git` is the one marker agents probe for. A missing
+                    // leaf prints only an error and reveals no content.
+                    // `.github` holds a project's workflows, never a
+                    // credential, so a probe for them may name it anywhere.
+                    !name.starts_with('.') || (index == 0 && name == ".git") || name == ".github"
+                }) || private_temporary;
+                // The owner's private temporary root itself (`$TMPDIR`) sits
+                // in a location the listing screens deny, but nobody else can
+                // put an entry there, so a missing name below it is enough.
                 return !missing.is_empty()
-                    && missing.iter().enumerate().all(|(index, part)| {
-                        let name = part.to_string_lossy();
-                        // `.git` is the one marker agents probe for. A missing
-                        // leaf prints only an error and reveals no content.
-                        // `.github` holds a project's workflows, never a
-                        // credential, so a probe for them may name it anywhere.
-                        !name.starts_with('.')
-                            || (index == 0 && name == ".git")
-                            || name == ".github"
-                    })
-                    && listable_ancestor(ancestor, context);
+                    && spelled
+                    && (private_temporary || listable_ancestor(ancestor, context));
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 let Some(name) = ancestor.file_name() else {
@@ -241,8 +245,9 @@ fn expanded_path(value: &str, context: super::PathContext<'_>) -> Option<std::pa
 /// Upper bound on the entries a leaf glob's directory may hold.
 const MAX_LEAF_ENTRIES: usize = 4096;
 
-/// `ls /tmp/.s.PGSQL*`: a pattern in the last component only, below a literal
-/// directory that `ls` may list by name. The screened glob expansion refuses
+/// `ls /tmp/pg-run/.s.PGSQL*`: a pattern in the last component only, below a
+/// literal directory that `ls` may list by name and that no other user can
+/// add an entry to. The screened glob expansion refuses
 /// hidden and socket matches, but a listing prints only their names, as
 /// listing the directory itself would. Every entry the pattern could match
 /// under any shell option (`dotglob`, `nocaseglob`) is screened: a directory
@@ -264,7 +269,6 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
         // pattern only screens its fixed path; every match is screened below.
         || super::sensitive_path_argument(value)
         || super::sensitive_read_path_argument(directory)
-        || !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
     {
         return false;
     }
@@ -286,6 +290,21 @@ fn leaf_glob_operand(value: &str, context: super::PathContext<'_>) -> bool {
     let Some(base) = expanded_path(directory, context) else {
         return false;
     };
+    // The shell expands the pattern after this screen, and anyone can add a
+    // matching link to a world-writable directory (`/tmp`) in between, so a
+    // pattern directly below one keeps its review whatever it matches now.
+    if super::listing_temporary::writable_by_anyone(&base) {
+        return false;
+    }
+    // The listing names the matches, not the directory holding them, so a
+    // temporary directory only the owner can add entries to answers for a
+    // pattern below it (`ls /tmp/tmp.ab12/pg*`) although listing it whole
+    // may stay reviewed. Every match is screened on its own below.
+    if !safe_reads::safe_listing_arguments(&[directory.to_owned()], context)
+        && !super::listing_temporary::temporary_glob_directory(&base, context)
+    {
+        return false;
+    }
     let Ok(entries) = std::fs::read_dir(&base) else {
         return false;
     };

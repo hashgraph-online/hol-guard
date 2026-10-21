@@ -436,6 +436,21 @@ pub(super) fn evaluate_signals(
             harness == "omp",
         )
     {
+        if super::super::git_routes::missing_path_in_registered_worktree(
+            &signals.path_values[0],
+            home_dir,
+            cwd,
+        ) {
+            // The agent was sent to work in this linked worktree and named the
+            // file before creating it. Nothing is there to read, so the read
+            // discloses nothing and the tool reports the missing path itself.
+            return generic_result(
+                action,
+                "allow",
+                "native_missing_worktree_read",
+                "The Rust authority proved this read names a path with nothing behind it inside a linked worktree this repository registers, so it reads nothing and the tool reports the missing path itself.",
+            );
+        }
         // Nothing exists to read, so stopping the call costs nothing. Saying
         // why lets the agent fix the path instead of waiting on an approval.
         let mut result = generic_result(action, "block", MISSING_PATH, "");

@@ -92,7 +92,7 @@ fn scratch_edit_safe(
                         context.home_dir,
                         context.cwd,
                     ) && !std::fs::symlink_metadata(target)
-                        .is_ok_and(|metadata| executable(&metadata))
+                        .is_ok_and(|metadata| executable(Path::new(target), &metadata))
                 })
         })
 }
@@ -408,7 +408,7 @@ fn target_safe(value: &str, workspace: &Path, context: super::PathContext<'_>) -
     let Ok(metadata) = std::fs::symlink_metadata(&joined) else {
         return false;
     };
-    if !metadata.is_file() || executable(&metadata) {
+    if !metadata.is_file() || executable(&joined, &metadata) {
         return false;
     }
     let Ok(canonical) = std::fs::canonicalize(&joined) else {
@@ -434,14 +434,36 @@ fn plain_parts(path: &Path) -> bool {
 }
 
 #[cfg(unix)]
-fn executable(metadata: &std::fs::Metadata) -> bool {
+fn executable(_path: &Path, metadata: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::PermissionsExt;
     metadata.permissions().mode() & 0o111 != 0
 }
 
+/// Windows has no execute bit: the extension decides what runs on launch, so
+/// that is what an in-place edit has to be read against there.
 #[cfg(not(unix))]
-fn executable(_metadata: &std::fs::Metadata) -> bool {
-    false
+fn executable(path: &Path, _metadata: &std::fs::Metadata) -> bool {
+    executable_extension(path)
+}
+
+/// Extensions an in-place edit treats as a program, on top of the ones Windows
+/// runs a file by.
+///
+/// `.psm1` is here and not in the shared list because the risk differs by
+/// route: a module is imported by name rather than launched, so truncating one
+/// with a download is a different act from rewriting the statements inside it,
+/// which is what `sed -i` does. `.js` stays out of both: it is ordinary
+/// repository source far more often than it is a script, and `sed -i` over
+/// source has to stay silent.
+#[cfg(any(not(unix), test))]
+const EDITED_PROGRAM_EXTENSIONS: [&str; 1] = ["psm1"];
+
+#[cfg(any(not(unix), test))]
+fn executable_extension(path: &Path) -> bool {
+    super::curl_reads::output_targets::windows_spelled_extension(path).is_some_and(|extension| {
+        super::curl_reads::output_targets::WINDOWS_PROGRAM_EXTENSIONS.contains(&extension.as_str())
+            || EDITED_PROGRAM_EXTENSIONS.contains(&extension.as_str())
+    })
 }
 
 #[cfg(test)]

@@ -6,32 +6,11 @@ use std::collections::BTreeMap;
 
 use serde_json::{Map, Value};
 
+use guard_command::harness_identity::REGISTERED_HARNESS_COUNT;
+
 use crate::guard_config_iso::is_valid_iso_datetime;
 
-/// `(harness id, install aliases)` of every registered harness contract.
-const HARNESS_ALIASES: [(&str, &[&str]); 17] = [
-    ("codex", &["codex"]),
-    ("claude-code", &["claude-code", "claude"]),
-    ("opencode", &["opencode"]),
-    ("copilot", &["copilot"]),
-    ("cursor", &["cursor"]),
-    ("cline", &["cline", "cline-cli", "cline-vscode"]),
-    ("gemini", &["gemini"]),
-    ("hermes", &["hermes"]),
-    ("openclaw", &["openclaw"]),
-    ("antigravity", &["antigravity"]),
-    ("kimi", &["kimi", "kimi-code", "kimi-cli"]),
-    (
-        "grok",
-        &["grok", "grok-build", "grok-build-cli", "xai-grok"],
-    ),
-    ("pi", &["pi", "pi-agent", "pi-coding-agent"]),
-    ("omp", &["omp", "oh-my-pi"]),
-    ("zcode", &["zcode", "zai", "z-code", "zai-zcode"]),
-    ("devin", &["devin", "devin-cli", "cognition-devin"]),
-    ("paseo", &["paseo"]),
-];
-const MAX_HARNESS_POSTURES: usize = HARNESS_ALIASES.len() * 2;
+const MAX_HARNESS_POSTURES: usize = REGISTERED_HARNESS_COUNT * 2;
 const POSTURE_LOCK_KEYS: [&str; 4] = [
     "protection_posture",
     "mode",
@@ -40,13 +19,9 @@ const POSTURE_LOCK_KEYS: [&str; 4] = [
 ];
 
 /// `canonical_harness_id`: a registry id or install alias, else `None`.
-pub(crate) fn canonical_harness_id(value: &str) -> Option<&'static str> {
-    let key = value.trim().to_lowercase().replace('_', "-");
-    HARNESS_ALIASES
-        .iter()
-        .find(|(_, aliases)| aliases.contains(&key.as_str()))
-        .map(|(harness, _)| *harness)
-}
+/// The table itself lives in `guard-command` so the risk-action resolver can
+/// canonicalize without a second copy.
+pub(crate) use guard_command::harness_identity::canonical_harness_id;
 
 /// `normalize_protection_posture`, shared with the package authority loader.
 pub(crate) fn normalize_posture(value: &Value) -> Option<&'static str> {

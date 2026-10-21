@@ -17,7 +17,14 @@ def transport(monkeypatch, tmp_path):
         available=True,
         compatible=True,
         identity=SimpleNamespace(path=tmp_path / "native-runtime", sha256="a" * 64),
-        capabilities=SimpleNamespace(features=("resident-protocol-v2", "contained-execution-v1", "prompt-analyze-v2")),
+        capabilities=SimpleNamespace(
+            features=(
+                "resident-protocol-v2",
+                "contained-execution-v1",
+                "prompt-analyze-v2",
+                "shim-admin-v4",
+            )
+        ),
     )
     client = Mock(return_value=b'{"status":"ok","result":{"decision":"block"}}')
     failed = Mock()
@@ -31,7 +38,7 @@ def transport(monkeypatch, tmp_path):
     return SimpleNamespace(status=status, client=client, failed=failed, succeeded=succeeded, environment=environment)
 
 
-def _request(home, request=None, operation="contained_execute", feature="contained-execution-v1"):
+def _request(home, request=None, operation="shim_admin", feature="shim-admin-v4"):
     return bridge._resident_request(
         operation=operation,
         request={} if request is None else request,
@@ -51,7 +58,7 @@ def test_unavailable_native_runtime_never_sends_a_request(transport, tmp_path, f
     transport.succeeded.assert_not_called()
 
 
-@pytest.mark.parametrize("features", [(), ("resident-protocol-v2",), ("contained-execution-v1",)])
+@pytest.mark.parametrize("features", [(), ("resident-protocol-v2",), ("shim-admin-v4",)])
 def test_both_protocol_and_operation_capabilities_are_required(transport, tmp_path, features):
     transport.status.capabilities.features = features
     assert _request(tmp_path) is None
@@ -77,7 +84,7 @@ def test_unserializable_or_oversized_requests_never_reach_native_transport(trans
 def test_missing_or_malformed_native_reply_records_failure_not_success(transport, tmp_path, response, reason):
     transport.client.return_value = response
     assert _request(tmp_path) is None
-    transport.failed.assert_called_once_with("a" * 64, tmp_path, reason=f"native_contained_execute_{reason}")
+    transport.failed.assert_called_once_with("a" * 64, tmp_path, reason=f"native_shim_admin_{reason}")
     transport.succeeded.assert_not_called()
 
 
@@ -97,7 +104,7 @@ def test_native_transport_keeps_executable_home_environment_and_payload_bound(tr
     assert arguments["environment"] is transport.environment
     assert arguments["timeout_seconds"] == 4.5
     assert json.loads(arguments["payload"]) == {
-        "operation": "contained_execute",
+        "operation": "shim_admin",
         "request": request,
         "deadline_budget_ms": 4500,
     }
@@ -271,6 +278,20 @@ def test_contained_runner_replies_are_accepted_without_outer_status(transport, t
     transport.succeeded.assert_called_once_with("a" * 64, tmp_path)
 
 
+def test_containment_health_probe_reply_reaches_the_caller(transport, tmp_path):
+    """The resident answers with a status-free versioned reply, as the contained runners do."""
+    result = {"enforced": True}
+    reply = {"schema": "guard-containment-health-probe-result.v1", "result": result}
+    transport.client.return_value = json.dumps(reply).encode()
+    assert bridge.containment_health_probe_native(daemon_fingerprint="f" * 64, guard_home=tmp_path) == result
+    envelope = json.loads(transport.client.call_args.kwargs["payload"])
+    # The resident clamps this operation to 15 seconds; asking for less leaves
+    # the worst-case probe and reap with almost no room for start-up.
+    assert envelope["deadline_budget_ms"] == 15_000
+    transport.client.return_value = json.dumps({**reply, "status": "ok"}).encode()
+    assert bridge.containment_health_probe_native(daemon_fingerprint="f" * 64, guard_home=tmp_path) is None
+
+
 def test_contained_runner_transport_budget_covers_resident_overhead(transport, tmp_path):
     transport.client.return_value = b'{"schema":"guard-contained-node-execute-result.v1","result":null}'
     bridge._contained_runner_request(
@@ -318,3 +339,35 @@ def test_framed_resident_refusal_keeps_its_finite_code(transport, tmp_path, fram
     assert response is None
     assert native_resident_client_failure_code() == expected
     transport.failed.assert_called_once_with("a" * 64, tmp_path, reason="native_daemon_lifecycle_decide_schema")
+
+
+def test_contained_execute_reply_reaches_the_caller(transport, tmp_path):
+    """The contained execute op answers with a status-free versioned reply."""
+    result = {"exit_code": 0, "enforcement": "bubblewrap"}
+    transport.client.return_value = json.dumps(
+        {"schema": "guard-contained-execute-result.v1", "result": result}
+    ).encode()
+    request = {
+        "schema_version": "containment-contract-v1",
+        "kind": "probe",
+        "argv": ["/bin/true"],
+        "cwd": str(tmp_path),
+        "env_allowlist": [],
+        "timeout_seconds": 60,
+        "max_output_bytes": 1024,
+        "additional_read_paths": [],
+        "allow_outbound_network": False,
+    }
+    policy = {"schema_version": "containment-contract-v1", "action": "run"}
+    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") == result
+    envelope = json.loads(transport.client.call_args.kwargs["payload"])
+    # The resident clamps this operation at the contract's one-hour request
+    # timeout plus the client's transport slack, so a minute-long contained run
+    # keeps the budget its own timeout earns.
+    assert envelope["deadline_budget_ms"] == 90_000
+    assert transport.client.call_args.kwargs["timeout_seconds"] == 90.0
+    # A reply carrying an outer status is not this operation's shape.
+    transport.client.return_value = json.dumps(
+        {"schema": "guard-contained-execute-result.v1", "result": result, "status": "ok"}
+    ).encode()
+    assert bridge.contained_execute_native(request, policy, guard_home=tmp_path, run_id="probe-1") is None

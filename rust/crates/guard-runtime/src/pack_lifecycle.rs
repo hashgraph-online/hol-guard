@@ -127,8 +127,14 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
         return selection::select(input);
     }
     if kind == "fallback" {
-        return if input["profile"] == "installed"
-            && input["reason"] == crate::pack_preparation::UNAVAILABLE
+        // A committed subset reports the same typed unavailability when its
+        // cached policy is gone. Re-preparing from the published root is the
+        // same authenticated route the installed profile already takes, and it
+        // is the only way a saved policy survives an evicted cache.
+        return if matches!(
+            input["profile"].as_str(),
+            Some("installed") | Some("committed-subset")
+        ) && input["reason"] == crate::pack_preparation::UNAVAILABLE
         {
             Ok(json!({"profile":"remote"}))
         } else {
@@ -212,27 +218,43 @@ pub(super) fn evaluate(input: &Value) -> Result<Value, String> {
             let installed: Option<Identity> = parse(&input["installed"])?;
             let mut admission = floor.clone();
             let mut installed_usable = false;
-            if let Some(installed) = installed
-                .as_ref()
-                .filter(|i| i.source == floor.source || floor.installed.as_ref() != Some(*i))
-            {
-                match transition(&floor, installed, &input["ancestry"]) {
-                    Ok(next) => {
-                        admission = next;
-                        installed_usable = true;
-                    }
-                    Err(code) if code == "pack_lifecycle_source_ancestry_required" => {
-                        if !input["ancestry"].is_null() {
-                            return Err(code);
+            if let Some(installed) = installed.as_ref() {
+                if floor.installed.as_ref() == Some(installed)
+                    && installed.authority >= floor.authority
+                    && installed.revocation >= floor.revocation
+                {
+                    // This floor already admitted exactly this release, so it
+                    // stays usable without re-deriving it. Re-deriving it was
+                    // the only reason a steady-state preview fell through to
+                    // the remote profile, which needs the network for every
+                    // saved policy; the floor itself does not move here. A
+                    // remote publication that raised the epochs past it sends
+                    // it through `transition`, which refuses the rollback.
+                    installed_usable = true;
+                } else {
+                    match transition(&floor, installed, &input["ancestry"]) {
+                        Ok(next) => {
+                            admission = next;
+                            installed_usable = true;
                         }
-                        return Ok(json!({"lineage_source":installed.source}));
+                        Err(code) if code == "pack_lifecycle_source_ancestry_required" => {
+                            if !input["ancestry"].is_null() {
+                                return Err(code);
+                            }
+                            return Ok(json!({"lineage_source":installed.source}));
+                        }
+                        // A release the floor will not admit is not fatal to
+                        // planning: preparation falls back to the published
+                        // root, which carries its own authority.
+                        Err(code)
+                            if matches!(
+                                code.as_str(),
+                                "pack_lifecycle_epoch_rollback"
+                                    | "pack_lifecycle_version_rollback"
+                                    | "pack_lifecycle_version_reused"
+                            ) => {}
+                        Err(code) => return Err(code),
                     }
-                    Err(code)
-                        if matches!(
-                            code.as_str(),
-                            "pack_lifecycle_epoch_rollback" | "pack_lifecycle_version_rollback"
-                        ) => {}
-                    Err(code) => return Err(code),
                 }
             }
             let admission_floor = encode(&admission, &key)?;

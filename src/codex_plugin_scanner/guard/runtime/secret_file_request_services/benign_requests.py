@@ -1,8 +1,6 @@
-"""Explicitly benign request classification and artifact construction."""
+"""Artifact construction for sensitive native tool-action requests."""
 
 from __future__ import annotations
-
-from pathlib import Path
 
 from ...models import GuardArtifact
 from ...native_tool_action_identity import tool_action_request_artifact_id
@@ -15,8 +13,7 @@ from ..effect_contract import UncertaintyKind
 from ..effect_decision import DecisionFactorSource, DecisionReason, EffectDecision, FinalDisposition
 from ..extension_control_contract import ExtensionControlLayer
 from ..extension_control_runtime import ExtensionControlRuntimeSnapshot
-from .constants_core import _PATH_KEYS, _PATH_LIST_KEYS
-from .request_models import ToolActionRequestMatch, _normalize_tool_name, tool_action_risk_summary
+from .request_models import ToolActionRequestMatch, tool_action_risk_summary
 
 # Artifact discovery can run before an authenticated native result exists, and
 # the sensitive request still has to be preserved at a review floor. The
@@ -40,39 +37,6 @@ _NATIVE_EVIDENCE_UNAVAILABLE_DECISION = EffectDecision(
     reasons=(_UNSUPPORTED_INPUT_REASON,),
     proof_routes=frozenset(),
 )
-
-
-def is_explicitly_benign_native_file_read_request(
-    tool_name: object,
-    arguments: object,
-    *,
-    cwd: Path | None = None,
-    home_dir: Path | None = None,
-) -> bool:
-    """Recognize one existing, non-sensitive native ``Read`` target."""
-
-    if _normalize_tool_name(tool_name) != "read" or not isinstance(arguments, dict):
-        return False
-    typed_arguments: dict[str, object] = {key: value for key, value in arguments.items() if isinstance(key, str)}
-    if any(key in typed_arguments for key in _PATH_LIST_KEYS):
-        return False
-    candidates = [
-        value.strip() for key in _PATH_KEYS if isinstance((value := typed_arguments.get(key)), str) and value.strip()
-    ]
-    if len(candidates) != 1:
-        return False
-    target = candidates[0]
-    if not target or any(marker in target for marker in ("$", "`", "<", ">", "|", ";", "&", "\x00")):
-        return False
-
-    from ..source_paths import source_path_is_allowed
-
-    decision = source_path_is_allowed(target, cwd=cwd, home_dir=home_dir)
-    resolved = decision.resolved_path
-    try:
-        return decision.allowed and resolved is not None and resolved.is_file()
-    except OSError:
-        return False
 
 
 def build_tool_action_request_artifact(
@@ -243,5 +207,4 @@ def build_tool_action_request_artifact(
 
 __all__ = [
     "build_tool_action_request_artifact",
-    "is_explicitly_benign_native_file_read_request",
 ]

@@ -1,5 +1,9 @@
 name: Restore exact runtime test executables
-description: Reuse compilation only; both runtime partitions still execute their tests.
+description: Reuse compilation only; all workspace test partitions still execute their tests.
+inputs:
+  partition:
+    description: Workspace test partition archive family (runtime, command, or core).
+    default: runtime
 outputs:
   cache-hit:
     description: Whether the complete exact-input archive was restored.
@@ -16,8 +20,15 @@ runs:
     - name: Identify the runtime test build environment
       id: environment
       shell: bash
+      env:
+        ARCHIVE_PARTITION: ${{ inputs.partition }}
       run: |
         echo "image=${ImageOS:?}" >> "$GITHUB_OUTPUT"
+        if [ "${ARCHIVE_PARTITION}" != "runtime" ]; then
+          echo "partition=${ARCHIVE_PARTITION}-" >> "$GITHUB_OUTPUT"
+        else
+          echo "partition=" >> "$GITHUB_OUTPUT"
+        fi
         python3 -m scripts.ci.native_cache_environment >> "$GITHUB_OUTPUT"
     - name: Restore the exact runtime test archive
       id: archive
@@ -28,4 +39,4 @@ runs:
         # Scripts and contracts cover build-time includes outside the Rust tree.
         # Helper imports can create timestamp-bearing bytecode before this step.
         # Neither those files nor Cargo outputs identify the authored inputs.
-        key: runtime-test-archive-v2-${{ runner.arch }}-${{ steps.environment.outputs.image }}-${{ steps.environment.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'tests/fixtures/**', 'src/codex_plugin_scanner/guard/contracts/**', 'src/codex_plugin_scanner/guard/schemas/**', '.cargo/**', '.github/actions/setup-rust/**', '.github/actions/restore-runtime-tests/**', '.github/workflows/ci.yml', 'scripts/**', '!**/__pycache__/**', '!rust/target/**') }}
+        key: runtime-test-archive-v2-${{ steps.environment.outputs.partition }}${{ runner.arch }}-${{ steps.environment.outputs.image }}-${{ steps.environment.outputs.compiler-env }}-lto-${{ env.CARGO_PROFILE_RELEASE_LTO }}-cgu-${{ env.CARGO_PROFILE_RELEASE_CODEGEN_UNITS }}-${{ hashFiles('rust/**', 'contributions/**', 'contracts/**', 'spec/**', 'tests/fixtures/**', 'src/codex_plugin_scanner/guard/contracts/**', 'src/codex_plugin_scanner/guard/schemas/**', '.cargo/**', '.github/actions/setup-rust/**', '.github/actions/restore-runtime-tests/**', '.github/workflows/ci.yml', 'scripts/**', '!**/__pycache__/**', '!rust/target/**') }}

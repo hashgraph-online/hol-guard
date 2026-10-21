@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
+from typing import cast
 
 from ..approvals import record_unprompted_review
 from ..blocked_request_mode import safe_alternative_reason
@@ -19,12 +21,18 @@ def apply_unprompted_native_review(
     args: argparse.Namespace,
     store: GuardStore,
     config: GuardConfig,
-    policy_action: str,
+    route: Mapping[str, object],
 ) -> None:
-    """Block the harness and keep a review-tier denial in the inbox."""
+    """Block the harness; keep a review-tier denial in the inbox.
 
+    ``route`` is the resident's silent review route: whether the denial is
+    recorded, and the verdict and lead sentence it carries.
+    """
+
+    silent = cast(Mapping[str, object], route["silent_review"])
+    policy_action = str(silent["action"])
     risk_summary = state.risk_summary
-    if policy_action in {"review", "require-reapproval"}:
+    if route["route"] == "silent_review":
         package_evaluation = state.package_evaluation
         package_evaluation_to_dict = getattr(package_evaluation, "to_dict", None)
         record_unprompted_review(
@@ -56,7 +64,7 @@ def apply_unprompted_native_review(
         )
     set_native_artifact_hook_final_action(state, "block")
     state.approval_prompted = False
-    guidance = safe_alternative_reason(f"HOL Guard blocked this action. {risk_summary}")
+    guidance = safe_alternative_reason(f"{silent['reason']} {risk_summary}")
     _terminalize_runtime_action_copy(state.response_payload)
     state.response_payload.update(
         terminal_action="block",

@@ -8,7 +8,6 @@ import os
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -61,6 +60,7 @@ def _main_context_token(*, artifact: GuardArtifact, workspace: Path, config: Gua
         data_flow_action=None,
         scanner_action=None,
         current_action="review",
+        risk_classes=(),
         data_flow_signals=(),
         scanner_evidence=(),
     )
@@ -588,7 +588,6 @@ def test_launch_identity_never_exposes_raw_shebang_arguments(tmp_path: Path) -> 
     assert secret not in serialized
     assert "shebang" not in executable_identity
     assert "shebang_sha256" in executable_identity
-
 
 
 def test_consumer_saved_allow_is_rejected_after_only_node_entrypoint_bytes_change(tmp_path: Path) -> None:

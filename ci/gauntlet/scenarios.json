@@ -48,7 +48,7 @@
       "oracle": "commands",
       "commands": [
         "cat 'src/path with spaces.ts'",
-        "cat 'src/caf\u00e9.ts'",
+        "cat 'src/café.ts'",
         "head -1 src/one.ts",
         "tail -1 src/one.ts"
       ],
@@ -590,6 +590,21 @@
       ]
     },
     {
+      "id": "omp-native-rg-files-service-lane",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I want to know which files my local service directory holds. Run each listed command once, in order, and tell me what each one printed. An empty result is a valid answer: report it and carry on to the next command. Do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy. Stop after the listed calls.",
+      "commands": [
+        "rg --files {{home}}/dev-services",
+        "rg --files -g \"*.yaml\" {{home}}/dev-services",
+        "rg --files {{home}}/dev-services/pg-run",
+        "ls {{home}}/dev-services"
+      ]
+    },
+    {
       "id": "omp-native-shell-home-variable-toolchain",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -666,6 +681,21 @@
         "cat {{stage}}/x.ts >> {{home}}/other-project/src/report.ts",
         "cat > {{home}}/other-project/.pending-edits.md <<'EOF'\n# Pending\n- retry window\nEOF",
         "cp {{stage}}/a.ts {{stage}}/b.ts && cat {{stage}}/a.ts > {{home}}/other-project/src/copied.ts"
+      ]
+    },
+    {
+      "id": "omp-native-ls-temporary-scratch-probes",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I stage throwaway files in a scratch folder under the temporary directory. Check whether that folder has a dependency tree or a stale temp directory left behind, and show me the staged sources: run each listed command once, in order, exactly as written, and tell me what each one printed. Change nothing.",
+      "commands": [
+        "ls {{stage}}/signup-funnel/node_modules 2>/dev/null | wc -l",
+        "ls {{stage}}/signup-funnel/.tmp 2>/dev/null | head -5",
+        "ls {{stage}}/.tmp 2>/dev/null | head -5",
+        "ls {{stage}}/*.ts"
       ]
     },
     {
@@ -881,6 +911,19 @@
       ]
     },
     {
+      "id": "omp-native-git-read-directory-without-repository",
+      "expectation": "allow",
+      "oracle": "native-tools",
+      "required_tools": [
+        "bash"
+      ],
+      "prompt": "I am not sure which of these two directories holds a checkout. Run each listed command once, in order, and tell me for each whether it is a Git repository. A 'fatal: not a git repository' answer, or a message that the directory could not be entered, is a valid result: report it and carry on to the next command. Do not initialize or clone anything, do not substitute tools, change the command or cwd, add verification calls, request approval, or change policy. Stop after the listed calls.",
+      "commands": [
+        "git -C {{home}}/acme-plain status --short",
+        "git -C {{home}}/not-cloned-yet log --oneline -3"
+      ]
+    },
+    {
       "id": "omp-native-git-compound-reads",
       "expectation": "allow",
       "oracle": "native-tools",
@@ -915,10 +958,11 @@
       "required_tools": [
         "bash"
       ],
-      "prompt": "Set up two sibling worktrees of the main project checkout: run each listed command once, in order, then tell me which branch each new worktree has checked out. The main checkout has tracked thousands of branches over the years and signs commits by default; that is expected, so do not change any configuration or delete anything.",
+      "prompt": "Set up the three worktrees listed below: run each command once, in order, then tell me which branch each new worktree has checked out. The first two are siblings of the main project checkout; the third has parent directories that Git creates. The main checkout has tracked thousands of branches over the years and signs commits by default; that is expected, so do not change any configuration or delete anything.",
       "commands": [
         "git -C {{home}}/project worktree add {{home}}/project-report-fix fix/report-export",
-        "git -C {{home}}/project worktree add {{home}}/project-report-followup -b fix/report-followup origin/main"
+        "git -C {{home}}/project worktree add {{home}}/project-report-followup -b fix/report-followup origin/main",
+        "git -C {{home}}/project worktree add -b fix/report-nested {{home}}/reviews/pending/report origin/main"
       ]
     },
     {

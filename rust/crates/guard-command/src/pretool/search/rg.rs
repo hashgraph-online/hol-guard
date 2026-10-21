@@ -2,8 +2,8 @@
 //! could re-include hidden ones, and the options that change either.
 
 use super::{
-    options, rg_whitelist, short_search_option, sibling, tree, unsafe_search_value, ReadContext,
-    SearchValueRole,
+    names_only, options, rg_whitelist, short_search_option, sibling, tree, unsafe_search_value,
+    ReadContext, SearchValueRole,
 };
 
 pub(in crate::pretool) fn safe_rg_stdin_arguments(arguments: &[String]) -> bool {
@@ -186,6 +186,7 @@ fn rg_arguments_pass(
     let mut paths_only = false;
     let mut config_disabled = false;
     let mut roots: Vec<&str> = Vec::new();
+    let mut unproven_roots: Vec<&str> = Vec::new();
     for argument in arguments {
         if let Some(role) = pending_value.take() {
             if unsafe_search_value(role, argument, context) {
@@ -334,6 +335,11 @@ fn rg_arguments_pass(
             // A shell glob that lexically could reach a hidden or credential
             // path is still proven when every expansion is an ordinary file,
             // or a directory below the cwd whose whole tree is ordinary.
+            //
+            // A root no reading proof admits is kept for the end of the
+            // pass rather than refused here: `--files` may be spelled after
+            // its operands, and what it leaves is a listing, which owes the
+            // proof a listing owes.
             if unsafe_search_value(SearchValueRole::Path, argument, context)
                 && !tree::rg_root_inside_cwd(argument, context)
                 && !sibling::rg_sibling_repository_root(argument, context)
@@ -343,7 +349,7 @@ fn rg_arguments_pass(
                 && (!argument.contains(['*', '?', '['])
                     || !tree::safe_glob_search_operand(argument, context))
             {
-                return false;
+                unproven_roots.push(argument);
             }
         } else {
             pattern_supplied = true;
@@ -351,8 +357,12 @@ fn rg_arguments_pass(
     }
     // `rg` takes the first positional as the pattern only when no `-e` or
     // `-f` supplies one, wherever that option appears: in `rg .env -e KEY`,
-    // `.env` is a path. Check again with every positional as a path.
-    if pattern_option_seen && !pattern_from_option {
+    // `.env` is a path. `--files` takes no pattern at all, so under it every
+    // positional is a path too, wherever the flag is spelled: in
+    // `rg ~/.ssh --files` the operand is the directory listed, and reading it
+    // as a pattern left the root unproven. Check again with every positional
+    // as a path.
+    if (pattern_option_seen || paths_only) && !pattern_from_option {
         return rg_arguments_pass(
             arguments,
             context,
@@ -371,6 +381,12 @@ fn rg_arguments_pass(
     // usage error: rg exits before it opens anything. That holds only for the
     // options whose value never names a pattern, path or glob.
     pending_value.is_none_or(|role| matches!(role, SearchValueRole::Other))
+        && (unproven_roots.is_empty()
+            || (paths_only
+                && unproven_roots
+                    .iter()
+                    .all(|root| names_only::safe_names_only_search_target(root, context))
+                && names_only_globs_proven(arguments, &unproven_roots, context)))
         && (!stdin_only || pattern_supplied)
         && (stdin_only || config_disabled || context.ripgrep_config_absent)
         && (stdin_only || paths_only || !prove_roots || rg_whitelist::roots_proven(&roots, context))
@@ -381,6 +397,91 @@ fn rg_arguments_pass(
                 context.home_dir,
                 context.cwd,
             ))
+}
+
+/// Whether the inclusion globs of a names-only listing select nothing its
+/// walk skipped.
+///
+/// A `-g` match outranks `rg`'s hidden filter, so `-g .ssh` enters a hidden
+/// directory the names-only walk stepped over. A literal glob can pass the
+/// name screen and so never reach the glob-scope proof on its own; under a
+/// names-only root every inclusion glob is proven by what it selects.
+///
+/// The scope proof reads a relative root against the working directory, so
+/// each root is expanded first as the names-only walk expanded it: `~/scratch`
+/// is the home directory's `scratch`, not a `~` folder below the cwd.
+fn names_only_globs_proven(arguments: &[String], roots: &[&str], context: ReadContext<'_>) -> bool {
+    let globs = inclusion_globs(arguments);
+    if globs.is_empty() {
+        return true;
+    }
+    let Some(expanded) = roots
+        .iter()
+        .map(|root| {
+            tree::expanded_operand(root, context).and_then(|path| path.to_str().map(str::to_owned))
+        })
+        .collect::<Option<Vec<String>>>()
+    else {
+        return false;
+    };
+    let expanded: Vec<&str> = expanded.iter().map(String::as_str).collect();
+    super::super::search_scope::rg_glob_scope_proven(
+        &expanded,
+        &globs,
+        context.home_dir,
+        context.cwd,
+    )
+}
+
+/// Every `-g`, `--glob` or `--iglob` value that selects rather than excludes.
+///
+/// A short cluster ends at its first option that takes a value, which is the
+/// rest of the argument or the next one. Every other long option that takes
+/// a value consumes the next argument too, as `rg` parses it, so a `--`
+/// spelled as that value (`--context-separator --`) never ends the scan
+/// before a later `-g`.
+fn inclusion_globs(arguments: &[String]) -> Vec<&str> {
+    let mut globs = Vec::new();
+    let mut arguments = arguments.iter();
+    while let Some(argument) = arguments.next() {
+        if argument == "--" {
+            break;
+        }
+        let value = if let Some(long) = argument.strip_prefix("--") {
+            match long.split_once('=') {
+                Some(("glob" | "iglob", value)) => Some(value),
+                Some(_) => None,
+                None if matches!(long, "glob" | "iglob") => arguments.next().map(String::as_str),
+                None if options::rg_value_role(argument).is_some() => {
+                    arguments.next();
+                    None
+                }
+                None => None,
+            }
+        } else if let Some(cluster) = argument.strip_prefix('-') {
+            match cluster
+                .char_indices()
+                .find(|(_, option)| "efgABCEjmMrtT".contains(*option))
+            {
+                Some((at, option)) => {
+                    let attached = &cluster[at + option.len_utf8()..];
+                    let value = if attached.is_empty() {
+                        arguments.next().map(String::as_str)
+                    } else {
+                        Some(attached)
+                    };
+                    value.filter(|_| option == 'g')
+                }
+                None => None,
+            }
+        } else {
+            None
+        };
+        if let Some(value) = value.filter(|value| !value.starts_with('!')) {
+            globs.push(value);
+        }
+    }
+    globs
 }
 
 #[cfg(test)]

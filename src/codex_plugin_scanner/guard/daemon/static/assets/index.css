@@ -1189,6 +1189,10 @@
     max-height: 85vh;
   }
 
+  .max-h-\[88vh\] {
+    max-height: 88vh;
+  }
+
   .max-h-\[90dvh\] {
     max-height: 90dvh;
   }
@@ -1453,8 +1457,8 @@
     width: 104px;
   }
 
-  .w-\[108px\] {
-    width: 108px;
+  .w-\[150px\] {
+    width: 150px;
   }
 
   .w-fit {
@@ -1529,8 +1533,12 @@
     max-width: 72ch;
   }
 
-  .max-w-\[320px\] {
-    max-width: 320px;
+  .max-w-\[260px\] {
+    max-width: 260px;
+  }
+
+  .max-w-\[300px\] {
+    max-width: 300px;
   }
 
   .max-w-\[380px\] {
@@ -1605,6 +1613,10 @@
     min-width: 132px;
   }
 
+  .min-w-\[150px\] {
+    min-width: 150px;
+  }
+
   .min-w-\[160px\] {
     min-width: 160px;
   }
@@ -1617,12 +1629,12 @@
     min-width: 220px;
   }
 
-  .min-w-\[920px\] {
-    min-width: 920px;
+  .min-w-\[520px\] {
+    min-width: 520px;
   }
 
-  .min-w-\[1040px\] {
-    min-width: 1040px;
+  .min-w-\[920px\] {
+    min-width: 920px;
   }
 
   .min-w-full {
@@ -1724,6 +1736,10 @@
 
   .resize {
     resize: both;
+  }
+
+  .scroll-mt-4 {
+    scroll-margin-top: calc(var(--spacing) * 4);
   }
 
   .scroll-mt-24 {
@@ -3663,6 +3679,14 @@
     }
   }
 
+  .bg-rose-300 {
+    background-color: var(--color-rose-300);
+  }
+
+  .bg-rose-600 {
+    background-color: var(--color-rose-600);
+  }
+
   .bg-sky-50 {
     background-color: var(--color-sky-50);
   }
@@ -4810,6 +4834,16 @@
     }
   }
 
+  .text-brand-blue\/80 {
+    color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .text-brand-blue\/80 {
+      color: color-mix(in oklab, var(--brand-blue) 80%, transparent);
+    }
+  }
+
   .text-brand-dark, .text-brand-dark\/35 {
     color: var(--brand-dark);
   }
@@ -5631,6 +5665,22 @@
     }
   }
 
+  .marker\:hidden ::marker {
+    display: none;
+  }
+
+  .marker\:hidden::marker {
+    display: none;
+  }
+
+  .marker\:hidden ::-webkit-details-marker {
+    display: none;
+  }
+
+  .marker\:hidden::-webkit-details-marker {
+    display: none;
+  }
+
   .placeholder\:font-sans::placeholder {
     font-family: system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif;
   }
@@ -5690,8 +5740,14 @@
     background-color: var(--color-white);
   }
 
-  .focus-within\:border-brand-blue:focus-within {
+  .focus-within\:border-brand-blue:focus-within, .focus-within\:border-brand-blue\/40:focus-within {
     border-color: var(--brand-blue);
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus-within\:border-brand-blue\/40:focus-within {
+      border-color: color-mix(in oklab, var(--brand-blue) 40%, transparent);
+    }
   }
 
   .focus-within\:ring-1:focus-within {
@@ -5966,6 +6022,10 @@
       .hover\:bg-brand-purple\/90:hover {
         background-color: color-mix(in oklab, var(--brand-purple) 90%, transparent);
       }
+    }
+
+    .hover\:bg-rose-700:hover {
+      background-color: var(--color-rose-700);
     }
 
     .hover\:bg-slate-50:hover {
@@ -6313,6 +6373,16 @@
   @supports (color: color-mix(in lab, red, red)) {
     .focus\:ring-brand-blue\/30:focus {
       --tw-ring-color: color-mix(in oklab, var(--brand-blue) 30%, transparent);
+    }
+  }
+
+  .focus\:ring-rose-600\/30:focus {
+    --tw-ring-color: #e700444d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .focus\:ring-rose-600\/30:focus {
+      --tw-ring-color: color-mix(in oklab, var(--color-rose-600) 30%, transparent);
     }
   }
 
@@ -6735,6 +6805,10 @@
 
     .sm\:min-w-\[10rem\] {
       min-width: 10rem;
+    }
+
+    .sm\:min-w-\[200px\] {
+      min-width: 200px;
     }
 
     .sm\:flex-1 {
@@ -7172,6 +7246,10 @@
 
     .lg\:max-w-none {
       max-width: none;
+    }
+
+    .lg\:min-w-\[820px\] {
+      min-width: 820px;
     }
 
     .lg\:grid-cols-1 {

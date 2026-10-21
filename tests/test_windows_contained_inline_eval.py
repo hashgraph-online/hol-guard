@@ -46,14 +46,21 @@ def _receipt(profile: str = "python-eval-readonly-v1") -> dict[str, object]:
     }
 
 
-def test_windows_backend_decodes_only_for_eval_profiles_on_windows(monkeypatch, tmp_path):
+def test_windows_backend_decodes_only_for_contained_profiles_on_windows(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
     plan = transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
     assert plan.backend == "windows-appcontainer"
     node = transport.decode_native_plan(_plan(tmp_path, profile="node-eval-readonly-v1"), ("node-eval-readonly-v1",))
     assert node.backend == "windows-appcontainer"
+    # The read-only pytest profile has a Windows runner of its own.
+    tests = transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
+    assert tests.backend == "windows-appcontainer"
+    # The workspace sandbox does not: it has no Windows backend, so a plan
+    # naming it is refused however it reaches this decode.
     with pytest.raises(RestrictedPytestError):
-        transport.decode_native_plan(_plan(tmp_path, profile="pytest-readonly-v2"), ("pytest-readonly-v2",))
+        transport.decode_native_plan(
+            _plan(tmp_path, profile="workspace-contained-v1"), ("workspace-contained-v1",)
+        )
     monkeypatch.setattr(sys, "platform", "darwin")
     with pytest.raises(RestrictedPytestError):
         transport.decode_native_plan(_plan(tmp_path), ("python-eval-readonly-v1",))
@@ -108,11 +115,14 @@ def test_windows_backend_never_reaches_posix_sandboxes(monkeypatch, tmp_path):
         _backend_argv(plan, private_root=tmp_path)
 
 
-def test_windows_contains_eval_profiles_only(monkeypatch):
+def test_windows_contains_the_profiles_it_has_a_runner_for(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     assert platform_contains(_receipt())
     assert platform_contains({"required_execution_profile": "node-eval-readonly-v1"})
-    assert not platform_contains(_receipt("pytest-readonly-v2"))
+    # The read-only pytest profile has a Windows planner and runner, so a
+    # receipt naming it is rewritten into the sink rather than left as a deny.
+    assert platform_contains(_receipt("pytest-readonly-v2"))
+    # The workspace sandbox has no Windows backend.
     assert not platform_contains(_receipt("workspace-contained-v1"))
 
 

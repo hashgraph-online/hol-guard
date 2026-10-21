@@ -67,7 +67,8 @@ pub struct ShimAdminRequestV2 {
     /// Caller correlation id; echoed back in the result.
     #[serde(default)]
     pub request_id: String,
-    /// `status` | `dashboard_status` | `cloud_coverage` | `path_order` |
+    /// `status` | `dashboard_status` | `protection_projection` |
+    /// `cloud_coverage` | `path_order` |
     /// `install` | `activate` | `repair` | `uninstall` | `probe_intercepts` |
     /// `supported_managers` | `ensure_package_shim_profile` |
     /// `remove_guard_profile_blocks` | `record_audit` |

@@ -29,7 +29,7 @@ fn a_bound_view_answers_as_a_fresh_parse_for_every_call() {
     let mut unlayered = view("enforce");
     unlayered["extension_layers"] = Value::Null;
     let mut renamed = view("enforce");
-    renamed["schema"] = json!("guard-mcp-relay-view.v2");
+    renamed["schema"] = json!("guard-mcp-relay-view.v3");
     let views = [
         Some(view("enforce")),
         Some(view("observe")),

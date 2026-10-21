@@ -172,6 +172,45 @@ fn worktree_proof_follows_the_session_git_configuration() {
     assert!(git(&repository, &["add", "tracked.txt"]));
     assert!(git(&repository, &["commit", "--quiet", "-m", "fixture"]));
 
+    // Git creates missing parent directories itself. A first worktree under
+    // an ordinary scratch directory must not need a separate mkdir approval.
+    let nested = "git worktree add .worktrees/review -b nested-review HEAD";
+    assert!(!repository.join(".worktrees").exists());
+    let admitted = evaluate(&repository, nested, None, true);
+    assert_eq!(admitted.minimum_action, "allow", "{}", admitted.reason_code);
+    assert_eq!(admitted.reason_code, "native_exact_safe_worktree_add");
+    assert!(git(
+        &repository,
+        &[
+            "worktree",
+            "add",
+            "--quiet",
+            ".worktrees/review",
+            "-b",
+            "nested-review",
+            "HEAD"
+        ]
+    ));
+    assert!(repository.join(".worktrees/review/tracked.txt").is_file());
+    std::os::unix::fs::symlink("absent", repository.join(".worktrees/dangling")).unwrap();
+    std::fs::write(repository.join(".worktrees/file"), "not a directory").unwrap();
+    // Existing targets and execution-control destinations remain reviewed.
+    for destination in [
+        ".worktrees/review",
+        ".git/hooks/new/review",
+        ".github/workflows/new/review",
+        ".worktrees/dangling/new/review",
+        ".worktrees/file/new/review",
+    ] {
+        let result = evaluate(
+            &repository,
+            &format!("git worktree add {destination} -b protected-review HEAD"),
+            None,
+            true,
+        );
+        assert_ne!(result.minimum_action, "allow", "{destination}");
+    }
+
     let sibling = "git worktree add ../weekly-report -b weekly-report";
     let admitted = evaluate(&repository, sibling, None, true);
     assert_eq!(admitted.minimum_action, "allow", "{}", admitted.reason_code);

@@ -348,6 +348,55 @@ fn committed_legacy_activation_retains_floor_across_packless_controls() {
 }
 
 #[test]
+fn an_admitted_installed_release_plans_without_the_network_after_the_source_moves() {
+    let key = [5u8; 32];
+    let mut moved = floor();
+    // A remote publication, or the legacy migration, moves the floor's source
+    // cursor while the installed release it already admitted stays put.
+    moved.source = "b".repeat(40);
+    let encoded = encode(&moved, &key).unwrap();
+    let plan = |installed: Value| {
+        evaluate(
+            &json!({"kind":"plan","key":hex::encode(key),"floor":encoded,
+            "selected":["command.external"],"retained":[],"active":Value::Null,
+            "active_engine":Value::Null,"registry":[],"installed":installed}),
+        )
+    };
+    let response = plan(serde_json::to_value(installed()).unwrap()).unwrap();
+    // Before, this planned "remote", so every saved policy needed the network.
+    assert_eq!(response["profile"], "installed");
+    let admitted = decode(response["admission_floor"].as_str().unwrap(), &key).unwrap();
+    assert_eq!(
+        serde_json::to_value(&admitted).unwrap(),
+        serde_json::to_value(&moved).unwrap()
+    );
+    // A release the floor has not admitted still has to earn its admission,
+    // and one that reuses a version degrades to remote instead of failing.
+    let mut reused = installed();
+    reused.root = "9".repeat(64);
+    assert_eq!(
+        plan(serde_json::to_value(&reused).unwrap()).unwrap()["profile"],
+        "remote"
+    );
+    // Once a remote publication raises an epoch past the admitted release,
+    // reusing it would be an epoch rollback, so planning goes remote.
+    for (authority, revocation) in [(1, 0), (0, 1)] {
+        let mut raised = moved.clone();
+        raised.authority += authority;
+        raised.revocation += revocation;
+        let encoded = encode(&raised, &key).unwrap();
+        let response = evaluate(
+            &json!({"kind":"plan","key":hex::encode(key),"floor":encoded,
+            "selected":["command.external"],"retained":[],"active":Value::Null,
+            "active_engine":Value::Null,"registry":[],
+            "installed":serde_json::to_value(installed()).unwrap()}),
+        )
+        .unwrap();
+        assert_eq!(response["profile"], "remote");
+    }
+}
+
+#[test]
 fn selection_uses_existing_composer_and_never_managed_opt_in() {
     let layer = |kind: &str, state: &str| {
         json!({"schema_version":"1.0.0", "catalog_digest":"1".repeat(64),
@@ -378,13 +427,12 @@ fn fallback_to_remote_is_authorized_only_for_installed_typed_unavailability() {
         evaluate(&json!({"kind":"fallback","profile":profile,"reason":reason}))
     };
     let code = crate::pack_preparation::UNAVAILABLE;
-    assert_eq!(
-        request("installed", code).unwrap(),
-        json!({"profile":"remote"})
-    );
+    for profile in ["installed", "committed-subset"] {
+        assert_eq!(request(profile, code).unwrap(), json!({"profile":"remote"}));
+    }
     for (profile, reason) in [
         ("remote", code),
-        ("committed-subset", code),
+        ("committed-subset", "unavailable-pack"),
         ("installed", "unavailable-pack"),
         ("installed", "pack_transfer_budget_exceeded"),
         ("installed", ""),

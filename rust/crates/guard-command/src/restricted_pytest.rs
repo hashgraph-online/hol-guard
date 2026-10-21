@@ -242,6 +242,9 @@ pub use authority::evaluate;
 pub(crate) use environment::forwarded_setting;
 pub(crate) use launch_roots::launches_outside_exec_roots;
 pub use mapping::evidence as mapping_evidence;
+/// The Windows planner in `guard-runtime` decides the same question about the
+/// same argv, so it reads it here rather than keeping a second copy.
+pub use validation::python_args_target_pytest;
 pub use workspace::workspace_script_reads;
 pub(crate) use workspace::{exact_shape as workspace_exact_shape, workspace_admissible};
 pub(crate) use workspace_linux::available as linux_workspace_sandbox_available;

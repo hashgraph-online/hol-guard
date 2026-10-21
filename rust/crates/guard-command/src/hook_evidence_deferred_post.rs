@@ -9,7 +9,7 @@
 use serde_json::Value;
 
 use crate::hook_evidence_writer::{
-    CommandActivityRecord, EvidenceStoreApi, EvidenceWriterDeps, PersistOutcome,
+    store_refused, CommandActivityRecord, EvidenceStoreApi, EvidenceWriterDeps, PersistOutcome,
 };
 
 /// `_activity_id()` — `f"activity:{secrets.token_hex(16)}"`.
@@ -37,7 +37,7 @@ pub(crate) fn persist_deferred_post_hook_command_activity(
     if let Some(correlation) = record.correlation.as_ref() {
         let previous = match store.command_activity_by_request_correlation(correlation) {
             Ok(previous) => previous,
-            Err(_) => return PersistOutcome::Retry,
+            Err(error) => return store_refused(&error),
         };
         if let Some(previous) = previous {
             let status = previous
@@ -64,7 +64,7 @@ pub(crate) fn persist_deferred_post_hook_command_activity(
                     .record_command_activity_observation_conflict(&deps.journal.now_utc_iso())
                 {
                     Ok(()) => PersistOutcome::Done,
-                    Err(_) => PersistOutcome::Retry,
+                    Err(error) => store_refused(&error),
                 };
             }
             let current = match deps.correlation.build_correlated_post_activity(
@@ -77,7 +77,7 @@ pub(crate) fn persist_deferred_post_hook_command_activity(
             };
             return match store.transition_command_activity(&current) {
                 Ok(_) => PersistOutcome::Done,
-                Err(_) => PersistOutcome::Retry,
+                Err(error) => store_refused(&error),
             };
         }
     }
@@ -100,6 +100,6 @@ pub(crate) fn persist_deferred_post_hook_command_activity(
     };
     match store.record_command_activity(&evidence, record.invocation_preview.as_deref()) {
         Ok(_) => PersistOutcome::Done,
-        Err(_) => PersistOutcome::Retry,
+        Err(error) => store_refused(&error),
     }
 }

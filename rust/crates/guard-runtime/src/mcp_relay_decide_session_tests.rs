@@ -13,7 +13,7 @@ fn view_for(harness: &str, mode: &str, redaction: Option<&str>) -> Value {
         bound["receipt_redaction_level"] = json!(level);
     }
     json!({
-        "schema": "guard-mcp-relay-view.v1",
+        "schema": "guard-mcp-relay-view.v2",
         "harnesses": {harness: bound},
         "extension_layers": [],
     })

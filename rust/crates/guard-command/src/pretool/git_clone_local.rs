@@ -71,7 +71,11 @@ fn proven(
     }
     let spec = parse(segment)?;
     let source = resolved_source(spec.source, context)?;
-    let destination = super::worktree_add::fresh_destination(spec.destination, context)?;
+    let destination = super::worktree_add::fresh_destination(
+        spec.destination,
+        context,
+        super::worktree_add::MissingParents::Required,
+    )?;
     // Git reads the configuration, hooks and attributes of the repository
     // being copied, so the proof runs there rather than in the agent's cwd.
     let source_context = super::PathContext {

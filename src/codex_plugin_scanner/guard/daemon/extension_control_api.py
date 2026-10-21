@@ -52,6 +52,7 @@ from ..runtime.extension_control_proof import (
 from ..runtime.extension_control_resolver import compose_control_layers
 from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
+from .extension_control_preparation_failure import preparation_unavailable
 from .extension_control_prepared import (
     MAX_CANDIDATES,
     PreparedControlCandidate,
@@ -113,17 +114,28 @@ class ExtensionControlApiService:
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
 
-    def rebind_registry(self, registry: CommandSafetyExtensionRegistry) -> None:
-        """Serve a registry the daemon recovered after starting on another.
+    def rebind_registry(
+        self,
+        registry: CommandSafetyExtensionRegistry,
+        *,
+        installed: ExtensionControlRuntimeSnapshot,
+    ) -> bool:
+        """Serve the registry whose view the runtime installed as `installed`.
 
         Proofs prepared against the previous registry name its catalog digest,
         and a preview in flight sees the registry change, so both fail as
-        conflicts.
+        conflicts. A refresh rebinds after releasing the authority lease, so
+        an apply can commit a newer activation in between. That apply binds
+        its own registry and installs a newer snapshot, which this refuses to
+        roll back.
         """
 
         with self._apply_lock:
+            if self._runtime.current() is not installed:
+                return False
             self._registry = registry
             self.catalog_digest = registry.catalog_digest
+            return True
 
     def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
         return self._registry, self._runtime.current()
@@ -361,7 +373,7 @@ class ExtensionControlApiService:
         try:
             targets = request_metadata(self._store, request_registry, raw)
         except (ValueError, OSError) as exc:
-            raise ExtensionControlApiError(503, "pack_preparation_unavailable") from exc
+            raise preparation_unavailable(exc, stage="target-metadata") from exc
         mutation = self._mutation_from_payload(payload, targets=targets)
         proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
         if mutation.previous_revision != current.revision:

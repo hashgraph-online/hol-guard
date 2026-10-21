@@ -120,6 +120,7 @@ from .fleet_posture import (
     commit_fleet_posture_sent,
     request_full_inventory,
 )
+from .fleet_posture_tools import device_display_name
 from .guard_run_evaluation import _get_default_detector_registry as _get_default_detector_registry
 from .local_runtime_fallbacks import local_receipt_redaction_level
 from .managed_controls_sync import (
@@ -4298,7 +4299,7 @@ def _cloud_package_manager_coverage(
 
 def _guard_device_metadata(store: GuardStore) -> tuple[str, str]:
     metadata = store.get_device_metadata()
-    return str(metadata["installation_id"]), str(metadata["device_label"])
+    return str(metadata["installation_id"]), device_display_name(store, str(metadata["device_label"]))
 
 
 def _record_synced_alert_events(

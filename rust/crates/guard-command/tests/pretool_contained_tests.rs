@@ -197,19 +197,19 @@ fn direct_pytest_requires_real_containment_never_direct_allow() {
     ] {
         for harness in ["omp", "claude-code", "codex"] {
             let result = classify(harness, command);
-            let expected = if cfg!(target_os = "macos") {
-                "sandbox-required"
+            // Codex's Windows sink runs only the Python evaluation profile.
+            let contained = cfg!(target_os = "macos") || (cfg!(windows) && harness != "codex");
+            let (expected, reason) = if contained {
+                (
+                    "sandbox-required",
+                    "native_pytest_readonly_containment_required",
+                )
             } else {
-                "review"
+                ("review", "native_command_review_required")
             };
             assert_eq!(result.minimum_action, expected, "{command}");
             assert_eq!(result.decision, "deny", "{command}");
             assert!(!result.explicitly_benign, "{command}");
-            let reason = if cfg!(target_os = "macos") {
-                "native_pytest_readonly_containment_required"
-            } else {
-                "native_command_review_required"
-            };
             assert_eq!(result.reason_code, reason, "{command}");
         }
     }
@@ -585,7 +585,7 @@ fn windows_contains_only_python_runs_from_harnesses_with_a_sink_command() {
             ("codex", "node -e 'console.log(1)'"),
             ("claude-code", "node -e 'console.log(1)'"),
             ("omp", "node -e 'console.log(1)'"),
-            ("claude-code", "python3 -m pytest"),
+            ("codex", "python3 -m pytest"),
         ] {
             let result = classify(harness, command);
             if command == "python3 test_calc.py" && harness != "zcode" {

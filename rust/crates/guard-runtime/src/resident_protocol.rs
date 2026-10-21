@@ -226,6 +226,8 @@ pub(crate) enum ResidentOperationV1 {
     ContainedWorkspaceWriteExecute(ContainedWorkspaceWriteExecuteRequestV1),
     #[allow(dead_code)]
     ContainedExecute(ContainedExecuteRequestV1),
+    #[allow(dead_code)]
+    ContainmentHealthProbe(guard_contracts::ContainmentHealthProbeRequestV1),
     ShimAdmin(ShimAdminRequestV2),
     PackageContextBuild(PackageContextBuildRequestV1),
     McpStdioProbe(McpStdioProbeRequestV1),
@@ -236,6 +238,7 @@ pub(crate) enum ResidentOperationV1 {
     McpStdioSessionClose(McpStdioSessionCloseRequestV1),
     PackageAdvisoryIds(PackageAdvisoryIdsRequestV1),
     PackageEvaluationCompose(PackageEvaluationComposeRequestV1),
+    VerifiedNpm(guard_contracts::VerifiedNpmRequestV1),
     PackageApprovalHash(PackageApprovalHashRequestV1),
     PackagePolicyResolve(PackagePolicyResolveRequestV1),
     PackageProtectFinalize(PackageProtectFinalizeRequestV1),

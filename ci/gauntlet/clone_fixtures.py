@@ -23,6 +23,7 @@ LONG_LIVED_NEW_BRANCH = "fix/report-followup"
 LONG_LIVED_WORKTREES = {
     "project-report-fix": LONG_LIVED_EXISTING_BRANCH,
     "project-report-followup": LONG_LIVED_NEW_BRANCH,
+    "reviews/pending/report": "fix/report-nested",
 }
 
 

@@ -38,6 +38,7 @@ def test_refresh_shares_unchanged_authority_and_excludes_readers_only_for_mutati
             SimpleNamespace(
                 store=store,
                 extension_control_runtime=ExtensionControlRuntime(initial),
+                extension_control_api=SimpleNamespace(catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest),
                 _installed_authority_pending=False,
                 _extension_control_on_core_registry=False,
             ),

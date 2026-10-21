@@ -76,6 +76,12 @@ fn guard_config(view: &HarnessView, artifact: &GuardArtifact) -> Result<GuardCon
         managed_locked_settings: strings(config, "managed_locked_settings")?,
         risk_actions: actions(config, "risk_actions")?,
         harness_risk_actions: harness_risk_actions(config, "harness_risk_actions")?,
+        // The per-harness posture map, which the risk-action resolver reads
+        // for the Extra careful floor. `config_for_harness` folds the override
+        // into `protection_posture`, which covers the posture defaults but not
+        // an explicit risk action weaker than the floor, so the map is bound
+        // too.
+        harness_postures: actions(config, "harness_postures")?,
         managed_policy_status: text(hash_config, "managed_policy_status")?,
         managed_policy_hash: optional_text(hash_config, "managed_policy_hash")?,
         guard_home: None,

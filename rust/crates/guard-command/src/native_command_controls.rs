@@ -272,9 +272,9 @@ impl CompiledNativeCommandControls {
         // so it takes the strongest of their floors and never less than review.
         // An unmodeled command already carries the floor of its possible owners.
         let mut uncertain_floor: Option<&'static str> = unmodeled;
-        // Uncertainty about a Git rule the user explicitly allowed reviews only
-        // when that Allow does not cover the whole command, or the command runs
-        // in a repository Guard could not inspect (below).
+        // Uncertainty about a rule the user explicitly allowed reviews only
+        // when that Allow does not cover the whole command, or a segment runs
+        // a shape Guard could not inspect (below).
         let mut enabled_uncertainty = false;
         for observation in &batch.observations {
             if !observation.uncertainty_reasons.is_empty() {
@@ -486,6 +486,10 @@ mod uncertainty_regressions;
 #[cfg(test)]
 #[path = "native_command_precedence_tests.rs"]
 mod precedence_regressions;
+
+#[cfg(test)]
+#[path = "native_command_precedence_generic_tests.rs"]
+mod precedence_generic_regressions;
 
 #[cfg(test)]
 #[path = "native_command_compound_controls_tests.rs"]

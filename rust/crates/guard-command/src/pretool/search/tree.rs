@@ -185,6 +185,7 @@ fn safe_walk_target(
             git_metadata,
             follow_links,
             Some(clearance),
+            false,
         ),
         None => walk(
             root,
@@ -410,6 +411,7 @@ pub(super) fn walk(
         excluded_directories,
         git_metadata,
         follow_links,
+        false,
         || {
             walk_uncached(
                 root.clone(),
@@ -418,18 +420,23 @@ pub(super) fn walk(
                 git_metadata,
                 follow_links,
                 None,
+                false,
             )
         },
     )
 }
 
-fn walk_uncached(
+/// `skip_hidden` is for a lister that never descends into a hidden entry, so
+/// no hidden name below the root reaches its output and none of them holds
+/// the proof. Every visible entry is screened as it is for a walk that reads.
+pub(super) fn walk_uncached(
     root: PathBuf,
     excluded_files: &[&str],
     excluded_directories: &[&str],
     git_metadata: bool,
     follow_links: bool,
     clearance: Option<&PatternClearance>,
+    skip_hidden: bool,
 ) -> bool {
     // The third field marks an entry below a directory that only the clearance
     // admitted: its files have ordinary names, so nothing but their content
@@ -459,6 +466,9 @@ fn walk_uncached(
         // require proof. Exact basenames avoid approximating grep's glob rules.
         if depth > 0 {
             let basename = path.file_name().and_then(|name| name.to_str());
+            if skip_hidden && basename.is_some_and(|name| name.starts_with('.')) {
+                continue;
+            }
             if basename.is_some_and(|name| {
                 (kind.is_dir() && excluded_directories.contains(&name))
                     || (kind.is_file() && excluded_files.contains(&name))
@@ -535,6 +545,6 @@ fn expand_glob(value: &str, context: ReadContext<'_>) -> Option<Vec<PathBuf>> {
     expand_glob_matches(value, context).filter(|matches| !matches.is_empty())
 }
 
-fn parent_component(value: &str) -> bool {
+pub(super) fn parent_component(value: &str) -> bool {
     value.split(['/', '\\']).any(|part| part == "..")
 }

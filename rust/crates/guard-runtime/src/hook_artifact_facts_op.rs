@@ -69,11 +69,12 @@ pub(crate) fn evaluate_request(request: &HookArtifactFactsRequestV1) -> Value {
 pub(crate) fn evaluate(artifact: &HookArtifactV1) -> Value {
     let empty = Map::new();
     let metadata = artifact.metadata.as_object().unwrap_or(&empty);
+    let permission_allow = explicit_permission_allow(metadata);
     let facts = PolicyArtifactFactsV1 {
         hard_block: prompt_requires_hard_block(metadata),
         configured_override: artifact.configured_override.clone(),
         command_action_floor: command_action_floor(metadata),
-        explicit_permission_allow: explicit_permission_allow(metadata),
+        explicit_permission_allow: permission_allow,
         risk_classes: risk_classes(&artifact.artifact_type, metadata),
         pytest_restricted_sandbox: pytest_restricted_sandbox(metadata),
         shell_local_script_review: metadata.get("reason_code").and_then(Value::as_str)
@@ -87,8 +88,21 @@ pub(crate) fn evaluate(artifact: &HookArtifactV1) -> Value {
             .and_then(Value::as_str)
             .map(str::to_owned),
         skill_is_known_bad: skill_is_known_bad(metadata),
+        skip_native_floor: skip_native_floor(&artifact.artifact_type, permission_allow),
     };
     serde_json::to_value(facts).unwrap_or(Value::Null)
+}
+
+/// Whether the native command floor stays out of this artifact's verdict.
+///
+/// A `package_request` is decided by the package evaluator, the fail-closed
+/// semantic authority for installs: an unproven-command review floor would
+/// pause every install whatever its supply-chain verdict. A verified
+/// explicit-permission allow was already adjudicated against the published
+/// control layer for this exact command, so a control-blind floor could only
+/// re-raise the cataloged risk the grant accepted.
+fn skip_native_floor(artifact_type: &str, explicit_permission_allow: bool) -> bool {
+    artifact_type == "package_request" || explicit_permission_allow
 }
 
 /// `_typed_text`: a present non-string setting normalizes to the unknown

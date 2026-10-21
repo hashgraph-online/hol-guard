@@ -16,7 +16,7 @@ from ..config import GuardConfig
 from ..harness_posture import harness_posture_override
 from ..models import GuardAction, GuardArtifact
 from ..native_hook_artifact_compose import native_hook_compose
-from ..native_hook_artifact_facts import native_hook_artifact_facts
+from ..native_hook_artifact_facts import HookArtifactFactsUnavailableError, native_hook_artifact_facts
 from ..protection_events import record_protection_event
 from .commands_support_runtime_resolution import _canonical_harness_name
 
@@ -27,38 +27,26 @@ def _runtime_artifact_command_action_floor(artifact: GuardArtifact) -> GuardActi
     return normalize_guard_action(artifact.metadata.get("command_action_floor"), unknown_action="block")
 
 
-def _runtime_artifact_has_explicit_permission_allow(artifact: GuardArtifact) -> bool:
-    if _runtime_artifact_command_action_floor(artifact) != "allow":
-        return False
-    resolution = artifact.metadata.get("extension_control_resolution")
-    if not isinstance(resolution, Mapping) or resolution.get("blocked") is not False:
-        return False
-    permission_ids = resolution.get("explicitly_enabled_permission_ids")
-    if (
-        not isinstance(permission_ids, Sequence)
-        or isinstance(permission_ids, str)
-        or not permission_ids
-        or any(not isinstance(item, str) or not item.startswith("command.") for item in permission_ids)
-    ):
-        return False
-    decision = artifact.metadata.get("command_decision_plane")
-    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
-        return False
-    routes = decision.get("proof_routes")
-    reasons = decision.get("controlling_reasons")
-    return (
-        isinstance(routes, Sequence)
-        and not isinstance(routes, str)
-        and "verified" in routes
-        and isinstance(reasons, Sequence)
-        and not isinstance(reasons, str)
-        and any(
-            isinstance(reason, Mapping)
-            and reason.get("source") == "control"
-            and reason.get("reason_code") == "control.explicitly-enabled-permission"
-            for reason in reasons
-        )
-    )
+def artifact_fact_risk_classes(facts: Mapping[str, object]) -> list[str]:
+    """The risk classes the resident read off one artifact."""
+
+    classes = facts.get("risk_classes")
+    if not isinstance(classes, list) or not all(isinstance(item, str) for item in classes):
+        raise HookArtifactFactsUnavailableError
+    return cast("list[str]", classes)
+
+
+def artifact_fact_skip_native_floor(facts: Mapping[str, object]) -> bool:
+    """Whether the resident says the native command floor is skipped.
+
+    A missing or non-boolean answer is no answer: the hook fails closed rather
+    than guessing whether the floor applies.
+    """
+
+    skipped = facts.get("skip_native_floor")
+    if not isinstance(skipped, bool):
+        raise HookArtifactFactsUnavailableError
+    return skipped
 
 
 def _typed_text(value: object) -> str | None:

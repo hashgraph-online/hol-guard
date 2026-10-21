@@ -145,6 +145,26 @@ fn a_verified_explicit_permission_allow_is_recognized() {
 }
 
 #[test]
+fn the_native_floor_is_skipped_for_a_package_request_or_an_explicit_allow() {
+    assert_eq!(
+        facts("package_request", json!({}))["skip_native_floor"],
+        json!(true)
+    );
+    assert_eq!(
+        facts("tool_action_request", explicit_allow_metadata())["skip_native_floor"],
+        json!(true)
+    );
+    assert_eq!(
+        facts("tool_action_request", json!({}))["skip_native_floor"],
+        json!(false)
+    );
+    assert_eq!(
+        facts("prompt_request", json!({}))["skip_native_floor"],
+        json!(false)
+    );
+}
+
+#[test]
 fn every_explicit_permission_condition_is_required() {
     let drop = |mutate: fn(&mut Value)| {
         let mut metadata = explicit_allow_metadata();

@@ -17,6 +17,7 @@ fn config() -> Map<String, Value> {
         "harness_actions": Value::Null,
         "risk_actions": {"package_script": "review"},
         "harness_risk_actions": {"codex": {"package_script": "block"}},
+        "harness_postures": Value::Null,
         "security_level": "balanced",
         "protection_posture": "balanced",
         "protection_posture_explicit": false,
@@ -150,6 +151,7 @@ fn a_view_this_cannot_read_defers_rather_than_reading_a_default() {
         "managed_locked_settings",
         "risk_actions",
         "harness_risk_actions",
+        "harness_postures",
         "artifact_actions",
         "publisher_actions",
         "harness_actions",
@@ -213,4 +215,71 @@ fn a_risk_action_that_is_not_an_action_defers() {
         Some(CONFIG_INVALID),
         "a harness maps to its risk classes, not to one action"
     );
+}
+
+#[test]
+fn a_harness_on_extra_careful_raises_an_explicit_risk_action_to_the_floor() {
+    // `config_for_harness` folds the override into `protection_posture`, which
+    // already answers for the posture defaults. An explicit risk action takes
+    // precedence over those defaults, so only the bound posture map raises it.
+    let mut config = config();
+    config.insert(
+        "harness_risk_actions".to_owned(),
+        json!({"codex": {"package_script": "warn"}}),
+    );
+    config.insert(
+        "harness_postures".to_owned(),
+        json!({"codex": "extra_careful"}),
+    );
+
+    let policy = config_policy(&view(config), &artifact()).expect("the view is readable");
+
+    assert_eq!(
+        policy.get("effective_package_script_action"),
+        Some(&json!("require-reapproval")),
+        "the harness's Extra careful floor strengthens the weaker explicit action"
+    );
+    assert_eq!(
+        policy.get("global_package_script_action"),
+        Some(&json!("review")),
+        "the global action is resolved without a harness and keeps its own value"
+    );
+}
+
+#[test]
+fn another_harnesss_extra_careful_override_does_not_reach_this_one() {
+    let mut config = config();
+    config.insert(
+        "harness_risk_actions".to_owned(),
+        json!({"codex": {"package_script": "warn"}}),
+    );
+    config.insert(
+        "harness_postures".to_owned(),
+        json!({"cursor": "extra_careful"}),
+    );
+
+    let policy = config_policy(&view(config), &artifact()).expect("the view is readable");
+
+    assert_eq!(
+        policy.get("effective_package_script_action"),
+        Some(&json!("warn")),
+        "the override names another harness"
+    );
+}
+
+#[test]
+fn a_posture_map_this_cannot_read_defers() {
+    for bound in [
+        json!("extra_careful"),
+        json!(["extra_careful"]),
+        json!({"codex": 7}),
+    ] {
+        let mut config = config();
+        config.insert("harness_postures".to_owned(), bound.clone());
+        assert_eq!(
+            config_policy(&view(config), &artifact()).err(),
+            Some(CONFIG_INVALID),
+            "harness_postures bound as {bound} is not the view this reads"
+        );
+    }
 }

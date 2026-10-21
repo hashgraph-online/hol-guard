@@ -47,7 +47,7 @@ EXPECTED_TASK_EVIDENCE: Final[Mapping[str, tuple[str, ...]]] = {
     "REM-122": (
         "tests/test_guard_harness_smoke.py",
         "tests/test_guard_risk.py",
-        "tests/test_guard_containment_executor.py",
+        "rust/crates/guard-command/src/contained_runner/real_backend_tests.rs",
     ),
     "REM-123": (
         "tests/test_guard_harness_contracts.py",

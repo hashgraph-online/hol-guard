@@ -159,13 +159,32 @@ fn outside_repository_with_symlinked_or_hidden_root_stays_reviewed() {
     }
 }
 
+/// A `-C` target that holds no repository can only print `fatal: not a git
+/// repository`, and Git dies in its own setup before it reads a pager or
+/// filter setting, so the read needs no repository proof. Where the target
+/// lands is still proved: it is read inside the screens that admit a
+/// repository route outside the working directory, and reviewed outside them.
 #[test]
-fn non_repository_outside_cwd_is_not_a_route() {
+fn non_repository_outside_cwd_is_read_within_the_route_screens() {
     let w = world("plain");
     let plain = w.parent.join("plain");
     std::fs::create_dir_all(&plain).unwrap();
     let command = format!("git -C {} log --oneline -1", plain.display());
-    assert!(!allowed(&w, &w.other, &command));
+    assert!(allowed(&w, &w.other, &command), "{command}");
+
+    let hidden = w.parent.join(".plain");
+    std::fs::create_dir_all(&hidden).unwrap();
+    let link = w.parent.join("linked-plain");
+    std::os::unix::fs::symlink(&plain, &link).unwrap();
+    for target in [
+        hidden.display().to_string(),
+        link.display().to_string(),
+        "/usr/share".to_owned(),
+        "..".to_owned(),
+    ] {
+        let command = format!("git -C {target} log --oneline -1");
+        assert!(!allowed(&w, &w.other, &command), "{command}");
+    }
 }
 
 #[test]

@@ -31,6 +31,12 @@ HOOK_ARTIFACT_COMPOSE_POLICY_LOOKUP_FEATURE = "hook-artifact-compose-policy-look
 HOOK_ARTIFACT_COMPOSE_PROMPT_REASON_FEATURE = "hook-artifact-compose-prompt-reason-v1"
 HOOK_ARTIFACT_COMPOSE_REMEMBERED_RULE_FEATURE = "hook-artifact-compose-remembered-rule-v1"
 HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE = "hook-artifact-compose-signal-composition-v1"
+# The policy stack answers whether local tool-grant evidence is required, the
+# artifact facts answer whether the native floor is skipped, and the settled
+# verdict's composition and approval source are a query kind of their own.
+# A runtime that predates any of them cannot answer the others, so every caller
+# of the three requires this one feature.
+HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE = "hook-artifact-compose-policy-tail-v1"
 _REQUEST_SCHEMA = "guard-hook-artifact-compose-request.v1"
 _RESULT_SCHEMA = "guard-hook-artifact-compose-result.v1"
 _RESIDENT_CODE = re.compile(r"^native_hook_artifact_compose_[a-z_]{1,64}$")
@@ -51,6 +57,9 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "policy_stack": frozenset(
         {
+            "event_name",
+            "artifact_type",
+            "has_raw_command",
             "policy_config",
             "runtime",
             "approval_context",
@@ -171,6 +180,25 @@ _FIELDS: dict[str, frozenset[str]] = {
     "prompt_request_reason": frozenset({"harness", "prompt_classes", "prompt_summary", "policy_action"}),
     "remembered_rule_reason": frozenset({"remembered_rules", "integrity_message", "artifact_summary"}),
     "signal_composition": frozenset({"signals", "base_action"}),
+    "policy_composition": frozenset(
+        {
+            "current_config_action",
+            "current_action_override",
+            "trusted_cli_action",
+            "untrusted_payload_action",
+            "package_policy_action",
+            "data_flow_action",
+            "scanner_action",
+            "current_composed_action",
+            "saved_policy_action",
+            "approval_reuse_source",
+            "trusted_request_override",
+            "trusted_request_override_reason",
+            "authoritative_action",
+            "claude_native_approval_observed",
+            "user_override_present",
+        }
+    ),
 }
 
 # The feature a kind needs beyond the op itself. A runtime that predates the
@@ -179,7 +207,9 @@ _KIND_FEATURES: dict[str, str] = {
     "package_firewall_access": HOOK_ARTIFACT_COMPOSE_PACKAGE_FIREWALL_ACCESS_FEATURE,
     "package_firewall_entitlement": HOOK_ARTIFACT_COMPOSE_PACKAGE_FIREWALL_ENTITLEMENT_FEATURE,
     "package_reuse_settle": HOOK_ARTIFACT_COMPOSE_PACKAGE_REUSE_FEATURE,
+    "policy_composition": HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE,
     "policy_lookup_select": HOOK_ARTIFACT_COMPOSE_POLICY_LOOKUP_FEATURE,
+    "policy_stack": HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE,
     "prompt_request_reason": HOOK_ARTIFACT_COMPOSE_PROMPT_REASON_FEATURE,
     "remembered_rule_reason": HOOK_ARTIFACT_COMPOSE_REMEMBERED_RULE_FEATURE,
     "signal_composition": HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE,
@@ -202,6 +232,7 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "approval_context_policy_action": "a",
         "current_config_action": "a",
         "data_flow_action": "A",
+        "local_eligibility_required": "b",
         "local_grants_allowed": "b",
         "native_floor": "A",
         "normalizer_evidence": "l",
@@ -266,6 +297,7 @@ _ANSWERS: dict[str, dict[str, str]] = {
         "normalization_reason_code": "S",
         "original_action": "S",
     },
+    "policy_composition": {"approval_source": "s", "evidence": "d", "policy_composition": "d"},
 }
 
 
@@ -368,6 +400,7 @@ __all__ = [
     "HOOK_ARTIFACT_COMPOSE_PACKAGE_FIREWALL_ENTITLEMENT_FEATURE",
     "HOOK_ARTIFACT_COMPOSE_PACKAGE_REUSE_FEATURE",
     "HOOK_ARTIFACT_COMPOSE_POLICY_LOOKUP_FEATURE",
+    "HOOK_ARTIFACT_COMPOSE_POLICY_TAIL_FEATURE",
     "HOOK_ARTIFACT_COMPOSE_PROMPT_REASON_FEATURE",
     "HOOK_ARTIFACT_COMPOSE_REMEMBERED_RULE_FEATURE",
     "HOOK_ARTIFACT_COMPOSE_SIGNAL_COMPOSITION_FEATURE",

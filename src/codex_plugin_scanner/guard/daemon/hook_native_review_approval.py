@@ -365,6 +365,7 @@ def queue_native_pre_tool_review(
         action_envelope = _native_review_action_envelope(
             harness=harness,
             payload=payload,
+            native_result=native_result,
             native_receipt=native_receipt,
             workspace=workspace,
             guard_home=guard_home,

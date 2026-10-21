@@ -23,6 +23,7 @@ from typing import Final, cast
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.ci.hook_route_handler_roots import ROUTE_HANDLER_ROOTS
 from scripts.ci.rust_io_ownership_cache import analysis_cache
 from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
 from scripts.ci.rust_io_ownership_contract import capability_contract
@@ -102,14 +103,11 @@ ROOTS: Final = (
     ),
     RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
     RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-        "try_native_hook_authority",
-    ),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-        "route_native_hook",
-    ),
+    RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "try_native_hook_authority"),
+    RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "route_native_hook"),
+    # The resident's route names native hook handlers through a table, which a
+    # call walk cannot follow, so each handler is a root of its own.
+    *(RootSpec(path, name) for path, name in ROUTE_HANDLER_ROOTS),
 )
 
 

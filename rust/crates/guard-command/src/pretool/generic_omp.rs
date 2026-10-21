@@ -347,6 +347,24 @@ fn listing(
             && !super::super::sensitive_command(target)
             && !super::super::sensitive_read_path_argument(target)
     };
+    // A name inside a linked worktree this repository registers lists nothing
+    // when nothing is there, and every existing file in that worktree is
+    // already routed, so saying nothing is there reveals no more than a
+    // listing the agent may already run.
+    let registered = |target: &str| {
+        missing(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_listing",
+            "The Rust authority proved this listing names a path with nothing behind it inside a linked worktree this repository registers, so it lists nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))
@@ -875,6 +893,26 @@ fn grep_scope(
     } else {
         "HOL Guard did not run this search because its path does not exist. Check the path, for example by listing its parent directory, and try again with the correct one."
     };
+    // The same holds for a search: a name inside a registered linked worktree
+    // with nothing behind it searches nothing, and that worktree's existing
+    // files are already in scope.
+    let registered = |target: &str| {
+        missing(target)
+            && !signals.sensitive_target
+            && !super::super::sensitive_command(target)
+            && !super::super::sensitive_read_path_argument(target)
+            && super::super::git_routes::missing_path_in_registered_worktree(target, home, cwd)
+    };
+    if targets
+        .iter()
+        .all(|target| proven(target) || registered(target))
+    {
+        return Some(directory_allow(
+            context,
+            "native_missing_worktree_search",
+            "The Rust authority proved this search names a path with nothing behind it inside a linked worktree this repository registers, so it searches nothing and the tool reports the missing path itself.",
+        ));
+    }
     targets
         .iter()
         .all(|target| proven(target) || missing(target))

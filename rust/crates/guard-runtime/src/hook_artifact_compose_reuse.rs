@@ -32,7 +32,7 @@ fn with_provenance(mut decision: ApprovalReuseDecision, stored_hash: &Value) -> 
     serde_json::to_value(decision).unwrap_or(Value::Null)
 }
 
-fn input_evidence(input_source: &str, reuse: &Value) -> Value {
+pub(crate) fn input_evidence(input_source: &str, reuse: &Value) -> Value {
     let mut evidence = Map::new();
     evidence.insert("source".into(), json!("approval_reuse"));
     evidence.insert("input_source".into(), json!(input_source));

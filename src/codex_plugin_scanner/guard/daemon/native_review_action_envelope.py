@@ -18,10 +18,34 @@ def native_review_tool_name(payload: Mapping[str, object]) -> str:
     return "tool"
 
 
+def _native_review_command_category(native_result: Mapping[str, object] | None) -> str | None:
+    if not isinstance(native_result, Mapping):
+        return None
+    evidence = native_result.get("command_extensions")
+    if not isinstance(evidence, Mapping):
+        return None
+    for key in ("observations", "permission_observations"):
+        items = evidence.get(key)
+        if not isinstance(items, list):
+            continue
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            if key == "observations":
+                effective = item.get("effective_segment_indexes")
+                if isinstance(effective, list) and not effective:
+                    continue
+            extension_id = item.get("extension_id")
+            if isinstance(extension_id, str) and extension_id.startswith("command."):
+                return extension_id
+    return None
+
+
 def native_review_action_envelope(
     *,
     harness: str,
     payload: Mapping[str, object],
+    native_result: Mapping[str, object] | None = None,
     native_receipt: Mapping[str, object] | None = None,
     workspace: Path | None,
     guard_home: Path | None = None,
@@ -45,6 +69,10 @@ def native_review_action_envelope(
         )
     except ValueError:
         return None
+    if envelope.get("command_category") is None:
+        command_category = _native_review_command_category(native_result)
+        if command_category is not None:
+            envelope["command_category"] = command_category
     validated = validate_native_decision_receipt(native_receipt)
     if validated is None or "origin_authentication" not in validated:
         return envelope

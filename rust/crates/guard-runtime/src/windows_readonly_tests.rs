@@ -54,7 +54,7 @@ fn credential_and_bulky_paths_are_withheld() {
         .iter()
         .map(|pattern| Regex::new(pattern).unwrap())
         .collect();
-    let withhold = withheld(&patterns);
+    let withhold = withheld(&patterns, None);
     for path in [
         ".env",
         r"app\.ENV.local",
@@ -68,6 +68,49 @@ fn credential_and_bulky_paths_are_withheld() {
     for path in ["test_calc.py", r"src\environment.py", "README.md"] {
         assert!(!withhold(Path::new(path)), "{path}");
     }
+}
+
+/// A contained pytest run reads the project's own virtual environment, so the
+/// `keep` prefix copies it while everything withheld *inside* it stays out.
+#[test]
+fn a_kept_environment_is_copied_without_what_it_contains() {
+    let patterns: Vec<Regex> = guard_command::credential_patterns::patterns()
+        .iter()
+        .map(|pattern| Regex::new(pattern).unwrap())
+        .collect();
+    let withhold = withheld(&patterns, Some(Path::new(".venv")));
+    for path in [
+        r".venv\Scripts\python.exe",
+        r".venv\Lib\site-packages\pytest\__init__.py",
+    ] {
+        assert!(!withhold(Path::new(path)), "{path}");
+    }
+    for path in [
+        r".venv\.git\config",
+        r".venv\src\node_modules\pkg\index.js",
+        r".venv\.env",
+    ] {
+        assert!(withhold(Path::new(path)), "{path}");
+    }
+}
+
+/// `keep` exempts an environment from the name it is withheld under. It must
+/// not exempt repository metadata: an environment named `.git` would
+/// otherwise copy `.git/config`, which no credential pattern covers.
+#[test]
+fn a_kept_environment_cannot_exempt_repository_metadata() {
+    let patterns: Vec<Regex> = guard_command::credential_patterns::patterns()
+        .iter()
+        .map(|pattern| Regex::new(pattern).unwrap())
+        .collect();
+    for keep in [r".git", r"src\.git", r".git\hooks"] {
+        let withhold = withheld(&patterns, Some(Path::new(keep)));
+        for path in [r".git\config", r".git\hooks\pre-commit", r"src\.git\config"] {
+            assert!(withhold(Path::new(path)), "{keep} kept {path}");
+        }
+    }
+    let withhold = withheld(&patterns, Some(Path::new("node_modules")));
+    assert!(withhold(Path::new(r"node_modules\pkg\index.js")));
 }
 
 #[test]

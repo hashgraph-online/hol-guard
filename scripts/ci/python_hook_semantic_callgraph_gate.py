@@ -11,12 +11,19 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+if __package__ is None:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
+from scripts.ci.hook_route_handler_roots import ROUTE_HANDLER_ROOTS
+
 SCHEMA: Final = "hol-guard.python-hook-semantic-callgraph.v1"
 _SRC_PACKAGE = "codex_plugin_scanner.guard"
 _PRODUCTION_FILES: Final = (
     "src/codex_plugin_scanner/guard/cli/commands_hook.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
     "src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_native_route.py",
+    "src/codex_plugin_scanner/guard/cli/commands_hook_native_route_handlers.py",
     "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
     "src/codex_plugin_scanner/guard/daemon/server.py",
     "src/codex_plugin_scanner/guard/native_pretool.py",
@@ -27,6 +34,9 @@ _ROOTS: Final = (
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "try_native_hook_authority"),
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", None, "route_native_hook"),
     ("src/codex_plugin_scanner/guard/cli/commands_hook_native_pipeline.py", None, "run_native_hook_pipeline"),
+    # The resident's route names handlers through a table, so the call graph cannot
+    # follow the dispatch: every handler the table can reach is a root of its own.
+    *((path, None, name) for path, name in ROUTE_HANDLER_ROOTS),
     ("src/codex_plugin_scanner/guard/daemon/hook_worker.py", "HookWorker", "review_http_payload"),
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_handle_runtime_hook_fast"),
     ("src/codex_plugin_scanner/guard/daemon/server.py", "_GuardDaemonHandler", "_execute_runtime_hook"),

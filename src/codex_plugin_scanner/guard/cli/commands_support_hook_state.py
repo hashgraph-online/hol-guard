@@ -72,23 +72,6 @@ def _update_codex_browser_operation_status(
         update_operation_status(operation_id=operation_id, status=status)
 
 
-def _should_emit_prequeue_native_hook_response(
-    args: argparse.Namespace,
-    *,
-    output_stream: TextIO | None,
-    event_name: str | None = None,
-) -> bool:
-    if _canonical_harness_name(args.harness) != "claude-code":
-        return False
-    if not getattr(args, "json", False):
-        return True
-    if event_name == "UserPromptSubmit":
-        # Prompt submits keep the composed envelope surface under --json so
-        # approval state, risk detail, and the decision copy stay together.
-        return False
-    return output_stream is not None
-
-
 def _emit_claude_permission_request_passthrough(*, output_stream: TextIO | None = None) -> None:
     if output_stream is not None:
         output_stream.write("")
@@ -508,7 +491,6 @@ __all__ = [
     "_record_claude_permission_notice",
     "_record_cursor_native_shell_allow_state",
     "_remove_claude_pending_permission",
-    "_should_emit_prequeue_native_hook_response",
     "_store_cursor_pending_shell_index",
     "_store_cursor_pending_shell_state",
     "_update_codex_browser_operation_status",

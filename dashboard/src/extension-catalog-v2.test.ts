@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 
 import {
+  CATALOG_PREPARATION_FAILED,
   CATALOG_SNAPSHOT_EXPIRED,
   clearCatalogReadCache,
   loadCatalogReadModel,
@@ -169,6 +170,20 @@ try {
     assert.equal(model.protocol, "v2");
     assert.deepEqual(model.extensions.map((item) => item.extension_id), [GIT, NPM]);
     assert.deepEqual(requests.map((entry) => entry.params.get("cursor")), [null, null, null, "c1"]);
+  }
+
+  {
+    // A daemon whose preparation keeps failing cannot be waited out, so this
+    // 503 is reported at once instead of after the retry schedule. It is still
+    // not a fallback signal: the page reports the fault rather than quietly
+    // serving the v1 catalog over a broken installed runtime.
+    serve((path) => (path === INDEX ? { status: 503, body: { error: CATALOG_PREPARATION_FAILED } } : { status: 500 }));
+    await assert.rejects(
+      loadCatalogReadModel(),
+      (error: unknown) =>
+        error instanceof ExtensionControlApiError && error.status === 503 && error.code === CATALOG_PREPARATION_FAILED,
+    );
+    assert.equal(requests.length, 1);
   }
 
   {

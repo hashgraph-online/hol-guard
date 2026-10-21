@@ -206,11 +206,81 @@ def _recorded_action_class(artifact) -> str | None:  # type: ignore[no-untyped-d
     return action_class if isinstance(action_class, str) else None
 
 
+def _recorded_explicit_permission_allow(artifact, command_action_floor: object) -> bool:  # type: ignore[no-untyped-def]
+    if command_action_floor != "allow":
+        return False
+    resolution = artifact.metadata.get("extension_control_resolution")
+    if not isinstance(resolution, Mapping) or resolution.get("blocked") is not False:
+        return False
+    permission_ids = resolution.get("explicitly_enabled_permission_ids")
+    if (
+        not isinstance(permission_ids, Sequence)
+        or isinstance(permission_ids, str)
+        or not permission_ids
+        or any(not isinstance(item, str) or not item.startswith("command.") for item in permission_ids)
+    ):
+        return False
+    decision = artifact.metadata.get("command_decision_plane")
+    if not isinstance(decision, Mapping) or decision.get("action") != "allow":
+        return False
+    routes = decision.get("proof_routes")
+    reasons = decision.get("controlling_reasons")
+    return (
+        isinstance(routes, Sequence)
+        and not isinstance(routes, str)
+        and "verified" in routes
+        and isinstance(reasons, Sequence)
+        and not isinstance(reasons, str)
+        and any(
+            isinstance(reason, Mapping)
+            and reason.get("source") == "control"
+            and reason.get("reason_code") == "control.explicitly-enabled-permission"
+            for reason in reasons
+        )
+    )
+
+
+def _recorded_risk_classes(artifact) -> list[str]:  # type: ignore[no-untyped-def]
+    from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_request_classes
+    from codex_plugin_scanner.guard.runtime.command_extensions import risk_classes_for_command_action
+
+    risk_classes: list[str] = []
+    composite_risk_classes = artifact.metadata.get("risk_classes")
+    if isinstance(composite_risk_classes, list):
+        risk_classes.extend(
+            value.strip() for value in composite_risk_classes if isinstance(value, str) and value.strip()
+        )
+    if artifact.artifact_type == "file_read_request":
+        risk_classes.append("local_secret_read")
+        return list(dict.fromkeys(risk_classes))
+    if artifact.artifact_type == "package_request":
+        risk_classes.append("package_script")
+        return list(dict.fromkeys(risk_classes))
+    if artifact.artifact_type == "prompt_request":
+        prompt_classes = _prompt_request_classes(artifact)
+        if "secret_read" in prompt_classes:
+            risk_classes.append("local_secret_read")
+        if "exfil_intent" in prompt_classes:
+            risk_classes.append("credential_exfiltration")
+        if "destructive_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
+        if "subprocess_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
+        if "prompt_injection_intent" in prompt_classes:
+            risk_classes.append("destructive_shell")
+        return list(dict.fromkeys(risk_classes))
+    if artifact.artifact_type != "tool_action_request":
+        return list(dict.fromkeys(risk_classes))
+    action_class = artifact.metadata.get("action_class")
+    if isinstance(action_class, str):
+        risk_classes.extend(risk_classes_for_command_action(action_class))
+    return list(dict.fromkeys(risk_classes))
+
+
 def record() -> list[dict[str, object]]:
     import codex_plugin_scanner.guard.cli.commands  # noqa: F401  (wires the shared command namespace)
     from codex_plugin_scanner.guard import protection_events
     from codex_plugin_scanner.guard.cli import commands_support_runtime_artifact_policy as policy
-    from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy
     from codex_plugin_scanner.guard.cli.commands_support_prompts import _prompt_requires_hard_block
     from codex_plugin_scanner.guard.harness_posture import harness_posture_override
 
@@ -228,6 +298,7 @@ def record() -> list[dict[str, object]]:
         metadata = artifact.metadata
         default = metadata.get("guard_default_action")
         confidence = _recorded_risk_confidence(artifact)
+        floor = policy._runtime_artifact_command_action_floor(artifact)
         query = {
             "policy_config": {
                 "default_action": config.default_action,
@@ -245,9 +316,9 @@ def record() -> list[dict[str, object]]:
                 "configured_override": _typed_override(
                     config.resolve_action_override(HARNESS, artifact.artifact_id, artifact.publisher)
                 ),
-                "command_action_floor": policy._runtime_artifact_command_action_floor(artifact),
-                "explicit_permission_allow": policy._runtime_artifact_has_explicit_permission_allow(artifact),
-                "risk_classes": runtime_policy._runtime_artifact_risk_classes(artifact),
+                "command_action_floor": floor,
+                "explicit_permission_allow": _recorded_explicit_permission_allow(artifact, floor),
+                "risk_classes": _recorded_risk_classes(artifact),
                 "pytest_restricted_sandbox": (
                     metadata.get("action_class") == "pytest repository-code execution"
                     and metadata.get("reason_code") == "pytest_restricted_profile_required"

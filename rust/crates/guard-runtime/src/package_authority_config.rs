@@ -261,6 +261,7 @@ pub(crate) fn load_effective_guard_config(
     require_canonical_workspace: bool,
     managed: &ManagedPolicySource,
 ) -> EvalResult<GuardConfig> {
+    let empty_managed_settings = Map::new();
     let managed_state = load_managed_policy(managed);
     let managed_policy = effective_managed_policy(&managed_state);
     let home = read_config_table(guard_home, HOME_CONFIG_FILENAME)?.unwrap_or_default();
@@ -277,6 +278,20 @@ pub(crate) fn load_effective_guard_config(
         None => local,
     };
 
+    let managed_locked_settings: Vec<String> = managed_policy
+        .as_ref()
+        .map(|policy| policy.locked_settings.iter().cloned().collect())
+        .unwrap_or_default();
+    // The per-harness posture map, which `resolve_risk_action` reads for the
+    // Extra careful floor, under the same managed locks the loader applies.
+    let harness_postures = crate::guard_config_harness::managed_effective(
+        crate::guard_config_harness::loaded_postures(merged.get("harness_postures")),
+        &managed_locked_settings,
+        managed_policy
+            .as_ref()
+            .map(|policy| &policy.settings)
+            .unwrap_or(&empty_managed_settings),
+    );
     let security_level = coerce_security_level(merged.get("security_level"));
     let posture_override = explicit_posture(merged.get("protection_posture"));
     let protection_posture_explicit = posture_override.is_some();
@@ -286,14 +301,12 @@ pub(crate) fn load_effective_guard_config(
         security_level,
         protection_posture,
         protection_posture_explicit,
-        managed_locked_settings: managed_policy
-            .as_ref()
-            .map(|policy| policy.locked_settings.iter().cloned().collect())
-            .unwrap_or_default(),
+        managed_locked_settings,
         risk_actions: Some(coerce_risk_action_map(merged.get("risk_actions"))),
         harness_risk_actions: Some(coerce_harness_risk_actions(
             merged.get("harness_risk_actions"),
         )),
+        harness_postures: Some(harness_postures),
         managed_policy_status: managed_state.status.as_str().to_owned(),
         managed_policy_hash: managed_policy
             .as_ref()

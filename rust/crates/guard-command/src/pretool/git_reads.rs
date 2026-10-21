@@ -20,6 +20,9 @@ pub(super) fn safe_git_arguments(
     allow_helper_context: bool,
     context: super::PathContext<'_>,
 ) -> bool {
+    // The inspected slice replaces `arguments` below, so the route the
+    // leading options name is kept here.
+    let with_route = arguments;
     // Branch patterns are ref names, not paths, so only the leading git options
     // (such as -C) go through the path checks.
     if let Some(inspected) =
@@ -195,14 +198,22 @@ pub(super) fn safe_git_arguments(
                 .iter()
                 .all(|argument| matches!(argument.as_str(), "-v" | "--verbose"));
     }
-    if !allow_helper_context
-        && matches!(subcommand, "diff" | "log" | "show")
-        && !(active_options
+    // These three read through the diff machinery, so without the
+    // configuration probe only the spelling that turns the external driver
+    // and the textconv filter off is proven. A `-C` route that discovers no
+    // repository needs neither: Git dies in its own setup before it reads a
+    // diff, textconv, pager or filter setting, so there is no configured
+    // helper for the options to turn off.
+    let helpers_off = active_options
+        .iter()
+        .any(|argument| argument == "--no-ext-diff")
+        && active_options
             .iter()
-            .any(|argument| argument == "--no-ext-diff")
-            && active_options
-                .iter()
-                .any(|argument| argument == "--no-textconv"))
+            .any(|argument| argument == "--no-textconv");
+    if matches!(subcommand, "diff" | "log" | "show")
+        && !(allow_helper_context
+            || helpers_off
+            || super::git_helper_context::arguments_route_to_no_repository(with_route, context))
     {
         return false;
     }

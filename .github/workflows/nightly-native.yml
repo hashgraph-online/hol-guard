@@ -385,7 +385,8 @@ jobs:
   linux-containment:
     name: Linux contained runners
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Usually 12-17 minutes; a cold Rust cache pushes it past 20.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -435,19 +436,29 @@ jobs:
           mkdir -p "$GUARD_VITEST_FIXTURE"
           cp .github/tools/containment-ci/package{,-lock}.json "$GUARD_VITEST_FIXTURE/"
           npm ci --prefix "$GUARD_VITEST_FIXTURE" --ignore-scripts --no-audit --no-fund
+      - name: Exercise the real backend from the native runner itself
+        env:
+          GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
+          GUARD_LINUX_CONTAINMENT: "1"
+        run: |
+          set -o pipefail
+          cargo test --manifest-path rust/Cargo.toml --locked --release \
+            -p guard-command --lib contained_runner::real_backend_tests -- --nocapture \
+            2>&1 | tee native-containment-proof.log
       - name: Exercise real contained execution and failure paths
+        if: ${{ !cancelled() }}
         env:
           GUARD_VITEST_FIXTURE: ${{ runner.temp }}/guard-vitest-fixture
         run: >-
-          uv run --no-sync pytest ci/containment/test_linux_containment.py
-          tests/test_guard_containment_backend_status.py
-          tests/test_guard_contained_vitest_handoff_fail_closed.py
+          uv run --no-sync pytest tests/test_guard_contained_vitest_handoff_fail_closed.py
           --tb=short --junitxml=containment-results.xml
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: containment-execution-results
-          path: containment-results.xml
+          path: |
+            native-containment-proof.log
+            containment-results.xml
           if-no-files-found: error
 
   linux-protected-vitest:
@@ -634,7 +645,8 @@ jobs:
   extension-builder:
     name: Extension builder (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 50
+    # The Windows builder tests alone take about 52 minutes on hosted runners.
+    timeout-minutes: ${{ matrix.os == 'windows-2022' && 120 || 90 }}
     defaults:
       run:
         shell: bash
@@ -670,7 +682,7 @@ jobs:
         # The pull-request base comparison does not apply to a scheduled run.
         run: python scripts/refresh_extension_artifacts.py --trust-only
       - name: Install the locked development environment
-        run: uv sync --frozen --extra dev --python "${{ matrix.python }}"
+        run: uv sync --frozen --extra dev --group ci-test --python "${{ matrix.python }}"
       - uses: ./.github/actions/setup-rust
       - name: Build native command evaluators
         env:
@@ -707,6 +719,7 @@ jobs:
             tests/test_guard_extension_trust.py \
             tests/test_contribution_trust_map.py \
             tests/test_guard_mcp_server_contribution.py \
+            -n 2 --dist loadfile --max-worker-restart 0 --durations=15 \
             --junitxml=builder-evidence/tests.xml --tb=short
       - name: Build and install a wheel outside the checkout
         env:
@@ -847,7 +860,7 @@ jobs:
             target: aarch64-apple-darwin
             deployment_target: '11.0'
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 35
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:
@@ -1571,8 +1584,8 @@ jobs:
 
   native-windows-evaluators:
     runs-on: windows-latest
-    # A cold Windows release build of both binaries takes 12-15 minutes.
-    timeout-minutes: 25
+    # The whole job, with a cold Windows release build of both binaries, takes 15-25 minutes.
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
         with:

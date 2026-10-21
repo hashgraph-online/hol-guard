@@ -354,6 +354,16 @@ def package_shim_dashboard_status(context: HarnessContextLike) -> dict[str, obje
     return _object("dashboard_status", context)
 
 
+def package_shim_protection(context: HarnessContextLike) -> dict[str, object]:
+    """The resident's package-manager protection projection.
+
+    The resident decides which detected managers count as unprotected; callers
+    present this block rather than recomputing it.
+    """
+
+    return _object("protection_projection", context)
+
+
 def package_shim_cloud_coverage(
     context: HarnessContextLike,
     *,

@@ -20,6 +20,7 @@ from ..runtime.extension_control_contract import (
 from ..runtime.extension_control_proof import ExtensionControlMutation
 from ..runtime.generated_command_catalog import GeneratedCommandCatalog
 from .extension_control_errors import ExtensionControlApiError
+from .extension_control_preparation_failure import preparation_unavailable
 
 MAX_CANDIDATES = 8
 _REQUEST_FIELDS = ("previous_revision", "catalog_digest", "layers", "actor_id", "idempotency_key", "nonce")
@@ -225,7 +226,7 @@ class PreparedControlCandidates:
         try:
             value = factory()
         except (ValueError, OSError) as exc:
-            raise ExtensionControlApiError(503, "pack_preparation_unavailable") from exc
+            raise preparation_unavailable(exc, stage="candidate-preparation") from exc
         if value is not None:
             self.values[key] = value
             while len(self.values) > MAX_CANDIDATES:

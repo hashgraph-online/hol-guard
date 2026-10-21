@@ -68,7 +68,7 @@ from .runtime.package_protect_projection import (
     resolve_local_supply_chain_harness as _resolve_local_supply_chain_harness,
 )
 from .runtime.restricted_archive_download import RestrictedArchiveDownload
-from .shims import package_shim_dashboard_status, package_shim_supported_managers
+from .shims import package_shim_protection, package_shim_supported_managers
 from .store import GuardStore
 from .store_guard_home_binding import binds_store_guard_home
 
@@ -1090,6 +1090,33 @@ def _coerce_command_error_output(error: subprocess.TimeoutExpired | OSError) -> 
     return "\n".join(part for part in parts if part)
 
 
+def _unavailable_package_manager_protection(store: Any, code: str) -> dict[str, object]:
+    """The shape the posture renders when the resident cannot answer.
+
+    No manager is reported as protected or unprotected here; the block only
+    says the projection is unavailable and why.
+    """
+
+    return {
+        "path_status": "unavailable",
+        "error": code,
+        "path_contains_shim_dir": False,
+        "restart_shell_required": False,
+        "process_path_status": "missing",
+        "process_restart_required": False,
+        "shell_profile_configured": False,
+        "shell_profile_path": None,
+        "shim_dir": str(store.guard_home / "package-shims" / "bin"),
+        "supported_managers": list(package_shim_supported_managers(store.guard_home)),
+        "detected_managers": [],
+        "installed_managers": [],
+        "active_managers": [],
+        "missing_shims": [],
+        "protected_managers": [],
+        "unprotected_managers": [],
+    }
+
+
 def _build_package_manager_protection(store: Any) -> dict[str, object]:
     context = HarnessContext(
         home_dir=Path.home().resolve(),
@@ -1097,44 +1124,11 @@ def _build_package_manager_protection(store: Any) -> dict[str, object]:
         guard_home=store.guard_home,
     )
     try:
-        status = package_shim_dashboard_status(context)
+        return package_shim_protection(context)
     except NativeShimAdminError as error:
         # Posture still renders when the resident cannot answer; the shim
         # fields read as unavailable instead of failing the whole projection.
-        status = {"path_status": "unavailable", "error": error.code}
-    shim_dir = Path(str(status.get("shim_dir") or store.guard_home / "package-shims" / "bin"))
-    installed_managers = sorted(set(_string_items(status.get("installed_managers"))))
-    active_managers = sorted(set(_string_items(status.get("active_managers"))))
-    missing_shims = sorted(set(_string_items(status.get("missing_managers"))))
-    supported_managers = list(package_shim_supported_managers(store.guard_home))
-    detected_managers = sorted(set(_string_items(status.get("detected_managers"))))
-    protected_managers = sorted(set(_string_items(status.get("protected_managers"))))
-    protected_set = set(protected_managers)
-    path_status = str(status.get("path_status") or "missing_from_path")
-    coverage_managers = set(detected_managers)
-    staged_managers = (
-        set(installed_managers).intersection(coverage_managers) if path_status == "restart_required" else set()
-    )
-    unprotected_managers = [
-        manager for manager in detected_managers if manager not in protected_set and manager not in staged_managers
-    ]
-    return {
-        "path_status": path_status,
-        "path_contains_shim_dir": bool(status.get("path_contains_shim_dir")),
-        "restart_shell_required": bool(status.get("restart_shell_required")),
-        "process_path_status": str(status.get("process_path_status") or "missing"),
-        "process_restart_required": bool(status.get("process_restart_required")),
-        "shell_profile_configured": bool(status.get("shell_profile_configured")),
-        "shell_profile_path": status.get("shell_profile_path"),
-        "shim_dir": str(shim_dir),
-        "supported_managers": supported_managers,
-        "detected_managers": detected_managers,
-        "installed_managers": installed_managers,
-        "active_managers": active_managers,
-        "missing_shims": missing_shims,
-        "protected_managers": protected_managers,
-        "unprotected_managers": unprotected_managers,
-    }
+        return _unavailable_package_manager_protection(store, error.code)
 
 
 def _execute_cloud_workspace_audit_request(
@@ -1414,12 +1408,6 @@ def _redact_command_token(token: str) -> str:
         if any(fragment in key.lower() for fragment in ("token", "secret", "api_key", "api-key", "password")):
             return f"{key}: *****"
     return redact_text(token).text
-
-
-def _string_items(value: object) -> tuple[str, ...]:
-    if not isinstance(value, (list, tuple)):
-        return ()
-    return tuple(item for item in value if isinstance(item, str))
 
 
 def _int_value(value: object) -> int | None:

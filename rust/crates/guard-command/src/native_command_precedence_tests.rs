@@ -393,3 +393,59 @@ fn an_explicit_git_allow_settles_only_known_built_ins() {
         );
     }
 }
+
+#[test]
+fn an_explicit_container_runtime_allow_settles_docker_sensitive_review() {
+    let program = packaged_command_program().unwrap();
+    let mut binding: NativeCommandControlBindingV1 = serde_json::from_value(serde_json::json!({
+        "schema": "guard.native-command-control-binding.v1",
+        "program_digest": program.program_digest, "catalog_digest": program.catalog_digest,
+        "trust_digest": program.trust_digest, "health": "protected",
+        "revision": 1, "managed_revision": 0, "effective_digest": "",
+        "layers": [{
+            "schema_version": "1.0.0", "kind": "local-admin",
+            "catalog_digest": program.catalog_digest, "global_lockdown": false,
+            "controls": [{
+                "target_kind": "permission",
+                "target_id": "command.container-runtime.permission.docker-sensitive",
+                "state": "enabled"
+            }]
+        }]
+    }))
+    .unwrap();
+    binding.effective_digest = binding.compute_effective_digest().unwrap();
+    let enabled = CompiledNativeCommandControls::new(&binding).unwrap();
+    let baseline = baseline();
+
+    for command in [
+        "docker version --format '{{.Server.Version}}'",
+        "docker compose ps",
+        "docker inspect web",
+    ] {
+        assert_ne!(
+            evaluate(&baseline, command).minimum_action,
+            "allow",
+            "{command}"
+        );
+        let result = evaluate(&enabled, command);
+        assert_eq!(
+            result.minimum_action, "allow",
+            "{command}: {}",
+            result.reason_code
+        );
+    }
+
+    for remote_or_sensitive_context in [
+        "docker --context production ps",
+        "docker -H tcp://127.0.0.1:2375 ps",
+        "docker --config /tmp/custom-docker ps",
+        "DOCKER_HOST=tcp://127.0.0.1:2375 docker ps",
+    ] {
+        let result = evaluate(&enabled, remote_or_sensitive_context);
+        assert_eq!(
+            result.minimum_action, "review",
+            "{remote_or_sensitive_context}: {}",
+            result.reason_code
+        );
+    }
+}

@@ -384,6 +384,9 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::PackageEvaluationCompose(request) => {
                 crate::package_evaluation_compose_op::evaluate_package_evaluation_compose(&request)
             }
+            ResidentOperationV1::VerifiedNpm(request) => {
+                crate::verified_npm_op::evaluate_verified_npm(&request)
+            }
             ResidentOperationV1::PolicyDocumentDecide(request) => {
                 crate::policy_document_decide_op::evaluate_policy_document_decision_request(
                     &request,
@@ -568,6 +571,10 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             ResidentOperationV1::ContainedExecute(request) => {
                 crate::contained_op::evaluate_contained_execute(&request)
             }
+            #[cfg(unix)]
+            ResidentOperationV1::ContainmentHealthProbe(request) => {
+                crate::contained_op::evaluate_containment_health_probe(&request)
+            }
             ResidentOperationV1::ShimAdmin(request) => {
                 crate::shim_op::evaluate_shim_admin(&request)
             }
@@ -646,7 +653,8 @@ pub(crate) fn evaluate_resident_bytes_with_cancellation(
             | ResidentOperationV1::ContainedTypescriptExecute(_)
             | ResidentOperationV1::ContainedPackageScriptExecute(_)
             | ResidentOperationV1::ContainedWorkspaceWriteExecute(_)
-            | ResidentOperationV1::ContainedExecute(_) => {
+            | ResidentOperationV1::ContainedExecute(_)
+            | ResidentOperationV1::ContainmentHealthProbe(_) => {
                 Err("native_operation_unavailable_on_this_platform".to_owned())
             }
             ResidentOperationV1::Health(_request) => encode_response(&serde_json::json!({
@@ -711,6 +719,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::HookAuthorityState(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageAdvisoryIds(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageEvaluationCompose(request) => Some(&request.guard_home),
+        ResidentOperationV1::VerifiedNpm(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageApprovalHash(request) => Some(&request.guard_home),
         ResidentOperationV1::PackagePolicyResolve(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageProtectFinalize(request) => Some(&request.guard_home),
@@ -723,6 +732,7 @@ fn operation_guard_home(operation: &ResidentOperationV1) -> Option<&str> {
         ResidentOperationV1::ContainedPackageScriptExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedWorkspaceWriteExecute(request) => Some(&request.guard_home),
         ResidentOperationV1::ContainedExecute(request) => Some(&request.guard_home),
+        ResidentOperationV1::ContainmentHealthProbe(request) => Some(&request.guard_home),
         ResidentOperationV1::ShimAdmin(request) => Some(&request.guard_home),
         ResidentOperationV1::PackageContextBuild(request) => Some(&request.guard_home),
         ResidentOperationV1::McpStdioProbe(request) => Some(&request.guard_home),

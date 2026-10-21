@@ -24,6 +24,9 @@ def _hold_the_image(monkeypatch: pytest.MonkeyPatch, attempts: int) -> list[floa
     sleeps: list[float] = []
 
     def rmtree(path, *args, **kwargs):  # type: ignore[no-untyped-def]
+        # The sweep of directories a dead process abandoned is not the copy under test.
+        if kwargs.get("ignore_errors"):
+            return real_rmtree(path, *args, **kwargs)
         if held["left"] > 0:
             held["left"] -= 1
             if "onexc" in kwargs or "onerror" in kwargs:

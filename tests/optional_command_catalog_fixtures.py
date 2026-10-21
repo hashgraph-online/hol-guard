@@ -7,6 +7,7 @@ the resident receives a separately prepared pack set and signed policy first.
 from __future__ import annotations
 
 import os
+import time
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -209,7 +210,9 @@ def optional_command_catalog(request, monkeypatch, tmp_path):
                 home_dir=shell_home,
                 source_ref_external_allowed=False,
                 observe_mode=False,
-                deadline=None,
+                # Without a deadline the edge allows 0.75 s, which a cold resident
+                # on a loaded Windows runner can miss.
+                deadline=time.monotonic() + 5,
                 policy_snapshot=published_snapshots[guard_home],
             )
             assert edge is not None, "authenticated optional command resident unavailable"

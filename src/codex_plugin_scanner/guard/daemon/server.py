@@ -27,7 +27,11 @@ from urllib.parse import parse_qs, parse_qsl, urlparse
 
 from ...version import __version__
 from ..adapters import get_adapter
-from ..aibom_cli import _AIBOM_AUTO_SYNC_INTERVAL_SECONDS, sync_aibom_snapshots_if_due
+from ..aibom_cli import (
+    _AIBOM_AUTO_SYNC_INTERVAL_SECONDS,
+    remember_user_inventory_if_due,
+    sync_aibom_snapshots_if_due,
+)
 from ..approval_gate import (
     ApprovalGateError,
     require_high_risk,
@@ -114,6 +118,7 @@ from .aibom_inventory_persist import persist_aibom_inventory_context
 from .audit_persistence import NOT_PERSISTED as AUDIT_NOT_PERSISTED
 from .audit_persistence import WRITTEN as AUDIT_WRITTEN
 from .audit_persistence import AuditPersistence
+from .background_diagnostics import install_sink as install_background_sink
 from .bounded_http import BoundedThreadingHTTPServer
 from .catalog_read_v2 import CATALOG_V2_PREFIX, serve_catalog_read_v2
 from .command_activity_api import (
@@ -725,11 +730,19 @@ class _GuardDaemonHTTPServer(BoundedThreadingHTTPServer):
                 require_current(self.store, _key(self.store), activation_digest)
                 view = self.store.read_extension_control_authority_for_registry(registry, read_only=shared)
                 snapshot = self.extension_control_runtime.refresh(view)
-            if self._extension_control_on_core_registry:
-                # Startup bound the control API to the core registry. Once the
-                # authority reads again, serve the registry it was read for so
-                # previews and mutations stop failing against the core one.
-                self.extension_control_api.rebind_registry(registry)
+            # The runtime now holds a view read for `registry`. Serve the same
+            # registry from the control API, whether startup fell back to the
+            # core one or a pack activation landed after startup (an upgrade
+            # settling its transition, another process's activation).
+            # Otherwise the effective controls and the catalog read model
+            # report different digests until the daemon restarts. Rebind after
+            # the authority lease is released: apply() takes the API lock
+            # before that lease. The API skips the rebind if an apply installed
+            # a newer snapshot in the meantime.
+            if (
+                self._extension_control_on_core_registry
+                or registry.catalog_digest != self.extension_control_api.catalog_digest
+            ) and self.extension_control_api.rebind_registry(registry, installed=snapshot):
                 self._extension_control_on_core_registry = False
             return snapshot
 
@@ -3257,6 +3270,10 @@ class GuardDaemonServer:
             raise RuntimeError("A previous Guard daemon remains quarantined after unconfirmed containment.")
         self._diagnostics = DaemonDiagnostics(store.guard_home)
         flush_pending_phases(self._diagnostics.record_phase)
+        # Catalog preparation and publication run on their own threads and hold
+        # no daemon object. Without this sink a permanent preparation fault
+        # leaves no line in daemon.log while every catalog read answers 503.
+        install_background_sink(self._diagnostics.record_background)
         try:
             with timed_phase("init_provider_registry"):
                 self._isolation_provider_registry = load_managed_provider_registry()
@@ -4255,6 +4272,19 @@ class GuardDaemonServer:
             try:
                 home_dir, workspace_dir, bound_workspace_id = self._aibom_inventory_context_dirs()
                 if workspace_dir is None:
+                    # Without a workspace the cloud snapshot is left alone; the
+                    # user-wide scan still feeds fleet posture inventory.
+                    # A failed home scan is reported here so the status still
+                    # says no workspace is bound rather than a sync error.
+                    try:
+                        user_inventory = remember_user_inventory_if_due(
+                            self._server.store,
+                            generated_at=refreshed_at,
+                            min_interval_seconds=max(int(interval_seconds), 1),
+                            home_dir=home_dir if home_dir is not None else self._aibom_home_dir,
+                        )
+                    except Exception as error:
+                        user_inventory = {"collected": False, "error": str(error)}
                     self._server.store.set_sync_payload(
                         "aibom_inventory_daemon",
                         {
@@ -4262,6 +4292,7 @@ class GuardDaemonServer:
                             "reason": "missing_workspace_context",
                             "skipped": True,
                             "refreshed_at": refreshed_at,
+                            "user_inventory": user_inventory,
                         },
                         refreshed_at,
                     )

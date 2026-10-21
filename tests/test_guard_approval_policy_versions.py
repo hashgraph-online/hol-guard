@@ -99,6 +99,7 @@ def _runtime_hook_token(
         data_flow_action=None,
         scanner_action=None,
         current_action="review",
+        risk_classes=(),
         data_flow_signals=(),
         scanner_evidence=(),
     )

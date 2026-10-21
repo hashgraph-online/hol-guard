@@ -437,6 +437,12 @@ class _HeadlessRoutes:
         registry, snapshot = api.recommendation_inputs()
         store = self._daemon_server().store
         hint = store.get_approval_extension_allow_hint(str(approval.get("request_id", "")))
+        if hint is None:
+            from .native_review_allow_hint import live_approval_extension_allow_hint
+
+            hint = live_approval_extension_allow_hint(
+                approval, guard_home=store.guard_home, snapshot=snapshot, registry=registry
+            )
         payload = with_approval_extension_recommendation(
             {**approval, "extension_allow_hint": hint}, registry=registry, snapshot=snapshot, include=True
         )

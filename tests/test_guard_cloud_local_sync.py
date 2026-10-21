@@ -1051,7 +1051,9 @@ def test_sync_runtime_session_emits_package_manager_coverage_payload(
     session_payload = captured_body["session"]
     assert isinstance(session_payload, dict)
     assert session_payload["deviceId"] == store.get_or_create_installation_id()
-    assert session_payload["deviceName"] == store.get_device_metadata()["device_label"]
+    assert session_payload["deviceName"] == guard_runner_module.device_display_name(
+        store, store.get_device_metadata()["device_label"]
+    )
     assert session_payload["localIdentity"]["lastSyncedAt"] == "2026-04-24T00:01:00+00:00"
     assert session_payload["localIdentitySource"]["daemonId"] == "local-guard"
     assert session_payload["localIdentitySource"]["daemonVersion"] == "local-guard"

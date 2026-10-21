@@ -212,6 +212,12 @@ def build_fixture(root: Path) -> BenignFixture:
     # `.config`, and a token-shaped file name in an otherwise ordinary place.
     _write(home / ".config/gcloud/credentials.db", "synthetic fixture\n")
     _write(home / ".agents/skills/x/credentials.json", "{}\n")
+    # A directory of local services an agent runs beside its checkouts. The
+    # running server leaves a hidden socket lock in its run directory, which
+    # is all that separates this tree from any other listing.
+    _write(home / "dev-services" / "compose.yaml", "services:\n  db:\n    image: postgres:16\n")
+    _write(home / "dev-services" / "scripts" / "start.sh", "#!/bin/sh\necho start\n")
+    _write(home / "dev-services" / "pg-run" / ".s.PGSQL.5432.lock", "4242\n")
     _write(home / "other-project" / "notes.md", "Notes kept outside the project.\nretry policy: three attempts.\n")
     _write(home / "other-project" / "src" / "report.ts", "export const reportWindow = 'report-window-marker';\n")
     _write(home / "other-project" / "package.json", '{\n  "name": "@acme/app",\n  "version": "1.0.0"\n}\n')

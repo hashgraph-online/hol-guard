@@ -510,6 +510,12 @@ def _add_realistic_shapes(main: Path, home: Path, environment: dict[str, str], s
         (".codex/plans/acme-plan-todo.md", "# Todo\n- [ ] 541 retry window\n"),
         (".codex/plans/evidence/run-1/summary.json", '{"cases": []}\n'),
         (".claude/plans/acme-plan.md", "# Plan\nSynthetic plan notes.\n"),
+        # A directory of local services an agent runs beside its checkouts:
+        # the running server leaves a hidden socket lock in its run directory,
+        # which is all that separates this tree from any other listing.
+        ("dev-services/compose.yaml", "services:\n  db:\n    image: postgres:16\n"),
+        ("dev-services/scripts/start.sh", "#!/bin/sh\necho start\n"),
+        ("dev-services/pg-run/.s.PGSQL.5432.lock", "4242\n"),
         # A tool whose name Guard knows nothing about, holding the two trees
         # every harness keeps: a skills folder and a lane of dated reports.
         # Agents look both up by the word they remember.
