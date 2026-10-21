@@ -165,7 +165,8 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
     ) -> list[dict[str, object]]:
         """Return authenticated, privacy-safe prior snapshots for the current catalog."""
 
-        if type(limit) is not int:
+        # Refuse before the read below, which can recover a stale transition.
+        if type(limit) is not int or limit < 1 or limit > 50:
             raise ExtensionControlAuthorityError("invalid extension control history limit")
         with self._extension_control_authority_lock():
             current = self._read_extension_control_authority_locked(catalog_digest)
