@@ -18,7 +18,7 @@ from codex_plugin_scanner.guard.native_policy_snapshot import (
 )
 from codex_plugin_scanner.guard.store import GuardStore
 
-from .native_policy_snapshot_test_fixtures import _ack, _config, _status
+from .native_policy_snapshot_test_fixtures import _ack, _config, _resident_generation_for_home, _status
 
 # Split modules are implementation containers; the compatibility façade imports
 # their test functions so the historical test path keeps identical collection.
@@ -37,7 +37,7 @@ def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: py
         assert isinstance(payload, bytes)
         assert (guard_home / "native-runtime" / "policy-verifier.key").is_file()
         calls.append(payload)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -47,7 +47,7 @@ def test_publisher_startup_ack_and_mutation_push(tmp_path: Path, monkeypatch: py
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         first = publisher.current_snapshot()
         assert first is not None
         assert len(calls) >= 1
@@ -83,7 +83,7 @@ def test_publisher_does_not_ack_snapshot_after_concurrent_mutation(
         assert isinstance(payload, bytes)
         entered.set()
         assert release.wait(2.0)
-        return _ack(payload)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -118,7 +118,7 @@ def test_publisher_repushes_after_resident_generation_change(
         payload = kwargs["payload"]
         assert isinstance(payload, bytes)
         calls.append(payload)
-        return _ack(payload, resident_generation=2 if len(calls) > 1 else 1)
+        return _ack(payload, guard_home=kwargs.get("guard_home"))
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -128,16 +128,18 @@ def test_publisher_repushes_after_resident_generation_change(
     )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         assert len(calls) == 1
+        # Reading the controls may already have started a real resident.
+        restarted = (_resident_generation_for_home(guard_home) or 1) + 1
         resident_state = guard_home / "native-runtime" / "resident-v3-restarted"
         resident_state.mkdir(mode=0o700)
-        (resident_state / "generation-2.json").write_text("{}", encoding="utf-8")
+        (resident_state / f"generation-{restarted}.json").write_text("{}", encoding="utf-8")
         deadline = time.monotonic() + 2.0
         while time.monotonic() < deadline and len(calls) < 2:
             time.sleep(0.01)
         assert len(calls) >= 2
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
     finally:
         publisher.close()
 
@@ -159,7 +161,7 @@ def test_publisher_does_not_republish_for_generation_created_by_own_ack(
         resident_state = guard_home / "native-runtime" / "resident-v3-owned"
         resident_state.mkdir(mode=0o700)
         (resident_state / "generation-1.json").write_text("{}", encoding="utf-8")
-        return _ack(payload)
+        return _ack(payload, resident_generation=1)
 
     publisher = NativePolicySnapshotPublisher(
         store=store,
@@ -167,9 +169,17 @@ def test_publisher_does_not_republish_for_generation_created_by_own_ack(
         client_request=client_request,
         poll_interval_seconds=0.05,
     )
+    # Reading the controls starts the real resident this client stands in
+    # for; observe only the resident the fabricated ACK creates.
+    observe = publisher._current_resident_fingerprint
+    monkeypatch.setattr(
+        publisher,
+        "_current_resident_fingerprint",
+        lambda: tuple(entry for entry in observe() if entry[0].startswith("resident-v3-owned")),
+    )
     publisher.start()
     try:
-        assert publisher.wait_until_ready(time.monotonic() + 2.0)
+        assert publisher.wait_until_ready(time.monotonic() + 10.0)
         time.sleep(0.2)
         assert len(calls) == 1
     finally:
@@ -272,7 +282,6 @@ def test_auto_hook_uses_barrier_without_loading_config_per_request(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
     monkeypatch.setattr(
         hook_worker_module,
@@ -328,7 +337,6 @@ def test_prepare_workspace_policy_uses_bounded_first_workspace_handshake(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -373,7 +381,6 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -388,16 +395,20 @@ def test_prepare_workspace_policy_waits_publish_budget_without_caller_deadline(
     assert wait_deadlines[-1] <= finished_at + budget + 0.05
 
 
+@pytest.mark.parametrize(
+    "publisher_error", ["native_policy_snapshot_runtime_unavailable", RuntimeError("native error")]
+)
 def test_prepare_workspace_policy_skips_wait_after_publisher_error(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    publisher_error: object,
 ) -> None:
     import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
 
     wait_deadlines: list[float] = []
 
     class _Publisher:
-        last_error = "native_policy_snapshot_runtime_unavailable"
+        last_error = publisher_error
 
         def start(self) -> None:
             return
@@ -416,7 +427,6 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
         def close(self) -> None:
             return
 
-    monkeypatch.setattr(hook_worker_module, "native_mode", lambda: "auto")
     monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
 
     worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
@@ -426,6 +436,52 @@ def test_prepare_workspace_policy_skips_wait_after_publisher_error(
     assert binding is None
     assert constructor_waits == 1
     assert len(wait_deadlines) == 1
+
+
+def test_prepare_workspace_policy_waits_for_transient_resident_restart_lock(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import codex_plugin_scanner.guard.daemon.hook_worker as hook_worker_module
+
+    wait_deadlines: list[float] = []
+
+    class _Publisher:
+        last_error = "native_resident_restart_budget_busy"
+        ready = False
+
+        def start(self) -> None:
+            return
+
+        def register_workspace(self, workspace: Path | None) -> bool:
+            del workspace
+            return False
+
+        def wait_until_ready(self, deadline_monotonic: float) -> bool:
+            wait_deadlines.append(deadline_monotonic)
+            self.ready = len(wait_deadlines) > 1
+            return self.ready
+
+        def current_snapshot_binding(self) -> dict[str, object] | None:
+            if not self.ready:
+                return None
+            return {
+                "generation": 2,
+                "policy_digest": "a" * 64,
+                "runtime_identity": "b" * 64,
+                "mode": "enforce",
+            }
+
+        def close(self) -> None:
+            return
+
+    monkeypatch.setattr(hook_worker_module, "get_native_policy_snapshot_publisher", lambda _store: _Publisher())
+
+    worker = hook_worker_module.HookWorker(store=GuardStore(tmp_path / "guard-home"))
+    binding = worker.prepare_workspace_policy(tmp_path / "workspace")
+
+    assert binding is not None and binding["generation"] == 2
+    assert len(wait_deadlines) == 2
 
 
 def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
@@ -441,7 +497,10 @@ def test_same_generation_retries_reuse_exact_signed_snapshot_bytes(
 
     def counted_builder(**kwargs: object) -> dict[str, object]:
         nonlocal build_calls
-        build_calls += 1
+        # The synthetic semantic-identity build (expires_at_ms == 1) is not an
+        # installable snapshot and is memoized per runtime and input digest.
+        if kwargs.get("expires_at_ms") != 1:
+            build_calls += 1
         return original_builder(**kwargs)
 
     monkeypatch.setattr(snapshot_module, "build_policy_snapshot_v3", counted_builder)

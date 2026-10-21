@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+from tests.dashboard_bundle_support import dashboard_chunk
+
 ROOT = Path(__file__).resolve().parents[1]
 DECISION_PATH = ROOT / "contracts" / "managed-controls" / "v1" / "product-decision.json"
 ADR_PATH = ROOT / "docs" / "guard" / "adr" / "0011-extension-first-managed-controls.md"
@@ -14,26 +16,9 @@ RULES_PAGE_PATH = ROOT / "dashboard" / "src" / "policy-workspace-page.tsx"
 APP_PATH = ROOT / "dashboard" / "src" / "app.tsx"
 APP_TITLE_TEST_PATH = ROOT / "dashboard" / "src" / "scrg171-172.test.ts"
 DASHBOARD_BUNDLE_PATH = (
-    ROOT
-    / "src"
-    / "codex_plugin_scanner"
-    / "guard"
-    / "daemon"
-    / "static"
-    / "assets"
-    / "guard-dashboard.js"
+    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "static" / "assets" / "guard-dashboard.js"
 )
-POLICY_BUNDLE_PATH = (
-    ROOT
-    / "src"
-    / "codex_plugin_scanner"
-    / "guard"
-    / "daemon"
-    / "static"
-    / "assets"
-    / "chunks"
-    / "policy-workspace-page.js"
-)
+POLICY_BUNDLE_PATH = dashboard_chunk("policy-workspace-page")
 MANAGED_CONTROLS_DOCS = (
     ROOT / "docs" / "guard" / "managed-controls-local-extensions.md",
     ROOT / "docs" / "guard" / "managed-controls-cloud-operator-guide.md",
@@ -44,19 +29,11 @@ MANAGED_CONTROLS_DOCS = (
     ROOT / "docs" / "guard" / "managed-controls-rollback-runbook.md",
     ROOT / "docs" / "guard" / "managed-controls-release-notes.md",
 )
-MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(
-    sorted((ROOT / "docs" / "guard").glob("managed-controls*.md"))
-)
+MANAGED_CONTROLS_CLOUD_BOUNDARY_DOCS = tuple(sorted((ROOT / "docs" / "guard").glob("managed-controls*.md")))
 MARKDOWN_LINK = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-EXTENSION_CONTROL_API_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
-)
-MANAGED_CONTROLS_API_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
-)
-POLICY_COMMAND_PATH = (
-    ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
-)
+EXTENSION_CONTROL_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "extension_control_api.py"
+MANAGED_CONTROLS_API_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "daemon" / "managed_controls_api.py"
+POLICY_COMMAND_PATH = ROOT / "src" / "codex_plugin_scanner" / "guard" / "cli" / "commands_dispatch_policy_document.py"
 
 EXPECTED_PRODUCT_DECISION: dict[str, object] = {
     "authority_modes": [
@@ -190,7 +167,7 @@ def test_local_navigation_uses_product_language_without_breaking_routes() -> Non
     assert 'href: "/extensions"' in navigation
     assert 'description: "Tools and capabilities protected on this device"' in navigation
     assert 'eyebrow="Rules & exceptions"' in rules_page
-    assert 'title="Remembered decisions and exceptions"' in rules_page
+    assert 'title="What Guard remembers, allows, and blocks"' in rules_page
     assert "Configure tools and capability posture in Extensions." in rules_page
     assert 'if (view === "policy") return "Rules & exceptions";' in app
     assert 'viewTitle("policy") === "Rules & exceptions"' in app_title_test
@@ -204,7 +181,7 @@ def test_packaged_dashboard_matches_the_reviewed_product_vocabulary() -> None:
     assert "Rules & exceptions" in dashboard_bundle
     assert "Tools and capabilities protected on this device" in dashboard_bundle
     assert "Rules & exceptions" in policy_bundle
-    assert "Remembered decisions and exceptions" in policy_bundle
+    assert "What Guard remembers, allows, and blocks" in policy_bundle
     assert "Configure tools and capability posture in Extensions." in policy_bundle
 
     for stale_copy in (
@@ -321,9 +298,7 @@ def test_support_projection_fields_exist_in_current_local_apis() -> None:
 
 
 def test_managed_controls_release_runbook_uses_repository_tooling() -> None:
-    release_runbook = (ROOT / "docs" / "guard" / "managed-controls-release-runbook.md").read_text(
-        encoding="utf-8"
-    )
+    release_runbook = (ROOT / "docs" / "guard" / "managed-controls-release-runbook.md").read_text(encoding="utf-8")
     assert "uv run python scripts/ci/managed_controls_release_gate.py" in release_runbook
     assert "uv run pytest tests/managed_controls" in release_runbook
     assert "uv run pytest tests/test_managed_controls_contract_docs.py" in release_runbook

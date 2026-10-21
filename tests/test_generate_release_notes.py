@@ -76,6 +76,8 @@ def test_select_previous_tag_picks_closest_same_channel_tag() -> None:
     assert select_previous_tag(["alpha/v3.0.0a289", "alpha/v3.0.0a290"], "3.0.0a290", "alpha") == "alpha/v3.0.0a289"
     assert select_previous_tag(["v2.2.128"], "3.0.0", "stable") == "v2.2.128"
     assert select_previous_tag(["v3.0.1"], "3.0.1", "stable") is None
+    assert select_previous_tag(["alpha/v3.1.0a13", "v3.42.0"], "3.43.0a1", "alpha") == "v3.42.0"
+    assert select_previous_tag(["v3.42.0", "alpha/v3.43.0a1"], "3.43.0a2", "alpha") == "alpha/v3.43.0a1"
 
 
 def test_extract_summary_bullets_reads_summary_section_with_limits() -> None:
@@ -209,6 +211,10 @@ def test_render_notes_alpha_channel_and_empty_history() -> None:
         source_sha="a" * 40,
     )
     assert "opt-in prerelease" in alpha
+    assert "`hol-guard update --alpha`" in alpha
+    assert "platform wheel attached to [this prerelease]" in alpha
+    assert "pure wheel only" in alpha
+    assert 'uv tool install "hol-guard[cisco]==3.0.0a290"' not in alpha
     assert "since [Guard 3.0.0a289]" in alpha
 
     empty = render_notes(
@@ -401,8 +407,7 @@ def test_render_notes_alpha_channel_links_published_predecessor() -> None:
     )
     assert "opt-in prerelease" in notes
     assert (
-        "since [Guard 3.0.0a289]"
-        "(https://github.com/hashgraph-online/hol-guard/releases/tag/alpha/v3.0.0a289)" in notes
+        "since [Guard 3.0.0a289](https://github.com/hashgraph-online/hol-guard/releases/tag/alpha/v3.0.0a289)" in notes
     )
     assert "**Full changelog**: [alpha/v3.0.0a289...alpha/v3.0.0a290]" in notes
 
@@ -455,9 +460,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = json.dumps({"tag_name": "v3.0.191", "draft": False})
         stderr = ""
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Ok()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Ok())
     resolved = resolve_previous_release(REPO, "v3.0.191")
     assert resolved.status == "published"
     assert resolved.url == "https://github.com/hashgraph-online/hol-guard/releases/tag/v3.0.191"
@@ -467,9 +470,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = ""
         stderr = "gh: Not Found (HTTP 404)"
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: NotFound()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: NotFound())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unpublished"
 
     class ServerError:
@@ -477,9 +478,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = ""
         stderr = "gh: Server Error (HTTP 500)"
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: ServerError()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: ServerError())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unavailable"
 
     class Draft:
@@ -487,9 +486,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
         stdout = json.dumps({"tag_name": "v3.0.191", "draft": True})
         stderr = ""
 
-    monkeypatch.setattr(
-        "scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Draft()
-    )
+    monkeypatch.setattr("scripts.ci.generate_release_notes.subprocess.run", lambda *a, **k: Draft())
     assert resolve_previous_release(REPO, "v3.0.191").status == "unpublished"
 
     def explode(*a, **k):
@@ -499,9 +496,7 @@ def test_resolve_previous_release_published_unpublished_unavailable(monkeypatch)
     assert resolve_previous_release(REPO, "v3.0.191").status == "unavailable"
 
 
-def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(tmp_path: Path, monkeypatch, capsys) -> None:
     repo = tmp_path / "repo"
     repo.mkdir()
     _git(repo, "init", "--initial-branch=main")
@@ -540,12 +535,10 @@ def test_main_degrades_to_labelled_comparison_when_release_lookup_fails(
     assert release_url not in notes
     assert "since tag `v3.0.191` (published release lookup unavailable)." in notes
     assert "**Source comparison**: [v3.0.191...v3.0.192]" in notes
-    assert "uv tool install \"hol-guard[cisco]==3.0.192\"" in notes
+    assert 'uv tool install "hol-guard[cisco]==3.0.192"' in notes
 
 
-def test_main_links_no_release_when_tag_exists_without_release_object(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_main_links_no_release_when_tag_exists_without_release_object(tmp_path: Path, monkeypatch, capsys) -> None:
     """v3.0.191 case: the tag exists but has no public release object.
 
     The releases API succeeds and only v3.0.190 (older, published) comes back,
@@ -597,4 +590,3 @@ def test_main_links_no_release_when_tag_exists_without_release_object(
     assert "since tag `v3.0.191` (previous tag has no published release)." in notes
     assert "**Source comparison**: [v3.0.191...v3.0.192]" in notes
     assert "**Full changelog**" not in notes
-

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -15,6 +16,7 @@ from .extension_control_contract import ExtensionControlLayer, ResolverFailureCo
 
 _RUNTIME_SNAPSHOT_SCHEMA = "guard.extension-control-runtime-snapshot.v1"
 _NO_CONTROL_DIGEST = hashlib.sha256(b"hol.guard.extension-control:none:v1").hexdigest()
+_MAX_PROTECTED_FLOORS = 32
 _ACTIVE_SNAPSHOT: ContextVar[ExtensionControlRuntimeSnapshot | None] = ContextVar(
     "guard_extension_control_runtime_snapshot",
     default=None,
@@ -39,6 +41,10 @@ class ExtensionControlRuntimeSnapshot:
     effective_digest: str
     layers: tuple[ExtensionControlLayer, ...]
     managed_revision: int = 0
+    # Carried from the view this snapshot was built from: the authority behind
+    # it was never read. It stays out of the effective digest so an unread
+    # placeholder and a read authority with the same contents still agree.
+    unread: bool = False
 
     @classmethod
     def from_authority_view(cls, view: ExtensionControlAuthorityView) -> ExtensionControlRuntimeSnapshot:
@@ -62,6 +68,7 @@ class ExtensionControlRuntimeSnapshot:
             effective_digest=hashlib.sha256(framed.encode("utf-8")).hexdigest(),
             layers=view.layers,
             managed_revision=view.managed_revision,
+            unread=view.unread,
         )
 
     @property
@@ -86,9 +93,16 @@ class ExtensionControlRuntime:
         self._highest_protected_revision = (
             (initial.revision, initial.managed_revision) if initial.health is AuthorityHealth.PROTECTED else (0, 0)
         )
-        self._highest_protected_digest = (
-            self._snapshot.effective_digest if initial.health is AuthorityHealth.PROTECTED else None
-        )
+        # One floor digest per catalog. A view read for another catalog is a
+        # different projection of the same authority, not a second authority
+        # offered for the same revision, so one catalog's floor says nothing
+        # about another's. Keeping only the last catalog's floor would let two
+        # catalogs alternating at one revision step around the replacement
+        # check, and this daemon alternates routinely: it rebinds whenever an
+        # activation lands. The revision floor below still applies to all.
+        self._protected_floors: OrderedDict[str, tuple[tuple[int, int], str]] = OrderedDict()
+        if initial.health is AuthorityHealth.PROTECTED:
+            self._record_floor_locked(self._snapshot)
 
     def current(self) -> ExtensionControlRuntimeSnapshot:
         with self._lock:
@@ -114,7 +128,10 @@ class ExtensionControlRuntime:
             if candidate.health is not AuthorityHealth.PROTECTED:
                 raise ValueError("extension control runtime recovery is not protected")
             self._highest_protected_revision = (candidate.revision, candidate.managed_revision)
-            self._highest_protected_digest = candidate.effective_digest
+            # Recovery exists to leave a poisoned floor behind, so every floor
+            # the poisoned authority published goes with it.
+            self._protected_floors.clear()
+            self._record_floor_locked(candidate)
             self._snapshot = candidate
             return candidate
 
@@ -140,11 +157,8 @@ class ExtensionControlRuntime:
             or candidate.managed_revision < self._highest_protected_revision[1]
         ):
             raise ValueError("extension control runtime revision cannot move backwards")
-        if (
-            candidate_revision == self._highest_protected_revision
-            and self._highest_protected_digest is not None
-            and candidate.effective_digest != self._highest_protected_digest
-        ):
+        floor = self._protected_floors.get(candidate.catalog_digest)
+        if floor is not None and floor[0] == candidate_revision and floor[1] != candidate.effective_digest:
             raise ValueError("extension control runtime revision cannot be replaced")
 
     def _install_candidate_locked(
@@ -156,10 +170,23 @@ class ExtensionControlRuntime:
         if not validated:
             self._validate_candidate_locked(candidate)
         if candidate.health is AuthorityHealth.PROTECTED:
-            self._highest_protected_digest = candidate.effective_digest
             self._highest_protected_revision = (candidate.revision, candidate.managed_revision)
+            self._record_floor_locked(candidate)
         self._snapshot = candidate
         return candidate
+
+    def _record_floor_locked(self, candidate: ExtensionControlRuntimeSnapshot) -> None:
+        floors = self._protected_floors
+        revision = (candidate.revision, candidate.managed_revision)
+        floors[candidate.catalog_digest] = (revision, candidate.effective_digest)
+        floors.move_to_end(candidate.catalog_digest)
+        while len(floors) > _MAX_PROTECTED_FLOORS:
+            # A daemon serves its core registry and the packs activated while
+            # it runs, so this bound is not reached by ordinary use; it is here
+            # so a churn of activations cannot grow the map without end. The
+            # oldest catalog goes first, and the revision floor above still
+            # refuses anything behind the highest revision installed.
+            _ = floors.popitem(last=False)
 
 
 @contextmanager

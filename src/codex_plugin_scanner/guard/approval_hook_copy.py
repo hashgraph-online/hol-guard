@@ -7,14 +7,15 @@ from collections.abc import Mapping
 from pathlib import Path
 from urllib.parse import urlparse
 
-from .approvals import build_approval_browser_url
-from .daemon.manager import load_guard_daemon_auth_token
+from .blocked_request_mode import is_unlinked_connector_setup_reason
+from .daemon.auth_token import load_guard_daemon_auth_token
+from .local_dashboard_session import build_approval_browser_url
 
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "::1", "localhost"})
 _OPEN_GUARD_MARKER = "open hol guard to approve"
 _DEFAULT_HOOK_REASON = "HOL Guard flagged this tool call for review."
 _GUARD_TOKEN_FRAGMENT = re.compile(
-    r"#guard-token=(?:[A-Za-z0-9_~%+-]+\.)*[A-Za-z0-9_~%+-]+",
+    r"#guard-token=[A-Za-z0-9_~%+-]+(?:\.[A-Za-z0-9_~%+-]+)*",
     re.IGNORECASE,
 )
 _SIGNED_APPROVAL_LINK_UNAVAILABLE = (
@@ -29,8 +30,10 @@ def _without_guard_token_fragment(text: str) -> str:
 def _without_raw_approval_url(message: str, review_url: str) -> str:
     without_raw_url = message.replace(review_url, "").strip()
     without_raw_url = re.sub(r":\s*\.(?=\s|$)", ".", without_raw_url)
-    without_raw_url = re.sub(r"[\s:;,]*\.\s*$", ".", without_raw_url)
-    return without_raw_url.rstrip(" :;,")
+    trimmed = without_raw_url.rstrip()
+    if trimmed.endswith("."):
+        trimmed = trimmed[:-1].rstrip(" \t\r\n:;,") + "."
+    return trimmed.rstrip(" :;,")
 
 
 def approval_review_url_from_payload(payload: Mapping[str, object]) -> str | None:
@@ -62,7 +65,12 @@ def live_approval_review_url(url: str, *, guard_home: Path | None) -> str:
     return tokenized if tokenized else url
 
 
-def authenticated_approval_review_url(url: str, *, guard_home: Path | None) -> str | None:
+def authenticated_approval_review_url(
+    url: str,
+    *,
+    guard_home: Path | None,
+    surface: str = "approval-center",
+) -> str | None:
     """Return a signed loopback link, an unchanged external link, or no safe local link."""
 
     if not url or not is_loopback_approval_url(url):
@@ -73,7 +81,7 @@ def authenticated_approval_review_url(url: str, *, guard_home: Path | None) -> s
         token = load_guard_daemon_auth_token(guard_home)
         if not token:
             return None
-        return build_approval_browser_url(url, auth_token=token) or None
+        return build_approval_browser_url(url, auth_token=token, surface=surface) or None
     except Exception:
         return None
 
@@ -88,7 +96,8 @@ def with_approval_review_url(
 
     review_url = approval_review_url_from_payload(payload)
     stripped = reason.strip()
-    if review_url is None:
+    if review_url is None or is_unlinked_connector_setup_reason(stripped):
+        # A default-mode connector setup reason never carries a link.
         return stripped
     live_url = live_approval_review_url(review_url, guard_home=guard_home)
     if live_url != review_url and review_url in stripped:
@@ -109,9 +118,24 @@ def is_loopback_approval_url(url: str) -> bool:
     return parsed.scheme in {"http", "https"} and host in _LOOPBACK_HOSTS
 
 
-def join_native_hook_reason(*values: object | None) -> str:
-    """Join hook reason parts, keeping the tokenized Open-HOL-Guard copy when both exist."""
+def payload_has_unlinked_connector_setup_reason(payload: Mapping[str, object]) -> bool:
+    """Whether a hook response carries the default-mode connector setup reason."""
 
+    hook_output = payload.get("hookSpecificOutput")
+    nested = hook_output.get("permissionDecisionReason") if isinstance(hook_output, Mapping) else None
+    return any(is_unlinked_connector_setup_reason(value) for value in (payload.get("reason"), nested))
+
+
+def join_native_hook_reason(*values: object | None) -> str:
+    """Join hook reason parts, keeping the tokenized Open-HOL-Guard copy when both exist.
+
+    Next to a default-mode connector setup reason, parts that offer approval are dropped.
+    """
+
+    if any(is_unlinked_connector_setup_reason(value) for value in values):
+        values = tuple(
+            value for value in values if not (isinstance(value, str) and _OPEN_GUARD_MARKER in value.lower())
+        )
     messages: list[str] = []
     for value in values:
         if isinstance(value, str) and value.strip():
@@ -154,6 +178,8 @@ def live_hook_approval_context(
 ) -> str | None:
     """Build ephemeral hook copy with a loopback-only scoped dashboard token."""
 
+    if payload_has_unlinked_connector_setup_reason(response_payload):
+        return None
     from .cli.commands_support_runtime_policy import _native_approval_center_context
 
     message = _native_approval_center_context(response_payload, harness=harness)

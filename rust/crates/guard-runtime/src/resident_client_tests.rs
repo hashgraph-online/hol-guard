@@ -92,6 +92,19 @@ impl crate::ResidentStream for TestStream {
 }
 
 #[test]
+fn auth_window_keeps_hook_budgets_and_scales_long_budgets() {
+    assert_eq!(
+        auth_window(Duration::from_millis(100)),
+        Duration::from_millis(100)
+    );
+    assert_eq!(auth_window(Duration::from_millis(750)), AUTH_TIMEOUT);
+    assert_eq!(auth_window(Duration::from_secs(1)), AUTH_TIMEOUT);
+    assert_eq!(auth_window(Duration::from_secs(4)), Duration::from_secs(1));
+    assert_eq!(auth_window(Duration::from_secs(9)), Duration::from_secs(2));
+    assert_eq!(auth_window(Duration::from_secs(60)), Duration::from_secs(2));
+}
+
+#[test]
 fn rejects_non_loopback_tcp_endpoint() {
     let error = match connect_loopback_with_digest(
         "192.0.2.1:80",
@@ -99,7 +112,7 @@ fn rejects_non_loopback_tcp_endpoint() {
         &ExpectedProcessIdentity {
             process_id: 1,
             start_marker: "",
-            digest: None,
+            runtime: ExpectedRuntime::Package,
         },
     ) {
         Ok(_) => panic!("non-loopback endpoint was accepted"),
@@ -349,4 +362,106 @@ fn partial_or_flush_request_write_is_never_retryable() {
         assert_eq!(error.code, "native_client_frame_write_failed");
         assert!(!error.retryable_teardown);
     }
+}
+
+#[test]
+fn rejected_server_proof_never_receives_client_proof_or_request_payload() {
+    use std::net::{TcpListener, TcpStream};
+    use std::thread;
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let address = listener.local_addr().unwrap();
+    let peer = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
+        let mut nonce = [0u8; AUTH_NONCE_BYTES];
+        stream.read_exact(&mut nonce).unwrap();
+        stream.write_all(&[0u8; AUTH_PROOF_BYTES]).unwrap();
+        let mut post_nonce = Vec::new();
+        stream.read_to_end(&mut post_nonce).unwrap();
+        post_nonce
+    });
+    let mut client = TcpStream::connect(address).unwrap();
+    let error = authenticate(
+        &mut client,
+        &[7u8; crate::AUTH_TOKEN_BYTES],
+        Duration::from_secs(1),
+    )
+    .unwrap_err();
+    assert_eq!(error.code, "native_client_auth_rejected");
+    assert!(!error.retryable_teardown);
+    drop(client);
+    assert!(peer.join().unwrap().is_empty());
+}
+
+#[test]
+fn resident_proofs_are_role_bound_and_match_fixed_hmac_vectors() {
+    let token = [7u8; crate::AUTH_TOKEN_BYTES];
+    let nonce = [11u8; AUTH_NONCE_BYTES];
+    let server = hmac_sha256(&token, SERVER_PROOF_LABEL, &nonce);
+    let client = hmac_sha256(&token, CLIENT_PROOF_LABEL, &nonce);
+    assert_ne!(server, client);
+    assert_eq!(
+        hex::encode(server),
+        "31fb45d43ad5910eb2988dacbaa675809cf398dead1ac909b41c1b05f73d6ca2"
+    );
+    assert_eq!(
+        hex::encode(client),
+        "7eee66422a1717a1650543cdd98cf98847fe78bb45611c4f4fd1b4086aa7742d"
+    );
+}
+
+struct DripStream {
+    delay: Duration,
+}
+
+impl Read for DripStream {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        std::thread::sleep(self.delay);
+        buffer[0] = 0;
+        Ok(1)
+    }
+}
+
+impl Write for DripStream {
+    fn write(&mut self, buffer: &[u8]) -> io::Result<usize> {
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl crate::ResidentStream for DripStream {
+    fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn try_read_available(&mut self, _output: &mut [u8]) -> io::Result<usize> {
+        Ok(0)
+    }
+}
+
+#[test]
+fn dripped_server_proof_cannot_outlast_the_handshake_window() {
+    let mut stream = DripStream {
+        delay: Duration::from_millis(30),
+    };
+    let started = std::time::Instant::now();
+    let error = authenticate(&mut stream, b"token", Duration::from_millis(400))
+        .expect_err("a proof dripped past the window must fail closed");
+    assert_eq!(error.code, "native_client_frame_read_failed");
+    assert!(!error.retryable_teardown);
+    assert!(started.elapsed() < Duration::from_millis(600));
 }

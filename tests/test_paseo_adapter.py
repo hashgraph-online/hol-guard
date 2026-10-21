@@ -231,6 +231,25 @@ def test_preflight_checks_every_selected_provider_before_any_write(context: Harn
     assert not context.guard_home.exists()
 
 
+def test_preflight_is_repeated_under_shared_owner_before_native_writes(
+    context: HarnessContext, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    configure(context, {"claude": {"enabled": True}, "pi": {"enabled": True}})
+    settings = context.home_dir / ".pi/agent/settings.json"
+    preflight = PaseoHarnessAdapter.preflight_management
+
+    def concurrent_edit(self, ctx, *, operation):
+        preflight(self, ctx, operation=operation)
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text("not-json", encoding="utf-8")
+
+    monkeypatch.setattr(PaseoHarnessAdapter, "preflight_management", concurrent_edit)
+    with pytest.raises(ValueError):
+        PaseoHarnessAdapter().install(context)
+    assert not (context.home_dir / ".claude/settings.json").exists()
+    assert settings.read_text(encoding="utf-8") == "not-json"
+
+
 @pytest.mark.parametrize(
     "override",
     [
@@ -437,16 +456,16 @@ def test_paseo_capability_does_not_claim_uniform_fail_closed_hooks() -> None:
 
 
 @pytest.mark.parametrize("include_native", [False, True])
-def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_content(
+def test_cloud_sync_labels_paseo_inventory_with_its_own_agent_type(
     context: HarnessContext, monkeypatch: pytest.MonkeyPatch, include_native: bool
 ) -> None:
-    """Keep unsupported composite events and content out of otherwise valid native cloud batches."""
+    """Send the Paseo composite under its own agent type next to native provider inventories."""
     from types import SimpleNamespace
 
     from codex_plugin_scanner.guard import aibom_cli
     from codex_plugin_scanner.guard.aibom_content_upload import empty_content_upload_summary
     from codex_plugin_scanner.guard.inventory_contract import GuardAgentInventorySnapshot
-    from codex_plugin_scanner.guard.runtime import runner
+    from codex_plugin_scanner.guard.runtime import runner, runner_native_sync
 
     generated = "2026-09-11T00:00:00Z"
     local = GuardAgentInventorySnapshot("paseo:local", "paseo:agent", "paseo", generated)
@@ -476,9 +495,11 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
 
     monkeypatch.setattr(aibom_cli, "collect_aibom_snapshots", collect)
     monkeypatch.setattr(aibom_cli, "upload_primary_content_sources", upload)
-    monkeypatch.setattr(runner, "_guard_events_sync_url", lambda url: url)
+    monkeypatch.setattr(runner_native_sync, "guard_events_sync_url", lambda url: url)
     monkeypatch.setattr(runner, "_guard_sync_request", request)
-    monkeypatch.setattr(runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {"accepted": 1, "rejected": 0})
+    monkeypatch.setattr(
+        runner, "_urlopen_json_with_timeout_retry", lambda **_kwargs: {"accepted": len(snapshots), "rejected": 0}
+    )
     summary = aibom_cli.sync_aibom_snapshots(
         store,
         context,
@@ -486,14 +507,10 @@ def test_cloud_sync_preserves_native_inventories_without_sending_local_paseo_con
         auth_context={"sync_url": "https://hol.test/api/v1/guard/events", "token": "test-token"},
     )
     assert summary["synced"] is True
-    assert summary["snapshots"] == int(include_native)
-    assert len(sent) == int(include_native)
-    assert all(event["payload"]["snapshot"]["agentType"] == "pi" for batch in sent for event in batch["events"])
-    assert [source.snapshot_id for sources in uploads for source in sources] == (
-        [native.snapshot_id] if include_native else []
+    assert summary["snapshots"] == len(snapshots)
+    sent_types = sorted(event["payload"]["snapshot"]["agentType"] for batch in sent for event in batch["events"])
+    assert sent_types == sorted(snapshot.agent_type for snapshot in snapshots)
+    assert sorted(source.snapshot_id for sources in uploads for source in sources) == sorted(
+        snapshot.snapshot_id for snapshot in snapshots
     )
     assert serialize_inventory_snapshot(local)["agentType"] == "paseo"
-    with pytest.raises(ValueError, match="local-only"):
-        aibom_cli._inventory_snapshot_event(
-            snapshot=local, workspace_id="workspace-1", device_id=None, generated_at=generated
-        )

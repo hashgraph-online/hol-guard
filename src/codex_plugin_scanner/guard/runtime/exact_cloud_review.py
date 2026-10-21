@@ -370,6 +370,11 @@ def authorize_exact_cloud_review_job(
         CommandCapabilityError,
         _command_job_seen,
     )
+    from .native_workspace_review_queue import (
+        NativeWorkspaceReviewQueueError,
+        native_workspace_review_payload,
+        require_native_workspace_review_authority,
+    )
 
     try:
         identity = _exact_job_identity(job)
@@ -379,11 +384,8 @@ def authorize_exact_cloud_review_job(
         if expires_at > _now(now) + timedelta(hours=24):
             raise ExactCloudReviewError("remote_exact_job_expiry_too_distant")
         payload = job.get("payload")
-        remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
-        if not isinstance(remote_approval, Mapping):
-            raise ExactCloudReviewError("remote_exact_job_invalid")
-        approval = {str(key): value for key, value in remote_approval.items() if isinstance(key, str)}
-        if remote_approval_uses_workspace_admin_mfa(approval):
+        native_command = native_workspace_review_payload(payload)
+        if native_command is not None:
             if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
                 raise ExactCloudReviewError("cloud_review_capability_revoked")
             oauth = _oauth_metadata(store)
@@ -391,21 +393,38 @@ def authorize_exact_cloud_review_job(
                 raise ExactCloudReviewError("remote_exact_job_wrong_target")
             if identity["workspaceId"] != oauth.workspace_id:
                 raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
-            if approval.get("grantId") != oauth.grant_id:
-                raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+            try:
+                require_native_workspace_review_authority(store, native_command)
+            except NativeWorkspaceReviewQueueError as error:
+                raise ExactCloudReviewError(error.code) from error
         else:
-            capability = _verified_capability(store, now=now)
-            if identity["deviceId"] != capability["deviceId"]:
-                raise ExactCloudReviewError("remote_exact_job_wrong_target")
-            if identity["workspaceId"] != capability["workspaceId"]:
-                raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
-            if approval.get("grantId") != capability["grantId"]:
-                raise ExactCloudReviewError("remote_exact_job_wrong_grant")
-            if approval.get("capabilityId") != _capability_digest(capability):
-                raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
-        if _command_job_seen(store, identity, now=now):
+            remote_approval = payload.get("remoteApproval") if isinstance(payload, Mapping) else None
+            if not isinstance(remote_approval, Mapping):
+                raise ExactCloudReviewError("remote_exact_job_invalid")
+            approval = {str(key): value for key, value in remote_approval.items() if isinstance(key, str)}
+            if remote_approval_uses_workspace_admin_mfa(approval):
+                if store.get_sync_payload(EXACT_CLOUD_REVIEW_REVOCATION_STATE_KEY) is not None:
+                    raise ExactCloudReviewError("cloud_review_capability_revoked")
+                oauth = _oauth_metadata(store)
+                if identity["deviceId"] != oauth.device_id:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_target")
+                if identity["workspaceId"] != oauth.workspace_id:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+                if approval.get("grantId") != oauth.grant_id:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+            else:
+                capability = _verified_capability(store, now=now)
+                if identity["deviceId"] != capability["deviceId"]:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_target")
+                if identity["workspaceId"] != capability["workspaceId"]:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_workspace")
+                if approval.get("grantId") != capability["grantId"]:
+                    raise ExactCloudReviewError("remote_exact_job_wrong_grant")
+                if approval.get("capabilityId") != _capability_digest(capability):
+                    raise ExactCloudReviewError("remote_exact_job_capability_mismatch")
+        if native_command is None and _command_job_seen(store, identity, now=now):
             raise ExactCloudReviewError("remote_exact_job_replayed")
-    except (ExactCloudReviewError, KeyError) as error:
+    except (ExactCloudReviewError, NativeWorkspaceReviewQueueError, KeyError) as error:
         code = error.code if isinstance(error, ExactCloudReviewError) else "remote_exact_job_invalid"
         raise CommandCapabilityError(code) from error
     return AuthorizedCommandJob(

@@ -4,14 +4,18 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from ..action_lattice import coerce_guard_action, most_restrictive_guard_action
+from ..action_lattice import coerce_guard_action
+from ..hook_execution_environment import HOOK_EXECUTION_ENVIRONMENT_KEY
+from ..local_cli_hook import local_cli_grant_action
 from ..models import GuardAction, GuardArtifact
+from ..native_hook_artifact_compose import native_hook_compose
+from ..native_policy_snapshot_constants import NativePolicySnapshotError
+from ..native_policy_snapshot_publisher import provision_native_verifier_key_for_store
 from ..native_pretool import native_pre_tool_policy_floor
 from ..runtime.actions import GuardActionEnvelope
 from ..store import GuardStore
-from .commands_hook_local_cli import local_cli_grant_action
 
 
 def _runtime_package_raw_command(
@@ -39,6 +43,7 @@ def native_pre_tool_floor_action(
     guard_home: Path,
     cwd: Path | None,
     home_dir: Path | None,
+    execution_environment: Mapping[str, object] | None = None,
 ) -> GuardAction | None:
     if event_name != "PreToolUse" or command is None:
         return None
@@ -48,35 +53,78 @@ def native_pre_tool_floor_action(
             guard_home=guard_home,
             cwd=cwd,
             home_dir=home_dir,
+            execution_environment=execution_environment,
         )
     )
 
 
-def attach_native_pre_tool_floor(
+def _stamped_execution_environment(payload: Mapping[str, object]) -> Mapping[str, object] | None:
+    """The shell environment the outer hook bridge stamped on this event.
+
+    The floor runs where the hook worker runs, not in the shell the command
+    is about to run in, so the variables it can read are its own. The stamp
+    is what the bridge took in that shell, and the rules that answer for an
+    inherited variable are proven from it or not at all.
+    """
+
+    stamped = payload.get(HOOK_EXECUTION_ENVIRONMENT_KEY)
+    return stamped if isinstance(stamped, Mapping) else None
+
+
+def _ensure_native_resident_verifier(
+    store: GuardStore | None,
+    guard_home: Path,
+) -> None:
+    """Provision the resident verifier key before a native floor request.
+
+    Production hook entry provisions through the policy snapshot publisher at
+    worker start.  A direct evaluator call must establish the same one-time
+    prerequisite or the resident refuses to serve and the floor fails closed.
+    Provisioning stays best-effort here: failure leaves the fail-closed floor
+    intact instead of inventing a weaker native answer.
+    """
+
+    if store is None:
+        return
+    key_path = guard_home / "native-runtime" / "policy-verifier.key"
+    try:
+        if key_path.is_file():
+            return
+    except OSError:
+        return
+    try:
+        provision_native_verifier_key_for_store(store)
+    except (NativePolicySnapshotError, OSError, RuntimeError, TypeError, ValueError, AttributeError):
+        return
+
+
+def native_pre_tool_floor(
     event_name: str,
     payload: Mapping[str, object],
     action_envelope: GuardActionEnvelope | None,
-    current_action_inputs: list[GuardAction],
     *,
     guard_home: Path,
     cwd: Path | None,
     home_dir: Path,
+    store: GuardStore | None = None,
 ) -> GuardAction | None:
-    floor = native_pre_tool_floor_action(
+    command = _runtime_package_raw_command(payload, action_envelope)
+    if event_name == "PreToolUse" and command is not None:
+        _ensure_native_resident_verifier(store, guard_home)
+    return native_pre_tool_floor_action(
         event_name,
-        _runtime_package_raw_command(payload, action_envelope),
+        command,
         guard_home=guard_home,
         cwd=cwd,
         home_dir=home_dir,
+        execution_environment=_stamped_execution_environment(payload),
     )
-    if floor is not None:
-        current_action_inputs.append(floor)
-    return floor
 
 
-def apply_local_grant_then_native_floor(
+def settle_local_grants(
     *,
     store: GuardStore,
+    guard_home: Path,
     command: str | None,
     cwd: Path,
     home_dir: Path,
@@ -84,8 +132,16 @@ def apply_local_grant_then_native_floor(
     policy_action: GuardAction,
     approval_context_policy_action: GuardAction,
     grant_allowed: bool,
+    tool_grant_applied: bool,
     native_floor: GuardAction | None,
 ) -> tuple[GuardAction, GuardAction, GuardAction]:
+    """Gather the local grant evidence; the resident settles the actions."""
+
+    if tool_grant_applied:
+        applied = native_hook_compose("tool_grant_apply", {}, guard_home=guard_home)
+        current_policy_action = cast(GuardAction, applied["current_policy_action"])
+        policy_action = cast(GuardAction, applied["policy_action"])
+        approval_context_policy_action = cast(GuardAction, applied["approval_context_policy_action"])
     granted = local_cli_grant_action(
         store=store,
         command=command,
@@ -94,16 +150,21 @@ def apply_local_grant_then_native_floor(
         current_action=current_policy_action,
         grant_allowed=grant_allowed,
     )
-    if granted != current_policy_action:
-        current_policy_action = granted
-        policy_action = granted
-        approval_context_policy_action = granted
-    if native_floor is None:
-        return policy_action, current_policy_action, approval_context_policy_action
+    settled = native_hook_compose(
+        "grant_settle",
+        {
+            "current_action": current_policy_action,
+            "policy_action": policy_action,
+            "approval_context_action": approval_context_policy_action,
+            "granted_action": granted,
+            "native_floor": native_floor,
+        },
+        guard_home=guard_home,
+    )
     return (
-        most_restrictive_guard_action(policy_action, native_floor),
-        most_restrictive_guard_action(current_policy_action, native_floor),
-        most_restrictive_guard_action(approval_context_policy_action, native_floor),
+        cast(GuardAction, settled["policy_action"]),
+        cast(GuardAction, settled["current_policy_action"]),
+        cast(GuardAction, settled["approval_context_policy_action"]),
     )
 
 

@@ -1,0 +1,85 @@
+name: CI cross-platform
+description: Run the cross-platform checks inside the existing CI job.
+inputs:
+  python-version:
+    description: Explicit python-version from the calling job.
+    required: true
+runs:
+  using: composite
+  steps:
+  - name: Download this run's current command projections
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: pytest-native-command-projections
+      path: .
+  - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+    with:
+      python-version: ${{ inputs.python-version }}
+  - name: Set up uv
+    id: setup-uv-primary
+    continue-on-error: true
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - name: Retry uv setup after transient download failure
+    if: steps.setup-uv-primary.outcome == 'failure'
+    uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+    with:
+      version: 0.9.26
+      enable-cache: true
+      cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      save-cache: false
+  - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+  - name: Run cross-platform Guard regressions
+    run: uv run --no-sync pytest tests/test_cli.py tests/test_verification.py tests/test_action_runner.py --tb=short
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+  - name: Download the CI-built Windows native runtime for skill tests
+    if: runner.os == 'Windows'
+    uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+    with:
+      name: windows-native-runtime
+      path: ${{ runner.temp }}/hol-guard-native-runtime
+  - name: Run cross-platform skill-directory identity regressions
+    # Both platforms replay the real native skill operation; macOS uses its
+    # dedicated native-runtime job and Windows reuses the existing artifact.
+    if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE: force
+    run: uv run --no-sync pytest tests/test_guard_skill_directory_identity.py
+      tests/test_guard_skill_directory_identity_discovery.py tests/test_guard_skill_directory_identity_downstream.py tests/test_guard_skill_directory_identity_links.py
+      tests/test_guard_skill_directory_identity_vectors.py
+      tests/test_guard_consumer_skill_directory_identity.py tests/test_guard_runner_skill_directory_identity.py
+      tests/test_guard_aibom_content_upload_batches.py --tb=short
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+  - name: Run native Windows skill transport boundaries
+    if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE_REGRESSION: "1"
+    run: uv run --no-sync pytest tests/test_native_skill_directory_portable.py --tb=short
+    shell: pwsh
+  - name: Run the native MCP relay end to end on Windows
+    # A disposable runner: the lane test starts a real daemon for the account.
+    # The daemon asks a source compiler whether a release bundle is installed
+    # before it republishes; the multicall runtime is that compiler.
+    if: runner.os == 'Windows'
+    env:
+      HOL_GUARD_NATIVE_BINARY: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+      HOL_GUARD_NATIVE_SOURCE_COMPILER: ${{ runner.temp }}/hol-guard-native-runtime/hol-guard-runtime.exe
+    run: uv run --no-sync pytest tests/test_mcp_relay_handoff.py tests/test_mcp_relay_lane_ready_install.py
+      tests/test_mcp_relay_native_launch.py --tb=short
+    shell: pwsh
+  - name: Run Windows direct-lane ACK regressions
+    if: runner.os == 'Windows'
+    run: uv run --no-sync pytest tests/test_native_policy_snapshot_direct_lane_windows.py --tb=short
+    shell: pwsh
+  - name: Run Windows Codex hook process-tree regressions
+    if: runner.os == 'Windows'
+    run: uv run --no-sync pytest tests/test_codex_hook_fallback_isolation.py -k "isolated_process_timeout_kills_descendants
+      or isolated_process_closes_descendant_held_pipes_after_parent_exit" --tb=short
+    shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}

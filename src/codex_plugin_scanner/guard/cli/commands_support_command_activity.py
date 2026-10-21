@@ -26,6 +26,7 @@ from ..runtime.command_activity_display import build_invocation_preview_from_pay
 from ..runtime.command_activity_lifecycle import (
     CommandActivityDecisionFacts,
     build_correlated_post_activity,
+    build_policy_only_pre_hook_evidence,
     build_pre_hook_evidence,
     build_unpaired_post_evidence,
 )
@@ -74,14 +75,18 @@ def record_pre_hook_command_activity_best_effort(
     try:
         if event not in _PRE_HOOK_EVENTS:
             return False
-        evaluation = _evaluate_payload_command(
-            payload,
-            store=store,
-            guard_home=guard_home,
-            cwd=cwd,
-            home_dir=home_dir,
-        )
-        if evaluation is None:
+        try:
+            evaluation = _evaluate_payload_command(
+                payload,
+                store=store,
+                guard_home=guard_home,
+                cwd=cwd,
+                home_dir=home_dir,
+            )
+        except NativeCommandControlMutationRequiredError:
+            _record_persistence_failure(store, "pre_native_control_unavailable")
+            return False
+        if evaluation is None and _payload_command_text(payload) is None:
             return False
         key = load_or_create_installation_correlation_key(guard_home)
         correlation = derive_proven_request_correlation(
@@ -92,36 +97,53 @@ def record_pre_hook_command_activity_best_effort(
         )
         activity_id = _activity_id()
         occurred_at = _utc_now()
-        evidence = build_pre_hook_evidence(
-            evaluation,
-            CommandActivityDecisionFacts(
+        if evaluation is None:
+            evidence = build_policy_only_pre_hook_evidence(
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+                harness=harness,
                 policy_action=policy_action,
-                decision_reason_code=_activity_decision_reason(
-                    evaluation,
-                    policy_action=policy_action,
-                    workflow_authorization_claimed=workflow_authorization_claimed,
-                ),
+                request_correlation=correlation,
+                receipt_id=receipt_id,
                 prompted=prompted,
                 approval_reuse_status=approval_reuse_status,
-                receipt_id=receipt_id,
                 workflow_authorization_claimed=workflow_authorization_claimed,
-            ),
-            activity_id=activity_id,
-            occurred_at=occurred_at,
-            harness=harness,
-            request_correlation=correlation,
-        )
+            )
+        else:
+            evidence = build_pre_hook_evidence(
+                evaluation,
+                CommandActivityDecisionFacts(
+                    policy_action=policy_action,
+                    decision_reason_code=_activity_decision_reason(
+                        evaluation,
+                        policy_action=policy_action,
+                        workflow_authorization_claimed=workflow_authorization_claimed,
+                    ),
+                    prompted=prompted,
+                    approval_reuse_status=approval_reuse_status,
+                    receipt_id=receipt_id,
+                    workflow_authorization_claimed=workflow_authorization_claimed,
+                ),
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+                harness=harness,
+                request_correlation=correlation,
+            )
         if correlation is not None and store.is_exact_command_activity_pre_replay(evidence):
             return False
-        shadow, shadow_failed = _build_shadow_best_effort(
-            evaluation=evaluation,
-            command_text=_payload_command_text(payload),
-            guard_home=guard_home,
-            cwd=cwd,
-            home_dir=home_dir,
-            policy_action=policy_action,
-            activity_id=activity_id,
-            occurred_at=occurred_at,
+        shadow, shadow_failed = (
+            _build_shadow_best_effort(
+                evaluation=evaluation,
+                command_text=_payload_command_text(payload),
+                guard_home=guard_home,
+                cwd=cwd,
+                home_dir=home_dir,
+                policy_action=policy_action,
+                activity_id=activity_id,
+                occurred_at=occurred_at,
+            )
+            if evaluation is not None
+            else (None, False)
         )
         try:
             recorded = store.record_command_activity(
@@ -318,13 +340,12 @@ def _evaluate_payload_command(
     cwd: Path | None,
     home_dir: Path | None,
 ):
-    try:
-        authority = store.read_extension_control_authority_for_registry(
-            BUILT_IN_COMMAND_EXTENSION_REGISTRY,
-            read_only=True,
-        )
-    except NativeCommandControlMutationRequiredError:
-        return None
+    """Let native control errors reach the caller, which records a failure without activity."""
+
+    authority = store.read_extension_control_authority_for_registry(
+        BUILT_IN_COMMAND_EXTENSION_REGISTRY,
+        read_only=True,
+    )
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(authority)
     arguments = payload.get("tool_input", payload.get("arguments"))
     request = extract_sensitive_tool_action_request(

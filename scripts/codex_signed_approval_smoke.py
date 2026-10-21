@@ -23,9 +23,7 @@ from contextlib import suppress
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
-URL_RE = re.compile(
-    r"https?://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/requests/[A-Za-z0-9_.~-]+(?:#[^\s\"'<>]*)?"
-)
+URL_RE = re.compile(r"https?://(?:127\.0\.0\.1|localhost|\[::1\]):\d+/requests/[A-Za-z0-9_.~-]+(?:#[^\s\"'<>]*)?")
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 
 

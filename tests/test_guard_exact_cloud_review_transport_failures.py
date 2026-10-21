@@ -14,6 +14,7 @@ from codex_plugin_scanner.guard.contracts.guard_cloud_review import validate_exa
 from codex_plugin_scanner.guard.runtime import command_queue
 from codex_plugin_scanner.guard.runtime.command_capability import CommandCapabilityError
 from codex_plugin_scanner.guard.runtime.exact_cloud_review import enable_exact_cloud_review
+from codex_plugin_scanner.guard.runtime.exact_cloud_review_diagnostics import _outbox_status
 from codex_plugin_scanner.guard.runtime.exact_cloud_review_transport import exact_result, exact_transport_job
 from tests.guard_exact_cloud_review_support import (
     add_review_request,
@@ -22,6 +23,28 @@ from tests.guard_exact_cloud_review_support import (
     remote_approval,
     review_request,
 )
+
+
+@pytest.mark.parametrize(
+    ("depth", "error", "binding_state", "expected"),
+    [
+        (23, "review_event_sequence_conflict", "healthy", "retrying"),
+        (23, None, "healthy", "pending"),
+        (0, "old delivery failure", "healthy", "healthy"),
+        (23, "review_event_sequence_conflict", "quarantined", "quarantined"),
+    ],
+)
+def test_outbox_diagnostics_distinguish_delivery_from_identity(
+    depth: int, error: str | None, binding_state: str, expected: str
+) -> None:
+    class Store:
+        def review_event_outbox_status(self, **_kwargs: object) -> dict[str, object]:
+            return {"depth": depth, "last_error": error, "binding_state": binding_state}
+
+    status = _outbox_status(Store(), "workspace-1")
+    assert status["state"] == expected
+    assert status["depth"] == depth
+    assert status["last_delivery_error"] == error
 
 
 def _exact_job(tmp_path: Path):

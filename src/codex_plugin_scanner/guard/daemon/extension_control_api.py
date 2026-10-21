@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import threading
 from collections import OrderedDict
 from dataclasses import dataclass, replace
@@ -13,10 +14,15 @@ from typing import TYPE_CHECKING
 
 from ..approval_gate import (
     ApprovalGateError,
+    ApprovalGateInput,
     consume_extension_control_grant,
     input_from_mapping,
     require_extension_control,
 )
+from ..catalog_delivery import lifecycle
+from ..json_transport import escape_json_for_html
+from ..native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+from ..native_extension_control import NativeExtensionControlError, compose_control_layers
 from ..runtime import command_inspection
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_authority import (
@@ -32,10 +38,10 @@ from ..runtime.extension_control_contract import (
     ExtensionControlLayer,
 )
 from ..runtime.extension_control_limits import (
-    MAX_CATALOG_PAYLOAD_BYTES,
     MAX_CONTROL_LAYERS,
     MAX_CONTROLS_PER_LAYER,
     MAX_CONTROLS_TOTAL,
+    MAX_DAEMON_CATALOG_RESPONSE_BYTES,
     advertised_extension_control_limits,
 )
 from ..runtime.extension_control_proof import (
@@ -44,9 +50,19 @@ from ..runtime.extension_control_proof import (
     ExtensionControlProofError,
     issue_extension_control_proof,
 )
-from ..runtime.extension_control_resolver import compose_control_layers
-from ..runtime.extension_control_runtime import ExtensionControlRuntime
+from ..runtime.extension_control_runtime import ExtensionControlRuntime, ExtensionControlRuntimeSnapshot
 from .extension_control_errors import ExtensionControlApiError
+from .extension_control_preparation_failure import preparation_unavailable
+from .extension_control_prepared import (
+    MAX_CANDIDATES,
+    PreparedControlCandidate,
+    PreparedControlCandidates,
+    expire_leases,
+    expired,
+    prepare_candidate,
+    release_all_leases,
+    request_digest,
+)
 from .extension_control_request import request_needs_proof, required_request_string
 from .extension_control_semantic_preview import build_extension_control_semantic_preview
 from .managed_controls_api import effective_controls_payload
@@ -54,6 +70,7 @@ from .managed_controls_api import effective_controls_payload
 if TYPE_CHECKING:
     from ..store import GuardStore
 
+_LOGGER = logging.getLogger(__name__)
 _EXTENSION_CONTROL_API_SCHEMA = "guard.daemon.extension-controls.v1"
 _MAX_PENDING_PROOFS = 128
 _MAX_APPLIED_MUTATIONS = 128
@@ -66,6 +83,8 @@ _MAX_INSPECTION_COMMAND_CHARS = 4096
 class _PendingMutation:
     mutation: ExtensionControlMutation
     proof: ExtensionControlProof
+    request_digest: str = ""
+    candidate: PreparedControlCandidate | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,11 +105,40 @@ class ExtensionControlApiService:
     ) -> None:
         self._store = store
         self._registry = registry
+        self.catalog_digest = registry.catalog_digest
         self._runtime = runtime
         self._proof_lock = threading.Lock()
         self._apply_lock = threading.Lock()
+        self._preview_lock = threading.Lock()
+        self._candidates = PreparedControlCandidates()
         self._pending_proofs: OrderedDict[str, _PendingMutation] = OrderedDict()
         self._applied_mutations: OrderedDict[str, _AppliedMutation] = OrderedDict()
+
+    def rebind_registry(
+        self,
+        registry: CommandSafetyExtensionRegistry,
+        *,
+        installed: ExtensionControlRuntimeSnapshot,
+    ) -> bool:
+        """Serve the registry whose view the runtime installed as `installed`.
+
+        Proofs prepared against the previous registry name its catalog digest,
+        and a preview in flight sees the registry change, so both fail as
+        conflicts. A refresh rebinds after releasing the authority lease, so
+        an apply can commit a newer activation in between. That apply binds
+        its own registry and installs a newer snapshot, which this refuses to
+        roll back.
+        """
+
+        with self._apply_lock:
+            if self._runtime.current() is not installed:
+                return False
+            self._registry = registry
+            self.catalog_digest = registry.catalog_digest
+            return True
+
+    def recommendation_inputs(self) -> tuple[CommandSafetyExtensionRegistry, ExtensionControlRuntimeSnapshot]:
+        return self._registry, self._runtime.current()
 
     def catalog(self) -> dict[str, object]:
         limits = advertised_extension_control_limits()
@@ -101,21 +149,103 @@ class ExtensionControlApiService:
             "extensions": [extension.to_dict() for extension in self._registry.extensions],
             "limits": {
                 **limits,
-                "max_body_bytes": limits["max_catalog_payload_bytes"],
+                "max_body_bytes": MAX_DAEMON_CATALOG_RESPONSE_BYTES,
                 "max_controls": limits["max_controls_total"],
             },
         }
-        wire_body = json.dumps(payload).encode("utf-8")
-        if len(wire_body) > MAX_CATALOG_PAYLOAD_BYTES:
+        # Measure the exact bytes the daemon writes, including its HTML-safe escaping.
+        wire_body = escape_json_for_html(json.dumps(payload).encode("utf-8"))
+        if len(wire_body) > MAX_DAEMON_CATALOG_RESPONSE_BYTES:
             raise ExtensionControlApiError(413, "catalog_payload_limit_exceeded")
         return payload
 
-    def effective(self) -> dict[str, object]:
-        snapshot = self._runtime.current()
-        return effective_controls_payload(self._registry, snapshot, self._store)
+    def effective(self, *, reread: bool = True) -> dict[str, object]:
+        # Reading the controls must stay a read. Committing a catalog migration
+        # here would move the stored revision under every draft the dashboard
+        # has open, which is the conflict this endpoint is polled to report.
+        #
+        # `reread=False` is for a caller that has just refreshed the runtime
+        # itself. Re-reading durable authority there would take the authority
+        # lease a second time for an answer the caller already installed, and
+        # that second wait is the one a dashboard repair pays for.
+        snapshot = self._runtime.current() if not reread else self._live_snapshot(read_only=True)
+        return self._effective_payload(snapshot)
+
+    def _effective_payload(self, snapshot: ExtensionControlRuntimeSnapshot) -> dict[str, object]:
+        # The native runtime resolves the controls; without an answer there is no payload to serve.
+        try:
+            return effective_controls_payload(self._registry, snapshot, self._store)
+        except NativeExtensionControlError as error:
+            raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
+
+    def _live_snapshot(self, *, read_only: bool = False, apply_locked: bool = False) -> ExtensionControlRuntimeSnapshot:
+        """The snapshot a draft is built on, re-read from durable authority.
+
+        The in-process snapshot only advances when this daemon commits, so a
+        catalog migration or another writer moves the stored revision underneath
+        it. A draft built on the stale revision can never be applied, because
+        the commit checks its expected revision against the store rather than
+        against this process. Re-reading keeps the revision the dashboard draws
+        a draft from the one that commit will check.
+
+        Only an authority that is protected and has moved forward replaces the
+        snapshot. A read that comes back unenrolled, degraded, or behind this
+        process must not take protection away from a running daemon; refreshing
+        is here to catch up with another writer, not to downgrade.
+
+        A protected read for a catalog the snapshot was not built for also
+        replaces it, whatever its revision says. The view was read for the
+        registry this service serves, so keeping a snapshot from another
+        catalog would publish controls under a catalog digest the catalog
+        endpoint no longer names, and a reader comparing the two cannot settle
+        that by reading again.
+
+        `read_only` keeps the read on the shared lock and off the write path, so
+        a caller that only renders the controls cannot settle a pending catalog
+        migration on the operator's behalf.
+
+        `apply_locked` is for a caller that already holds the apply lock. That
+        lock is not reentrant, so taking it again here would deadlock the
+        apply that asked for the snapshot.
+        """
+
+        registry = self._registry
+        current = self._runtime.current()
+        try:
+            view = self._store.read_extension_control_authority_for_registry(registry, read_only=read_only)
+            if view.health is not AuthorityHealth.PROTECTED:
+                return current
+            if view.catalog_digest == current.catalog_digest and (view.revision, view.managed_revision) <= (
+                current.revision,
+                current.managed_revision,
+            ):
+                return current
+            if apply_locked:
+                return self._runtime.refresh(view)
+            with self._apply_lock:
+                # The read above runs without the apply lock, so an apply or a
+                # daemon refresh can install a newer snapshot, or rebind this
+                # service to another registry, while it is in flight. Installing
+                # this view anyway would roll the runtime back under the work
+                # that just landed, and `rebind_registry` would then refuse the
+                # rebind because the snapshot it installed is no longer current.
+                # A reader that lost the race serves what the writer installed.
+                if self._registry is not registry or self._runtime.current() is not current:
+                    return self._runtime.current()
+                return self._runtime.refresh(view)
+        except (ExtensionControlAuthorityError, ValueError, OSError):
+            # Authority that cannot be re-read or installed keeps serving the
+            # snapshot the runtime already holds; mutations still fail closed.
+            return current
 
     def refresh(self) -> dict[str, object]:
-        view = self._store.read_extension_control_authority_for_registry(self._registry)
+        try:
+            view = self._store.read_extension_control_authority_for_registry(self._registry)
+        except NativeCommandControlAuthorityUnavailableError:
+            # A busy lease means this refresh read nothing, not that the route
+            # failed. Serve the snapshot the runtime already holds rather than
+            # retrying the read through effective(), which would wait again.
+            return self._effective_payload(self._runtime.current())
         _ = self._runtime.refresh(view)
         return self.effective()
 
@@ -169,12 +299,22 @@ class ExtensionControlApiService:
             "items": items,
         }
 
-    def _require_action_grant(self, payload: dict[str, object], *, action: str, subject: str) -> None:
+    def _require_action_grant(
+        self,
+        payload: dict[str, object],
+        *,
+        action: str,
+        subject: str,
+        require_fresh_totp: bool = False,
+    ) -> None:
         session_nonce = required_request_string(payload, "session_nonce")
+        gate_input = input_from_mapping(payload)
+        if require_fresh_totp:
+            gate_input = replace(gate_input or ApprovalGateInput(), require_fresh_totp=True)
         try:
             grant = require_extension_control(
                 self._store.guard_home,
-                approval_gate_input=input_from_mapping(payload),
+                approval_gate_input=gate_input,
                 action=action,
                 subject=subject,
                 session_nonce=session_nonce,
@@ -189,7 +329,7 @@ class ExtensionControlApiService:
         except ApprovalGateError as exc:
             raise ExtensionControlApiError(exc.status, exc.code) from exc
 
-    def recover_authority(self, payload: dict[str, object]) -> dict[str, object]:
+    def recover_authority(self, payload: dict[str, object], *, require_fresh_totp: bool = False) -> dict[str, object]:
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         if current.health not in {AuthorityHealth.TAMPERED, AuthorityHealth.RECOVERY_REQUIRED}:
             runtime = self._runtime.current()
@@ -206,7 +346,12 @@ class ExtensionControlApiService:
         _ = self._runtime.refresh(current)
         action = "recover-authority"
         subject = f"{action}:{current.health.value}:{current.revision}:{self._registry.catalog_digest}"
-        self._require_action_grant(payload, action=action, subject=subject)
+        self._require_action_grant(
+            payload,
+            action=action,
+            subject=subject,
+            require_fresh_totp=require_fresh_totp,
+        )
         try:
             view = self._store.recover_extension_control_authority(
                 catalog_digest=self._registry.catalog_digest,
@@ -223,7 +368,13 @@ class ExtensionControlApiService:
         return self.effective()
 
     def acknowledge_degraded(self, payload: dict[str, object]) -> dict[str, object]:
-        if self._runtime.current().health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
+        current_snapshot = self._runtime.current()
+        if current_snapshot.unread:
+            # The daemon started without reading the authority, so degraded mode
+            # here is the absence of a reading. Acknowledging it would persist an
+            # outage nobody observed and invalidate the native policy with it.
+            raise ExtensionControlApiError(503, "authority_unread")
+        if current_snapshot.health is not AuthorityHealth.DEGRADED_UNACKNOWLEDGED:
             raise ExtensionControlApiError(409, "authority_not_degraded")
         current = self._store.read_extension_control_authority_for_registry(self._registry)
         action = "acknowledge-degraded"
@@ -234,14 +385,55 @@ class ExtensionControlApiService:
         return self.effective()
 
     def preview(self, payload: dict[str, object]) -> dict[str, object]:
-        current = self._runtime.current()
-        mutation = self._mutation_from_payload(payload)
-        proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
+        with self._preview_lock, lifecycle.session():
+            try:
+                return self._preview_locked(payload)
+            except NativeExtensionControlError as error:
+                raise ExtensionControlApiError(503, "native_runtime_unavailable") from error
+
+    def _preview_locked(self, payload: dict[str, object]) -> dict[str, object]:
+        from .extension_control_targets import request_metadata
+
+        request_registry = self._registry
+        raw_layers = payload.get("layers")
+        if not isinstance(raw_layers, list):
+            raise ExtensionControlApiError(400, "invalid_layers")
+        if len(raw_layers) > MAX_CONTROL_LAYERS:
+            raise ExtensionControlApiError(400, "layer_limit_exceeded")
+        try:
+            raw = layers_from_json(json.dumps(raw_layers, separators=(",", ":")))
+        except (TypeError, ValueError, ExtensionControlAuthorityError) as exc:
+            raise ExtensionControlApiError(400, "invalid_mutation") from exc
+        if any(len(layer.controls) > MAX_CONTROLS_PER_LAYER for layer in raw):
+            raise ExtensionControlApiError(400, "layer_control_limit_exceeded")
+        if sum(len(layer.controls) for layer in raw) > MAX_CONTROLS_TOTAL:
+            raise ExtensionControlApiError(400, "control_limit_exceeded")
+        # Resolve authority before metadata preparation can perform transfer IO.
+        current = self._live_snapshot(read_only=True)
         if current.health is not AuthorityHealth.PROTECTED:
             raise ExtensionControlApiError(423, "authority_unavailable")
+        try:
+            targets = request_metadata(self._store, request_registry, raw)
+        except (ValueError, OSError) as exc:
+            raise preparation_unavailable(exc, stage="target-metadata") from exc
+        mutation = self._mutation_from_payload(payload, targets=targets)
+        proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
         if mutation.previous_revision != current.revision:
             raise ExtensionControlApiError(409, "revision_conflict")
-        composed = compose_control_layers(proposed_layers)
+        candidate = self._candidates.get_or_prepare(
+            f"{mutation.canonical_digest}:{current.managed_revision}",
+            lambda: prepare_candidate(
+                self._store, targets, mutation, proposed_layers, managed_revision=current.managed_revision
+            ),
+        )
+        if self._registry is not request_registry or self._live_snapshot(read_only=True) != current:
+            raise ExtensionControlApiError(409, "revision_conflict")
+        registry = self._registry if candidate is None else candidate.registry
+        if candidate is not None:
+            self._validate_authority_mutability(proposed_layers, registry=registry)
+            mutation = candidate.mutation
+            proposed_layers = tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in proposed_layers)
+        composed = compose_control_layers(proposed_layers, guard_home=self._store.guard_home)
         if composed.failures:
             raise ExtensionControlApiError(400, composed.failures[0].code.value.replace("_", "-"))
         response: dict[str, object] = {
@@ -253,9 +445,10 @@ class ExtensionControlApiService:
             "global_lockdown": composed.global_lockdown,
             "controls": len(composed.controls),
             "semantic_preview": build_extension_control_semantic_preview(
-                self._registry,
-                current.layers,
+                registry,
+                tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in current.layers),
                 proposed_layers,
+                guard_home=self._store.guard_home,
             ),
         }
         if request_needs_proof(payload):
@@ -269,30 +462,58 @@ class ExtensionControlApiService:
                 )
             except (ApprovalGateError, ExtensionControlProofError) as exc:
                 raise ExtensionControlApiError(423, "approval_required") from exc
-            self._remember_proof(mutation, proof)
+            self._remember_proof(mutation, proof, request_digest=request_digest(payload), candidate=candidate)
             response["proof_id"] = proof.proof_id
         return response
 
+    def expire_prepared_cache_leases(self):
+        expire_leases(self)
+
+    def release_prepared_cache_leases(self):
+        return release_all_leases(self)
+
     def apply(self, payload: dict[str, object]) -> dict[str, object]:
         with self._apply_lock:
-            return self._apply_locked(payload)
+            try:
+                # One verified native executable serves every request of this mutation.
+                with lifecycle.session():
+                    return self._apply_locked(payload)
+            except ExtensionControlApiError:
+                raise
+            except Exception as exc:
+                # Report a stable error instead of dropping the connection.
+                _LOGGER.error("Extension-control apply failed: %s", type(exc).__name__, exc_info=exc)
+                raise ExtensionControlApiError(503, "authority_apply_failed") from exc
 
     def _apply_locked(self, payload: dict[str, object]) -> dict[str, object]:
         proof_id = required_request_string(payload, "proof_id")
-        mutation = self._mutation_from_payload(payload)
         pending = self._proof_state(proof_id)
+        original_digest = request_digest(payload)
         if isinstance(pending, _AppliedMutation):
-            if pending.canonical_digest != mutation.canonical_digest:
+            if pending.canonical_digest != original_digest:
                 raise ExtensionControlApiError(409, "proof_mismatch")
             return dict(pending.response)
-        if pending.mutation.canonical_digest != mutation.canonical_digest:
+        if pending.request_digest != original_digest:
             raise ExtensionControlApiError(409, "proof_mismatch")
-        current = self._runtime.current()
+        mutation = pending.mutation
+        candidate = pending.candidate
+        if candidate is not None and expired((candidate,)):
+            raise ExtensionControlApiError(409, "prepared_preview_expired")
+        registry = self._registry if candidate is None else candidate.registry
+        current = self._live_snapshot(read_only=True, apply_locked=True)
+        if candidate is not None and (
+            current.managed_revision != candidate.managed_revision
+            or tuple(layer for layer in current.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
+            != candidate.managed_layers
+        ):
+            raise ExtensionControlApiError(409, "managed_layer_conflict")
         proposed_layers = self._effective_layers_for_local_mutation(mutation.layers)
+        proposed_layers = tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in proposed_layers)
         semantic_preview = build_extension_control_semantic_preview(
-            self._registry,
-            current.layers,
+            registry,
+            tuple(replace(layer, catalog_digest=registry.catalog_digest) for layer in current.layers),
             proposed_layers,
+            guard_home=self._store.guard_home,
         )
         try:
             _ = self._store.commit_extension_control_layers(
@@ -303,12 +524,19 @@ class ExtensionControlApiService:
                 idempotency_key=mutation.idempotency_key,
                 nonce=mutation.nonce,
                 proof=pending.proof,
+                migration_registry=registry,
+                pack_activation=None if candidate is None else candidate.draft,
+                expected_managed_revision=None if candidate is None else candidate.managed_revision,
+                expected_managed_layers=None if candidate is None else candidate.managed_layers,
+                managed_registry=None if candidate is None else self._registry,
             )
         except ExtensionControlProofError as exc:
             raise ExtensionControlApiError(409, "proof_invalid") from exc
         except (ExtensionControlAuthorityError, ValueError) as exc:
             raise ExtensionControlApiError(409, "authority_conflict") from exc
-        composed_view = self._store.read_extension_control_authority_for_registry(self._registry)
+        self._registry = registry
+        self.catalog_digest = registry.catalog_digest
+        composed_view = self._store.read_extension_control_authority_for_registry(registry)
         snapshot = self._runtime.refresh(composed_view)
         self._store.add_event(
             "extension_control_authority_changed",
@@ -330,7 +558,7 @@ class ExtensionControlApiService:
         }
         with self._proof_lock:
             _ = self._pending_proofs.pop(proof_id, None)
-            self._applied_mutations[proof_id] = _AppliedMutation(mutation.canonical_digest, response)
+            self._applied_mutations[proof_id] = _AppliedMutation(original_digest, response)
             self._applied_mutations.move_to_end(proof_id)
             while len(self._applied_mutations) > _MAX_APPLIED_MUTATIONS:
                 _ = self._applied_mutations.popitem(last=False)
@@ -339,6 +567,8 @@ class ExtensionControlApiService:
     def _canonicalize_extension_ids(
         self,
         layers: tuple[ExtensionControlLayer, ...],
+        *,
+        targets=None,
     ) -> tuple[ExtensionControlLayer, ...]:
         canonical_layers: list[ExtensionControlLayer] = []
         for layer in layers:
@@ -346,7 +576,7 @@ class ExtensionControlApiService:
             seen_targets: set[tuple[ControlTargetKind, str]] = set()
             for control in layer.controls:
                 if control.target.kind is ControlTargetKind.EXTENSION:
-                    extension = self._registry.get(control.target.target_id)
+                    extension = (targets or self._registry).get(control.target.target_id)
                     if extension is None:
                         raise ExtensionControlApiError(400, "unknown_extension")
                     control = replace(
@@ -361,7 +591,10 @@ class ExtensionControlApiService:
             canonical_layers.append(replace(layer, controls=tuple(canonical_controls)))
         return tuple(canonical_layers)
 
-    def _validate_authority_mutability(self, layers: tuple[ExtensionControlLayer, ...]) -> None:
+    def _validate_authority_mutability(
+        self, layers: tuple[ExtensionControlLayer, ...], *, registry: CommandSafetyExtensionRegistry | None = None
+    ) -> None:
+        registry = self._registry if registry is None else registry
         current = self._runtime.current()
         current_managed = tuple(layer for layer in current.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
         proposed_managed = tuple(layer for layer in layers if layer.kind is ControlLayerKind.SIGNED_CLOUD)
@@ -379,11 +612,11 @@ class ExtensionControlApiService:
             immutable = False
             error_code = "immutable_permission"
             if control.target.kind is ControlTargetKind.EXTENSION:
-                extension = self._registry.get(target_id)
+                extension = registry.get(target_id)
                 immutable = extension is not None and extension.required
                 error_code = "immutable_extension"
             else:
-                permission = self._registry.permission(target_id)
+                permission = registry.permission(target_id)
                 immutable = permission is not None and not permission.configurable
             if immutable and current_states.get((control.target.kind, target_id)) != control.state:
                 # Preserve unchanged legacy authority, but do not permit creation or
@@ -391,7 +624,8 @@ class ExtensionControlApiService:
                 # control remains allowed because that restores canonical behavior.
                 raise ExtensionControlApiError(403, error_code)
 
-    def _mutation_from_payload(self, payload: dict[str, object]) -> ExtensionControlMutation:
+    def _mutation_from_payload(self, payload: dict[str, object], *, targets=None) -> ExtensionControlMutation:
+        targets = targets or self._registry
         previous_revision = payload.get("previous_revision")
         raw_layers = payload.get("layers")
         if isinstance(previous_revision, bool) or not isinstance(previous_revision, int):
@@ -402,7 +636,7 @@ class ExtensionControlApiService:
             raise ExtensionControlApiError(400, "layer_limit_exceeded")
         try:
             layers = layers_from_json(json.dumps(raw_layers, separators=(",", ":")))
-            layers = self._canonicalize_extension_ids(layers)
+            layers = self._canonicalize_extension_ids(layers, targets=targets)
             if any(len(layer.controls) > MAX_CONTROLS_PER_LAYER for layer in layers):
                 raise ExtensionControlApiError(400, "layer_control_limit_exceeded")
             if sum(len(layer.controls) for layer in layers) > MAX_CONTROLS_TOTAL:
@@ -433,15 +667,16 @@ class ExtensionControlApiService:
             for control in layer.controls:
                 target_id = control.target.target_id
                 if control.target.kind is ControlTargetKind.EXTENSION:
-                    if self._registry.get(target_id) is None:
+                    if targets.get(target_id) is None:
                         raise ExtensionControlApiError(400, "unknown_extension")
-                elif self._registry.permission(target_id) is None:
+                elif targets.permission(target_id) is None:
                     raise ExtensionControlApiError(400, "unknown_permission")
-        self._validate_authority_mutability(mutation.layers)
+        self._validate_authority_mutability(mutation.layers, registry=targets)
         local_layers = tuple(layer for layer in mutation.layers if layer.kind is ControlLayerKind.LOCAL_ADMIN)
         raw_authority = self._store.read_extension_control_authority_for_registry(
             self._registry,
             include_managed_controls=False,
+            read_only=True,
         )
         persisted_signed_layers = tuple(
             layer for layer in raw_authority.layers if layer.kind is ControlLayerKind.SIGNED_CLOUD
@@ -494,12 +729,17 @@ class ExtensionControlApiService:
             )
         return event_targets
 
-    def _remember_proof(self, mutation: ExtensionControlMutation, proof: ExtensionControlProof) -> None:
+    def _remember_proof(
+        self, mutation: ExtensionControlMutation, proof: ExtensionControlProof, *, request_digest="", candidate=None
+    ) -> None:
         with self._proof_lock:
-            self._pending_proofs[proof.proof_id] = _PendingMutation(mutation, proof)
+            self._pending_proofs[proof.proof_id] = _PendingMutation(mutation, proof, request_digest, candidate)
             self._pending_proofs.move_to_end(proof.proof_id)
             while len(self._pending_proofs) > _MAX_PENDING_PROOFS:
                 _ = self._pending_proofs.popitem(last=False)
+            while sum(item.candidate is not None for item in self._pending_proofs.values()) > MAX_CANDIDATES:
+                oldest = next(key for key, item in self._pending_proofs.items() if item.candidate is not None)
+                del self._pending_proofs[oldest]
 
     def _proof_state(self, proof_id: str) -> _PendingMutation | _AppliedMutation:
         with self._proof_lock:

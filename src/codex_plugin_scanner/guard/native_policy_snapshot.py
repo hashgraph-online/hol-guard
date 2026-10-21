@@ -30,6 +30,7 @@ from . import native_policy_snapshot_windows_io as _windows_io
 from . import native_policy_snapshot_windows_key as _windows_key
 from . import native_policy_snapshot_windows_state as _windows_state
 from . import native_policy_snapshot_windows_support as _windows_support
+from .fork_safety import forget_in_child
 from .native_policy_snapshot_publisher import NativePolicySnapshotPublisher
 
 globals().update({name: getattr(_constants, name) for name in _constants.__all__})
@@ -50,15 +51,12 @@ derive_native_policy_verifier_key = _codec.derive_native_policy_verifier_key
 native_policy_verifier_key_id = _codec.native_policy_verifier_key_id
 build_policy_snapshot_v3 = _contract.build_policy_snapshot_v3
 snapshot_bytes_v3 = _contract.snapshot_bytes_v3
-snapshot_config_digest_v3 = _contract.snapshot_config_digest_v3
-snapshot_signing_bytes_v3 = _contract.snapshot_signing_bytes_v3
+snapshot_mac_matches_v3 = _contract.snapshot_mac_matches_v3
 native_policy_snapshot_v3 = _generation.native_policy_snapshot_v3
 effective_native_policy_v3 = _contract.effective_native_policy_v3
 provision_native_policy_verifier_key = _windows_key.provision_native_policy_verifier_key
 
 _snapshot_integrity_mac_v3 = _contract._snapshot_integrity_mac_v3
-_snapshot_policy_digest_v3 = _contract._snapshot_policy_digest_v3
-_validate_snapshot_v3 = _contract._validate_snapshot_v3
 _strict_json_loads_v3 = _codec._strict_json_loads_v3
 _clear_v3_snapshot_pending = _storage._clear_v3_snapshot_pending
 _read_v3_generation_state = _storage._read_v3_generation_state
@@ -91,7 +89,6 @@ _windows_ensure_private_directory = _windows_state._windows_ensure_private_direc
 _windows_private_directory_binding = _windows_state._windows_private_directory_binding
 _windows_private_state_binding = _windows_state._windows_private_state_binding
 _v3_generation_for_policy = _generation._v3_generation_for_policy
-_merge_effective_native_policies = _policy._merge_effective_native_policies
 _normalize_scope_text_v3 = _policy._normalize_scope_text_v3
 _utf8_size_v3 = _codec._utf8_size_v3
 _valid_bounded_string_v3 = _codec._valid_bounded_string_v3
@@ -105,12 +102,7 @@ _windows_read_key = _windows_key._windows_read_key
 _windows_provision_verifier_key = _windows_key._windows_provision_verifier_key
 _scope_digest_v3 = _policy._scope_digest_v3
 _config_value = _policy._config_value
-_action_value = _policy._action_value
 _string_map = _policy._string_map
-_harness_risk_map = _policy._harness_risk_map
-_harness_action_map = _policy._harness_action_map
-_require_snapshot_mapping_fields_v3 = _contract._require_snapshot_mapping_fields_v3
-_valid_u16_v3 = _contract._valid_u16_v3
 _valid_u64_v3 = _contract._valid_u64_v3
 _valid_digest_v3 = _contract._valid_digest_v3
 _policy_snapshot_push_bytes_v3 = _contract._policy_snapshot_push_bytes_v3
@@ -368,6 +360,7 @@ def native_policy_snapshot(
 
 _PUBLISHER_LOCK = threading.RLock()
 _PUBLISHERS: dict[str, set[NativePolicySnapshotPublisher]] = {}
+forget_in_child(_PUBLISHERS)
 
 
 def _publisher_key(guard_home: Path) -> str:
@@ -384,6 +377,22 @@ def notify_native_policy_mutation(guard_home: Path) -> None:
         publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
     for publisher in publishers:
         publisher.request_publish()
+
+
+def local_cli_publication_status(guard_home: Path, revision: int) -> dict[str, object]:
+    """Inspect existing publishers without starting a runtime or claiming readiness."""
+    with _PUBLISHER_LOCK:
+        publishers = tuple(_PUBLISHERS.get(_publisher_key(guard_home), ()))
+    for publisher in publishers:
+        receipt = publisher.local_cli_publication_receipt(revision)
+        if receipt is not None:
+            return {"state": "acknowledged", **receipt}
+    errors = [publisher.last_error for publisher in publishers if not publisher.closed and publisher.last_error]
+    return {
+        "state": "failed" if errors else "pending" if publishers else "unavailable",
+        "revision": revision,
+        **({"reason": errors[0]} if errors else {}),
+    }
 
 
 def get_native_policy_snapshot_publisher(store: GuardStore) -> NativePolicySnapshotPublisher:
@@ -418,6 +427,5 @@ __all__ = [
     "notify_native_policy_mutation",
     "provision_native_policy_verifier_key",
     "snapshot_bytes_v3",
-    "snapshot_config_digest_v3",
-    "snapshot_signing_bytes_v3",
+    "snapshot_mac_matches_v3",
 ]

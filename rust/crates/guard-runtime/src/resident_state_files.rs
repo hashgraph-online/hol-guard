@@ -116,6 +116,21 @@ pub(crate) fn verify_windows_private_file(file: &File) -> Result<(), String> {
     windows_security::verify_private_file(file)
 }
 
+#[cfg(windows)]
+fn surfaced_state_write_error(error: std::io::Error) -> String {
+    let message = error.to_string();
+    if (1..=128).contains(&message.len())
+        && message.starts_with("native_")
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        message
+    } else {
+        "native_resident_state_write_failed".to_owned()
+    }
+}
+
 pub(crate) fn private_file(
     path: &Path,
     create_new: bool,
@@ -134,18 +149,14 @@ pub(crate) fn private_file(
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
                 let mut file = windows_security::open_private_file(path, private_root)
-                    .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                    .map_err(surfaced_state_write_error)?;
                 windows_security::repair_private_file(&mut file)?;
                 if !create_new {
-                    file.set_len(0)
-                        .map_err(|_| "native_resident_state_write_failed".to_owned())?;
+                    file.set_len(0).map_err(surfaced_state_write_error)?;
                 }
                 file
             }
-            Err(_) if create_new => {
-                return Err("native_resident_state_write_failed".to_owned());
-            }
-            Err(_) => return Err("native_resident_state_write_failed".to_owned()),
+            Err(error) => return Err(surfaced_state_write_error(error)),
         };
         // CREATE_NEW already created an empty file; the existing-object case
         // returned above before opening or mutating it.
@@ -288,6 +299,21 @@ pub(crate) fn ensure_private_directory(
     ensure_private_directory_under(path, &private_root, protect_windows)
 }
 
+/// A state directory whose ancestors were never created is an unprovisioned
+/// home, the same answer Unix gives when `create_dir` fails for a missing
+/// parent. Windows names the missing ancestor kind instead, so fold both into
+/// the code the clients already treat as "no resident provisioned here".
+#[cfg(any(windows, test))]
+fn unprovisioned_state_dir_error(code: String) -> String {
+    match code.as_str() {
+        "native_resident_windows_private_ancestry_missing"
+        | "native_resident_windows_trusted_ancestry_missing" => {
+            "native_resident_state_dir_create_failed".to_owned()
+        }
+        _ => code,
+    }
+}
+
 pub(crate) fn ensure_private_directory_under(
     path: &Path,
     private_root: &Path,
@@ -296,11 +322,12 @@ pub(crate) fn ensure_private_directory_under(
     #[cfg(windows)]
     {
         let resolved =
-            windows_security::ensure_private_directory_path(path, private_root, protect_windows)?;
-        let private_root = private_root
+            windows_security::ensure_private_directory_path(path, private_root, protect_windows)
+                .map_err(unprovisioned_state_dir_error)?;
+        let canonical_root = private_root
             .canonicalize()
             .map_err(|_| "native_resident_state_dir_outside_user_profile".to_owned())?;
-        if !resolved.starts_with(&private_root) {
+        if !guard_runtime_windows_process::path_is_within(&resolved, &canonical_root) {
             return Err("native_resident_state_dir_outside_user_profile".to_owned());
         }
         Ok(resolved)
@@ -342,7 +369,50 @@ pub(crate) fn ensure_private_directory_under(
 
 #[cfg(test)]
 mod tests {
-    use super::is_lock_contention;
+    use super::{is_lock_contention, unprovisioned_state_dir_error};
+
+    #[test]
+    fn missing_windows_ancestry_reads_as_an_unprovisioned_state_dir() {
+        for code in [
+            "native_resident_windows_private_ancestry_missing",
+            "native_resident_windows_trusted_ancestry_missing",
+        ] {
+            assert_eq!(
+                unprovisioned_state_dir_error(code.to_owned()),
+                "native_resident_state_dir_create_failed"
+            );
+        }
+    }
+
+    #[test]
+    fn other_state_dir_failures_keep_their_code() {
+        for code in [
+            "native_resident_windows_access_denied",
+            "native_resident_windows_acl_not_private",
+            "native_resident_windows_boundary_mismatch",
+            "native_resident_windows_bind_failed",
+            "native_resident_state_dir_outside_user_profile",
+        ] {
+            assert_eq!(unprovisioned_state_dir_error(code.to_owned()), code);
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn missing_guard_home_is_an_unprovisioned_state_dir() {
+        let root = std::env::temp_dir().join(format!(
+            "hol-guard-missing-home-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let state_base = root.join("native-runtime");
+        let error = super::ensure_private_directory_under(&state_base, &root, false).unwrap_err();
+        assert_eq!(error, "native_resident_state_dir_create_failed");
+        assert!(!root.exists());
+    }
 
     #[test]
     fn would_block_is_lock_contention() {

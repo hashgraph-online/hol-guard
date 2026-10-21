@@ -44,7 +44,7 @@ def _context(tmp_path: Path) -> HarnessContext:
     home_dir = tmp_path / "home"
     guard_home = tmp_path / "guard-home"
     home_dir.mkdir()
-    guard_home.mkdir()
+    guard_home.mkdir(mode=0o700)
     return HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
 
 
@@ -171,9 +171,8 @@ def test_run_guard_remote_pair_command_persists_credentials_and_installs_runtime
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
-        raising=False,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
     )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:
@@ -258,9 +257,8 @@ def test_run_guard_remote_pair_command_wraps_local_save_oserror(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
-        raising=False,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
     )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:
@@ -333,9 +331,8 @@ def test_run_guard_remote_pair_command_syncs_runtime_session(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
-        raising=False,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
     )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:
@@ -394,9 +391,8 @@ def test_run_guard_remote_pair_command_swallows_sync_failure(
     context = _context(tmp_path)
     store = GuardStore(context.guard_home)
     monkeypatch.setattr(
-        "codex_plugin_scanner.guard.cli.remote_pair_flow.os.geteuid",
-        lambda: 1000,
-        raising=False,
+        "codex_plugin_scanner.guard.cli.remote_pair_flow._assert_no_root_install_allowed",
+        lambda **_kwargs: None,
     )
 
     def fake_claim(**_kwargs: object) -> dict[str, object]:

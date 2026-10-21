@@ -8,7 +8,6 @@ import os
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Mapping
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import suppress
 from dataclasses import dataclass, field
@@ -24,7 +23,7 @@ _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 _HEALTH_PROBE_ATTEMPTS = 2
 _HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS = 1.0
 _HEALTH_PROBE_ATTEMPT_TIMEOUT_SECONDS = _HEALTH_PROBE_TOTAL_TIMEOUT_SECONDS / _HEALTH_PROBE_ATTEMPTS
-_STRESS_REQUEST_ATTEMPTS = 3
+_STRESS_REQUEST_ATTEMPTS = 5
 _HEALTH_READY_TIMEOUT_SECONDS = 15.0
 
 
@@ -89,42 +88,6 @@ def stabilized_process_resources(pid: int) -> tuple[int, int, int] | None:
     )
 
 
-def healthz_details(execution: StressExecution) -> Mapping[str, object] | None:
-    """Read the authenticated bounded capacity report for one stress daemon."""
-
-    request = urllib.request.Request(
-        f"{execution.daemon_url}/v1/healthz/details",
-        headers={"X-Guard-Token": execution.auth_token},
-        method="GET",
-    )
-    try:
-        with cast(HTTPResponse, urllib.request.urlopen(request, timeout=1)) as response:
-            body = response.read(_MAX_RESPONSE_BYTES + 1)
-    except (OSError, urllib.error.URLError):
-        return None
-    if len(body) > _MAX_RESPONSE_BYTES:
-        return None
-    try:
-        payload = cast(object, json.loads(body.decode("utf-8")))
-    except (UnicodeDecodeError, json.JSONDecodeError):
-        return None
-    return cast(Mapping[str, object], payload) if isinstance(payload, Mapping) else None
-
-
-def worker_capacity(details: Mapping[str, object] | None) -> tuple[int, int, int, int, int] | None:
-    """Extract only bounded worker-capacity counts from the health report."""
-
-    if details is None:
-        return None
-    workers = details.get("hook_workers")
-    if not isinstance(workers, Mapping):
-        return None
-    values = tuple(workers.get(name) for name in ("configured", "target", "workers", "ready", "busy"))
-    if not all(isinstance(value, int) and not isinstance(value, bool) and value >= 0 for value in values):
-        return None
-    return cast(tuple[int, int, int, int, int], values)
-
-
 def stress_request(endpoint: str, auth_token: str) -> float:
     """Issue one bounded synthetic hook request and return its latency."""
 
@@ -141,7 +104,7 @@ def stress_request(endpoint: str, auth_token: str) -> float:
         method="POST",
     )
     last_error: BaseException | None = None
-    for _ in range(_STRESS_REQUEST_ATTEMPTS):
+    for attempt in range(_STRESS_REQUEST_ATTEMPTS):
         started = time.monotonic()
         try:
             with cast(HTTPResponse, urllib.request.urlopen(request, timeout=6)) as response:
@@ -156,7 +119,11 @@ def stress_request(endpoint: str, auth_token: str) -> float:
             if not isinstance(payload, dict):
                 raise RuntimeError("Hook response was not an object.")
             return (time.monotonic() - started) * 1000
-        except urllib.error.HTTPError:
+        except urllib.error.HTTPError as exc:
+            if exc.code == 503 and attempt + 1 < _STRESS_REQUEST_ATTEMPTS:
+                last_error = exc
+                time.sleep(0.1 * (attempt + 1))
+                continue
             raise
         except json.JSONDecodeError as exc:
             last_error = exc
@@ -181,8 +148,17 @@ def stress_request(endpoint: str, auth_token: str) -> float:
 
 
 def stress_warmup(endpoint: str, auth_token: str, count: int) -> None:
-    """Run a bounded request wave before the measured stress batches."""
+    """Prime once, then run ``count`` concurrent requests (``count + 1`` total).
 
+    The cold prime retains stress_request's bounded retries. The wave also uses
+    that request helper and preserves the existing six-second future waits.
+    """
+
+    if count <= 0:
+        raise ValueError("Warm-up count must be positive.")
+    # Liveness does not imply that the first native policy/worker is initialized.
+    # One successful synthetic request must precede the burst; failures still raise.
+    stress_request(endpoint, auth_token)
     with ThreadPoolExecutor(max_workers=count) as executor:
         futures = [executor.submit(stress_request, endpoint, auth_token) for _ in range(count)]
         for future in futures:
@@ -257,9 +233,7 @@ def health_is_ready(daemon_url: str) -> bool:
     return health_probe_status(daemon_url) == "ready"
 
 
-def wait_until_health_ready(
-    daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS
-) -> None:
+def wait_until_health_ready(daemon_url: str, *, timeout_seconds: float = _HEALTH_READY_TIMEOUT_SECONDS) -> None:
     """Block until `/healthz` is ready, or raise before warmup."""
 
     deadline = time.monotonic() + timeout_seconds
@@ -348,7 +322,6 @@ __all__ = [
     "finalize_stress_runtime",
     "health_is_ready",
     "health_probe_status",
-    "healthz_details",
     "pid_is_running",
     "process_tree_resources",
     "record_resources",
@@ -361,5 +334,4 @@ __all__ = [
     "update_pid_stability",
     "wait_for_process_resources",
     "wait_until_health_ready",
-    "worker_capacity",
 ]

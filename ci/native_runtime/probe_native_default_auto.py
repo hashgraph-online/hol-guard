@@ -23,7 +23,6 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.append(str(_REPO_ROOT))
 
 import codex_plugin_scanner
-from codex_plugin_scanner.guard.config import hook_fast_path_enabled
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
 from codex_plugin_scanner.guard.native_resident_client import (
@@ -58,6 +57,7 @@ if _HOOK_CLIENT_SPEC is None or _HOOK_CLIENT_SPEC.loader is None:
 _HOOK_CLIENT_MODULE = importlib.util.module_from_spec(_HOOK_CLIENT_SPEC)
 _HOOK_CLIENT_SPEC.loader.exec_module(_HOOK_CLIENT_MODULE)
 _installed_hook_request = _HOOK_CLIENT_MODULE.installed_hook_request
+hook_failure_detail = _HOOK_CLIENT_MODULE.hook_failure_detail
 
 
 def _request(root: Path, text: str, request_id: str) -> HookReviewRequest:
@@ -219,17 +219,16 @@ def _exercise_installed_routes(
                 )
             )
         for event, payload in events:
-            response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            try:
+                response_payload = _installed_hook_request(daemon, guard_home, workspace, harness, event, payload)
+            except TimeoutError as error:
+                # Report the failed route without exposing tokens or replaying a possibly dispatched request.
+                raise RuntimeError(f"installed hook transport timed out: harness={harness} event={event}") from error
             if response_payload is None:
                 raise RuntimeError(f"empty response for {harness} {event}")
             _require(
                 is_allowed(event, response_payload),
-                {
-                    "harness": harness,
-                    "event": event,
-                    "decision": response_payload.get("decision"),
-                    "permission_decision": _permission_decision(response_payload),
-                },
+                hook_failure_detail(harness, event, response_payload),
             )
             reason = response_payload.get("reason_code")
             if isinstance(reason, str):
@@ -243,33 +242,52 @@ def _exercise_mode_invariants(
     workspace: Path,
 ) -> dict[str, dict[str, object]]:
     mode_invariants: dict[str, dict[str, object]] = {}
+    post_tool_payload: dict[str, object] = {
+        "hook_event_name": "PostToolUse",
+        "tool_name": "Read",
+        "tool_response": [{"type": "text", "text": "mode invariant\n"}],
+    }
     try:
+        os.environ.pop("HOL_GUARD_NATIVE", None)
+        baseline = _installed_hook_request(
+            daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
+        )
+        if not isinstance(baseline, dict):
+            raise RuntimeError(f"native_default_auto_probe_failed: invalid baseline response: {baseline}")
         for mode in ("off", "shadow"):
             os.environ["HOL_GUARD_NATIVE"] = mode
             response = _installed_hook_request(
-                daemon,
-                guard_home,
-                workspace,
-                "claude-code",
-                "PostToolUse",
-                {
-                    "hook_event_name": "PostToolUse",
-                    "tool_name": "Read",
-                    "tool_response": [{"type": "text", "text": "mode invariant\n"}],
-                },
+                daemon, guard_home, workspace, "claude-code", "PostToolUse", dict(post_tool_payload)
             )
             if not isinstance(response, dict):
                 raise RuntimeError(f"native_default_auto_probe_failed: invalid mode response: {response}")
+            # Legacy values are accepted but resolve to auto: the native
+            # resident must decide exactly as it does with the variable unset.
+            # Current Claude PostToolUse contract: a non-blocking native
+            # outcome carries ``policy_action`` (allow/warn) plus the
+            # PostToolUse hook-specific envelope. It carries no ``continue``
+            # (that key only appears on terminal block responses) and no
+            # ``decision``; any block/stop key would mean the tool output was
+            # refused rather than passed through.
+            specific = response.get("hookSpecificOutput")
             _require(
-                response.get("continue") is True
-                and response.get("policy_action") == "allow"
-                and response.get("reason_code") in {"native_hook_disabled", "native_shadow_diagnostic_disabled"},
-                {"mode": mode, "response": response},
+                response.get("policy_action") in {"allow", "warn"}
+                and isinstance(specific, dict)
+                and specific.get("hookEventName") == "PostToolUse"
+                and "decision" not in response
+                and "continue" not in response
+                and "stopReason" not in response
+                and all(
+                    response.get(key) == baseline.get(key)
+                    for key in ("decision", "policy_action", "reason_code", "hookSpecificOutput")
+                ),
+                {"mode": mode, "response": response, "baseline": baseline},
             )
             mode_invariants[mode] = {
                 "decision": response.get("decision"),
+                "policy_action": response.get("policy_action"),
                 "reason_code": response.get("reason_code"),
-                "python_oracle": daemon._server.hook_worker.test_oracle is not None,
+                "python_oracle": getattr(daemon._server.hook_worker, "test_oracle", None) is not None,
             }
             _require(mode_invariants[mode]["python_oracle"] is False, mode_invariants[mode])
     finally:
@@ -321,10 +339,17 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         worker_stats = wait_for_route_corpus(
             daemon._server.hook_worker.metrics,
             expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
         )
         writer = daemon._server.runtime_hook_evidence_writer
+        # Count the route corpus receipts before the mode invariants send their
+        # own PostToolUse requests, which write receipts of their own.
+        evidence_stats = wait_for_receipt_corpus(
+            writer,
+            expected=len(route_receipts),
+            timeout_seconds=45.0 if os.name == "nt" else 5.0,
+        )
         mode_invariants = _exercise_mode_invariants(daemon, guard_home, workspace)
-        evidence_stats = wait_for_receipt_corpus(writer, expected=len(route_receipts))
     finally:
         daemon.stop()
     if not isinstance(worker_stats, Mapping) or not isinstance(evidence_stats, Mapping):
@@ -335,7 +360,7 @@ def _installed_hook_corpus(root: Path) -> dict[str, object]:
         raise RuntimeError(f"native_default_auto_probe_failed: invalid route metrics: {worker_stats}")
     observed_routes = cast(dict[str, int], observed_routes_raw)
     _require(expected > 0, "installed hook corpus is empty")
-    _require(expected == 21, {"expected": expected, "routes": routes})
+    _require(expected == 23, {"expected": expected, "routes": routes})
     _require(sum(observed_routes.values()) == expected, worker_stats)
     _require(observed_routes.get("native_resident") == expected, worker_stats)
     _require(receipt_corpus_is_complete(evidence_stats, expected=expected), evidence_stats)
@@ -372,7 +397,6 @@ def _require_clean_probe_environment() -> None:
     ):
         _require(environment_name not in os.environ, f"{environment_name} must be unset")
     _require(native_mode() == "auto", f"unexpected native mode: {native_mode()}")
-    _require(hook_fast_path_enabled(), "unset fast-path configuration must be enabled")
     os.environ["HOL_GUARD_NATIVE"] = "invalid"
     try:
         _require(native_mode() == "auto", "invalid native mode must resolve to auto")
@@ -463,15 +487,16 @@ def _run_temporary_probe(identity: NativeRuntimeIdentity) -> dict[str, object]:
                 raise cleanup_error
 
 
-def _assert_native_disabled_mode() -> None:
-    os.environ["HOL_GUARD_NATIVE"] = "off"
-    try:
-        _require(native_mode() == "off", f"unexpected native mode: {native_mode()}")
-        disabled = native_runtime_status()
-        _require(disabled.mode == "off", disabled)
-        _require(disabled.reason == "native_disabled", disabled)
-    finally:
-        os.environ.pop("HOL_GUARD_NATIVE", None)
+def _assert_legacy_native_modes_resolve_to_auto() -> None:
+    for legacy in ("off", "shadow"):
+        os.environ["HOL_GUARD_NATIVE"] = legacy
+        try:
+            _require(native_mode() == "auto", f"legacy native mode {legacy} must resolve to auto: {native_mode()}")
+            resolved = native_runtime_status()
+            _require(resolved.mode == "auto", resolved)
+            _require(resolved.reason != "native_disabled", resolved)
+        finally:
+            os.environ.pop("HOL_GUARD_NATIVE", None)
 
 
 def _build_probe_receipt(
@@ -486,7 +511,7 @@ def _build_probe_receipt(
         "fast_path": "enabled",
         "runtime_reason": status.reason,
         "target": capabilities.target,
-        "rollback": "off",
+        "legacy_modes": "accepted_as_auto",
         "corpus_decisions": installed_corpus["route_count"],
         "resident_decisions": installed_corpus["route_count"],
         "resident_share": 1.0,
@@ -512,7 +537,7 @@ def main(*, json_path: Path | None = None) -> int:
     status, identity, capabilities = _probe_native_identity()
     _assert_binary_override_ignored(identity)
     installed_corpus = _run_temporary_probe(identity)
-    _assert_native_disabled_mode()
+    _assert_legacy_native_modes_resolve_to_auto()
     receipt = _build_probe_receipt(status, capabilities, installed_corpus)
     rendered = json.dumps(receipt, sort_keys=True)
     if json_path is not None:

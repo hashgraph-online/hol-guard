@@ -38,6 +38,7 @@ export function cloudReviewConfirmationError(message: string): string {
 
 export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string {
   if (!status.connected) return "Connect Guard Cloud on this device to review its requests in the cloud.";
+  if (status.reconnect_required) return "Guard Cloud sign-in needs repair. Reconnect to resume uploads and cloud decisions; local review is still available.";
   if (!status.enabled) return "Cloud sync is connected. Cloud decisions still need this device's authorization. Confirm it here to update pending requests; you do not need to reconnect.";
   if (status.activation_error) return "Authorization is saved. Request delivery needs another attempt.";
   if (status.held_events > 0) return "Cloud Review is enabled. Some earlier requests need your confirmation before upload.";
@@ -45,6 +46,26 @@ export function cloudReviewStatusCopy(status: CloudReviewSettingsStatus): string
   if (status.delivery_state === "error") return "Cloud Review is enabled. Uploads are retrying; local review is still available.";
   if (status.pending_uploads > 0) return "Cloud Review is enabled. Pending requests are being uploaded.";
   return "Cloud Review is enabled for this device. Each cloud decision applies only to its exact request.";
+}
+
+export function cloudReviewConnectionLabel(status: CloudReviewSettingsStatus): string {
+  if (status.reconnect_required) return "Reconnect needed";
+  return status.connected ? "Connected" : "Not connected";
+}
+
+export function cloudReviewDecisionLabel(status: CloudReviewSettingsStatus): string {
+  if (status.reconnect_required) return "Paused until sign-in";
+  return status.enabled ? "Enabled" : "Confirmation needed";
+}
+
+// Priority: sign-in repair comes first because nothing else can succeed without
+// valid credentials; authorization applies once connected but not yet enabled;
+// restore applies only when enabled but delivery needs attention.
+export function cloudReviewRecoveryAction(status: CloudReviewSettingsStatus): "connect" | "authorize" | "restore" | "none" {
+  if (!status.connected || status.reconnect_required) return "connect";
+  if (!status.enabled) return "authorize";
+  if (status.activation_error || status.held_events > 0) return "restore";
+  return "none";
 }
 
 export function CloudReviewSettings() {
@@ -56,7 +77,7 @@ export function CloudReviewSettings() {
   const [includeHeld, setIncludeHeld] = useState(false);
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
-  const dialog = useRef<HTMLDivElement>(null);
+  const dialog = useRef<HTMLFormElement>(null);
   const revision = useRef(0);
   useFocusTrap(action !== null, dialog);
 
@@ -138,7 +159,7 @@ export function CloudReviewSettings() {
     }
   }
 
-  const needsRecovery = Boolean(status?.activation_error || status?.held_events || status?.delivery_state === "error");
+  const recoveryAction = status ? cloudReviewRecoveryAction(status) : "none";
   const requireFreshTotp = status?.approval_gate.totp_enabled === true;
   const disabled = pending || cloudReviewProofIncomplete(status?.approval_gate, password, totp, requireFreshTotp);
   let confirmLabel = "Turn off Cloud Review";
@@ -172,11 +193,11 @@ export function CloudReviewSettings() {
         <dl className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud connection</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.connected ? "Connected" : "Not connected"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{cloudReviewConnectionLabel(status)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Cloud decisions</dt>
-            <dd className="mt-1 font-medium text-brand-dark">{status.enabled ? "Enabled" : "Confirmation needed"}</dd>
+            <dd className="mt-1 font-medium text-brand-dark">{cloudReviewDecisionLabel(status)}</dd>
           </div>
           <div className="min-w-0">
             <dt className="text-xs text-slate-600">Last activity delivered</dt>
@@ -188,12 +209,17 @@ export function CloudReviewSettings() {
           </div>
         </dl>
       ) : null}
-      {status?.connected ? (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {!status.enabled || needsRecovery ? (
+      {status ? (
+        <div className="mt-3 flex flex-wrap items-start gap-2">
+          {recoveryAction === "connect" ? (
+            <ConnectGuardCloudButton label={status.reconnect_required ? "Reconnect Guard Cloud" : "Connect Guard Cloud"}
+              variant={status.reconnect_required ? "primary" : "secondary"}
+              onConnected={() => { void refresh(false); }} />
+          ) : null}
+          {recoveryAction === "authorize" || recoveryAction === "restore" ? (
             <button type="button" disabled={loading || pending} onClick={() => openConfirmation("enable")}
               className="min-h-10 rounded-md bg-brand-blue px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
-              {status.enabled ? "Restore Cloud Review" : "Enable Cloud Review"}
+              {recoveryAction === "restore" ? "Restore Cloud Review" : "Enable Cloud Review"}
             </button>
           ) : null}
           {status.enabled ? (
@@ -204,11 +230,11 @@ export function CloudReviewSettings() {
           ) : null}
         </div>
       ) : null}
-      {status && !status.connected ? <ConnectGuardCloudButton className="mt-3" /> : null}
       {action && status ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-black/30 p-4"
           onKeyDown={(event) => { if (event.key === "Escape") close(); }}>
-          <div ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-review-confirm-title"
+          <form ref={dialog} role="dialog" aria-modal="true" aria-labelledby="cloud-review-confirm-title" noValidate
+            onSubmit={(event) => { event.preventDefault(); void confirm(); }}
             className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-lg bg-white p-5 shadow-xl">
             <div className="flex items-start justify-between gap-3">
               <h2 id="cloud-review-confirm-title" className="text-base font-semibold text-brand-dark">
@@ -243,12 +269,12 @@ export function CloudReviewSettings() {
             {error ? <p role="alert" className="mt-3 text-sm text-red-700">{cloudReviewConfirmationError(error)}</p> : null}
             <div className="mt-5 flex flex-wrap justify-end gap-2">
               <button type="button" onClick={close} disabled={pending} className="min-h-10 rounded-md border border-slate-200 px-4 py-2 text-sm text-brand-dark">Cancel</button>
-              <button type="button" onClick={() => void confirm()} disabled={disabled}
+              <button type="submit" disabled={disabled}
                 className="min-h-10 rounded-md bg-brand-blue px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
                 {confirmLabel}
               </button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
     </section>

@@ -1,0 +1,167 @@
+"""Private provider action metadata, separate from a complete MCP tools catalog."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+from collections.abc import Sequence
+from hashlib import sha256
+from pathlib import Path
+from typing import cast
+
+from .runtime.mcp_classification import McpClassificationUnavailableError, classify_mcp_actions
+
+_MAX_ACTIONS = 10_000
+_MAX_BYTES = 2_000_000
+
+
+def rebuild_provider_authority(connection: sqlite3.Connection, cli_id: str, identity_hash: str) -> None:
+    fingerprint = sha256(identity_hash.encode())
+    for row in connection.execute(
+        """select tool_slug, authority_hash, full_schema from local_mcp_provider_action
+        where cli_id = ? and identity_hash = ? order by tool_slug""",
+        (cli_id, identity_hash),
+    ):
+        fingerprint.update(json.dumps(tuple(row), separators=(",", ":")).encode())
+    connection.execute(
+        "insert into local_mcp_provider_authority values (?, ?, ?) "
+        "on conflict(cli_id, identity_hash) do update set digest = excluded.digest",
+        (cli_id, identity_hash, fingerprint.hexdigest()),
+    )
+
+
+def read_provider_authority(connection: sqlite3.Connection) -> str | None:
+    rows = connection.execute(
+        """select a.cli_id, a.identity_hash, a.digest from local_mcp_provider_authority a
+        join local_cli_observation o on o.cli_id = a.cli_id and o.identity_hash = a.identity_hash
+        where o.surface = 'mcp' order by a.cli_id, a.identity_hash"""
+    ).fetchall()
+    if not rows:
+        return None
+    return sha256(json.dumps([tuple(row) for row in rows], separators=(",", ":")).encode()).hexdigest()
+
+
+def load_provider_catalog_summaries(connection: sqlite3.Connection) -> dict[str, dict[str, object]]:
+    rows = connection.execute(
+        """select p.cli_id, count(*), sum(p.full_schema), max(p.updated_at)
+        from local_mcp_provider_action p join local_cli_observation o
+        on p.cli_id = o.cli_id and p.identity_hash = o.identity_hash
+        group by p.cli_id"""
+    ).fetchall()
+    return {
+        cli_id: {
+            "provider": "composio",
+            "known_count": count,
+            "full_schema_count": full_count,
+            "updated_at": updated_at,
+            "coverage": "discovery-subset",
+            "account_binding": "unverified",
+        }
+        for cli_id, count, full_count, updated_at in rows
+    }
+
+
+def read_provider_actions(
+    connection: sqlite3.Connection,
+    cli_id: str,
+    identity_hash: str,
+    *,
+    limit: int = 100,
+    offset: int = 0,
+    search: str = "",
+    expected_token: str | None = None,
+) -> tuple[dict[str, object], tuple[dict[str, object], ...]]:
+    """A page of provider actions and the declarations that describe them.
+
+    The declarations travel to the resident, which is a round trip the caller
+    makes after this connection's read transaction has ended; classifying here
+    would hold a reader open for the length of that call.
+    """
+
+    if not 1 <= limit <= 100 or offset < 0 or len(search) > 128:
+        raise ValueError("invalid provider catalog page")
+    fingerprint = sha256(identity_hash.encode())
+    for row in connection.execute(
+        """select a.tool_slug, a.toolkit, a.authority_hash, a.full_schema, a.revision,
+        a.description, a.updated_at, coalesce(g.state, 'review')
+        from local_mcp_provider_action a left join local_mcp_provider_grant g
+        on g.cli_id = a.cli_id and g.identity_hash = a.identity_hash and g.tool_slug = a.tool_slug
+        where a.cli_id = ? and a.identity_hash = ? order by a.tool_slug""",
+        (cli_id, identity_hash),
+    ):
+        fingerprint.update(json.dumps(tuple(row), separators=(",", ":"), ensure_ascii=True).encode())
+    token = fingerprint.hexdigest()
+    if expected_token is not None and expected_token != token:
+        raise ValueError("provider_catalog_changed")
+    search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    pattern = f"%{search}%"
+    rows = connection.execute(
+        """select a.tool_slug, a.toolkit, a.description, a.full_schema, a.revision, a.updated_at,
+        coalesce(g.state, 'review'), a.input_schema_json
+        from local_mcp_provider_action a
+        left join local_mcp_provider_grant g on g.cli_id = a.cli_id
+          and g.identity_hash = a.identity_hash and g.tool_slug = a.tool_slug
+        where a.cli_id = ? and a.identity_hash = ?
+        and (a.tool_slug like ? escape '\\' or a.toolkit like ? escape '\\' or a.description like ? escape '\\')
+        order by a.toolkit asc, a.tool_slug asc limit ? offset ?""",
+        (cli_id, identity_hash, pattern, pattern, pattern, limit + 1, offset),
+    ).fetchall()
+    page = rows[:limit]
+    declarations: tuple[dict[str, object], ...] = tuple(
+        {
+            "name": slug,
+            "schema": json.loads(raw_schema),
+            "provider": "composio",
+            "full_schema": bool(full),
+        }
+        for slug, _, _, full, _, _, _, raw_schema in page
+    )
+    return (
+        {
+            "actions": [
+                {
+                    "tool_slug": slug,
+                    "toolkit": toolkit,
+                    "description": description,
+                    "full_schema": bool(full),
+                    "revision": revision,
+                    "updated_at": updated_at,
+                    "permission_state": state,
+                    "allow_supported": False,
+                    "account_binding": "unverified",
+                    "source": "observed-provider-result",
+                }
+                for slug, toolkit, description, full, revision, updated_at, state, _ in page
+            ],
+            "next_offset": offset + limit if len(rows) > limit else None,
+            "coverage": "discovery-subset",
+            "catalog_token": token,
+        },
+        declarations,
+    )
+
+
+def describe_provider_actions(
+    page: dict[str, object],
+    declarations: Sequence[dict[str, object]],
+    *,
+    guard_home: Path,
+) -> dict[str, object]:
+    """Attach the resident's advisory classification to a page of actions.
+
+    The classification is display evidence, not authority: a page without a
+    resident still names every action and its permission state, so an absent
+    description leaves the entry out rather than failing the read.
+    """
+
+    actions = cast("list[dict[str, object]]", page["actions"])
+    if not actions:
+        return page
+    try:
+        described = classify_mcp_actions(list(declarations), guard_home=guard_home)
+    except McpClassificationUnavailableError:
+        return page
+    for action, classification in zip(actions, described, strict=True):
+        if classification is not None:
+            action["classification"] = classification
+    return page

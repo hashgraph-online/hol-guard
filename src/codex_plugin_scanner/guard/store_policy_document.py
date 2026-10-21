@@ -6,15 +6,20 @@ import sqlite3
 
 # pyright: reportAttributeAccessIssue=false, reportUnknownMemberType=false
 from dataclasses import dataclass
-from typing import Literal
+from typing import TYPE_CHECKING, Literal, cast
 
 from .approval_gate import ApprovalGateGrant, require_high_risk
 from .policy_authority import validate_policy_write_authority
 from .policy_document import GuardPolicyDocument, policy_document_digest
+from .policy_document_authority import policy_import_approval_binding
+from .policy_document_compile import compile_policy_document
 from .policy_document_io import CompiledPolicyRow
 from .store_base import _validate_scoped_policy_artifact_target
 
 PolicyImportMode = Literal["merge", "replace"]
+
+if TYPE_CHECKING:
+    from .store import GuardStore
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +35,17 @@ class PolicyDocumentImportPlan:
     additions: tuple[str, ...]
     replacements: tuple[str, ...]
     removals: tuple[str, ...]
+
+
+def _validate_compiled_document_rows(
+    document: GuardPolicyDocument,
+    compiled_rows: tuple[CompiledPolicyRow, ...],
+) -> None:
+    # Reuse the canonical adapter; do not trust a caller's claimed projection.
+    # This check adds no matcher or policy evaluator and preserves refusal of
+    # documents the existing adapter cannot represent.
+    if compile_policy_document(document) != compiled_rows:
+        raise ValueError("policy_document_compilation_mismatch")
 
 
 class StorePolicyDocumentMixin:
@@ -111,18 +127,36 @@ class StorePolicyDocumentMixin:
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
 
+        from .business_policy_document_import import (
+            has_business_rules,
+            import_business_document,
+            refuse_legacy_import_over_business_source,
+        )
+
+        if has_business_rules(document):
+            if compiled_rows:
+                raise ValueError("policy_document_compilation_mismatch")
+            return import_business_document(
+                cast("GuardStore", self), document, mode=mode, now=now, approval_gate_grant=approval_gate_grant
+            )
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
+
+        _validate_compiled_document_rows(document, compiled_rows)
 
         require_high_risk(
             self.guard_home,
             purpose="policy_import",
+            **policy_import_approval_binding(document, mode),
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
 
         digest = policy_document_digest(document)
         secret_material = self._policy_integrity_secret_material(create=True)
-        with self._connect() as connection:
+        from .native_command_control_authority_io import hold_command_control_authority_lock
+
+        with hold_command_control_authority_lock(self.guard_home), self._connect() as connection:
+            refuse_legacy_import_over_business_source(cast("GuardStore", self))
             connection.execute("begin immediate")
             result = self._import_policy_rows_on_connection(
                 connection,
@@ -299,22 +333,36 @@ class StorePolicyDocumentMixin:
         """
         if mode not in {"merge", "replace"}:
             raise ValueError("invalid_policy_import_mode")
+        from .business_policy_document_import import has_business_rules, refuse_legacy_import_over_business_source
+
+        if has_business_rules(document):
+            # MCP must hold the source-owner lease outside its request/status
+            # transaction and call apply_business_document_on_connection.
+            raise ValueError("native_business_source_transaction_owner_required")
         normalized_rows = self._normalize_compiled_rows(compiled_rows)
+        _validate_compiled_document_rows(document, compiled_rows)
         require_high_risk(
             self.guard_home,
             purpose="policy_import",
+            **policy_import_approval_binding(document, mode),
             approval_gate_grant=approval_gate_grant,
             now=now,
         )
         digest = policy_document_digest(document)
         secret_material = self._policy_integrity_secret_material(create=True)
-        return self._import_policy_rows_on_connection(
-            connection,
-            document=document,
-            compiled_rows=compiled_rows,
-            normalized_rows=normalized_rows,
-            mode=mode,
-            now=now,
-            digest=digest,
-            secret_material=secret_material,
-        )
+        from .native_command_control_authority_io import hold_command_control_authority_lock
+
+        # Direct transaction callers cannot wait on a lease held by another
+        # owner waiting for this SQLite writer. Refuse immediately and rollback.
+        with hold_command_control_authority_lock(self.guard_home, timeout_seconds=0):
+            refuse_legacy_import_over_business_source(cast("GuardStore", self))
+            return self._import_policy_rows_on_connection(
+                connection,
+                document=document,
+                compiled_rows=compiled_rows,
+                normalized_rows=normalized_rows,
+                mode=mode,
+                now=now,
+                digest=digest,
+                secret_material=secret_material,
+            )

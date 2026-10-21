@@ -268,6 +268,7 @@ def test_windows_existing_directory_reapplies_private_dacl_on_same_handle(
             ("apply", (applied_handle, applied_descriptor, applied_dacl, directory))
         ),
     )
+
     def verify_dacl(verified_handle: object, *, owner_sid: str, directory: bool) -> None:
         events.append(("verify", (verified_handle, owner_sid, directory)))
         if sum(1 for event in events if event[0] == "verify") == 1:

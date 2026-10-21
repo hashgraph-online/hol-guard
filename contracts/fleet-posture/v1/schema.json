@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://guard.hashgraphonline.com/schema/fleet-posture/v1",
+  "title": "HOL Guard fleet posture v1",
+  "description": "Machine posture a hol-guard client reports to Guard Cloud inside syncContext.fleetPosture on POST /api/guard/receipts/sync. Serialized size must not exceed 65536 bytes.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "collectedAt", "client", "machine", "aiTools", "inventory", "policy"],
+  "$defs": {
+    "utcTimestamp": {
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]{1,9})?(Z|\\+00:00)$"
+    },
+    "nullableUtcTimestamp": {
+      "oneOf": [{ "$ref": "#/$defs/utcTimestamp" }, { "type": "null" }]
+    },
+    "sha256Digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "nullableSha256Digest": {
+      "oneOf": [{ "$ref": "#/$defs/sha256Digest" }, { "type": "null" }]
+    },
+    "harness": {
+      "type": "string",
+      "enum": [
+        "antigravity", "claude-code", "cline", "codex", "copilot", "cursor", "devin", "gemini",
+        "grok", "hermes", "kimi", "omp", "openclaw", "opencode", "paseo", "pi", "zcode"
+      ]
+    },
+    "itemHarness": {
+      "oneOf": [{ "$ref": "#/$defs/harness" }, { "const": "*" }]
+    },
+    "itemKind": {
+      "type": "string",
+      "enum": ["skill", "mcp_server", "plugin", "package", "hook"]
+    },
+    "inventoryItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "version", "hash", "harness", "source", "pathHash", "firstSeenAt", "lastSeenAt"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/itemKind" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "version": { "type": ["string", "null"], "maxLength": 64 },
+        "hash": { "$ref": "#/$defs/nullableSha256Digest" },
+        "harness": { "$ref": "#/$defs/itemHarness" },
+        "source": { "type": "string", "enum": ["marketplace", "project", "user", "lockfile", "config", "unknown"] },
+        "pathHash": { "$ref": "#/$defs/nullableSha256Digest" },
+        "firstSeenAt": { "$ref": "#/$defs/utcTimestamp" },
+        "lastSeenAt": { "$ref": "#/$defs/utcTimestamp" }
+      }
+    },
+    "removedItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "name", "harness", "hash"],
+      "properties": {
+        "kind": { "$ref": "#/$defs/itemKind" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 200 },
+        "harness": { "$ref": "#/$defs/itemHarness" },
+        "hash": { "$ref": "#/$defs/nullableSha256Digest" }
+      }
+    }
+  },
+  "properties": {
+    "schemaVersion": { "const": "fleet-posture/v1" },
+    "collectedAt": { "$ref": "#/$defs/utcTimestamp" },
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "channel", "runtime", "autoUpdate"],
+      "properties": {
+        "version": { "type": "string", "minLength": 1, "maxLength": 32, "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+[0-9A-Za-z.+-]*$" },
+        "channel": { "type": "string", "enum": ["stable", "alpha"] },
+        "runtime": { "type": "string", "enum": ["python", "native"] },
+        "autoUpdate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["enabled", "lastCheckedAt", "lastResult"],
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "lastCheckedAt": { "$ref": "#/$defs/nullableUtcTimestamp" },
+            "lastResult": {
+              "oneOf": [
+                { "type": "string", "enum": ["up_to_date", "update_available", "updated", "failed"] },
+                { "type": "null" }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "machine": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["osName", "osVersion", "arch", "hostnameHash"],
+      "properties": {
+        "osName": { "type": "string", "enum": ["macos", "linux", "windows", "unknown"] },
+        "osVersion": { "type": ["string", "null"], "maxLength": 32 },
+        "arch": { "type": "string", "enum": ["arm64", "x86_64", "unknown"] },
+        "hostnameHash": { "$ref": "#/$defs/nullableSha256Digest" }
+      }
+    },
+    "aiTools": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "harness", "toolVersion", "setupStatus", "protectionState", "hooks", "blindSpots",
+          "postureOverride", "artifactCount", "lastActivityAt", "inventoryDigest"
+        ],
+        "properties": {
+          "harness": { "$ref": "#/$defs/harness" },
+          "toolVersion": { "type": ["string", "null"], "maxLength": 64 },
+          "setupStatus": { "type": "string", "enum": ["active", "broken", "partial", "not_found"] },
+          "protectionState": { "type": "string", "enum": ["protected", "needs_setup", "broken", "paused", "stale", "not_detected"] },
+          "hooks": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["nativeHooks", "browserFallback", "mcpProxy", "promptHooks"],
+            "properties": {
+              "nativeHooks": { "type": "boolean" },
+              "browserFallback": { "type": "boolean" },
+              "mcpProxy": { "type": "boolean" },
+              "promptHooks": { "type": "boolean" }
+            }
+          },
+          "blindSpots": {
+            "type": "array",
+            "maxItems": 8,
+            "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+          },
+          "postureOverride": {
+            "oneOf": [{ "type": "string", "enum": ["default", "enforce", "observe", "off"] }, { "type": "null" }]
+          },
+          "artifactCount": { "type": "integer", "minimum": 0, "maximum": 100000 },
+          "lastActivityAt": { "$ref": "#/$defs/nullableUtcTimestamp" },
+          "inventoryDigest": { "$ref": "#/$defs/nullableSha256Digest" }
+        }
+      }
+    },
+    "inventory": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "mode", "items", "removed"],
+      "properties": {
+        "digest": { "$ref": "#/$defs/nullableSha256Digest" },
+        "mode": { "type": "string", "enum": ["full", "delta", "digest_only"] },
+        "items": { "type": "array", "maxItems": 250, "items": { "$ref": "#/$defs/inventoryItem" } },
+        "removed": { "type": "array", "maxItems": 250, "items": { "$ref": "#/$defs/removedItem" } }
+      }
+    },
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["appliedBundleVersion", "appliedBundleHash", "appliedPolicyVersionNumber", "status", "errorCode", "appliedAt"],
+      "properties": {
+        "appliedBundleVersion": { "type": ["integer", "null"], "minimum": 1 },
+        "appliedBundleHash": { "type": ["string", "null"], "maxLength": 80 },
+        "appliedPolicyVersionNumber": { "type": ["integer", "null"], "minimum": 1 },
+        "status": { "type": "string", "enum": ["applied", "validated", "rejected", "none"] },
+        "errorCode": { "type": ["string", "null"], "maxLength": 80 },
+        "appliedAt": { "$ref": "#/$defs/nullableUtcTimestamp" }
+      }
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "guard.extension-listing.v2",
+  "extensionId": "command.cogext",
+  "tagline": "Reviewed HOL Guard coverage for COGEXT commitment-changing CLI commands.",
+  "summary": "Reviews COGEXT CLI operations that add, fulfill, or fail commitments while leaving read-only queries outside the reviewed mutation set.",
+  "category": "specialized-tools",
+  "limitations": [
+    "Coverage is limited to the reviewed operations and the surrounding Guard policy.",
+    "A maintainer profile is not a security certification or an official upstream endorsement."
+  ],
+  "documentationUrl": "https://github.com/yaminbinyoosuf/cogext-primitive",
+  "tags": ["cogext", "cli", "commitments"],
+  "contributors": [
+    {
+      "githubId": "106717293",
+      "githubLogin": "yaminbinyoosuf",
+      "roles": ["author"]
+    }
+  ],
+  "originalContributions": [
+    {
+      "kind": "pull-request",
+      "url": "https://github.com/hashgraph-online/hol-guard/pull/3146"
+    }
+  ],
+  "upstream": {
+    "name": "COGEXT AI",
+    "url": "https://github.com/yaminbinyoosuf/cogext-primitive"
+  },
+  "maintainerGithubIds": ["106717293"]
+}

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -17,6 +18,7 @@ from packaging.version import InvalidVersion, Version
 PyPIReleaseState = Literal["absent", "active", "yanked"]
 PyPIReleaseStateLoader = Callable[[str], PyPIReleaseState]
 _PYPI_RELEASE_METADATA_LIMIT = 4 * 1024 * 1024
+_PYPI_SERVICE_UNAVAILABLE_RETRY_DELAYS = (2, 4, 8, 16, 30)
 
 
 def _canonical_stable(version_text: str, *, label: str) -> Version:
@@ -82,23 +84,28 @@ def _pypi_release_state(version_text: str) -> PyPIReleaseState:
     quoted_version = urllib.parse.quote(version_text, safe="")
     url = f"https://pypi.org/pypi/hol-guard/{quoted_version}/json"
     request = urllib.request.Request(url, headers={"User-Agent": "hol-guard-main-release-version"})
-    try:
-        with urllib.request.urlopen(request, timeout=20) as response:
-            declared_length = response.headers.get("Content-Length")
-            if declared_length is not None:
-                try:
-                    parsed_length = int(declared_length)
-                except ValueError as exc:
-                    raise ValueError("PyPI release metadata has an invalid content length") from exc
-                if parsed_length < 0 or parsed_length > _PYPI_RELEASE_METADATA_LIMIT:
-                    raise ValueError("PyPI release metadata exceeds the maximum allowed size")
-            payload = response.read(_PYPI_RELEASE_METADATA_LIMIT + 1)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return "absent"
-        raise ValueError(f"PyPI release lookup failed with HTTP {exc.code}") from exc
-    except (OSError, TimeoutError, urllib.error.URLError) as exc:
-        raise ValueError("PyPI release lookup failed") from exc
+    for retry_delay in (*_PYPI_SERVICE_UNAVAILABLE_RETRY_DELAYS, None):
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                declared_length = response.headers.get("Content-Length")
+                if declared_length is not None:
+                    try:
+                        parsed_length = int(declared_length)
+                    except ValueError as exc:
+                        raise ValueError("PyPI release metadata has an invalid content length") from exc
+                    if parsed_length < 0 or parsed_length > _PYPI_RELEASE_METADATA_LIMIT:
+                        raise ValueError("PyPI release metadata exceeds the maximum allowed size")
+                payload = response.read(_PYPI_RELEASE_METADATA_LIMIT + 1)
+            break
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return "absent"
+            if exc.code == 503 and retry_delay is not None:
+                time.sleep(retry_delay)
+                continue
+            raise ValueError(f"PyPI release lookup failed with HTTP {exc.code}") from exc
+        except (OSError, TimeoutError, urllib.error.URLError) as exc:
+            raise ValueError("PyPI release lookup failed") from exc
 
     if len(payload) > _PYPI_RELEASE_METADATA_LIMIT:
         raise ValueError("PyPI release metadata exceeds the maximum allowed size")

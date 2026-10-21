@@ -1,5 +1,7 @@
+use std::ffi::OsString;
 use std::fs::File;
 use std::io;
+use std::os::windows::ffi::{OsStrExt, OsStringExt};
 use std::os::windows::io::AsRawHandle;
 use std::path::{Path, PathBuf};
 use windows_permissions::constants::{
@@ -69,7 +71,7 @@ where
     };
     result
         .and_then(|mut binding| action(&mut binding))
-        .map_err(|error| error.to_string())
+        .map_err(surfaced_windows_bind_error)
 }
 
 #[cfg(test)]
@@ -101,7 +103,7 @@ pub(super) fn bind_windows_private_directory_under(
             }
         },
     )
-    .map_err(|error| error.to_string())
+    .map_err(surfaced_windows_bind_error)
 }
 
 pub(super) fn bind_windows_existing_directory(
@@ -129,7 +131,7 @@ pub(super) fn bind_windows_existing_directory_under(
             }
         },
     )
-    .map_err(|error| error.to_string())
+    .map_err(surfaced_windows_bind_error)
 }
 
 fn with_existing_directory<T, F>(path: &Path, private_root: &Path, action: F) -> io::Result<T>
@@ -217,6 +219,32 @@ pub(super) fn open_private_directory(path: &Path, private_root: &Path) -> io::Re
         handle.try_clone()
     })
 }
+fn windows_path_key(path: &Path) -> String {
+    let text = path.to_string_lossy();
+    let stripped = text.strip_prefix(r"\\?\").unwrap_or(text.as_ref());
+    stripped
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase()
+}
+
+fn same_windows_parent(left: &Path, right: &Path) -> bool {
+    left == right || windows_path_key(left) == windows_path_key(right)
+}
+
+fn surfaced_windows_io_error(error: io::Error) -> String {
+    let message = error.to_string();
+    if !message.is_empty()
+        && message.len() <= 80
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+        && message.starts_with("native_")
+    {
+        return message;
+    }
+    "native_resident_windows_acl_apply_failed".to_owned()
+}
 
 pub(super) fn replace_private_file(
     temporary: &Path,
@@ -226,7 +254,10 @@ pub(super) fn replace_private_file(
     let parent = path
         .parent()
         .ok_or_else(|| "native_resident_windows_replace_parent_missing".to_owned())?;
-    if temporary.parent() != Some(parent) {
+    if temporary
+        .parent()
+        .is_none_or(|candidate| !same_windows_parent(candidate, parent))
+    {
         return Err("native_resident_windows_replace_parent_mismatch".to_owned());
     }
     let temporary_name = temporary
@@ -242,7 +273,7 @@ pub(super) fn replace_private_file(
         verify_windows_handle(&source, owner.as_ref()).map_err(io::Error::other)?;
         binding.replace_private_file(&source, destination_name)
     })
-    .map_err(|error| error.to_string())
+    .map_err(surfaced_windows_io_error)
 }
 
 pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bool, String> {
@@ -260,7 +291,7 @@ pub(super) fn remove_private_file(path: &Path, private_root: &Path) -> Result<bo
         };
         guard_runtime_windows_process::delete_private_file_handle(&file).map(|()| true)
     })
-    .map_err(|error| error.to_string())
+    .map_err(surfaced_windows_io_error)
 }
 
 pub(super) fn verify_private_file(file: &File) -> Result<(), String> {
@@ -306,10 +337,37 @@ pub(super) fn repair_windows_handle<H: AsRawHandle>(
     verify_windows_handle(handle, owner)
 }
 
+fn windows_acl_path(path: &Path) -> PathBuf {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    if wide.starts_with(EXTENDED_PREFIX) || wide.starts_with(DEVICE_PREFIX) || !path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    // Adding the verbatim prefix disables Win32's slash conversion. Preserve
+    // UTF-16 code units while normalizing ordinary absolute-path separators.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+
+    let mut extended = Vec::with_capacity(wide.len() + EXTENDED_PREFIX.len() + 4);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    PathBuf::from(OsString::from_wide(&extended))
+}
+
 pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), String> {
     let owner =
         current_process_sid().map_err(|_| "native_resident_windows_owner_sid_failed".to_owned())?;
-    verify_windows_path_owner(path, &owner)?;
+    let path = windows_acl_path(path);
+    verify_windows_path_owner(&path, &owner)?;
     let descriptor = private_descriptor(directory)?;
     let dacl = descriptor
         .dacl()
@@ -325,10 +383,11 @@ pub(super) fn protect_windows_path(path: &Path, directory: bool) -> Result<(), S
     )
     .map_err(|_| "native_resident_windows_acl_apply_failed".to_owned())?;
 
-    verify_windows_path(path, &owner)
+    verify_windows_path(&path, &owner)
 }
 
 fn verify_windows_path_owner(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
@@ -349,6 +408,7 @@ fn verify_windows_handle_owner<H: AsRawHandle>(handle: &H, owner: &Sid) -> Resul
 }
 
 pub(super) fn verify_windows_path(path: &Path, owner: &Sid) -> Result<(), String> {
+    let path = windows_acl_path(path);
     let applied = GetNamedSecurityInfo(
         path.as_os_str(),
         SeObjectType::SE_FILE_OBJECT,
@@ -458,6 +518,40 @@ fn verify_windows_owner(applied: &SecurityDescriptor, owner: &Sid) -> Result<(),
     Ok(())
 }
 
+fn is_stable_native_code(message: &str) -> bool {
+    (1..=128).contains(&message.len())
+        && message.starts_with("native_")
+        && message
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+}
+
+fn surfaced_windows_bind_error(error: io::Error) -> String {
+    surfaced_windows_bind_message(&error.to_string())
+}
+
+fn surfaced_windows_bind_message(message: &str) -> String {
+    if is_stable_native_code(message) {
+        return message.to_owned();
+    }
+    if message.contains("outside its trusted private boundary") {
+        return "native_resident_windows_boundary_mismatch".to_owned();
+    }
+    if message.contains("trusted directory ancestry is missing") {
+        return "native_resident_windows_trusted_ancestry_missing".to_owned();
+    }
+    if message.contains("private directory ancestry is missing") {
+        return "native_resident_windows_private_ancestry_missing".to_owned();
+    }
+    if message.contains("os error 32") || message.contains("being used by another process") {
+        return "native_resident_windows_sharing_violation".to_owned();
+    }
+    if message.contains("os error 5") || message.contains("Access is denied") {
+        return "native_resident_windows_access_denied".to_owned();
+    }
+    "native_resident_windows_bind_failed".to_owned()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -483,5 +577,43 @@ mod tests {
             system.as_ref(),
             administrators.as_ref(),
         ));
+    }
+
+    #[test]
+    fn windows_bind_errors_keep_stable_codes() {
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "directory binding path is outside its trusted private boundary"
+            ),
+            "native_resident_windows_boundary_mismatch"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("private directory ancestry is missing"),
+            "native_resident_windows_private_ancestry_missing"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("trusted directory ancestry is missing"),
+            "native_resident_windows_trusted_ancestry_missing"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "The process cannot access the file because it is being used by another process. (os error 32)"
+            ),
+            "native_resident_windows_sharing_violation"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("Access is denied. (os error 5)"),
+            "native_resident_windows_access_denied"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message("native_resident_windows_acl_not_private"),
+            "native_resident_windows_acl_not_private"
+        );
+        assert_eq!(
+            super::surfaced_windows_bind_message(
+                "The system cannot find the path specified. (os error 3)"
+            ),
+            "native_resident_windows_bind_failed"
+        );
     }
 }

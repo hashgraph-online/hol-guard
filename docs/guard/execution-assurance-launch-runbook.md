@@ -37,10 +37,10 @@ Reference commands:
 # hol-guard
 uv run --no-sync pytest -q tests/test_guard_provider_*.py tests/test_guard_policy_*.py tests/test_guard_receipt_*.py tests/test_guard_evidence_*.py
 uv run --no-sync pytest -q tests/test_guard_harness_*.py
-gh workflow run guard-gvisor-reference.yml --ref <candidate-branch>
+gh workflow run nightly-native.yml --ref <candidate-branch>
 gh workflow run mdm-artifacts.yml --ref <candidate-branch> -f build_id=<candidate-sha>
 
-# hol-points-portal
+# cloud-portal
 bun run test -- __tests__/guard-execution-assurance-*.test.ts __tests__/guard-execution-assurance-*.test.tsx
 bun run guard:test:mdm
 bun run lint

@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.krusch-agentic-proxy",
+  "version": "1.0.0",
+  "name": "Krusch Agentic Proxy MCP",
+  "description": "Dual-Engine (Thinker + Implementer) MCP server and local LLM tool-calling gateway with tokenized shlex command allowlists and sensitive dotfile isolation. Task delegation via krusch_execute_task and unknown tools require review. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.kruschdev",
+    "displayName": "Krusch (@kruschdev)",
+    "url": "https://github.com/kruschdev/krusch-agentic-proxy"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#0B0F17"
+  },
+  "homepage": "https://github.com/kruschdev/krusch-agentic-proxy",
+  "license": "MIT",
+  "launch": {
+    "kind": "direct-command",
+    "command": "krusch-agentic-mcp"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-repository-read"
+  ],
+  "tools": [
+    {
+      "name": "krusch_execute_task",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/kruschdev/krusch-agentic-proxy",
+    "https://github.com/kruschdev/krusch-agentic-proxy/blob/main/src/mcp_server.py",
+    "https://github.com/kruschdev/krusch-agentic-proxy/blob/main/src/tools.py",
+    "https://github.com/kruschdev/krusch-agentic-proxy/blob/main/pyproject.toml"
+  ],
+  "saferAlternatives": [
+    "Keep krusch_execute_task on Review: although internal tools enforce tokenized shlex allowlists and block sensitive dotfiles (.env, .ssh, .aws), the sub-agent runs local inspection commands.",
+    "Set KRUSCH_ALLOWED_ROOTS to a colon-separated list of project directories instead of relying on the default home and /tmp roots.",
+    "Lower max_loops (or set KRUSCH_AGENT_TIMEOUT) when delegating narrow inspection tasks so sub-agent iterations stay tightly bounded."
+  ]
+}

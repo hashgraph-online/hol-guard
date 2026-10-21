@@ -192,19 +192,28 @@ pub(super) fn open_raw(
     open_raw_with_access(path, directory, share_mode, desired_access)
 }
 
-fn open_raw_with_access(
+pub(super) fn open_raw_with_access(
     path: &Path,
     directory: bool,
     share_mode: DWORD,
     desired_access: DWORD,
 ) -> io::Result<std::fs::File> {
-    let path_w = super::wide_path(path)?;
     let flags = FILE_FLAG_OPEN_REPARSE_POINT
         | if directory {
             FILE_FLAG_BACKUP_SEMANTICS
         } else {
             0
         };
+    open_raw_with_flags(path, share_mode, desired_access, flags)
+}
+
+pub(super) fn open_raw_with_flags(
+    path: &Path,
+    share_mode: DWORD,
+    desired_access: DWORD,
+    flags: DWORD,
+) -> io::Result<std::fs::File> {
+    let path_w = super::wide_path(path)?;
     // SAFETY: The path is NUL-terminated and all pointers remain valid for
     // the synchronous CreateFileW call.
     let raw = unsafe {
@@ -276,22 +285,6 @@ fn invalid_object(directory: bool) -> io::Error {
     )
 }
 
-fn trusted_private_owner(applied: &Sid, current: &Sid) -> bool {
-    if applied == current {
-        return true;
-    }
-    let Ok(system) = "S-1-5-18".parse::<LocalBox<Sid>>() else {
-        return false;
-    };
-    if applied == system.as_ref() {
-        return true;
-    }
-    let Ok(administrators) = "S-1-5-32-544".parse::<LocalBox<Sid>>() else {
-        return false;
-    };
-    applied == administrators.as_ref()
-}
-
 /// Verify the exact owner-private file policy on an already-open handle.
 pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
     let owner = current_process_sid()
@@ -308,7 +301,7 @@ pub(super) fn verify_private_file(handle: &std::fs::File) -> io::Result<()> {
             "private file owner is missing",
         ));
     };
-    if !trusted_private_owner(applied_owner, owner.as_ref()) {
+    if !crate::owner::trusted_owner(applied_owner, owner.as_ref()) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "private file owner does not match the current SID",
@@ -455,46 +448,4 @@ pub(super) fn rename_into_directory(
         ));
     }
     Ok(())
-}
-
-/// Delete the path's currently opened object only when it is the same object
-/// as `expected`. Comparison and deletion both use owned handles, preventing a
-/// same-user pathname replacement from redirecting cleanup to a new file.
-pub fn remove_file_if_same(path: &Path, expected: &std::fs::File) -> io::Result<bool> {
-    let current = match open_raw(
-        path,
-        false,
-        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-        true,
-    ) {
-        Ok(current) => current,
-        Err(error) => {
-            if error.kind() == io::ErrorKind::NotFound {
-                return Ok(false);
-            }
-            return Err(error);
-        }
-    };
-    validate_handle(&current, false)?;
-    if file_information(expected.as_raw_handle() as HANDLE)?
-        != file_information(current.as_raw_handle() as HANDLE)?
-    {
-        return Ok(false);
-    }
-    mark_handle_for_delete(&current)?;
-    Ok(true)
-}
-
-pub(super) fn file_information(handle: HANDLE) -> io::Result<(DWORD, DWORD, DWORD)> {
-    // SAFETY: BY_HANDLE_FILE_INFORMATION is a plain output struct; handle
-    // stays owned during this query.
-    let mut information = unsafe { zeroed::<BY_HANDLE_FILE_INFORMATION>() };
-    if unsafe { GetFileInformationByHandle(handle, &mut information) } == FALSE {
-        return Err(io::Error::last_os_error());
-    }
-    Ok((
-        information.dwVolumeSerialNumber,
-        information.nFileIndexHigh,
-        information.nFileIndexLow,
-    ))
 }

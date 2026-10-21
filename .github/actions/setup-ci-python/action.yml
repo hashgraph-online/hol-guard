@@ -1,5 +1,5 @@
 name: Set up locked CI Python
-description: Install the exact interpreter and development dependencies for Linux pytest jobs.
+description: Install the exact interpreter and locked test dependencies for Linux pytest jobs.
 inputs:
   python-version:
     description: Exact Python version shared by discovery and execution.
@@ -25,6 +25,8 @@ runs:
         enable-cache: true
         cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
         save-cache: ${{ inputs.save-cache }}
+        # Coverage workers reuse the producer's prebuilt wheels instead of downloading them again.
+        prune-cache: false
     - name: Retry uv setup after transient download failure
       if: steps.setup-uv-primary.outcome == 'failure'
       uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
@@ -33,13 +35,14 @@ runs:
         enable-cache: true
         cache-dependency-glob: ${{ inputs.cache-dependency-glob }}
         save-cache: ${{ inputs.save-cache }}
-    - name: Install locked development dependencies
+        prune-cache: false
+    - name: Install locked test dependencies
       shell: bash
       env:
         CI_SETUP_PYTHON_VERSION: ${{ inputs.python-version }}
       run: |
         for attempt in 1 2; do
-          if uv sync --frozen --extra dev --python "$CI_SETUP_PYTHON_VERSION"; then
+          if uv sync --frozen --no-dev --group ci-test --python "$CI_SETUP_PYTHON_VERSION"; then
             exit 0
           fi
           if [[ "$attempt" -eq 2 ]]; then

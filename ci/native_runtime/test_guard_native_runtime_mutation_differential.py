@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import random
 import string
@@ -9,15 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.config import load_guard_config
 from codex_plugin_scanner.guard.native_policy_test_support import native_policy_snapshot
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.native_runtime import parity_signature, review_post_tool_native
-from codex_plugin_scanner.guard.native_runtime_resident import close_resident_native_runtimes
-from codex_plugin_scanner.guard.runtime.hook_content_scanner import ContentScanner
-from codex_plugin_scanner.guard.runtime.hook_decision_cache import HookDecisionCache
-from codex_plugin_scanner.guard.runtime.hook_review_engine import HookReviewEngine
 from codex_plugin_scanner.guard.runtime.hook_review_types import HookReviewRequest, HookReviewResponse
-from codex_plugin_scanner.guard.store import GuardStore
 
 _NATIVE_BINARY = os.environ.get("HOL_GUARD_NATIVE_BINARY")
 pytestmark = pytest.mark.skipif(not _NATIVE_BINARY, reason="compiled native runtime is required")
@@ -26,14 +22,14 @@ _CASES_PER_SEED = 64
 _OUTPUT_KEYS = ("tool_response", "stdout", "stderr", "result")
 _TEXT_KEYS = ("text", "output", "content", "message", "stdout", "stderr")
 
-
-def _engine(store: GuardStore) -> HookReviewEngine:
-    return HookReviewEngine(
-        store=store,
-        scanner=ContentScanner(),
-        cache=HookDecisionCache(store),
-        config_loader=lambda guard_home, workspace: load_guard_config(guard_home, workspace=workspace),
-    )
+_EXPECTATIONS_PATH = (
+    Path(__file__).resolve().parents[2]
+    / "tests"
+    / "fixtures"
+    / "native-hook-parity"
+    / "differential-expectations.v1.json"
+)
+_EXPECTATIONS = json.loads(_EXPECTATIONS_PATH.read_text(encoding="utf-8"))["suites"]["mutation"]
 
 
 def _clean_text(rng: random.Random) -> str:
@@ -125,11 +121,11 @@ def _request(
 
 def _assert_native_security_floor(
     native_response: HookReviewResponse,
-    python_response: HookReviewResponse,
+    expected: dict[str, object],
 ) -> None:
-    """Native policy floors may be stricter, but never weaker than Python."""
+    """Native policy floors may be stricter, but never weaker than the recorded oracle."""
 
-    if python_response.decision == "deny":
+    if expected["decision"] == "deny":
         assert native_response.decision == "deny"
         assert native_response.model_output_action == "block"
         return
@@ -138,9 +134,8 @@ def _assert_native_security_floor(
         return
     assert native_response.decision == "allow"
     native_signature = parity_signature(native_response)
-    python_signature = parity_signature(python_response)
-    assert native_signature[1] == python_signature[1]
-    assert native_signature[6:] == python_signature[6:]
+    assert native_signature[1] == expected["model_output_action"]
+    assert native_signature[6:] == (expected["reviewed_output_sha256"], expected["excerpt_sha256"])
 
 
 @pytest.mark.parametrize("seed", _SEEDS)
@@ -149,8 +144,6 @@ def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path,
     with tempfile.TemporaryDirectory(prefix=f"hgm-{seed}-", dir=tempfile.gettempdir()) as short_tmp:
         guard_home = Path(short_tmp) / "guard-home"
         guard_home.mkdir(mode=0o700)
-        store = GuardStore(guard_home)
-        engine = _engine(store)
         try:
             with native_policy_snapshot(guard_home) as snapshot:
                 for case_index in range(_CASES_PER_SEED):
@@ -160,7 +153,11 @@ def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path,
                         payload=_payload(rng, case_index),
                         request_id=f"mutation-{seed}-{case_index}",
                     )
-                    python_response = engine.review(request)
+                    case_id = f"mutation-{seed}-{case_index}"
+                    try:
+                        expected = _EXPECTATIONS[case_id]
+                    except KeyError:
+                        raise AssertionError(f"missing oracle expectation for case {case_id}") from None
                     native_response = review_post_tool_native(
                         request,
                         observe_mode=False,
@@ -168,13 +165,11 @@ def test_mutated_inline_corpus_keeps_python_rust_security_parity(tmp_path: Path,
                     )
                     assert native_response is not None, (seed, case_index)
                     try:
-                        _assert_native_security_floor(native_response, python_response)
+                        _assert_native_security_floor(native_response, expected)
                     except AssertionError:
-                        raise AssertionError(
-                            (seed, case_index, request.payload, native_response, python_response)
-                        ) from None
+                        raise AssertionError((seed, case_index, request.payload, native_response, expected)) from None
         finally:
-            close_resident_native_runtimes()
+            close_native_residents()
 
 
 def test_mutation_corpus_is_deterministic() -> None:

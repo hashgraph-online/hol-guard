@@ -87,6 +87,20 @@ def test_symlink_target_inside_workspace_is_rejected(tmp_path: Path, monkeypatch
     assert "workspace" in resolution.error.lower()
 
 
+def test_home_grok_bin_is_an_automatic_install_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    context = _context(tmp_path, workspace=False)
+    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+    candidate = _write_executable(context.home_dir / ".grok" / "bin" / grok_executable_names()[0])
+    monkeypatch.setenv("PATH", str(candidate.parent))
+    monkeypatch.setattr(grok_executable_module, "_executable_security_error", lambda *_args: None)
+
+    resolution = resolve_trusted_grok_executable(context)
+
+    assert resolution.error is None
+    assert resolution.executable is not None
+    assert resolution.executable.path == candidate.resolve()
+
+
 def test_missing_executable_has_actionable_error(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     context = _context(tmp_path, workspace=False)
     monkeypatch.setenv("PATH", "")

@@ -110,3 +110,21 @@ fn symlink_source_is_fail_closed() {
     assert_eq!(response.reason_code, "no_output_to_review");
     let _ = fs::remove_dir_all(root);
 }
+
+#[test]
+fn oversized_source_never_yields_allow_original() {
+    let root =
+        std::env::temp_dir().join(format!("guard-hook-core-oversize-{}", std::process::id()));
+    fs::create_dir_all(&root).unwrap();
+    let source = root.join("source.rs");
+    // A secret pattern sitting past the bounded scan window must fail closed.
+    let mut bytes = vec![b'a'; 5 * 1024 * 1024 + 16];
+    bytes.extend_from_slice(b"ghp_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    fs::write(&source, &bytes).unwrap();
+
+    let response = review_post_tool(&source_request(&root, digest(&bytes), bytes.len() as i64));
+
+    assert_ne!(response.model_output_action, "allow_original");
+    assert_ne!(response.decision, "allow");
+    let _ = fs::remove_dir_all(root);
+}

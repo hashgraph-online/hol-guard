@@ -8,6 +8,9 @@ generation state, response binding, and resident lifecycle.
 from __future__ import annotations
 
 import atexit
+import contextlib
+import json
+import os
 import threading
 import time
 from collections.abc import Mapping
@@ -20,24 +23,101 @@ from .codex_hook_launch_runtime import (
 from .codex_hook_launch_runtime import (
     run_isolated_hook_process as _legacy_run_isolated_hook_process,
 )
-from .native_approval_errors import NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .fork_safety import forget_in_child
+from .native_approval_errors import FINITE_FAILURE_CODES, NATIVE_RESIDENT_LIFECYCLE_ERROR_CODES
+from .native_resident_revival import (
+    RESTART_BLOCKED_CODE,
+    arm_restart_hold,
+    clear_restart_hold,
+    is_restart_blocked_frame,
+    restart_blocked_frame,
+    restart_hold_active,
+)
 from .native_resident_stream import _PersistentNativeClient, _StreamFailure
+from .path_resolution_cache import cached_realpath
 
 # Retain the old runner name as a test seam. Production always leaves this
 # binding untouched and uses the persistent Rust client below.
 run_isolated_hook_process = _legacy_run_isolated_hook_process
 
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_RESIDENT_REQUEST_LOG = "HOL_GUARD_RESIDENT_REQUEST_LOG"
+_BACKGROUND_REQUEST_LABEL: ContextVar[str | None] = ContextVar("_background_request_label", default=None)
+
+
+@contextlib.contextmanager
+def background_resident_requests(label: str):
+    """Name this thread's resident calls for the request log that counts them.
+
+    A daemon thread that drains its own queue spends round trips on its own
+    schedule, so no hook request waits on them. The budget test reads the log
+    to tell those apart from the calls a hook makes inline; without a name of
+    their own they would look like per-request growth. Production leaves the
+    log unset and nothing here runs.
+    """
+
+    token = _BACKGROUND_REQUEST_LABEL.set(label)
+    try:
+        yield
+    finally:
+        _BACKGROUND_REQUEST_LABEL.reset(token)
+
+
+def _record_resident_request(payload: bytes = b"") -> None:
+    """Append one line when a test asks every process to count resident calls.
+
+    The line is the operation name when the payload is a resident envelope, so
+    a test can assert which ops a workload used; otherwise it is ``1``. A
+    thread inside ``background_resident_requests`` writes that name instead.
+
+    Hook workers are spawned processes, so an in-process monkeypatch cannot see
+    their round trips. The variable is unset in production and the write then
+    does not run. A configured log that cannot be written fails the request.
+    """
+
+    path = os.environ.get(_RESIDENT_REQUEST_LOG)
+    if not path:
+        return
+    background = _BACKGROUND_REQUEST_LABEL.get()
+    if background is not None:
+        _append_resident_request(path, background.encode("ascii", "replace"))
+        return
+    label = b"1"
+    try:
+        operation = json.loads(payload).get("operation")
+        if isinstance(operation, str) and operation.isidentifier():
+            label = operation.encode("ascii", "replace")
+    except (ValueError, AttributeError, UnicodeDecodeError):
+        pass
+    _append_resident_request(path, label)
+
+
+def _append_resident_request(path: str, label: bytes) -> None:
+    descriptor = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    try:
+        os.write(descriptor, label + b"\n")
+    finally:
+        os.close(descriptor)
+
+
 _MAX_REQUEST_BYTES = 6 * 1024 * 1024
 _MAX_PERSISTENT_CLIENTS = 16
+# Overlap fans out to _MAX_PERSISTENT_CLIENTS streams, and each parked stream
+# keeps a child process alive. A stream parked this long behind a newer one is
+# retired, so bursts keep their streams warm and a quiet process sheds them.
+_IDLE_STREAM_TTL_SECONDS = 30.0
 _MAX_PERSISTENT_POOLS = 16
 _MAX_FAILURE_CODE_LENGTH = 128
+# Shared bounds for probes that must confirm native resident cleanup.
+NATIVE_RESIDENT_CLEANUP_TIMEOUT_SECONDS = 10.0
+NATIVE_RESIDENT_CLEANUP_RETRY_INTERVAL_SECONDS = 0.25
 _LAST_FAILURE_CODE: ContextVar[str | None] = ContextVar(
     "native_resident_client_failure_code",
     default=None,
 )
 _RESIDENTS_LOCK = threading.Lock()
 _RESIDENTS: dict[tuple[Path, Path], Mapping[str, str]] = {}
+forget_in_child(_RESIDENTS)
 
 
 def native_resident_client_failure_code() -> str | None:
@@ -45,9 +125,20 @@ def native_resident_client_failure_code() -> str | None:
     return _LAST_FAILURE_CODE.get()
 
 
-def record_native_resident_client_failure_code(code: str) -> None:
+def record_native_resident_client_failure_code(code: str | None) -> None:
     """Record a privacy-safe failure code for the current native client request."""
     _LAST_FAILURE_CODE.set(code)
+
+
+def record_native_resident_error_frame(decoded: Mapping[str, object]) -> None:
+    """Keep the code from a framed resident refusal such as ``{"error": code}``.
+
+    The client stream answers a failed resident round trip with a framed error instead of exiting, so
+    the transport succeeds and the code would otherwise be dropped as an unexpected schema.
+    """
+    code = decoded.get("error")
+    if isinstance(code, str) and len(code) <= _MAX_FAILURE_CODE_LENGTH and code in FINITE_FAILURE_CODES:
+        _LAST_FAILURE_CODE.set(code)
 
 
 def _allowlisted_failure_code(stderr: str) -> str | None:
@@ -77,6 +168,23 @@ def _record_failure_code(result: BoundedHookProcessResult) -> None:
     _LAST_FAILURE_CODE.set(_allowlisted_failure_code(result.stderr) or _classify_failure(result))
 
 
+def _is_resident_startup_error(response: bytes) -> bool:
+    """True for the resident's own failure frame, which carries no request schema.
+
+    A client that answered with it is bound to a resident that never came up
+    (for example the state directory did not exist yet). Parking it would hand
+    that stale failure to every later request for the same home.
+    """
+
+    if not response.startswith(b'{"error":"native_resident_'):
+        return False
+    try:
+        decoded = json.loads(response)
+    except ValueError:
+        return False
+    return isinstance(decoded, dict) and set(decoded) == {"error", "retryable"}
+
+
 class _PersistentNativeClientPool:
     """Bounded lazy pool of streams for one executable and Guard state root.
 
@@ -88,17 +196,38 @@ class _PersistentNativeClientPool:
     def __init__(self, *, executable: Path, state_dir: Path, environment: Mapping[str, str]) -> None:
         self._executable = executable
         self._state_dir = state_dir
+        self._hold_key = (str(executable), str(state_dir))
         self._environment = environment
         self._clients: set[_PersistentNativeClient] = set()
+        self._retiring: set[_PersistentNativeClient] = set()
         self._idle: list[_PersistentNativeClient] = []
+        self._parked_at: dict[_PersistentNativeClient, float] = {}
+        self._trim_timer: threading.Timer | None = None
         self._condition = threading.Condition()
         self._closed = False
+
+    def has_idle_client(self) -> bool:
+        """True when a live client is parked and can serve without a spawn."""
+
+        with self._condition:
+            if self._closed:
+                return False
+            return any(client._process is not None and client._process.poll() is None for client in self._idle)
 
     def _lease(self, *, deadline_monotonic: float) -> _PersistentNativeClient | None:
         with self._condition:
             while not self._closed:
+                # Timed-out requests may have no teardown budget left. Retain
+                # ownership until close confirms containment, but reclaim
+                # completed retirees instead of permanently exhausting slots.
+                for retiring in tuple(self._retiring):
+                    if retiring.close(deadline_monotonic=time.monotonic()):
+                        self._retiring.discard(retiring)
+                        self._clients.discard(retiring)
                 if self._idle:
-                    return self._idle.pop()
+                    client = self._idle.pop()
+                    self._parked_at.pop(client, None)
+                    return client
                 if len(self._clients) < _MAX_PERSISTENT_CLIENTS:
                     client = _PersistentNativeClient(
                         executable=self._executable,
@@ -111,55 +240,155 @@ class _PersistentNativeClientPool:
                 remaining = deadline_monotonic - time.monotonic()
                 if remaining <= 0:
                     break
-                self._condition.wait(timeout=remaining)
+                self._condition.wait(timeout=min(remaining, 0.05) if self._retiring else remaining)
         _LAST_FAILURE_CODE.set("native_client_pool_exhausted")
         return None
 
     def request(self, payload: bytes, *, deadline_monotonic: float) -> bytes | None:
+        if restart_hold_active(self._hold_key) and not self.has_idle_client():
+            # The Rust client just refused to respawn a crash-looping resident.
+            # Answer the same bounded refusal instead of spawning a client per call.
+            _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
+            return restart_blocked_frame()
         client = self._lease(deadline_monotonic=deadline_monotonic)
         if client is None:
             return None
         response: bytes | None = None
         try:
+            _record_resident_request(payload)
             response = client.request(payload, deadline_monotonic=deadline_monotonic)
+            if response is not None:
+                if is_restart_blocked_frame(response):
+                    arm_restart_hold(self._hold_key)
+                    _LAST_FAILURE_CODE.set(RESTART_BLOCKED_CODE)
+                else:
+                    clear_restart_hold(self._hold_key)
             return response
         finally:
             close_client = False
             with self._condition:
                 if client not in self._clients:
                     close_client = True
-                elif self._closed or response is None:
-                    self._clients.remove(client)
+                elif self._closed or response is None or _is_resident_startup_error(response):
+                    self._retiring.add(client)
                     close_client = True
                 else:
                     self._idle.append(client)
+                    self._parked_at[client] = time.monotonic()
+                    self._schedule_trim_locked()
                 self._condition.notify()
             if close_client:
-                client.close()
+                try:
+                    contained = client.close(deadline_monotonic=deadline_monotonic)
+                except BaseException:
+                    with self._condition:
+                        if client in self._clients:
+                            self._retiring.add(client)
+                    raise
+                if contained is not False:
+                    with self._condition:
+                        self._clients.discard(client)
+                        self._retiring.discard(client)
+                        self._condition.notify_all()
 
-    def close(self) -> None:
+    def _schedule_trim_locked(self) -> None:
+        """Arm one timer for the oldest stream parked behind the newest."""
+
+        if self._closed or self._trim_timer is not None or len(self._idle) < 2:
+            return
+        # Streams are parked in order, so the first one is the oldest.
+        due = self._parked_at.get(self._idle[0], time.monotonic()) + _IDLE_STREAM_TTL_SECONDS
+        timer = threading.Timer(max(0.0, due - time.monotonic()), self._trim_idle)
+        timer.daemon = True
+        self._trim_timer = timer
+        timer.start()
+
+    def _trim_idle(self) -> None:
+        """Retire streams parked past the idle TTL, keeping the newest parked."""
+
+        with self._condition:
+            self._trim_timer = None
+            if self._closed:
+                return
+            now = time.monotonic()
+            stale = [
+                client
+                for client in self._idle[:-1]
+                if now - self._parked_at.get(client, now) >= _IDLE_STREAM_TTL_SECONDS
+            ]
+            for client in stale:
+                self._idle.remove(client)
+                self._parked_at.pop(client, None)
+                self._retiring.add(client)
+            self._schedule_trim_locked()
+        for client in stale:
+            try:
+                contained = client.close()
+            except Exception:
+                # The stream stays retiring; the next lease reclaims it.
+                continue
+            if contained is not False:
+                with self._condition:
+                    self._clients.discard(client)
+                    self._retiring.discard(client)
+                    self._condition.notify_all()
+
+    def close(self, *, deadline_monotonic: float | None = None) -> bool:
         with self._condition:
             self._closed = True
             clients = tuple(self._clients)
-            self._clients.clear()
             self._idle.clear()
+            self._parked_at.clear()
+            trim_timer, self._trim_timer = self._trim_timer, None
             self._condition.notify_all()
+        if trim_timer is not None:
+            trim_timer.cancel()
         for client in clients:
-            client.close()
+            contained = (
+                client.close() if deadline_monotonic is None else client.close(deadline_monotonic=deadline_monotonic)
+            )
+            if contained is not False:
+                with self._condition:
+                    self._clients.discard(client)
+                    self._retiring.discard(client)
         for client in clients:
             _contain_persistent_resident(client)
+        with self._condition:
+            return not self._clients
 
 
 _CLIENTS_LOCK = threading.Lock()
 _CLIENT_POOLS: dict[tuple[str, str], _PersistentNativeClientPool] = {}
+forget_in_child(_CLIENT_POOLS)
+
+
+def native_resident_client_ready(executable: Path, guard_home: Path) -> bool:
+    """True when a pooled resident for this runtime and home needs no spawn.
+
+    Callers that budget a request tightly have to know whether the cost they
+    are bounding is a round trip or a process spawn: the pool starts a client
+    lazily, and a resident that a test or an operator killed leaves no idle
+    client behind.
+    """
+
+    key = (str(executable), str(_pinned_state_dir(guard_home / "native-runtime")))
+    with _CLIENTS_LOCK:
+        pool = _CLIENT_POOLS.get(key)
+    return pool is not None and pool.has_idle_client()
 
 
 def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str, str]) -> _PersistentNativeClientPool:
-    normalized_state_dir = state_dir.expanduser().resolve()
+    normalized_state_dir = _pinned_state_dir(state_dir)
     key = (str(executable), str(normalized_state_dir))
     evicted: _PersistentNativeClientPool | None = None
     with _CLIENTS_LOCK:
         pool = _CLIENT_POOLS.get(key)
+        if pool is None:
+            forms = _directory_forms(normalized_state_dir)
+            for old_key in list(_CLIENT_POOLS):
+                if old_key[0] == key[0] and _directory_forms(Path(old_key[1])) & forms:
+                    evicted = _CLIENT_POOLS.pop(old_key)
+                    break
         if pool is None:
             if len(_CLIENT_POOLS) >= _MAX_PERSISTENT_POOLS:
                 evicted_key = next(iter(_CLIENT_POOLS))
@@ -176,10 +405,53 @@ def _client_pool_for(executable: Path, state_dir: Path, environment: Mapping[str
     return pool
 
 
-def _state_files(state_dir: Path) -> tuple[Path, ...]:
+def _is_directory(path: Path) -> bool:
+    try:
+        return path.is_dir()
+    except OSError:
+        return False
+
+
+def _pinned_state_dir(state_dir: Path) -> Path:
+    """Pin a runtime directory that exists.
+
+    ``Path.resolve`` of a missing directory is not a stable Windows identity.
+    A settings write can start a resident before publication creates
+    ``native-runtime`` at its absolute spelling. Caching that guess makes the
+    later bind report a missing private ancestor for a directory that exists.
+    """
+
+    candidate = state_dir.expanduser()
+    if _is_directory(candidate):
+        return Path(cached_realpath(os.fspath(candidate)))
+    absolute = Path(os.path.abspath(candidate))
+    if _is_directory(absolute):
+        try:
+            resolved = absolute.resolve()
+        except OSError:
+            return absolute
+        return resolved if _is_directory(resolved) else absolute
+    return absolute
+
+
+def _directory_forms(path: Path) -> set[str]:
+    forms = {str(path), os.path.abspath(path)}
+    if _is_directory(path):
+        with contextlib.suppress(OSError):
+            forms.add(str(path.expanduser().resolve()))
+    return {os.path.normcase(form) for form in forms}
+
+
+def _state_dir_in_guard_home(state_dir: Path, guard_home: Path) -> bool:
+    return bool(_directory_forms(state_dir.parent) & _directory_forms(guard_home))
+
+
+def _state_files(state_dir: Path, *, strict: bool = False) -> tuple[Path, ...]:
     try:
         return tuple(state_dir.glob("resident-v3-*/generation-*.json"))
     except (OSError, RuntimeError):
+        if strict:
+            raise
         return ()
 
 
@@ -193,7 +465,7 @@ def _contain_persistent_resident(client: _PersistentNativeClient) -> None:
     _ = client
 
 
-def close_native_resident_clients(guard_home: Path | None = None) -> None:
+def close_native_resident_clients(guard_home: Path | None = None, *, deadline_monotonic: float | None = None) -> bool:
     """Close persistent Rust clients, optionally limited to one Guard home."""
 
     resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
@@ -202,19 +474,27 @@ def close_native_resident_clients(guard_home: Path | None = None) -> None:
         selected = [
             (key, pool)
             for key, pool in _CLIENT_POOLS.items()
-            if resolved_guard_home is None or Path(key[1]).parent == resolved_guard_home
+            if resolved_guard_home is None or _state_dir_in_guard_home(Path(key[1]), resolved_guard_home)
         ]
-        for key, _pool in selected:
-            _CLIENT_POOLS.pop(key, None)
     first_error: Exception | None = None
-    for _key, pool in selected:
+    all_contained = True
+    for key, pool in selected:
         try:
-            pool.close()
+            contained = (
+                pool.close() if deadline_monotonic is None else pool.close(deadline_monotonic=deadline_monotonic)
+            )
+            if contained is False:
+                all_contained = False
+            else:
+                with _CLIENTS_LOCK:
+                    if _CLIENT_POOLS.get(key) is pool:
+                        _CLIENT_POOLS.pop(key)
         except Exception as error:
             if first_error is None:
                 first_error = error
     if first_error is not None:
         raise first_error
+    return all_contained
 
 
 atexit.register(close_native_resident_clients)
@@ -227,53 +507,126 @@ def _track_resident(executable: Path, state_dir: Path, environment: Mapping[str,
         _RESIDENTS[(executable, state_dir)] = dict(environment)
 
 
+def tracked_native_resident_state_dirs(guard_home: Path) -> tuple[Path, ...]:
+    """State roots of residents this process has used for ``guard_home`` and not stopped."""
+
+    resolved = guard_home.expanduser().resolve()
+    with _RESIDENTS_LOCK:
+        return tuple(
+            state_dir for (_executable, state_dir) in _RESIDENTS if _state_dir_in_guard_home(state_dir, resolved)
+        )
+
+
+def resident_state_files(state_dir: Path) -> tuple[Path, ...]:
+    """Published resident generation files under one native state root."""
+
+    return _state_files(state_dir)
+
+
 def stop_native_resident(
     *,
     executable: Path,
     state_dir: Path,
     environment: Mapping[str, str],
     timeout_seconds: float = 3.0,
+    retire_clients: bool = False,
+    deadline_monotonic: float | None = None,
 ) -> bool:
     """Stop one Rust-managed resident and wait for its state retirement."""
+    command = [str(executable), "resident-stop", "--state-dir", str(state_dir)]
+    if retire_clients:
+        command.append("--retire-clients")
     result = run_isolated_hook_process(
-        (str(executable), "resident-stop", "--state-dir", str(state_dir)),
+        tuple(command),
         input_text="",
         cwd=executable.parent,
         environment=dict(environment),
         timeout_seconds=timeout_seconds,
+        deadline_monotonic=deadline_monotonic,
         output_limit=_MAX_RESPONSE_BYTES,
     )
+    if result.timed_out or result.containment_failed:
+        return False
+    try:
+        state_files = _state_files(state_dir, strict=True)
+    except (OSError, RuntimeError):
+        return False
+    if result.returncode == 0:
+        return not state_files
+    # Rust uses this authenticated, idempotent result when no resident state
+    # exists. Update retirement also inspects leases, so accept it only after
+    # the strict final state scan and only for the update-only command.
     return (
-        result.returncode == 0
-        and not result.timed_out
-        and not result.containment_failed
-        and not _state_files(state_dir)
+        retire_clients
+        and result.returncode == 2
+        and result.stderr.strip() == "native_resident_stop_unavailable"
+        and not state_files
     )
 
 
-def close_native_residents(guard_home: Path | None = None) -> bool:
+def retire_native_resident_for_update(
+    *,
+    executable: Path,
+    guard_home: Path,
+    environment: Mapping[str, str],
+    timeout_seconds: float = 3.0,
+) -> bool:
+    """Retire any resident before its executable can be replaced in place.
+
+    The resident registry is process-local, so an updater may need to retire a
+    resident started by another Guard process. State discovery stays bounded to
+    this Guard home, while shutdown still goes through the authenticated Rust
+    command and its PID/start-marker/runtime-digest checks.
+    """
+
+    resolved_guard_home = guard_home.expanduser().resolve()
+    state_dir = resolved_guard_home / "native-runtime"
+    try:
+        # A persistent client that could not be contained is still a live
+        # native process. Stopping the shared resident does not make that true.
+        if close_native_resident_clients(resolved_guard_home) is False:
+            return False
+        _ = _state_files(state_dir, strict=True)
+        return stop_native_resident(
+            executable=executable,
+            state_dir=state_dir,
+            environment=environment,
+            timeout_seconds=timeout_seconds,
+            retire_clients=True,
+        )
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+
+def close_native_residents(guard_home: Path | None = None, *, deadline_monotonic: float | None = None) -> bool:
     """Stop this process's residents, optionally limited to one Guard home."""
 
     resolved_guard_home = guard_home.expanduser().resolve() if guard_home is not None else None
-    close_native_resident_clients(guard_home)
+    clients_contained = close_native_resident_clients(guard_home, deadline_monotonic=deadline_monotonic)
     with _RESIDENTS_LOCK:
         residents = [
             (key, environment)
             for key, environment in _RESIDENTS.items()
-            if resolved_guard_home is None or key[1].parent == resolved_guard_home
+            if resolved_guard_home is None or _state_dir_in_guard_home(key[1], resolved_guard_home)
         ]
         remaining = {
             key: environment
             for key, environment in _RESIDENTS.items()
-            if resolved_guard_home is not None and key[1].parent != resolved_guard_home
+            if resolved_guard_home is not None and not _state_dir_in_guard_home(key[1], resolved_guard_home)
         }
-    all_contained = True
+    all_contained = clients_contained is not False
     for (executable, state_dir), environment in residents:
-        if _state_files(state_dir) and not stop_native_resident(
+        if not _state_files(state_dir):
+            continue
+        remaining_seconds = 3.0 if deadline_monotonic is None else min(3.0, deadline_monotonic - time.monotonic())
+        stopped = remaining_seconds > 0 and stop_native_resident(
             executable=executable,
             state_dir=state_dir,
             environment=environment,
-        ):
+            timeout_seconds=remaining_seconds,
+            deadline_monotonic=deadline_monotonic,
+        )
+        if not stopped:
             remaining[(executable, state_dir)] = environment
             all_contained = False
     with _RESIDENTS_LOCK:
@@ -340,6 +693,12 @@ def _legacy_native_resident_client_request(
     return result.stdout.encode("utf-8")
 
 
+def native_resident_client_transport() -> str:
+    """Which transport the next request takes: ``"pool"`` or the legacy seam."""
+
+    return "legacy" if run_isolated_hook_process is not _legacy_run_isolated_hook_process else "pool"
+
+
 def native_resident_client_request(
     *,
     executable: Path,
@@ -390,7 +749,13 @@ __all__ = [
     "close_native_resident_clients",
     "close_native_residents",
     "native_resident_client_failure_code",
+    "native_resident_client_ready",
     "native_resident_client_request",
+    "native_resident_client_transport",
     "record_native_resident_client_failure_code",
+    "record_native_resident_error_frame",
+    "resident_state_files",
+    "retire_native_resident_for_update",
     "stop_native_resident",
+    "tracked_native_resident_state_dirs",
 ]

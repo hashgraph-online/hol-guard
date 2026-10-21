@@ -293,10 +293,11 @@ def managed_urlopen(
     *,
     timeout: float | None = None,
     policy: ManagedNetworkPolicy | None = None,
+    allow_redirects: bool = True,
 ) -> ManagedResponse:
     resolved, managed = resolved_network_policy(policy)
     validate_destination(request_url(request), resolved)
-    reject_redirects = _request_has_authentication(request)
+    reject_redirects = not allow_redirects or _request_has_authentication(request)
     if (
         not managed
         and resolved.proxy_mode == "system"

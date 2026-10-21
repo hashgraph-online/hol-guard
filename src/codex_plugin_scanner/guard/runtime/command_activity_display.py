@@ -138,7 +138,7 @@ def _redact_home_prefix(value: str, *, home_dir: Path | str | None) -> str:
 
 
 def _scrub_residual_private_text(value: str) -> str:
-    scrubbed = _HEREDOC_RE.sub(r"\g<op>…\g<end>", value)
+    scrubbed = _strip_shell_comments(_HEREDOC_RE.sub(r"\g<op>…\g<end>", value))
     scrubbed = _ENV_ASSIGNMENT_RE.sub("[redacted]", scrubbed)
     scrubbed = _URL_RE.sub("[redacted]", scrubbed)
     scrubbed = _POSIX_ABS_PATH_RE.sub("[redacted]", scrubbed)
@@ -146,6 +146,46 @@ def _scrub_residual_private_text(value: str) -> str:
     scrubbed = _HOME_PATH_RE.sub("[redacted]", scrubbed)
     scrubbed = _EMAIL_RE.sub("[redacted]", scrubbed)
     return redact_text(scrubbed).text
+
+
+def _strip_shell_comments(value: str) -> str:
+    """Hide POSIX-like comment tails from a local display preview.
+
+    This does not reconstruct shell execution. Quoted hashes remain visible,
+    and a backslash-newline is preserved while a following comment is removed.
+    """
+
+    result: list[str] = []
+    quote: str | None = None
+    escaped = False
+    comment = False
+    for index, char in enumerate(value):
+        if comment:
+            if char == "\n":
+                comment = False
+                result.append(char)
+            continue
+        if escaped:
+            result.append(char)
+            escaped = False
+        elif char == "\\" and quote != "'":
+            result.append(char)
+            escaped = True
+        elif char in {"'", '"'}:
+            if quote is None:
+                quote = char
+            elif quote == char:
+                quote = None
+            result.append(char)
+        elif (
+            char == "#" and quote is None and (index == 0 or value[index - 1].isspace() or value[index - 1] in ";&|()")
+        ):
+            while result and result[-1] in {" ", "\t"}:
+                result.pop()
+            comment = True
+        else:
+            result.append(char)
+    return "".join(result)
 
 
 __all__ = (

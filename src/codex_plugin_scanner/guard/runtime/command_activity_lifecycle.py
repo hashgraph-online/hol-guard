@@ -85,7 +85,7 @@ _UNCERTAINTY_REASON: Final = MappingProxyType(
 )
 
 
-def build_native_pre_hook_evidence(
+def build_policy_only_pre_hook_evidence(
     *,
     activity_id: str,
     occurred_at: datetime,
@@ -95,8 +95,9 @@ def build_native_pre_hook_evidence(
     receipt_id: str | None = None,
     prompted: bool = False,
     approval_reuse_status: ActivityApprovalReuseStatus = ActivityApprovalReuseStatus.NOT_APPLICABLE,
+    workflow_authorization_claimed: bool = False,
 ) -> CommandActivityEvidence:
-    """Preserve a final native action without inventing Python rule evaluation."""
+    """Preserve a final hook action without inventing rule evaluation."""
 
     activity = CommandActivity(
         activity_id=activity_id,
@@ -110,7 +111,11 @@ def build_native_pre_hook_evidence(
         ),
         proof_level=CommandProofLevel.PRE_HOOK,
         policy_action=policy_action,
-        decision_reason_code=ActivityDecisionReason.POLICY,
+        decision_reason_code=(
+            ActivityDecisionReason.CAPABILITY
+            if workflow_authorization_claimed and policy_action == "allow"
+            else ActivityDecisionReason.POLICY
+        ),
         controlling_rule_id=None,
         parse_confidence=None,
         uncertainty_class=None,
@@ -173,24 +178,6 @@ def build_pre_hook_evidence(
         persistence_latency_bucket=persistence_latency_bucket,
     )
     return CommandActivityEvidence(activity=activity, matches=matches)
-
-
-def build_correlated_post_evidence(
-    previous: CommandActivityEvidence,
-    *,
-    request_correlation: CorrelationHandle,
-    succeeded: bool,
-    persistence_latency_bucket: ActivityLatencyBucket = ActivityLatencyBucket.NOT_MEASURED,
-) -> CommandActivityEvidence:
-    """Promote an evidence value while preserving its immutable rule matches."""
-
-    activity = build_correlated_post_activity(
-        previous.activity,
-        request_correlation=request_correlation,
-        succeeded=succeeded,
-        persistence_latency_bucket=persistence_latency_bucket,
-    )
-    return CommandActivityEvidence(activity=activity, matches=previous.matches)
 
 
 def build_correlated_post_activity(

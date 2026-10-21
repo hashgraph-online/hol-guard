@@ -1,17 +1,101 @@
 [workspace]
+exclude = ["crates/guard-command-build"]
 members = [
+    "crates/guard-alloc-probe",
+    "crates/guard-archive",
+    "crates/guard-contained-process",
     "crates/guard-command",
     "crates/guard-contracts",
+    "crates/guard-google-identity",
     "crates/guard-rules",
     "crates/guard-scanner",
+    "crates/guard-seatbelt",
     "crates/guard-secure-fs",
     "crates/guard-hook-core",
     "crates/guard-policy-snapshot",
+    "crates/guard-pack-compiler",
     "crates/guard-rule-contract",
     "crates/guard-runtime",
     "crates/guard-runtime-windows-process",
 ]
 resolver = "2"
+
+[profile.release]
+opt-level = "s"
+# Executable behavior is unchanged; omit symbol tables from distributed binaries.
+strip = "symbols"
+# Whole-program optimization makes the shipped runtime about 20% smaller than
+# per-crate codegen. Unwinding stays enabled: the runtime relies on catch_unwind.
+# Pull request test builds restore the faster per-crate settings through
+# CARGO_PROFILE_RELEASE_* in ci.yml.
+lto = "fat"
+codegen-units = 1
+
+# Code that runs outside the hook decision path (sign-in, installers and
+# updates, TLS, archive inspection, policy-schema validation, bundle signature
+# checks, process inventory) is optimized for size. The hook client, command
+# evaluation, regex matching, JSON, hashing, SQLite and the decompression of
+# embedded rule data keep opt-level "s". Per-function size attributes survive
+# fat LTO, so the split holds in the linked runtime.
+[profile.release.package.email_address]
+opt-level = "z"
+
+[profile.release.package.fluent-uri]
+opt-level = "z"
+
+[profile.release.package.guard-archive]
+opt-level = "z"
+
+[profile.release.package.guard-google-identity]
+opt-level = "z"
+
+[profile.release.package.guard-pack-compiler]
+opt-level = "z"
+
+[profile.release.package.jsonschema]
+opt-level = "z"
+
+[profile.release.package.mailparse]
+opt-level = "z"
+
+[profile.release.package.num-bigint-dig]
+opt-level = "z"
+
+[profile.release.package.oauth2]
+opt-level = "z"
+
+[profile.release.package.referencing]
+opt-level = "z"
+
+[profile.release.package.rsa]
+opt-level = "z"
+
+[profile.release.package.rustls]
+opt-level = "z"
+
+[profile.release.package.rustls-webpki]
+opt-level = "z"
+
+[profile.release.package.saphyr-parser]
+opt-level = "z"
+
+[profile.release.package.security-framework]
+opt-level = "z"
+
+[profile.release.package.sysinfo]
+opt-level = "z"
+
+[profile.release.package.tar]
+opt-level = "z"
+
+[profile.release.package.toml_edit]
+opt-level = "z"
+
+[profile.release.package.ureq]
+opt-level = "z"
+
+[profile.release.package.ureq-proto]
+opt-level = "z"
 
 [workspace.package]
 version = "0.1.0"
@@ -20,20 +104,43 @@ license = "Apache-2.0"
 rust-version = "1.88"
 
 [workspace.dependencies]
+base64 = "=0.22.1"
+mailparse = "=0.17.0"
 hex = "0.4.3"
+caseless = "0.2.2"
 fs2 = "0.4.3"
 ring = "0.17.14"
-getrandom = "0.3.3"
+rsa = "0.9.8"
+getrandom = { version = "0.3.3", features = ["std"] }
 libc = "0.2.175"
-nix = { version = "0.31.3", features = ["fs", "poll", "process", "signal", "socket"] }
+nix = { version = "0.31.3", features = ["dir", "fs", "poll", "process", "signal", "socket"] }
+rustix = { version = "1.1.5", features = ["fs"] }
 regex = "1.11.2"
+fancy-regex = "0.19"
+rusqlite = { version = "0.40.2", features = ["bundled"] }
 serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.143"
+idna = "1.0"
+percent-encoding = "2.3"
+pep440_rs = "=0.7.3"
+serde_json = { version = "1.0.143", features = ["arbitrary_precision"] }
+aes = "0.8.4"
+base64ct = { version = "1.7.3", features = ["alloc"] }
+cbc = "0.1.2"
+hmac = "0.12.1"
 sha2 = "0.10.9"
+sha1 = "0.10.6"
+pbkdf2 = "0.12.2"
+scrypt = "0.11.0"
+base32ct = { version = "0.2.0", features = ["alloc"] }
 sysinfo = "=0.37.2"
 thiserror = "2.0.16"
 windows-permissions = "0.2.4"
+toml = { version = "0.8.23", features = ["preserve_order"] }
+roxmltree = "0.21.1"
+saphyr-parser = "=0.1.0"
 winapi = "0.3.9"
+ruzstd = { version = "=0.9.1", default-features = false, features = ["std"] }
+zstd = "=0.14.0"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

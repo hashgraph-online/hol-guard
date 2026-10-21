@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import sys
 from pathlib import Path
 from typing import Any
 
 from .argparse_utils import FriendlyArgumentParser, should_default_to_scan_target
+from .cli_native_errors import guard_value_error_exit
 from .cli_ui import build_cli_epilog, build_plain_text, build_scan_help_epilog
 from .reporting import format_json as format_json
 from .version import __version__
@@ -21,6 +23,13 @@ def _guard_cli(name: str):
     from .guard import cli as guard_cli_module
 
     return getattr(guard_cli_module, name)
+
+
+def _load_guard_command_hub() -> None:
+    # Parser construction no longer imports the Guard command hub. Load it
+    # before the dispatch handlers so an import failure keeps its traceback
+    # diagnostics instead of collapsing into a one-line error.
+    importlib.import_module(".guard.cli.commands", __package__)
 
 
 def _supported_harness_values() -> tuple[str, ...]:
@@ -243,11 +252,12 @@ def _resolve_legacy_args(
         if program_mode == "hol-guard":
             return ["--help"]
         return argv
-    if program_mode == "guard":
+    if program_mode in {"guard", "hol-guard"}:
+        # Guard-generated commands spell the combined form `<cli> guard ...`.
+        # Neither standalone launcher has a `guard` subcommand, so the prefix
+        # is dropped instead of failing the whole command.
         if argv[0] == "guard":
             return argv[1:]
-        return _resolve_hermes_args(argv)
-    if program_mode == "hol-guard":
         return _resolve_hermes_args(argv)
     if program_mode == "combined" and argv[0] == "hook":
         return ["guard", *argv]
@@ -308,6 +318,9 @@ def _resolve_legacy_args(
         "protect",
         "preflight",
         "pytest-contained",
+        "execute-contained-test",
+        "execute-bound-bash",
+        "ack-bound-bash",
         "diff",
         "test-eval",
         "command",
@@ -364,6 +377,10 @@ def _run_frozen_early_dispatch(requested_argv: list[str]) -> int | None:
         from .guard.adapters.cursor_hook_config import run_frozen_cursor_hook
 
         return run_frozen_cursor_hook(requested_argv[1:])
+    if requested_argv[:1] == ["__guard-claude-hook"]:
+        from .guard.adapters._modules.claude.claude_frozen_hook import run_frozen_claude_hook
+
+        return run_frozen_claude_hook(requested_argv[1:])
     from .guard.shims import resolve_frozen_package_shim_path, run_frozen_package_shim
 
     frozen_shim_path = resolve_frozen_package_shim_path(requested_argv)
@@ -402,10 +419,12 @@ def main(argv: list[str] | None = None) -> int:
         program_mode = "combined"
     if program_mode == "guard" and requested_argv[:1] == ["help"]:
         requested_argv = [*requested_argv[1:], "--help"]
-    if program_mode in {"guard", "hol-guard"} and requested_argv[:1] == ["--version"]:
-        # Fast path: answering a version probe must not build the full Guard
-        # command surface. Update flows spawn `--version` on every check, and
-        # hook wrappers probe it while a tool waits.
+    if requested_argv[:1] == ["--version"] and (
+        program_mode in {"guard", "hol-guard"}
+        or (program_name.startswith("hol-guard-") and program_name.endswith(".partial"))
+    ):
+        # Desktop stages Core as hol-guard-*.partial. Keep other executable
+        # names on their existing parser path, including scanner/combined CLIs.
         print(f"{program_name} {__version__}")
         return 0
     if program_mode != "scanner":
@@ -451,13 +470,14 @@ def main(argv: list[str] | None = None) -> int:
 
     warn_if_shadowed()
     if program_mode in {"guard", "hol-guard"}:
+        _load_guard_command_hub()
         try:
             import codex_plugin_scanner.cli as cli_module
 
             run_guard = getattr(cli_module, "run_guard_command", None) or _guard_cli("run_guard_command")
             return run_guard(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1
@@ -485,10 +505,11 @@ def _dispatch_scanner_command(
     if args.command == "doctor":
         return _run_doctor(args)
     if args.command == "guard":
+        _load_guard_command_hub()
         try:
             return _guard_cli("run_guard_command")(args)
         except ValueError as exc:
-            parser.error(str(exc))
+            return guard_value_error_exit(parser, exc)
         except Exception as exc:
             print(str(exc), file=sys.stderr)
             return 1

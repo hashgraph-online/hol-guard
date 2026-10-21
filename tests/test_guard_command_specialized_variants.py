@@ -116,6 +116,14 @@ def test_heredoc_substitution_shell_wrappers_feed_cli_and_runtime_classification
     _assert_native_unavailable(command)
 
 
+def _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command: str) -> None:
+    payload = real_native_review_fixture(command).payload
+    extensions = payload["command_extensions"]
+    assert extensions["evaluation_error"] is None
+    assert extensions["binding"]["uncertainty_count"] == 0
+    assert payload["minimum_action"] == "review"
+
+
 @pytest.mark.parametrize(
     "command",
     [
@@ -131,9 +139,14 @@ def test_literal_shell_wrapped_heredoc_substitutions_remain_safe_at_cli_and_runt
     exit_code = main(["guard", "command", "test", "--json", command])
     payload = json.loads(capsys.readouterr().out)
     assert exit_code == 2
+    assert payload["rules"] == []
+    if command.startswith("cat <<'"):
+        assert payload["status"] == "native_unavailable"
+        assert payload["minimum_action"] == "review"
+        _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command)
+        return
     assert payload["status"] == "native_unavailable"
     assert payload["minimum_action"] == "review"
-    assert payload["rules"] == []
     _assert_native_unavailable(command)
 
 
@@ -173,6 +186,9 @@ SPECIALIZED_SAFE_VARIANT_CASES = (
 
 def test_specialized_literal_observer_and_option_value_variants_remain_safe(tmp_path: Path) -> None:
     for case_id, command in enumerate(SPECIALIZED_SAFE_VARIANT_CASES, start=1):
+        if command.startswith("cat <<'"):
+            _assert_quoted_cat_heredoc_reviews_without_evaluation_failure(command)
+            continue
         if command.startswith("cat <<"):
             _assert_native_unavailable(command)
             continue

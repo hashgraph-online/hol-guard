@@ -27,13 +27,17 @@ import {
   detectedHarnesses,
   resolveDetectedAppStatus,
   useHarnessDetection,
+  versionCompatibilityFor,
   visibleHarnessesFor,
   type DetectedAppStatus,
 } from "./harness-detection";
+import type { HarnessVersionCompatibility } from "./harness-version-compatibility";
+import { HarnessVersionLabel } from "./harness-version-label";
 import { protectionHealthFor, useProtectionPresentationState } from "./protection-health";
 import { ConnectGuardCloudButton } from "./connect-guard-cloud-button";
 import { resolveFleetHeroCopy } from "./fleet-hero-copy";
 import { FleetProtectionRecovery } from "./fleet-protection-recovery";
+import { FleetAppProtection, type FleetPostureApp } from "./fleet-app-protection";
 import type {
   GuardInventoryItem,
   GuardPolicyDecision,
@@ -55,6 +59,7 @@ type FleetWorkspaceProps = {
   onRepairHarness?: (harness: string) => void;
   onRepairProtection: (harnesses: string[]) => Promise<string>;
   onOpenAppDetail?: (harness: string) => void;
+  onRuntimeRefresh?: () => Promise<void> | void;
 };
 
 function collectHarnesses(snapshot: GuardRuntimeSnapshot): string[] {
@@ -123,10 +128,11 @@ type AppRowProps = {
   status: DetectedAppStatus;
   inventoryCount: number;
   policyCount: number;
+  versionCompatibility?: HarnessVersionCompatibility | null;
   onOpenAppDetail?: (harness: string) => void;
 };
 
-function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail }: AppRowProps) {
+function AppRow({ harness, status, inventoryCount, policyCount, versionCompatibility, onOpenAppDetail }: AppRowProps) {
   const isClickable = onOpenAppDetail !== undefined;
 
   const handleClick = useCallback(() => {
@@ -160,6 +166,7 @@ function AppRow({ harness, status, inventoryCount, policyCount, onOpenAppDetail 
           <p className="text-xs text-slate-400">
             {formatCount(inventoryCount)} actions · {formatCount(policyCount)} decisions
           </p>
+          <HarnessVersionLabel compatibility={versionCompatibility ?? null} />
         </div>
       </div>
       <div className="flex items-center gap-2">
@@ -200,6 +207,14 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
       (check) => check.check_id === "harness_hooks" && check.status === "fail"
     )) ?? visibleHarnesses[0];
   const repairHarnesses = repairHarnessesFor(managedInstalls, protectionHealth);
+  // Apps known to this machine and whether Guard actually manages their hooks.
+  // The posture card only speaks about the managed ones.
+  const postureApps: FleetPostureApp[] = (() => {
+    const activeSet = new Set(activeInstalls.map((install) => install.harness));
+    const known = new Set([...managedInstalls.map((install) => install.harness), ...visibleHarnesses]);
+    return Array.from(known, (harness) => ({ harness, active: activeSet.has(harness) }))
+      .sort((a, b) => a.harness.localeCompare(b.harness));
+  })();
   const heroCopy = resolveFleetHeroCopy(
     props.runtime.cloud_state,
     activeInstalls.length,
@@ -261,6 +276,8 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
         />
       ) : null}
 
+      <FleetAppProtection apps={postureApps} onChanged={props.onRuntimeRefresh} />
+
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)]">
         <section>
           <div className="mb-4">
@@ -285,6 +302,7 @@ export function FleetWorkspace(props: FleetWorkspaceProps) {
                     status={status}
                     inventoryCount={harnessInventory.length}
                     policyCount={harnessPolicies.length}
+                    versionCompatibility={versionCompatibilityFor(harnessDetection, harness)}
                     onOpenAppDetail={props.onOpenAppDetail}
                   />
                 );

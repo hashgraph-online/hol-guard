@@ -14,9 +14,23 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+_helper_dir = str(Path(__file__).resolve().parent)
+sys.path.insert(0, _helper_dir)
+try:
+    from extension_claim_authority import ClaimProvenanceError as ClaimProvenanceError
+    from extension_claim_authority import accepted_claimant_ids as verified_claimant_ids
+    from extension_claim_authority import external_contribution
+finally:
+    sys.path.remove(_helper_dir)
+
+LINKEDIN_RE = re.compile(r"^https://(?:www\.)?linkedin\.com/(?:in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$")
+X_RE = re.compile(r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
+CONTRIBUTOR_PROFILE_FIELDS = frozenset({"description", "organization", "website", "linkedin", "x"})
 MARKER = "<!-- hol-extension-claim-notice:v1 -->"
+GUIDANCE_MARKER = "<!-- hol-extension-claim-guidance:v1 -->"
 DEFAULT_STUDIO_URL = "https://hol.org/guard/extension-studio"
 NOTICE_SOURCE_SURFACE = "github_claim_notice"
 PORTAL_READINESS_URL_ENV = "GUARD_EXTENSION_PORTAL_READINESS_URL"
@@ -37,6 +51,7 @@ READYNESS_REASONS = frozenset(
 )
 CONTRIBUTION_PREFIXES = (
     "contributions/extensions/",
+    "contributions/command-sources/",
     "contributions/mcp-servers/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -47,6 +62,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TRUSTED_NOTICE_ACTOR_ID = 41898282
 MAX_LISTING_BYTES = 16_384
+MAX_GITHUB_RESPONSE_BYTES = 8 * 1024 * 1024
 LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
 LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
 LISTING_REQUIRED_KEYS = frozenset({"schemaVersion", "extensionId", "tagline", "category", "limitations"})
@@ -88,12 +104,13 @@ class ExtensionReadiness:
     extension_id: str
     status: str
     notified_ids: tuple[str, ...] = ()
+    missing_mapping: bool = False
 
 
 class GitHubApi:
     """Small GitHub REST client used by the post-merge workflow."""
 
-    def __init__(self, token: str, repo: str) -> None:
+    def __init__(self, token: str, repo: str, *, source_root: Path | None = None) -> None:
         if not token:
             raise ClaimNoticeError("GitHub token is required")
         if not REPO_RE.fullmatch(repo):
@@ -101,8 +118,13 @@ class GitHubApi:
         self.token = token
         self.repo = repo
         self.base_url = f"https://api.github.com/repos/{repo}"
+        self.source_root = source_root
+        self._immutable_reads: dict[str, Any] = {}
 
     def _request(self, url: str, *, method: str = "GET", payload: Any | None = None) -> Any:
+        immutable = method == "GET" and bool(re.search(r"/commits/[a-f0-9]{40}(?:[?]|$)", url))
+        if immutable and url in self._immutable_reads:
+            return self._immutable_reads[url]
         body = None
         headers = {
             "Accept": "application/vnd.github+json",
@@ -116,16 +138,21 @@ class GitHubApi:
         request = urllib.request.Request(url, headers=headers, method=method, data=body)
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                raw = response.read()
+                raw = response.read(MAX_GITHUB_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             raise ClaimNoticeError(f"GitHub API {error.code} for {url}: {detail[:300]}") from error
         except OSError as error:
             raise ClaimNoticeError(f"GitHub API request failed for {url}: {error}") from error
+        if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
+            raise ClaimNoticeError("GitHub API response exceeds the byte limit")
         if not raw:
             return None
         try:
-            return json.loads(raw.decode("utf-8"))
+            data = json.loads(raw.decode("utf-8"))
+            if immutable:
+                self._immutable_reads[url] = data
+            return data
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ClaimNoticeError(f"GitHub API returned invalid JSON for {url}") from error
 
@@ -205,6 +232,11 @@ class GitHubApi:
 
     def post_comment(self, number: int, body: str) -> None:
         self._request(f"{self.base_url}/issues/{number}/comments", method="POST", payload={"body": body})
+
+    def update_comment(self, comment_id: int, body: str) -> None:
+        if comment_id <= 0:
+            raise ClaimNoticeError("claim notice comment ID is invalid")
+        self._request(f"{self.base_url}/issues/comments/{comment_id}", method="PATCH", payload={"body": body})
 
 
 def _extension_id_from_path(path: str, prefix: str) -> str | None:
@@ -296,6 +328,40 @@ def _public_reference(value: object, *, field: str) -> None:
         raise ClaimNoticeError(f"listing {field} must use public HTTPS without credentials") from error
 
 
+def _validate_contributor_profile(profile: object, extension_id: str) -> None:
+    """Presentation only. Profile contents are not claimant input."""
+
+    if not isinstance(profile, dict) or not profile or not frozenset(profile) <= CONTRIBUTOR_PROFILE_FIELDS:
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    for field in ("description", "organization"):
+        if field in profile:
+            maximum = 280 if field == "description" else 80
+            minimum = 12 if field == "description" else 2
+            _plain_text(profile[field], minimum=minimum, maximum=maximum, field=f"contributors.profile.{field}")
+    website = _profile_link(profile, "website", extension_id)
+    if website is not None:
+        _public_reference(website, field="contributors.profile.website")
+    linkedin = _profile_link(profile, "linkedin", extension_id)
+    if linkedin is not None:
+        if LINKEDIN_RE.fullmatch(linkedin) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor LinkedIn link is invalid")
+        _public_reference(linkedin, field="contributors.profile.linkedin")
+    x_url = _profile_link(profile, "x", extension_id)
+    if x_url is not None:
+        if X_RE.fullmatch(x_url) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor X link is invalid")
+        _public_reference(x_url, field="contributors.profile.x")
+
+
+def _profile_link(profile: dict[str, Any], field: str, extension_id: str) -> str | None:
+    if field not in profile:
+        return None
+    value = profile[field]
+    if not isinstance(value, str):
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    return value
+
+
 def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> None:
     _plain_text(listing["summary"], minimum=20, maximum=2048, field="summary")
 
@@ -304,12 +370,20 @@ def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> No
         raise ClaimNoticeError(f"{extension_id}: contributors must be an array of at most eight entries")
     contributor_ids: set[str] = set()
     for contributor in contributors:
-        if not isinstance(contributor, dict) or frozenset(contributor) != {
-            "githubId",
-            "githubLogin",
-            "roles",
-        }:
+        if (
+            not isinstance(contributor, dict)
+            or not {"githubId", "githubLogin", "roles"} <= frozenset(contributor)
+            or not frozenset(contributor)
+            <= {
+                "githubId",
+                "githubLogin",
+                "roles",
+                "profile",
+            }
+        ):
             raise ClaimNoticeError(f"{extension_id}: contributor fields do not match the canonical schema")
+        if "profile" in contributor:
+            _validate_contributor_profile(contributor["profile"], extension_id)
         github_id = contributor["githubId"]
         if not isinstance(github_id, str) or not GITHUB_ID_RE.fullmatch(github_id):
             raise ClaimNoticeError(f"{extension_id}: contributor GitHub ID is invalid")
@@ -431,13 +505,42 @@ def contribution_path(extension_id: str) -> str:
     raise ClaimNoticeError(f"unsupported extension ID: {extension_id}")
 
 
+def contribution_paths(extension_id: str) -> tuple[str, ...]:
+    """Every authored file that establishes a native contribution.
+
+    A command extension is contributed as its canonical source; the descriptor
+    under ``contributions/extensions/`` is generated on main after merge, so
+    either file proves the contribution exists at a revision.
+    """
+    paths = (contribution_path(extension_id),)
+    if extension_id.startswith("command."):
+        paths += (f"contributions/command-sources/{extension_id}.json",)
+    return paths
+
+
+def contribution_exists(client: GitHubApi, extension_id: str, ref: str) -> bool:
+    return any(client.file_exists(path, ref) for path in contribution_paths(extension_id))
+
+
+def accepted_claimant_ids(
+    client: GitHubApi, extension_id: str, ref: str, listing: dict[str, Any] | None
+) -> tuple[str, ...]:
+    return verified_claimant_ids(
+        client,
+        extension_id,
+        ref,
+        listing,
+        validate_listing=accepted_github_ids,
+        contribution_paths=contribution_paths,
+    )
+
+
 def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     lines = [
         MARKER,
-        (
-            "The merged extension metadata now authorizes the GitHub account(s) below "
-            "to manage publisher profiles in HOL Guard Extension Studio."
-        ),
+        "Your HOL Guard extension contribution is merged. Claim your publisher page in Extension Studio.",
+        "",
+        "## Claim your extension",
         "",
     ]
     for item in items:
@@ -448,9 +551,20 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
         link = f"{studio_url}?{urllib.parse.urlencode(intent)}"
         identities = [f"@{login}" if login else f"GitHub ID `{account_id}`" for account_id, login in item.identities]
         identity_text = ", ".join(identities) if identities else "accepted maintainer identity"
-        lines.append(f"- `{item.extension_id}`: {identity_text} · [Open Extension Studio]({link})")
+        lines.append(f"- [Claim `{item.extension_id}` in Extension Studio]({link}) — {identity_text}")
     lines.extend(
         [
+            "",
+            (
+                "Open your link and continue with GitHub using an account named above. "
+                "Claiming creates a public publisher page that credits your GitHub account."
+            ),
+            "",
+            (
+                "After claiming, Extension Studio lets you shape a launch story, prepare a setup guide "
+                "and blog content, and use the verified publisher badge toolkit. "
+                "Submit launch content for review when ready; claiming alone does not publish it."
+            ),
             "",
             (
                 "Claim verification re-reads canonical `main` and checks the accepted numeric GitHub ID "
@@ -462,19 +576,114 @@ def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     return "\n".join(lines)
 
 
+def build_withdrawn_comment() -> str:
+    """Remove obsolete claim links when current reviewed authority no longer permits them."""
+    return "\n".join(
+        [
+            MARKER,
+            "This extension claim invitation is no longer current.",
+            "",
+            (
+                "The accepted publisher mapping or native contribution has changed since this notice was posted. "
+                "Claim access is checked against canonical `main`; this comment no longer provides a claim link."
+            ),
+        ]
+    )
+
+
 def _resolve_identities(client: GitHubApi, github_ids: tuple[str, ...]) -> tuple[tuple[str, str | None], ...]:
     return tuple((account_id, client.user_login(account_id)) for account_id in github_ids)
 
 
-def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
-    """Return whether the trusted GitHub Actions identity already posted this notice."""
+def has_trusted_marker(comments: list[dict[str, Any]], marker: str) -> bool:
+    """Accept markers only from the trusted GitHub Actions identity."""
     for comment in comments:
-        if MARKER not in str(comment.get("body") or ""):
+        if marker not in str(comment.get("body") or ""):
             continue
         user = comment.get("user")
         if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
             return True
     return False
+
+
+def trusted_notice_comment(comments: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Find a claim notice posted by the trusted GitHub Actions identity."""
+    for comment in comments:
+        if MARKER not in str(comment.get("body") or ""):
+            continue
+        user = comment.get("user")
+        if isinstance(user, dict) and user.get("id") == TRUSTED_NOTICE_ACTOR_ID and user.get("type") == "Bot":
+            return comment
+    return None
+
+
+def has_trusted_notice(comments: list[dict[str, Any]]) -> bool:
+    """Return whether the trusted bot already posted a claim notice."""
+    return has_trusted_marker(comments, MARKER)
+
+
+def has_trusted_guidance(comments: list[dict[str, Any]]) -> bool:
+    """Ignore contributor-spoofed markers when checking guidance delivery."""
+    return has_trusted_marker(comments, GUIDANCE_MARKER)
+
+
+def build_guidance_comment(extension_ids: list[str]) -> str:
+    """Explain the reviewed mapping required before a publisher claim is possible."""
+    lines = [
+        GUIDANCE_MARKER,
+        "The merged extension contribution is available, but its publisher profile cannot yet be claimed.",
+        "A separate, maintainer-reviewed publisher listing must name the authorized numeric GitHub ID first:",
+        "",
+    ]
+    lines.extend(
+        f"- `{extension_id}`: add `contributions/extension-listings/{extension_id}.json`"
+        for extension_id in extension_ids
+    )
+    lines.extend(
+        [
+            "",
+            (
+                "Follow the [publisher metadata guide]"
+                "(https://github.com/hashgraph-online/hol-guard/blob/main/"
+                "docs/guard/extensions/publisher-metadata.md). "
+                "Once that mapping is accepted on `main`, the claim notice will link the authorized account "
+                "to Extension Studio. The contribution PR or its author does not grant publisher access by itself."
+            ),
+        ]
+    )
+    return "\n".join(lines)
+
+
+def current_unmapped_contributions(client: GitHubApi, pr_number: int, records: list[ExtensionReadiness]) -> list[str]:
+    """Offer guidance only while the exact merged source remains on main without a claim mapping."""
+    missing = [entry.extension_id for entry in records if entry.missing_mapping]
+    if not missing:
+        return []
+    default_branch = client.repo_metadata().get("default_branch")
+    merge_sha = client.pull_request(pr_number).get("merge_commit_sha")
+    if not isinstance(default_branch, str) or not isinstance(merge_sha, str):
+        raise ClaimNoticeError("canonical contribution revision is unavailable")
+    current: list[str] = []
+    for extension_id in missing:
+        if not contribution_exists(client, extension_id, merge_sha) or not contribution_exists(
+            client, extension_id, default_branch
+        ):
+            continue
+        if not external_contribution(client, extension_id, default_branch):
+            continue
+        listing_path = f"{LISTING_PREFIX}{extension_id}.json"
+        tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
+        if tip_listing is None:
+            current.append(extension_id)
+            continue
+        try:
+            mapped_ids = accepted_github_ids(tip_listing, extension_id)
+        except ClaimNoticeError:
+            print(f"PR #{pr_number}: {extension_id} has an invalid current publisher listing; skipping guidance")
+            continue
+        if not mapped_ids:
+            current.append(extension_id)
+    return current
 
 
 def _plan_notice_items(
@@ -483,18 +692,26 @@ def _plan_notice_items(
     *,
     allow_renames: bool = False,
     records: list[ExtensionReadiness] | None = None,
-) -> tuple[list[NoticeItem], str]:
+) -> tuple[list[NoticeItem], str, bool]:
     """Compute candidate notice items and the PR-level readiness status.
 
-    Returns the eligible notice items plus one PR-level typed reason. When
-    ``records`` is provided, one typed :class:`ExtensionReadiness` entry is
+    Returns eligible notice items, one PR-level typed reason, and whether
+    renames were excluded. When ``records`` is provided, one typed
+    :class:`ExtensionReadiness` entry is
     appended per considered extension so delayed/backfilled runs can report
     ``no_mapping`` and ``source_not_current`` instead of skipping silently.
     """
 
-    def record(extension_id: str, status: str, ids: tuple[str, ...] = ()) -> None:
+    def record(extension_id: str, status: str, ids: tuple[str, ...] = (), *, missing_mapping: bool = False) -> None:
         if records is not None:
-            records.append(ExtensionReadiness(extension_id=extension_id, status=status, notified_ids=ids))
+            records.append(
+                ExtensionReadiness(
+                    extension_id=extension_id,
+                    status=status,
+                    notified_ids=ids,
+                    missing_mapping=missing_mapping,
+                )
+            )
 
     repo = client.repo_metadata()
     default_branch = repo.get("default_branch")
@@ -504,12 +721,12 @@ def _plan_notice_items(
     pr = client.pull_request(pr_number)
     if not pr.get("merged_at"):
         print(f"PR #{pr_number}: not merged; skipping")
-        return [], "not_merged"
+        return [], "not_merged", False
     base = pr.get("base")
     base_ref = base.get("ref") if isinstance(base, dict) else None
     if base_ref != default_branch:
         print(f"PR #{pr_number}: merged into {base_ref!r}, not canonical {default_branch!r}; skipping")
-        return [], "not_merged"
+        return [], "not_merged", False
     before_sha = base.get("sha") if isinstance(base, dict) else None
     if not isinstance(before_sha, str) or not SHA_RE.fullmatch(before_sha):
         raise ClaimNoticeError("merged pull request is missing its pre-merge base SHA")
@@ -523,40 +740,62 @@ def _plan_notice_items(
     ancestry = client.compare(merge_sha, default_branch).get("status")
     if ancestry not in {"ahead", "identical"}:
         print(f"PR #{pr_number}: merge commit is no longer on canonical {default_branch}; skipping")
-        return [], "source_not_current"
+        return [], "source_not_current", False
 
     contribution_changes, listing_changes, rename_changes = changed_extension_ids(client.pull_request_files(pr_number))
     candidates = contribution_changes | listing_changes
-    if rename_changes and not allow_renames:
+    renames_excluded = bool(rename_changes and not allow_renames)
+    if renames_excluded:
         print(f"PR #{pr_number}: rename-affected extensions require explicit maintainer backfill")
         candidates -= rename_changes
     candidates = sorted(candidates)
     if not candidates:
         print(f"PR #{pr_number}: no automatically claimable extension changes; skipping")
-        return [], "no_mapping"
+        return [], "no_mapping", renames_excluded
 
     items: list[NoticeItem] = []
     for extension_id in candidates:
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
-        if current_listing is None:
-            record(extension_id, "no_mapping")
-            continue
-        merge_ids = accepted_github_ids(current_listing, extension_id)
+        merge_ids = accepted_claimant_ids(client, extension_id, merge_sha, current_listing)
+        newly_added = extension_id in contribution_changes and not contribution_exists(client, extension_id, before_sha)
+        if (
+            newly_added
+            and not merge_ids
+            and current_listing is not None
+            and (current_listing.get("maintainerGithubIds") == [])
+        ):
+            # A historical empty override may have since been removed. Recover
+            # only the original author who is accepted by current authority.
+            initial_ids = accepted_claimant_ids(client, extension_id, merge_sha, None)
+            tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
+            tip_ids = accepted_claimant_ids(client, extension_id, default_branch, tip_listing)
+            merge_ids = tuple(account_id for account_id in initial_ids if account_id in tip_ids)
         if not merge_ids:
-            record(extension_id, "no_mapping")
+            newly_added = extension_id in contribution_changes and not contribution_exists(
+                client, extension_id, before_sha
+            )
+            record(extension_id, "no_mapping", missing_mapping=newly_added)
             continue
 
-        native_path = contribution_path(extension_id)
-        if not client.file_exists(native_path, merge_sha):
+        if not contribution_exists(client, extension_id, merge_sha):
             raise ClaimNoticeError(f"{extension_id}: authority sidecar exists without a canonical native contribution")
-        contribution_existed = client.file_exists(native_path, before_sha)
+        if not contribution_exists(client, extension_id, default_branch):
+            print(f"PR #{pr_number}: {extension_id}: native contribution is absent from canonical {default_branch}")
+            record(extension_id, "source_not_current")
+            continue
+        contribution_existed = contribution_exists(client, extension_id, before_sha)
 
         if not contribution_existed:
             notify_ids = merge_ids
         elif extension_id in listing_changes:
+            if current_listing is None or "maintainerGithubIds" not in current_listing:
+                # Automatic initial invitations belong on the introducing PR.
+                # Snapshot reconciliation repairs that PR after a metadata fix.
+                record(extension_id, "source_not_current")
+                continue
             previous_listing = client.file_json(listing_path, before_sha, missing_ok=True)
-            previous_ids = accepted_github_ids(previous_listing, extension_id) if previous_listing else ()
+            previous_ids = accepted_claimant_ids(client, extension_id, before_sha, previous_listing)
             notify_ids = tuple(account_id for account_id in merge_ids if account_id not in previous_ids)
         else:
             notify_ids = ()
@@ -568,12 +807,8 @@ def _plan_notice_items(
         # merged sidecar must not re-invite a since-removed identity. Re-read
         # the canonical listing at the default branch tip and intersect.
         tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
-        if tip_listing is None:
-            print(f"PR #{pr_number}: {extension_id}: listing is absent from canonical {default_branch}; skipping")
-            record(extension_id, "source_not_current")
-            continue
         try:
-            tip_ids = accepted_github_ids(tip_listing, extension_id)
+            tip_ids = accepted_claimant_ids(client, extension_id, default_branch, tip_listing)
         except ClaimNoticeError as error:
             print(f"PR #{pr_number}: {extension_id}: canonical listing is invalid on {default_branch}: {error}")
             record(extension_id, "source_not_current")
@@ -593,15 +828,26 @@ def _plan_notice_items(
         items.append(
             NoticeItem(
                 extension_id=extension_id,
-                identities=_resolve_identities(client, revalidated),
+                identities=tuple((account_id, None) for account_id in revalidated),
             )
         )
-    return items, "eligible_for_notice"
+    return items, "eligible_for_notice", renames_excluded
+
+
+def resolve_notice_identities(client: GitHubApi, items: list[NoticeItem]) -> list[NoticeItem]:
+    """Resolve account handles only when a claim invitation will be delivered."""
+    return [
+        NoticeItem(
+            item.extension_id,
+            _resolve_identities(client, tuple(account_id for account_id, _ in item.identities)),
+        )
+        for item in items
+    ]
 
 
 def collect_notice_items(client: GitHubApi, pr_number: int, *, allow_renames: bool = False) -> list[NoticeItem]:
-    items, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames)
-    return items
+    items, _, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames)
+    return resolve_notice_identities(client, items)
 
 
 def portal_readiness(url: str) -> tuple[str, str]:
@@ -665,7 +911,7 @@ def readiness_report(
     try:
         already = has_trusted_notice(client.comments(pr_number))
         records: list[ExtensionReadiness] = []
-        items, pr_reason = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
+        items, pr_reason, _ = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
     except ClaimNoticeError as error:
         if "GitHub API" in str(error):
             return {
@@ -733,6 +979,7 @@ def process(
     allow_renames: bool = False,
     portal_readiness_url: str | None = None,
     report_only: bool = False,
+    refresh_existing: bool = False,
 ) -> int:
     if report_only:
         print(
@@ -748,25 +995,72 @@ def process(
             )
         )
         return 0
-    if has_trusted_notice(client.comments(pr_number)):
-        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping")
+    comments = client.comments(pr_number)
+    existing_notice = trusted_notice_comment(comments)
+    notice_exists = existing_notice is not None
+    if notice_exists and not refresh_existing:
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
         return 0
-    if portal_readiness_url:
+    guidance_exists = has_trusted_guidance(comments)
+    records: list[ExtensionReadiness] = []
+    items, _, renames_excluded = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
+    unmapped = current_unmapped_contributions(client, pr_number, records)
+    portal_blocked = False
+    if items and portal_readiness_url:
         portal_status, portal_detail = portal_readiness(portal_readiness_url)
         if portal_status != "ok":
-            # Fail closed: an unreachable or lagging portal projection must not
-            # produce an invitation that promises an immediately available claim.
-            print(f"PR #{pr_number}: portal readiness check failed ({portal_status}: {portal_detail}); skipping")
-            return 0
-    items = collect_notice_items(client, pr_number, allow_renames=allow_renames)
-    if not items:
-        return 0
-    body = build_comment(items, studio_url.rstrip("/"))
-    if dry_run:
-        print(body)
-        return 0
-    client.post_comment(pr_number, body)
-    print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
+            # An unavailable projection blocks claim invitations, not mapping guidance.
+            print(
+                f"PR #{pr_number}: portal readiness check failed "
+                f"({portal_status}: {portal_detail}); skipping claim notice"
+            )
+            items = []
+            portal_blocked = True
+    if unmapped and not guidance_exists:
+        body = build_guidance_comment(unmapped)
+        if dry_run:
+            print(body)
+        else:
+            client.post_comment(pr_number, body)
+            print(f"PR #{pr_number}: posted claim guidance for {len(unmapped)} extension(s)")
+    elif guidance_exists:
+        print(f"PR #{pr_number}: trusted claim guidance already exists; skipping duplicate")
+    if items and (not notice_exists or (refresh_existing and not renames_excluded)):
+        body = build_comment(resolve_notice_identities(client, items), studio_url.rstrip("/"))
+        if dry_run:
+            print(body)
+        elif existing_notice is not None:
+            comment_id = existing_notice.get("id")
+            if type(comment_id) is not int or comment_id <= 0:
+                raise ClaimNoticeError("trusted claim notice comment ID is invalid")
+            if existing_notice.get("body") == body:
+                print(f"PR #{pr_number}: trusted extension claim notice is already current")
+            else:
+                client.update_comment(comment_id, body)
+                print(f"PR #{pr_number}: refreshed Extension Studio claim notice for {len(items)} extension(s)")
+        else:
+            client.post_comment(pr_number, body)
+            print(f"PR #{pr_number}: posted Extension Studio claim notice for {len(items)} extension(s)")
+    elif notice_exists:
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
+    if (
+        refresh_existing
+        and existing_notice is not None
+        and not items
+        and not portal_blocked
+        and not renames_excluded
+        and records
+        and all(record.status in {"no_mapping", "source_not_current"} for record in records)
+    ):
+        body = build_withdrawn_comment()
+        if dry_run:
+            print(body)
+        elif existing_notice.get("body") != body:
+            comment_id = existing_notice.get("id")
+            if type(comment_id) is not int or comment_id <= 0:
+                raise ClaimNoticeError("trusted claim notice comment ID is invalid")
+            client.update_comment(comment_id, body)
+            print(f"PR #{pr_number}: withdrew obsolete Extension Studio claim links")
     return 0
 
 
@@ -774,9 +1068,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--pr-number", type=int, required=True)
+    parser.add_argument("--source-root", type=Path, help="Trusted full-history canonical checkout for source proof.")
     parser.add_argument("--studio-url", default=os.environ.get("GUARD_EXTENSION_STUDIO_URL", DEFAULT_STUDIO_URL))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-renames", action="store_true")
+    parser.add_argument(
+        "--refresh-existing",
+        action="store_true",
+        help="Update an existing trusted claim notice after rechecking current claim authority.",
+    )
     parser.add_argument(
         "--report",
         action="store_true",
@@ -798,11 +1098,12 @@ def main(argv: list[str] | None = None) -> int:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     try:
         return process(
-            GitHubApi(token, args.repo),
+            GitHubApi(token, args.repo, source_root=args.source_root),
             args.pr_number,
             args.studio_url,
             dry_run=args.dry_run,
             allow_renames=args.allow_renames,
+            refresh_existing=args.refresh_existing,
             portal_readiness_url=args.portal_readiness_url or None,
             report_only=args.report,
         )

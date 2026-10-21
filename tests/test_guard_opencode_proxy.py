@@ -4,11 +4,15 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.proxy import OpenCodeMcpGuardProxy, RuntimeMcpGuardProxy
 from codex_plugin_scanner.guard.proxy import runtime_mcp as runtime_mcp_module
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _child_command(marker_path: Path) -> list[str]:

@@ -57,6 +57,16 @@ function buildShellReceipt(overrides: Partial<GuardReceipt> = {}): GuardReceipt 
   };
 }
 
+{
+  const request = buildShellRequest({
+    artifact_type: "tool_call",
+    artifact_name: "Edit",
+    action_envelope_json: { action_type: "file_write", target_paths: ["src/http.ts"] } as unknown as GuardActionEnvelope,
+  });
+  assert(whyPaused(request).includes("file change"), "Typed native edits must not be described as outside tools");
+  assert(!whyPaused(request).includes("outside tool"), "Generic tool metadata must not override the file action");
+}
+
 // T12: a command-like receipt with no typed command uses the retained raw command.
 {
   const receipt = buildShellReceipt({
@@ -166,6 +176,12 @@ function buildShellReceipt(overrides: Partial<GuardReceipt> = {}): GuardReceipt 
   });
   const title = plainEnglishRequestTitle(request);
   assert(title === "Codex wants to do something with mystery-artifact", `T3: expected generic title, got "${title}"`);
+}
+
+// Native Bash reviews name the concrete action instead of a generic tool.
+{
+  const request = buildShellRequest({ artifact_type: "native_bash_request" });
+  assert(plainEnglishRequestTitle(request) === "Run this script?");
 }
 
 // T4: secret category title is preserved

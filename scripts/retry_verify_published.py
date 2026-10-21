@@ -16,6 +16,9 @@ VERIFY_SCRIPT = Path(__file__).with_name("verify_native_runtime_release.py")
 
 
 def is_retryable_incomplete_error(stderr: str) -> bool:
+    # Registry metadata may briefly disappear between upload and propagation.
+    if stderr.strip() == "Error: Registry release is absent":
+        return True
     return "missing=" in stderr and "extra=[]" in stderr and "mismatched=[]" in stderr
 
 
@@ -27,9 +30,7 @@ def wait_for_published(
     runner: Callable[[Sequence[str]], subprocess.CompletedProcess[str]] | None = None,
     sleeper: Callable[[float], None] = time.sleep,
 ) -> int:
-    run = runner or (
-        lambda command: subprocess.run(command, check=False, capture_output=True, text=True)
-    )
+    run = runner or (lambda command: subprocess.run(command, check=False, capture_output=True, text=True))
     command = [sys.executable, str(VERIFY_SCRIPT), "verify-published", *argv]
     last_error = "Published artifacts were not exact"
     for attempt in range(attempts):

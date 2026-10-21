@@ -1,70 +1,36 @@
-use std::io::{self, Read, Write};
+use std::io::Read;
+#[cfg(test)]
+use std::io::{self, Write};
+#[cfg(test)]
 use std::net::TcpStream;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::resident_diagnostics::{self, observe, Phase, Status};
 use sha2::{Digest, Sha256};
-#[cfg(unix)]
+#[path = "resident_control_dispatch.rs"]
+mod control;
+#[path = "resident_worker_pool.rs"]
+mod worker_pool;
+#[cfg(all(test, unix))]
 use std::os::unix::net::UnixStream;
+use worker_pool::spawn_workers;
 
-pub(crate) trait ResidentStream: Read + Write + Send {
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()>;
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()>;
-    fn try_read_available(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        self.set_resident_nonblocking(true)?;
-        let result = self.read(output);
-        let restore = self.set_resident_nonblocking(false);
-        match (result, restore) {
-            (Err(error), Ok(())) if error.kind() == io::ErrorKind::WouldBlock => Ok(0),
-            (result, Ok(())) => result,
-            (_, Err(error)) => Err(error),
-        }
-    }
-    fn configure_low_latency(&self) -> io::Result<()> {
-        Ok(())
-    }
-}
-
-impl ResidentStream for TcpStream {
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        TcpStream::set_read_timeout(self, timeout)
-    }
-
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        TcpStream::set_write_timeout(self, timeout)
-    }
-
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        self.set_nonblocking(nonblocking)
-    }
-
-    fn configure_low_latency(&self) -> io::Result<()> {
-        self.set_nodelay(true)
-    }
-}
-
-#[cfg(unix)]
-impl ResidentStream for UnixStream {
-    fn set_resident_read_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        UnixStream::set_read_timeout(self, timeout)
-    }
-
-    fn set_resident_write_timeout(&self, timeout: Option<Duration>) -> io::Result<()> {
-        UnixStream::set_write_timeout(self, timeout)
-    }
-
-    fn set_resident_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
-        self.set_nonblocking(nonblocking)
-    }
-}
+#[path = "resident_stream.rs"]
+mod stream;
+pub(crate) use stream::{DisconnectInput, ResidentStream};
+#[path = "resident_request_cancellation.rs"]
+mod request_cancellation;
 
 pub(crate) type BoxedResidentStream = Box<dyn ResidentStream>;
 
 pub(crate) struct PendingRequest {
+    // Trusted transport metadata; never filled from request JSON or exported.
+    peer_identity: Option<crate::resident_peer_identity::UnixPeerIdentity>,
     pub(crate) stream: BoxedResidentStream,
     pub(crate) request_id: [u8; crate::FRAME_REQUEST_ID_BYTES],
     pub(crate) request_digest: [u8; crate::FRAME_DIGEST_BYTES],
@@ -73,48 +39,18 @@ pub(crate) struct PendingRequest {
     pub(crate) accepted_at: Instant,
 }
 
-pub(crate) fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
-    if left.len() != right.len() {
-        return false;
+impl PendingRequest {
+    #[allow(dead_code)] // Future worker enrollment consumes this input, not a grant.
+    pub(crate) fn kernel_peer_identity(
+        &self,
+    ) -> Option<&crate::resident_peer_identity::UnixPeerIdentity> {
+        self.peer_identity.as_ref()
     }
-    let mut difference = 0u8;
-    for (left_byte, right_byte) in left.iter().zip(right) {
-        difference |= left_byte ^ right_byte;
-    }
-    difference == 0
 }
 
-pub(crate) fn hmac_sha256(key: &[u8], label: &[u8], nonce: &[u8]) -> [u8; crate::AUTH_PROOF_BYTES] {
-    const BLOCK_BYTES: usize = 64;
-    let mut key_block = [0u8; BLOCK_BYTES];
-    if key.len() > BLOCK_BYTES {
-        let digest = Sha256::digest(key);
-        key_block[..digest.len()].copy_from_slice(&digest);
-    } else {
-        key_block[..key.len()].copy_from_slice(key);
-    }
-
-    let mut inner_pad = [0x36u8; BLOCK_BYTES];
-    let mut outer_pad = [0x5cu8; BLOCK_BYTES];
-    for index in 0..BLOCK_BYTES {
-        inner_pad[index] ^= key_block[index];
-        outer_pad[index] ^= key_block[index];
-    }
-
-    let mut inner = Sha256::new();
-    inner.update(inner_pad);
-    inner.update(label);
-    inner.update(nonce);
-    let inner_digest = inner.finalize();
-
-    let mut outer = Sha256::new();
-    outer.update(outer_pad);
-    outer.update(inner_digest);
-    let digest = outer.finalize();
-    let mut proof = [0u8; crate::AUTH_PROOF_BYTES];
-    proof.copy_from_slice(&digest);
-    proof
-}
+#[path = "resident_auth_crypto.rs"]
+mod auth_crypto;
+pub(crate) use auth_crypto::{constant_time_eq, hmac_sha256};
 
 fn authenticate_resident_stream(
     stream: &mut dyn ResidentStream,
@@ -148,7 +84,14 @@ fn authenticate_resident_stream(
     Ok(())
 }
 
-fn read_request_header(mut stream: BoxedResidentStream) -> Result<PendingRequest, String> {
+fn read_request_header(stream: BoxedResidentStream) -> Result<PendingRequest, String> {
+    observe(Phase::ResidentHeaderRead, || {
+        read_request_header_inner(stream)
+    })
+}
+
+fn read_request_header_inner(mut stream: BoxedResidentStream) -> Result<PendingRequest, String> {
+    let peer_identity = stream.kernel_peer_identity()?;
     stream
         .set_resident_read_timeout(Some(crate::HEADER_TIMEOUT))
         .map_err(|_| "native_frame_timeout_failed".to_owned())?;
@@ -172,17 +115,30 @@ fn read_request_header(mut stream: BoxedResidentStream) -> Result<PendingRequest
     if length == 0 || length > crate::MAX_NATIVE_REQUEST_BYTES {
         return Err("native_request_too_large".to_owned());
     }
-    Ok(PendingRequest {
+    let pending = PendingRequest {
+        peer_identity,
         stream,
         request_id,
         request_digest,
         length,
         payload_prefix: Vec::new(),
         accepted_at: Instant::now(),
-    })
+    };
+    resident_diagnostics::start(Phase::ResidentDispatchWait);
+    Ok(pending)
 }
 
 fn write_bound_response(
+    stream: &mut dyn ResidentStream,
+    request_id: &[u8; crate::FRAME_REQUEST_ID_BYTES],
+    response: &[u8],
+) -> Result<(), String> {
+    observe(Phase::ResidentResponseWrite, || {
+        write_bound_response_inner(stream, request_id, response)
+    })
+}
+
+fn write_bound_response_inner(
     stream: &mut dyn ResidentStream,
     request_id: &[u8; crate::FRAME_REQUEST_ID_BYTES],
     response: &[u8],
@@ -212,15 +168,105 @@ fn write_bound_response(
 }
 
 fn write_overload(pending: &mut PendingRequest) {
+    resident_diagnostics::finish_since(
+        Phase::ResidentDispatchWait,
+        Status::Error,
+        pending.accepted_at,
+    );
     let response = crate::resident_protocol::error_response("native_overloaded", true);
     let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
 }
 
+/// Continuation I/O can run for the caller's whole minute. Keep it off the
+/// evaluation workers. Two side threads are enough; a third fails closed.
+const CODEX_RESUME_RETRY_SIDE_LIMIT: usize = 2;
+static CODEX_RESUME_RETRY_IN_FLIGHT: AtomicUsize = AtomicUsize::new(0);
+
+struct ContinuationSlot;
+
+impl Drop for ContinuationSlot {
+    fn drop(&mut self) {
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
+fn reserve_continuation_slot() -> bool {
+    let mut in_flight = CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire);
+    while in_flight < CODEX_RESUME_RETRY_SIDE_LIMIT {
+        match CODEX_RESUME_RETRY_IN_FLIGHT.compare_exchange_weak(
+            in_flight,
+            in_flight + 1,
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        ) {
+            Ok(_) => return true,
+            Err(observed) => in_flight = observed,
+        }
+    }
+    false
+}
+
+/// Only a resume retry sends a continuation; the other resume calls are
+/// store reads and writes that stay on the evaluation workers.
+fn is_codex_resume_retry(request: &[u8]) -> bool {
+    crate::strict_json_value(request).is_ok_and(|value| {
+        value.get("operation").and_then(serde_json::Value::as_str) == Some("codex_request_resume")
+            && value
+                .get("request")
+                .and_then(|request| request.get("call"))
+                .and_then(serde_json::Value::as_str)
+                == Some("retry")
+    })
+}
+
+/// The slot is already reserved. A thread that cannot be started drops the
+/// connection and releases the slot.
+fn spawn_codex_resume_retry(
+    pending: PendingRequest,
+    request: Vec<u8>,
+    policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
+) {
+    if thread::Builder::new()
+        .spawn(move || {
+            let slot = ContinuationSlot;
+            let response = match catch_unwind(AssertUnwindSafe(|| {
+                observe(Phase::ResidentEvaluate, || {
+                    crate::resident_protocol::evaluate_resident_bytes(
+                        &request,
+                        policy_store.as_deref(),
+                    )
+                })
+            })) {
+                Ok(Ok(response)) => response,
+                Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
+                Err(_panic) => {
+                    crate::resident_protocol::error_response("native_runtime_panicked", false)
+                }
+            };
+            // Free the slot before replying so a caller that sends again on
+            // receipt never sees this finished continuation as in flight.
+            drop(slot);
+            let mut pending = pending;
+            let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
+        })
+        .is_err()
+    {
+        CODEX_RESUME_RETRY_IN_FLIGHT.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 fn handle_pending_request(
     mut pending: PendingRequest,
-    policy_store: Option<&crate::policy_store::PolicySnapshotStore>,
+    policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
+    control_dispatch: Option<&SyncSender<PendingRequest>>,
 ) {
-    if crate::hardening::request_expired(pending.accepted_at) {
+    let expired = crate::hardening::request_expired(pending.accepted_at);
+    resident_diagnostics::finish_since(
+        Phase::ResidentDispatchWait,
+        if expired { Status::Error } else { Status::Ok },
+        pending.accepted_at,
+    );
+    if expired {
         let response =
             crate::resident_protocol::error_response("native_request_deadline_exceeded", true);
         let _ = write_bound_response(&mut *pending.stream, &pending.request_id, &response);
@@ -229,22 +275,37 @@ fn handle_pending_request(
     let _ = pending
         .stream
         .set_resident_read_timeout(Some(crate::PAYLOAD_TIMEOUT));
-    let prefix_length = pending.payload_prefix.len();
-    let mut request = vec![0u8; pending.length];
-    request[..prefix_length].copy_from_slice(&pending.payload_prefix);
-    let response = if pending
-        .stream
-        .read_exact(&mut request[prefix_length..])
-        .is_err()
+    let mut request = std::mem::take(&mut pending.payload_prefix);
+    let prefix_length = request.len();
+    request.resize(pending.length, 0);
+    let response = if observe(Phase::ResidentPayloadRead, || {
+        pending.stream.read_exact(&mut request[prefix_length..])
+    })
+    .is_err()
     {
         crate::resident_protocol::error_response("native_frame_read_failed", false)
     } else {
         let digest = Sha256::digest(&request);
         if !constant_time_eq(&digest, &pending.request_digest) {
             crate::resident_protocol::error_response("native_request_digest_mismatch", false)
+        } else if let Some(sender) = control_dispatch.filter(|_| control::is_request(&request)) {
+            // A fragmented request is routed only after its complete frame is
+            // authenticated. Move its buffer rather than retaining a copy.
+            pending.payload_prefix = request;
+            control::enqueue(sender, pending);
+            return;
+        } else if is_codex_resume_retry(&request) {
+            if reserve_continuation_slot() {
+                spawn_codex_resume_retry(pending, request, policy_store.clone());
+            } else {
+                write_overload(&mut pending);
+            }
+            return;
         } else {
             match catch_unwind(AssertUnwindSafe(|| {
-                crate::resident_protocol::evaluate_resident_bytes(&request, policy_store)
+                observe(Phase::ResidentEvaluate, || {
+                    request_cancellation::evaluate(&mut pending, &request, policy_store.as_deref())
+                })
             })) {
                 Ok(Ok(response)) => response,
                 Ok(Err(reason)) => crate::resident_protocol::safe_error_response(&reason, false),
@@ -263,32 +324,25 @@ fn handle_pending_request(
     }
 }
 
-fn spawn_workers<T, F>(count: usize, receiver: Receiver<T>, handler: F)
-where
-    T: Send + 'static,
-    F: Fn(T) + Send + Sync + 'static,
-{
-    let receiver = Arc::new(Mutex::new(receiver));
-    let handler = Arc::new(handler);
-    for _ in 0..count {
-        let receiver = Arc::clone(&receiver);
-        let handler = Arc::clone(&handler);
-        thread::spawn(move || loop {
-            let next = match receiver.lock() {
-                Ok(guard) => guard.recv(),
-                Err(_) => return,
-            };
-            match next {
-                Ok(item) => handler(item),
-                Err(_) => return,
-            }
-        });
-    }
-}
-
 pub(crate) struct ResidentAdmission {
     primary: SyncSender<BoxedResidentStream>,
     overflow: SyncSender<BoxedResidentStream>,
+    workers: Vec<thread::JoinHandle<()>>,
+}
+
+pub(crate) fn drain_resident_workers(admission: ResidentAdmission) {
+    let ResidentAdmission {
+        primary,
+        overflow,
+        workers,
+    } = admission;
+    drop(primary);
+    drop(overflow);
+    worker_pool::drain(workers, Duration::from_secs(2));
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while CODEX_RESUME_RETRY_IN_FLIGHT.load(Ordering::Acquire) > 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
 }
 
 fn retry_overflow_admissions(
@@ -317,24 +371,34 @@ pub(crate) fn start_resident_workers(
     token: Arc<[u8; crate::AUTH_TOKEN_BYTES]>,
     policy_store: Option<Arc<crate::policy_store::PolicySnapshotStore>>,
 ) -> ResidentAdmission {
+    let (control_sender, mut workers) = control::start(policy_store.clone());
     let (evaluation_sender, evaluation_receiver) =
-        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity());
+        sync_channel::<PendingRequest>(crate::evaluation_queue_capacity() - control::capacity());
     let evaluation_policy_store = policy_store.clone();
-    spawn_workers(
-        crate::evaluation_workers(),
+    let evaluation_control_sender = control_sender.clone();
+    workers.extend(spawn_workers(
+        crate::evaluation_workers() - control::WORKERS,
         evaluation_receiver,
         move |pending| {
-            handle_pending_request(pending, evaluation_policy_store.as_deref());
+            handle_pending_request(
+                pending,
+                evaluation_policy_store.clone(),
+                Some(&evaluation_control_sender),
+            );
         },
-    );
+    ));
 
     let (authentication_sender, authentication_receiver) =
         sync_channel::<BoxedResidentStream>(crate::auth_queue_capacity());
-    spawn_workers(
+    workers.extend(spawn_workers(
         crate::auth_workers(),
         authentication_receiver,
         move |mut stream| {
-            if authenticate_resident_stream(&mut *stream, &token).is_err() {
+            if observe(Phase::ResidentAuthenticate, || {
+                authenticate_resident_stream(&mut *stream, &token)
+            })
+            .is_err()
+            {
                 return;
             }
             let mut pending = match read_request_header(stream) {
@@ -353,7 +417,11 @@ pub(crate) fn start_resident_workers(
             };
             pending.payload_prefix.truncate(available);
             if available == pending.length {
-                handle_pending_request(pending, policy_store.as_deref());
+                if control::is_request(&pending.payload_prefix) {
+                    control::enqueue(&control_sender, pending);
+                } else {
+                    handle_pending_request(pending, policy_store.clone(), Some(&control_sender));
+                }
                 return;
             }
             match evaluation_sender.try_send(pending) {
@@ -362,16 +430,25 @@ pub(crate) fn start_resident_workers(
                     let mut pending = returned;
                     write_overload(&mut pending);
                 }
-                Err(TrySendError::Disconnected(_returned)) => {}
+                Err(TrySendError::Disconnected(returned)) => {
+                    resident_diagnostics::finish_since(
+                        Phase::ResidentDispatchWait,
+                        Status::Error,
+                        returned.accepted_at,
+                    );
+                }
             }
         },
-    );
+    ));
     let overflow_primary = authentication_sender.clone();
     let (overflow_sender, overflow_receiver) = sync_channel(crate::auth_queue_capacity());
-    thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_receiver));
+    workers.push(thread::spawn(move || {
+        retry_overflow_admissions(overflow_primary, overflow_receiver)
+    }));
     ResidentAdmission {
         primary: authentication_sender,
         overflow: overflow_sender,
+        workers,
     }
 }
 
@@ -395,99 +472,13 @@ pub(crate) fn admit_connection(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::mpsc::sync_channel;
-    use std::time::Duration;
+#[path = "resident_transport_peer_tests.rs"]
+mod peer_tests;
 
-    struct NullStream;
+#[cfg(test)]
+#[path = "resident_transport_tests.rs"]
+mod tests;
 
-    impl Read for NullStream {
-        fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
-            Ok(0)
-        }
-    }
-
-    impl Write for NullStream {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl ResidentStream for NullStream {
-        fn set_resident_read_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
-            Ok(())
-        }
-
-        fn set_resident_write_timeout(&self, _timeout: Option<Duration>) -> io::Result<()> {
-            Ok(())
-        }
-
-        fn set_resident_nonblocking(&self, _nonblocking: bool) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    #[test]
-    fn admit_connection_does_not_block_accept_on_full_auth_queue() {
-        let (primary, primary_rx) = sync_channel(1);
-        primary
-            .try_send(Box::new(NullStream) as BoxedResidentStream)
-            .expect("seed occupancy");
-        let overflow_primary = primary.clone();
-        let (overflow, overflow_rx) = sync_channel(1);
-        thread::spawn(move || retry_overflow_admissions(overflow_primary, overflow_rx));
-        let admission = ResidentAdmission { primary, overflow };
-        let started = Instant::now();
-        admit_connection(&admission, Box::new(NullStream)).expect("overflow handoff");
-        assert!(
-            started.elapsed() < Duration::from_millis(20),
-            "accept must keep moving when auth workers are busy"
-        );
-        let worker = thread::spawn(move || {
-            thread::sleep(Duration::from_millis(30));
-            let occupied = primary_rx.recv().expect("drain occupancy");
-            let admitted = primary_rx.recv().expect("overflow retry");
-            (occupied, admitted)
-        });
-        drop(worker.join().expect("overflow delivered"));
-        drop(admission);
-    }
-
-    #[test]
-    fn spawn_workers_run_queued_jobs_in_parallel() {
-        let started = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let (sender, receiver) = sync_channel(4);
-        spawn_workers(4, receiver, {
-            let started = Arc::clone(&started);
-            move |_item: u8| {
-                started.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                while started.load(std::sync::atomic::Ordering::SeqCst) < 4 {
-                    thread::sleep(Duration::from_millis(1));
-                }
-                thread::sleep(Duration::from_millis(40));
-            }
-        });
-        let started_at = Instant::now();
-        for _ in 0..4 {
-            sender.send(1).expect("enqueue parallel job");
-        }
-        drop(sender);
-        let deadline = Instant::now() + Duration::from_millis(400);
-        while started.load(std::sync::atomic::Ordering::SeqCst) < 4 && Instant::now() < deadline {
-            thread::sleep(Duration::from_millis(1));
-        }
-        assert_eq!(started.load(std::sync::atomic::Ordering::SeqCst), 4);
-        while started_at.elapsed() < Duration::from_millis(40) {
-            thread::sleep(Duration::from_millis(1));
-        }
-        assert!(
-            started_at.elapsed() < Duration::from_millis(160),
-            "queued auth/eval work must overlap instead of running one job at a time"
-        );
-    }
-}
+#[cfg(all(test, unix))]
+#[path = "resident_transport_continuation_tests.rs"]
+mod continuation_tests;

@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path, PurePath
+from types import SimpleNamespace
 
 import pytest
 
@@ -15,11 +16,17 @@ from codex_plugin_scanner.cli import main
 from codex_plugin_scanner.guard import protect
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution, queue_blocked_approvals
 from codex_plugin_scanner.guard.cli.protect_approvals import _protect_approval_item, _protect_request_artifact
-from codex_plugin_scanner.guard.local_supply_chain import _is_fresh_artifact_approval, build_package_protect_payload
+from codex_plugin_scanner.guard.local_supply_chain import build_package_protect_payload
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, HarnessDetection
+from codex_plugin_scanner.guard.native_package_policy_resolve import native_resolve_stored_package_policy
 from codex_plugin_scanner.guard.protect import build_protect_payload
+from codex_plugin_scanner.guard.runtime.package_request_evaluation import (
+    PackageRequestEvaluation,
+    SupplyChainUserCopy,
+)
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.harness_attribution_env import strip_harness_env_markers
+from tests.package_review_settings import review_package_signals
 from tests.test_guard_local_supply_chain_phase15 import _package, _seed_supply_chain_bundle
 
 
@@ -131,6 +138,7 @@ def _install_fake_package_manager(
     ],
 )
 @pytest.mark.parametrize("package_manager", ["npm", "bun"])
+@pytest.mark.usefixtures("approval_questionnaire_mode")
 def test_guard_protect_attributes_package_requests_to_invoking_harness(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -145,6 +153,7 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir(parents=True)
     store = GuardStore(home_dir)
+    review_package_signals(home_dir)
     _seed_review_advisory(store)
     strip_harness_env_markers(monkeypatch)
     if origin == "environment":
@@ -206,6 +215,7 @@ def test_guard_protect_attributes_package_requests_to_invoking_harness(
     assert all(event["payload"].get("harness") == harness for event in install_events)
 
 
+@pytest.mark.usefixtures("approval_questionnaire_mode")
 def test_guard_protect_attributes_package_requests_from_grok_env(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -245,6 +255,7 @@ def test_guard_protect_attributes_package_requests_from_grok_env(
     assert rc == 2
 
 
+@pytest.mark.usefixtures("approval_questionnaire_mode")
 def test_guard_protect_attributes_package_requests_from_origin_stamp(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -284,6 +295,7 @@ def test_guard_protect_attributes_package_requests_from_origin_stamp(
     assert rc == 2
 
 
+@pytest.mark.usefixtures("approval_questionnaire_mode")
 def test_guard_protect_keeps_guard_cli_attribution_outside_harness_env(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -496,6 +508,7 @@ def test_package_approval_reuses_under_policy_harness_after_invoking_harness_rev
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager=package_manager,
         store=store,
@@ -617,6 +630,7 @@ def test_package_approval_does_not_reuse_after_package_context_changes(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager=package_manager,
         store=store,
@@ -721,20 +735,94 @@ def test_noncanonical_package_artifact_keeps_invoking_policy_harness(
     )
 
 
-@pytest.mark.parametrize("artifact_hash", [None, "plain-package-hash", "guard-approval-context:v1:invalid"])
-def test_fresh_package_approval_requires_valid_context_token(tmp_path: Path, artifact_hash: object) -> None:
+def _recorded_context_token() -> str:
+    path = (
+        Path(__file__).resolve().parents[1] / "rust/crates/guard-runtime/testdata/package_policy_resolve_vectors.json"
+    )
+    cases = json.loads(path.read_text())
+    for case in cases:
+        token = case.get("request", {}).get("artifact_hash")
+        if isinstance(token, str) and token.startswith("guard-approval-context:v1:ey"):
+            return token
+    raise AssertionError("recorded package context token missing")
+
+
+def _review_evaluation() -> PackageRequestEvaluation:
+    return PackageRequestEvaluation(
+        decision="ask",
+        policy_action="review",
+        enforcement="enforce",
+        entitlement_state="active",
+        cache_status="fresh",
+        package_intent_hash="intent",
+        policy_version="v1",
+        bundle_version=None,
+        workspace_fingerprint=None,
+        reasons=({"code": "current_package_result", "message": "Current package evaluation."},),
+        packages=({"decision": "ask", "name": "reviewpkg"},),
+        risk_summary="Current package evaluation.",
+        user_copy=SupplyChainUserCopy(
+            title="Review",
+            summary="Current package evaluation.",
+            next_step=None,
+            dashboard_url=None,
+            harness_message="Review",
+        ),
+    )
+
+
+@pytest.mark.parametrize(
+    ("saved_hash", "expects_reuse"),
+    [
+        (None, False),
+        ("plain-package-hash", False),
+        ("guard-approval-context:v1:invalid", False),
+        ("recorded", True),
+    ],
+)
+def test_fresh_package_approval_requires_valid_context_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    saved_hash: object,
+    expects_reuse: bool,
+) -> None:
+    token = _recorded_context_token()
     decision = {
         "decision_id": 1,
         "harness": "guard-cli",
         "scope": "artifact",
         "action": "allow",
         "artifact_id": "guard-cli:project:package-request:reviewpkg",
-        "artifact_hash": artifact_hash,
+        "artifact_hash": token if expects_reuse else saved_hash,
         "source": "approval-gate",
         "expires_at": "2026-09-10T00:15:00+00:00",
     }
 
-    assert _is_fresh_artifact_approval(decision, store=GuardStore(tmp_path / "guard-home")) is False
+    store = GuardStore(tmp_path / "guard-home")
+    monkeypatch.setattr(
+        store,
+        "resolve_policy_decision_lookup",
+        lambda *_args, **_kwargs: {"decision": decision, "ignored_local_integrity": None},
+    )
+    artifact = SimpleNamespace(harness="guard-cli", artifact_id=decision["artifact_id"], publisher=None)
+
+    _resolved, _disposition, reused = native_resolve_stored_package_policy(
+        _review_evaluation(),
+        store=store,
+        artifact=artifact,
+        artifact_hash=token,
+        workspace_dir=tmp_path,
+        now="2026-09-10T00:01:00+00:00",
+        policy_workspaces=(str(tmp_path),),
+        current_action=None,
+        claim_saved_approval=False,
+    )
+
+    if expects_reuse:
+        assert reused is not None
+        assert reused["artifact_hash"] == token
+    else:
+        assert reused is None
 
 
 def test_package_once_lookup_filters_expiry_before_fresh_proof(
@@ -750,6 +838,7 @@ def test_package_once_lookup_filters_expiry_before_fresh_proof(
     workspace_dir = tmp_path / "workspace"
     workspace_dir.mkdir()
     store = GuardStore(tmp_path / "guard-home")
+    review_package_signals(tmp_path / "guard-home")
     baseline, baseline_rc = _package_payload(
         package_manager="npm",
         store=store,
@@ -786,7 +875,20 @@ def test_package_once_lookup_filters_expiry_before_fresh_proof(
         consume_one_shot=False,
     )
     assert before_expiry["decision"] is not None
-    assert _is_fresh_artifact_approval(before_expiry["decision"], store=store) is True
+    artifact = SimpleNamespace(harness="guard-cli", artifact_id=artifact_id, publisher=None)
+    _resolved, _disposition, reused = native_resolve_stored_package_policy(
+        _review_evaluation(),
+        store=store,
+        artifact=artifact,
+        artifact_hash=artifact_hash,
+        workspace_dir=workspace_dir,
+        now="2026-09-10T00:10:00+00:00",
+        policy_workspaces=(str(workspace_dir),),
+        current_action=None,
+        claim_saved_approval=False,
+    )
+    assert reused is not None
+    assert reused["artifact_hash"] == artifact_hash
     decision_id = before_expiry["decision"]["decision_id"]
     with sqlite3.connect(store.path) as connection:
         connection.execute(

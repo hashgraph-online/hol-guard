@@ -6,9 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime.command_extension_matchers import safe_option_variant, with_required_flag
 from codex_plugin_scanner.guard.runtime.command_extensions import BUILT_IN_COMMAND_EXTENSION_REGISTRY
-from codex_plugin_scanner.guard.runtime.command_rules import AnyMatcher, ExecutableMatcher
 from tests.command_extension_contracts import assert_reviewed_command_cases, assert_safe_command_cases
 from tests.native_command_test_support import (
     extract_sensitive_tool_action_request_native_test as extract_sensitive_tool_action_request,
@@ -283,31 +281,3 @@ def test_cloud_extensions_publish_primary_references() -> None:
         assert extension is not None
         assert extension.reference_urls
         assert all(url.startswith("https://") for url in extension.reference_urls)
-
-
-def test_cloud_safe_variant_rejects_unsupported_matcher_nesting() -> None:
-    nested = AnyMatcher(matchers=(AnyMatcher(matchers=(ExecutableMatcher(executables=frozenset({"aws"})),)),))
-
-    with pytest.raises(ValueError, match="executable matcher children"):
-        with_required_flag(nested, "--help")
-    with pytest.raises(ValueError, match="executable matcher children"):
-        safe_option_variant(
-            nested,
-            variant_id="skeleton",
-            title="Request skeleton",
-            option="--generate-cli-skeleton",
-            allowed_values=frozenset({"output"}),
-        )
-
-
-def test_cloud_safe_option_variant_requires_allowed_values() -> None:
-    matcher = AnyMatcher(matchers=(ExecutableMatcher(executables=frozenset({"aws"})),))
-
-    with pytest.raises(ValueError, match="at least one allowed value"):
-        safe_option_variant(
-            matcher,
-            variant_id="skeleton",
-            title="Request skeleton",
-            option="--generate-cli-skeleton",
-            allowed_values=frozenset(),
-        )

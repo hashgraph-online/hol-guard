@@ -5,6 +5,8 @@ from __future__ import annotations
 import threading
 from typing import Protocol, final
 
+from ..models import GuardRuntimeRegistration
+
 
 class RuntimeHeartbeatStore(Protocol):
     def try_touch_runtime_state(
@@ -13,6 +15,7 @@ class RuntimeHeartbeatStore(Protocol):
         session_id: str,
         last_heartbeat_at: str,
         timeout_seconds: float,
+        registration: GuardRuntimeRegistration | None = None,
     ) -> bool: ...
 
 
@@ -34,11 +37,21 @@ class RuntimeHeartbeatWriter:
         self._retry_interval_seconds = max(retry_interval_seconds, 0.001)
         self._condition = threading.Condition()
         self._pending_heartbeat: str | None = None
+        # _write_lock serializes registration reads/writes against the worker's
+        # store write, so clear_registration() cannot return while a write is
+        # still carrying the revoked registration past shutdown.
+        self._write_lock = threading.Lock()
+        self._registration: GuardRuntimeRegistration | None = None
         self._stopping = False
+        self._stopped = False
         self._thread: threading.Thread | None = None
 
     def start(self) -> None:
         with self._condition:
+            if self._stopped:
+                # A completed stop() is final until register() explicitly
+                # re-arms the writer for a new ownership generation.
+                return
             if self._thread is not None and self._thread.is_alive():
                 return
             self._stopping = False
@@ -48,6 +61,16 @@ class RuntimeHeartbeatWriter:
                 name="guard-runtime-heartbeat-writer",
             )
             self._thread.start()
+
+    def register(self, registration: GuardRuntimeRegistration) -> None:
+        with self._write_lock:
+            self._registration = registration
+            with self._condition:
+                self._stopped = False
+
+    def clear_registration(self) -> None:
+        with self._write_lock:
+            self._registration = None
 
     def touch(self, last_heartbeat_at: str) -> None:
         with self._condition:
@@ -64,6 +87,7 @@ class RuntimeHeartbeatWriter:
         if thread is not None:
             thread.join(timeout=max(timeout_seconds, 0.0))
         with self._condition:
+            self._stopped = True
             if self._thread is thread and (thread is None or not thread.is_alive()):
                 self._thread = None
             return self._thread is None
@@ -79,11 +103,17 @@ class RuntimeHeartbeatWriter:
             assert heartbeat is not None
             succeeded = False
             try:
-                succeeded = self._store.try_touch_runtime_state(
-                    session_id=self._session_id,
-                    last_heartbeat_at=heartbeat,
-                    timeout_seconds=self._write_timeout_seconds,
-                )
+                # The registration read and the store write stay under
+                # _write_lock: clear_registration() may block here (bounded by
+                # the store's write timeout) but once it returns, no write in
+                # flight can still carry the revoked registration.
+                with self._write_lock:
+                    succeeded = self._store.try_touch_runtime_state(
+                        session_id=self._session_id,
+                        last_heartbeat_at=heartbeat,
+                        timeout_seconds=self._write_timeout_seconds,
+                        registration=self._registration,
+                    )
             except Exception:
                 succeeded = False
             with self._condition:

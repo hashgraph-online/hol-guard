@@ -129,7 +129,25 @@ def build_desktop_dashboard_session_url(
     auth_token = load_guard_daemon_auth_token(guard_home)
     if auth_token is None:
         raise RuntimeError("Guard daemon auth token is not available")
-    parsed = urllib.parse.urlparse(approval_center_url)
+    return build_desktop_dashboard_session_url_for_daemon(
+        daemon_url=approval_center_url,
+        auth_token=auth_token,
+    )
+
+
+def build_desktop_dashboard_session_url_for_daemon(*, daemon_url: str, auth_token: str) -> str:
+    """Mint a dashboard session URL for a daemon this process already knows is local.
+
+    Callers inside the running daemon use this so bootstrap does not health-check
+    itself. The daemon auth token stays in-process; the URL fragment carries only
+    the short-lived dashboard session token.
+    """
+
+    parsed = urllib.parse.urlparse(daemon_url)
+    if parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost"}:
+        raise ValueError("Desktop bootstrap session URL requires the loopback daemon")
+    if parsed.username or parsed.password:
+        raise ValueError("Desktop bootstrap session URL requires the loopback daemon")
     query_pairs = [
         (key, value)
         for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)

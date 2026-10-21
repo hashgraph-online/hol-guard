@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -85,8 +86,10 @@ def test_command_inspection_maps_existing_sensitive_actions_to_extensions(
 
     assert payload["status"] == "review"
     assert payload["classification"]["action_class"] == action_class
-    assert payload["extensions"][0]["extension_id"] == extension_id
-    assert payload["rules"][0]["rule_id"].startswith(f"{extension_id}.")
+    # Read-only identification rules from sibling extensions may also match;
+    # the classification above proves which extension governs the decision.
+    assert extension_id in {extension["extension_id"] for extension in payload["extensions"]}
+    assert any(rule["rule_id"].startswith(f"{extension_id}.") for rule in payload["rules"])
     assert payload["command_model"]["transport"] == "shell_string"
     assert payload["policy_evaluation"] == "not_run"
     assert payload["side_effects"] == "none"
@@ -362,10 +365,13 @@ def test_inspection_handles_unregistered_legacy_action_without_crashing(
 
     payload = inspect_command("echo value", cwd=tmp_path, home_dir=tmp_path)
 
-    assert payload["status"] == "review"
-    assert payload["classification"]["action_class"] == "future sensitive command"
+    # A caller label is display metadata. Without effective native rule evidence for
+    # this command it cannot add a review floor: sparse active catalogs omit inactive
+    # extension owners, so an unowned label does not authenticate itself.
+    assert payload["status"] == "no_match"
+    assert payload["classification"]["action_class"] is None
     assert payload["rules"] == []
-    assert payload["minimum_action"] == "review"
+    assert payload["minimum_action"] == "allow"
 
 
 def test_required_core_extensions_are_explicit_and_cannot_be_mistaken_for_optional() -> None:
@@ -499,7 +505,12 @@ def test_unsupported_heredocs_preserve_native_block_without_inventing_data_match
     expanded = inspect_command(f"cat <<EOF\n$({body})\nEOF", cwd=tmp_path, home_dir=tmp_path)
     script = inspect_command(f"bash <<'EOF'\n{body}\nEOF", cwd=tmp_path, home_dir=tmp_path)
 
-    for payload in (data, expanded, script):
+    assert data["status"] == "no_match"
+    assert data["minimum_action"] == "review"
+    assert data["classification"]["explicitly_benign"] is False
+    assert data["rules"] == []
+    assert data["command_model"]["uncertainty_reason"] == "command_redirect_not_yet_supported"
+    for payload in (expanded, script):
         assert payload["status"] == "native_unavailable"
         assert payload["minimum_action"] == "block"
         assert payload["classification"]["explicitly_benign"] is False
@@ -672,12 +683,19 @@ def test_explicit_github_merge_permission_allows_exact_merge_through_runtime_art
     assert decision_plane["proof_routes"] == ["verified"]
     assert decision_plane["controlling_reasons"] == [
         {
+            "source": "assurance",
+            "reason_code": "native.explicit-benign",
+            "action_floor": "allow",
+            "segment_ref": None,
+            "operation_ref": None,
+        },
+        {
             "source": "control",
             "reason_code": "control.explicitly-enabled-permission",
             "action_floor": "allow",
             "segment_ref": None,
             "operation_ref": None,
-        }
+        },
     ]
 
 
@@ -725,9 +743,7 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
     health: AuthorityHealth,
     state: ControlState,
 ) -> None:
-    from codex_plugin_scanner.guard.runtime.secret_file_request_services.github_pr_body_safety import (
-        _gh_pr_create_uses_safe_static_body_file,
-    )
+    from codex_plugin_scanner.guard.native_shell_request_authority import shell_request_authority
 
     home_dir = tmp_path / "home"
     workspace = home_dir / "CascadeProjects" / "hashgraph-online"
@@ -742,7 +758,12 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
         "--title 'feat(guard): add protection_posture with dual-write to mode and level' "
         "--body-file ~/CascadeProjects/hol-guard-protection-posture/PR_BODY_PROTECTION.md"
     )
-    assert _gh_pr_create_uses_safe_static_body_file(command, cwd=workspace, home_dir=home_dir)
+    # The native body-file proof models POSIX paths only, so Windows fails closed.
+    safe_body = shell_request_authority(
+        "_gh_pr_create_uses_safe_static_body_file",
+        {"command_text": command, "cwd": workspace, "home_dir": home_dir},
+    )
+    assert safe_body is (sys.platform != "win32")
     snapshot = ExtensionControlRuntimeSnapshot.from_authority_view(
         ExtensionControlAuthorityView(
             health=health,
@@ -753,12 +774,7 @@ def test_github_pr_create_body_file_requires_native_file_proof_before_proposal_p
     )
 
     with use_extension_control_snapshot(snapshot):
-        request = extract_sensitive_tool_action_request(
-            "Shell",
-            {"command": command},
-            cwd=workspace,
-            home_dir=home_dir,
-        )
+        request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=workspace, home_dir=home_dir)
 
     # Host discovery can recognize the file, but the offline native request
     # does not bind its contents or identity. Proposal permission cannot remove
@@ -797,7 +813,9 @@ def test_explicit_git_force_push_permission_allows_matcher_owned_rule(tmp_path: 
     }
 
 
-def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Path) -> None:
+def test_explicit_permission_allow_cannot_override_explicit_policy(
+    tmp_path: Path, native_approval_reuse_runtime
+) -> None:
     command = "gh pr merge 5115 --repo example/project --squash --auto"
     request = extract_sensitive_tool_action_request("Shell", {"command": command}, cwd=tmp_path, home_dir=tmp_path)
     layer = _github_permission_layer("command.github.permission.merge-remote", ControlState.ENABLED)
@@ -824,13 +842,19 @@ def test_explicit_permission_allow_cannot_override_explicit_policy(tmp_path: Pat
 
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}), artifact, "codex"
+            GuardConfig(**base, artifact_actions={artifact.artifact_id: "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "block"
     )
     assert (
         _runtime_artifact_policy_action(
-            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}), artifact, "codex"
+            GuardConfig(**base, risk_actions={str(risk_classes[0]): "block"}),
+            artifact,
+            "codex",
+            guard_home=native_approval_reuse_runtime,
         )
         == "allow"
     )
@@ -902,13 +926,18 @@ def test_discovery_artifact_cannot_authorize_unbound_permission_layers(tmp_path:
             ("command.github.permission.merge-remote",),
             "require-reapproval",
         ),
+        # An explicit force-remote Allow is the user's decision for this exact
+        # extension permission, so it takes precedence over the native block.
         (
             "gh repo sync example/project --force",
             ("command.github.permission.force-remote",),
-            "block",
+            "allow",
         ),
+        ("gh repo sync example/project --force", (), "block"),
+        # A shell that carries its whole script runs exactly that script, so an
+        # Allow for another permission leaves the script's own floor standing.
         (
-            "sh -c 'gh pr merge 5115 --repo example/project --squash --auto'",
+            "sh -c 'gh repo sync example/project --force'",
             ("command.github.permission.merge-remote",),
             "block",
         ),
@@ -1041,17 +1070,23 @@ def test_inspection_and_runtime_artifact_share_canonical_wrapper_evidence(tmp_pa
 
 
 def test_inspection_parses_each_command_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    from codex_plugin_scanner.guard.runtime import command_inspection as inspection_module
+    import sys
 
-    real_parser = inspection_module.parse_shell_command
+    from codex_plugin_scanner.guard.runtime import command_model
+
     calls = 0
+    real_model_parser = command_model.parse_shell_command
 
-    def counting_parser(*args: object, **kwargs: object):
+    def counting_model_parser(*args: object, **kwargs: object):
         nonlocal calls
         calls += 1
-        return real_parser(*args, **kwargs)
+        return real_model_parser(*args, **kwargs)
 
-    monkeypatch.setattr(inspection_module, "parse_shell_command", counting_parser)
+    for module in tuple(sys.modules.values()):
+        if module is not None:
+            for name, binding in tuple(vars(module).items()):
+                if binding is real_model_parser:
+                    monkeypatch.setattr(module, name, counting_model_parser)
 
     payload = inspect_command("git push origin main --force", cwd=tmp_path, home_dir=tmp_path)
 

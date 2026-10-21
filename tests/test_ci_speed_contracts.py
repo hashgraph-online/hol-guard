@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -10,11 +11,14 @@ from typing import Any
 import pytest
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _workflow(name: str) -> dict[str | bool, Any]:
-    return yaml.safe_load((ROOT / ".github/workflows" / name).read_text())
+    """Load expanded workflow definitions for CI contract assertions."""
+    return expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows" / name).read_text()))
 
 
 def test_ci_checkouts_do_not_expose_credentials_to_project_code() -> None:
@@ -96,7 +100,13 @@ def test_native_wheel_helpers_run_without_site_packages(script: str) -> None:
 
 def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
     job = _workflow("publish.yml")["jobs"]["build-native-guard-wheels"]
-    assert len(job["strategy"]["matrix"]["include"]) == 4
+    assert job["strategy"]["matrix"]["include"] == "${{ fromJSON(needs.build.outputs.native_wheel_matrix) }}"
+    selector = next(
+        step for step in _workflow("publish.yml")["jobs"]["build"]["steps"] if step.get("id") == "native_wheel_matrix"
+    )
+    platforms = [leg["platform_tag"] for leg in json.loads(selector["env"]["NATIVE_WHEEL_MATRIX"])]
+    assert platforms == ["manylinux_2_17_x86_64", "macosx_13_0_x86_64", "macosx_11_0_arm64", "win_amd64", "win_arm64"]
+    assert 'select(.platform_tag != "win_arm64")' in selector["run"]
     commands = "\n".join(step.get("run", "") for step in job["steps"])
     assert "uv sync" not in commands
     assert "pip install" not in commands
@@ -105,20 +115,26 @@ def test_native_wheel_build_keeps_all_platforms_and_integrity_checks() -> None:
     assert "python scripts/build_native_hol_guard_wheel.py" in commands
 
 
-def test_duration_telemetry_uses_successful_push_on_target_branch() -> None:
+def test_duration_telemetry_uses_complete_push_manifest_on_target_branch() -> None:
+    """Restore the newest complete push manifest, even when other main jobs failed."""
     workflow = _workflow("ci.yml")
     assert set(workflow[True]["pull_request"]["branches"]) <= set(workflow[True]["push"]["branches"])
-    job = workflow["jobs"]["coverage-plan"]
+    job = workflow["jobs"]["native-command-evaluators"]
     plan = next(step for step in job["steps"] if step.get("uses") == "./.github/actions/plan-pytest")
     assert plan["with"]["telemetry-branch"] == "${{ github.event.pull_request.base.ref || github.ref_name }}"
-    action = yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text())
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/plan-pytest/action.yml").read_text()))
     restore = next(step for step in action["runs"]["steps"] if step.get("id") == "latest-duration-telemetry")
     assert restore["env"]["TELEMETRY_BRANCH"] == "${{ inputs.telemetry-branch }}"
     command = restore["run"]
-    assert '-f branch="$TELEMETRY_BRANCH" -f event=push -f status=success' in command
-    assert 'test "$event" = "push"' in command
-    assert 'test "$conclusion" = "success"' in command
-    assert 'test "$branch" = "$TELEMETRY_BRANCH"' in command
-    assert 'test "$workflow_path" = ".github/workflows/ci.yml"' in command
-    assert "/actions/runs/${run_id}/artifacts?" in command
+    # Only a run whose every coverage shard passed and reported publishes this
+    # artifact, so requiring a fully green run would only make timings stale.
+    assert "/actions/workflows/ci.yml/runs" in command
+    assert '-f branch="$TELEMETRY_BRANCH" -f event=push' in command
+    assert '.event == "push" and .head_branch == env.TELEMETRY_BRANCH' in command
+    assert '.path == ".github/workflows/ci.yml"' in command
+    assert "/actions/runs/${run_id}/artifacts" in command
+    assert "-f name=pytest-duration-manifest-candidate" in command
+    assert "status=success" not in command
+    assert "conclusion" not in command
+    assert 'test -n "$artifact_id"' in command
     assert "release/3.0" not in command

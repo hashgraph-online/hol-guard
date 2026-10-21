@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.daemon.lifecycle_journal import (
+    load_bounded_incident_lifecycle_events,
     load_daemon_lifecycle_events,
     record_daemon_lifecycle_event,
 )
@@ -85,6 +86,60 @@ def test_lifecycle_reader_skips_invalid_records(tmp_path: Path) -> None:
     events = load_daemon_lifecycle_events(tmp_path)
 
     assert [event.get("session_id") for event in events] == ["valid"]
+
+
+def test_lifecycle_reader_skips_oversized_record(tmp_path: Path) -> None:
+    journal_dir = tmp_path / "daemon-lifecycle"
+    journal_dir.mkdir()
+    oversized = journal_dir / "99999999999999999999-oversized.json"
+    oversized.write_bytes(b" " * 2049)
+    oversized.chmod(0o600)
+    record_daemon_lifecycle_event(tmp_path, event="ready", session_id="valid")
+
+    events = load_daemon_lifecycle_events(tmp_path)
+
+    assert [event.get("session_id") for event in events] == ["valid"]
+
+
+def test_incident_reader_reports_scan_limit_instead_of_empty_history(tmp_path: Path) -> None:
+    journal_dir = tmp_path / "daemon-lifecycle"
+    journal_dir.mkdir()
+    for index in range(257):
+        (journal_dir / f"{index:020d}.tmp").touch()
+
+    events, status = load_bounded_incident_lifecycle_events(tmp_path)
+
+    assert events == []
+    assert status == "journal_scan_limit"
+
+
+def test_incident_reader_omits_symlinked_records(tmp_path: Path) -> None:
+    journal_dir = tmp_path / "daemon-lifecycle"
+    journal_dir.mkdir()
+    target = tmp_path / "outside.json"
+    target.write_text('{"event":"ready","version":1,"recorded_at_ns":1,"pid":1}', encoding="utf-8")
+    (journal_dir / "99999999999999999999-linked.json").symlink_to(target)
+
+    events, status = load_bounded_incident_lifecycle_events(tmp_path)
+
+    assert events == []
+    assert status == "invalid_entries_omitted"
+
+
+def test_incident_reader_omits_read_time_io_failures(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    record_daemon_lifecycle_event(tmp_path, event="ready")
+
+    def fail_read(_path: Path, *, max_bytes: int) -> str:
+        del max_bytes
+        raise OSError("private incident detail")
+
+    monkeypatch.setattr("codex_plugin_scanner.guard.daemon.lifecycle_journal.read_private_regular_text", fail_read)
+
+    events, status = load_bounded_incident_lifecycle_events(tmp_path)
+
+    assert events == []
+    assert status == "invalid_entries_omitted"
+    assert load_daemon_lifecycle_events(tmp_path) == []
 
 
 def test_daemon_records_ready_and_clean_stop_without_sqlite_dependency(tmp_path: Path) -> None:

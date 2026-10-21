@@ -53,6 +53,9 @@ class ExtensionControlAuthorityView:
     catalog_digest: str
     layers: tuple[ExtensionControlLayer, ...]
     managed_revision: int = 0
+    # The authority was never read, so this view reports no reading rather than
+    # a verdict about it. It grants nothing, and the next read replaces it.
+    unread: bool = False
 
     def layers_for(self, surface: ControlSurface) -> tuple[ExtensionControlLayer, ...]:
         if self.health is AuthorityHealth.PROTECTED:
@@ -148,42 +151,6 @@ def anchor_to_json(anchor: AuthorityAnchor, *, key: bytes) -> str:
         purpose=ANCHOR_PURPOSE,
     )
     return _canonical_json({"record": encoded, "digest": digest, "mac": mac})
-
-
-def anchor_from_json(value: str, *, key: bytes) -> AuthorityAnchor:
-    try:
-        raw_envelope = cast(object, json.loads(value))
-    except (TypeError, json.JSONDecodeError) as exc:
-        raise ExtensionControlAuthorityError("invalid authority anchor") from exc
-    if not isinstance(raw_envelope, dict):
-        raise ExtensionControlAuthorityError("invalid authority anchor")
-    envelope = cast(dict[object, object], raw_envelope)
-    record = envelope.get("record")
-    digest = envelope.get("digest")
-    mac = envelope.get("mac")
-    if not all(isinstance(item, str) for item in (record, digest, mac)):
-        raise ExtensionControlAuthorityError("invalid authority anchor")
-    payload = verify_authenticated_record(
-        cast(str, record),
-        expected_digest=cast(str, digest),
-        expected_mac=cast(str, mac),
-        key=key,
-        purpose=ANCHOR_PURPOSE,
-    )
-    revision = payload.get("revision")
-    snapshot_digest = payload.get("snapshot_digest")
-    phase = payload.get("phase")
-    if type(revision) is not int or revision < 0:
-        raise ExtensionControlAuthorityError("invalid authority anchor revision")
-    if not isinstance(snapshot_digest, str) or len(snapshot_digest) != 64:
-        raise ExtensionControlAuthorityError("invalid authority anchor digest")
-    if not isinstance(phase, str):
-        raise ExtensionControlAuthorityError("invalid authority anchor phase")
-    try:
-        parsed_phase = AuthorityPhase(phase)
-    except ValueError as exc:
-        raise ExtensionControlAuthorityError("invalid authority anchor phase") from exc
-    return AuthorityAnchor(revision, snapshot_digest, parsed_phase)
 
 
 def _layer_to_value(layer: ExtensionControlLayer) -> dict[str, object]:

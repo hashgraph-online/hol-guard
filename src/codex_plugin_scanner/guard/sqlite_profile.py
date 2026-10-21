@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import math
-import sqlite3
 import threading
 from dataclasses import dataclass
 from typing import TypedDict, final
+
+from .sqlite_errors import sqlite_error_is_busy_locked as sqlite_error_is_busy_locked
 
 _MAX_SAMPLES = 10_000
 
@@ -124,13 +125,6 @@ class SQLiteProfiler:
     def _append(self, samples: list[float], duration_ms: float) -> None:
         if len(samples) < self._max_samples:
             samples.append(max(0.0, duration_ms))
-
-
-def sqlite_error_is_busy_locked(error: BaseException) -> bool:
-    if not isinstance(error, sqlite3.OperationalError):
-        return False
-    message = str(error).lower()
-    return "locked" in message or "busy" in message
 
 
 __all__ = [

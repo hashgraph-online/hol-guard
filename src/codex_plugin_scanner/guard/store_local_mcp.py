@@ -2,16 +2,26 @@
 
 from __future__ import annotations
 
-import shlex
 import sqlite3
-from contextlib import AbstractContextManager
-from typing import TYPE_CHECKING
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
-from .runtime.local_cli_commands import LocalCliCommand, LocalCliCommandState
+from .runtime.composio_contract import composio_tool_role
+from .runtime.composio_discovery import ComposioActionSchema
+from .runtime.composio_workflows import ComposioWorkflowProposal
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
-from .runtime.mcp_protection import build_mcp_server_identity, resolved_package_launcher_executable
-from .store_local_cli import _grant_from_row, _row_values
+from .runtime.observed_mcp_tools import ObservedMcpTool, observed_mcp_tool
+from .store_local_cli_retention import LocalCliReplaySkippedError, utc_now_iso
 from .store_local_cli_schema import ensure_local_cli_schema
+from .store_mcp_catalog import read_mcp_skill_page
+from .store_mcp_provider_catalog import describe_provider_actions, read_provider_actions
+
+if TYPE_CHECKING:
+    from .store import GuardStore
+
+_OBSERVED_MCP_ACTIONS = frozenset({"allow", "review", "block"})
 
 
 class StoreLocalMcpMixin:
@@ -19,9 +29,177 @@ class StoreLocalMcpMixin:
 
         def _connect(self) -> AbstractContextManager[sqlite3.Connection]: ...
 
-        def read_local_cli_command_catalog(self, cli_id: str) -> list[LocalCliCommand]: ...
+        def _native_store_call(
+            self, method: str, args: Mapping[str, object], *, busy_timeout_seconds: float | None = None
+        ) -> Any: ...
 
-        def read_local_cli_command_states(self, cli_id: str) -> dict[str, LocalCliCommandState]: ...
+    def read_mcp_provider_choices(self) -> dict[str, str]:
+        from .store_mcp_provider_permissions import read_native_provider_choices
+
+        with self._connect() as connection:
+            connection.execute("begin")
+            ensure_local_cli_schema(connection, for_read=True)
+            return read_native_provider_choices(connection)
+
+    def read_observed_mcp_tool_actions(self) -> dict[str, str]:
+        """Return the operator's exact choices for observed MCP connectors."""
+
+        # The resident reads only the current schema; migrate an older store first.
+        with self._connect() as connection:
+            ensure_local_cli_schema(connection, for_read=True)
+            # The snapshot publisher reads this on every policy observation.
+            # Without an observed connector the resident would return no
+            # actions, so skip the round trip.
+            observed = connection.execute(
+                "select 1 from local_cli_observation "
+                "where surface = 'mcp' and server_command like 'observed-mcp:%' limit 1"
+            ).fetchone()
+        if observed is None:
+            return {}
+        actions = self._native_store_call("observed_mcp_tool_actions", {})
+        if not isinstance(actions, dict) or any(
+            not isinstance(key, str) or action not in _OBSERVED_MCP_ACTIONS
+            for key, action in cast(dict[object, object], actions).items()
+        ):
+            raise sqlite3.DatabaseError("native_observed_mcp_tool_actions_invalid")
+        return cast(dict[str, str], actions)
+
+    def read_mcp_provider_authority_hash(self) -> str | None:
+        from .store_mcp_provider_catalog import read_provider_authority
+
+        with self._connect() as connection:
+            connection.execute("begin")
+            ensure_local_cli_schema(connection, for_read=True)
+            return read_provider_authority(connection)
+
+    def record_composio_discovery(
+        self,
+        source: ObservedMcpTool,
+        actions: tuple[ComposioActionSchema, ...],
+        *,
+        seen_at: str,
+        proposals: tuple[ComposioWorkflowProposal, ...] = (),
+    ) -> str:
+        if observed_mcp_tool(source.harness, source.qualified_name) != source or (
+            composio_tool_role(source.qualified_name) != "discovery"
+        ):
+            raise ValueError("invalid provider discovery source")
+        server = source.server_identity
+        cli_id = self.ensure_local_mcp_observation(
+            source.identity,
+            seen_at=seen_at,
+            server_identity_hash=server.identity_hash,
+            server_command=server.command,
+            server_args_hash=server.args_hash,
+            source_label=f"{source.harness.title()} · observed provider metadata",
+        )
+        args: dict[str, object] = {
+            "cli_id": cli_id,
+            "identity_hash": server.identity_hash,
+            "server_command": server.command,
+            "source_tool": source.qualified_name,
+            "seen_at": seen_at,
+            "actions": [
+                {
+                    "toolkit": action.toolkit,
+                    "tool_slug": action.tool_slug,
+                    "description": action.description,
+                    "input_schema": action.input_schema,
+                    "full_schema": bool(action.full_schema),
+                }
+                for action in actions
+            ],
+            "proposals": [
+                {
+                    "primary": list(proposal.primary),
+                    "supporting": list(proposal.supporting),
+                    "guidance_present": proposal.guidance_present,
+                }
+                for proposal in proposals
+            ],
+        }
+        result = self._native_store_call("record_composio_discovery", args)
+        if isinstance(result, dict) and result.get("need_barrier") is True:
+            # This batch moves the provider authority, which the native policy
+            # barrier has to bracket. The resident cannot reach the publishers
+            # that barrier notifies, so it wrote nothing and asked for one:
+            # close it and run the same write inside it.
+            with _notify_legacy_mcp_denial(cast("GuardStore", self).guard_home):
+                self._native_store_call("record_composio_discovery", {**args, "barrier_closed": True})
+        return cli_id
+
+    def read_local_mcp_workflows(self, cli_id: str, *, offset: int = 0) -> dict[str, object]:
+        if not is_local_cli_id(cli_id):
+            raise ValueError("invalid provider connection")
+        from .store_mcp_workflows import read_workflow_proposals
+
+        with self._connect() as connection:
+            connection.execute("begin deferred")
+            ensure_local_cli_schema(connection, for_read=True)
+            return read_workflow_proposals(connection, cli_id, offset=offset)
+
+    def read_local_mcp_provider_actions(
+        self,
+        cli_id: str,
+        *,
+        limit: int = 100,
+        offset: int = 0,
+        search: str = "",
+        expected_token: str | None = None,
+    ) -> dict[str, object]:
+        if not is_local_cli_id(cli_id):
+            raise ValueError("invalid provider connection")
+        with self._connect() as connection:
+            connection.execute("begin deferred")
+            ensure_local_cli_schema(connection, for_read=True)
+            observation = connection.execute(
+                "select identity_hash from local_cli_observation where cli_id = ? and surface = 'mcp'",
+                (cli_id,),
+            ).fetchone()
+            if observation is None:
+                raise ValueError("provider connection not found")
+            page, declarations = read_provider_actions(
+                connection,
+                cli_id,
+                observation[0],
+                limit=limit,
+                offset=offset,
+                search=search,
+                expected_token=expected_token,
+            )
+        return describe_provider_actions(
+            page,
+            declarations,
+            guard_home=cast("GuardStore", self).guard_home,
+        )
+
+    def read_local_mcp_skills(
+        self,
+        cli_id: str,
+        *,
+        offset: int,
+        search: str,
+        expected_revision: int | None = None,
+    ) -> dict[str, object]:
+        if not is_local_cli_id(cli_id):
+            raise ValueError("mcp_skills_unavailable")
+        with self._connect() as connection:
+            connection.execute("begin deferred")
+            ensure_local_cli_schema(connection, for_read=True)
+            observation = connection.execute(
+                "select identity_hash from local_cli_observation where cli_id = ? and surface = 'mcp'",
+                (cli_id,),
+            ).fetchone()
+            if observation is None:
+                raise ValueError("mcp_skills_unavailable")
+            return read_mcp_skill_page(
+                connection,
+                cli_id,
+                observation[0],
+                offset=offset,
+                search=search,
+                expected_revision=expected_revision,
+            )
 
     def find_local_mcp_observation(
         self,
@@ -31,42 +209,18 @@ class StoreLocalMcpMixin:
         command: str | None = None,
         args_hash: str | None = None,
     ) -> dict[str, object] | None:
-        hash_value = _normalized_identity_hash(server_identity_hash)
-        lookup_cli_id = cli_id if isinstance(cli_id, str) and is_local_cli_id(cli_id) else None
-        if hash_value is None and (not command or not args_hash) and lookup_cli_id is None:
-            return None
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            row = connection.execute(
-                """
-                select cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                       server_identity_hash, server_command, server_args_hash
-                from local_cli_observation
-                where surface = 'mcp'
-                  and (
-                    (? is not null and cli_id = ?)
-                    or (? is not null and (server_identity_hash = ? or identity_hash = ?))
-                    or (
-                      ? is not null and ? is not null
-                      and server_command = ? and server_args_hash = ?
-                    )
-                  )
-                order by last_seen_at desc, cli_id asc
-                limit 1
-                """,
-                (
-                    lookup_cli_id,
-                    lookup_cli_id,
-                    hash_value,
-                    hash_value,
-                    hash_value,
-                    command,
-                    args_hash,
-                    command,
-                    args_hash,
-                ),
-            ).fetchone()
-        return _observation_from_values(row)
+        found = self._native_store_call(
+            "find_local_mcp_observation",
+            {
+                "cli_id": cli_id if isinstance(cli_id, str) else None,
+                "server_identity_hash": server_identity_hash if isinstance(server_identity_hash, str) else None,
+                "command": command if isinstance(command, str) else None,
+                "args_hash": args_hash if isinstance(args_hash, str) else None,
+            },
+        )
+        if found is not None and not isinstance(found, dict):
+            raise sqlite3.DatabaseError("native_local_mcp_observation_invalid")
+        return cast("dict[str, object] | None", found)
 
     def ensure_local_mcp_observation(
         self,
@@ -77,312 +231,81 @@ class StoreLocalMcpMixin:
         server_command: str,
         server_args_hash: str,
         source_label: str | None = None,
+        connection_identity_hash: str | None = None,
+        replayed: bool = False,
+        replay_now: str | None = None,
+        remote_origin: str | None = None,
+        declared_source: str | None = None,
     ) -> str:
-        """Insert or refresh an MCP observation without incrementing observed_count."""
+        """Insert or refresh an MCP observation without incrementing observed_count.
 
-        if not is_local_cli_id(identity.cli_id):
-            raise ValueError("invalid local CLI id")
-        existing = self.find_local_mcp_observation(
-            server_identity_hash=server_identity_hash,
-            command=server_command,
-            args_hash=server_args_hash,
-        )
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            if existing is None:
-                inserted = _insert_mcp_observation(
-                    connection,
-                    identity,
-                    seen_at=seen_at,
-                    server_identity_hash=server_identity_hash,
-                    server_command=server_command,
-                    server_args_hash=server_args_hash,
-                    source_label=source_label,
-                )
-                if inserted is not None:
-                    return inserted
-                existing = _observation_from_values(
-                    connection.execute(
-                        """
-                        select cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                               server_identity_hash, server_command, server_args_hash
-                        from local_cli_observation
-                        where cli_id = ?
-                        """,
-                        (identity.cli_id,),
-                    ).fetchone()
-                )
-                if existing is None:
-                    return identity.cli_id
-                if not _same_mcp_observation(existing, identity, server_command, server_args_hash):
-                    retry = _insert_mcp_observation(
-                        connection,
-                        identity,
-                        seen_at=seen_at,
-                        server_identity_hash=server_identity_hash,
-                        server_command=server_command,
-                        server_args_hash=server_args_hash,
-                        source_label=source_label,
-                        cli_id=_collision_cli_id(identity.identity_hash),
-                    )
-                    if retry is not None:
-                        return retry
-                    return str(existing["cli_id"])
-            cli_id = str(existing["cli_id"])
-            _ = connection.execute(
-                """
-                update local_cli_observation
-                set name = ?, example_label = ?, last_seen_at = ?,
-                    server_identity_hash = coalesce(server_identity_hash, ?),
-                    server_command = coalesce(server_command, ?),
-                    server_args_hash = coalesce(server_args_hash, ?),
-                    source_label = coalesce(?, source_label)
-                where cli_id = ?
-                """,
-                (
-                    identity.name,
-                    identity.example_label,
-                    seen_at,
-                    server_identity_hash,
-                    server_command,
-                    server_args_hash,
-                    source_label,
-                    cli_id,
-                ),
-            )
-            return cli_id
+        ``declared_source`` (``<harness>:<stdio|remote>``) and
+        ``remote_origin`` record a harness config declaration on the same
+        record a call sighting uses.
 
-    def read_local_mcp_grant(
-        self,
-        server_identity_hash: str,
-        *,
-        command: str | None = None,
-        args_hash: str | None = None,
-        package_name: str | None = None,
-        package_version: str | None = None,
-        package_source: str | None = None,
-    ) -> dict[str, object] | None:
-        hash_value = _normalized_identity_hash(server_identity_hash)
-        if hash_value is None:
-            return None
-        server_identity_hash = hash_value
-        with self._connect() as connection:
-            ensure_local_cli_schema(connection)
-            observation = connection.execute(
-                """
-                select cli_id, identity_hash
-                from local_cli_observation
-                where surface = 'mcp'
-                  and (
-                    server_identity_hash = ?
-                    or identity_hash = ?
-                    or (
-                      ? is not null and ? is not null
-                      and server_command = ? and server_args_hash = ?
-                    )
-                  )
-                order by last_seen_at desc, cli_id asc
-                limit 1
-                """,
-                (
-                    server_identity_hash,
-                    server_identity_hash,
-                    command,
-                    args_hash,
-                    command,
-                    args_hash,
-                ),
-            ).fetchone()
-            if observation is None:
-                observation = _equivalent_package_launcher_observation(
-                    connection,
-                    command=command,
-                    package_name=package_name,
-                    package_version=package_version,
-                    package_source=package_source,
-                )
-            if observation is None:
-                return None
-            cli_id, identity_hash = _row_values(observation, 2)
-            if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
-                return None
-            grant_row = connection.execute(
-                "select cli_id, identity_hash, state, revision, updated_at from local_cli_grant where cli_id = ?",
-                (cli_id,),
-            ).fetchone()
-        if grant_row is None:
-            return None
-        grant = _grant_from_row(grant_row)
-        if grant["identity_hash"] != identity_hash:
-            return None
-        if grant["state"] == "blocked":
-            grant["commands"] = []
-            grant["command_states"] = {}
-            return grant
-        grant["commands"] = self.read_local_cli_command_catalog(cli_id)
-        grant["command_states"] = self.read_local_cli_command_states(cli_id)
-        return grant
-
-
-def _equivalent_package_launcher_observation(
-    connection: sqlite3.Connection,
-    *,
-    command: str | None,
-    package_name: str | None,
-    package_version: str | None,
-    package_source: str | None,
-) -> tuple[str, str] | None:
-    """Match a this-device MCP grant for the same package launcher and package."""
-
-    requested = resolved_package_launcher_executable(command or "")
-    runtime_package = package_name.strip() if isinstance(package_name, str) else ""
-    if requested is None or not runtime_package:
-        return None
-    runtime_version = _normalized_package_version(package_version)
-    if not isinstance(package_source, str) or not package_source.strip():
-        return None
-    runtime_source = package_source.strip()
-    rows = connection.execute(
+        ``replayed`` marks ``seen_at`` as a history timestamp: it never moves
+        ``last_seen_at`` backward and does not run retention pruning. The
+        replay check runs in the write transaction, so a concurrent Forget is
+        not undone; a skipped entry raises ``LocalCliReplaySkippedError``.
         """
-        select o.cli_id, o.identity_hash, o.server_command, o.example_label, g.state
-        from local_cli_observation as o
-        join local_cli_grant as g
-          on g.cli_id = o.cli_id and g.identity_hash = o.identity_hash
-        where o.surface = 'mcp'
-        order by case when g.state = 'blocked' then 0 else 1 end, o.last_seen_at desc, o.cli_id asc
+
+        args: dict[str, object] = {
+            "cli_id": identity.cli_id,
+            "identity_hash": identity.identity_hash,
+            "kind": identity.kind,
+            "name": identity.name,
+            "interpreter_name": identity.interpreter_name,
+            "example_label": identity.example_label,
+            "seen_at": seen_at,
+            "server_identity_hash": server_identity_hash,
+            "server_command": server_command,
+            "server_args_hash": server_args_hash,
+            "source_label": source_label,
+            "connection_identity_hash": connection_identity_hash,
+            "replayed": replayed,
+            "replay_now": replay_now,
+            "clock": utc_now_iso(),
+        }
+        if remote_origin is not None:
+            args["remote_origin"] = remote_origin
+        if declared_source is not None:
+            args["declared_source"] = declared_source
+        result = self._native_store_call("ensure_local_mcp_observation", args)
+        if isinstance(result, dict) and result.get("need_barrier") is True:
+            # Carrying a legacy Deny changes policy authority: close the
+            # native policy barrier around the write.
+            guard_home = cast("GuardStore", self).guard_home
+            with _notify_legacy_mcp_denial(guard_home):
+                result = self._native_store_call("ensure_local_mcp_observation", {**args, "barrier_closed": True})
+        if isinstance(result, dict) and result.get("replay_skipped") is True:
+            raise LocalCliReplaySkippedError(identity.cli_id)
+        cli_id = result.get("cli_id") if isinstance(result, dict) else None
+        if not isinstance(cli_id, str):
+            raise sqlite3.DatabaseError("native_local_mcp_observation_invalid")
+        return cli_id
+
+    def reconcile_remote_mcp_declarations(self, *, harnesses: Sequence[str], declared_cli_ids: Sequence[str]) -> int:
+        """Forget remote declarations a config scan of ``harnesses`` no longer finds.
+
+        Records stay, so permission history and decisions are kept; only the
+        ``<harness>:remote`` source goes, and the stored origin once no harness
+        declares the connector as remote.
         """
-    ).fetchall()
-    for row in rows:
-        cli_id, identity_hash, server_command, example_label, _grant_state = _row_values(row, 5)
-        if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
-            continue
-        stored_package, stored_version, stored_source = _observation_package_identity(
-            server_command if isinstance(server_command, str) else None,
-            example_label if isinstance(example_label, str) else None,
+
+        result = self._native_store_call(
+            "reconcile_remote_mcp_declarations",
+            {"harnesses": sorted(set(harnesses)), "declared_cli_ids": sorted(set(declared_cli_ids))},
         )
-        if stored_package != runtime_package or stored_version != runtime_version or stored_source != runtime_source:
-            continue
-        stored = resolved_package_launcher_executable(str(server_command or ""))
-        if stored is not None and stored == requested:
-            return cli_id, identity_hash
-    return None
+        reconciled = result.get("reconciled") if isinstance(result, dict) else None
+        return reconciled if isinstance(reconciled, int) else 0
 
 
-def _observation_package_identity(
-    server_command: str | None,
-    example_label: str | None,
-) -> tuple[str | None, str | None, str]:
-    if not isinstance(example_label, str) or not example_label.strip():
-        return None, None, "default"
+@contextmanager
+def _notify_legacy_mcp_denial(guard_home: Path) -> Iterator[None]:
+    from .native_policy_snapshot import notify_native_policy_mutation
+
+    notify_native_policy_mutation(guard_home)
     try:
-        parts = shlex.split(example_label)
-    except ValueError:
-        return None, None, "default"
-    if not parts:
-        return None, None, "default"
-    command = server_command or parts[0]
-    identity = build_mcp_server_identity(
-        config_path="",
-        command=command,
-        args=tuple(parts[1:]),
-        transport="stdio",
-    )
-    return (
-        identity.package_name,
-        _normalized_package_version(identity.package_version),
-        identity.package_source,
-    )
-
-
-def _normalized_package_version(value: str | None) -> str:
-    if not isinstance(value, str):
-        return "latest"
-    text = value.strip()
-    return text or "latest"
-
-
-def _normalized_identity_hash(value: str | None) -> str | None:
-    if not isinstance(value, str) or len(value) != 64:
-        return None
-    lowered = value.lower()
-    if any(character not in "0123456789abcdef" for character in lowered):
-        return None
-    return lowered
-
-
-def _observation_from_values(row: object | None) -> dict[str, object] | None:
-    if row is None:
-        return None
-    values = _row_values(row, 9)
-    cli_id = values[0]
-    identity_hash = values[1]
-    if not isinstance(cli_id, str) or not isinstance(identity_hash, str):
-        return None
-    return {
-        "cli_id": cli_id,
-        "identity_hash": identity_hash,
-        "kind": values[2],
-        "name": values[3],
-        "interpreter_name": values[4],
-        "example_label": values[5],
-        "server_identity_hash": values[6],
-        "server_command": values[7],
-        "server_args_hash": values[8],
-    }
-
-
-def _same_mcp_observation(
-    existing: dict[str, object],
-    identity: UnlistedCliIdentity,
-    server_command: str,
-    server_args_hash: str,
-) -> bool:
-    if existing.get("identity_hash") == identity.identity_hash:
-        return True
-    return existing.get("server_command") == server_command and existing.get("server_args_hash") == server_args_hash
-
-
-def _collision_cli_id(identity_hash: str) -> str:
-    return f"local-cli.mcp-{identity_hash[:12]}"
-
-
-def _insert_mcp_observation(
-    connection: sqlite3.Connection,
-    identity: UnlistedCliIdentity,
-    *,
-    seen_at: str,
-    server_identity_hash: str,
-    server_command: str,
-    server_args_hash: str,
-    source_label: str | None = None,
-    cli_id: str | None = None,
-) -> str | None:
-    target_id = cli_id or identity.cli_id
-    if not is_local_cli_id(target_id):
-        return None
-    try:
-        _ = connection.execute(
-            """
-            insert into local_cli_observation (
-                cli_id, identity_hash, kind, name, interpreter_name, example_label,
-                observed_count, last_seen_at, source_path, help_status, surface,
-                server_identity_hash, server_command, server_args_hash, source_label
-            ) values (?, ?, ?, ?, ?, ?, 1, ?, null, null, 'mcp', ?, ?, ?, ?)
-            """,
-            (
-                target_id,
-                identity.identity_hash,
-                identity.kind,
-                identity.name,
-                identity.interpreter_name,
-                identity.example_label,
-                seen_at,
-                server_identity_hash,
-                server_command,
-                server_args_hash,
-                source_label,
-            ),
-        )
-    except sqlite3.IntegrityError:
-        return None
-    return target_id
+        yield
+    finally:
+        notify_native_policy_mutation(guard_home)

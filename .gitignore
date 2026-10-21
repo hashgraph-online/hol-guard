@@ -11,7 +11,7 @@ dist/
 build/
 *.egg-info/
 *.egg
-rust/target/
+rust/target
 
 # Native binaries are staged only for wheel and frozen builds.
 /src/codex_plugin_scanner/_native/
@@ -66,3 +66,25 @@ Thumbs.db
 /docs/guard/extension-builder/*.[mM][dD]
 !/docs/guard/extension-builder/README.md
 !/docs/guard/extension-builder/VALIDATION.md
+# Native command projections are build outputs, never merge inputs.
+/contracts/extensions/command-catalog.v1.json
+/contracts/extensions/native-command-program.v1.json
+/contracts/extensions/command-projection-build.v1.json
+/src/codex_plugin_scanner/guard/contracts/data/extensions/command-catalog.v1.json
+/src/codex_plugin_scanner/guard/contracts/data/extensions/native-command-program.v1.json
+
+# local gauntlet/build artifacts
+ci/pi-exact-continuation/node_modules/
+native-dist/
+source-build.json
+source-compiled.json
+contracts/extensions/build-descriptors/
+contracts/extensions/build-trust-class-map.v1.json
+contracts/extensions/trust-class-map.v1.json
+src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json
+
+# per-session editor hook cache (local paths, never committed)
+dashboard/.impeccable/hook.cache.json
+
+# Dashboard integration run output can hold local session URLs.
+/dashboard/e2e/proofs/integration-output/

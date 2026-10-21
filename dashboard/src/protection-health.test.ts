@@ -245,6 +245,7 @@ assert.match(appSource, /const handleRepairProtection = useCallback/);
 assert.match(appSource, /onRepairProtection=\{handleRepairProtection\}/);
 assert.match(readFileSync(new URL("./protection-repair-flow.ts", import.meta.url), "utf8"), /remainingProtectionRepairMessage\(remainingHealth, input\.displayName\)/);
 assert.match(protectionHealthSource, /Command evidence still needs repair/);
+assert.match(protectionHealthSource, /protectionReasonText\(decisionStreamCheck\.reason_code\)/);
 assert.match(protectionHealthSource, /Connect an AI app to start local protection/);
 assert.doesNotMatch(appSource, /app\.checks\.some\(\(check\) => check\.status === "fail"\)/);
 
@@ -281,6 +282,33 @@ evidenceUnknown[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
 assert.equal(
   remainingProtectionRepairParts(normalizeProtectionHealth(payload(evidenceUnknown))).evidenceFailed,
   true,
+);
+
+const degradedEvidenceChecks = checks();
+degradedEvidenceChecks[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
+  check_id: "decision_stream",
+  status: "fail",
+  reason_code: "decision_stream_degraded",
+};
+assert.match(
+  remainingProtectionRepairMessage(
+    normalizeProtectionHealth(payload(degradedEvidenceChecks)),
+    (harness) => harness,
+  ).message,
+  /Guard could not restore command evidence persistence/,
+);
+const unmappedEvidenceChecks = checks();
+unmappedEvidenceChecks[PROTECTION_CHECK_IDS.indexOf("decision_stream")] = {
+  check_id: "decision_stream",
+  status: "fail",
+  reason_code: "decision_stream_gap",
+};
+assert.match(
+  remainingProtectionRepairMessage(
+    normalizeProtectionHealth(payload(unmappedEvidenceChecks)),
+    (harness) => harness,
+  ).message,
+  /Command evidence still needs repair/,
 );
 
 const hookFailureChecks = checks();

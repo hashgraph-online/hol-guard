@@ -11,7 +11,6 @@ from codex_plugin_scanner.guard.config import (
     update_guard_settings,
 )
 from codex_plugin_scanner.guard.protection_posture import (
-    apply_posture_confidence,
     derive_protection_posture,
     dual_write_from_posture,
 )
@@ -224,41 +223,6 @@ def test_derive_and_dual_write_tables() -> None:
     assert dual_write_from_posture("watch", current_security_level="balanced") == ("observe", "balanced")
 
 
-def test_confidence_stop_blocks_strong_exfiltration_even_when_implicit() -> None:
-    asked = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence=None,
-    )
-    stopped = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    implicit = apply_posture_confidence(
-        posture="protected",
-        explicit=False,
-        risk_class="credential_exfiltration",
-        action="require-reapproval",
-        confidence="strong",
-    )
-    always = apply_posture_confidence(
-        posture="protected",
-        explicit=True,
-        risk_class="guard_bypass",
-        action="require-reapproval",
-        confidence=None,
-    )
-    assert asked == "require-reapproval"
-    assert stopped == "block"
-    assert implicit == "block"
-    assert always == "block"
-
-
 def test_managed_security_level_lock_keeps_level_maps(tmp_path: Path) -> None:
     guard_home = tmp_path / ".hol-guard"
     loaded = update_guard_settings(guard_home, {"protection_posture": "protected"})
@@ -360,9 +324,11 @@ def test_watch_forces_observe_even_when_mode_is_in_payload(tmp_path: Path) -> No
     assert loaded.protection_posture == "watch"
 
 
-def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path: Path) -> None:
+def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(
+    tmp_path: Path, native_approval_reuse_runtime: Path
+) -> None:
     from codex_plugin_scanner.guard.cli.commands_support_runtime_policy import (
-        _apply_explicit_posture_action,
+        _runtime_artifact_policy_action,
     )
     from codex_plugin_scanner.guard.models import GuardArtifact
 
@@ -376,10 +342,11 @@ def test_runtime_policy_reads_signal_confidence_from_artifact_metadata(tmp_path:
         source_scope="project",
         config_path="/workspace/repo/.guard/config.toml",
         metadata={
+            "risk_classes": ["credential_exfiltration"],
             "risk_signals": [{"confidence": "strong", "category": "secret"}],
         },
     )
-    action = _apply_explicit_posture_action(config, artifact, "credential_exfiltration", "require-reapproval")
+    action = _runtime_artifact_policy_action(config, artifact, "codex", guard_home=native_approval_reuse_runtime)
     assert action == "block"
 
 
@@ -399,9 +366,7 @@ def test_managed_mode_lock_overrides_watch_payload() -> None:
     assert composed["mode"] == "enforce"
 
 
-def test_status_marks_legacy_observe_as_protection_off(
-    tmp_path: Path, capsys: object
-) -> None:
+def test_status_marks_legacy_observe_as_protection_off(tmp_path: Path, capsys: object) -> None:
     import json
 
     from codex_plugin_scanner.cli import main

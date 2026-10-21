@@ -1,0 +1,13 @@
+[package]
+name = "guard-seatbelt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "guard_seatbelt"
+path = "src/lib.rs"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

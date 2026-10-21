@@ -202,7 +202,7 @@ class TestApproveBlockRecoveryPayloads:
         assert recovery.get("code") == "session_stale"
 
     def test_stale_approval_page_shows_recovery_copy_not_blank(self, tmp_path: Path) -> None:
-        """T699: GET on stale/nonexistent approval request returns recovery copy instead of bare 404."""
+        """T699: missing or temporarily unverifiable requests retain honest recovery copy."""
         store = GuardStore(tmp_path / "guard")
         daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
         daemon.start()
@@ -219,12 +219,19 @@ class TestApproveBlockRecoveryPayloads:
                 ):
                     pytest.fail("Expected HTTP error")
             except urllib.error.HTTPError as err:
+                status = err.code
                 payload = json.loads(err.read().decode("utf-8"))
         finally:
             daemon.stop()
 
         recovery = payload.get("recovery")
-        assert isinstance(recovery, dict), "404 GET on stale request must include recovery payload"
-        assert recovery.get("code") in {"request_unknown", "not_found"}
+        assert isinstance(recovery, dict), "Failed request lookup must include recovery payload"
+        assert status in {404, 503}
+        if status == 404:
+            assert payload.get("error") == "not_found"
+            assert recovery.get("code") == "request_unknown"
+        else:
+            assert payload.get("error") == "native_local_business_queue_read_failed"
+            assert recovery.get("code") == "request_unavailable"
         assert recovery.get("title") is not None
         assert recovery.get("queue_url") == f"http://127.0.0.1:{daemon.port}/#/inbox"

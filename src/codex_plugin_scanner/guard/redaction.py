@@ -133,6 +133,34 @@ _WINDOWS_USER_PATH_PATTERN = re.compile(
 )
 
 
+_REVIEW_SENSITIVE_KEYS = frozenset(
+    {
+        "api_key",
+        "apikey",
+        "access_token",
+        "auth",
+        "authorization",
+        "client_secret",
+        "content",
+        "cookie",
+        "credential",
+        "credentials",
+        "id_token",
+        "output",
+        "password",
+        "private_key",
+        "refresh_token",
+        "secret",
+        "session_token",
+        "set_cookie",
+        "stderr",
+        "stdout",
+        "token",
+        "tool_response",
+    }
+)
+
+
 def redact_text(value: str) -> RedactedText:
     """Redact common secret-like values before Guard prints or syncs them."""
 

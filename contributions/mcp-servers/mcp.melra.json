@@ -1,0 +1,91 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.melra",
+  "version": "1.0.0",
+  "name": "MELRA",
+  "description": "Reviews MELRA alpha local MCP execution. Planning and status tools inherit Guard policy; task execution and workflow advancement require Review. MELRA applies its own policy and scoped approvals. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.xagi-lab",
+    "displayName": "XAGI Labs",
+    "url": "https://github.com/XAGI-Lab/melra"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniCommandLine",
+    "background": "#1D4ED8"
+  },
+  "homepage": "https://github.com/XAGI-Lab/melra",
+  "license": "Apache-2.0",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "@melra/cli"
+  },
+  "riskClasses": [
+    "external-command-execution",
+    "external-filesystem-write",
+    "external-network-access",
+    "external-workflow-execution",
+    "local-data-access"
+  ],
+  "tools": [
+    {
+      "name": "melra_capabilities",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_plan",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_execute",
+      "state": "review"
+    },
+    {
+      "name": "melra_task_status",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_task_cancel",
+      "state": "review"
+    },
+    {
+      "name": "melra_receipt",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_plan",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_advance",
+      "state": "review"
+    },
+    {
+      "name": "melra_workflow_status",
+      "state": "inherit"
+    },
+    {
+      "name": "melra_workflow_cancel",
+      "state": "review"
+    },
+    {
+      "name": "melra_workflow_control",
+      "state": "review"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/XAGI-Lab/melra",
+    "https://github.com/XAGI-Lab/melra/blob/main/packages/server/src/mcp-server.ts"
+  ],
+  "saferAlternatives": [
+    "Keep task execution and workflow controls on Review; MELRA's policy and scoped approvals still apply after Guard's check.",
+    "MELRA is alpha software; inspect the repository and use a dedicated local environment before enabling it."
+  ]
+}

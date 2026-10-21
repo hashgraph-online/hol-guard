@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import json
 
 try:
@@ -263,46 +262,6 @@ class TestKimiHookQuoting:
         assert "workspace & tools" in windows_cmd
 
 
-class TestKimiHookChatUx:
-    def test_kimi_block_emits_reason_to_stderr(self, tmp_path: Path) -> None:
-        import io
-        from contextlib import redirect_stderr
-
-        from codex_plugin_scanner.guard.cli.commands_hook_generic import (
-            _run_hook_generic_payload,
-        )
-        from codex_plugin_scanner.guard.config import GuardConfig
-        from codex_plugin_scanner.guard.store import GuardStore
-
-        guard_home = tmp_path / ".hol-guard"
-        store = GuardStore(guard_home)
-        config = GuardConfig(guard_home=guard_home, workspace=tmp_path)
-        args = argparse.Namespace(
-            harness="kimi",
-            json=False,
-            policy_action="block",
-            artifact_id=None,
-            artifact_name=None,
-        )
-        payload = {"hookEventName": "UserPromptSubmit", "prompt": "delete all files"}
-        stderr_capture = io.StringIO()
-        stdout_capture = io.StringIO()
-        with redirect_stderr(stderr_capture):
-            rc = _run_hook_generic_payload(
-                args,
-                action_envelope=None,
-                config=config,
-                output_stream=stdout_capture,
-                payload=payload,
-                home_dir=tmp_path,
-                runtime_workspace=tmp_path,
-                store=store,
-            )
-        assert rc == 2
-        assert "HOL Guard flagged" in stderr_capture.getvalue()
-        assert '"decision":"block"' in stdout_capture.getvalue()
-
-
 class TestKimiLaunchCommand:
     def test_launch_command_passes_workspace(self, tmp_path: Path) -> None:
         ctx = _ctx(tmp_path, workspace=True)
@@ -311,38 +270,48 @@ class TestKimiLaunchCommand:
         assert "--version" in command
 
 
+def _recorded_artifact_directive(harness: str, *, json_mode: bool, event: str, action: str) -> dict[str, object]:
+    """The artifact hook's routing the resident must reproduce for these facts."""
+
+    import gzip
+
+    fixture = Path(__file__).resolve().parents[1] / (
+        "rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz"
+    )
+    wanted = {
+        "harness": harness,
+        "json": json_mode,
+        "event": event,
+        "policy_action": action,
+        "output_stream_present": False,
+        "replayed": False,
+        "approval_context_present": False,
+    }
+    return next(
+        vector["directive"]
+        for vector in json.loads(gzip.decompress(fixture.read_bytes()))
+        if all(vector["facts"][key] == value for key, value in wanted.items()) and not any(vector["extra"].values())
+    )
+
+
 class TestKimiNativeHookBlocking:
     def test_kimi_emits_native_hook_response(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-            _should_emit_native_hook_response,
-        )
-
-        args = argparse.Namespace(harness="kimi", json=False)
-        assert _should_emit_native_hook_response(args) is True
+        directive = _recorded_artifact_directive("kimi", json_mode=False, event="PreToolUse", action="allow")
+        assert directive["route"] == "render"
+        assert directive["try_json_document"] is False
+        assert directive["after_json"] == "native_response"
 
     def test_kimi_exit_block_on_blocking_actions(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-            _should_emit_native_hook_exit_block,
-        )
+        def route(event: str, action: str) -> object:
+            return _recorded_artifact_directive("kimi", json_mode=False, event=event, action=action)["route"]
 
-        args = argparse.Namespace(harness="kimi", json=False)
-        assert _should_emit_native_hook_exit_block(args, event_name="PreToolUse", policy_action="block") is True
-        assert (
-            _should_emit_native_hook_exit_block(args, event_name="UserPromptSubmit", policy_action="sandbox-required")
-            is True
-        )
-        assert _should_emit_native_hook_exit_block(args, event_name="PreToolUse", policy_action="allow") is False
-        assert _should_emit_native_hook_exit_block(args, event_name="SessionStart", policy_action="block") is False
-
-    def test_kimi_permission_decision_is_deny_for_blocking(self) -> None:
-        from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (
-            _native_hook_permission_decision,
-        )
-
-        assert _native_hook_permission_decision("block", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("sandbox-required", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("require-reapproval", harness="kimi") == "deny"
-        assert _native_hook_permission_decision("allow", harness="kimi") == "allow"
+        assert route("PreToolUse", "block") == "exit_block"
+        assert route("UserPromptSubmit", "sandbox-required") == "exit_block"
+        assert route("PreToolUse", "allow") == "render"
+        assert route("SessionStart", "block") == "render"
+        blocked = _recorded_artifact_directive("kimi", json_mode=False, event="PreToolUse", action="block")
+        assert blocked["exit_code"] == 2
+        assert blocked["exit_block_stderr"] is True  # kimi shows stderr as the blocking explanation
 
     def test_normalize_hook_payload_flattens_kimi_content_parts(self) -> None:
         from codex_plugin_scanner.guard.cli.commands_support_hook_payload import (

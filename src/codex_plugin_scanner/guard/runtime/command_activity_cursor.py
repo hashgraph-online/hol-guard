@@ -7,13 +7,11 @@ from pathlib import Path
 
 from ..adapters.cursor_native_approval import (
     after_shell_proof_from_env,
-    cursor_observer_event_for_payload,
-    ensure_cursor_hook_attestation_secret,
     managed_cursor_hook_invocation,
-    normalize_cursor_shell_command,
     resolve_cursor_approval_binding,
-    verify_cursor_after_observer_proof,
 )
+from ..native_cursor_observer_proof import native_cursor_observer_proof_valid
+from ..native_hook_render import native_cursor_observer_event
 from .harness_attribution import cursor_runtime_detected
 
 
@@ -33,17 +31,19 @@ def cursor_command_activity_observer_trusted(
     proof = after_shell_proof_from_env(env)
     if approval_binding is None or proof is None:
         return False
-    try:
-        secret = ensure_cursor_hook_attestation_secret(guard_home)
-    except OSError:
+    # The event the proof was computed over is the resident's to name. Without
+    # it there is nothing to check the proof against, so the observer stays
+    # untrusted.
+    observer_event = native_cursor_observer_event(payload, guard_home=guard_home)
+    if observer_event is None:
         return False
-    return verify_cursor_after_observer_proof(
-        secret=secret,
+    return native_cursor_observer_proof_valid(
+        guard_home=guard_home,
         conversation_id=conversation_id,
-        command=normalize_cursor_shell_command(command),
+        command=command,
         approval_binding=approval_binding,
+        observer_event=observer_event,
         proof=proof,
-        observer_event=cursor_observer_event_for_payload(payload),
     )
 
 

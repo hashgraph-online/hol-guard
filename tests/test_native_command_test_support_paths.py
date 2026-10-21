@@ -9,6 +9,7 @@ from tests import native_command_test_support as support
 
 def test_native_fixture_prefers_release_and_falls_back_to_debug(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(support, "ROOT", tmp_path)
+    monkeypatch.delenv("HOL_GUARD_TEST_USE_INSTALLED", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", raising=False)
     release = tmp_path / "rust" / "target" / "release"
@@ -43,6 +44,7 @@ def test_native_fixture_accepts_explicit_binary_paths(tmp_path: Path, monkeypatc
 
 def test_native_fixture_discovers_windows_suffix_on_any_host(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(support, "ROOT", tmp_path)
+    monkeypatch.delenv("HOL_GUARD_TEST_USE_INSTALLED", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", raising=False)
     release = tmp_path / "rust" / "target" / "release"
@@ -60,6 +62,7 @@ def test_native_fixture_discovers_windows_suffix_on_any_host(tmp_path: Path, mon
 
 def test_native_regression_gate_fails_when_binaries_are_missing(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(support, "ROOT", tmp_path)
+    monkeypatch.delenv("HOL_GUARD_TEST_USE_INSTALLED", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_BINARY", raising=False)
     monkeypatch.delenv("HOL_GUARD_NATIVE_TEST_SOURCE_COMPILER", raising=False)
     monkeypatch.setenv("HOL_GUARD_NATIVE_REGRESSION", "1")

@@ -13,6 +13,9 @@ from pathlib import Path
 
 _NATIVE_VERIFIER_PATH = Path(__file__).with_name("verify_pyinstaller_native_runtime.py")
 _MANIFEST_SCHEMA = "hol-guard-native-runtime.v1"
+_SOURCE_COMPILER_NAME = "source-compiler-manifest.json"
+_SOURCE_COMPILER_SCHEMA = "hol-guard-native-source-compiler.v2"
+_NATIVE_PARENT = "_native"
 
 
 class NativeManifestSealError(ValueError):
@@ -30,6 +33,37 @@ def _load_native_verifier():
 
 def _encode_manifest(payload: dict[str, object]) -> bytes:
     return json.dumps(payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+
+
+def _is_source_compiler_entry(name: str) -> bool:
+    parts = Path(name.replace("\\", "/")).parts
+    return len(parts) >= 2 and parts[-1] == _SOURCE_COMPILER_NAME and parts[-2] == _NATIVE_PARENT
+
+
+def _parse_source_compiler(raw: bytes) -> dict[str, object]:
+    try:
+        parsed = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise NativeManifestSealError("Bundled source compiler manifest is not valid JSON") from error
+    if not isinstance(parsed, dict) or parsed.get("schema") != _SOURCE_COMPILER_SCHEMA:
+        raise NativeManifestSealError("Bundled source compiler manifest failed identity checks")
+    return parsed
+
+
+def _reseal_source_compiler(payload: dict[str, object], runtime: bytes) -> bytes | None:
+    """Rebind compiler size and digest to the runtime bytes Apple signing produced.
+
+    The runtime manifest and the source compiler manifest pin the same
+    executable. Resealing only the first leaves the second describing the
+    unsigned bytes, so the installed bundle never verifies and the catalog read
+    model stays unavailable for the life of the release.
+    """
+    digest = hashlib.sha256(runtime).hexdigest()
+    if payload.get("compiler_sha256") == digest and payload.get("compiler_size") == len(runtime):
+        return None
+    payload["compiler_sha256"] = digest
+    payload["compiler_size"] = len(runtime)
+    return _encode_manifest(payload)
 
 
 def _rebuild_carchive(
@@ -92,6 +126,7 @@ def seal(binary: Path) -> None:
     rebuilt: list[tuple[str, bytes, int, bool, str]] = []
     runtime: bytes | None = None
     payload: dict[str, object] | None = None
+    compiler_payload: dict[str, object] | None = None
     with binary.open("rb") as handle:
         for name, offset, stored_length, uncompressed, compressed, typecode in entries:
             stored = data[archive_start + offset : archive_start + offset + stored_length]
@@ -103,32 +138,50 @@ def seal(binary: Path) -> None:
                     runtime = signing._entry_bytes(handle, archive_start, name, offset, stored_length, compressed)
                 except (OSError, ValueError, zlib.error) as error:
                     raise NativeManifestSealError(f"Bundled native runtime is not readable: {name}") from error
-                if len(runtime) != uncompressed:
+                if runtime is None or len(runtime) != uncompressed:
                     raise NativeManifestSealError("Bundled native runtime size does not match its TOC entry")
             if native._is_native_manifest_entry(name):
                 try:
                     decoded = signing._entry_bytes(handle, archive_start, name, offset, stored_length, compressed)
-                    parsed = json.loads(decoded.decode("utf-8"))
+                    parsed = json.loads(decoded.decode("utf-8") if decoded is not None else "")
                 except (UnicodeDecodeError, json.JSONDecodeError, ValueError, OSError, zlib.error) as error:
                     raise NativeManifestSealError("Bundled native manifest is not valid JSON") from error
-                if len(decoded) != uncompressed:
+                if decoded is None or len(decoded) != uncompressed:
                     raise NativeManifestSealError("Bundled native manifest size does not match its TOC entry")
                 if not isinstance(parsed, dict) or parsed.get("schema") != _MANIFEST_SCHEMA:
                     raise NativeManifestSealError("Bundled native manifest failed identity checks")
                 payload = parsed
+            if _is_source_compiler_entry(name):
+                try:
+                    decoded = signing._entry_bytes(handle, archive_start, name, offset, stored_length, compressed)
+                except (OSError, ValueError, zlib.error) as error:
+                    raise NativeManifestSealError("Bundled source compiler manifest is not readable") from error
+                if decoded is None or len(decoded) != uncompressed:
+                    raise NativeManifestSealError("Bundled source compiler manifest size does not match its TOC entry")
+                compiler_payload = _parse_source_compiler(decoded)
     if runtime is None or payload is None:
         raise NativeManifestSealError("Core archive native runtime or manifest could not be read")
     digest = hashlib.sha256(runtime).hexdigest()
-    if payload.get("runtime_sha256") == digest and payload.get("runtime_size") == len(runtime):
+    encoded: bytes | None = None
+    if payload.get("runtime_sha256") != digest or payload.get("runtime_size") != len(runtime):
+        payload["runtime_sha256"] = digest
+        payload["runtime_size"] = len(runtime)
+        encoded = _encode_manifest(payload)
+    compiler_encoded: bytes | None = None
+    if compiler_payload is None:
+        print("core archive carries no source compiler manifest; nothing to reseal for it")
+    else:
+        compiler_encoded = _reseal_source_compiler(compiler_payload, runtime)
+    if encoded is None and compiler_encoded is None:
         print(f"native manifest already matches packaged runtime {runtime_entries[0][0]!r}")
         return
-    payload["runtime_sha256"] = digest
-    payload["runtime_size"] = len(runtime)
-    encoded = _encode_manifest(payload)
     sealed: list[tuple[str, bytes, int, bool, str]] = []
     for name, stored, uncompressed, compressed, typecode in rebuilt:
-        if native._is_native_manifest_entry(name):
+        if encoded is not None and native._is_native_manifest_entry(name):
             sealed.append((name, encoded, len(encoded), False, typecode))
+            continue
+        if compiler_encoded is not None and _is_source_compiler_entry(name):
+            sealed.append((name, compiler_encoded, len(compiler_encoded), False, typecode))
             continue
         sealed.append((name, stored, uncompressed, compressed, typecode))
     binary.write_bytes(
@@ -141,17 +194,61 @@ def seal(binary: Path) -> None:
             entries=sealed,
         )
     )
+    if compiler_encoded is not None:
+        print(f"resealed source compiler manifest for {runtime_entries[0][0]!r} ({len(runtime)} bytes)")
     print(f"resealed native manifest for {runtime_entries[0][0]!r} ({len(runtime)} bytes)")
+
+
+def seal_onedir(tree: Path) -> None:
+    """Reseal the native manifest inside a PyInstaller onedir tree (no CArchive)."""
+    native_dir = tree / "_internal" / "codex_plugin_scanner" / "_native"
+    runtime_file = native_dir / "hol-guard-runtime"
+    manifest_file = native_dir / "runtime-manifest.json"
+    if not runtime_file.is_file():
+        raise NativeManifestSealError(f"Onedir tree is missing its native runtime: {runtime_file}")
+    if not manifest_file.is_file():
+        raise NativeManifestSealError(f"Onedir tree is missing its native manifest: {manifest_file}")
+    compiler_file = native_dir / _SOURCE_COMPILER_NAME
+    if not compiler_file.is_file():
+        raise NativeManifestSealError(f"Onedir tree is missing its source compiler manifest: {compiler_file}")
+    runtime = runtime_file.read_bytes()
+    try:
+        payload = json.loads(manifest_file.read_bytes())
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise NativeManifestSealError("Onedir native manifest is not valid JSON") from error
+    if not isinstance(payload, dict) or payload.get("schema") != _MANIFEST_SCHEMA:
+        raise NativeManifestSealError("Onedir native manifest failed identity checks")
+    compiler_payload = _parse_source_compiler(compiler_file.read_bytes())
+    compiler_encoded = _reseal_source_compiler(compiler_payload, runtime)
+    if compiler_encoded is not None:
+        compiler_file.write_bytes(compiler_encoded)
+        print(f"resealed onedir source compiler manifest for {runtime_file.name!r} ({len(runtime)} bytes)")
+    digest = hashlib.sha256(runtime).hexdigest()
+    if payload.get("runtime_sha256") == digest and payload.get("runtime_size") == len(runtime):
+        print(f"onedir native manifest already matches packaged runtime {runtime_file.name!r}")
+        return
+    payload["runtime_sha256"] = digest
+    payload["runtime_size"] = len(runtime)
+    manifest_file.write_bytes(_encode_manifest(payload))
+    print(f"resealed onedir native manifest for {runtime_file.name!r} ({len(runtime)} bytes)")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
+    parser.add_argument("--onedir", type=Path)
     args = parser.parse_args()
-    if not args.binary.is_file():
+    if (args.binary is None) == (args.onedir is None):
+        raise SystemExit("exactly one of --binary or --onedir is required")
+    if args.binary is not None and not args.binary.is_file():
         raise SystemExit(f"Binary does not exist: {args.binary}")
+    if args.onedir is not None and not args.onedir.is_dir():
+        raise SystemExit(f"Onedir tree does not exist: {args.onedir}")
     try:
-        seal(args.binary)
+        if args.onedir is not None:
+            seal_onedir(args.onedir)
+        elif args.binary is not None:
+            seal(args.binary)
     except (OSError, ValueError, zlib.error) as error:
         raise SystemExit(str(error)) from error
 

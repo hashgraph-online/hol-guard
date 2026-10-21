@@ -1,0 +1,88 @@
+name: CI macOS skill identity
+description: Run the skill-directory identity regressions against the CI-built macOS runtime.
+inputs:
+  python-version:
+    description: Explicit python-version from the calling job.
+    required: true
+  suite:
+    description: skill-identity, or gates for the benign false-positive and replay gates.
+    required: true
+  shard-index:
+    description: Zero-based gate shard this job runs (gates suite only).
+    required: true
+  shard-count:
+    description: Number of gate shards (gates suite only).
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Download this run's current command projections
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: pytest-native-command-projections
+        path: .
+    - name: Download the CI-built macOS native runtime
+      uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+      with:
+        name: macos-native-runtime
+        path: ${{ runner.temp }}/hol-guard-native-runtime
+    - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Set up uv
+      id: setup-uv-primary
+      continue-on-error: true
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      with:
+        version: 0.9.26
+        enable-cache: true
+        cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+        save-cache: false
+    - name: Retry uv setup after transient download failure
+      if: steps.setup-uv-primary.outcome == 'failure'
+      uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      with:
+        version: 0.9.26
+        enable-cache: true
+        cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+        save-cache: false
+    - run: uv sync --frozen --no-dev --group ci-test --python ${{ inputs.python-version }}
+      shell: bash
+    - name: Expose the CI-built macOS runtime
+      # Uploaded artifacts drop the executable bit.
+      shell: bash
+      run: |
+        chmod 0755 "$RUNNER_TEMP/hol-guard-native-runtime/hol-guard-runtime"
+        echo "HOL_GUARD_NATIVE_BINARY=$RUNNER_TEMP/hol-guard-native-runtime/hol-guard-runtime" >> "$GITHUB_ENV"
+        echo "HOL_GUARD_NATIVE_REGRESSION=1" >> "$GITHUB_ENV"
+    - name: Run macOS skill-directory identity regressions
+      if: inputs.suite == 'skill-identity'
+      run: uv run --no-sync pytest tests/test_guard_skill_directory_identity.py
+        tests/test_guard_skill_directory_identity_discovery.py tests/test_guard_skill_directory_identity_downstream.py tests/test_guard_skill_directory_identity_links.py
+        tests/test_guard_skill_directory_identity_vectors.py
+        tests/test_guard_consumer_skill_directory_identity.py tests/test_guard_runner_skill_directory_identity.py tests/test_gemini_adapter.py
+        tests/test_gemini_skill_directory_identity.py tests/test_antigravity_adapter.py tests/test_guard_aibom_detection.py
+        tests/test_guard_aibom_content_upload_batches.py tests/test_guard_aibom_skill_directory_identity.py --tb=short
+      shell: bash
+    - name: Benign false-positive and Gauntlet replay gates on macOS
+      # Linux CI decides stale pending markers; this run catches cases that
+      # are reviewed only on macOS, where the sandbox and paths differ.
+      if: inputs.suite == 'gates'
+      env:
+        SHARD_INDEX: ${{ inputs.shard-index }}
+        SHARD_COUNT: ${{ inputs.shard-count }}
+      run: |
+        # A collection failure must fail the step even when grep still prints nodes.
+        set -o pipefail
+        gates=(tests/test_guard_benign_false_positive_gate.py
+               tests/test_guard_gauntlet_replay_gate.py
+               tests/test_guard_command_corpus_benign_allow.py)
+        uv run --no-sync pytest --collect-only -q "${gates[@]}" | grep '::' > gate-nodes.txt
+        # Same split as the Linux gates: every shard sorts the same node list
+        # and keeps every SHARD_COUNT-th node, so shards are disjoint and cover
+        # the whole gate.
+        sort gate-nodes.txt | awk -v n="$SHARD_COUNT" -v i="$SHARD_INDEX" '(NR - 1) % n == i' > gate-shard.txt
+        test -s gate-shard.txt
+        echo "shard $SHARD_INDEX runs $(wc -l < gate-shard.txt) of $(wc -l < gate-nodes.txt) gate cases"
+        uv run --no-sync pytest -q --tb=short --durations=10 -n 2 --dist load --max-worker-restart 0 "@gate-shard.txt"
+      shell: bash

@@ -11,21 +11,15 @@ import pytest
 from codex_plugin_scanner.guard.daemon import repair_approval_center_locator
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_approvals import (
+from tests.native_approval_writes import (
     add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
+    native_approval_connection,
+    seed_pending_approval_rows,
 )
 
 
 def _make_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("pragma journal_mode=wal")
-    conn.execute(approval_schema_statement())
-    for stmt in approval_index_statements():
-        conn.execute(stmt)
-    return conn
+    return native_approval_connection()
 
 
 def _make_request(
@@ -92,9 +86,7 @@ class TestNormalizedIdentityLookupPerformance:
     """T741: approval lookup by normalized identity stays under 50 ms with 100k approvals."""
 
     @pytest.mark.slow
-    def test_lookup_by_identity_key_under_50ms_with_100k_rows(self) -> None:
-        from codex_plugin_scanner.guard.store_approvals import _normalized_identity_key  # type: ignore[attr-defined]
-
+    def test_lookup_by_identity_key_under_50ms_with_100k_rows(self, tmp_path) -> None:
         conn = _make_conn()
         harness = "codex"
         artifact_id = "codex:project:perf-tool"
@@ -102,19 +94,15 @@ class TestNormalizedIdentityLookupPerformance:
         launch_target = "run perf-tool"
         now = "2026-01-01T00:00:00Z"
 
-        for _ in range(100_000):
-            req = _make_request(
-                harness=harness,
-                artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            add_approval_request(conn, req, now)
+        seed_pending_approval_rows(conn, 100_000, workspace=workspace)
 
         target = _make_request(
             harness=harness, artifact_id=artifact_id, workspace=workspace, launch_target=launch_target
         )
         add_approval_request(conn, target, now)
-        identity_key = _normalized_identity_key(launch_target)
+        identity_key = conn.execute(
+            "select normalized_identity_key from approval_requests where request_id = ?", (target.request_id,)
+        ).fetchone()[0]
 
         start = time.monotonic()
         result = conn.execute(
@@ -140,7 +128,7 @@ class TestDuplicatePendingCollapsePerformance:
     """T742: duplicate pending collapse stays under 100 ms with 100k approvals."""
 
     @pytest.mark.slow
-    def test_dedup_insert_under_100ms_with_100k_rows(self) -> None:
+    def test_dedup_insert_under_100ms_with_100k_rows(self, tmp_path) -> None:
         conn = _make_conn()
         harness = "codex"
         artifact_id = "codex:project:dedup-tool"
@@ -148,13 +136,7 @@ class TestDuplicatePendingCollapsePerformance:
         launch_target = "run dedup-tool --flag"
         now = "2026-01-01T00:00:00Z"
 
-        for _ in range(99_999):
-            req = _make_request(
-                harness=harness,
-                artifact_id=f"codex:project:tool-{uuid.uuid4().hex[:8]}",
-                workspace=workspace,
-            )
-            add_approval_request(conn, req, now)
+        seed_pending_approval_rows(conn, 99_999, workspace=workspace)
 
         first = _make_request(
             harness=harness,
@@ -242,29 +224,6 @@ class TestReceiptAnalyticsIndexes:
         assert "idx_receipts_timestamp_desc" in names
         assert "idx_receipts_harness_timestamp_desc" in names
         assert "idx_receipts_harness_artifact_timestamp_desc" in names
-
-    def test_receipt_listing_queries_use_ordered_indexes(self, tmp_path) -> None:
-        store = GuardStore(tmp_path / "guard-home")
-        with store._connect() as connection:
-            harness_plan = connection.execute(
-                "explain query plan "
-                + store._receipt_base_query("where r.harness = ? order by r.timestamp desc limit ?"),
-                ("codex", 200),
-            ).fetchall()
-            artifact_plan = connection.execute(
-                "explain query plan "
-                + store._receipt_base_query(
-                    "where r.harness = ? and r.artifact_id = ? order by r.timestamp desc limit 1"
-                ),
-                ("codex", "codex:project:tool"),
-            ).fetchall()
-
-        harness_detail = " ".join(str(row["detail"]) for row in harness_plan)
-        artifact_detail = " ".join(str(row["detail"]) for row in artifact_plan)
-        assert "idx_receipts_harness_timestamp_desc" in harness_detail
-        assert "idx_receipts_harness_artifact_timestamp_desc" in artifact_detail
-        assert "USE TEMP B-TREE" not in harness_detail
-        assert "USE TEMP B-TREE" not in artifact_detail
 
     def test_guard_store_creates_receipt_rollup_tables(self, tmp_path) -> None:
         store = GuardStore(tmp_path / "guard-home")

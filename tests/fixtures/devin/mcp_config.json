@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "local-stdio": {
+      "command": "uvx",
+      "args": ["some-mcp-server"],
+      "env": {"API_TOKEN": "x"}
+    },
+    "remote-http": {
+      "url": "https://mcp.example.com/sse",
+      "transport": "http"
+    }
+  }
+}

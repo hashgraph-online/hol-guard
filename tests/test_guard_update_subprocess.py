@@ -83,9 +83,22 @@ def _build_manager_context(
     guard_home: Path | None = None,
     source_url: str | None = None,
 ) -> tuple[TrustedUpdateContext, Path]:
+    trusted_python_import_paths = update_subprocess_module._trusted_python_import_paths()
     prefix, manager_bin = _manager_layout(tmp_path, installer_kind)
-    manager_path = manager or _write_executable(manager_bin / installer_kind)
+    if os.name == "nt":
+        profile = tmp_path / "windows-profile"
+        manager_bin = profile / ".local" / "bin"
+        manager_bin.mkdir(parents=True)
+        monkeypatch.setattr(update_subprocess_module, "trusted_windows_user_profile", lambda: profile)
+        manager_path = manager or Path(shutil.copy2(sys.executable, manager_bin / f"{installer_kind}.exe"))
+    else:
+        manager_path = manager or _write_executable(manager_bin / installer_kind)
     monkeypatch.setattr(update_subprocess_module.sys, "prefix", str(prefix))
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: trusted_python_import_paths,
+    )
     entries = path_entries or (manager_path.parent, Path(sys.executable).resolve().parent)
     monkeypatch.setenv("PATH", _path_value(*entries))
     context = build_trusted_update_context(
@@ -696,6 +709,13 @@ def test_manager_recovery_pip_uses_authenticated_python_and_pinned_source(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    trusted_import_root = tmp_path / "trusted-python-import"
+    trusted_import_root.mkdir()
+    monkeypatch.setattr(
+        update_subprocess_module,
+        "_trusted_python_import_paths",
+        lambda: (trusted_import_root,),
+    )
     context, _manager = _build_manager_context(
         tmp_path,
         monkeypatch,
@@ -849,6 +869,26 @@ def test_pipx_runpip_execution_is_source_pinned(
     ]
 
 
+@pytest.mark.parametrize("flags", [[], ["--force-reinstall", "--no-deps"]])
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="uses an extensionless POSIX shebang executable as the pipx manager fixture",
+)
+def test_pipx_runpip_accepts_local_wheel_shapes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    flags: list[str],
+) -> None:
+    context, manager = _build_manager_context(tmp_path, monkeypatch, "pipx")
+    wheel = str(tmp_path / "hol_guard-3.0.0-py3-none-win_arm64.whl")
+
+    command = context.build_installer_command(["pipx", "runpip", "hol-guard", "install", *flags, wheel])
+
+    assert command[:4] == [str(manager), "runpip", "hol-guard", "install"]
+    assert command[4:-3] == [*flags, "--no-cache-dir"]
+    assert command[-3] == wheel
+
+
 @pytest.mark.parametrize(
     "display",
     [
@@ -856,6 +896,7 @@ def test_pipx_runpip_execution_is_source_pinned(
         ["pipx", "runpip", "hol-guard", "uninstall", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--index-url", "https://example.test", "hol-guard"],
         ["pipx", "runpip", "hol-guard", "install", "--force-reinstall"],
+        ["pipx", "runpip", "hol-guard", "install", "--no-deps", "hol-guard==3.0.0"],
     ],
 )
 @pytest.mark.skipif(

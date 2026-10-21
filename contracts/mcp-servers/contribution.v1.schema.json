@@ -62,6 +62,20 @@
         {
           "type": "object",
           "additionalProperties": false,
+          "required": ["kind", "command"],
+          "properties": {
+            "kind": { "const": "direct-command" },
+            "command": {
+              "type": "string",
+              "description": "Lexical portable-basename shape only; Python and Rust validators additionally reject reserved shells, interpreters, package launchers, runtime wrappers, and versioned interpreter aliases.",
+              "pattern": "^(?!.*\\.(?:exe|cmd|bat)$)[a-z0-9][a-z0-9_-]*(?:\\.[a-z0-9_-]+)*$",
+              "maxLength": 128
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
           "required": ["kind", "command", "package"],
           "properties": {
             "kind": { "const": "package-launcher" },

@@ -238,6 +238,7 @@ class GuardApprovalRequest:
     first_seen_guard_version: str | None = None
     last_seen_guard_version: str | None = None
     continuation_snapshot: dict[str, object] | None = None
+    extension_allow_hint: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -245,6 +246,15 @@ class GuardApprovalRequest:
         payload["risk_signals"] = list(self.risk_signals)
         payload["scanner_evidence"] = [dict(item) for item in self.scanner_evidence]
         return payload
+
+
+@dataclass(frozen=True, slots=True)
+class GuardRuntimeRegistration:
+    """Identity a serving daemon uses to recreate its runtime row after store loss."""
+
+    daemon_host: str
+    daemon_port: int
+    started_at: str
 
 
 @dataclass(frozen=True, slots=True)

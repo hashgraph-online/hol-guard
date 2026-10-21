@@ -11,7 +11,15 @@ on:
 
 concurrency:
   group: codeql-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Canceling a default-branch overlay-base build poisons the shared status cache.
+  # Let main finish; obsolete PR analyses can still be canceled.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # Never disable overlay analysis across the repository after an interrupted
+  # or failed main build; fall back per run without persisting a poison flag.
+  CODEQL_ACTION_OVERLAY_ANALYSIS_STATUS_CHECK: "false"
+  CODEQL_ACTION_OVERLAY_ANALYSIS_STATUS_SAVE: "false"
 
 permissions:
   contents: read

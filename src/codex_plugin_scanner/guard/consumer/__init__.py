@@ -36,6 +36,7 @@ def evaluate_detection(
     pending_approval_claims: Any = None,
     claimed_saved_approval_overrides: Any = None,
     retained_saved_approval_overrides: Any = None,
+    saved_approval_qualification_overrides: Any = None,
     runtime_detector_context: Any = None,
 ):
     return _service_module().evaluate_detection(
@@ -49,6 +50,7 @@ def evaluate_detection(
         pending_approval_claims=pending_approval_claims,
         claimed_saved_approval_overrides=claimed_saved_approval_overrides,
         retained_saved_approval_overrides=retained_saved_approval_overrides,
+        saved_approval_qualification_overrides=saved_approval_qualification_overrides,
         runtime_detector_context=runtime_detector_context,
     )
 

@@ -6,6 +6,8 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -14,7 +16,8 @@ if TYPE_CHECKING:
 
 
 from ..action_lattice import coerce_guard_action
-from ..package_firewall_entitlement import resolve_package_firewall_entitlement
+from ..blocked_request_mode import is_unlinked_connector_setup_reason
+from ..package_firewall_entitlement import package_firewall_entitlement_or_denied
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -41,10 +44,6 @@ def _ensure_terminal_punctuation(message: str) -> str:
 
 def _native_hook_reason(*values: object | None) -> str:
     return _runtime_policy_module()._native_hook_reason(*values)
-
-
-def _copilot_hook_permission_decision(policy_action: str) -> str:
-    return _hook_payload_module()._copilot_hook_permission_decision(policy_action)
 
 
 def _guard_action_from_cli(value: object) -> GuardAction:
@@ -150,7 +149,7 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
     )
 
     def persist_settings(payload: dict[str, object]) -> GuardConfig:
-        entitlement = resolve_package_firewall_entitlement(GuardStore(guard_home))
+        entitlement = package_firewall_entitlement_or_denied(GuardStore(guard_home))
         return update_guard_settings(
             guard_home,
             payload,
@@ -159,9 +158,15 @@ def _update_guard_cli_settings(*, args: argparse.Namespace, config: GuardConfig,
         )
 
     if settings_command == "protection":
-        from ..protection_posture import coerce_protection_posture
+        from ..harness_posture import protection_settings_payload
 
-        return persist_settings({"protection_posture": coerce_protection_posture(args.protection_posture)})
+        return persist_settings(
+            protection_settings_payload(
+                getattr(args, "protection_posture", None),
+                harness=getattr(args, "harness", None),
+                inherit=bool(getattr(args, "inherit", False)),
+            )
+        )
     if settings_command == "security-level":
         payload: dict[str, object] = {"security_level": args.security_level}
         if args.security_level in _NAMED_SECURITY_LEVELS:
@@ -254,44 +259,55 @@ def _prompt_request_classes(artifact: GuardArtifact) -> set[str]:
     values = prompt_classes if isinstance(prompt_classes, list) else [artifact.metadata.get("prompt_request_class")]
     return {str(item) for item in values if isinstance(item, str) and item.strip()}
 
-def _native_prompt_context(artifact: GuardArtifact) -> str:
-    if _prompt_requires_hard_block(artifact):
-        return "HOL Guard blocked this prompt because it asks to bypass or disable Guard."
-    prompt_classes = _prompt_request_classes(artifact)
-    if "secret_read" in prompt_classes:
-        return (
-            "HOL Guard flagged this prompt because it asks for direct local secret access and is protecting your "
-            "local secrets. "
-            "If that is intentional, continue and Guard will ask again on the actual tool call."
-        )
-    return (
-        "HOL Guard flagged this prompt as higher risk. Continue only if you expect the next tool call to need "
-        "explicit approval."
-    )
+def _prompt_request_reason(
+    artifact: GuardArtifact,
+    response_payload: dict[str, object],
+    *,
+    composer: Callable[..., dict[str, object]],
+    guard_home: Path | None,
+) -> str:
+    """What the resident says a flagged prompt request asks for.
 
-def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: dict[str, object]) -> str:
+    The classes are read out of the artifact; which of them decides the copy,
+    and what that copy is, belong to the resident.
+    """
+
+    prompt_summary = artifact.metadata.get("prompt_summary")
+    harness = response_payload.get("harness")
+    policy_action = response_payload.get("policy_action")
+    answer = composer(
+        "prompt_request_reason",
+        {
+            "harness": harness if isinstance(harness, str) else None,
+            "prompt_classes": sorted(_prompt_request_classes(artifact)),
+            "prompt_summary": prompt_summary if isinstance(prompt_summary, str) else None,
+            "policy_action": policy_action if isinstance(policy_action, str) else None,
+        },
+        guard_home=guard_home,
+    )
+    return str(answer["reason"])
+
+
+def _runtime_artifact_native_reason(
+    artifact: GuardArtifact,
+    response_payload: dict[str, object],
+    *,
+    composer: Callable[..., dict[str, object]],
+    guard_home: Path | None,
+) -> str:
+    guidance = response_payload.get("blocked_request_guidance")
+    if isinstance(guidance, str) and guidance.strip():
+        return guidance.strip()
     decision_message = _decision_v2_harness_message(response_payload)
     if decision_message is not None and _should_use_decision_v2_harness_message(response_payload, decision_message):
         return decision_message
     if artifact.artifact_type == "prompt_request":
-        harness = response_payload.get("harness")
-        prompt_classes = _prompt_request_classes(artifact)
-        if harness == "codex" and "secret_read" in prompt_classes:
-            prompt_summary = artifact.metadata.get("prompt_summary")
-            if isinstance(prompt_summary, str) and "credential-looking local file" in prompt_summary:
-                return (
-                    "HOL Guard stopped this Codex prompt before Codex could open a credential-looking local file. "
-                    "Codex does not expose native approval prompts for Read-tool file reads, so Guard blocks this "
-                    "request at prompt time."
-                )
-            return (
-                "HOL Guard stopped this Codex prompt before Codex could open a sensitive local file. Codex does not "
-                "expose native approval prompts for Read-tool file reads, so Guard blocks this request at prompt time."
-            )
-        policy_action = response_payload.get("policy_action")
-        if policy_action in {"block", "sandbox-required"} and not _prompt_requires_hard_block(artifact):
-            return "HOL Guard blocked this prompt because it requests guarded local secret access."
-        return _native_prompt_context(artifact)
+        return _prompt_request_reason(
+            artifact,
+            response_payload,
+            composer=composer,
+            guard_home=guard_home,
+        )
     path_class = artifact.metadata.get("path_class")
     tool_name = artifact.metadata.get("tool_name")
     if isinstance(path_class, str) and isinstance(tool_name, str):
@@ -308,6 +324,32 @@ def _runtime_artifact_native_reason(artifact: GuardArtifact, response_payload: d
             f"HOL Guard blocked {harness_label}'s attempt to use {tool_name} for {path_class} to protect your "
             "local secrets. "
             "This request cannot continue in the current approval flow."
+        )
+    request_signals = artifact.metadata.get("runtime_request_signals")
+    if (
+        response_payload.get("policy_action")
+        in {"review", "require-reapproval", "sandbox-required", "block"}
+        and isinstance(request_signals, list)
+        and "tool output contains credential-looking material" in request_signals
+    ):
+        secret_source = artifact.metadata.get("secret_source_family")
+        if isinstance(secret_source, str) and secret_source.strip():
+            return (
+                "HOL Guard blocked this tool output because it contains sensitive content from "
+                f"{secret_source.strip()}. The command already ran; review the flagged output "
+                "in the approval center before trusting it."
+            )
+        request_summary = artifact.metadata.get("runtime_request_summary")
+        if (
+            isinstance(request_summary, str)
+            and request_summary.strip()
+            and not request_summary.startswith("Requests a sensitive native tool action")
+        ):
+            return request_summary.strip()
+        return (
+            "HOL Guard blocked this tool output because it may contain sensitive content. "
+            "The command already ran; review the flagged output in the approval center "
+            "before trusting it."
         )
     risk_summary = response_payload.get("risk_summary")
     if isinstance(risk_summary, str) and risk_summary.strip():
@@ -359,7 +401,10 @@ def _should_use_decision_v2_harness_message(response_payload: dict[str, object],
     )
     if any(message.startswith(prefix) for prefix in generic_prefixes):
         return False
-    return not message.startswith("HOL Guard needs a fresh approval because this action changed.")
+    return not message.startswith((
+        "HOL Guard needs a fresh approval because this action changed.",
+        "HOL Guard needs a fresh approval before this action can run.",
+    ))
 
 def _claude_prompt_additional_context(
     *,
@@ -377,8 +422,14 @@ def _claude_prompt_additional_context(
         return None
     if _prompt_requires_hard_block(artifact):
         return None
+    return _claude_prompt_briefing(native_reason, secret="secret_read" in _prompt_request_classes(artifact))
+
+
+def _claude_prompt_briefing(native_reason: str, *, secret: bool) -> str:
+    """What Claude is told to do before a paused prompt's sensitive action."""
+
     briefing_sentence = "HOL Guard will intercept Claude's next sensitive action and open a branded approval question."
-    if "secret_read" in _prompt_request_classes(artifact):
+    if secret:
         briefing_sentence = (
             "HOL Guard will intercept Claude's next attempt to access local secrets and open a branded approval "
             "question to protect you."
@@ -393,43 +444,59 @@ def _claude_prompt_additional_context(
         "action automatically. Instead, tell the user approval is required in Claude to continue."
     )
 
+
+def _claude_prompt_intercept_message(*, secret: bool) -> str:
+    """Why Claude paused a sensitive prompt it may still approve."""
+
+    cause = "asks Claude to access local secrets" if secret else "leads to a sensitive action"
+    return (
+        f"HOL Guard intercepted this prompt because it {cause}. "
+        "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
+    )
+
+
 def _claude_prompt_system_message(
     *,
     event_name: str,
     policy_action: str,
     artifact: GuardArtifact,
-    native_reason: str,
+    native_reason: Callable[[], str],
 ) -> str | None:
+    """The system message Claude is shown, or ``None``.
+
+    The reason is read through a callable so a pass that needs no message
+    never composes one.
+    """
+
     if event_name == "UserPromptSubmit":
         if policy_action == "require-reapproval" and not _prompt_requires_hard_block(artifact):
-            if "secret_read" in _prompt_request_classes(artifact):
-                return (
-                    "HOL Guard intercepted this prompt because it asks Claude to access local secrets. "
-                    "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
-                )
-            return (
-                "HOL Guard intercepted this prompt because it leads to a sensitive action. "
-                "If Claude asks to continue, HOL Guard will route the decision through a branded approval prompt."
-            )
+            return _claude_prompt_intercept_message(secret="secret_read" in _prompt_request_classes(artifact))
         if policy_action in {"block", "sandbox-required"}:
-            return _ensure_terminal_punctuation(native_reason)
+            return _ensure_terminal_punctuation(native_reason())
         return None
     if event_name == "PreToolUse" and policy_action in {"require-reapproval", "block", "sandbox-required"}:
-        return _ensure_terminal_punctuation(native_reason)
+        return _ensure_terminal_punctuation(native_reason())
     return None
 
-def _codex_prompt_block_system_message(*, policy_action: str, native_reason: str) -> str | None:
+def _codex_prompt_block_system_message(*, policy_action: str, native_reason: Callable[[], str]) -> str | None:
+    """What Codex is told about a paused prompt, or ``None``.
+
+    The reason is read through a callable so a prompt that keeps running
+    never composes one.
+    """
+
     if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
         return None
-    if "open hol guard" not in native_reason.lower():
+    reason = native_reason()
+    if "open hol guard" not in reason.lower():
         return None
-    return f"HOL Guard paused your Codex prompt. {native_reason}"
+    return f"HOL Guard paused your Codex prompt. {reason}"
 
 def _copilot_hook_reason(*values: object | None) -> str:
     reason = _native_hook_reason(*values)
     if reason.startswith("Guard "):
         reason = f"HOL {reason}"
-    if "approve" in reason.lower():
+    if "approve" in reason.lower() or is_unlinked_connector_setup_reason(reason):
         return reason
     return f"{reason} Approve it in HOL Guard, then retry."
 
@@ -473,7 +540,8 @@ def _append_guard_context_args(command: list[str], args: argparse.Namespace) -> 
 
 def _write_json_line(payload: dict[str, object], *, output_stream: TextIO | None = None) -> None:
     stream = output_stream or sys.stdout
-    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")
+    # stdout is the harness delivery channel; approval payloads must reach the operator.
+    stream.write(f"{json.dumps(payload, separators=(',', ':'))}\n")  # codeql[py/clear-text-logging-sensitive-data]
     stream.flush()
 
 def _emit_copilot_hook_response(
@@ -486,14 +554,27 @@ def _emit_copilot_hook_response(
 ) -> None:
     # Copilot's command-hook contract only accepts its native transport
     # fields. The exact Guard action is persisted in Guard receipts/events;
-    # this payload intentionally carries only Copilot's binary disposition.
-    payload: dict[str, object] = {"permissionDecision": _copilot_hook_permission_decision(policy_action)}
-    if payload["permissionDecision"] != "allow":
-        payload["permissionDecisionReason"] = reason
+    # this payload intentionally carries only Copilot's binary disposition,
+    # which the resident composes. A render the resident cannot answer falls
+    # back to the fixed disposition for the action class, so an unreachable
+    # resident never turns a blocking action into one Copilot would run.
+    hook_payload = _hook_payload_module()
+    params: dict[str, object] = {"policy_action": policy_action, "reason": reason}
     if approval_reuse is not None:
-        payload["approval_reuse"] = approval_reuse
+        params["approval_reuse"] = approval_reuse
     if scanner_evidence:
-        payload["scanner_evidence"] = list(scanner_evidence)
+        params["scanner_evidence"] = list(scanner_evidence)
+    rendered = hook_payload._render_cli("copilot_hook_response", "copilot", params)
+    payload: dict[str, object] = dict(rendered[1]) if rendered is not None and rendered[1] else {}
+    if not payload:
+        blocked = policy_action in hook_payload._BLOCKING_ACTIONS
+        payload["permissionDecision"] = "deny" if blocked else "allow"
+        if blocked:
+            payload["permissionDecisionReason"] = reason
+        if approval_reuse is not None:
+            payload["approval_reuse"] = approval_reuse
+        if scanner_evidence:
+            payload["scanner_evidence"] = list(scanner_evidence)
     _write_json_line(payload, output_stream=output_stream)
 
 def _emit_copilot_permission_request_response(
@@ -519,6 +600,8 @@ def _emit_copilot_permission_request_response(
 __all__ = [
     "_append_guard_context_args",
     "_claude_prompt_additional_context",
+    "_claude_prompt_briefing",
+    "_claude_prompt_intercept_message",
     "_claude_prompt_system_message",
     "_codex_prompt_block_system_message",
     "_copilot_hook_reason",
@@ -530,7 +613,6 @@ __all__ = [
     "_guard_approvals_command",
     "_guard_diff_command",
     "_guard_rerun_command",
-    "_native_prompt_context",
     "_prompt_request_classes",
     "_prompt_requires_hard_block",
     "_run_approval_password_settings_command",

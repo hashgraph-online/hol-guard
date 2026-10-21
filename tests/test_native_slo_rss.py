@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from itertools import count
+
 import pytest
 
 import scripts.native_slo_adapter as native_slo_adapter
@@ -128,7 +130,7 @@ def test_rss_baseline_fails_closed_when_worker_capacity_changes() -> None:
 
 
 def test_rss_baseline_fails_closed_when_plateau_deadline_expires(monkeypatch: pytest.MonkeyPatch) -> None:
-    clock = iter((0.0, 0.2, 0.4, 0.6, 0.8))
+    clock = count(0.0, 0.2)
     monkeypatch.setattr(native_slo_baseline.time, "monotonic", lambda: next(clock))
 
     with pytest.raises(RuntimeError, match="RSS did not reach a bounded plateau"):

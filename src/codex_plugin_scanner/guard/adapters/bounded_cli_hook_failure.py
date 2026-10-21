@@ -3,46 +3,33 @@
 from __future__ import annotations
 
 from ..daemon.hook_availability_policy import (
-    EMERGENCY_SAFE_REASON,
     hook_event_is_permission_request,
     hook_event_pauses_when_unavailable,
 )
-from ..daemon.hook_launcher_recovery import hook_action_is_launcher_recovery_safe
 
 _DECISION_HOOK_HARNESSES = frozenset({"grok", "hermes", "openclaw"})
+
+
+def grok_observe_event(harness: str, event_name: str) -> bool:
+    compact = event_name.strip().lower().replace("_", "").replace("-", "")
+    return harness == "grok" and compact in {
+        "sessionstart",
+        "sessionend",
+        "subagentstart",
+        "subagentstop",
+        "posttooluse",
+        "permissiondenied",
+    }
 
 
 def _is_permission_event(event_name: str) -> bool:
     return hook_event_is_permission_request(event_name)
 
 
-def watch_continue_payload(harness: str, event_name: str) -> dict[str, object]:
-    if harness == "copilot":
-        return {"permissionDecision": "allow"}
-    if harness in _DECISION_HOOK_HARNESSES:
-        return {"decision": "allow"}
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "permissionDecision": "allow",
-        }
-    }
-
-
-def _emergency_safe_payload(harness: str, event_name: str) -> dict[str, object]:
-    if harness == "copilot":
-        return {
-            "permissionDecision": "allow",
-            "permissionDecisionReason": EMERGENCY_SAFE_REASON,
-        }
-    if harness in _DECISION_HOOK_HARNESSES:
-        return {"decision": "allow", "reason": EMERGENCY_SAFE_REASON}
-    return {
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "permissionDecision": "allow",
-            "permissionDecisionReason": EMERGENCY_SAFE_REASON,
-        }
+def _is_prompt_event(event_name: str) -> bool:
+    return event_name.strip().lower().replace("_", "").replace("-", "") in {
+        "userpromptsubmit",
+        "userpromptsubmitted",
     }
 
 
@@ -59,6 +46,10 @@ def _observe_payload(harness: str, event_name: str, reason: str) -> dict[str, ob
 
 
 def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
+    if _is_prompt_event(event_name):
+        from ..daemon.hook_fail_closed import fail_closed_response
+
+        return fail_closed_response(harness, event_name), 0
     if harness == "copilot":
         if _is_permission_event(event_name):
             return {
@@ -88,57 +79,28 @@ def _pause_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str
     }, 2
 
 
-def _unavailable_payload(harness: str, event_name: str, reason: str) -> tuple[dict[str, object], int]:
-    if harness == "copilot":
-        if _is_permission_event(event_name):
-            return {
-                "behavior": "deny",
-                "message": reason,
-                "interrupt": False,
-            }, 0
-        return {
-            "permissionDecision": "allow",
-            "permissionDecisionReason": reason,
-        }, 0
-    if harness in _DECISION_HOOK_HARNESSES:
-        return {"decision": "allow", "reason": reason}, 0
-    if _is_permission_event(event_name):
-        return {
-            "continue": True,
-            "systemMessage": reason,
-        }, 0
-    return {
-        "continue": True,
-        "systemMessage": reason,
-        "hookSpecificOutput": {
-            "hookEventName": event_name,
-            "permissionDecision": "allow",
-            "permissionDecisionReason": reason,
-        },
-    }, 0
-
-
 def failure_payload(
     *,
     harness: str,
     event_name: str,
     reason: str,
-    payload: dict[str, object] | None,
     recording_only: bool,
+    payload: dict[str, object] | None = None,
     continue_session: bool = False,
 ) -> tuple[dict[str, object], int]:
-    if recording_only:
-        return watch_continue_payload(harness, event_name), 0
+    """Fixed fail-closed payload per harness when review cannot finish.
+
+    recording_only and continue_session are accepted for caller compatibility
+    and ignored: request shape never turns an outage into an allow.
+    """
+    del recording_only, continue_session, payload
+    if grok_observe_event(harness, event_name):
+        return {}, 0
     pauses = hook_event_pauses_when_unavailable(event_name)
-    if (
-        pauses
-        and not _is_permission_event(event_name)
-        and isinstance(payload, dict)
-        and hook_action_is_launcher_recovery_safe(payload)
-    ):
-        return _emergency_safe_payload(harness, event_name), 0
     if not pauses:
+        # Observations continue processing completed activity without authorizing a tool action.
         return _observe_payload(harness, event_name, reason), 0
-    if continue_session:
-        return _unavailable_payload(harness, event_name, reason)
+    # A failed review cannot authorize a protected action. Keep the legacy
+    # keyword for callers, but continuation applies only to observer/watch
+    # events handled above, never to this protected-event branch.
     return _pause_payload(harness, event_name, reason)

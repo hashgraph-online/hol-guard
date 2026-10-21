@@ -25,8 +25,9 @@ def authenticate_adapter_state(
     *,
     harness: str,
     payload: dict[str, object],
+    create_key: bool = True,
 ) -> dict[str, object]:
-    key_id, key = _load_or_create_key(guard_home)
+    key_id, key = _load_or_create_key(guard_home) if create_key else _load_key(guard_home)
     authenticated = dict(payload)
     authenticated["state_authentication"] = {
         "algorithm": "hmac-sha256",

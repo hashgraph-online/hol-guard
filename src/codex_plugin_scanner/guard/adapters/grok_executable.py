@@ -356,6 +356,7 @@ def _automatic_install_root(candidate: Path, home_dir: Path) -> Path | None:
         Path("/opt/homebrew/bin"),
         Path("/opt/local/bin"),
         home_dir / ".local" / "bin",
+        home_dir / ".grok" / "bin",
         home_dir / "bin",
         home_dir / ".npm-global" / "bin",
         home_dir / ".bun" / "bin",

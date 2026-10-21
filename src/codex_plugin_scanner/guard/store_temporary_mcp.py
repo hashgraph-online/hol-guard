@@ -4,7 +4,8 @@ from __future__ import annotations
 
 # pyright: reportAttributeAccessIssue=false, reportUndefinedVariable=false
 # ruff: noqa: F403,F405
-from .approval_resolution import require_resolvable_approval_request
+from .approval_resolution import approval_resolution_block_reasons, require_resolvable_approval_request
+from .native_approval_queue_identity import connection_guard_home
 from .store_approvals import _begin_immediate, _unresolved_queue_result
 from .store_base import *
 from .temporary_mcp_approvals import TemporaryMcpGrantSelection, temporary_mcp_grant_covers_request
@@ -48,7 +49,7 @@ class StoreTemporaryMcpMixin:
             elif source.get("status") != "pending":
                 result = _unresolved_queue_result(connection, error="already_resolved", item=source)
             else:
-                require_resolvable_approval_request(source)
+                require_resolvable_approval_request(source, guard_home=connection_guard_home(connection))
                 if selection.target != "exact":
                     covered_ids = self._covered_pending_request_ids_locked(
                         connection,
@@ -91,7 +92,7 @@ class StoreTemporaryMcpMixin:
         request_id: str,
         selection: TemporaryMcpGrantSelection,
     ) -> list[str]:
-        covered_ids: list[str] = []
+        candidates: list[tuple[str, dict[str, object]]] = []
         for item in load_approval_requests(
             connection,
             status="pending",
@@ -101,9 +102,14 @@ class StoreTemporaryMcpMixin:
             candidate_id = str(item["request_id"])
             if candidate_id == request_id or not temporary_mcp_grant_covers_request(selection, item):
                 continue
-            try:
-                require_resolvable_approval_request(item)
-            except ValueError:
-                continue
-            covered_ids.append(candidate_id)
-        return covered_ids
+            candidates.append((candidate_id, item))
+        if not candidates:
+            return []
+        # One call for the whole sweep: the grant is applied under the write
+        # lock, so asking per row would put a round trip between every covered
+        # request and the next.
+        reasons = approval_resolution_block_reasons(
+            [item for _, item in candidates],
+            guard_home=connection_guard_home(connection),
+        )
+        return [candidate_id for (candidate_id, _), reason in zip(candidates, reasons, strict=True) if reason is None]

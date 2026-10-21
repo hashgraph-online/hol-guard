@@ -1,0 +1,220 @@
+{
+  "extension": {
+    "action_classes": [
+      "tui-runner forced reconfiguration command"
+    ],
+    "aliases": [],
+    "conflicts": [],
+    "delegated_protection": null,
+    "dependencies": [],
+    "description": "Reviews TUI Runner --reconfigure invocations, which overwrite a project's saved process configuration. Port cleanup, process spawning, and project scaffolding happen through TUI Runner's interactive menu after launch and are not observable command-line events, so this extension does not cover them.",
+    "ecosystem_ids": [
+      "tui-runner"
+    ],
+    "executables": [
+      "tui-runner"
+    ],
+    "extension_id": "command.tui-runner",
+    "homepage": null,
+    "icon": {
+      "background": "#0E7490",
+      "kind": "react-icon",
+      "name": "HiMiniCommandLine"
+    },
+    "license": null,
+    "name": "TUI Runner",
+    "permissions": [
+      {
+        "action_classes": [
+          "tui-runner forced reconfiguration command"
+        ],
+        "baseline_floor": "review",
+        "configurable": true,
+        "conflicts": [],
+        "default_enabled": true,
+        "dependencies": [],
+        "deprecated": false,
+        "description": "Identifies TUI Runner invocations with --reconfigure, which forces the setup wizard to run and unconditionally overwrites any existing tui.config.json for the chosen project once the wizard completes. Invocations carrying unresolved shell expansions are reviewed because they cannot prove --reconfigure absent.",
+        "example_command": "tui-runner --reconfigure",
+        "family": null,
+        "fixed_reason": null,
+        "implementation_version": "1.0.0",
+        "implied_permissions": [],
+        "introduced_version": "2.2.0",
+        "label": "TUI Runner forced reconfiguration",
+        "permission_id": "command.tui-runner.permission.reconfigure",
+        "replacement_permission_id": null,
+        "risk_tier": "medium",
+        "safer_guidance": [
+          "Inspect the project's existing tui.config.json before forcing --reconfigure, since the wizard replaces it without a separate confirmation step.",
+          "Expand shell variables and command substitutions before running tui-runner --reconfigure."
+        ],
+        "typed_capabilities": []
+      }
+    ],
+    "project_markers": [],
+    "publisher": {
+      "display_name": "Community",
+      "id": "community.tui-runner",
+      "url": null
+    },
+    "reference_urls": [],
+    "required": false,
+    "risk_classes": [
+      "destructive_shell"
+    ],
+    "rules": [
+      {
+        "action_classes": [
+          "tui-runner forced reconfiguration command"
+        ],
+        "default_mode": "review",
+        "description": "Identifies TUI Runner invocations with --reconfigure, which forces the setup wizard to run and unconditionally overwrites any existing tui.config.json for the chosen project once the wizard completes. Invocations carrying unresolved shell expansions are reviewed because they cannot prove --reconfigure absent.",
+        "family": null,
+        "matcher": {
+          "config": {},
+          "matchers": [
+            {
+              "config": {
+                "allow_leading_options": false,
+                "executables": [
+                  "tui-runner",
+                  "tui-runner.cmd",
+                  "tui-runner.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [],
+                "options_with_values": [],
+                "required_flags": [
+                  "--reconfigure"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": []
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "exec",
+                  "exec.cmd",
+                  "exec.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--reconfigure"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "tui-runner"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "allow_leading_options": true,
+                "executables": [
+                  "xargs",
+                  "xargs.cmd",
+                  "xargs.exe"
+                ],
+                "fail_secure_unknown_options": false,
+                "forbidden_flags": [],
+                "interspersed_flags": [],
+                "interspersed_options_with_values": [],
+                "inverse_flag_pairs": [],
+                "leading_options_with_values": [
+                  "-i",
+                  "-l",
+                  "-n",
+                  "-p",
+                  "-s"
+                ],
+                "options_with_values": [],
+                "required_flags": [
+                  "--reconfigure"
+                ],
+                "required_flags_in_all_arguments": true,
+                "required_option_values": [],
+                "subcommands": [
+                  "tui-runner"
+                ]
+              },
+              "op": "executable.v1"
+            },
+            {
+              "config": {
+                "expansion_markers": [
+                  "$",
+                  "`"
+                ],
+                "launchers": [
+                  [
+                    "tui-runner"
+                  ],
+                  [
+                    "exec",
+                    "tui-runner"
+                  ],
+                  [
+                    "xargs",
+                    "tui-runner"
+                  ]
+                ],
+                "leading_options_with_values": [
+                  "-I",
+                  "-L",
+                  "-P",
+                  "-n",
+                  "-s"
+                ]
+              },
+              "op": "tui-runner-expansion.v1"
+            }
+          ],
+          "op": "any.v1"
+        },
+        "native_capability": null,
+        "permission_id": "command.tui-runner.permission.reconfigure",
+        "risk_classes": [
+          "destructive_shell"
+        ],
+        "rule_id": "command.tui-runner.reconfigure",
+        "rule_version": "1.0.0",
+        "safe_variants": [],
+        "safer_alternatives": [
+          "Inspect the project's existing tui.config.json before forcing --reconfigure, since the wizard replaces it without a separate confirmation step.",
+          "Expand shell variables and command substitutions before running tui-runner --reconfigure."
+        ],
+        "severity": "medium",
+        "title": "TUI Runner forced reconfiguration"
+      }
+    ],
+    "safer_alternatives": [
+      "Review the saved tui.config.json before forcing a reconfiguration that will replace it."
+    ],
+    "source": "built-in",
+    "version": "1.0.0"
+  },
+  "schema": "guard.command-extension-source.v1"
+}

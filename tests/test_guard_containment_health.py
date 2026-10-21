@@ -7,13 +7,14 @@ from typing import cast
 
 import pytest
 
+import codex_plugin_scanner.guard.native_execution as native_execution
 import codex_plugin_scanner.guard.runtime.containment_health as containment_health_module
+from codex_plugin_scanner.guard.runtime.contained_execution_common import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_contract import (
     ContainmentBackend,
     ContainmentPolicy,
     ContainmentRequest,
 )
-from codex_plugin_scanner.guard.runtime.containment_executor import file_sha256
 from codex_plugin_scanner.guard.runtime.containment_health import (
     CONTAINMENT_POLICY_CONTRACT_DIGEST,
     ContainmentHealthEvidence,
@@ -97,11 +98,15 @@ def test_compatible_health_proves_only_the_containment_owned_checks() -> None:
 
 def test_unsupported_platform_probe_returns_explicit_fail_closed_health(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     daemon_fingerprint = hashlib.sha256(b"windows-daemon").hexdigest()
     monkeypatch.setattr(containment_health_module.sys, "platform", "win32")
 
-    evidence = probe_containment_health(daemon_fingerprint=daemon_fingerprint)
+    evidence = probe_containment_health(
+        daemon_fingerprint=daemon_fingerprint,
+        guard_home=tmp_path / "guard-home",
+    )
     signals = containment_health_signals(evidence.to_dict(), now=datetime.now(timezone.utc))
 
     assert evidence.backend is ContainmentBackend.UNSUPPORTED
@@ -207,3 +212,52 @@ def test_request_fixture_remains_path_pinned(tmp_path: Path) -> None:
         operation_id="test",
     )
     assert request.argv == ("/usr/bin/true",)
+
+
+def test_probe_consumes_resident_evidence_without_recomputing_it(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    daemon_fingerprint = hashlib.sha256(b"resident-daemon").hexdigest()
+    payload = _evidence(
+        backend=ContainmentBackend.LINUX_BWRAP,
+        probe_enforced=True,
+        daemon_fingerprint=daemon_fingerprint,
+        runtime_fingerprint=daemon_fingerprint,
+    ).to_dict()
+    seen: dict[str, object] = {}
+
+    def fake_probe(*, daemon_fingerprint: str, guard_home: Path) -> dict[str, object]:
+        seen["daemon_fingerprint"] = daemon_fingerprint
+        seen["guard_home"] = guard_home
+        return payload
+
+    monkeypatch.setattr(native_execution, "containment_health_probe_native", fake_probe)
+
+    evidence = probe_containment_health(
+        daemon_fingerprint=daemon_fingerprint,
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert seen == {
+        "daemon_fingerprint": daemon_fingerprint,
+        "guard_home": tmp_path / "guard-home",
+    }
+    assert evidence.to_dict() == payload
+
+
+def test_probe_fails_closed_when_the_resident_cannot_answer(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        native_execution,
+        "containment_health_probe_native",
+        lambda **_kwargs: None,
+    )
+
+    with pytest.raises(RuntimeError, match="native_containment_health_probe_unavailable"):
+        _ = probe_containment_health(
+            daemon_fingerprint=hashlib.sha256(b"no-resident").hexdigest(),
+            guard_home=tmp_path / "guard-home",
+        )

@@ -12,9 +12,12 @@ from ..adapters.cline import ClineHarnessAdapter
 from ..adapters.contracts import contract_for
 from ..adapters.cursor import CursorHarnessAdapter
 from ..agent_safety_guidance import install_agent_safety_guidance, uninstall_agent_safety_guidance
+from ..codex_install_transaction import codex_install_transaction
 from ..managed_install_proof import bind_managed_install_proof, verify_managed_install_proof
-from ..runtime.mcp_skill_firewall import build_mcp_skill_firewall_fingerprints, portal_skill_identity
-from ..runtime.skill_protection import build_skill_identity, detect_skill_content_risk, skill_identity_metadata
+from ..native_mcp_tool_evidence import NativeMcpToolEvidenceError, native_skill_firewall_metadata_patch
+from ..native_runner_authority import NativeRunnerAuthorityError
+from ..runtime.skill_protection import detect_skill_content_risk
+from ..runtime_transition import assert_transition_mutation_allowed
 from ..store import GuardStore
 from .cursor_actions import (
     cursor_install_surface,
@@ -86,6 +89,26 @@ def apply_managed_install(
     *,
     surface: str | None = None,
 ) -> dict[str, object]:
+    # The adapter's publication and the corresponding store proof belong to
+    # the same home-wide ownership interval, including multi-app operations.
+    with codex_install_transaction(context.guard_home, context.guard_home / "managed", actor=f"managed.{command}"):
+        return _apply_managed_install_owned(
+            command, requested_harness, install_all, context, store, workspace, now, surface=surface
+        )
+
+
+def _apply_managed_install_owned(
+    command: str,
+    requested_harness: str | Sequence[str] | None,
+    install_all: bool,
+    context: HarnessContext,
+    store: GuardStore,
+    workspace: str | None,
+    now: str,
+    *,
+    surface: str | None = None,
+) -> dict[str, object]:
+    assert_transition_mutation_allowed(context.guard_home)
     targets = _resolve_targets(command, requested_harness, install_all, context, store)
     active = command == "install"
     managed_installs: list[dict[str, object]] = []
@@ -346,34 +369,77 @@ def scan_workspace_skills(
                 content = skill_path.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            identity = build_skill_identity(content, skill_path=str(skill_path))
+            try:
+                patch = native_skill_firewall_metadata_patch(
+                    name=skill_path.parent.name,
+                    config_path=str(skill_path),
+                    skill_content=content,
+                    guard_home=store.guard_home,
+                )
+                if patch is None:
+                    continue
+                skill_metadata = patch.get("mcp_skill_identity")
+                firewall = patch.get("mcpSkillFirewall")
+                if not isinstance(skill_metadata, dict) or not isinstance(firewall, dict):
+                    raise NativeMcpToolEvidenceError("native_mcp_tool_evidence_result_invalid")
+            except NativeMcpToolEvidenceError as error:
+                # Same fail-closed answer the refused risk scan below gives: the
+                # install is already applied, so a skill the resident would not
+                # describe is reported unscanned rather than aborting it. No
+                # identity and no firewall metadata is persisted for it.
+                results.append(
+                    {
+                        "skill_path": str(skill_path.relative_to(workspace_dir)),
+                        "identity_hash": None,
+                        "status": "unscanned",
+                        "risk_count": None,
+                        "severities": [],
+                        "signal_ids": [],
+                        "scan_error": str(error),
+                    }
+                )
+                continue
+            identity_hash = skill_metadata["identity_hash"]
             artifact_id = f"skill-path:{skill_path}"
             stored = store.get_snapshot("skill_scan", artifact_id)
             stored_hash = stored.get("identity_hash") if stored else None
-            skill_metadata = skill_identity_metadata(identity)
-            firewall = build_mcp_skill_firewall_fingerprints(
-                skill=portal_skill_identity(identity),
-            )
-            if stored_hash == identity.identity_hash:
+            if stored_hash == identity_hash:
                 continue
-            signals = detect_skill_content_risk(content, skill_path=str(skill_path))
+            try:
+                signals = detect_skill_content_risk(content, guard_home=store.guard_home)
+            except NativeRunnerAuthorityError as error:
+                # The install is already applied. Report the skill as unscanned and
+                # leave no snapshot, so the next install scans it again.
+                results.append(
+                    {
+                        "skill_path": str(skill_path.relative_to(workspace_dir)),
+                        "identity_hash": identity_hash,
+                        "status": "unscanned",
+                        "risk_count": None,
+                        "severities": [],
+                        "signal_ids": [],
+                        "scan_error": str(error),
+                    }
+                )
+                continue
             store.save_snapshot(
                 "skill_scan",
                 artifact_id,
                 {
-                    "identity_hash": identity.identity_hash,
+                    "identity_hash": identity_hash,
                     "skill_path": str(skill_path),
                     "mcp_skill_identity": skill_metadata,
                     "mcpSkillFirewall": firewall,
                 },
-                identity.identity_hash,
+                identity_hash,
                 now,
             )
             if signals:
                 results.append(
                     {
                         "skill_path": str(skill_path.relative_to(workspace_dir)),
-                        "identity_hash": identity.identity_hash,
+                        "identity_hash": identity_hash,
+                        "status": "scanned",
                         "risk_count": len(signals),
                         "severities": sorted({s.severity for s in signals}),
                         "signal_ids": [s.signal_id for s in signals],

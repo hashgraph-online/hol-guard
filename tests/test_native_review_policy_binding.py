@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import hashlib
 import json
 from typing import Any
@@ -10,10 +9,6 @@ from typing import Any
 import pytest
 
 from codex_plugin_scanner.guard.daemon.hook_native_review_binding import (
-    NATIVE_REVIEW_BINDING_FIELD,
-    native_codex_request_digest,
-    native_review_action_identity,
-    native_review_binding_matches,
     native_review_policy_binding,
 )
 from codex_plugin_scanner.guard.native_decision_receipt import validate_native_decision_receipt
@@ -33,7 +28,11 @@ def _binding(result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
 
 def _resign_identity(receipt: dict[str, Any]) -> None:
     identity = {
-        **{key: value for key, value in receipt.items() if key not in {"authority", "decision_id"}},
+        **{
+            key: value
+            for key, value in receipt.items()
+            if key not in {"authority", "decision_id", "review_anchor_digest"}
+        },
         "schema": "guard-native-hook-decision-identity.v1",
     }
     receipt["decision_id"] = hashlib.sha256(
@@ -46,11 +45,28 @@ def test_review_binding_captures_verified_domain_without_aliasing_receipt() -> N
     result, receipt = _fixture()
     binding = _binding(result, receipt)
     assert binding == {
-        "schema": "guard.native-review-policy-binding.v1",
-        **{key: receipt[key] for key in ("policy_digest", "rule_digest", "runtime_identity", "command_extensions")},
+        "schema": "guard.native-review-policy-binding.v2",
+        **{key: receipt[key] for key in ("rule_digest", "runtime_identity", "command_extensions")},
     }
     receipt["command_extensions"]["control_revision"] += 1
     assert binding["command_extensions"]["control_revision"] == 3
+
+
+def test_review_binding_omits_the_republishing_snapshot_digest() -> None:
+    """``policy_digest`` is ``H(config_digest, rule_digest)`` over the whole
+    compiled snapshot, so it moves on a republish that recorded observed state
+    and nothing else. Binding a retry to it strands the approval that retry
+    needs. The receipt must still carry a well-formed one."""
+
+    result, receipt = _fixture()
+    assert "policy_digest" not in _binding(result, receipt)
+    republished = dict(receipt)
+    republished["policy_digest"] = "9" * 64
+    _resign_identity(republished)
+    assert _binding(result, republished) == _binding(result, receipt)
+    del republished["policy_digest"]
+    with pytest.raises(ValueError, match="native_review_policy_binding_invalid"):
+        native_review_policy_binding(harness="claude-code", native_result=result, verified_receipt=republished)
 
 
 @pytest.mark.parametrize("missing", ["receipt", "result", "receipt-domain", "result-domain"])
@@ -85,47 +101,3 @@ def test_valid_but_uncertain_native_domain_cannot_authorize_reuse() -> None:
     assert validate_native_decision_receipt(receipt) == receipt
     with pytest.raises(ValueError, match="native_review_policy_binding_invalid"):
         native_review_policy_binding(harness="claude-code", native_result=result, verified_receipt=receipt)
-
-
-def test_stored_review_requires_exact_domain_and_preserves_absence_only_legacy() -> None:
-    result, receipt = _fixture()
-    binding = _binding(result, receipt)
-    row = {"action_envelope_json": {NATIVE_REVIEW_BINDING_FIELD: copy.deepcopy(binding)}}
-    assert native_review_binding_matches(row, binding)
-    assert not native_review_binding_matches(row, None)
-    assert not native_review_binding_matches({}, binding)
-    assert not native_review_binding_matches({"action_envelope_json": {}}, binding)
-    assert native_review_binding_matches({}, None)
-    assert native_review_binding_matches({"action_envelope_json": {}}, None)
-    assert native_review_policy_binding(harness="claude-code", native_result={}, verified_receipt={}) is None
-    changed = copy.deepcopy(binding)
-    assert changed is not None
-    changed["policy_digest"] = "d" * 64
-    assert not native_review_binding_matches(row, changed)
-
-
-def test_action_deduplication_binds_tool_target_and_control_generation() -> None:
-    result, receipt = _fixture()
-    binding = _binding(result, receipt)
-    assert binding is not None
-    first = native_review_action_identity(tool_name="Bash", launch_target="fixture", binding=binding)
-    assert first == native_review_action_identity(
-        tool_name="Bash", launch_target="fixture", binding=dict(reversed(list(binding.items())))
-    )
-    assert first != native_review_action_identity(tool_name="Other", launch_target="fixture", binding=binding)
-    assert first != native_review_action_identity(tool_name="Bash", launch_target="different", binding=binding)
-    changed = copy.deepcopy(binding)
-    changed["command_extensions"]["control_revision"] += 1
-    assert first != native_review_action_identity(tool_name="Bash", launch_target="fixture", binding=changed)
-    assert native_review_action_identity(tool_name="Bash", launch_target="fixture", binding=None) is None
-
-
-def test_codex_request_commitment_rejects_wrong_harness_and_changed_result() -> None:
-    result, receipt = _fixture()
-    assert native_codex_request_digest(result, receipt) is None
-    receipt["harness"] = "codex"
-    _resign_identity(receipt)
-    assert native_codex_request_digest(result, receipt) == receipt["request_digest"]
-    assert native_codex_request_digest(result, {}) is None
-    result["decision"] = "allow"
-    assert native_codex_request_digest(result, receipt) is None

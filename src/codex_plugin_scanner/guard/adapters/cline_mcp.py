@@ -11,7 +11,7 @@ from pathlib import Path
 
 from ..aibom_detection import enrich_mcp_server_metadata
 from ..launcher import merge_guard_launcher_env
-from ..models import GuardArtifact, HarnessDetection
+from ..models import GuardArtifact, HarnessDetection, _redact_arg
 from ..redaction import redact_text
 from ..runtime.mcp_skill_firewall import enrich_artifact_with_mcp_skill_firewall
 from .base import HarnessContext
@@ -149,7 +149,7 @@ def detect_cline_mcp(context: HarnessContext) -> HarnessDetection:
             raw = {str(key): value for key, value in raw_value.items() if isinstance(key, str)}
             command = raw.get("command")
             args = _server_args(raw)
-            safe_args = tuple(redact_text(item).text for item in args)
+            safe_args = tuple(_redact_arg(redact_text(item).text) for item in args)
             url = raw.get("url") or raw.get("endpoint")
             environment = _string_env(raw.get("env", raw.get("environment")))
             raw_headers = raw.get("headers")
@@ -190,6 +190,7 @@ def detect_cline_mcp(context: HarnessContext) -> HarnessDetection:
                         url=url if isinstance(url, str) else None,
                         transport=transport,
                         metadata=metadata,
+                        runtime_private_metadata={"mcp_args": args, "mcp_env": environment},
                     )
                 )
             )

@@ -2,7 +2,6 @@
 
 use crate::resident_state_encoding::{decode_hex, hex_bytes};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 #[cfg(not(windows))]
 use std::fs::OpenOptions;
 use std::fs::{self, File};
@@ -17,6 +16,10 @@ mod resident_startup_lock;
 mod resident_state_discovery;
 #[path = "resident_state_files.rs"]
 mod resident_state_files;
+#[path = "resident_state_supersession.rs"]
+mod resident_state_supersession;
+
+pub(crate) use resident_state_supersession::runtime_superseded;
 
 #[allow(unused_imports)]
 pub(crate) use resident_startup_lock::{
@@ -50,8 +53,10 @@ const MAX_RUNTIME_BYTES: u64 = 128 * 1024 * 1024;
 const LOCK_STALE_AFTER: Duration = Duration::from_secs(10);
 const MAX_STARTUP_LOCK_BYTES: u64 = 4 * 1024;
 
-#[allow(unused_imports)]
-pub(crate) use resident_state_discovery::{discover_home_states, discover_home_states_prefer};
+#[cfg(test)]
+pub(crate) use resident_state_discovery::discover_home_states;
+pub(crate) use resident_state_discovery::discover_home_states_prefer;
+pub(crate) use resident_state_discovery::discover_same_executable_states;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +70,8 @@ pub(crate) struct ResidentState {
     pub(crate) runtime_sha256: String,
     pub(crate) transport: String,
     pub(crate) endpoint: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub(crate) unix_endpoint_identity: Option<crate::resident_endpoint::UnixEndpointIdentity>,
     pub(crate) token_hex: String,
     pub(crate) created_ms: u64,
     pub(crate) state_mac: String,
@@ -83,24 +90,14 @@ fn executable_digest(executable: &Path) -> Result<String, String> {
         .map_err(|_| "native_resident_runtime_stat_failed".to_owned())?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
-        || metadata.len() > MAX_RUNTIME_BYTES
+        || (metadata.len() > MAX_RUNTIME_BYTES && !cfg!(test))
     {
         return Err("native_resident_runtime_invalid".to_owned());
     }
     let mut file =
         File::open(executable).map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0u8; 64 * 1024];
-    loop {
-        let count = file
-            .read(&mut buffer)
-            .map_err(|_| "native_resident_runtime_read_failed".to_owned())?;
-        if count == 0 {
-            break;
-        }
-        hasher.update(&buffer[..count]);
-    }
-    Ok(hex_bytes(&hasher.finalize()))
+    crate::resident_state_encoding::sha256_hex_from_reader(&mut file)
+        .map_err(|_| "native_resident_runtime_read_failed".to_owned())
 }
 
 pub(crate) fn runtime_digest() -> Result<String, String> {
@@ -108,6 +105,7 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
     RUNTIME_DIGEST
         .get_or_init(|| {
             let executable = std::env::current_exe()
+                .and_then(fs::canonicalize)
                 .map_err(|_| "native_resident_runtime_path_failed".to_owned())?;
             executable_digest(&executable)
         })
@@ -115,8 +113,9 @@ pub(crate) fn runtime_digest() -> Result<String, String> {
 }
 
 pub(crate) use crate::resident_process_identity::{
-    parent_process_id, process_start_marker, validate_package_process_identity,
-    validate_runtime_process_identity,
+    durable_runtime_digest, parent_process_id, process_is_definitively_gone, process_start_marker,
+    validate_direct_lane_process_identity, validate_package_process_identity,
+    validate_process_start_marker, validate_runtime_process_identity,
 };
 
 pub(crate) fn state_scope(base: &Path, digest: &str) -> Result<PathBuf, String> {
@@ -157,6 +156,8 @@ pub(crate) fn private_root_for_scope(scope: &Path) -> Result<PathBuf, String> {
 
 #[cfg(unix)]
 fn socket_directory_path(scope: &Path, digest: &str) -> PathBuf {
+    use sha2::{Digest, Sha256};
+
     let mut hasher = Sha256::new();
     hasher.update(scope.as_os_str().as_encoded_bytes());
     let scope_digest = hex_bytes(&hasher.finalize());
@@ -185,7 +186,7 @@ pub(crate) fn socket_directory(scope: &Path, digest: &str) -> Result<PathBuf, St
 }
 
 fn state_message(state: &ResidentState) -> Vec<u8> {
-    format!(
+    let mut message = format!(
         "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         state.schema,
         state.generation,
@@ -199,10 +200,21 @@ fn state_message(state: &ResidentState) -> Vec<u8> {
         state.token_hex,
         state.created_ms,
     )
-    .into_bytes()
+    .into_bytes();
+    // Missing witnesses retain legacy encoding but never authorize cleanup.
+    if let Some(identity) = state.unix_endpoint_identity {
+        message.extend_from_slice(
+            format!(
+                "\0unix-endpoint-v1\0{}\0{}\0{}",
+                identity.device, identity.inode, identity.owner,
+            )
+            .as_bytes(),
+        );
+    }
+    message
 }
 
-fn state_mac(state: &ResidentState, token: &[u8]) -> String {
+pub(crate) fn state_mac(state: &ResidentState, token: &[u8]) -> String {
     hex_bytes(&crate::hmac_sha256(
         token,
         STATE_MAC_LABEL,
@@ -234,6 +246,7 @@ fn validate_state(
         || state.runtime_sha256 != expected_digest
         || !matches!(state.transport.as_str(), "unix" | "loopback")
         || state.endpoint.len() > 32 * 1024
+        || (state.transport != "unix" && state.unix_endpoint_identity.is_some())
     {
         return Err("native_resident_state_invalid".to_owned());
     }
@@ -356,6 +369,16 @@ pub(crate) fn publish_state(
     endpoint: String,
     token: &[u8],
 ) -> Result<ResidentState, String> {
+    #[cfg(unix)]
+    let unix_endpoint_identity = if transport == "unix" {
+        Some(crate::resident_endpoint::UnixEndpointIdentity::capture(
+            Path::new(&endpoint),
+        )?)
+    } else {
+        None
+    };
+    #[cfg(not(unix))]
+    let unix_endpoint_identity = None;
     let process_id = std::process::id();
     let serving_start_marker = process_start_marker(process_id)?;
     let owner_process_start_marker = process_start_marker(owner_process_id)?;
@@ -369,11 +392,13 @@ pub(crate) fn publish_state(
         runtime_sha256: digest.to_owned(),
         transport: transport.to_owned(),
         endpoint,
+        unix_endpoint_identity,
         token_hex: hex_bytes(token),
         created_ms: now_ms()?,
         state_mac: String::new(),
     };
     state.state_mac = state_mac(&state, token);
+    validate_state(scope, &state, digest)?;
     let path = scope.join(format!(
         "{STATE_FILE_PREFIX}{generation:020}{STATE_FILE_SUFFIX}"
     ));
@@ -398,6 +423,18 @@ pub(crate) fn publish_state(
         .take(RETAINED_STATE_FILES)
         .map(|candidate| candidate.generation)
         .collect::<std::collections::HashSet<_>>();
+    prune_superseded_states(scope, generation, &retained_generations, &private_root)?;
+    Ok(state)
+}
+
+fn prune_superseded_states(
+    scope: &Path,
+    published_generation: u64,
+    retained_generations: &std::collections::HashSet<u64>,
+    private_root: &Path,
+) -> Result<(), String> {
+    #[cfg(not(windows))]
+    let _ = private_root;
     let superseded = resident_state_discovery::state_paths(scope)?;
     for candidate in superseded {
         let generation = candidate
@@ -406,11 +443,16 @@ pub(crate) fn publish_state(
             .and_then(|name| name.strip_prefix(STATE_FILE_PREFIX))
             .and_then(|name| name.strip_suffix(STATE_FILE_SUFFIX))
             .and_then(|name| name.parse::<u64>().ok());
-        if generation.is_some_and(|value| retained_generations.contains(&value)) {
+        // This generation was constructed, authenticated and durably written
+        // above. A transient read/identity failure during rediscovery must not
+        // unpublish our own live endpoint while its listener keeps serving.
+        if generation.is_some_and(|value| {
+            value == published_generation || retained_generations.contains(&value)
+        }) {
             continue;
         }
         #[cfg(windows)]
-        if remove_windows_private_file(&candidate, &private_root).is_err() {
+        if remove_windows_private_file(&candidate, private_root).is_err() {
             match fs::remove_file(&candidate) {
                 Ok(()) => {}
                 Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -427,9 +469,13 @@ pub(crate) fn publish_state(
             }
         }
     }
-    Ok(state)
+    Ok(())
 }
 
 #[cfg(test)]
 #[path = "resident_state_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "resident_state_discovery_tests.rs"]
+mod discovery_tests;

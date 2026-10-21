@@ -40,11 +40,10 @@ export function resolveSettingsSaveProofKind(input: {
   if (input.changingPassword && input.wasConfigured) {
     return "change-password";
   }
-  if (!input.wasConfigured && input.draftGateEnabled) {
+  if (input.draftGateEnabled && !input.savedGateEnabled) {
+    // Enabling a disabled gate requires new_password and confirmation, even
+    // when a password verifier and authenticator were retained while off.
     return "setup-gate";
-  }
-  if (input.wasConfigured && input.draftGateEnabled && !input.savedGateEnabled) {
-    return "verify-save";
   }
   if (input.savedGateEnabled) {
     return "verify-save";

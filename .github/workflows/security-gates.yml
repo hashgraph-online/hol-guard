@@ -14,6 +14,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  UV_HTTP_TIMEOUT: "120"
+
 jobs:
   privileged-workflow-policy:
     name: Privileged workflow policy
@@ -24,11 +27,12 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
           cache-dependency-glob: uv.lock
+      - uses: ./.github/actions/stage-command-projections
       - name: Install policy dependencies
         run: uv sync --frozen --extra dev
       - name: Validate workflow policy code
@@ -49,7 +53,7 @@ jobs:
       - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
         with:
           python-version: "3.12"
-      - uses: astral-sh/setup-uv@fac544c07dec837d0ccb6301d7b5580bf5edae39
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           version: "0.9.26"
           enable-cache: true
@@ -64,16 +68,39 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Verify the locked MCPB RSA backport
+        run: |
+          set -euo pipefail
+          npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          node --test .github/tools/mcpb-cli/harden-forge.test.cjs
+          node .github/tools/mcpb-cli/harden-forge.cjs --vex-output "$RUNNER_TEMP/mcpb-forge-openvex.json"
+      - name: Scan the verified MCPB tool dependency
+        run: >
+          docker run --rm
+          -v "$PWD/.github/tools/mcpb-cli:/workdir:ro"
+          -v "$RUNNER_TEMP/mcpb-forge-openvex.json:/verified-openvex.json:ro"
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          fs
+          --scanners vuln,misconfig,secret
+          --severity HIGH,CRITICAL
+          --skip-dirs /workdir/node_modules
+          --vex /verified-openvex.json
+          --exit-code 1
+          --quiet
+          /workdir
       - name: Run Trivy on release surfaces
         run: >
           docker run --rm
           -v "$PWD:/workdir"
-          aquasec/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
+          ghcr.io/aquasecurity/trivy@sha256:85e87be1a96459c38a4eea47dc64eb2d342bb14cd4b4cef96adcf6ff03378b7c
           fs
           --scanners vuln,misconfig,secret
           --severity HIGH,CRITICAL
+          --ignorefile /workdir/.trivyignore
           --skip-dirs /workdir/tests/fixtures
+          --skip-dirs /workdir/.github/tools/mcpb-cli/node_modules
           --skip-files /workdir/.clusterfuzzlite/Dockerfile
+          --skip-files /workdir/.github/tools/mcpb-cli/package-lock.json
           --exit-code 1
           --quiet
           /workdir
@@ -104,6 +131,8 @@ jobs:
           GOBIN="$RUNNER_TEMP/gitleaks-bin" go install github.com/zricethezav/gitleaks/v8@v8.24.2
       - name: Add Gitleaks to PATH
         run: echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+      - name: Verify Gitleaks fixture exclusion scope
+        run: python3 scripts/ci/check_gitleaks_fixture_scope.py
       - name: Determine Gitleaks scope
         id: gitleaks-scope
         env:
@@ -129,6 +158,23 @@ jobs:
             echo "head_sha=$EVENT_HEAD_SHA" >> "$GITHUB_OUTPUT"
           else
             echo "mode=dir" >> "$GITHUB_OUTPUT"
+          fi
+      # The denylist lives only in the runner environment or a repository secret, never in
+      # the tree; the check skips when neither is set and never prints a matched token. It
+      # scans the same commit range as Gitleaks, so pull-request, merge-group and push runs
+      # all check their commit messages as well as the tree.
+      - name: Private token check
+        env:
+          GUARD_PRIVATE_TOKEN_DENYLIST_SECRET: ${{ secrets.GUARD_PRIVATE_TOKEN_DENYLIST }}
+          SCOPE_MODE: ${{ steps.gitleaks-scope.outputs.mode }}
+          BASE_SHA: ${{ steps.gitleaks-scope.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.gitleaks-scope.outputs.head_sha }}
+        run: |
+          set -euo pipefail
+          if [ "$SCOPE_MODE" = "git" ]; then
+            python3 scripts/ci/check_private_tokens.py --range "$BASE_SHA..$HEAD_SHA"
+          else
+            python3 scripts/ci/check_private_tokens.py
           fi
       - name: Prepare isolated Gitleaks commit range
         id: gitleaks-range
@@ -168,6 +214,7 @@ jobs:
           GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
         run: >-
           gitleaks git
+          --verbose
           --log-opts="${{ steps.gitleaks-range.outputs.log_opts }}"
           --no-banner
           --redact

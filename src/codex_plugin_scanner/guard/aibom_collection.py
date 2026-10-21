@@ -13,6 +13,7 @@ from .aibom_content_upload import (
 from .aibom_models import (
     AibomCliOptions,
 )
+from .harness_tool_version import tool_version_from_detection
 from .inventory_contract import (
     GuardAgentInventorySnapshot,
 )
@@ -60,6 +61,7 @@ def collect_aibom_snapshots(
             generated_at=generated_at,
             home_dir=context.home_dir,
             workspace_dir=context.workspace_dir,
+            runtime_version=tool_version_from_detection(detection),
             cisco_runs=cisco_runs,
             include_symlinks=resolved.include_symlinks,
             follow_unsafe_symlinks=resolved.follow_unsafe_symlinks,

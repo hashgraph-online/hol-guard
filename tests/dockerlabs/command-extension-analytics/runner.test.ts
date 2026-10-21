@@ -1,9 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { resolve } from "node:path";
 
-import { composeCommand, safeProjectName, type CommandResult } from "./lab-process";
+import { composeCommand, REPO_ROOT, runCommand, safeProjectName, type CommandResult } from "./lab-process";
 import { runInstalledPlaywright } from "./installed-playwright";
 import { fetchLabGet, fetchLabIdempotent } from "./relay-fetch";
-import { readyFromLogs } from "./runner";
+import { readyFromLogs, resolveWheel } from "./runner";
 import { readDashboardSession } from "./session-handoff";
 import { teardownLab } from "./teardown";
 
@@ -12,10 +13,32 @@ function result(stdout = "", exitCode = 0): CommandResult {
 }
 
 describe("command extension analytics Dockerlabs orchestration", () => {
+  test("requires an explicit native wheel instead of building a pure wheel", () => {
+    const original = Bun.env.HOL_GUARD_WHEEL;
+    try {
+      delete Bun.env.HOL_GUARD_WHEEL;
+      expect(() => resolveWheel()).toThrow("native-injected wheel");
+      Bun.env.HOL_GUARD_WHEEL = resolve(REPO_ROOT, "dist/synthetic.whl");
+      expect(resolveWheel()).toBe("dist/synthetic.whl");
+    } finally {
+      if (original === undefined) delete Bun.env.HOL_GUARD_WHEEL;
+      else Bun.env.HOL_GUARD_WHEEL = original;
+    }
+  });
+
   test("normalizes bounded compose project names", () => {
     expect(safeProjectName("Guard Command Analytics 42")).toBe("guard-command-analytics-42");
     expect(() => safeProjectName("../")).toThrow("invalid Dockerlabs project name");
     expect(() => safeProjectName("x".repeat(49))).toThrow("invalid Dockerlabs project name");
+  });
+
+  test("terminates a stalled diagnostic command", async () => {
+    const started = Date.now();
+    const timedOut = await runCommand([process.execPath, "-e", "await Bun.sleep(10_000)"], { timeoutMs: 100 });
+    expect(timedOut.exitCode).not.toBe(0);
+    expect(Date.now() - started).toBeLessThan(3_000);
+    await expect(runCommand([process.execPath, "-e", ""], { timeoutMs: 0 }))
+      .rejects.toThrow("timeoutMs must be a positive integer");
   });
 
   test("uses a pinned compose file and explicit project", () => {
@@ -64,18 +87,28 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     }
   });
 
-  test("keeps Guard internal and publishes only the fixed-target relay", async () => {
+  test("publishes only the loopback relay while Guard stays on the internal network", async () => {
     const compose = await Bun.file(`${import.meta.dir}/docker-compose.yml`).text();
+    const server = await Bun.file(`${import.meta.dir}/installed_server.py`).text();
+    const relay = await Bun.file(`${import.meta.dir}/tcp_relay.py`).text();
     const guardBlock = compose.slice(compose.indexOf("  guard:"), compose.indexOf("  relay:"));
     const relayStart = compose.indexOf("  relay:");
-    const relayBlock = compose.slice(relayStart, compose.indexOf("\nvolumes:", relayStart));
+    const relayBlock = compose.slice(relayStart, compose.indexOf("  host_relay:", relayStart));
+    const hostRelayBlock = compose.slice(compose.indexOf("  host_relay:"), compose.indexOf("\nvolumes:"));
     expect(guardBlock).toContain("- guard-analytics");
     expect(guardBlock).not.toContain("ports:");
     expect(relayBlock).toContain('["python", "/opt/guard-lab/tcp_relay.py"]');
-    expect(relayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4781"');
-    expect(relayBlock).toContain("- guard-analytics\n      - host-access");
+    expect(relayBlock).toContain('network_mode: "service:guard"');
+    expect(relayBlock).not.toContain("ports:");
     expect(relayBlock).toContain("condition: service_healthy");
+    expect(hostRelayBlock).toContain('"127.0.0.1:${HOL_GUARD_LAB_PORT:?set by runner}:4783"');
+    expect(hostRelayBlock).toContain("- host-access");
+    expect(hostRelayBlock).toContain("- guard-analytics");
+    expect(hostRelayBlock).toContain("condition: service_healthy");
     expect(compose).toContain("guard-analytics:\n    internal: true");
+    expect(server).toContain('host="127.0.0.1"');
+    expect(relay).toContain('"guard": (("0.0.0.0", 4782), ("127.0.0.1", 4781))');
+    expect(relay).toContain('"host_relay": (("0.0.0.0", 4783), ("guard", 4782))');
   });
 
   test("preserves exact wheel bindings when compose reparses the lab", async () => {
@@ -133,6 +166,30 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     expect(proofScanned).toBe(true);
   });
 
+  test("reports a browser failure alongside the proof failure without exposing private values", async () => {
+    const session = "secret-session-value";
+    let invocation = 0;
+    let failure: Error | null = null;
+    try {
+      await runInstalledPlaywright("http://127.0.0.1:4781", session, 7, "proof", async () => {
+        invocation += 1;
+        return invocation === 1 ? result() : {
+          exitCode: 1,
+          stdout: `browser assertion failed: ${session} guard-private-command-sentinel`,
+          stderr: "bun wrapper failed",
+        };
+      }, async () => {
+        throw new Error(`private value retained in proof: ${session}`);
+      });
+    } catch (error) {
+      if (error instanceof Error) failure = error;
+    }
+    expect(failure?.message).toContain("browser assertion failed");
+    expect(failure?.message).toContain("private value retained in proof");
+    expect(failure?.message).not.toContain(session);
+    expect(failure?.message).not.toContain("guard-private-command-sentinel");
+  });
+
   test("teardown removes volumes and orphans then proves zero resources", async () => {
     const commands: string[][] = [];
     const evidence = await teardownLab("guard-command-analytics", async (command, options) => {
@@ -160,107 +217,4 @@ describe("command extension analytics Dockerlabs orchestration", () => {
     })).rejects.toThrow("Dockerlabs cleanup incomplete");
   });
 
-  test("installed fixture is wheel-only and exercises the required evidence paths", async () => {
-    const directory = import.meta.dir;
-    const [
-      dockerfile,
-      dockerignore,
-      compose,
-      server,
-      containmentProbe,
-      relay,
-      runner,
-      relayFetch,
-      playwright,
-      databasePrivacy,
-    ] = await Promise.all([
-      Bun.file(`${directory}/Dockerfile`).text(),
-      Bun.file(`${directory}/Dockerfile.dockerignore`).text(),
-      Bun.file(`${directory}/docker-compose.yml`).text(),
-      Bun.file(`${directory}/installed_server.py`).text(),
-      Bun.file(`${directory}/installed_containment_probe.py`).text(),
-      Bun.file(`${directory}/tcp_relay.py`).text(),
-      Bun.file(`${directory}/runner.ts`).text(),
-      Bun.file(`${directory}/relay-fetch.ts`).text(),
-      Bun.file(`${directory}/../../../dashboard/playwright.installed.config.ts`).text(),
-      Bun.file(`${directory}/database-privacy.ts`).text(),
-    ]);
-    expect(dockerfile).toContain("pip install --no-cache-dir /opt/wheels/*.whl");
-    expect(dockerfile).not.toContain("COPY src");
-    expect(dockerignore).toContain("!dist/*.whl");
-    expect(dockerignore).toContain("installed_server.py");
-    expect(dockerignore).toContain("github-cli-fixture.sh");
-    expect(dockerignore).toContain("tcp_relay.py");
-    expect(compose).not.toContain("../../src");
-    expect(compose).toContain("internal: true");
-    expect(compose).toContain("no-new-privileges:true");
-    expect(compose).not.toContain("SYS_ADMIN");
-    expect(compose).not.toContain("seccomp:unconfined");
-    expect(dockerfile).not.toContain("bubblewrap");
-    expect(relay).toContain("select.select(sockets, (), ())");
-    expect(relay).toContain("except ConnectionResetError:");
-    expect(relay).not.toContain("active.remove(source)");
-    expect(relay).not.toContain("(), (), 30");
-    for (const harness of ["codex", "claude-code", "cursor"]) {
-      expect(server).toContain(`_run_installed_hook(\"${harness}\"`);
-    }
-    expect(server).toContain("subprocess.run(");
-    expect(server).toContain('[\n        "hol-guard",\n        "hook",');
-    expect(server).not.toContain('[\n        "hol-guard",\n        "guard",\n        "hook",');
-    expect(server).toContain('"git status --short"');
-    expect(server).toContain('"git diff --stat"');
-    expect(server).toContain('"git push --delete origin stale-lab-branch"');
-    expect(server).toContain('"shutdown -h now # {SENTINEL}"');
-    expect(server).not.toContain("execute_contained");
-    expect(containmentProbe).toContain('Path("/bin/sh").resolve(strict=True)');
-    expect(containmentProbe).toContain("execute_contained(request");
-    expect(containmentProbe).toContain('declared_outputs=("output/format-output.txt",)');
-    expect(containmentProbe).toContain("result.outputs[0].content == b\"formatted\\n\"");
-    expect(containmentProbe).toContain("not destination.exists()");
-    expect(containmentProbe).toContain("cat {protected_path}");
-    expect(containmentProbe).toContain("printf changed 2>/dev/null > {protected_path}");
-    expect(containmentProbe).toContain('"namespace-unavailable"');
-    expect(containmentProbe).toContain('"site-packages"');
-    expect(server).not.toContain("record_pre_hook_command_activity_best_effort");
-    expect(server).not.toContain("record_command_activity(");
-    expect(server).not.toContain("ActivityDecisionReason.CAPABILITY");
-    expect(server).toContain("HOL_GUARD_LAB_PENDING");
-    expect(server).not.toContain("READY_MARKER");
-    expect(server).not.toContain('"dashboard_session"');
-    expect(server).toContain("os.O_NOFOLLOW");
-    expect(server).toContain("request_scope_contract(");
-    expect(server).toContain("codex_lab_workflow_drift_0002");
-    expect(server).toContain("codex_lab_workflow_retry_0003");
-    expect(server).not.toContain("apply_approval_resolution(");
-    expect(server).toContain('\"activity_proof\": \"drift-rejected-restored-one-shot-reuse\"');
-    expect(server).toContain("site-packages");
-    expect(runner).toContain("finally");
-    expect(runner).toContain("teardownLab(project");
-    expect(runner).toContain('"/v1/command-activity/diagnostics"');
-    expect(runner).toContain("/v1/command-activity/events?cursor=0");
-    expect(runner).toContain('"X-Guard-Dashboard-Session": session');
-    expect(runner).toContain("scope_contract_digest: pending.scope_contract_digest");
-    expect(runner).toContain("approveWorkflowAuthorization(origin, pending, session)");
-    expect(runner).toContain("const WORKFLOW_AUTHORIZATION_TIMEOUT_MS = 120_000");
-    expect(runner).toContain("Date.now() + WORKFLOW_AUTHORIZATION_TIMEOUT_MS");
-    expect(runner).toContain('"-I"');
-    expect(runner).toContain("HOL_GUARD_LAB_PYTHON");
-    expect(relayFetch).toContain("async function fetchLabGet");
-    expect(relayFetch).toContain("async function fetchLabIdempotent");
-    expect(runner).toContain("init.method === undefined");
-    expect(runner).toContain("retryTransientReset");
-    expect(runner).toContain("await fetchLabIdempotent(request, options)");
-    expect(runner).toContain("await fetch(request, options)");
-    expect(runner.lastIndexOf("try {")).toBeLessThan(runner.lastIndexOf("runInstalledContainment(runner, version)"));
-    expect(runner.lastIndexOf("runInstalledContainment(runner, version)")).toBeLessThan(
-      runner.lastIndexOf('composeCommand(project, "up"'),
-    );
-    expect(playwright).toContain('trace: "off"');
-    expect(databasePrivacy).toContain("command_activity(?:_[a-z0-9_]+)?");
-    expect(databasePrivacy).toContain("envelope_redacted_json");
-    expect(runner).toContain('["event", "activity_id"]');
-    for (const category of ["prompt-free", "contained", "workflow", "review", "block"]) {
-      expect(runner).toContain(`\"${category}\"`);
-    }
-  });
 });

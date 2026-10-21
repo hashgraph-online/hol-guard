@@ -1,0 +1,223 @@
+name: Extension artifact regen
+
+# Contributors own canonical contribution sources. The generated projections
+# derived from them (published descriptors and directory render) are maintainer-owned and
+# published here after merges so contribution PRs never conflict on them.
+#
+# Compatibility copies remain tracked while existing PRs and readers migrate.
+# Generated catalog projections never enter contribution branches or PRs.
+# A separate delivery branch contains only the advisory root pointer.
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # Product/catalog inputs only. Per-run reports and independent test
+      # fixtures do not schedule native compilation or publication.
+      - contributions/**
+      - rust/**
+      - contracts/extensions/**
+      - contracts/mcp-servers/**
+      - contracts/catalog-delivery/**
+      - src/codex_plugin_scanner/guard/**
+      - scripts/refresh_extension_artifacts.py
+      - scripts/build_native_command_program.py
+      - scripts/prepare_extension_contribution.py
+      - scripts/export_extension_directory.py
+      - scripts/render_command_extension_directory.py
+      - scripts/extension_artifact_bundle.py
+      - scripts/publish_extension_snapshot.py
+      - scripts/build_native_command_packs.py
+      - scripts/command_compiler_receipt.py
+      - scripts/command_pack_*.py
+      - scripts/build_extension_delivery.py
+      - scripts/extension_delivery_*.py
+      - scripts/extension_pack_*.py
+      - scripts/native_directory_inventory.py
+      - scripts/prepare_extension_directory.py
+      - scripts/publish_extension_delivery.py
+      - scripts/reconcile_extension_delivery_claims.py
+      - pyproject.toml
+      - uv.lock
+      - scripts/extension_claim_provenance.py
+      - scripts/extension_claim_authority.py
+      - scripts/extension_claim_github_history.py
+      - scripts/extension_claim_github_comments.py
+      - scripts/reconcile_extension_claim_notices.py
+      - scripts/notify_merged_extension_claimants.py
+      - docs/guard/extensions/contributing.md
+      - .github/workflows/extension-artifact-regen.yml
+  workflow_dispatch:
+  schedule:
+    # Renew authenticated metadata without requiring a contribution or code edit.
+    - cron: "23 6 * * *"
+
+# Serialize publication without cancelling an active upload. Every retained
+# run publishes the exact commit that triggered it.
+concurrency:
+  group: extension-artifact-regen-main
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  regen:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install the locked development environment
+        run: uv sync --frozen --extra dev
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install 1.88.0 --profile minimal
+      - name: Cache the data-free native compiler
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6
+        with:
+          workspaces: rust
+          shared-key: extension-pack-compiler
+      - name: Cache integrity-checked public metadata
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        with:
+          path: .extension-delivery-cache/metadata
+          key: extension-delivery-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: extension-delivery-metadata-
+      - name: Build immutable public directory and policy packs
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+          PUBLICATION_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+          GH_TOKEN: ${{ github.token }}
+        run: uv run --no-sync python scripts/build_extension_delivery.py --source-sha "$SOURCE_SHA" --publication-id "$PUBLICATION_ID" --output extension-distribution --resolve-claimants --reuse-current --metadata-cache .extension-delivery-cache/metadata
+      - name: Select bounded attestation subjects
+        id: subjects
+        run: |
+          {
+            echo 'paths<<SUBJECTS'
+            echo extension-distribution/extension-distribution.v2.json
+            if [ -f extension-distribution/legacy/extension-artifacts.v1.json ]; then
+              echo extension-distribution/legacy/extension-artifacts.v1.json
+              echo extension-distribution/legacy/extension-artifacts.zip
+            elif [ -f extension-distribution/legacy/extension-artifacts.unavailable.v1.json ]; then
+              echo extension-distribution/legacy/extension-artifacts.unavailable.v1.json
+            fi
+            echo SUBJECTS
+          } >> "$GITHUB_OUTPUT"
+      - name: Attest the immutable distribution
+        id: provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8
+        with:
+          subject-path: ${{ steps.subjects.outputs.paths }}
+      - name: Retain release provenance
+        env:
+          PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          cp "$PROVENANCE_BUNDLE" extension-distribution/extension-distribution.intoto.jsonl
+          if [ -d extension-distribution/legacy ]; then
+            cp "$PROVENANCE_BUNDLE" extension-distribution/legacy/extension-artifacts.intoto.jsonl
+          fi
+      - name: Retain verified snapshot evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: extension-artifacts-${{ github.sha }}
+          path: |
+            extension-distribution/extension-distribution.v2.json
+            extension-distribution/extension-distribution.intoto.jsonl
+            extension-distribution/compilation-report.json
+          if-no-files-found: error
+          retention-days: 14
+      - name: Publish complete immutable distribution and compatibility snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+          PUBLICATION_ID: ${{ github.run_id }}.${{ github.run_attempt }}
+        run: uv run --no-sync python scripts/publish_extension_delivery.py --source-sha "$SOURCE_SHA" --publication-id "$PUBLICATION_ID" --directory extension-distribution
+
+  claim-notice-plan:
+    needs: regen
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    outputs:
+      pull_requests: ${{ steps.plan.outputs.pull_requests }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: "3.13"
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          version: "0.9.26"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install locked provenance verifier
+        run: uv sync --frozen --extra dev
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: extension-artifacts-${{ github.sha }}
+          path: extension-snapshot
+      - name: Plan missing introducing-contributor invitations
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          pending=$(uv run --no-sync python scripts/reconcile_extension_delivery_claims.py --directory extension-snapshot --source-sha "$SOURCE_SHA")
+          echo "pull_requests=$pending" >> "$GITHUB_OUTPUT"
+
+  claim-notices:
+    needs: claim-notice-plan
+    if: needs.claim-notice-plan.outputs.pull_requests != '[]'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        pr_number: ${{ fromJSON(needs.claim-notice-plan.outputs.pull_requests) }}
+    # Share the immediate merge workflow's lock so reconciliation cannot
+    # race it into duplicate invitations on the same PR.
+    concurrency:
+      group: extension-claim-notice-${{ matrix.pr_number }}
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Deliver missing claim invitation
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ matrix.pr_number }}
+        run: python3 scripts/notify_merged_extension_claimants.py --repo "$GITHUB_REPOSITORY" --pr-number "$PR_NUMBER" --source-root "$GITHUB_WORKSPACE" --refresh-existing

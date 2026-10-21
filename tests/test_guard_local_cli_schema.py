@@ -10,10 +10,51 @@ from codex_plugin_scanner.guard.store_local_cli_schema import (
     _V2_CHECKSUM,
     _V3_CHECKSUM,
     _V4_CHECKSUM,
+    _V5_CHECKSUM,
+    _V6_CHECKSUM,
     LOCAL_CLI_SCHEMA_VERSION,
     LocalCliSchemaError,
     ensure_local_cli_schema,
 )
+
+
+def test_v6_migration_preserves_choices_and_adds_explicit_ask(tmp_path: Path) -> None:
+    with sqlite3.connect(tmp_path / "guard.db") as connection:
+        ensure_local_cli_schema(connection)
+        connection.execute("drop table local_cli_command_grant")
+        connection.execute(
+            "create table local_cli_command_grant (cli_id text not null, command_id text not null, "
+            "state text not null check (state in ('inherit', 'allow', 'block')), primary key (cli_id, command_id))"
+        )
+        connection.execute("insert into local_cli_command_grant values ('local-cli.fixture', 'read', 'allow')")
+        connection.execute(
+            "update local_cli_schema_migration set version = 6, checksum = ? where singleton = 1", (_V6_CHECKSUM,)
+        )
+        ensure_local_cli_schema(connection)
+        assert connection.execute("select state from local_cli_command_grant").fetchone()[0] == "allow"
+        connection.execute("update local_cli_command_grant set state = 'review' where command_id = 'read'")
+        assert connection.execute("select state from local_cli_command_grant").fetchone()[0] == "review"
+        version = connection.execute("select version from local_cli_schema_migration").fetchone()[0]
+        assert version == LOCAL_CLI_SCHEMA_VERSION
+
+
+def test_v5_migration_preserves_existing_authority(tmp_path: Path) -> None:
+    with sqlite3.connect(tmp_path / "guard.db") as connection:
+        ensure_local_cli_schema(connection)
+        connection.execute(
+            "insert into local_cli_grant values (?, ?, ?, ?, ?)",
+            ("local-cli.fixture", "1" * 64, "allowed", 4, "2026-09-27T12:00:00Z"),
+        )
+        connection.execute("drop table local_mcp_catalog")
+        connection.execute(
+            "update local_cli_schema_migration set version = 5, checksum = ? where singleton = 1", (_V5_CHECKSUM,)
+        )
+        before = connection.execute("select * from local_cli_grant").fetchall()
+        ensure_local_cli_schema(connection)
+        assert connection.execute("select * from local_cli_grant").fetchall() == before
+        version = connection.execute("select version from local_cli_schema_migration").fetchone()[0]
+        assert version == LOCAL_CLI_SCHEMA_VERSION
+        assert connection.execute("select * from local_mcp_catalog").fetchall() == []
 
 
 def test_v1_schema_migrates_to_command_tables(tmp_path: Path) -> None:

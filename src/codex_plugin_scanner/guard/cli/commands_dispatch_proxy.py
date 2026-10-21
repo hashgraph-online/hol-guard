@@ -13,7 +13,11 @@ if TYPE_CHECKING:
     from .commands_support_interaction import _emit
     from .commands_support_prompts import _guard_approvals_command, _guard_diff_command, _guard_rerun_command
     from .commands_support_runtime_resolution import _run_hermes_mcp_proxy
-    from .commands_support_workspace import _package_firewall_block_payload, _package_firewall_cli_gate_input
+    from .commands_support_workspace import (
+        _package_firewall_authority_unavailable_payload,
+        _package_firewall_block_payload,
+        _package_firewall_cli_gate_input,
+    )
 
 
 from ._commands_shared import *
@@ -220,6 +224,9 @@ def _run_guard_uninstall_command(
     except ValueError as error:
         print(str(error), file=sys.stderr)
         return 2
+    native_resident_retired = retire_native_resident_after_last_harness(context, store)
+    if native_resident_retired is not None:
+        payload["native_resident_retired"] = native_resident_retired
     _emit("uninstall", payload, getattr(args, "json", False))
     return 0
 
@@ -247,10 +254,18 @@ def _run_guard_package_shims_command(
     current_status = package_shim_status(context)
     if shim_command == "status":
         payload = current_status
-        payload["actions"] = package_firewall_action_states(
-            entitlement,
-            has_installed_managers=bool(current_status.get("installed_managers")),
-        )
+        try:
+            access = package_firewall_access(
+                entitlement,
+                has_installed_managers=bool(current_status.get("installed_managers")),
+                guard_home=store.guard_home,
+            )
+        except NativeHookComposeError:
+            payload = _package_firewall_authority_unavailable_payload("status", entitlement)
+            payload["generated_at"] = _now()
+            _emit("package-shims", payload, getattr(args, "json", False))
+            return 2
+        payload["actions"] = access.action_states
         payload["entitlement"] = entitlement
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
@@ -260,12 +275,13 @@ def _run_guard_package_shims_command(
             entitlement=entitlement,
             has_installed_managers=bool(current_status.get("installed_managers")),
             operation="remove" if shim_command == "uninstall" else shim_command,
+            guard_home=store.guard_home,
         )
         payload["generated_at"] = _now()
         _emit("package-shims", payload, getattr(args, "json", False))
         return 2
     try:
-        if shim_command in {"install", "repair", "uninstall"}:
+        if shim_command in {"install", "repair", "test", "uninstall"}:
             gate_input = _package_firewall_cli_gate_input(args, store.guard_home)
             require_high_risk(
                 store.guard_home,
@@ -282,6 +298,12 @@ def _run_guard_package_shims_command(
             )
         elif shim_command == "uninstall":
             payload = uninstall_package_shims(context, managers=requested_managers or None)
+        elif shim_command == "test":
+            payload = probe_package_shim_intercepts(
+                context,
+                managers=requested_managers or None,
+                workspace_dir=context.workspace_dir or Path.cwd().resolve(),
+            )
         else:
             payload = package_shim_status(context)
     except ApprovalGateError as error:

@@ -4,22 +4,26 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from codex_plugin_scanner.cli import main
-from codex_plugin_scanner.guard.cli import commands_dispatch_local
-from codex_plugin_scanner.guard.cli import render
+from codex_plugin_scanner.guard.cli import commands_dispatch_local, render
 from codex_plugin_scanner.guard.cli.render import emit_guard_payload
 from codex_plugin_scanner.guard.store import GuardStore
 from tests.test_guard_package_shims import WORKSPACE_ID
 from tests.test_guard_protect import _seed_guard_cloud
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def test_guard_protect_human_output_signs_loopback_link_without_persisting_token(
     tmp_path,
     capsys,
     monkeypatch,
+    native_context_digest,
 ) -> None:
     import codex_plugin_scanner.guard.cli.commands as commands_module
-    import codex_plugin_scanner.guard.runtime.supply_chain_package_eval as evaluator_module
+    from codex_plugin_scanner.guard.runtime import runner as guard_runner_module
 
     home_dir = tmp_path / "home"
     workspace_dir = tmp_path / "workspace"
@@ -30,10 +34,9 @@ def test_guard_protect_human_output_signs_loopback_link_without_persisting_token
     token_path.write_text("synthetic-daemon-token", encoding="utf-8")
     token_path.chmod(0o600)
 
-    def raise_trusted_session_error(*_args: object, **_kwargs: object) -> dict[str, object]:
-        raise RuntimeError("cloud token refresh failed")
-
-    monkeypatch.setattr(evaluator_module, "_resolve_guard_sync_auth_context", raise_trusted_session_error)
+    # The resident resolves the Cloud session itself; this override surfaces a
+    # trusted-session (token refresh) failure there rather than in Python.
+    guard_runner_module._test_sync_auth_context_override = {"error": "trusted_session_failure"}
     monkeypatch.setattr(commands_module, "sync_supply_chain_bundle", lambda *args, **kwargs: None)
     monkeypatch.setattr(commands_module, "ensure_guard_daemon", lambda _home: "http://127.0.0.1:5474")
 
@@ -123,8 +126,7 @@ def test_guard_protect_human_output_replaces_all_approval_url_occurrences(tmp_pa
     assert isinstance(signed_url, str)
     assert signed_url != review_url
     assert user_copy["harness_message"] == (
-        "Review __HOL_GUARD_EPHEMERAL_SIGNED_APPROVAL_URL__; "
-        "retry with __HOL_GUARD_EPHEMERAL_SIGNED_APPROVAL_URL__."
+        "Review __HOL_GUARD_EPHEMERAL_SIGNED_APPROVAL_URL__; retry with __HOL_GUARD_EPHEMERAL_SIGNED_APPROVAL_URL__."
     )
 
 

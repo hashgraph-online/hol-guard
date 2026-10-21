@@ -67,6 +67,16 @@ def verify(binary: Path, expected_team_id: str | None = None) -> None:
             manifest_length,
             manifest_compressed,
         )
+    _verify_manifest_pair(runtime, manifest_bytes, runtime_name=runtime_name, expected_team_id=expected_team_id)
+
+
+def _verify_manifest_pair(
+    runtime: bytes,
+    manifest_bytes: bytes,
+    *,
+    runtime_name: str,
+    expected_team_id: str | None,
+) -> None:
     try:
         payload = json.loads(manifest_bytes.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
@@ -79,6 +89,7 @@ def verify(binary: Path, expected_team_id: str | None = None) -> None:
     if expected_team_id:
         import tempfile
 
+        signing = _load_signing_module()
         with tempfile.TemporaryDirectory(prefix="hol-guard-native-runtime-") as tmp:
             extracted = Path(tmp) / Path(runtime_name).name
             extracted.write_bytes(runtime)
@@ -90,15 +101,36 @@ def verify(binary: Path, expected_team_id: str | None = None) -> None:
     print(f"verified bundled native runtime {runtime_name!r} ({len(runtime)} bytes)")
 
 
+def verify_onedir(tree: Path, expected_team_id: str | None = None) -> None:
+    """Verify the sealed native runtime pair inside a PyInstaller onedir tree."""
+    native_dir = tree / "_internal" / "codex_plugin_scanner" / "_native"
+    runtime_file = native_dir / "hol-guard-runtime"
+    manifest_file = native_dir / _MANIFEST_NAME
+    if not runtime_file.is_file() or not manifest_file.is_file():
+        raise ValueError(f"Onedir tree is missing its native runtime pair under {native_dir}")
+    _verify_manifest_pair(
+        runtime_file.read_bytes(),
+        manifest_file.read_bytes(),
+        runtime_name=runtime_file.name,
+        expected_team_id=expected_team_id,
+    )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--binary", type=Path, required=True)
+    parser.add_argument("--binary", type=Path)
+    parser.add_argument("--onedir", type=Path)
     parser.add_argument("--team-id")
     args = parser.parse_args()
-    if not args.binary.is_file():
+    if (args.binary is None) == (args.onedir is None):
+        raise SystemExit("exactly one of --binary or --onedir is required")
+    if args.binary is not None and not args.binary.is_file():
         raise SystemExit(f"Binary does not exist: {args.binary}")
     try:
-        verify(args.binary, args.team_id)
+        if args.onedir is not None:
+            verify_onedir(args.onedir, args.team_id)
+        elif args.binary is not None:
+            verify(args.binary, args.team_id)
     except (OSError, ValueError) as error:
         raise SystemExit(str(error)) from error
 

@@ -10,14 +10,16 @@ from hashlib import sha256
 from pathlib import Path
 
 from .base import HarnessContext
+from .bounded_cli_hook_bridge import bounded_cli_hook_command
 from .cline_paths import cline_plugin_root as _resolve_cline_plugin_root
 from .cline_plugin_probe import probe_cline_plugin_syntax
-from .guard_cli_attestation import guard_hook_command, resolve_attested_guard_cli
+from .guard_cli_attestation import GuardCliAttestation, guard_hook_command, resolve_attested_guard_cli
 
 _MANAGED_MARKER = "HOL_GUARD_MANAGED_CLINE_PLUGIN_V1"
 _SCHEMA_VERSION = 1
 _PLUGIN_NAME = "hol-guard"
 _PLUGIN_TIMEOUT_MS = 9_000
+_BRIDGE_TIMEOUT_SECONDS = 8
 _MAX_PAYLOAD_BYTES = 256 * 1024
 _MAX_PRETOOL_INPUT_BYTES = 64 * 1024
 _PROOF_MAX_AGE_SECONDS = 7 * 24 * 60 * 60
@@ -60,7 +62,8 @@ def _is_managed_plugin(path: Path) -> bool:
         return False
 
 
-def _plugin_source(context: HarnessContext, guard_cli: list[str]) -> str:
+def _plugin_source(context: HarnessContext, guard_cli: list[str], hook_argv: list[str] | None = None) -> str:
+    hook = hook_argv if hook_argv is not None else [*guard_cli, "--harness", "cline", "--json"]
     proof_loaded = str(_proof_path(context, "loaded"))
     proof_pre = str(_proof_path(context, "pretool"))
     proof_post = str(_proof_path(context, "posttool"))
@@ -73,6 +76,7 @@ import {{ mkdirSync, readFileSync, renameSync, writeFileSync }} from "node:fs";
 import {{ dirname }} from "node:path";
 
 const GUARD_CLI = {json.dumps(guard_cli)};
+const GUARD_HOOK_ARGV = {json.dumps(hook)};
 const TIMEOUT_MS = {_PLUGIN_TIMEOUT_MS};
 const MAX_BYTES = {_MAX_PAYLOAD_BYTES};
 const MAX_PRETOOL_INPUT_BYTES = {_MAX_PRETOOL_INPUT_BYTES};
@@ -281,7 +285,7 @@ function invokeGuard(eventName, toolCall, input, result) {{
     }}
     let child;
     try {{
-      child = spawnSync(GUARD_CLI[0], [...GUARD_CLI.slice(1), "--harness", "cline", "--json"], {{
+      child = spawnSync(GUARD_HOOK_ARGV[0], GUARD_HOOK_ARGV.slice(1), {{
         input: encoded,
         encoding: "utf8",
         timeout: TIMEOUT_MS,
@@ -295,7 +299,7 @@ function invokeGuard(eventName, toolCall, input, result) {{
       }};
     }}
     const missingOutput = !String(child.stdout ?? "").trim();
-    if (child.error || child.signal || ![0, 1].includes(child.status) || missingOutput) {{
+    if (child.error || child.signal || ![0, 1, 2].includes(child.status) || missingOutput) {{
       return {{
         ok: false,
         reason: "HOL Guard evaluation was unavailable; this Cline action was not allowed to proceed.",
@@ -308,7 +312,7 @@ function invokeGuard(eventName, toolCall, input, result) {{
         reason: "HOL Guard returned an invalid decision; this Cline action was not allowed to proceed.",
       }};
     }}
-    if (child.status === 1) {{
+    if (child.status !== 0) {{
       if (guardBlocks(parsed)) return {{ ok: true, payload: parsed }};
       return {{
         ok: false,
@@ -445,6 +449,26 @@ def _load_state(context: HarnessContext) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _bounded_hook_argv(context: HarnessContext, attested: GuardCliAttestation) -> list[str] | None:
+    """The bounded hook bridge argv: the daemon answers first, the CLI is the fallback."""
+
+    if attested.frozen or attested.python is None:
+        return None
+    guard_args = ["guard", "hook", "--guard-home", str(context.guard_home), "--harness", "cline"]
+    if context.home_dir.resolve() != Path.home().resolve():
+        guard_args.extend(["--home", str(context.home_dir)])
+    return list(
+        bounded_cli_hook_command(
+            python_executable=str(attested.python.executable),
+            package_root=Path(__file__).resolve().parents[3],
+            guard_home=context.guard_home,
+            cli_args=guard_args,
+            harness="cline",
+            timeout_seconds=_BRIDGE_TIMEOUT_SECONDS,
+        )
+    )
+
+
 def install_cline_plugin(context: HarnessContext) -> dict[str, object]:
     """Install a Guard-owned Cline plugin without replacing user-owned files."""
 
@@ -459,7 +483,9 @@ def install_cline_plugin(context: HarnessContext) -> dict[str, object]:
         with suppress(OSError):
             _proof_path(context, proof_name).unlink()
     attested = resolve_attested_guard_cli(context)
-    source = _plugin_source(context, guard_hook_command(attested, harness="cline")[:-3])
+    source = _plugin_source(
+        context, guard_hook_command(attested, harness="cline")[:-3], _bounded_hook_argv(context, attested)
+    )
     root.mkdir(parents=True, exist_ok=True)
     _atomic_write(index_path, source)
     _atomic_write(package_path, _package_json())

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 
 from codex_plugin_scanner.guarded_repository_evidence import (
@@ -38,7 +38,7 @@ def _evidence():
         findings_total=2,
         sarif_sha256="b" * 64,
         visibility="public",
-        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=UTC),
+        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=timezone.utc),
     )
 
 

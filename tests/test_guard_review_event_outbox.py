@@ -2,11 +2,9 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from typing import TypedDict
 
 import pytest
 
-from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.review_event_integrity import review_event_payload_digest
 from codex_plugin_scanner.guard.runtime.review_event_delivery import decode_stored_review_event
 from codex_plugin_scanner.guard.store import GuardStore
@@ -15,72 +13,12 @@ from codex_plugin_scanner.guard.store_review_event_outbox_schema import (
     REVIEW_REQUEST_SNAPSHOT_COLUMNS,
     ensure_review_event_outbox_schema,
 )
-from tests.guard_review_event_outbox_test_support import as_int
+from tests.guard_review_event_outbox_test_support import _all_events, _connect, _request, as_int
 
 # pyright: reportMissingImports=false
 
 _NOW = "2026-08-24T12:00:00+00:00"
 _LATER = "2026-08-24T12:00:01+00:00"
-
-
-class _DeliveryBinding(TypedDict):
-    oauth_subject_hash: str
-    workspace_id: str
-    machine_id: str
-    machine_installation_id: str
-
-
-def _request(request_id: str, *, summary: str = "Review test action") -> GuardApprovalRequest:
-    return GuardApprovalRequest(
-        request_id=request_id,
-        harness="codex",
-        artifact_id=f"codex:project:{request_id}",
-        artifact_name="Test action",
-        artifact_hash="hash-abc",
-        policy_action="require-reapproval",
-        recommended_scope="artifact",
-        changed_fields=("tool_action_request",),
-        source_scope="project",
-        config_path="/test/config.toml",
-        review_command=f"hol-guard approvals approve {request_id}",
-        approval_url=f"http://127.0.0.1:5474/requests/{request_id}",
-        action_identity=request_id,
-        queue_group_id=request_id,
-        trigger_summary=summary,
-        last_seen_at=_NOW,
-    )
-
-
-def _connect(
-    store: GuardStore,
-    *,
-    grant_id: str = "grant-1",
-    workspace_id: str = "workspace-1",
-    machine_id: str = "machine-1",
-) -> _DeliveryBinding:
-    state_key = (
-        "oauth_local_credentials"
-        if store.guard_source == "default"
-        else f"oauth_local_credentials:{store.guard_source}"
-    )
-    store.set_sync_payload(
-        state_key,
-        {"grant_id": grant_id, "workspace_id": workspace_id, "machine_id": machine_id},
-        _NOW,
-    )
-    binding = store.get_review_event_oauth_binding()
-    assert binding is not None
-    return {
-        "oauth_subject_hash": binding["oauth_subject_hash"],
-        "workspace_id": binding["workspace_id"],
-        "machine_id": binding["machine_id"],
-        "machine_installation_id": binding["machine_installation_id"],
-    }
-
-
-def _all_events(store: GuardStore) -> list[sqlite3.Row]:
-    with store._connect() as connection:
-        return connection.execute("select * from guard_review_outbox_events order by stream_sequence").fetchall()
 
 
 def test_identity_incomplete_event_is_quarantined_with_valid_hash(tmp_path) -> None:
@@ -102,7 +40,10 @@ def test_identity_incomplete_event_is_quarantined_with_valid_hash(tmp_path) -> N
         machine_installation_id=event["machine_installation_id"],
     )
     assert store.list_ready_review_events(now=_NOW, limit=10) == []
-    assert store.review_event_outbox_status(now=_NOW)["quarantined_depth"] == 1
+    status = store.review_event_outbox_status(now=_NOW)
+    assert status["quarantined_depth"] == 1
+    assert status["binding_state"] == "quarantined"
+    assert status["binding_hint"] == "Review events require explicit identity repair."
 
 
 def test_later_credential_availability_does_not_silently_adopt_quarantine(tmp_path) -> None:
@@ -190,6 +131,35 @@ def test_acknowledgement_compacts_only_contiguous_binding_prefix(tmp_path) -> No
     assert cursor is not None
     assert cursor["acknowledged_stream_sequence"] == third
     assert [(row["stream_sequence"], row["binding_status"]) for row in retained] == [(quarantined, "quarantined")]
+    status = store.review_event_outbox_status(now=_NOW, **binding)
+    assert status["quarantined_depth"] == 1
+    assert status["binding_state"] == "healthy"
+    assert status["binding_hint"] is None
+    assert status["identity_mismatch_depth"] == 0
+
+
+def test_quarantine_cannot_reclassify_an_acknowledged_event(tmp_path) -> None:
+    store = GuardStore(tmp_path / "guard")
+    binding = _connect(store)
+    store.add_approval_request(_request("pending-prefix"), _NOW)
+    store.add_approval_request(_request("acknowledged-later"), _NOW)
+    rows = store.list_ready_review_events(now=_NOW, limit=10, **binding)
+    first, second = (as_int(row["sequence"]) for row in rows)
+    assert store.acknowledge_review_events([second], **binding) == 0
+    assert (
+        store.quarantine_review_event(
+            second, reason="review_continuation_binding_mismatch", error="late rejection", **binding
+        )
+        == 0
+    )
+    with store._connect() as connection:
+        row = connection.execute(
+            "select binding_status, acknowledged_at from guard_review_outbox_events where stream_sequence = ?",
+            (second,),
+        ).fetchone()
+    assert row is not None and row["binding_status"] == "ready" and row["acknowledged_at"] is not None
+    assert store.acknowledge_review_events([first], **binding) == 2
+    assert store.review_event_outbox_status(now=_NOW)["quarantined_depth"] == 0
 
 
 def test_request_mutations_roll_back_when_event_append_fails(tmp_path) -> None:

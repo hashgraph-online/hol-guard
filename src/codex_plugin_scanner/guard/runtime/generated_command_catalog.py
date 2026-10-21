@@ -229,6 +229,59 @@ class GeneratedCommandCatalog:
         ordered = tuple(sorted(extensions, key=lambda item: item.extension_id))
         if len(ordered) > MAX_CATALOG_EXTENSIONS:
             raise ValueError("Generated command catalog exceeds catalog extension limit")
+        self._initialize(
+            ordered,
+            catalog_digest=catalog_digest,
+            program_digest=program_digest,
+            source_digest=source_digest,
+            implementation_digest=implementation_digest,
+            candidate_executables=candidate_executables,
+        )
+
+    @classmethod
+    def from_prepared_packs(cls, prepared: object) -> GeneratedCommandCatalog:
+        """Index authenticated per-pack metadata without a legacy envelope.
+
+        This is a control-plane metadata view, not executable policy authority.
+        """
+        from ..catalog_delivery.activation_record import CommittedCommandPacks
+        from ..catalog_delivery.preparation import MAX_SELECTED, PreparedCommandPacks
+        from .generated_command_catalog_loader import _extension
+
+        if not isinstance(prepared, (PreparedCommandPacks, CommittedCommandPacks)):
+            raise ValueError("active metadata requires prepared authenticated packs")
+        extensions = tuple(
+            sorted(
+                (_extension(value) for value in prepared.registry_catalogs()),
+                key=lambda extension: extension.extension_id,
+            )
+        )
+        if (
+            len(extensions) > MAX_SELECTED
+            or {extension.extension_id for extension in extensions} != prepared.registry_ids
+        ):
+            raise ValueError("prepared registry inventory mismatch")
+        result = object.__new__(cls)
+        result._initialize(
+            extensions,
+            catalog_digest=prepared.metadata.catalog_digest,
+            program_digest=prepared.metadata.program_digest,
+            source_digest=prepared.source_sha,
+            implementation_digest=prepared.engine,
+            candidate_executables=prepared.candidate_executables,
+        )
+        return result
+
+    def _initialize(
+        self,
+        ordered: tuple[GeneratedCommandExtension, ...],
+        *,
+        catalog_digest: str | None,
+        program_digest: str | None,
+        source_digest: str | None,
+        implementation_digest: str | None,
+        candidate_executables: tuple[str, ...],
+    ) -> None:
         for item in ordered:
             _validate_generated_extension(item)
         by_id = {item.extension_id: item for item in ordered}
@@ -320,20 +373,11 @@ class GeneratedCommandCatalog:
     def get_rule(self, rule_id: str) -> GeneratedCommandRule | None:
         return self._by_rule_id.get(rule_id.strip().lower())
 
-    def rule_for_action_class(self, action_class: str) -> GeneratedCommandRule | None:
-        return self._by_action_rule.get(action_class.strip().lower())
-
     def permission(self, permission_id: str) -> GeneratedCommandPermission | None:
         return self._by_permission_id.get(permission_id.strip().lower())
 
     def permission_for_rule_id(self, rule_id: str) -> GeneratedCommandPermission | None:
         return self._permission_by_rule_id.get(rule_id.strip().lower())
-
-    def permission_for_action_class(self, action_class: str) -> GeneratedCommandPermission | None:
-        return self._permission_by_action_class.get(action_class.strip().lower())
-
-    def permission_for_typed_capability(self, capability: str) -> GeneratedCommandPermission | None:
-        return self._permission_by_capability.get(capability.strip().lower())
 
 
 def immutable_mapping(value: Mapping[str, object]) -> Mapping[str, object]:

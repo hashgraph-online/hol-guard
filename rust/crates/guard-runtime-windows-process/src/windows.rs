@@ -35,21 +35,45 @@ use winapi::um::winbase::{
 };
 use winapi::um::winnt::{FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_SHARE_WRITE, GENERIC_WRITE};
 
+#[path = "bound_open.rs"]
+mod bound_open;
+#[path = "windows/capture.rs"]
+mod capture;
+#[path = "windows/child_tree.rs"]
+mod child_tree;
 #[path = "directory_binding.rs"]
 mod directory_binding;
+#[path = "file_identity.rs"]
+mod file_identity;
+#[path = "windows/job_guard.rs"]
+mod job_guard;
 #[path = "private_files.rs"]
 mod private_files;
 #[path = "process_lifecycle.rs"]
 mod process_lifecycle;
-pub use directory_binding::{
-    bind_directory, bind_private_directory, create_private_directory, PrivateDirectoryBinding,
+pub use bound_open::{
+    directory_file_id, handle_file_id, open_bound_executable_file, open_bound_regular_file,
+    open_bound_replaceable_file, open_skill_directory, path_stat, regular_file_id, FileId,
+    PathStat,
 };
+pub use capture::{
+    capture as capture_managed_child, capture_owned_child, capture_pipes, CaptureCommand,
+    CapturePipes, CapturedOutput, InheritWindow,
+};
+pub use child_tree::{disinherit_standard_handles, ChildTree, CHILD_TREE_CREATION_FLAGS};
+pub use directory_binding::{
+    bind_directory, bind_private_directory, bind_readonly_directory, create_private_directory,
+    path_is_within, PrivateDirectoryBinding,
+};
+pub use file_identity::{is_single_link_file, is_single_link_handle, remove_file_if_same};
+pub use job_guard::{attach_suspended_process, ChildJobGuard, ResourceLimits};
 pub use private_files::{
     create_private_file, delete_private_file_handle, open_private_directory, open_private_file,
-    remove_file_if_same,
 };
 pub use process_lifecycle::{
-    process_start_marker, terminate_process, terminate_process_verified, wait_for_process_exit,
+    process_liveness, process_parent_ids, process_start_marker, running_process_image_path,
+    running_process_start_marker, terminate_process, terminate_process_verified,
+    wait_for_process_exit,
 };
 
 // SAFETY: This module is the sole Win32 FFI boundary; borrowed handles remain valid
@@ -294,28 +318,72 @@ fn create_null_handle(
     }
 }
 
+/// `MAX_PATH` includes the terminating NUL. A path already at that limit
+/// cannot be opened unless `CreateFileW` receives the `\\?\` prefix. Shorter
+/// paths stay in Win32 form: the prefix disables 8.3 expansion.
+pub(crate) const MAX_PATH: usize = 260;
+
 fn wide_path(path: &Path) -> io::Result<Vec<u16>> {
     if path.as_os_str().encode_wide().any(|unit| unit == 0) {
         return Err(io::Error::new(io::ErrorKind::InvalidInput, "NUL in path"));
     }
-    Ok(path.as_os_str().encode_wide().chain([0]).collect())
+    let wide = path.as_os_str().encode_wide().collect::<Vec<_>>();
+    let mut wide = extend_over_max_path(wide, path.is_absolute());
+    wide.push(0);
+    Ok(wide)
+}
+
+fn extend_over_max_path(wide: Vec<u16>, absolute: bool) -> Vec<u16> {
+    const EXTENDED_PREFIX: &[u16] = &[92, 92, 63, 92];
+    const DEVICE_PREFIX: &[u16] = &[92, 92, 46, 92];
+    if wide.len() < MAX_PATH
+        || wide.starts_with(EXTENDED_PREFIX)
+        || wide.starts_with(DEVICE_PREFIX)
+        || !absolute
+    {
+        return wide;
+    }
+    // The verbatim prefix disables Win32 slash conversion.
+    let wide = wide
+        .into_iter()
+        .map(|unit| if unit == 47 { 92 } else { unit })
+        .collect::<Vec<_>>();
+    let mut extended = Vec::with_capacity(wide.len() + 8);
+    if wide.starts_with(&[92, 92]) {
+        extended.extend_from_slice(&[92, 92, 63, 92, 85, 78, 67, 92]);
+        extended.extend_from_slice(&wide[2..]);
+    } else {
+        extended.extend_from_slice(EXTENDED_PREFIX);
+        extended.extend_from_slice(&wide);
+    }
+    extended
 }
 
 fn command_line(executable: &OsStr, args: &[&OsStr]) -> io::Result<Vec<u16>> {
-    let mut output = Vec::new();
-    let all_args = std::iter::once(executable).chain(args.iter().copied());
-    for (index, arg) in all_args.enumerate() {
-        if index != 0 {
-            output.push(' ' as u16);
-        }
-        output.extend(quote_arg(arg)?);
+    // The image comes from the application name; argv[0] only names it.
+    // Programs such as cmd.exe scan the raw command line for switches, so a
+    // `/` in the program name (`System32/cmd.exe`) would read as `/c md.exe`
+    // and run a different command. Name the program with native separators.
+    let program = executable
+        .encode_wide()
+        .map(|unit| {
+            if unit == b'/' as u16 {
+                b'\\' as u16
+            } else {
+                unit
+            }
+        })
+        .collect();
+    let mut output = quote_units(program)?;
+    for arg in args {
+        output.push(' ' as u16);
+        output.extend(quote_units(arg.encode_wide().collect())?);
     }
     output.push(0);
     Ok(output)
 }
 
-fn quote_arg(arg: &OsStr) -> io::Result<Vec<u16>> {
-    let value: Vec<u16> = arg.encode_wide().collect();
+fn quote_units(value: Vec<u16>) -> io::Result<Vec<u16>> {
     if value.contains(&0) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -409,56 +477,5 @@ impl Drop for AttributeList {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::env;
-    use std::io::Write;
-
-    const SENTINEL_ENV: &str = "HOL_GUARD_TEST_UNLISTED_HANDLE";
-
-    #[test]
-    fn inherited_handle_is_not_leaked() {
-        if let Ok(raw_handle) = env::var(SENTINEL_ENV) {
-            let handle = raw_handle.parse::<usize>().expect("test handle is numeric") as HANDLE;
-            let mut flags = 0;
-            let inherited = unsafe {
-                GetHandleInformation(handle, &mut flags) != FALSE
-                    && GetFileType(handle) == FILE_TYPE_UNKNOWN
-            };
-            assert!(!inherited, "unlisted parent handle reached managed child");
-            return;
-        }
-
-        let mut security = SECURITY_ATTRIBUTES {
-            nLength: size_of::<SECURITY_ATTRIBUTES>() as DWORD,
-            lpSecurityDescriptor: null_mut(),
-            bInheritHandle: TRUE,
-        };
-        let mut open_handles = Vec::new();
-        for _ in 0..128 {
-            open_handles.push(create_null_handle(GENERIC_WRITE, &mut security).unwrap());
-        }
-        let sentinel = unsafe { CreateEventW(&mut security, FALSE, FALSE, null()) };
-        assert!(!sentinel.is_null());
-        let sentinel = unsafe { OwnedHandle::from_raw_handle(sentinel as RawHandle) };
-        env::set_var(
-            SENTINEL_ENV,
-            (sentinel.as_raw_handle() as usize).to_string(),
-        );
-
-        let executable = env::current_exe().unwrap();
-        let arguments = [
-            OsStr::new("--nocapture"),
-            OsStr::new("inherited_handle_is_not_leaked"),
-        ];
-        let mut child = spawn_managed_child(&executable, &arguments).unwrap();
-        let mut stdin = child.take_stdin().unwrap();
-        stdin.flush().unwrap();
-        drop(stdin);
-        assert!(child
-            .wait_success_with_timeout(std::time::Duration::from_secs(2))
-            .unwrap());
-        env::remove_var(SENTINEL_ENV);
-        drop(open_handles);
-    }
-}
+#[path = "windows_tests.rs"]
+mod tests;

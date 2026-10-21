@@ -7,7 +7,11 @@ native UI lifecycle.
 
 from __future__ import annotations
 
+import logging
 import re
+from contextlib import suppress
+
+_LOGGER = logging.getLogger(__name__)
 
 _SECRET_KV_PATTERN = re.compile(
     r"(?i)\b(token|key|secret|password|auth|credential|api[_-]?key)\s*[=:]\s*"
@@ -22,6 +26,7 @@ def sanitize_secret(message: str) -> str:
 
     This intentionally favors false-positive redaction over leaking a token,
     credential, password, API key, or authenticated dashboard fragment.
+    If sanitization cannot finish, hide the complete diagnostic.
     """
 
     if not message:
@@ -30,5 +35,9 @@ def sanitize_secret(message: str) -> str:
         sanitized = _SECRET_KV_PATTERN.sub(r"\1=<redacted>", message)
         sanitized = _GUARD_TOKEN_FRAGMENT_PATTERN.sub("#guard-token=<redacted>", sanitized)
         return _BEARER_PATTERN.sub("Bearer <redacted>", sanitized)
-    except Exception:  # pragma: no cover - defensive safety boundary
-        return message
+    except Exception:
+        # A failing log handler must not prevent the safe fallback.
+        with suppress(Exception):
+            # Emit only a constant event, never diagnostic or exception details.
+            _LOGGER.warning("secret_redaction_failed")
+        return "<redacted>"

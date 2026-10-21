@@ -3,24 +3,18 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import shlex
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
-from pathlib import Path, PurePath
-from typing import Literal
+from pathlib import Path
+from typing import Literal, cast
 
 from ..models import GuardArtifact
-from .mcp_protection import _split_package_token
-from .npm_source_spec import NpmSourceSpec, parse_npm_source_spec
-from .typescript_launch_evidence import TypeScriptLaunchEvidence
-from .workspace_path_guard import existing_paths_within_workspace
+from .typescript_launch_evidence import TypeScriptLaunchEvidence, TypeScriptLaunchStatus
 
 IntentKind = Literal["install", "execute", "sync"]
 EvidenceStatus = Literal["available", "missing", "not_regular", "unreadable", "unstable"]
-_EXTRAS_RE = re.compile(r"^(?P<name>[A-Za-z0-9_.-]+)\[(?P<extras>[A-Za-z0-9_,.-]+)\]$")
-_EGG_FRAGMENT_RE = re.compile(r"(?:^|[#&])egg=([^&#]+)")
-_PYTHON_VERSION_RE = re.compile(r"(?P<name>[^<>=!~\s]+)(?P<op>===|==|~=|!=|<=|>=|<|>|=)?(?P<version>.*)")
 _HTTP_SOURCE_IN_TOKEN_RE = re.compile(r"https?:", re.IGNORECASE)
 
 
@@ -118,6 +112,10 @@ class PackageIntent:
     execution_context_hashes: tuple[str, ...] = ()
     execution_context_cwds: tuple[str, ...] = ()
     execution_context_reason_codes: tuple[str, ...] = ()
+    #: Whether the native parser judged this a routine local JS runner already
+    #: bound to local project state. The runtime computes it beside the
+    #: manifest, lockfile and executable reads it depends on; Python reads it.
+    routine_local_runner: bool = False
 
     def to_dict(self) -> dict[str, object]:
         payload = asdict(self)
@@ -125,20 +123,210 @@ class PackageIntent:
         payload["targets"] = [target.to_dict() for target in self.targets]
         return payload
 
+    @classmethod
+    def from_dict(
+        cls,
+        payload: Mapping[str, object],
+        *,
+        runtime_private_metadata: Mapping[str, object] | None = None,
+    ) -> PackageIntent:
+        """Hydrate exact private targets and argv without rehashing redacted sources."""
 
-@dataclass(frozen=True, slots=True)
-class ManifestDependencyChange:
-    manifest_path: str
-    package_name: str
-    before: str | None
-    after: str | None
+        if not isinstance(payload.get("package_manager"), str):
+            raise ValueError("package intent payload missing package_manager")
+        intent_kind = payload.get("intent_kind")
+        if intent_kind not in ("install", "execute", "sync"):
+            raise ValueError("package intent payload missing intent_kind")
+        targets = _package_intent_targets_from_dict(payload.get("targets"), runtime_private_metadata)
+        redacted_command = payload.get("redacted_command")
+        if runtime_private_metadata is not None:
+            command_tokens = runtime_private_metadata.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) or any(
+                not isinstance(token, str) for token in command_tokens
+            ):
+                raise ValueError("package intent exact command metadata missing")
+        else:
+            command_tokens = payload.get("command_tokens")
+            if not isinstance(command_tokens, (list, tuple)) and isinstance(redacted_command, str):
+                command_tokens = shlex.split(redacted_command)
+        return cls(
+            package_manager=str(payload["package_manager"]),
+            intent_kind=cast(IntentKind, intent_kind),
+            command_tokens=_str_tuple(command_tokens),
+            redacted_command=str(redacted_command) if isinstance(redacted_command, str) else "",
+            targets=targets,
+            manifest_paths=_str_tuple(payload.get("manifest_paths")),
+            lockfile_paths=_str_tuple(payload.get("lockfile_paths")),
+            flags=_str_tuple(payload.get("flags")),
+            notes=_str_tuple(payload.get("notes")),
+            local_executions=tuple(
+                evidence
+                for evidence in (
+                    _local_execution_evidence_from_dict(item) for item in _dict_items(payload.get("local_executions"))
+                )
+                if evidence is not None
+            ),
+            execution_context_hashes=_str_tuple(payload.get("execution_context_hashes")),
+            execution_context_cwds=_str_tuple(payload.get("execution_context_cwds")),
+            execution_context_reason_codes=_str_tuple(payload.get("execution_context_reason_codes")),
+            routine_local_runner=payload.get("routine_local_runner") is True,
+        )
 
 
-@dataclass(frozen=True, slots=True)
-class ManifestParseResult:
-    changes: tuple[ManifestDependencyChange, ...]
-    truncated: bool = False
-    parse_errors: tuple[str, ...] = ()
+def _dict_items(value: object) -> tuple[Mapping[str, object], ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, Mapping))
+
+
+def _str_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, (list, tuple)):
+        return ()
+    return tuple(item for item in value if isinstance(item, str))
+
+
+def _opt_str(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _package_execution_file_evidence_from_dict(
+    value: object,
+) -> PackageExecutionFileEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    status = value.get("status")
+    if status not in ("available", "missing", "not_regular", "unreadable", "unstable"):
+        status = "missing"
+    path = value.get("path")
+    return PackageExecutionFileEvidence(
+        path=path if isinstance(path, str) else "",
+        resolved_path=_opt_str(value.get("resolved_path")),
+        status=cast(EvidenceStatus, status),
+        file_identity=_opt_str(value.get("file_identity")),
+        content_hash=_opt_str(value.get("content_hash")),
+    )
+
+
+def _typescript_launch_evidence_from_dict(value: object) -> TypeScriptLaunchEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    status = value.get("status")
+    if status not in ("complete", "incomplete"):
+        status = "incomplete"
+    schema_version = value.get("schema_version")
+    return TypeScriptLaunchEvidence(
+        schema_version=schema_version if isinstance(schema_version, int) else 0,
+        status=cast(TypeScriptLaunchStatus, status),
+        reasons=_str_tuple(value.get("reasons")),
+        binding_digest=str(value.get("binding_digest") or ""),
+        manager_name=str(value.get("manager_name") or ""),
+        package_name=_opt_str(value.get("package_name")),
+        executable_name=_opt_str(value.get("executable_name")),
+        declared_version=_opt_str(value.get("declared_version")),
+        locked_version=_opt_str(value.get("locked_version")),
+        installed_version=_opt_str(value.get("installed_version")),
+        config_mode=str(value.get("config_mode") or "implicit_or_config_driven"),
+        source_files=_str_tuple(value.get("source_files")),
+        direct_silent_verification=bool(value.get("direct_silent_verification")),
+    )
+
+
+def _local_execution_evidence_from_dict(value: object) -> LocalPackageExecutionEvidence | None:
+    if not isinstance(value, Mapping):
+        return None
+    return LocalPackageExecutionEvidence(
+        manager_name=str(value.get("manager_name") or ""),
+        path_source=str(value.get("path_source") or ""),
+        effective_cwd=str(value.get("effective_cwd") or ""),
+        cwd_source=str(value.get("cwd_source") or ""),
+        manager_is_guard_shim=bool(value.get("manager_is_guard_shim")),
+        local_only_requested=bool(value.get("local_only_requested")),
+        context_hash=str(value.get("context_hash") or ""),
+        package_name=_opt_str(value.get("package_name")),
+        executable_name=_opt_str(value.get("executable_name")),
+        declared_version=_opt_str(value.get("declared_version")),
+        manager=_package_execution_file_evidence_from_dict(value.get("manager")),
+        local_executable=_package_execution_file_evidence_from_dict(value.get("local_executable")),
+        manifests=tuple(
+            evidence
+            for evidence in (
+                _package_execution_file_evidence_from_dict(item) for item in _dict_items(value.get("manifests"))
+            )
+            if evidence is not None
+        ),
+        lockfiles=tuple(
+            evidence
+            for evidence in (
+                _package_execution_file_evidence_from_dict(item) for item in _dict_items(value.get("lockfiles"))
+            )
+            if evidence is not None
+        ),
+        typescript_launch=_typescript_launch_evidence_from_dict(value.get("typescript_launch")),
+    )
+
+
+def _package_intent_targets_from_dict(
+    public_targets: object,
+    runtime_private_metadata: Mapping[str, object] | None,
+) -> tuple[PackageIntentTarget, ...]:
+    targets: list[PackageIntentTarget] = []
+    if runtime_private_metadata is None:
+        for public_target in _dict_items(public_targets):
+            target = _package_intent_target_from_dict(public_target)
+            if target is None:
+                continue
+            expected = target.to_dict()
+            if any(
+                key in public_target and public_target[key] != expected.get(key)
+                for key in ("raw_spec_hash", "source_url_hash")
+            ):
+                raise ValueError("package intent exact target metadata missing")
+            targets.append(target)
+        return tuple(targets)
+
+    private_targets = runtime_private_metadata.get("package_targets")
+    if (
+        not isinstance(public_targets, (list, tuple))
+        or not isinstance(private_targets, (list, tuple))
+        or len(private_targets) != len(public_targets)
+    ):
+        raise ValueError("package intent private target integrity invalid")
+    for private_target, public_target in zip(private_targets, public_targets, strict=True):
+        target = _package_intent_target_from_dict(private_target)
+        if target is None or not isinstance(public_target, Mapping):
+            raise ValueError("package intent private target integrity invalid")
+        public_fields = dict(public_target)
+        extras = public_fields.get("extras")
+        if isinstance(extras, list):
+            public_fields["extras"] = tuple(extras)
+        if target.to_dict() != public_fields:
+            raise ValueError("package intent private target integrity invalid")
+        targets.append(target)
+    return tuple(targets)
+
+
+def _package_intent_target_from_dict(value: object) -> PackageIntentTarget | None:
+    if not isinstance(value, Mapping):
+        return None
+    ecosystem = value.get("ecosystem")
+    if not isinstance(ecosystem, str) or not ecosystem:
+        return None
+    return PackageIntentTarget(
+        ecosystem=ecosystem,
+        package_name=_opt_str(value.get("package_name")),
+        raw_spec=str(value.get("raw_spec") or ""),
+        requested_specifier=_opt_str(value.get("requested_specifier")),
+        source_url=_opt_str(value.get("source_url")),
+        source_kind=_opt_str(value.get("source_kind")),
+        source_repository=_opt_str(value.get("source_repository")),
+        source_revision_kind=_opt_str(value.get("source_revision_kind")),
+        source_identity=_opt_str(value.get("source_identity")),
+        source_invalid_reason=_opt_str(value.get("source_invalid_reason")),
+        alias=_opt_str(value.get("alias")),
+        dependency_group=_opt_str(value.get("dependency_group")),
+        extras=_str_tuple(value.get("extras")),
+        editable=bool(value.get("editable")),
+    )
 
 
 def build_package_request_artifact(
@@ -147,175 +335,29 @@ def build_package_request_artifact(
     *,
     config_path: str,
     source_scope: str,
+    guard_home: Path | None = None,
+    deadline_monotonic: float | None = None,
 ) -> GuardArtifact:
-    manifest_paths, lockfile_paths = _artifact_workspace_paths(intent)
-    package_executable = (
-        intent.command_tokens[0] if intent.command_tokens and ";" not in intent.command_tokens else None
-    )
-    fingerprint = hashlib.sha256(
-        json.dumps(
-            {
-                "harness": harness,
-                "package_manager": intent.package_manager,
-                "intent_kind": intent.intent_kind,
-                "redacted_command": _fingerprint_command_shape(intent),
-                "targets": [target.to_fingerprint_dict() for target in intent.targets],
-                "manifest_paths": list(manifest_paths),
-                "lockfile_paths": list(lockfile_paths),
-                "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
-                "execution_context_hashes": list(intent.execution_context_hashes),
-                "execution_context_cwds": list(intent.execution_context_cwds),
-                "execution_context_reason_codes": list(intent.execution_context_reason_codes),
-            },
-            sort_keys=True,
-        ).encode("utf-8")
-    ).hexdigest()
-    target_label = intent.targets[0].package_name if intent.targets else intent.package_manager
-    return GuardArtifact(
-        artifact_id=f"{harness}:{source_scope}:package-request:{fingerprint}",
-        name=f"{intent.package_manager} {intent.intent_kind} {target_label}",
+    """Name the review a package request gets, by asking the runtime.
+
+    The id this returns is the key a saved package approval is stored under, so
+    it has exactly one derivation: the runtime's own builder, over the exact
+    intent. Deriving it a second time here would let the two spellings drift
+    and silently re-key reviews the user had already approved.
+
+    The import is local because `native_package_authority` imports the artifact
+    model this module's callers also reach through.
+    """
+    from ..native_package_authority import package_request_artifact_native
+
+    return package_request_artifact_native(
+        intent,
         harness=harness,
-        artifact_type="package_request",
-        source_scope=source_scope,
         config_path=config_path,
-        metadata={
-            "package_manager": intent.package_manager,
-            "package_executable": package_executable,
-            "intent_kind": intent.intent_kind,
-            "targets": [target.to_dict() for target in intent.targets],
-            "manifest_paths": list(manifest_paths),
-            "lockfile_paths": list(lockfile_paths),
-            "flags": list(intent.flags),
-            "notes": list(intent.notes),
-            "local_executions": [evidence.to_dict() for evidence in intent.local_executions],
-            "shell_execution_context_hashes": list(intent.execution_context_hashes),
-            "shell_execution_effective_cwds": list(intent.execution_context_cwds),
-            "shell_execution_context_reason_codes": list(intent.execution_context_reason_codes),
-            "shell_execution_context_complete": not intent.execution_context_reason_codes,
-            "effective_cwd": intent.execution_context_cwds[-1] if intent.execution_context_cwds else None,
-            "redacted_command": intent.redacted_command,
-            "request_summary": package_request_summary(intent),
-            "runtime_request_signals": [f"invokes a package {intent.intent_kind} request via {intent.package_manager}"],
-            "runtime_request_summary": package_runtime_summary(intent),
-            "runtime_request_reason": package_runtime_reason(intent),
-            **_local_execution_runtime_metadata(intent),
-        },
-        runtime_private_metadata={
-            "package_targets": [target.to_execution_dict() for target in intent.targets],
-        },
+        source_scope=source_scope,
+        guard_home=guard_home,
+        deadline_monotonic=deadline_monotonic,
     )
-
-
-def _artifact_workspace_paths(intent: PackageIntent) -> tuple[tuple[str, ...], tuple[str, ...]]:
-    if _is_global_package_install(intent):
-        return (), ()
-    return intent.manifest_paths, intent.lockfile_paths
-
-
-def _is_global_package_install(intent: PackageIntent) -> bool:
-    if intent.package_manager not in {"npm", "pnpm", "yarn"}:
-        return False
-    if "multiple-package-segments" in intent.notes:
-        return _all_package_segments_are_global(intent)
-    return any(_is_true_global_flag(flag) for flag in intent.flags)
-
-
-def _all_package_segments_are_global(intent: PackageIntent) -> bool:
-    segments = tuple(segment.strip() for segment in intent.redacted_command.split(" ; ") if segment.strip())
-    if not segments:
-        return False
-    return all(_segment_has_global_flag(segment) for segment in segments)
-
-
-def _segment_has_global_flag(segment: str) -> bool:
-    try:
-        tokens = shlex.split(segment)
-    except ValueError:
-        tokens = segment.split()
-    return any(_is_true_global_flag(token) for token in tokens)
-
-
-def _is_true_global_flag(flag: str) -> bool:
-    normalized = flag.strip().lower()
-    if normalized in {"-g", "--global"}:
-        return True
-    if normalized.startswith("--global="):
-        return normalized.split("=", 1)[1] not in {"", "0", "false", "no", "off"}
-    return normalized == "--location=global"
-
-
-def package_request_summary(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        execution = intent.local_executions[0]
-        executable = execution.executable_name or "an unresolved executable"
-        manager_path = (
-            execution.manager.resolved_path
-            if execution.manager is not None and execution.manager.resolved_path is not None
-            else "unresolved from the command's effective PATH"
-        )
-        return (
-            f"Requested local `{executable}` execution through `{execution.manager_name}`. Manager: `{manager_path}`."
-        )
-    if intent.targets:
-        target_names = ", ".join(target.package_name or target.raw_spec for target in intent.targets[:3])
-        return f"Requested `{intent.package_manager}` {intent.intent_kind} for {target_names}."
-    if intent.lockfile_paths:
-        return (
-            f"Requested `{intent.package_manager}` {intent.intent_kind} using existing project "
-            "manifest and lockfile context."
-        )
-    return f"Requested `{intent.package_manager}` {intent.intent_kind} using existing project manifest context."
-
-
-def package_runtime_summary(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        return f"Executes a project package through {intent.package_manager} using an exact local execution identity."
-    if intent.intent_kind == "execute":
-        return f"Executes a remote package through {intent.package_manager} before it is trusted locally."
-    if intent.lockfile_paths:
-        return (
-            f"Mutates project dependencies through {intent.package_manager} using "
-            "existing manifest and lockfile context."
-        )
-    return f"Mutates project dependencies through {intent.package_manager}."
-
-
-def package_runtime_reason(intent: PackageIntent) -> str:
-    if intent.local_executions:
-        return (
-            "Guard requires review for the first local package-runner execution and binds reuse to the exact "
-            "manager, local executable, manifest, and lockfile evidence."
-        )
-    return (
-        f"Guard parsed this command as a package {intent.intent_kind} request and "
-        "kept only package metadata plus a redacted command shape."
-    )
-
-
-def _fingerprint_command_shape(intent: PackageIntent) -> str:
-    if not any(target.source_kind == "git" for target in intent.targets):
-        return intent.redacted_command
-    tokens: list[str] = list(intent.command_tokens)
-    for target in intent.targets:
-        if target.source_kind != "git":
-            continue
-        for source_spelling in (target.raw_spec, target.source_url):
-            if not source_spelling:
-                continue
-            tokens = [token.replace(source_spelling, "<canonical-git-source>") for token in tokens]
-    return shlex.join(tokens)
-
-
-def _local_execution_runtime_metadata(intent: PackageIntent) -> dict[str, object]:
-    if not intent.local_executions:
-        return {}
-    return {
-        "runtime_request_reason_code": "local_package_execution_review",
-        "runtime_request_remediation_hint": (
-            "Review the resolved manager and local executable once. Unchanged exact executions reuse that scoped "
-            "approval; PATH, executable, manifest, or lockfile changes require review again."
-        ),
-    }
 
 
 def redacted_command(tokens: tuple[str, ...]) -> str:
@@ -346,198 +388,6 @@ def redact_package_request_token(value: str) -> str:
     return _sanitize_url(value)
 
 
-def flag_tokens(tokens: tuple[str, ...]) -> tuple[str, ...]:
-    flags: list[str] = []
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token.startswith("-"):
-            if token == "--location" and index + 1 < len(tokens) and not tokens[index + 1].startswith("-"):
-                flags.append(f"--location={tokens[index + 1]}")
-                index += 2
-                continue
-            if token.startswith(("--global=", "--location=")):
-                flags.append(token)
-            else:
-                flags.append(token.split("=", 1)[0] if token.startswith("--") and "=" in token else token)
-        index += 1
-    return tuple(dict.fromkeys(flags))
-
-
-def existing_relative_paths(workspace: Path | None, candidates: tuple[str, ...] | list[str]) -> tuple[str, ...]:
-    return existing_paths_within_workspace(workspace, candidates)
-
-
-def first_positional(tokens: tuple[str, ...], *, skip_value_options: set[str]) -> str | None:
-    index = 0
-    while index < len(tokens):
-        token = tokens[index]
-        if token in skip_value_options and index + 1 < len(tokens):
-            index += 2
-            continue
-        if token.startswith("-"):
-            index += 1
-            continue
-        return token
-    return None
-
-
-def option_value(tokens: tuple[str, ...], option: str) -> str | None:
-    for index, token in enumerate(tokens):
-        if token == option and index + 1 < len(tokens):
-            return tokens[index + 1]
-        if token.startswith(f"{option}="):
-            return token.partition("=")[2]
-    return None
-
-
-def property_value(tokens: tuple[str, ...], property_name: str) -> str | None:
-    prefix = f"-D{property_name}="
-    for token in tokens:
-        if token.startswith(prefix):
-            return token[len(prefix) :]
-    return None
-
-
-def js_target(spec: str) -> PackageIntentTarget:
-    alias = None
-    normalized_spec = spec
-    if "@npm:" in spec and not spec.startswith("@npm:"):
-        alias, _, normalized_spec = spec.partition("@npm:")
-    parsed_source = parse_npm_source_spec(normalized_spec)
-    if parsed_source is not None and _is_unnamed_js_source_spec(normalized_spec):
-        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
-    named_source_package, source_url = _split_js_named_source_spec(normalized_spec)
-    if source_url is not None:
-        parsed_source = parse_npm_source_spec(source_url)
-        assert parsed_source is not None
-        return _js_source_target(spec, source_url, parsed_source, package_name=named_source_package, alias=alias)
-    if parsed_source is not None:
-        return _js_source_target(spec, normalized_spec, parsed_source, alias=alias)
-    package_name, requested_specifier = _split_package_token(normalized_spec)
-    parsed_source = parse_npm_source_spec(requested_specifier)
-    if requested_specifier is not None and parsed_source is not None:
-        return _js_source_target(spec, requested_specifier, parsed_source, package_name=package_name, alias=alias)
-    return PackageIntentTarget("npm", package_name, spec, requested_specifier, alias=alias)
-
-
-def _js_source_target(
-    raw_spec: str,
-    source_url: str,
-    source: NpmSourceSpec,
-    *,
-    package_name: str | None = None,
-    alias: str | None,
-) -> PackageIntentTarget:
-    return PackageIntentTarget(
-        "npm",
-        package_name or _source_url_package_name(source_url),
-        raw_spec,
-        None,
-        source_url=source_url,
-        source_kind=source.source_kind,
-        source_repository=source.canonical_repository,
-        source_revision_kind=source.revision_kind,
-        source_identity=source.identity,
-        source_invalid_reason=source.reason,
-        alias=alias,
-    )
-
-
-def python_target(
-    spec: str,
-    *,
-    editable: bool = False,
-    dependency_group: str | None = None,
-    extras: tuple[str, ...] = (),
-) -> PackageIntentTarget:
-    if " @ " in spec:
-        package_name, _, source = spec.partition(" @ ")
-        return PackageIntentTarget("pypi", package_name.strip(), spec, None, source_url=source.strip())
-    if "://" in spec or spec.startswith("git+"):
-        match = _EGG_FRAGMENT_RE.search(spec)
-        sanitized_source = _sanitize_url(spec)
-        package_name = match.group(1) if match else PurePath(sanitized_source).name.removesuffix(".git")
-        return PackageIntentTarget(
-            "pypi",
-            package_name or None,
-            spec,
-            None,
-            source_url=spec,
-            editable=editable,
-        )
-    if "@" in spec and not spec.startswith(("./", "../", "/")):
-        package_name, requested_specifier = spec.rsplit("@", 1)
-        normalized_name, detected_extras = split_python_extras(package_name)
-        return PackageIntentTarget(
-            "pypi",
-            normalized_name or None,
-            spec,
-            requested_specifier or None,
-            dependency_group=dependency_group,
-            extras=extras or detected_extras,
-            editable=editable,
-        )
-    normalized_name, requested_specifier = split_python_specifier(spec)
-    package_name, detected_extras = split_python_extras(normalized_name)
-    if package_name.startswith(("./", "../", "/")):
-        package_name = Path(package_name).name or package_name
-    return PackageIntentTarget(
-        "pypi",
-        package_name or None,
-        spec,
-        requested_specifier,
-        dependency_group=dependency_group,
-        extras=extras or detected_extras,
-        editable=editable,
-    )
-
-
-def version_target(ecosystem: str, spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
-    package_name, requested_specifier = _split_package_token(spec)
-    return PackageIntentTarget(ecosystem, package_name, spec, requested_specifier, source_url=source_url)
-
-
-def coordinate_target(ecosystem: str, spec: str) -> PackageIntentTarget:
-    parts = spec.split(":")
-    if len(parts) < 3:
-        return PackageIntentTarget(ecosystem, spec or None, spec, None)
-    return PackageIntentTarget(ecosystem, ":".join(parts[:2]), spec, parts[-1] or None)
-
-
-def composer_target(spec: str) -> PackageIntentTarget:
-    package_name, requested_specifier = spec.split(":", 1) if ":" in spec else (spec, None)
-    return PackageIntentTarget("packagist", package_name, spec, requested_specifier)
-
-
-def homebrew_target(spec: str, *, cask: bool = False) -> PackageIntentTarget:
-    ecosystem = "homebrew-cask" if cask else "homebrew"
-    return PackageIntentTarget(ecosystem, spec or None, spec, None)
-
-
-def homebrew_tap_target(spec: str, *, source_url: str | None = None) -> PackageIntentTarget:
-    return PackageIntentTarget("homebrew-tap", spec or None, spec, None, source_url=source_url)
-
-
-def split_python_specifier(spec: str) -> tuple[str, str | None]:
-    matched = _PYTHON_VERSION_RE.match(spec.strip())
-    if matched is None:
-        return spec, None
-    name = matched.group("name") or spec
-    operator = matched.group("op")
-    version = (matched.group("version") or "").strip()
-    if operator and version:
-        return name, version if operator in {"==", "==="} else f"{operator}{version}"
-    return name, None
-
-
-def split_python_extras(name: str) -> tuple[str, tuple[str, ...]]:
-    matched = _EXTRAS_RE.match(name)
-    if matched is None:
-        return name, ()
-    return matched.group("name"), tuple(item for item in matched.group("extras").split(",") if item)
-
-
 def _sanitize_url(value: str) -> str:
     http_source = _HTTP_SOURCE_IN_TOKEN_RE.search(value)
     if http_source is not None:
@@ -558,42 +408,3 @@ def _sanitize_url(value: str) -> str:
         suffix = f"/{tail[0]}" if tail else ""
         return f"{scheme}://{authority}{suffix}".split("?", 1)[0].split("#", 1)[0]
     return value.split("?", 1)[0].split("#", 1)[0]
-
-
-def _split_js_named_source_spec(spec: str) -> tuple[str | None, str | None]:
-    for index, character in enumerate(spec):
-        if character != "@" or index == 0:
-            continue
-        package_name = spec[:index].strip()
-        source_candidate = spec[index + 1 :].strip()
-        if package_name and parse_npm_source_spec(source_candidate) is not None:
-            return package_name, source_candidate
-    return None, None
-
-
-def _is_unnamed_js_source_spec(value: str) -> bool:
-    lowered = value.lower()
-    return (
-        re.match(r"^[A-Za-z][A-Za-z0-9+.-]*://", value) is not None
-        or lowered.startswith(("git@", "git+", "github:", "gitlab:", "bitbucket:", "file:"))
-        or "@" not in value
-    )
-
-
-def _source_url_package_name(source_url: str) -> str | None:
-    parsed_source = parse_npm_source_spec(source_url)
-    if parsed_source is not None and parsed_source.canonical_repository is not None:
-        return parsed_source.canonical_repository.rsplit("/", 1)[-1] or None
-    normalized = source_url.strip()
-    candidate = (
-        normalized.partition(":")[2]
-        if normalized.startswith(("github:", "gitlab:", "bitbucket:", "file:"))
-        else normalized
-    )
-    sanitized = _sanitize_url(candidate)
-    package_name = PurePath(sanitized).name
-    if package_name.endswith(".tar.gz"):
-        return package_name[: -len(".tar.gz")] or normalized
-    if package_name.endswith((".git", ".tar", ".tgz")):
-        return package_name.rsplit(".", 1)[0] or normalized
-    return package_name or normalized

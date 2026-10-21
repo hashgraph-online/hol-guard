@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
@@ -54,3 +55,75 @@ def test_session_readiness_uses_registered_workspace_and_preserves_budget(
     assert registered == {workspace}
     assert session._connection is not None
     session._connection.close()
+
+
+def test_startup_failure_records_bounded_capacity_before_cleanup(monkeypatch, capsys) -> None:
+    session = object.__new__(AdapterSession)
+    events: list[str] = []
+    failure = RuntimeError("private startup detail")
+
+    def fail_start() -> None:
+        raise failure
+
+    def stats() -> dict[str, object]:
+        events.append("stats")
+        return {
+            "active": 1,
+            "active_limit": 2,
+            "queued": 0,
+            "queued_limit": 4,
+            "expired": True,
+            "cancelled": -1,
+            "retained_bytes": 2**32,
+            "rejected": {"private detail": 1},
+            "unexpected": "private value",
+        }
+
+    session.daemon = cast(
+        session_module.GuardDaemonServer,
+        SimpleNamespace(
+            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=stats)),
+        ),
+    )
+    monkeypatch.setattr(session, "start", fail_start)
+    monkeypatch.setattr(session, "close", lambda: events.append("close"))
+
+    with pytest.raises(RuntimeError) as raised:
+        session.__enter__()
+
+    assert raised.value is failure
+    assert events == ["stats", "close"]
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert json.loads(captured.err) == {
+        "schema": "hol-guard.native-startup-failure.v1",
+        "workers": {"active": 1, "active_limit": 2, "queued": 0, "queued_limit": 4},
+    }
+
+
+def test_startup_diagnostic_failure_preserves_original_failure_and_cleanup(monkeypatch, capsys) -> None:
+    session = object.__new__(AdapterSession)
+    failure = RuntimeError("startup failed")
+    closed: list[bool] = []
+
+    def fail_start() -> None:
+        raise failure
+
+    def fail_stats() -> None:
+        raise ValueError("diagnostic unavailable")
+
+    session.daemon = cast(
+        session_module.GuardDaemonServer,
+        SimpleNamespace(
+            _server=SimpleNamespace(runtime_hook_scheduler=SimpleNamespace(stats=fail_stats)),
+        ),
+    )
+    monkeypatch.setattr(session, "start", fail_start)
+    monkeypatch.setattr(session, "close", lambda: closed.append(True))
+
+    with pytest.raises(RuntimeError) as raised:
+        session.__enter__()
+
+    assert raised.value is failure
+    assert closed == [True]
+    assert capsys.readouterr().err == ""

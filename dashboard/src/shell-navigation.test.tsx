@@ -28,8 +28,18 @@ assert(
   "Top-level navigation destinations are unique",
 );
 assert(
-  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,evidence",
+  mobilePrimaryNavigationItems().map((item) => item.view).join(",") === "home,inbox,fleet,extensions",
   "Compact screens keep the four highest-frequency sections one tap away",
+);
+assert(
+  SHELL_NAV_ITEMS.map((item) => item.view).join(",") ===
+    "home,inbox,fleet,extensions,policy,supply-chain,settings,evidence,about",
+  "Sidebar order promotes Extensions right after Protect and demotes Evidence near the bottom",
+);
+assert(
+  SHELL_NAV_ITEMS.find((item) => item.view === "extensions")?.group === "primary" &&
+    SHELL_NAV_ITEMS.find((item) => item.view === "evidence")?.group === "manage",
+  "Extensions lives in the Guard group while Evidence sits with the Manage surfaces",
 );
 assert(
   canonicalNavigationView("app-detail") === "fleet",
@@ -39,6 +49,10 @@ assert(
   canonicalNavigationView("audit") === "supply-chain" &&
     canonicalNavigationView("feed-health") === "supply-chain",
   "Supply-chain subroutes keep their parent destination active",
+);
+assert(
+  canonicalNavigationView("protection-repair") === "extensions",
+  "Repair protection stays inside Extensions without a new navigation item",
 );
 assert(
   navigationItemForView("settings").label === "Settings",
@@ -101,6 +115,7 @@ assert(
 const css = source("./shell-navigation.css");
 const drawerSource = source("./shell-navigation-drawer.tsx");
 const layoutSource = source("./approval-center-layout.tsx");
+const appSource = source("./app.tsx");
 const responsiveSource = source("./responsive-layout.css");
 const mainSource = source("./main.tsx");
 
@@ -137,6 +152,12 @@ assert(
 assert(
   drawerSource.includes("onSetUpdateChannel={props.onSetUpdateChannel}"),
   "The navigation drawer keeps the alpha update control",
+);
+assert(
+  layoutSource.includes("useGuardUpdate({ onReconnected: props.onGuardReconnected })") &&
+    !layoutSource.includes("enableUpdateStatus") &&
+    !appSource.includes("enableUpdateStatus"),
+  "Update status stays enabled on every view so the Update action cannot disappear on Inbox",
 );
 
 const alphaMarkup = renderToStaticMarkup(

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 
 import pytest
 
@@ -25,7 +25,7 @@ def _evidence():
         findings_total=2,
         sarif_sha256="b" * 64,
         visibility="public",
-        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=UTC),
+        generated_at=datetime(2026, 8, 9, 20, 0, tzinfo=timezone.utc),
     )
 
 
