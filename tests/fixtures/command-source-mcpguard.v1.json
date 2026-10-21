@@ -5,6 +5,7 @@
     "schema": "guard.command-extension-build.v1",
     "sources": [
       {
+        "schema": "guard.command-extension-source.v1",
         "extension": {
           "action_classes": [
             "mcp-guard MCP server launch command",
@@ -15,7 +16,7 @@
           "conflicts": [],
           "delegated_protection": null,
           "dependencies": [],
-          "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
+          "description": "Reviews mcp-guard runs that start processes, approve a trust baseline or write message bodies to disk. proxy, test-injection --run and --live (inspect, lock, ui, snapshot save) start the MCP servers named in a config or on the command line, or the given agent script. lock writes the lock file that later runs compare against, so running it approves the current tools, including a changed description. proxy --record-bodies keeps full JSON-RPC messages, which can contain secrets, in the journal. Static audits (inspect, scan, ui, snapshot save and diff without --live), journal export, test-injection without --run, and direct runs with --help or --version (except proxy, whose later arguments go to the server) are not matched by this extension; Guard's default handling for commands no rule matches still applies to them. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
           "ecosystem_ids": [],
           "executables": [
             "mcp-guard",
@@ -138,9 +139,11 @@
               "description": "Identifies mcp-guard proxy, test-injection --run, and inspect, lock, ui or snapshot save with --live. They start the MCP servers named in the config or given with --server (any command, or an http(s) URL that is contacted), or run the agent script given to test-injection. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -152,10 +155,7 @@
                         "mcp-guard-audit.exe"
                       ],
                       "fail_secure_unknown_options": false,
-                      "forbidden_flags": [
-                        "--help",
-                        "--version"
-                      ],
+                      "forbidden_flags": [],
                       "interspersed_flags": [],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
@@ -180,10 +180,339 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -225,10 +554,360 @@
                       "subcommands": [
                         "inspect"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "inspect"
+                        ],
+                        [
+                          "mcp-guard",
+                          "inspect"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "inspect"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "inspect"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "inspect"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "inspect"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "inspect"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "inspect"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "inspect"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -270,10 +949,360 @@
                       "subcommands": [
                         "lock"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -315,10 +1344,360 @@
                       "subcommands": [
                         "ui"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "ui"
+                        ],
+                        [
+                          "mcp-guard",
+                          "ui"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "ui"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "ui"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "ui"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "ui"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "ui"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "ui"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "ui"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -361,10 +1740,369 @@
                         "snapshot",
                         "save"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
                   },
                   {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "snapshot",
+                          "save"
+                        ],
+                        [
+                          "mcp-guard",
+                          "snapshot",
+                          "save"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "snapshot",
+                          "save"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "snapshot",
+                          "save"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "snapshot",
+                          "save"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "snapshot",
+                          "save"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "snapshot",
+                        "save"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "snapshot",
+                        "save"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--live"
+                      ],
+                      "subcommands": [
+                        "snapshot",
+                        "save"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -406,11 +2144,359 @@
                       "subcommands": [
                         "test-injection"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "test-injection"
+                        ],
+                        [
+                          "mcp-guard",
+                          "test-injection"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "test-injection"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "test-injection"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "test-injection"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "test-injection"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "subcommands": [
+                        "test-injection"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "subcommands": [
+                        "test-injection"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--run"
+                      ],
+                      "subcommands": [
+                        "test-injection"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.server-launch",
@@ -436,9 +2522,11 @@
               "description": "Identifies mcp-guard lock. It writes (or with --update, migrates) the lock file that inspect --lock and proxy --lock treat as the approved state, so running it approves the current servers and tools, including a description or annotation that changed since the last lock. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -478,11 +2566,347 @@
                       "subcommands": [
                         "lock"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [
+                        "--help",
+                        "--version"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "lock"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "lock"
+                        ]
+                      ],
+                      "required_flags": [],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [],
+                      "subcommands": [
+                        "lock"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.lock-approve",
@@ -507,9 +2931,11 @@
               "description": "Identifies mcp-guard proxy --record-bodies. The journal then keeps every JSON-RPC message in full, including tool arguments and results that can hold tokens or file contents. Without it, the journal keeps no bodies. Covers the mcp-guard and mcp-guard-audit executables (including .cmd/.exe), uvx, uv tool run and pipx run launches of the mcp-guard-audit package, and versioned launches (mcp-guard-audit@version).",
               "family": null,
               "matcher": {
+                "op": "any.v1",
                 "config": {},
                 "matchers": [
                   {
+                    "op": "executable.v1",
                     "config": {
                       "allow_leading_options": false,
                       "executables": [
@@ -521,10 +2947,7 @@
                         "mcp-guard-audit.exe"
                       ],
                       "fail_secure_unknown_options": false,
-                      "forbidden_flags": [
-                        "--help",
-                        "--version"
-                      ],
+                      "forbidden_flags": [],
                       "interspersed_flags": [],
                       "interspersed_options_with_values": [],
                       "inverse_flag_pairs": [],
@@ -551,11 +2974,350 @@
                       "subcommands": [
                         "proxy"
                       ]
-                    },
-                    "op": "executable.v1"
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "tool",
+                          "run",
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "executable-path-set.v1",
+                    "config": {
+                      "allow_leading_options": false,
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "fail_secure_unknown_options": false,
+                      "forbidden_flags": [],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ],
+                      "inverse_flag_pairs": [],
+                      "leading_options_with_values": [],
+                      "options_with_values": [
+                        "--server",
+                        "--format",
+                        "-o",
+                        "--output",
+                        "--rules",
+                        "--timeout",
+                        "--lock",
+                        "--fail-on",
+                        "--record",
+                        "--server-name",
+                        "--only",
+                        "--id-salt"
+                      ],
+                      "paths": [
+                        [
+                          "run",
+                          "mcp-guard-audit",
+                          "proxy"
+                        ],
+                        [
+                          "run",
+                          "mcp-guard",
+                          "proxy"
+                        ]
+                      ],
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "required_flags_in_all_arguments": false,
+                      "required_option_values": []
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uvx",
+                        "uvx.cmd",
+                        "uvx.exe"
+                      ],
+                      "leading_subcommands": [],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "uv",
+                        "uv.cmd",
+                        "uv.exe"
+                      ],
+                      "leading_subcommands": [
+                        "tool",
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
+                  },
+                  {
+                    "op": "versioned-package-subcommand.v1",
+                    "config": {
+                      "executables": [
+                        "pipx",
+                        "pipx.cmd",
+                        "pipx.exe"
+                      ],
+                      "leading_subcommands": [
+                        "run"
+                      ],
+                      "package": "mcp-guard-audit",
+                      "required_flags": [
+                        "--record-bodies"
+                      ],
+                      "subcommands": [
+                        "proxy"
+                      ],
+                      "interspersed_flags": [
+                        "--isolated",
+                        "--offline",
+                        "--quiet",
+                        "-q",
+                        "--no-cache",
+                        "--refresh",
+                        "--system-certs",
+                        "--native-tls",
+                        "--verbose",
+                        "-v"
+                      ],
+                      "interspersed_options_with_values": [
+                        "--from",
+                        "--with",
+                        "-w",
+                        "--with-requirements",
+                        "--python",
+                        "-p",
+                        "--index-url",
+                        "--extra-index-url",
+                        "--index",
+                        "--spec"
+                      ]
+                    }
                   }
-                ],
-                "op": "any.v1"
+                ]
               },
               "native_capability": null,
               "permission_id": "command.mcpguard.permission.record-bodies",
@@ -580,8 +3342,7 @@
           ],
           "source": "built-in",
           "version": "1.0.0"
-        },
-        "schema": "guard.command-extension-source.v1"
+        }
       }
     ],
     "trust": {
@@ -837,6 +3598,45 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
+      "command": "mcp-guard proxy node server.js --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.00.03.proxy-node-server-js-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard proxy node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.00.04.proxy-node-server-js-version",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard proxy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.00.05.proxy-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
       "command": "mcp-guard inspect ~/.cursor/mcp.json --live",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -846,7 +3646,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.00.06.inspect-cursor-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -859,7 +3659,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.04.inspect-live-yes-timeout-30-mcp-json",
+      "id": "server-launch.00.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -872,7 +3672,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.00.08.inspect-server-npx-y-some-server-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -885,7 +3685,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.06.lock-mcp-json-live",
+      "id": "server-launch.00.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -898,7 +3698,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.07.ui-mcp-json-live",
+      "id": "server-launch.00.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -911,7 +3711,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.00.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -924,7 +3724,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.09.test-injection-agent-py-run",
+      "id": "server-launch.00.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -937,7 +3737,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.00.10.test-injection-run-only-p1-p2-agent-py",
+      "id": "server-launch.00.13.test-injection-run-only-p1-p2-agent-py",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -950,7 +3750,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.00.11.lock-mcp-json",
+      "id": "lock-approve.00.14.lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -963,7 +3763,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.00.12.lock-mcp-json-o-mcp-guard-lock",
+      "id": "lock-approve.00.15.lock-mcp-json-o-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -976,7 +3776,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.00.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.00.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -989,7 +3789,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.00.14.lock-server-uvx-some-server",
+      "id": "lock-approve.00.17.lock-server-uvx-some-server",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1002,7 +3802,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.00.15.proxy-record-s-jsonl-record-bodies-node-",
+      "id": "record-bodies.00.18.proxy-record-s-jsonl-record-bodies-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1015,7 +3815,20 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.00.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.00.19.proxy-record-bodies-record-s-jsonl-node-",
+      "rule_id": "command.mcpguard.record-bodies"
+    },
+    {
+      "command": "mcp-guard proxy --record-bodies --record s.jsonl node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "record-bodies.00.20.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1058,6 +3871,45 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
+      "command": "mcp-guard-audit proxy node server.js --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.01.03.proxy-node-server-js-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard-audit proxy node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.01.04.proxy-node-server-js-version",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard-audit proxy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.01.05.proxy-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
       "command": "mcp-guard-audit inspect ~/.cursor/mcp.json --live",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -1067,7 +3919,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.01.06.inspect-cursor-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1080,7 +3932,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.04.inspect-live-yes-timeout-30-mcp-json",
+      "id": "server-launch.01.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1093,7 +3945,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.01.08.inspect-server-npx-y-some-server-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1106,7 +3958,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.06.lock-mcp-json-live",
+      "id": "server-launch.01.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1119,7 +3971,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.07.ui-mcp-json-live",
+      "id": "server-launch.01.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1132,7 +3984,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.01.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1145,7 +3997,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.09.test-injection-agent-py-run",
+      "id": "server-launch.01.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1158,7 +4010,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.01.10.test-injection-run-only-p1-p2-agent-py",
+      "id": "server-launch.01.13.test-injection-run-only-p1-p2-agent-py",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1171,7 +4023,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.01.11.lock-mcp-json",
+      "id": "lock-approve.01.14.lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1184,7 +4036,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.01.12.lock-mcp-json-o-mcp-guard-lock",
+      "id": "lock-approve.01.15.lock-mcp-json-o-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1197,7 +4049,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.01.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.01.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1210,7 +4062,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.01.14.lock-server-uvx-some-server",
+      "id": "lock-approve.01.17.lock-server-uvx-some-server",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1223,7 +4075,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.01.15.proxy-record-s-jsonl-record-bodies-node-",
+      "id": "record-bodies.01.18.proxy-record-s-jsonl-record-bodies-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1236,7 +4088,20 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.01.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.01.19.proxy-record-bodies-record-s-jsonl-node-",
+      "rule_id": "command.mcpguard.record-bodies"
+    },
+    {
+      "command": "mcp-guard-audit proxy --record-bodies --record s.jsonl node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "record-bodies.01.20.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1279,6 +4144,45 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
+      "command": "mcp-guard.exe proxy node server.js --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.02.03.proxy-node-server-js-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard.exe proxy node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.02.04.proxy-node-server-js-version",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard.exe proxy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.02.05.proxy-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
       "command": "mcp-guard.exe inspect ~/.cursor/mcp.json --live",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -1288,7 +4192,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.02.06.inspect-cursor-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1301,7 +4205,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.04.inspect-live-yes-timeout-30-mcp-json",
+      "id": "server-launch.02.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1314,7 +4218,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.02.08.inspect-server-npx-y-some-server-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1327,7 +4231,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.06.lock-mcp-json-live",
+      "id": "server-launch.02.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1340,7 +4244,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.07.ui-mcp-json-live",
+      "id": "server-launch.02.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1353,7 +4257,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.02.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1366,7 +4270,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.09.test-injection-agent-py-run",
+      "id": "server-launch.02.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1379,7 +4283,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.02.10.test-injection-run-only-p1-p2-agent-py",
+      "id": "server-launch.02.13.test-injection-run-only-p1-p2-agent-py",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1392,7 +4296,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.02.11.lock-mcp-json",
+      "id": "lock-approve.02.14.lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1405,7 +4309,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.02.12.lock-mcp-json-o-mcp-guard-lock",
+      "id": "lock-approve.02.15.lock-mcp-json-o-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1418,7 +4322,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.02.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.02.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1431,7 +4335,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.02.14.lock-server-uvx-some-server",
+      "id": "lock-approve.02.17.lock-server-uvx-some-server",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1444,7 +4348,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.02.15.proxy-record-s-jsonl-record-bodies-node-",
+      "id": "record-bodies.02.18.proxy-record-s-jsonl-record-bodies-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1457,7 +4361,20 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.02.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.02.19.proxy-record-bodies-record-s-jsonl-node-",
+      "rule_id": "command.mcpguard.record-bodies"
+    },
+    {
+      "command": "mcp-guard.exe proxy --record-bodies --record s.jsonl node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "record-bodies.02.20.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1500,6 +4417,45 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
+      "command": "mcp-guard-audit.cmd proxy node server.js --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.03.03.proxy-node-server-js-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard-audit.cmd proxy node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.03.04.proxy-node-server-js-version",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
+      "command": "mcp-guard-audit.cmd proxy --help",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "server-launch.03.05.proxy-help",
+      "rule_id": "command.mcpguard.server-launch"
+    },
+    {
       "command": "mcp-guard-audit.cmd inspect ~/.cursor/mcp.json --live",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -1509,7 +4465,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.03.06.inspect-cursor-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1522,7 +4478,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.04.inspect-live-yes-timeout-30-mcp-json",
+      "id": "server-launch.03.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1535,7 +4491,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.03.08.inspect-server-npx-y-some-server-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1548,7 +4504,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.06.lock-mcp-json-live",
+      "id": "server-launch.03.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1561,7 +4517,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.07.ui-mcp-json-live",
+      "id": "server-launch.03.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1574,7 +4530,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.03.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1587,7 +4543,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.09.test-injection-agent-py-run",
+      "id": "server-launch.03.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1600,7 +4556,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.03.10.test-injection-run-only-p1-p2-agent-py",
+      "id": "server-launch.03.13.test-injection-run-only-p1-p2-agent-py",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1613,7 +4569,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.03.11.lock-mcp-json",
+      "id": "lock-approve.03.14.lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1626,7 +4582,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.03.12.lock-mcp-json-o-mcp-guard-lock",
+      "id": "lock-approve.03.15.lock-mcp-json-o-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1639,7 +4595,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.03.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.03.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1652,7 +4608,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.03.14.lock-server-uvx-some-server",
+      "id": "lock-approve.03.17.lock-server-uvx-some-server",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -1665,7 +4621,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.03.15.proxy-record-s-jsonl-record-bodies-node-",
+      "id": "record-bodies.03.18.proxy-record-s-jsonl-record-bodies-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1678,7 +4634,20 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.03.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.03.19.proxy-record-bodies-record-s-jsonl-node-",
+      "rule_id": "command.mcpguard.record-bodies"
+    },
+    {
+      "command": "mcp-guard-audit.cmd proxy --record-bodies --record s.jsonl node server.js --version",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "review",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "record-bodies.03.20.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1695,7 +4664,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit proxy --record session.jsonl -- node server.js",
+      "command": "uvx mcp-guard-audit proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -1704,33 +4673,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.04.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1743,20 +4686,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.04.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1769,7 +4699,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.06.lock-mcp-json-live",
+      "id": "server-launch.04.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1782,7 +4712,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.07.ui-mcp-json-live",
+      "id": "server-launch.04.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1795,7 +4725,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.04.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1808,47 +4738,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.04.09.test-injection-agent-py-run",
+      "id": "server-launch.04.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.04.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.04.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.04.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uvx mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
@@ -1860,34 +4751,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.04.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.04.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.04.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.04.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uvx mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
@@ -1899,7 +4764,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.04.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.04.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -1916,7 +4781,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy --record session.jsonl -- node server.js",
+      "command": "uvx --from mcp-guard-audit mcp-guard proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -1925,33 +4790,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.05.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1964,20 +4803,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.05.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -1990,7 +4816,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.06.lock-mcp-json-live",
+      "id": "server-launch.05.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2003,7 +4829,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.07.ui-mcp-json-live",
+      "id": "server-launch.05.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2016,7 +4842,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.05.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2029,47 +4855,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.05.09.test-injection-agent-py-run",
+      "id": "server-launch.05.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.05.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.05.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.05.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uvx --from mcp-guard-audit mcp-guard lock --update -o mcp-guard.lock mcp.json",
@@ -2081,34 +4868,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.05.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.05.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.05.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --from mcp-guard-audit mcp-guard proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.05.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uvx --from mcp-guard-audit mcp-guard proxy --record-bodies --record s.jsonl -- node server.js",
@@ -2120,7 +4881,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.05.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.05.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -2137,7 +4898,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx --system-certs mcp-guard-audit proxy --record session.jsonl -- node server.js",
+      "command": "uvx --system-certs mcp-guard-audit proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2146,33 +4907,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.06.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2185,20 +4920,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.06.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2211,7 +4933,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.06.lock-mcp-json-live",
+      "id": "server-launch.06.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2224,7 +4946,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.07.ui-mcp-json-live",
+      "id": "server-launch.06.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2237,7 +4959,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.06.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2250,47 +4972,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.06.09.test-injection-agent-py-run",
+      "id": "server-launch.06.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.06.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.06.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.06.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uvx --system-certs mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
@@ -2302,34 +4985,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.06.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.06.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.06.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx --system-certs mcp-guard-audit proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.06.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uvx --system-certs mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
@@ -2341,7 +4998,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.06.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.06.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -2358,7 +5015,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy --record session.jsonl -- node server.js",
+      "command": "uvx mcp-guard-audit@0.10.1 proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2367,33 +5024,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.07.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2406,20 +5037,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.07.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2432,7 +5050,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.06.lock-mcp-json-live",
+      "id": "server-launch.07.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2445,7 +5063,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.07.ui-mcp-json-live",
+      "id": "server-launch.07.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2458,7 +5076,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.07.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2471,47 +5089,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.07.09.test-injection-agent-py-run",
+      "id": "server-launch.07.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.07.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.07.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.07.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uvx mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
@@ -2523,34 +5102,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.07.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.07.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.07.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uvx mcp-guard-audit@0.10.1 proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.07.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uvx mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
@@ -2562,7 +5115,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.07.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.07.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -2579,7 +5132,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uv tool run mcp-guard-audit proxy --record session.jsonl -- node server.js",
+      "command": "uv tool run mcp-guard-audit proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2588,33 +5141,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.08.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2627,20 +5154,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.08.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2653,7 +5167,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.06.lock-mcp-json-live",
+      "id": "server-launch.08.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2666,7 +5180,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.07.ui-mcp-json-live",
+      "id": "server-launch.08.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2679,7 +5193,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.08.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2692,47 +5206,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.08.09.test-injection-agent-py-run",
+      "id": "server-launch.08.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.08.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.08.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.08.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uv tool run mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
@@ -2744,34 +5219,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.08.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.08.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.08.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.08.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uv tool run mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
@@ -2783,7 +5232,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.08.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.08.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -2800,7 +5249,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy --record session.jsonl -- node server.js",
+      "command": "uv tool run mcp-guard-audit@0.10.1 proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -2809,33 +5258,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.09.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2848,20 +5271,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.09.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2874,7 +5284,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.06.lock-mcp-json-live",
+      "id": "server-launch.09.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2887,7 +5297,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.07.ui-mcp-json-live",
+      "id": "server-launch.09.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2900,7 +5310,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.09.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -2913,47 +5323,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.09.09.test-injection-agent-py-run",
+      "id": "server-launch.09.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.09.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.09.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.09.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "uv tool run mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
@@ -2965,34 +5336,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.09.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.09.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.09.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "uv tool run mcp-guard-audit@0.10.1 proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.09.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "uv tool run mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
@@ -3004,7 +5349,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.09.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.09.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3021,7 +5366,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "pipx run mcp-guard-audit proxy --record session.jsonl -- node server.js",
+      "command": "pipx run mcp-guard-audit proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3030,33 +5375,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.10.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3069,20 +5388,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.10.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3095,7 +5401,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.06.lock-mcp-json-live",
+      "id": "server-launch.10.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3108,7 +5414,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.07.ui-mcp-json-live",
+      "id": "server-launch.10.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3121,7 +5427,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.10.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3134,47 +5440,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.10.09.test-injection-agent-py-run",
+      "id": "server-launch.10.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.10.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.10.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.10.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "pipx run mcp-guard-audit lock --update -o mcp-guard.lock mcp.json",
@@ -3186,34 +5453,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.10.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.10.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.10.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.10.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "pipx run mcp-guard-audit proxy --record-bodies --record s.jsonl -- node server.js",
@@ -3225,7 +5466,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.10.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.10.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3242,7 +5483,7 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy --record session.jsonl -- node server.js",
+      "command": "pipx run mcp-guard-audit@0.10.1 proxy node server.js --help",
       "disabled_permissions": [],
       "enabled_extensions": [
         "command.mcpguard"
@@ -3251,33 +5492,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.01.proxy-record-session-jsonl-node-server-j",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy --lock mcp-guard.lock --server-name memory -- python server.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.02.proxy-lock-mcp-guard-lock-server-name-me",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 inspect ~/.cursor/mcp.json --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.03.inspect-cursor-mcp-json-live",
+      "id": "server-launch.11.03.proxy-node-server-js-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3290,20 +5505,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.04.inspect-live-yes-timeout-30-mcp-json",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 inspect --server \"npx -y some-server\" --live",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.05.inspect-server-npx-y-some-server-live",
+      "id": "server-launch.11.07.inspect-live-yes-timeout-30-mcp-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3316,7 +5518,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.06.lock-mcp-json-live",
+      "id": "server-launch.11.09.lock-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3329,7 +5531,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.07.ui-mcp-json-live",
+      "id": "server-launch.11.10.ui-mcp-json-live",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3342,7 +5544,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.08.snapshot-save-mcp-json-live-o-snap-json",
+      "id": "server-launch.11.11.snapshot-save-mcp-json-live-o-snap-json",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3355,47 +5557,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "server-launch.11.09.test-injection-agent-py-run",
+      "id": "server-launch.11.12.test-injection-agent-py-run",
       "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 test-injection --run --only p1,p2 ./agent.py",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "server-launch.11.10.test-injection-run-only-p1-p2-agent-py",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 lock mcp.json",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.11.11.lock-mcp-json",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 lock mcp.json -o mcp-guard.lock",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.11.12.lock-mcp-json-o-mcp-guard-lock",
-      "rule_id": "command.mcpguard.lock-approve"
     },
     {
       "command": "pipx run mcp-guard-audit@0.10.1 lock --update -o mcp-guard.lock mcp.json",
@@ -3407,34 +5570,8 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "lock-approve.11.13.lock-update-o-mcp-guard-lock-mcp-json",
+      "id": "lock-approve.11.16.lock-update-o-mcp-guard-lock-mcp-json",
       "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 lock --server \"uvx some-server\"",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "lock-approve.11.14.lock-server-uvx-some-server",
-      "rule_id": "command.mcpguard.lock-approve"
-    },
-    {
-      "command": "pipx run mcp-guard-audit@0.10.1 proxy --record s.jsonl --record-bodies -- node server.js",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "record-bodies.11.15.proxy-record-s-jsonl-record-bodies-node-",
-      "rule_id": "command.mcpguard.record-bodies"
     },
     {
       "command": "pipx run mcp-guard-audit@0.10.1 proxy --record-bodies --record s.jsonl -- node server.js",
@@ -3446,7 +5583,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "record-bodies.11.16.proxy-record-bodies-record-s-jsonl-node-",
+      "id": "record-bodies.11.19.proxy-record-bodies-record-s-jsonl-node-",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3670,30 +5807,6 @@
       "rule_id": "command.mcpguard.server-launch"
     },
     {
-      "command": "mcp-guard proxy --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [],
-      "id": "safe.00.10.proxy-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
-      "command": "uvx mcp-guard-audit proxy --help",
-      "disabled_permissions": [],
-      "enabled_extensions": [
-        "command.mcpguard"
-      ],
-      "expected_action": "review",
-      "expected_effective_segments": [
-        0
-      ],
-      "id": "launcher-stays.01.10.proxy-help",
-      "rule_id": "command.mcpguard.server-launch"
-    },
-    {
       "command": "mcp-guard inspect --live --help",
       "disabled_permissions": [],
       "enabled_extensions": [
@@ -3701,7 +5814,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.11.inspect-live-help",
+      "id": "safe.00.10.inspect-live-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3714,7 +5827,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "launcher-stays.01.11.inspect-live-help",
+      "id": "launcher-stays.01.10.inspect-live-help",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3725,7 +5838,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.12.version",
+      "id": "safe.00.11.version",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3736,7 +5849,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.01.12.version",
+      "id": "safe.01.11.version",
       "rule_id": "command.mcpguard.server-launch"
     },
     {
@@ -3747,7 +5860,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.13.inspect-mcp-json-lock-mcp-guard-lock",
+      "id": "safe.00.12.inspect-mcp-json-lock-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -3758,7 +5871,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.01.13.inspect-mcp-json-lock-mcp-guard-lock",
+      "id": "safe.01.12.inspect-mcp-json-lock-mcp-guard-lock",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -3769,7 +5882,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.14.lock-help",
+      "id": "safe.00.13.lock-help",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -3782,7 +5895,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "launcher-stays.01.14.lock-help",
+      "id": "launcher-stays.01.13.lock-help",
       "rule_id": "command.mcpguard.lock-approve"
     },
     {
@@ -3793,7 +5906,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.15.proxy-record-s-jsonl-node-server-js",
+      "id": "safe.00.14.proxy-record-s-jsonl-node-server-js",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3804,7 +5917,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.01.15.proxy-record-s-jsonl-node-server-js",
+      "id": "safe.01.14.proxy-record-s-jsonl-node-server-js",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3815,7 +5928,7 @@
       ],
       "expected_action": "review",
       "expected_effective_segments": [],
-      "id": "safe.00.16.proxy-node-server-js-record-bodies",
+      "id": "safe.00.15.proxy-node-server-js-record-bodies",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3828,7 +5941,7 @@
       "expected_effective_segments": [
         0
       ],
-      "id": "launcher-stays.01.16.proxy-node-server-js-record-bodies",
+      "id": "launcher-stays.01.15.proxy-node-server-js-record-bodies",
       "rule_id": "command.mcpguard.record-bodies"
     },
     {
@@ -3893,6 +6006,36 @@
       ],
       "id": "disabled-bodies",
       "rule_id": "command.mcpguard.record-bodies"
+    },
+    {
+      "command": "uvx mcp-guard-audit lock mcp.json",
+      "disabled_permissions": [
+        "command.mcpguard.permission.lock-approve"
+      ],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-lock-uvx",
+      "rule_id": "command.mcpguard.lock-approve"
+    },
+    {
+      "command": "pipx run mcp-guard-audit proxy -- node s.js",
+      "disabled_permissions": [
+        "command.mcpguard.permission.server-launch"
+      ],
+      "enabled_extensions": [
+        "command.mcpguard"
+      ],
+      "expected_action": "block",
+      "expected_effective_segments": [
+        0
+      ],
+      "id": "disabled-launch-pipx",
+      "rule_id": "command.mcpguard.server-launch"
     },
     {
       "command": "mcp-guard lock mcp.json",
