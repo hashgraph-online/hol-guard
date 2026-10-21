@@ -590,6 +590,7 @@
           "command.aether-vault",
           "command.agentbridge",
           "command.agenticjobs",
+          "command.agentsocks",
           "command.agi-memory",
           "command.ai-dev",
           "command.answerloops",
