@@ -4,7 +4,8 @@
 //! Every read happens in one read-only transaction. The op never writes: work
 //! only a writer may do comes back as an `action`, together with the
 //! authenticated inputs it needs, and the caller performs it under the
-//! exclusive authority lease before asking again. A read that ends on a
+//! exclusive authority lease before asking again. The writer's own decisions
+//! come back the same way, as the `plan` a `*_plan` op answers with. A read that ends on a
 //! verdict also reports the catalog-migration events it found missing, which
 //! the caller records.
 //!
@@ -14,18 +15,22 @@
 
 mod catalog;
 mod chain;
+mod history;
 mod layers;
 mod managed;
 #[cfg(test)]
 mod managed_tests;
+mod plans;
+#[cfg(test)]
+mod plans_tests;
 mod records;
 #[cfg(test)]
 mod tests;
+mod view;
 
 use std::cell::RefCell;
 
 use base64ct::{Base64UrlUnpadded, Encoding};
-use guard_command::extension_control::ExtensionControlLayer;
 use guard_contracts::{
     ExtensionControlAuthorityRequestV1, ExtensionControlAuthorityResultV1,
     EXTENSION_CONTROL_AUTHORITY_MAX_BYTES, EXTENSION_CONTROL_AUTHORITY_REQUEST_SCHEMA,
@@ -37,14 +42,12 @@ use zeroize::Zeroizing;
 
 use crate::local_store_read::{open_read_only, require_store_path};
 use crate::package_authority_op::request_digest_with_limit;
-use layers::{
-    layers_from_json, layers_from_values, layers_to_values, validate_layers,
-    validate_serialized_layers, Manifest,
-};
+use layers::{layers_from_json, validate_layers, validate_serialized_layers, Manifest};
 use records::{
     degraded, fields_match, parse_anchor, query_row, row_py_int, row_str, row_text, row_value,
     tampered, verify_record, Anchor, Fault, Phase, Res, Row, SNAPSHOT_PURPOSE,
 };
+use view::View;
 
 const INVALID: &str = "native_extension_control_authority_invalid";
 const STORE_UNAVAILABLE: &str = "extension control authority store unavailable";
@@ -91,7 +94,7 @@ fn evaluate(request: &ExtensionControlAuthorityRequestV1) -> Result<Value, Strin
         "managed_activation" => managed::activation_op(request, key),
         "managed_revision" => managed::revision_op(request, key),
         "read" | "read_composed" | "sync_manifest" | "compose_managed" | "load_manifest"
-        | "validate_chain" => {
+        | "validate_chain" | "history" | "commit_plan" | "resume_plan" | "rollback_plan" => {
             return with_store(request, key);
         }
         _ => return Err(INVALID.to_owned()),
@@ -152,67 +155,6 @@ pub(super) struct Ctx<'a> {
     key: Option<&'a [u8]>,
     pub(super) request: &'a ExtensionControlAuthorityRequestV1,
     events: RefCell<Vec<Value>>,
-}
-
-/// `ExtensionControlAuthorityView`. `health` is carried as its wire name so a
-/// view the caller sends back keeps its acknowledged or unacknowledged
-/// degraded state.
-#[derive(Debug, Clone)]
-pub(super) struct View {
-    pub(super) health: String,
-    pub(super) revision: i64,
-    pub(super) catalog_digest: String,
-    pub(super) layers: Vec<ExtensionControlLayer>,
-    pub(super) managed_revision: i64,
-}
-
-impl View {
-    fn bare(health: &str, revision: i64, catalog_digest: &str) -> Self {
-        Self {
-            health: health.to_owned(),
-            revision,
-            catalog_digest: catalog_digest.to_owned(),
-            layers: Vec::new(),
-            managed_revision: 0,
-        }
-    }
-
-    pub(super) fn to_value(&self) -> Value {
-        json!({
-            "health": self.health,
-            "revision": self.revision,
-            "catalog_digest": self.catalog_digest,
-            "layers": layers_to_values(&self.layers),
-            "managed_revision": self.managed_revision,
-        })
-    }
-
-    fn from_value(value: Option<&Value>) -> Res<Self> {
-        let invalid = || tampered("invalid extension control authority view");
-        let Some(Value::Object(view)) = value else {
-            return Err(invalid());
-        };
-        let int = |name: &str| {
-            view.get(name)
-                .and_then(records::exact_int)
-                .ok_or_else(invalid)
-        };
-        Ok(Self {
-            health: view
-                .get("health")
-                .and_then(Value::as_str)
-                .ok_or_else(invalid)?
-                .to_owned(),
-            revision: int("revision")?,
-            catalog_digest: view
-                .get("catalog_digest")
-                .and_then(Value::as_str)
-                .ok_or_else(invalid)?
-                .to_owned(),
-            layers: layers_from_values(view.get("layers").unwrap_or(&Value::Null))?,
-            managed_revision: int("managed_revision")?,
-        })
-    }
 }
 
 /// How far one `_read_extension_control_authority_locked` call may go.
@@ -294,6 +236,10 @@ impl Ctx<'_> {
                 self.validate_transition_chain(revision, snapshot_digest)?;
                 Ok(json!({ "ok": true }))
             }
+            "history" => self.history(),
+            "commit_plan" => self.commit_plan(),
+            "resume_plan" => self.resume_plan(),
+            "rollback_plan" => self.rollback_plan(),
             _ => Err(tampered("unsupported extension control authority op")),
         }
     }

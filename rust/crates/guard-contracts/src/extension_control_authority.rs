@@ -10,7 +10,11 @@
 //! credential store, so the transport reads them and ships them here along
 //! with the clock.
 //!
-//! The op never writes. When a read finds work only a writer may do --
+//! The op never writes. The `commit_plan`, `resume_plan` and `rollback_plan`
+//! ops decide a writer's next step -- the checks a commit must pass, the
+//! records it seals, and whether a prepared transition is resumed, committed
+//! or abandoned -- and the caller performs that step under the exclusive
+//! authority lease. When a read finds work only a writer may do --
 //! restoring the last-good export, resuming or abandoning a prepared
 //! transition, or committing a catalog migration -- it answers with an
 //! `action` naming that work and the authenticated inputs it needs. The caller
@@ -49,7 +53,8 @@ pub struct ExtensionControlAuthorityRequestV1 {
     pub guard_home: String,
     /// `read`, `read_composed`, `sync_manifest`, `compose_managed`,
     /// `managed_activation`, `managed_revision`, `load_manifest`,
-    /// `validate_chain` or `anchor`.
+    /// `validate_chain`, `history`, `commit_plan`, `resume_plan`,
+    /// `rollback_plan` or `anchor`.
     pub op: String,
     /// Authority authentication key bytes (base64url, no padding); absent
     /// when the credential store holds none.
@@ -95,10 +100,41 @@ pub struct ExtensionControlAuthorityRequestV1 {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub state: Option<Value>,
     /// `validate_chain`: the committed head to validate up to.
+    /// `resume_plan`: the prepared transition to resume.
+    /// `rollback_plan`: the committed head the prepared transition sits on.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub revision: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub snapshot_digest: Option<String>,
+    /// `commit_plan` / `rollback_plan`: the caller's clock, as Python's
+    /// `datetime.now(timezone.utc).isoformat()` spells it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub now: Option<String>,
+    /// `history`: how many prior snapshots to list.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub limit: Option<i64>,
+    /// `commit_plan`: the mutation the caller's proof was validated against.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub commit: Option<ExtensionControlCommitV1>,
+}
+
+/// One requested extension-control commit. The identities are sent as the
+/// caller received them; the resident keys them into private hashes.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ExtensionControlCommitV1 {
+    pub actor_id: String,
+    pub idempotency_key: String,
+    pub nonce: String,
+    pub proof_id: String,
+    /// `ExtensionControlMutation.canonical_digest`.
+    pub mutation_digest: String,
+    /// The requested layers, serialized as `layers_to_json` writes them.
+    pub layers_json: String,
+    pub expected_revision: i64,
+    /// The activated command pack record, when the commit activates one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pack_record_digest: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

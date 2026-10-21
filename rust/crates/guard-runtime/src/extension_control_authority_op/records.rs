@@ -84,7 +84,6 @@ fn compare_digest(actual: &str, expected: &str) -> Res<bool> {
 }
 
 /// `authenticated_record`: the framed canonical record, its digest and MAC.
-#[cfg(test)]
 pub(super) fn authenticated_record(
     payload: &Map<String, Value>,
     key: &[u8],
