@@ -13,7 +13,7 @@ mod hidden_listing;
 #[path = "omp_json_query.rs"]
 mod omp_json_query;
 #[path = "omp_read_targets.rs"]
-mod omp_targets;
+pub(super) mod omp_targets;
 use hidden_listing::resolved_home_hidden_content_read;
 pub(super) use hidden_listing::{
     home_hidden_content_read, home_hidden_directory, home_hidden_tool_directory,

@@ -304,6 +304,14 @@ pub(super) fn exact_safe_segment_with_context(
         "diff" => super::metadata_reads::safe_diff_arguments(&segment.arguments, context),
         "file" => super::metadata_reads::safe_file_arguments(&segment.arguments, context),
         "stat" => super::metadata_reads::safe_stat_arguments(&segment.arguments, context),
+        "dirname" | "basename" => {
+            super::path_word_reads::safe_path_word_arguments(basename, &segment.arguments)
+        }
+        "readlink" | "realpath" => super::path_word_reads::safe_resolved_path_arguments(
+            basename,
+            &segment.arguments,
+            context,
+        ),
         "cp" => {
             super::chain_temporary::copy_segments_allowed(model, segment, context)
                 && super::directory_targets::drive_targets_quoted(segment)
@@ -390,8 +398,9 @@ pub(super) fn exact_safe_segment_with_context(
             )
         }
         "sort" | "uniq" | "cut" | "tr" => {
-            segment.pipeline_index > 0
-                && super::stdin_filters::safe_arguments(basename, &segment.arguments)
+            (segment.pipeline_index > 0
+                && super::stdin_filters::safe_arguments(basename, &segment.arguments))
+                || super::stdin_filters::safe_file_arguments(basename, &segment.arguments, context)
         }
         "rg" | "grep" | "fd" => {
             (match basename {

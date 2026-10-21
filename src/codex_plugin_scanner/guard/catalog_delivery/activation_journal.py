@@ -143,14 +143,15 @@ def finish(store, connection, transition):
     if "lifecycle_before" not in link:
         from . import lifecycle
 
-        link.update(
-            lifecycle.invoke(
-                "legacy-pending",
-                key=key.hex(),
-                floor=lifecycle_store.read(store),
-                **lifecycle_store.legacy_evidence(store, connection),
+        with lifecycle_store.legacy_transport(store, connection) as evidence:
+            link.update(
+                lifecycle.invoke(
+                    "legacy-pending",
+                    key=key.hex(),
+                    floor=lifecycle_store.read(store),
+                    **evidence,
+                )
             )
-        )
     draft = object.__new__(ActivationDraft)
     for name, value in {
         "directory": directory_for_store(store),

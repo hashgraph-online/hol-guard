@@ -98,6 +98,10 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
     marked = {c.base_id for c in expand() if c.expect == "block" and c.contained_ok}
     assert marked == {
         "neg-cargo-check-locked-host-toolchain",
+        # A filter whose grammar the read recognizer rejects: the operands stay inside the
+        # workspace, so the contained run reaches nothing, and the case pins the rejection
+        # rather than an approval prompt an in-worktree write would never raise.
+        "neg-cut-without-selection",
         "neg-env-bare-set-then-list",
         "neg-env-git-dir-then-list",
         "neg-env-ld-preload-then-list",
@@ -126,6 +130,13 @@ def test_only_the_marked_cases_may_pass_on_containment() -> None:
         "neg-sibling-find-github-exec-cat",
         "neg-sibling-ls-missing-env-below-github",
         "neg-sibling-node-heap-require-other-checkout",
+        # The same rejection for a filter that names an output file. `neg-sort-output-file`
+        # and `neg-uniq-output-operand` carry the strict direction with an escaping path;
+        # these keep the in-worktree shape on record, where the write cannot leave the
+        # workspace and the contained run is the designed outcome.
+        "neg-sort-output-file-in-worktree",
+        "neg-tr-file-operand",
+        "neg-uniq-output-operand-in-worktree",
     }
 
 

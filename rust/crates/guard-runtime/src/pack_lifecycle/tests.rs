@@ -1,5 +1,7 @@
 use super::*;
 
+mod spilled_history;
+
 fn installed() -> Identity {
     Identity {
         profile: "installed".into(),

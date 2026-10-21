@@ -223,13 +223,13 @@ pub(super) fn evaluate_signals(
     }
     if action_type == PreToolActionTypeV1::FileRead
         && event == "PreToolUse"
-        && harness == "omp"
-        && signals.tool_name.as_deref() == Some("read")
         && !signals.sensitive_target
         && signals.url_values.is_empty()
         && signals.command.is_none()
         && signals.path_values.len() == 1
-        && super::super::safe_reads::bounded_omp_directory_read_target(
+        && super::super::read_paths::omp_targets::bounded_directory_read_tool_target(
+            harness,
+            signals.tool_name.as_deref(),
             &signals.path_values[0],
             home_dir,
             cwd,
