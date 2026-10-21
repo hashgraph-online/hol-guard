@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "guard.mcp-server-contribution.v1",
+  "id": "mcp.garmin-coach-mcp",
+  "version": "1.0.0",
+  "name": "Garmin Coach MCP",
+  "description": "Reads Garmin Connect data (sleep, health metrics, activities, training load) and writes structured workouts to the Garmin calendar. Four tools change the account: create, schedule, unschedule and delete workouts. Off until you turn it on.",
+  "trustClass": "external",
+  "activation": "opt-in",
+  "publisher": {
+    "id": "io.github.yeisonfjrd",
+    "displayName": "Yeison Fajardo",
+    "url": "https://github.com/Yeisonfjrd"
+  },
+  "icon": {
+    "kind": "react-icon",
+    "name": "HiMiniBolt",
+    "background": "#2E1065"
+  },
+  "homepage": "https://github.com/Yeisonfjrd/garmin-coach-mcp",
+  "license": "MIT",
+  "launch": {
+    "kind": "package-launcher",
+    "command": "npx",
+    "package": "garmin-coach-mcp"
+  },
+  "riskClasses": [
+    "external-network-read",
+    "external-shared-state-write",
+    "external-content-deletion",
+    "local-file-write",
+    "package-or-source-installation"
+  ],
+  "tools": [
+    {
+      "name": "get_daily_overview",
+      "state": "inherit"
+    },
+    {
+      "name": "get_sleep_data",
+      "state": "inherit"
+    },
+    {
+      "name": "get_health_metrics",
+      "state": "inherit"
+    },
+    {
+      "name": "get_heart_rate_data",
+      "state": "inherit"
+    },
+    {
+      "name": "get_weight_data",
+      "state": "inherit"
+    },
+    {
+      "name": "get_hydration_data",
+      "state": "inherit"
+    },
+    {
+      "name": "get_activities",
+      "state": "inherit"
+    },
+    {
+      "name": "get_activity_details",
+      "state": "inherit"
+    },
+    {
+      "name": "get_weekly_volume",
+      "state": "inherit"
+    },
+    {
+      "name": "get_training_stress_balance",
+      "state": "inherit"
+    },
+    {
+      "name": "get_vo2max",
+      "state": "inherit"
+    },
+    {
+      "name": "get_activity_laps",
+      "state": "inherit"
+    },
+    {
+      "name": "get_race_predictions",
+      "state": "inherit"
+    },
+    {
+      "name": "get_hrv",
+      "state": "inherit"
+    },
+    {
+      "name": "get_training_status",
+      "state": "inherit"
+    },
+    {
+      "name": "get_hr_zones",
+      "state": "inherit"
+    },
+    {
+      "name": "get_activity_hr_zones",
+      "state": "inherit"
+    },
+    {
+      "name": "get_training_readiness",
+      "state": "inherit"
+    },
+    {
+      "name": "get_scheduled_workouts",
+      "state": "inherit"
+    },
+    {
+      "name": "get_workout_details",
+      "state": "inherit"
+    },
+    {
+      "name": "create_running_workout",
+      "state": "review"
+    },
+    {
+      "name": "schedule_workout",
+      "state": "review"
+    },
+    {
+      "name": "unschedule_workout",
+      "state": "review"
+    },
+    {
+      "name": "delete_workout",
+      "state": "review"
+    },
+    {
+      "name": "get_nutrition",
+      "state": "inherit"
+    },
+    {
+      "name": "other",
+      "state": "review"
+    }
+  ],
+  "referenceUrls": [
+    "https://github.com/Yeisonfjrd/garmin-coach-mcp",
+    "https://github.com/Yeisonfjrd/garmin-coach-mcp#readme",
+    "https://www.npmjs.com/package/garmin-coach-mcp"
+  ],
+  "saferAlternatives": [
+    "Set GARMIN_READ_ONLY=true: the four tools that change the account are not listed and the server rejects them if a client calls them anyway.",
+    "The write tools carry MCP annotations (readOnlyHint false; delete_workout and unschedule_workout also destructiveHint true), so clients can ask before running them.",
+    "Garmin credentials come from environment variables and are only sent to Garmin Connect. The server keeps HRV and form history in ~/.garmin-connect-mcp.",
+    "Pin the package version when launching with npx (for example garmin-coach-mcp@0.6.0) so only the reviewed release runs."
+  ]
+}
