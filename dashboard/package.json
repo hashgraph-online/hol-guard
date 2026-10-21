@@ -17,6 +17,7 @@
     "test:managed-controls-ui": "tsx src/managed-controls/extension-managed-controls-panel.test.tsx && tsx src/managed-controls/local-protection-model.test.ts && tsx src/protection-center/protection-module-detail.test.tsx && tsx src/protection-center/extension-activity.test.tsx && tsx src/extension-policy-panel.managed-controls.test.ts && tsx src/extension-controls-normalize.test.ts",
     "test:e2e": "playwright test",
     "test:e2e:installed": "playwright test --config playwright.installed.config.ts",
+    "test:e2e:integration": "playwright test --config playwright.integration.config.ts",
     "dev": "vite dev",
     "test:temporary-mcp": "tsx src/temporary-mcp-approval.test.tsx",
     "test:local-tool": "tsx src/local-tool-approval.test.tsx"

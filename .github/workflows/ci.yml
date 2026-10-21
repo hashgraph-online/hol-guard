@@ -938,6 +938,42 @@ jobs:
           css_size=$(du -sh ../src/codex_plugin_scanner/guard/daemon/static/assets/index.css | cut -f1)
           echo "Bundle JS: ${js_size:-unknown}, CSS: ${css_size:-unknown}"
 
+  dashboard-integration:
+    # Drives the committed dashboard bundle against a real, seeded Guard daemon
+    # in Chrome. No API mocks: every screen reads and writes through the daemon.
+    needs: [plan, native-command-evaluators]
+    if: >-
+      !cancelled() &&
+      needs.native-command-evaluators.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+       (needs.plan.result == 'success' && needs.plan.outputs.data_only != 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: ${{ env.CI_PYTHON_VERSION }}
+          cache-dependency-glob: ${{ env.CI_UV_CACHE_DEPENDENCY_GLOB }}
+      - name: Download native command evaluators
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: pytest-native-command-evaluators
+          path: rust/target/release
+      - uses: ./.github/actions/restore-command-projections
+      - run: |
+          chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
+          echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: "1.3.14"
+      - run: cd dashboard && bun install --frozen-lockfile
+      # Uses the runner's preinstalled Google Chrome, so no browser download.
+      - name: Dashboard integration suite
+        run: cd dashboard && bun run test:e2e:integration
+
   cisco-full:
     needs: [plan, native-command-evaluators]
     if: >-
@@ -1114,7 +1150,7 @@ jobs:
   required:
     name: hol-guard / required
     if: always()
-    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
+    needs: [plan, native-workspace, native-command-evaluators, native-offline-previous, native-offline-upgrade, native-gates, quality, coverage, compatibility, scheduling-sensitive, dashboard, dashboard-integration, cisco-full, ci-python-312, pi-exact-continuation, cross-platform, windows-native-runtime, windows-shim-admin, windows-packaged-daemon, macos-native-runtime, macos-skill-identity, macos-gates]
     runs-on: ubuntu-latest
     timeout-minutes: 2
     permissions:
@@ -1148,7 +1184,7 @@ jobs:
           # Lane-gated required set: skipped is acceptable only on a data-only
           # plan; failure/cancelled always fails.
           required = ["coverage","compatibility","scheduling-sensitive",
-                      "dashboard","cisco-full","pi-exact-continuation","cross-platform",
+                      "dashboard","dashboard-integration","cisco-full","pi-exact-continuation","cross-platform",
                       "windows-native-runtime","windows-shim-admin","windows-packaged-daemon",
                       "macos-native-runtime","macos-skill-identity","macos-gates"]
           missing = [j for j in always_on + required if j not in needs]

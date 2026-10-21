@@ -85,3 +85,6 @@ src/codex_plugin_scanner/guard/contracts/data/extensions/trust-class-map.v1.json
 
 # per-session editor hook cache (local paths, never committed)
 dashboard/.impeccable/hook.cache.json
+
+# Dashboard integration run output can hold local session URLs.
+/dashboard/e2e/proofs/integration-output/
