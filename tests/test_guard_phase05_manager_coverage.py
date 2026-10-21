@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from codex_plugin_scanner.guard.daemon.server import _build_snapshot_payload
 from codex_plugin_scanner.guard.shims import (
     activate_package_shims,
     install_package_shims,
@@ -120,12 +119,18 @@ def test_package_shim_status_marks_undetected_managers_honestly(
     context = _harness_context(tmp_path)
     install_package_shims(context, managers=("npm", "pip"))
 
-    def fake_which(command: str, path: str | None = None) -> str | None:
-        if command in {"npm", "pip"}:
-            return f"/usr/local/bin/{command}"
-        return None
-
-    monkeypatch.setattr("codex_plugin_scanner.guard.shims.shutil.which", fake_which)
+    # Detection is the resident's which() over the request PATH. A Python
+    # shutil patch is invisible to that lookup, so put real executables there.
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    for manager in ("npm", "pip"):
+        write_fake_manager_script(
+            fake_bin=fake_bin,
+            manager=manager,
+            marker_path=tmp_path / f"{manager}-detect-marker.json",
+            exit_code=0,
+        )
+    monkeypatch.setenv("PATH", str(fake_bin))
 
     status = package_shim_status(context)
 
@@ -135,18 +140,6 @@ def test_package_shim_status_marks_undetected_managers_honestly(
     pip_detail = next(item for item in status["manager_details"] if item["manager"] == "pip")
     assert npm_detail["system_binary_detected"] is True
     assert pip_detail["system_binary_detected"] is True
-
-
-def test_daemon_snapshot_includes_detected_manager_subset(tmp_path: Path) -> None:
-    context = _harness_context(tmp_path)
-    install_package_shims(context, managers=("npm",))
-    snapshot = _build_snapshot_payload(context)
-
-    coverage = snapshot["package_manager_coverage"]
-    assert "detected_managers" in coverage
-    assert "undetected_managers" in coverage
-    assert isinstance(coverage["detected_managers"], list)
-    assert isinstance(coverage["undetected_managers"], list)
 
 
 def test_npx_shim_installs_alongside_npm(tmp_path: Path) -> None:

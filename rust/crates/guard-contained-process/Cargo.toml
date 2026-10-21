@@ -1,0 +1,18 @@
+[package]
+name = "guard-contained-process"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+libc = "0.2"
+sha2.workspace = true
+serde_json.workspace = true
+hex.workspace = true
+tempfile = "3.10"
+getrandom.workspace = true
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3.9", features = ["aclapi", "accctrl", "fileapi", "handleapi", "memoryapi", "minwinbase", "processthreadsapi", "securitybaseapi", "userenv", "winbase", "winnt"] }

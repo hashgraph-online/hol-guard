@@ -10,6 +10,11 @@ from pathlib import Path
 import pytest
 
 from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
+from codex_plugin_scanner.guard.adapters._modules.devin.devin_hooks import (
+    devin_hook_response_from_guard,
+    emit_devin_hook_response,
+    prepare_devin_hook_payload,
+)
 from codex_plugin_scanner.guard.adapters.base import HarnessContext, _shell_command
 from codex_plugin_scanner.guard.adapters.devin import DevinHarnessAdapter
 from codex_plugin_scanner.guard.adapters.devin_config import (
@@ -17,12 +22,6 @@ from codex_plugin_scanner.guard.adapters.devin_config import (
     GUARD_MANAGED_MARKER,
     is_guard_managed_hook_command,
     load_devin_jsonc,
-)
-from codex_plugin_scanner.guard.adapters.devin_hooks import (
-    devin_hook_response_from_guard,
-    devin_hook_should_block,
-    emit_devin_hook_response,
-    prepare_devin_hook_payload,
 )
 from codex_plugin_scanner.guard.inventory_contract import _agent_type
 
@@ -308,19 +307,23 @@ class TestDevinWindowsPaths:
 
         ctx = _ctx(tmp_path)
         appdata = tmp_path / "AppData" / "Roaming"
-        monkeypatch.setattr(os, "name", "nt")
-        monkeypatch.setenv("APPDATA", str(appdata))
-        monkeypatch.setattr("codex_plugin_scanner.guard.adapters.devin.Path", PureWindowsPath)
-        adapter = DevinHarnessAdapter()
+        with monkeypatch.context() as platform_patch:
+            platform_patch.setattr(os, "name", "nt")
+            platform_patch.setenv("APPDATA", str(appdata))
+            platform_patch.setattr("codex_plugin_scanner.guard.adapters.devin.Path", PureWindowsPath)
+            adapter = DevinHarnessAdapter()
+            actual = adapter._user_config_path(ctx)
         expected = PureWindowsPath(str(appdata)) / "devin" / "config.json"
-        assert adapter._user_config_path(ctx) == expected
+        assert actual == expected
 
     def test_unix_config_dir_ignores_appdata(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(os, "name", "posix")
-        monkeypatch.setenv("APPDATA", str(tmp_path / "unused"))
-        adapter = DevinHarnessAdapter()
-        assert adapter._user_config_path(ctx) == ctx.home_dir / ".config" / "devin" / "config.json"
+        with monkeypatch.context() as platform_patch:
+            platform_patch.setattr(os, "name", "posix")
+            platform_patch.setenv("APPDATA", str(tmp_path / "unused"))
+            adapter = DevinHarnessAdapter()
+            actual = adapter._user_config_path(ctx)
+        assert actual == ctx.home_dir / ".config" / "devin" / "config.json"
 
     def test_utf16_config_warns_and_install_refuses(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
@@ -335,10 +338,6 @@ class TestDevinWindowsPaths:
             DevinHarnessAdapter().install(ctx)
 
     def _shim_safe(self, monkeypatch, ctx: HarnessContext) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.devin.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
@@ -401,36 +400,41 @@ class TestDevinWindowsPaths:
         config_path.parent.mkdir(parents=True, exist_ok=True)
         config_path.write_text("{}", encoding="utf-8")
         original_bytes = config_path.read_bytes()
+        from codex_plugin_scanner.guard import codex_hook_recovery
 
-        def _deny(*_args: object, **_kwargs: object) -> str:
-            raise PermissionError("denied")
+        original_open = codex_hook_recovery.os.open
 
-        monkeypatch.setattr(Path, "read_text", _deny)
-        result = DevinHarnessAdapter().detect(ctx)
+        def deny_snapshot(path, *args, **kwargs):
+            if Path(path) == config_path:
+                raise PermissionError("denied")
+            return original_open(path, *args, **kwargs)
+
+        with monkeypatch.context() as snapshot_patch:
+            snapshot_patch.setattr(codex_hook_recovery.os, "open", deny_snapshot)
+            with pytest.raises(ValueError, match="could not be parsed"):
+                DevinHarnessAdapter().install(ctx)
+        assert config_path.read_bytes() == original_bytes
+
+        # Detection runs in the resident, so the file must be unreadable on disk.
+        config_path.chmod(0)
+        try:
+            if os.access(config_path, os.R_OK):
+                pytest.skip("file permissions are not enforced for this user")
+            result = DevinHarnessAdapter().detect(ctx)
+        finally:
+            config_path.chmod(0o600)
         assert str(config_path) in result.config_paths
         assert any("could not be parsed" in warning for warning in result.warnings)
-        with pytest.raises(ValueError, match="could not be parsed"):
-            DevinHarnessAdapter().install(ctx)
-        monkeypatch.undo()
-        assert config_path.read_bytes() == original_bytes
 
     def test_missing_config_still_counts_as_absent(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
         missing = _user_config_path(ctx)
         assert not missing.exists()
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
         DevinHarnessAdapter().install(ctx)
         assert json.loads(missing.read_text(encoding="utf-8"))["hooks"]
 
     def test_install_writes_config_atomically_without_leftover_temps(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
         DevinHarnessAdapter().install(ctx)
         config_path = _user_config_path(ctx)
         assert json.loads(config_path.read_text(encoding="utf-8"))["hooks"]
@@ -441,10 +445,6 @@ class TestDevinWindowsPaths:
 
 class TestDevinInstallUninstall:
     def _patch_shims(self, monkeypatch, ctx: HarnessContext) -> None:
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.devin.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
-        )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.devin.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-devin"), "notes": []},
@@ -781,11 +781,6 @@ class TestDevinHookResponses:
         emit_devin_hook_response(policy_action="block", reason="no", event_name="PreToolUse", output_stream=stream)
         response = json.loads(stream.getvalue())
         assert response["decision"] == "block"
-
-    def test_should_block_classification(self) -> None:
-        for action in ("review", "require-reapproval", "sandbox-required", "block"):
-            assert devin_hook_should_block(policy_action=action) is True
-        assert devin_hook_should_block(policy_action="allow") is False
 
 
 class TestDevinManagedMarker:

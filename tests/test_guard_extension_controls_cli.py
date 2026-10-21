@@ -76,6 +76,7 @@ def test_status_without_daemon_is_read_only(tmp_path: Path) -> None:
     assert result == 2
     assert not guard_home.exists()
 
+
 @pytest.mark.parametrize("program_name", ["hol-guard", "plugin-scanner", "plugin-guard", "plugin-ecosystem-scanner"])
 def test_controls_help_is_available_from_every_installed_alias(
     program_name: str,
@@ -98,14 +99,14 @@ def test_controls_help_is_available_from_every_installed_alias(
 
     assert exit_info.value.code == 0
     assert (
-        "{status,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
+        "{status,prefetch,export-offline,import-offline,cleanup-cache,patterns,set,list,show,preview,apply,global-preview,global-apply,enroll,recover-authority,acknowledge-degraded}"
     ) in capsys.readouterr().out
 
 
 @pytest.mark.parametrize(
     ("command", "expected_calls"),
     (
-        ("recover-authority", ("prompt", "require", "consume", "recover", "refresh")),
+        ("recover-authority", ("prompt", "require", "consume", "recover", "daemon-recover")),
         ("acknowledge-degraded", ("prompt", "ensure", "acknowledge")),
     ),
 )
@@ -126,7 +127,7 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def __init__(self, guard_home: Path) -> None:
             assert guard_home == tmp_path
 
-        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
             assert registry
             return view
 
@@ -145,6 +146,11 @@ def test_authority_recovery_requires_and_consumes_fresh_local_approval(
         def refresh_extension_controls(self) -> dict[str, object]:
             calls.append("refresh")
             return {"health": "protected", "revision": 7}
+
+        def recover_extension_control_authority(self, payload: dict[str, object]) -> dict[str, object]:
+            assert payload == {}
+            calls.append("daemon-recover")
+            return {"health": "protected", "revision": 0}
 
         def acknowledge_degraded_extension_controls(
             self,
@@ -198,7 +204,7 @@ def test_degraded_acknowledgement_reports_daemon_startup_failure(
     view = SimpleNamespace(health=SimpleNamespace(value="degraded"), revision=0)
 
     class FakeStore:
-        def read_extension_control_authority_for_registry(self, registry: object) -> object:
+        def read_extension_control_authority_for_registry(self, registry: object, **_kwargs) -> object:
             assert registry
             return view
 

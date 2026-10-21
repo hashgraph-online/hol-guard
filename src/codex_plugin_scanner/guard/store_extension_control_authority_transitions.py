@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from typing import cast
 
 from .runtime.extension_control_authority import (
@@ -27,6 +28,21 @@ from .store_extension_control_authority_support import (
     _row_optional_str,
     _row_str,
 )
+
+# A request that failed after preparing its transition may be retried with the
+# same single-use proof, which needs the prepared row and proof reservation to
+# survive. Only transitions older than this are treated as abandoned.
+ABANDONED_TRANSITION_GRACE_SECONDS = 300.0
+
+
+def _prepared_row_is_stale(row: sqlite3.Row) -> bool:
+    try:
+        created = datetime.fromisoformat(_row_str(row, "created_at"))
+    except ValueError:
+        return False
+    if created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - created).total_seconds() >= ABANDONED_TRANSITION_GRACE_SECONDS
 
 
 class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySupportMixin):
@@ -122,6 +138,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
                 "delete from extension_control_authority_transition where revision = ?",
                 (revision,),
             )
+            from .catalog_delivery.activation_journal import abandon
+
+            abandon(connection, revision)
             return None
         if (
             anchor.revision == revision
@@ -164,6 +183,68 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
             return current
         raise ExtensionControlAuthorityError("idempotent transition state mismatch")
 
+    def _roll_back_abandoned_transition(
+        self,
+        revision: int,
+        *,
+        snapshot_digest: str,
+        anchor: AuthorityAnchor,
+        key: bytes,
+    ) -> bool:
+        """Discard a prepared transition the vault anchor never moved past.
+
+        A request that dies before its anchor write leaves a prepared row at
+        revision + 1 while the committed anchor still pins the current
+        snapshot. That row never took effect, so removing it restores the
+        previous authority without applying anything. The row is authenticated
+        first, and anchored or committed transitions are left for explicit
+        recovery. Rows younger than the grace window are kept so the original
+        request can retry with its single-use proof. Returns whether the
+        abandoned row was removed.
+        """
+
+        if (
+            anchor.revision != revision
+            or anchor.snapshot_digest != snapshot_digest
+            or anchor.phase is not AuthorityPhase.COMMITTED
+        ):
+            return False
+        pending = self._pending_transition(revision + 1)
+        if pending is None or _row_str(pending, "phase") != AuthorityPhase.PREPARED.value:
+            return False
+        if not _prepared_row_is_stale(pending):
+            return False
+        from .native_policy_snapshot_constants import NativePolicySnapshotError
+
+        try:
+            with self._connect() as connection:
+                resumed = self._resume_idempotent_transition(
+                    connection,
+                    pending,
+                    current=ExtensionControlAuthorityView(
+                        AuthorityHealth.RECOVERY_REQUIRED, revision, _row_str(pending, "catalog_digest"), ()
+                    ),
+                    catalog_digest=_row_str(pending, "catalog_digest"),
+                    layers_json=_row_str(pending, "layers_json"),
+                    actor_hash=_row_str(pending, "actor_id_hash"),
+                    idempotency_hash=_row_str(pending, "idempotency_key_hash"),
+                    nonce_hash=_row_str(pending, "nonce_hash"),
+                    expected_revision=_row_int(pending, "previous_revision"),
+                    key=key,
+                )
+                if resumed is not None:
+                    return False
+                _ = connection.execute(
+                    "delete from extension_control_authority_proof "
+                    "where transition_revision = ? and consumed_at is null",
+                    (revision + 1,),
+                )
+        except (ExtensionControlAuthorityError, NativePolicySnapshotError):
+            # Readers holding only a shared lease cannot mutate; explicit
+            # recovery remains available.
+            return False
+        return True
+
     def _validate_transition_chain(
         self,
         revision: int,
@@ -171,68 +252,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
         current_snapshot_digest: str,
         key: bytes,
     ) -> None:
-        with self._connect() as connection:
-            rows = cast(
-                list[sqlite3.Row],
-                connection.execute("select * from extension_control_authority_transition order by revision").fetchall(),
-            )
-        committed = [row for row in rows if _row_str(row, "phase") == AuthorityPhase.COMMITTED.value]
-        if [_row_int(row, "revision") for row in committed] != list(range(1, revision + 1)):
-            raise ExtensionControlAuthorityError("extension control transition gap")
-        prior_snapshot_digest: str | None = None
-        for row in committed:
-            row_revision = _row_int(row, "revision")
-            previous_revision = _row_int(row, "previous_revision")
-            if previous_revision != row_revision - 1:
-                raise ExtensionControlAuthorityError("extension control transition chain mismatch")
-            layers_json = _row_str(row, "layers_json")
-            self._validate_serialized_layers(layers_json)
-            snapshot_payload = verify_authenticated_record(
-                _row_str(row, "snapshot_json"),
-                expected_digest=_row_str(row, "snapshot_digest"),
-                expected_mac=_row_str(row, "snapshot_mac"),
-                key=key,
-                purpose=SNAPSHOT_PURPOSE,
-            )
-            previous_digest = snapshot_payload.get("previous_digest")
-            if not isinstance(previous_digest, str):
-                raise ExtensionControlAuthorityError("extension control transition chain mismatch")
-            if prior_snapshot_digest is not None and previous_digest != prior_snapshot_digest:
-                raise ExtensionControlAuthorityError("extension control transition chain mismatch")
-            snapshot_expected: dict[str, object] = {
-                "revision": row_revision,
-                "catalog_digest": _row_str(row, "catalog_digest"),
-                "layers_json": layers_json,
-                "previous_digest": previous_digest,
-                "committed_at": _row_str(row, "created_at"),
-            }
-            if any(snapshot_payload.get(name) != value for name, value in snapshot_expected.items()):
-                raise ExtensionControlAuthorityError("extension control transition snapshot mismatch")
-            self._validate_layers(layers_from_json(layers_json), _row_str(row, "catalog_digest"))
-            transition_payload = verify_authenticated_record(
-                _row_str(row, "transition_json"),
-                expected_digest=_row_str(row, "transition_digest"),
-                expected_mac=_row_str(row, "transition_mac"),
-                key=key,
-                purpose=TRANSITION_PURPOSE,
-            )
-            transition_expected: dict[str, object] = {
-                "revision": row_revision,
-                "previous_revision": previous_revision,
-                "previous_digest": previous_digest,
-                "snapshot_digest": _row_str(row, "snapshot_digest"),
-                "catalog_digest": _row_str(row, "catalog_digest"),
-                "actor_id_hash": _row_str(row, "actor_id_hash"),
-                "idempotency_key_hash": _row_str(row, "idempotency_key_hash"),
-                "nonce_hash": _row_str(row, "nonce_hash"),
-                "created_at": _row_str(row, "created_at"),
-                "phase": AuthorityPhase.PREPARED.value,
-            }
-            if any(transition_payload.get(name) != value for name, value in transition_expected.items()):
-                raise ExtensionControlAuthorityError("extension control transition field mismatch")
-            prior_snapshot_digest = _row_str(row, "snapshot_digest")
-        if prior_snapshot_digest is not None and prior_snapshot_digest != current_snapshot_digest:
-            raise ExtensionControlAuthorityError("extension control transition head mismatch")
+        self._extension_control_authority_op(
+            "validate_chain", key=key, revision=revision, snapshot_digest=current_snapshot_digest
+        )
 
     def list_extension_control_authority_history(
         self,
@@ -292,6 +314,9 @@ class _ExtensionControlAuthorityTransitionMixin(_ExtensionControlAuthoritySuppor
 
     def _commit_pending_transition(self, connection: sqlite3.Connection, row: sqlite3.Row) -> None:
         self._validate_serialized_layers(_row_str(row, "layers_json"))
+        from .catalog_delivery.activation_journal import finish
+
+        finish(self, connection, row)
         _ = connection.execute(
             """
             update extension_control_authority_snapshot

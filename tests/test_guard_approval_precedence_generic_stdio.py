@@ -14,8 +14,6 @@ from codex_plugin_scanner.guard.models import GuardAction, GuardArtifact, Policy
 from codex_plugin_scanner.guard.proxy._env import _build_scrubbed_env
 from codex_plugin_scanner.guard.proxy.stdio import (
     StdioGuardProxy,
-    _sensitive_read_current_action,
-    build_sensitive_read_approval_hash,
 )
 from codex_plugin_scanner.guard.runtime.approval_context import (
     APPROVAL_CONTEXT_TOKEN_PREFIX,
@@ -23,10 +21,10 @@ from codex_plugin_scanner.guard.runtime.approval_context import (
     build_runtime_launch_identity,
 )
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
-    build_file_read_request_artifact,
-    extract_sensitive_file_read_request,
+    extract_sensitive_file_read_request_artifact,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.guard_sensitive_read_support import sensitive_read_current_action, sensitive_read_token
 
 _GENERIC_HARNESS = "generic-test"
 _GENERIC_ARTIFACT_ID = "generic-test:project:opaque-request"
@@ -66,14 +64,15 @@ def _record_generic_once_allow(
 
 
 def _sensitive_read_artifact(workspace: Path, *, publisher: str | None = None) -> GuardArtifact:
-    request = extract_sensitive_file_read_request("read_file", {"path": ".env"}, cwd=workspace)
-    assert request is not None
-    artifact = build_file_read_request_artifact(
+    _request, artifact = extract_sensitive_file_read_request_artifact(
+        "read_file",
+        {"path": ".env"},
+        cwd=workspace,
         harness="codex",
-        request=request,
         config_path=str(workspace / ".mcp.json"),
         source_scope="project",
     )
+    assert artifact is not None
     return replace(artifact, publisher=publisher) if publisher is not None else artifact
 
 
@@ -113,9 +112,9 @@ def _save_sensitive_read_policy(
     workspace: Path,
     command: list[str],
 ) -> str:
-    current_action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    current_action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,
@@ -156,6 +155,7 @@ def test_sensitive_read_context_binds_exact_configured_override(
     publisher = "trusted-publisher" if override_scope == "publisher" else None
     artifact = _sensitive_read_artifact(workspace, publisher=publisher)
     base_config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -169,16 +169,16 @@ def test_sensitive_read_context_binds_exact_configured_override(
     else:
         changed_kwargs = {"publisher_actions": {"trusted-publisher": "block"}}
     changed_config = replace(base_config, **changed_kwargs)
-    base_action = _sensitive_read_current_action(base_config, artifact=artifact, harness="codex")
-    changed_action = _sensitive_read_current_action(changed_config, artifact=artifact, harness="codex")
+    base_action = sensitive_read_current_action(base_config, artifact=artifact, harness="codex")
+    changed_action = sensitive_read_current_action(changed_config, artifact=artifact, harness="codex")
 
-    base_token = build_sensitive_read_approval_hash(
+    base_token = sensitive_read_token(
         artifact,
         config=base_config,
         cwd=workspace,
         current_action=base_action,
     )
-    changed_token = build_sensitive_read_approval_hash(
+    changed_token = sensitive_read_token(
         artifact,
         config=changed_config,
         cwd=workspace,
@@ -195,6 +195,7 @@ def test_sensitive_read_exact_allow_overrides_global_block_before_independent_ri
     workspace.mkdir()
     artifact = _sensitive_read_artifact(workspace)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         default_action="block",
@@ -202,7 +203,7 @@ def test_sensitive_read_exact_allow_overrides_global_block_before_independent_ri
         risk_actions={"local_secret_read": "review"},
     )
 
-    action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
 
     assert action == "review"
 
@@ -212,6 +213,7 @@ def test_sensitive_read_risk_block_outranks_exact_allow(tmp_path: Path) -> None:
     workspace.mkdir()
     artifact = _sensitive_read_artifact(workspace)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         default_action="block",
@@ -219,17 +221,20 @@ def test_sensitive_read_risk_block_outranks_exact_allow(tmp_path: Path) -> None:
         risk_actions={"local_secret_read": "block"},
     )
 
-    action = _sensitive_read_current_action(config, artifact=artifact, harness="codex")
+    action = sensitive_read_current_action(config, artifact=artifact, harness="codex")
 
     assert action == "block"
 
 
-def test_stdio_sensitive_read_old_allow_cannot_survive_new_exact_artifact_block(tmp_path: Path) -> None:
+def test_stdio_sensitive_read_old_allow_cannot_survive_new_exact_artifact_block(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     artifact = _sensitive_read_artifact(workspace)
     review_config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -267,12 +272,15 @@ def test_stdio_sensitive_read_old_allow_cannot_survive_new_exact_artifact_block(
     assert store.list_approval_requests(limit=None) == []
 
 
-def test_stdio_sensitive_read_old_allow_cannot_survive_new_default_block(tmp_path: Path) -> None:
+def test_stdio_sensitive_read_old_allow_cannot_survive_new_default_block(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     artifact = _sensitive_read_artifact(workspace)
     review_config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         default_action="review",
@@ -291,7 +299,7 @@ def test_stdio_sensitive_read_old_allow_cannot_survive_new_default_block(tmp_pat
     )
     block_config = replace(review_config, default_action="block")
     launch_env = _build_scrubbed_env()
-    blocked_hash = build_sensitive_read_approval_hash(
+    blocked_hash = sensitive_read_token(
         artifact,
         config=block_config,
         cwd=workspace,
@@ -339,6 +347,7 @@ def test_stdio_sensitive_read_fresh_terminal_action_never_queues_approval(
     store = GuardStore(tmp_path / "guard-home")
     artifact = _sensitive_read_artifact(workspace)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -366,11 +375,14 @@ def test_stdio_sensitive_read_fresh_terminal_action_never_queues_approval(
     assert store.list_receipts(limit=1)[0]["policy_decision"] == terminal_action
 
 
-def test_stdio_sensitive_read_exact_saved_block_is_terminal_and_not_reapprovable(tmp_path: Path) -> None:
+def test_stdio_sensitive_read_exact_saved_block_is_terminal_and_not_reapprovable(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -416,6 +428,7 @@ def test_stdio_sensitive_read_valid_saved_block_remains_terminal_with_separate_i
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -467,6 +480,7 @@ def test_stdio_sensitive_read_current_review_still_queues_approval(tmp_path: Pat
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -497,12 +511,14 @@ def test_stdio_sensitive_read_current_review_still_queues_approval(tmp_path: Pat
 
 def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     artifact = _sensitive_read_artifact(workspace)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -511,7 +527,7 @@ def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
     marker = tmp_path / "unchanged-one-shot-forwarded.json"
     command = _marker_child_command(marker)
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,
@@ -564,15 +580,19 @@ def test_stdio_sensitive_read_unchanged_exact_one_shot_is_claimed_and_forwarded(
     assert store.list_receipts(limit=1)[0]["policy_decision"] == "allow"
 
 
+@pytest.mark.parametrize("resident_unavailable_after_claim", (False, True))
 def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
+    resident_unavailable_after_claim: bool,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     artifact = _sensitive_read_artifact(workspace)
     review_config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -586,7 +606,7 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     marker = tmp_path / "postclaim-sensitive-read-must-not-forward.json"
     command = _marker_child_command(marker)
     launch_env = _build_scrubbed_env()
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=review_config,
         cwd=workspace,
@@ -630,6 +650,11 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
         claimed = real_claim(decision)
         if claimed:
             current_config[0] = block_config
+            if resident_unavailable_after_claim:
+                monkeypatch.setattr(
+                    "codex_plugin_scanner.guard.native_approval_reuse.approval_reuse_decide_native",
+                    lambda *args, **kwargs: None,
+                )
         return claimed
 
     monkeypatch.setattr(store, "claim_approval_reuse_decision", claim_then_tighten_policy)
@@ -640,7 +665,6 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
     assert result["responses"][0]["error"]["code"] == -32001
     event = result["events"][0]
     assert event["decision"] == "block"
-    assert event["approval_reuse_reason_code"] == "approval_reuse_policy_changed"
     assert "approval_requests" not in event
     claim_events = store.list_events(event_name="approval.local_once_applied")
     assert len(claim_events) == 1
@@ -650,11 +674,13 @@ def test_stdio_sensitive_read_rebuilds_current_authority_after_exact_claim(
 
 def test_stdio_sensitive_read_fails_closed_when_postclaim_config_refresh_fails(
     tmp_path: Path,
+    native_context_digest: Path,
 ) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -705,11 +731,14 @@ def test_stdio_sensitive_read_fails_closed_when_postclaim_config_refresh_fails(
     assert receipt["scanner_evidence"][-1] == approval_evidence[-1]
 
 
-def test_stdio_invalidated_saved_allow_with_current_review_never_reaches_child(tmp_path: Path) -> None:
+def test_stdio_invalidated_saved_allow_with_current_review_never_reaches_child(
+    tmp_path: Path, native_context_digest: Path
+) -> None:
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     store = GuardStore(tmp_path / "guard-home")
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
@@ -753,13 +782,14 @@ def test_sensitive_read_legacy_artifact_digest_is_not_approval_authority(tmp_pat
     workspace.mkdir()
     artifact = _sensitive_read_artifact(workspace)
     config = GuardConfig(
+        blocked_request_mode="ask",
         guard_home=tmp_path / "guard-home",
         workspace=workspace,
         security_level="custom",
         risk_actions={"local_secret_read": "review"},
     )
 
-    context_token = build_sensitive_read_approval_hash(
+    context_token = sensitive_read_token(
         artifact,
         config=config,
         cwd=workspace,

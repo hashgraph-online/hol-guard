@@ -34,6 +34,9 @@ struct McpPublisher {
 #[derive(Deserialize, serde::Serialize)]
 #[serde(tag = "kind", rename_all = "kebab-case", deny_unknown_fields)]
 enum Launch {
+    DirectCommand {
+        command: String,
+    },
     PackageLauncher {
         command: String,
         package: String,
@@ -92,7 +95,13 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
     {
         return Err("command_source_mcp_contract_invalid");
     }
-    let (executables, example, remote) = match &input.launch {
+    let (executables, example, tightening_only) = match &input.launch {
+        Launch::DirectCommand { command } => {
+            if !super::super::admission::valid_direct_mcp_command(command) {
+                return Err("command_source_mcp_launcher_invalid");
+            }
+            (vec![command.clone()], command.clone(), true)
+        }
         Launch::PackageLauncher { command, package } => {
             if !matches!(
                 command.as_str(),
@@ -104,7 +113,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
             }
             (
                 vec![command.clone()],
-                format!("{command} -y {package}"),
+                package_launch_example(command, package),
                 false,
             )
         }
@@ -123,7 +132,7 @@ pub(super) fn lower(bytes: &[u8]) -> Result<LoweredMcp, &'static str> {
                 tool.state.as_str(),
                 "inherit" | "allow" | "review" | "block"
             )
-            || (remote && tool.state == "allow")
+            || (tightening_only && tool.state == "allow")
             || !names.insert(crate::native_command_controls::normalized_tool(&tool.name))
         {
             return Err("command_source_mcp_tool_invalid");
@@ -230,20 +239,43 @@ fn canonical_endpoint(value: &str) -> Result<String, &'static str> {
 }
 
 pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
-    let mut packages = BTreeSet::new();
-    let mut endpoints = BTreeSet::new();
-    let mut aliases = BTreeSet::new();
+    let mut inventory = McpInventory::default();
     for extension in program["extensions"]
         .as_array()
         .ok_or("command_source_mcp_projection_invalid")?
     {
-        let launch = &extension["mcp"]["mcp_launch"];
+        inventory.insert(&extension["mcp"]["mcp_launch"])?;
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+pub(in crate::native_command_program) struct McpInventory {
+    packages: BTreeSet<String>,
+    commands: BTreeSet<String>,
+    endpoints: BTreeSet<String>,
+    aliases: BTreeSet<String>,
+}
+
+impl McpInventory {
+    pub(in crate::native_command_program) fn insert(
+        &mut self,
+        launch: &Value,
+    ) -> Result<(), &'static str> {
         match launch["kind"].as_str() {
+            Some("direct-command") => {
+                let command = launch["command"]
+                    .as_str()
+                    .ok_or("command_source_mcp_projection_invalid")?;
+                if !self.commands.insert(command.to_owned()) {
+                    return Err("command_source_mcp_command_duplicate");
+                }
+            }
             Some("package-launcher") => {
                 let package = launch["package"]
                     .as_str()
                     .ok_or("command_source_mcp_projection_invalid")?;
-                if !packages.insert(package.trim().to_lowercase()) {
+                if !self.packages.insert(package.trim().to_lowercase()) {
                     return Err("command_source_mcp_package_duplicate");
                 }
             }
@@ -251,7 +283,7 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
                 let url = launch["url"]
                     .as_str()
                     .ok_or("command_source_mcp_projection_invalid")?;
-                if !endpoints.insert(canonical_endpoint(url)?) {
+                if !self.endpoints.insert(canonical_endpoint(url)?) {
                     return Err("command_source_mcp_endpoint_duplicate");
                 }
                 for name in launch["serverNames"]
@@ -261,7 +293,7 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
                     let name = name
                         .as_str()
                         .ok_or("command_source_mcp_projection_invalid")?;
-                    if !aliases.insert(name.to_owned()) {
+                    if !self.aliases.insert(name.to_owned()) {
                         return Err("command_source_mcp_alias_duplicate");
                     }
                 }
@@ -269,13 +301,42 @@ pub(super) fn validate_inventory(program: &Value) -> Result<(), &'static str> {
             None => {}
             _ => return Err("command_source_mcp_launcher_invalid"),
         }
+        Ok(())
     }
-    Ok(())
+}
+
+/// Runnable example for a package launcher. `-y` is an npx flag: `uvx -y <pkg>`
+/// fails, so each launcher gets the form Guard's MCP launch parser recognizes.
+fn package_launch_example(command: &str, package: &str) -> String {
+    match command {
+        "npx" => format!("npx -y {package}"),
+        "npm" => format!("npm exec --yes {package}"),
+        "pnpm" => format!("pnpm dlx {package}"),
+        "yarn" => format!("yarn dlx {package}"),
+        "pipx" => format!("pipx run {package}"),
+        _ => format!("{command} {package}"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn package_launch_examples_use_each_launcher_form() {
+        let cases = [
+            ("npx", "npx -y pkg"),
+            ("npm", "npm exec --yes pkg"),
+            ("pnpm", "pnpm dlx pkg"),
+            ("yarn", "yarn dlx pkg"),
+            ("pipx", "pipx run pkg"),
+            ("uvx", "uvx pkg"),
+            ("bunx", "bunx pkg"),
+        ];
+        for (command, expected) in cases {
+            assert_eq!(package_launch_example(command, "pkg"), expected);
+        }
+    }
 
     #[test]
     fn endpoint_identity_preserves_existing_alias_collision_rules() {

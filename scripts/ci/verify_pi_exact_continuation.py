@@ -20,8 +20,8 @@ EXPECTED = {
         "sha512-m8ArJUtVcQMSe1lLE/Ei7vX/JV7O39sWmWBsXV2NOU70F0qCp8GubA24pT3LnwTmM6LL2xV80/h6sQg85n69ew==",
     ),
     OMP_PACKAGE: (
-        "18.1.18",
-        "sha512-EcgVLAo8V/p6xrvUFogAzHVaTDK/COBiWkD4VwZqg8QVcJX5PbwzsvV/ucA4M/dUJIP1MuO5z5YI9BRT3i25sw==",
+        "18.11.3",
+        "sha512-7MdQBaj/zGHG7uV0mJSrYGHsjX3xthYgXUxTxLeJeFFL15UAnyE99kAfDE66c8LdXU0dN34eTyw6lfM7K5ouCg==",
     ),
 }
 EXPECTED_NODE = "v22.22.2"
@@ -75,7 +75,7 @@ def verify_lock(lock_path: Path) -> None:
     root = packages.get("")
     if not isinstance(root, dict) or root.get("dependencies") != {
         PI_PACKAGE: "0.87.1",
-        OMP_PACKAGE: "18.1.18",
+        OMP_PACKAGE: "18.11.3",
     }:
         fail("root package dependencies are not the reviewed exact SDK versions")
 
@@ -192,6 +192,9 @@ def run_continuation_tests(env: dict[str, str], junit_path: Path) -> None:
         "pytest",
         "-q",
         "tests/test_pi_exact_continuation.py",
+        "tests/test_pi_exact_continuation_runner.py",
+        "tests/test_pi_exact_continuation_omp.py",
+        "tests/test_pi_exact_continuation_handlers.py",
         "--tb=short",
         f"--junitxml={junit_path}",
     ]

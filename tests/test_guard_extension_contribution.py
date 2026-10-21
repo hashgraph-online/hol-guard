@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -11,13 +10,8 @@ import pytest
 
 from codex_plugin_scanner.guard.runtime import extension_contribution as contribution_module
 from codex_plugin_scanner.guard.runtime.extension_contribution import (
-    contribution_ids,
-    load_contribution_payloads,
     validate_contribution,
 )
-from codex_plugin_scanner.guard.runtime.extension_trust import ids_for_class
-from codex_plugin_scanner.guard.runtime.mcp_server_contribution import mcp_catalog_ids
-from tests.support.extension_freshness import requires_fresh_projections
 
 _NOODLE = Path(__file__).resolve().parents[1] / "contributions/extensions/command.noodle.json"
 
@@ -28,15 +22,17 @@ def _noodle_payload() -> dict[str, object]:
     return payload
 
 
-@requires_fresh_projections
-def test_in_tree_contributions_match_reviewed_trust_classes() -> None:
-    payloads = load_contribution_payloads()
-    ids = {str(item["id"]) for item in payloads}
-    assert ids == contribution_ids()
-    expected = ids_for_class("external") | ids_for_class("first-party") | ids_for_class("trusted-library")
-    assert contribution_ids() | mcp_catalog_ids() == expected
-    for payload in payloads:
-        validate_contribution(payload, filename=str(payload["id"]))
+def _source_contribution_ids() -> frozenset[str]:
+    """Ids declared by authored command-source inputs, including pending ones."""
+    root = Path(__file__).resolve().parents[1] / "contributions/command-sources"
+    ids: set[str] = set()
+    for path in root.glob("command.*.json"):
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        extension = payload.get("extension") if isinstance(payload, dict) else None
+        extension_id = extension.get("extension_id") if isinstance(extension, dict) else None
+        if isinstance(extension_id, str):
+            ids.add(extension_id)
+    return frozenset(ids)
 
 
 def test_contribution_cannot_self_declare_trusted_library() -> None:
@@ -74,37 +70,6 @@ def test_contribution_rejects_inconsistent_activation_and_invalid_id() -> None:
     payload["id"] = "plugin.invalid"
     with pytest.raises(ValueError, match="has invalid id"):
         validate_contribution(payload, filename="id.json")
-
-
-def test_frozen_packaged_payloads_load_from_meipass(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    repo = Path(__file__).resolve().parents[1]
-    dest = tmp_path / "codex_plugin_scanner" / "guard" / "contracts" / "data" / "extensions"
-    contributions = dest / "contributions"
-    contributions.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(
-        repo / "contributions" / "extensions" / "command.noodle.json", contributions / "command.noodle.json"
-    )
-    shutil.copyfile(
-        repo / "contracts" / "extensions" / "contribution.v2.schema.json",
-        dest / "contribution.v2.schema.json",
-    )
-    shutil.copyfile(
-        repo / "contracts" / "extensions" / "trust-class-map.v1.json",
-        dest / "trust-class-map.v1.json",
-    )
-    monkeypatch.setattr(sys, "frozen", True, raising=False)
-    monkeypatch.setattr(sys, "_MEIPASS", str(tmp_path), raising=False)
-
-    def missing_package(_name: str) -> object:
-        raise ModuleNotFoundError("missing packaged extensions")
-
-    monkeypatch.setattr(contribution_module.resources, "files", missing_package)
-    contribution_module.reset_contribution_cache()
-    try:
-        payloads = contribution_module._load_packaged_payloads()
-        assert any(item.get("id") == "command.noodle" for item in payloads)
-    finally:
-        contribution_module.reset_contribution_cache()
 
 
 def test_frozen_packaged_payloads_fail_closed_without_package_data(

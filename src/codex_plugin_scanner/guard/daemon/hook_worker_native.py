@@ -9,33 +9,53 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 from ..cli.commands_support_command_activity import hook_post_succeeded
-from ..codex_binding_capture_writer import CodexBindingCaptureWriter
+from ..native_codex_binding_capture import CodexBindingCaptureWriter
+from ..native_hook_containment_route import edge_containment_route
+from ..native_hook_decision import NativeHookDecisionError
 from ..native_policy_snapshot_constants import NativePolicySnapshotError
-from ..native_runtime import NativeRuntimeStatus, native_mode
+from ..native_policy_snapshot_harness_postures import recording_only_for_binding
+from ..native_resident_client import (
+    native_resident_client_failure_code,
+    record_native_resident_client_failure_code,
+)
+from ..native_resident_revival import native_unavailable_reason
+from ..native_runtime import NativeRuntimeStatus
 from ..runtime.structured_output_mediation import (
     StructuredContentMediation,
-    StructuredOutputBinding,
     StructuredOutputResolution,
     canonical_harness_name,
     mediate_native_post_tool_content,
     resolve_managed_structured_output_resolution,
 )
-from .hook_availability_policy import (
-    availability_harness_response,
-    recording_only_pre_tool_response,
-)
+from .hook_availability_policy import availability_harness_response
+from .hook_contained_grant import granted_containment_response
+from .hook_evidence_dispatch import run_hook_evidence
+from .hook_fail_closed import render_pre_tool, render_recording_only_pre_tool
+from .hook_native_cli_observer import observe_native_pre_tool_cli
+from .hook_native_local_cli import native_local_cli_block_response
 from .hook_native_review_approval import (
     pause_native_pre_tool_for_approval,
     record_claude_permission_notice_for_native_review,
 )
-from .hook_native_review_fence import native_review_fence
-from .hook_policy_repair import apply_command_policy_repair
-from .hook_worker_responses import (
-    harness_json_from_native_post_tool,
-    harness_json_from_native_pre_tool,
-    harness_json_from_native_prompt,
-    observe_lifecycle_fail_safe_response,
+from .hook_native_review_fence import native_review_fence, published_binding_token
+from .hook_policy_fence_window import POLICY_SOURCE_FENCE_ERRORS, PolicySourceFenceBusyError
+from .hook_worker_native_review import (
+    CONTROL_BINDING_REFRESH_ERRORS,
+    SNAPSHOT_NOT_CURRENT_ERROR,
+    NativePolicyBindingRefreshError,
+    review_native_edge,
+    superseded_post_tool_snapshot,
 )
+
+
+def _edge_harness_response(edge: Mapping[str, object]) -> dict[str, object]:
+    """The harness response Rust rendered for the edge decision."""
+
+    rendered = edge["harness_response"]
+    if not isinstance(rendered, dict):
+        raise ValueError("native_hook_edge_invalid_response")
+    return {str(key): value for key, value in rendered.items()}
+
 
 _NATIVE_PRE_TOOL_APPROVAL_ACTIONS = frozenset({"review", "require-reapproval"})
 
@@ -83,7 +103,7 @@ def _claude_native_prompt_brand(
         event_name="UserPromptSubmit",
         policy_action=policy_action,
         artifact=artifact,
-        native_reason=native_reason,
+        native_reason=lambda: native_reason,
     )
     if system_message:
         response["systemMessage"] = system_message
@@ -99,16 +119,6 @@ def _claude_native_prompt_brand(
         if isinstance(hook_output, dict):
             hook_output["additionalContext"] = additional_context
     return response
-
-
-def _watch_native_pre_tool_result(native: Mapping[str, object]) -> dict[str, object]:
-    rewritten = dict(native)
-    if str(rewritten.get("minimum_action") or "") == "allow" and rewritten.get("decision") == "allow":
-        return rewritten
-    rewritten["decision"] = "allow"
-    rewritten["minimum_action"] = "warn"
-    rewritten["policy_action"] = "warn"
-    return rewritten
 
 
 class _HookWorkerMetrics(Protocol):
@@ -129,6 +139,12 @@ class _HookWorkerNativeHost(Protocol):
 
     @property
     def activity_writer(self) -> object | None: ...
+
+    @property
+    def evidence_dispatch(self) -> object | None: ...
+
+    @property
+    def policy_snapshot_publisher(self) -> object: ...
 
     _last_native_decision_receipt: dict[str, object] | None
     _native_policy_snapshot: Callable[..., dict[str, object] | None]
@@ -172,20 +188,54 @@ def _record_native_pre_activity(
     response: dict[str, object],
     receipt: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
+    from ..runtime_transition_hook_probe import OBSERVATION_FIELD, transition_hook_observation
+
+    # Bind diagnostics to this call's accepted receipt, never the worker's
+    # shared last-receipt slot (other HTTP requests may run concurrently).
+    observation = transition_hook_observation(payload, receipt)
+    if observation is not None:
+        response = {**response, OBSERVATION_FIELD: observation}
     submit = getattr(host.activity_writer, "submit_command_activity", None)
     if callable(submit):
-        with suppress(Exception):
-            submit(
+        receipt_id = receipt.get("decision_id") if receipt is not None else None
+        # The hook has its verdict; the activity row records it. The writer
+        # lives in the resident, so submitting here would spend a round trip
+        # in front of the response rather than behind it.
+        run_hook_evidence(
+            host,
+            lambda: submit(
                 harness=harness,
                 event="PreToolUse",
                 payload=payload,
                 succeeded=True,
                 policy_action=response.get("policy_action"),
-                receipt_id=receipt.get("decision_id") if receipt is not None else None,
+                receipt_id=receipt_id,
                 prompted=response.get("prompted") is True,
                 approval_reuse_status=response.get("approval_reuse_status", "not-applicable"),
-            )
+            ),
+        )
     return response
+
+
+def _containment_outage(
+    host: _HookWorkerNativeHost,
+    payload: dict[str, object],
+    harness: str,
+    error: NativeHookDecisionError,
+    guard_home: Path,
+    deadline: float | None,
+) -> tuple[dict[str, object], bool]:
+    """The host outage answer when the resident does not route a PreToolUse call."""
+    response = _record_unavailable_native(
+        host,
+        payload,
+        harness=harness,
+        event_name="PreToolUse",
+        reason_code=error.code,
+        guard_home=guard_home,
+        deadline=deadline,
+    )
+    return (response, False)
 
 
 def _record_unavailable_native(
@@ -195,36 +245,50 @@ def _record_unavailable_native(
     harness: str,
     event_name: str,
     reason_code: str,
-    workspace: Path | None,
-    home_dir: Path,
     guard_home: Path,
-    recording_only: bool,
+    watch_continue: bool = False,
+    deadline: float | None = None,
+    reason: str | None = None,
 ) -> dict[str, object]:
+    failure_code = native_resident_client_failure_code()
     response = availability_harness_response(
-        payload,
         harness=harness,
         event_name=event_name,
         reason_code=reason_code,
-        reason="HOL Guard could not complete the native hook decision safely.",
-        workspace=workspace,
-        home_dir=home_dir,
-        guard_home=guard_home,
-        recording_only=recording_only,
+        reason=reason
+        or native_unavailable_reason(
+            failure_code,
+            "HOL Guard could not complete the native hook decision safely.",
+        ),
+        prompt_reason=reason or native_unavailable_reason(failure_code, "") or None,
     )
-    route = "native_degraded" if response.get("reason_code") == "native_degraded_emergency_safe" else "native_fail_safe"
-    host.metrics.record_route(route)
+    if watch_continue and event_name == "PreToolUse":
+        # Only a superseded Watch snapshot (resident reachable) keeps recording,
+        # through the resident-rendered continue; any render failure keeps the
+        # fixed deny above. Real outages never take this path.
+        response = render_recording_only_pre_tool(
+            harness,
+            reason_code=reason_code,
+            reason="Watch recorded this action without stopping it.",
+            guard_home=guard_home,
+            deadline=deadline,
+            fallback=response,
+        )
+    host.metrics.record_route("native_fail_safe")
     if event_name == "PreToolUse":
         writer = host.activity_writer
         submit = getattr(writer, "submit_command_activity", None)
         if callable(submit):
-            with suppress(Exception):
-                _ = submit(
+            run_hook_evidence(
+                host,
+                lambda: submit(
                     harness=harness,
                     event=event_name,
                     payload=payload,
                     succeeded=str(response.get("policy_action") or "") != "block",
                     policy_action=response.get("policy_action"),
-                )
+                ),
+            )
     return response
 
 
@@ -232,26 +296,6 @@ class HookWorkerNativeMixin:
     """Native edge paths kept out of the worker facade."""
 
     _last_native_decision_receipt: dict[str, object] | None = None
-
-    def _structured_output_binding(
-        self: _HookWorkerNativeHost,
-        *,
-        guard_home: Path,
-        workspace: Path | None,
-        harness: str,
-    ) -> StructuredOutputBinding | None:
-        """Read the active machine binding without creating a local authority.
-
-        This compatibility wrapper intentionally drops the required-state
-        detail; the native PostToolUse path uses ``_structured_output_resolution``
-        when it must distinguish optional-off from fail-closed authority.
-        """
-
-        return self._structured_output_resolution(
-            guard_home=guard_home,
-            workspace=workspace,
-            harness=harness,
-        ).binding
 
     def _structured_output_resolution(
         self: _HookWorkerNativeHost,
@@ -296,6 +340,9 @@ class HookWorkerNativeMixin:
         """Project managed structured mediation after Rust has decided."""
 
         if native_event != "PostToolUse" or canonical_harness_name(native_harness) not in {"pi", "omp"}:
+            return dict(native_result)
+        # Native denials have no model-visible content to project.
+        if native_result.get("decision") != "allow":
             return dict(native_result)
         resolution = self._structured_output_resolution(
             guard_home=guard_home,
@@ -368,67 +415,6 @@ class HookWorkerNativeMixin:
             ).to_harness_json(),
         }
 
-    def _mode_surface_response(
-        self: _HookWorkerNativeHost,
-        harness: str,
-        event_name: str,
-        mode: str,
-        *,
-        payload: dict[str, object],
-        workspace: Path | None,
-        home_dir: Path,
-        guard_home: Path,
-    ) -> dict[str, object] | None:
-        if event_name not in {"PreToolUse", "PostToolUse"}:
-            return availability_harness_response(
-                payload,
-                harness=harness,
-                event_name=event_name,
-                reason_code="native_hook_event_unavailable",
-                reason="HOL Guard could not classify this hook event safely.",
-                workspace=workspace,
-                home_dir=home_dir,
-                guard_home=guard_home,
-            )
-        reason_code = {"off": "native_hook_disabled", "shadow": "native_shadow_diagnostic_disabled"}.get(mode)
-        if reason_code is None:
-            return None
-        reason = {
-            "off": "HOL Guard native hook review is explicitly disabled; no trusted native decision is available.",
-            "shadow": "HOL Guard shadow comparison is unavailable outside its diagnostic surface.",
-        }[mode]
-        return availability_harness_response(
-            payload,
-            harness=harness,
-            event_name=event_name,
-            reason_code=reason_code,
-            reason=reason,
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-        )
-
-    def _review_pre_tool_http(
-        self: _HookWorkerNativeHost,
-        payload: dict[str, object],
-        *,
-        harness: str,
-        home_dir: Path,
-        guard_home: Path,
-        workspace: Path | None,
-    ) -> dict[str, object]:
-        reason_code = "native_hook_disabled" if native_mode() == "off" else "native_shadow_diagnostic_disabled"
-        return availability_harness_response(
-            payload,
-            harness=harness,
-            event_name="PreToolUse",
-            reason_code=reason_code,
-            reason="HOL Guard could not complete the native hook decision safely.",
-            workspace=workspace,
-            home_dir=home_dir,
-            guard_home=guard_home,
-        )
-
     def _review_native_edge(
         self: _HookWorkerNativeHost,
         *,
@@ -443,93 +429,23 @@ class HookWorkerNativeMixin:
         claim_saved_approval: bool = True,
         claimed_saved_allow_hash: str | None = None,
         claimed_approval_request_id: str | None = None,
+        policy_snapshot: Mapping[str, object] | None = None,
     ) -> dict[str, object]:
-        policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-        # Native evaluation and Python delivery use the same acknowledged
-        # posture. A local Watch edit cannot weaken an enforcing snapshot
-        # before its replacement is accepted. A missing binding takes the
-        # unavailable route and cannot establish recording-only authority.
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
-        fenced: bool | None = None
-        capture_receipts: list[Mapping[str, object]] = []
-        try:
-            with native_review_fence(
-                policy_snapshot=policy_snapshot,
-                event_name=event_name,
-                recording_only=recording_only,
-                guard_home=guard_home,
-                deadline=deadline,
-            ) as fenced:
-                response, native_used = self._review_native_edge_with_snapshot(
-                    payload=payload,
-                    harness=harness,
-                    event_name=event_name,
-                    default_harness=default_harness,
-                    home_dir=home_dir,
-                    guard_home=guard_home,
-                    workspace=workspace,
-                    deadline=deadline,
-                    policy_snapshot=policy_snapshot,
-                    recording_only=recording_only,
-                    claim_saved_approval=claim_saved_approval,
-                    claimed_saved_allow_hash=claimed_saved_allow_hash,
-                    claimed_approval_request_id=claimed_approval_request_id,
-                    capture_receipts=capture_receipts,
-                )
-                if (
-                    fenced
-                    and native_used
-                    and response.get("policy_action") == "allow"
-                    and deadline is not None
-                    and time.monotonic() >= deadline
-                ):
-                    raise TimeoutError("native_review_fence_deadline")
-            if capture_receipts and self.capture_writer is not None:
-                with suppress(Exception):
-                    _ = self.capture_writer.submit_native_capture(
-                        guard_home=guard_home, payload=payload, receipt=capture_receipts[0]
-                    )
-            if native_used:
-                self.metrics.record_route("native_resident")
-            return response
-        except TimeoutError:
-            return self._apply_structured_unavailable_overlay(
-                _record_unavailable_native(
-                    self,
-                    payload,
-                    harness=harness,
-                    event_name=event_name,
-                    reason_code="native_review_deadline_exceeded",
-                    workspace=workspace,
-                    home_dir=home_dir,
-                    guard_home=guard_home,
-                    recording_only=recording_only,
-                ),
-                harness=harness,
-                event_name=event_name,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
-        except (OSError, NativePolicySnapshotError):
-            if fenced is False:
-                raise
-            return self._apply_structured_unavailable_overlay(
-                _record_unavailable_native(
-                    self,
-                    payload,
-                    harness=harness,
-                    event_name=event_name,
-                    reason_code="native_command_control_fence_unavailable",
-                    workspace=workspace,
-                    home_dir=home_dir,
-                    guard_home=guard_home,
-                    recording_only=recording_only,
-                ),
-                harness=harness,
-                event_name=event_name,
-                guard_home=guard_home,
-                workspace=workspace,
-            )
+        return review_native_edge(
+            self,
+            payload=payload,
+            harness=harness,
+            event_name=event_name,
+            default_harness=default_harness,
+            home_dir=home_dir,
+            guard_home=guard_home,
+            workspace=workspace,
+            deadline=deadline,
+            claim_saved_approval=claim_saved_approval,
+            claimed_saved_allow_hash=claimed_saved_allow_hash,
+            claimed_approval_request_id=claimed_approval_request_id,
+            policy_snapshot=policy_snapshot,
+        )
 
     def _review_native_edge_with_snapshot(
         self: _HookWorkerNativeHost,
@@ -549,19 +465,56 @@ class HookWorkerNativeMixin:
         claimed_approval_request_id: str | None = None,
         capture_receipts: list[Mapping[str, object]] | None = None,
     ) -> tuple[dict[str, object], bool]:
-        edge = self._review_raw_hook_native(
-            payload=payload,
-            harness=harness,
-            event=event_name,
-            guard_home=guard_home,
-            home_dir=home_dir,
-            cwd=workspace,
-            source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
-            observe_mode=recording_only,
-            deadline=deadline,
-            policy_snapshot=policy_snapshot,
-        )
+        from ..runtime_transition_hook_probe import transition_hook_probe
+
+        probe = transition_hook_probe(payload)
+        # Worker threads are reused, so clear any failure code left by an
+        # earlier request before this review can report its own.
+        record_native_resident_client_failure_code(None)
+        for retried in (False, True):
+            edge = self._review_raw_hook_native(
+                payload=payload,
+                harness=harness,
+                event=event_name,
+                guard_home=guard_home,
+                home_dir=home_dir,
+                cwd=workspace,
+                source_ref_external_allowed=default_harness.strip().lower().replace("_", "-") in {"pi", "omp"},
+                observe_mode=recording_only,
+                deadline=deadline,
+                policy_snapshot=policy_snapshot,
+                **({"request_id": probe[1]} if probe is not None else {}),
+            )
+            refreshed = (
+                None
+                if edge is not None or retried
+                else superseded_post_tool_snapshot(
+                    self, policy_snapshot, event_name, workspace=workspace, deadline=deadline
+                )
+            )
+            if refreshed is None:
+                break
+            # The tool already ran; review its result once under the binding
+            # that replaced ours instead of answering PostToolUse fail-safe.
+            policy_snapshot = refreshed
+            recording_only = recording_only_for_binding(refreshed, harness)
+            record_native_resident_client_failure_code(None)
         if edge is None:
+            failure = native_resident_client_failure_code()
+            if failure in POLICY_SOURCE_FENCE_ERRORS and event_name in {"PreToolUse", "UserPromptSubmit"}:
+                raise PolicySourceFenceBusyError(failure, recording_only=recording_only)
+            if (
+                isinstance(failure, str)
+                and event_name in {"PreToolUse", "UserPromptSubmit"}
+                and policy_snapshot is not None
+                and (
+                    failure == SNAPSHOT_NOT_CURRENT_ERROR
+                    or (failure in CONTROL_BINDING_REFRESH_ERRORS and policy_snapshot.get("mode") == "enforce")
+                )
+            ):
+                raise NativePolicyBindingRefreshError(
+                    failure, policy_snapshot.get("generation"), recording_only=recording_only
+                )
             if event_name == "PostToolUse":
                 self._record_post_tool_activity(
                     harness=harness,
@@ -589,10 +542,7 @@ class HookWorkerNativeMixin:
                         harness=harness,
                         event_name=event_name,
                         reason_code=reason_code,
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     harness=harness,
                     event_name=event_name,
@@ -623,10 +573,7 @@ class HookWorkerNativeMixin:
                         harness=harness,
                         event_name=event_name,
                         reason_code="native_hook_edge_invalid_response",
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     harness=harness,
                     event_name=event_name,
@@ -649,41 +596,54 @@ class HookWorkerNativeMixin:
                         harness=native_harness,
                         event_name=native_event,
                         reason_code="native_hook_edge_invalid_response",
-                        workspace=workspace,
-                        home_dir=home_dir,
                         guard_home=guard_home,
-                        recording_only=recording_only,
                     ),
                     False,
                 )
-            if recording_only:
-                return (
-                    observe_lifecycle_fail_safe_response(
-                        native_harness,
-                        event_name=native_event,
-                        reason_code="watch_recording_only",
-                    ),
-                    True,
-                )
-            response = harness_json_from_native_prompt(native_harness, native_result)
-            if native_harness.strip().lower().replace("_", "-") == "claude-code":
+            response = _edge_harness_response(edge)
+            if not recording_only and native_harness.strip().lower().replace("_", "-") == "claude-code":
                 with suppress(Exception):
                     response = _claude_native_prompt_brand(response, native_result)
             return (response, True)
         if native_event == "PreToolUse":
+            with suppress(Exception):
+                observe_native_pre_tool_cli(self.store, payload=payload, workspace=workspace, home_dir=home_dir)
             if recording_only:
                 action = str(native_result.get("minimum_action") or "")
                 if action != "allow" or native_result.get("decision") != "allow":
-                    native_result = _watch_native_pre_tool_result(native_result)
-                    response = recording_only_pre_tool_response(
-                        native_harness,
-                        reason_code=str(native_result.get("reason_code") or "watch_recording_only"),
-                        reason=str(native_result.get("reason") or "Watch recorded this action without stopping it."),
-                    )
                     return (
-                        _record_native_pre_activity(self, native_harness, payload, response, accepted_receipt),
+                        _record_native_pre_activity(
+                            self, native_harness, payload, _edge_harness_response(edge), accepted_receipt
+                        ),
                         True,
                     )
+            try:
+                # The resident routes the call, as on the CLI path; without its
+                # answer the host gets the outage shape, never a route picked here.
+                containment = edge_containment_route(
+                    edge,
+                    native_result,
+                    event_name=native_event,
+                    recording_only=recording_only,
+                    guard_home=guard_home,
+                    deadline=deadline,
+                )
+                contained = None
+                if containment == "grant":
+                    contained = granted_containment_response(
+                        self.store,
+                        native_result,
+                        harness=native_harness,
+                        payload=payload,
+                        guard_home=guard_home,
+                        home_dir=home_dir,
+                        workspace=workspace,
+                        deadline=deadline,
+                    )
+            except NativeHookDecisionError as error:
+                return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
+            if contained is not None:
+                return (_record_native_pre_activity(self, native_harness, payload, contained, accepted_receipt), True)
             action = str(native_result.get("minimum_action") or "")
             if action in _NATIVE_PRE_TOOL_APPROVAL_ACTIONS:
                 response = pause_native_pre_tool_for_approval(
@@ -695,6 +655,7 @@ class HookWorkerNativeMixin:
                     workspace=workspace,
                     guard_home=guard_home,
                     home_dir=home_dir,
+                    deadline=deadline,
                     claim_saved_approval=claim_saved_approval,
                     claimed_saved_allow_hash=claimed_saved_allow_hash,
                     claimed_approval_request_id=claimed_approval_request_id,
@@ -711,24 +672,58 @@ class HookWorkerNativeMixin:
                             guard_home=guard_home,
                         )
                 return (_record_native_pre_activity(self, native_harness, payload, response, accepted_receipt), True)
-            repaired_result = apply_command_policy_repair(
+            custom_block = native_local_cli_block_response(
                 self.store,
-                native_result,
-                guard_home=guard_home,
+                harness=native_harness,
+                payload=payload,
+                native_result=native_result,
+                workspace=workspace,
+                home_dir=home_dir,
             )
-            if repaired_result:
-                native_result = repaired_result
+            if custom_block is not None:
+                if recording_only:
+                    custom_block = render_recording_only_pre_tool(
+                        native_harness,
+                        reason_code="local_cli_extension_blocked",
+                        reason="Watch recorded this action without stopping it.",
+                        guard_home=guard_home,
+                        deadline=deadline,
+                    )
+                return (
+                    _record_native_pre_activity(self, native_harness, payload, custom_block, accepted_receipt),
+                    True,
+                )
+            from ..adapters.zcode_contained_tests import route_zcode_containment
+
+            rendered = (
+                render_pre_tool(native_harness, native_result, guard_home=guard_home, deadline=deadline)
+                if native_result and not isinstance(edge.get("harness_response"), dict)
+                else _edge_harness_response(edge)
+            )
+            if containment == "sink":
+                try:
+                    rendered = route_zcode_containment(
+                        rendered,
+                        harness=native_harness,
+                        payload=payload,
+                        guard_home=guard_home,
+                        home_dir=home_dir,
+                        workspace=workspace,
+                        deadline=deadline,
+                    )
+                except NativeHookDecisionError as error:
+                    return _containment_outage(self, payload, native_harness, error, guard_home, deadline)
             return (
                 _record_native_pre_activity(
                     self,
                     native_harness,
                     payload,
-                    harness_json_from_native_pre_tool(native_harness, native_result),
+                    rendered,
                     accepted_receipt,
                 ),
                 True,
             )
-        native_result = self._apply_structured_mediation(
+        mediated = self._apply_structured_mediation(
             native_result,
             payload=payload,
             native_harness=native_harness,
@@ -744,7 +739,11 @@ class HookWorkerNativeMixin:
             payload=payload,
             succeeded=hook_post_succeeded(native_event, payload),
         )
-        return (harness_json_from_native_post_tool(native_harness, native_result), True)
+        response = _edge_harness_response(edge)
+        mediation = mediated.get("structured_content_mediation")
+        if mediation is not None and mediation != native_result.get("structured_content_mediation"):
+            response["structured_content_mediation"] = mediation
+        return (response, True)
 
     def review_native_edge_decision(
         self: _HookWorkerNativeHost,
@@ -756,6 +755,7 @@ class HookWorkerNativeMixin:
         guard_home: Path,
         workspace: Path | None,
         deadline: float | None = None,
+        edge_budget_seconds: float | None = None,
     ) -> dict[str, object]:
         """Return the raw native edge decision for the CLI presentation path.
 
@@ -767,18 +767,13 @@ class HookWorkerNativeMixin:
         event is outside native scope.
         """
         event_name = self._hook_event_name(payload)
-        if native_mode() not in {"auto", "force"}:
-            return {
-                "event_name": event_name,
-                "harness": harness,
-                "result": None,
-                "receipt": None,
-                "recording_only": False,
-                "failure_reason_code": "native_runtime_unavailable",
-            }
         policy_snapshot = self._native_policy_snapshot(workspace, deadline=deadline)
-        recording_only = policy_snapshot is not None and policy_snapshot.get("mode") == "observe"
+        recording_only = recording_only_for_binding(policy_snapshot, harness)
         fenced: bool | None = None
+        if deadline is None and edge_budget_seconds is not None:
+            # The budget starts after policy readiness, which keeps its own
+            # wait; it bounds only the native evaluation and fails closed.
+            deadline = time.monotonic() + edge_budget_seconds
 
         def unavailable(reason_code: str) -> dict[str, object]:
             # The CLI path owns presentation, but evidence persistence stays
@@ -790,10 +785,7 @@ class HookWorkerNativeMixin:
                 harness=harness,
                 event_name=event_name,
                 reason_code=reason_code,
-                workspace=workspace,
-                home_dir=home_dir,
                 guard_home=guard_home,
-                recording_only=recording_only,
             )
             return {
                 "event_name": event_name,
@@ -804,6 +796,7 @@ class HookWorkerNativeMixin:
                 "failure_reason_code": reason_code,
             }
 
+        unleased_binding: tuple[object, ...] | None = None
         try:
             with native_review_fence(
                 policy_snapshot=policy_snapshot,
@@ -812,6 +805,11 @@ class HookWorkerNativeMixin:
                 guard_home=guard_home,
                 deadline=deadline,
             ) as fenced:
+                if fenced is None:
+                    unleased_binding = published_binding_token(self.policy_snapshot_publisher)
+                from ..runtime_transition_hook_probe import transition_hook_probe
+
+                probe = transition_hook_probe(payload)
                 edge = self._review_raw_hook_native(
                     payload=payload,
                     harness=harness,
@@ -823,14 +821,25 @@ class HookWorkerNativeMixin:
                     observe_mode=recording_only,
                     deadline=deadline,
                     policy_snapshot=policy_snapshot,
+                    **({"request_id": probe[1]} if probe is not None else {}),
                 )
-                if edge is not None and deadline is not None and time.monotonic() >= deadline:
-                    raise TimeoutError("native_review_fence_deadline")
+                # A completed edge is kept rather than reported unavailable:
+                # discarding it would ask about ordinary work and would drop a
+                # deny the native review had already reached. A deadline that
+                # passed while it was being reached says the host was busy, not
+                # that the answer is wrong.
         except TimeoutError:
             return unavailable("native_review_deadline_exceeded")
         except (OSError, NativePolicySnapshotError):
             if fenced is False:
                 raise
+            return unavailable("native_command_control_fence_unavailable")
+        if fenced is None and (
+            unleased_binding is None or published_binding_token(self.policy_snapshot_publisher) != unleased_binding
+        ):
+            # This edge was reached without the lease and a control mutation
+            # published across it. Honouring it could allow a command, or claim
+            # a saved approval, against the policy the user is replacing.
             return unavailable("native_command_control_fence_unavailable")
         if edge is None:
             if event_name == "PostToolUse":
@@ -868,6 +877,7 @@ class HookWorkerNativeMixin:
             "result": native_result,
             "receipt": dict(receipt) if isinstance(receipt, Mapping) else None,
             "recording_only": recording_only,
+            "containment_route": edge.get("containment_route"),
             "failure_reason_code": None,
         }
 
@@ -883,7 +893,8 @@ class HookWorkerNativeMixin:
         writer = self.activity_writer
         submit = getattr(writer, "submit_native_decision_receipt", None)
         if callable(submit):
-            with suppress(Exception):
-                submit(receipt=accepted)
+            # Ordered behind nothing and in front of this hook's activity row,
+            # which links to the receipt by its decision id.
+            run_hook_evidence(self, lambda: submit(receipt=accepted))
         self._last_native_decision_receipt = accepted
         return accepted

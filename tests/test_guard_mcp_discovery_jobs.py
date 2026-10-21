@@ -16,6 +16,8 @@ from codex_plugin_scanner.guard.runtime.local_cli_identity import UnlistedCliIde
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
 
 def _finished(pool: McpDiscoveryJobs, job_id: str) -> dict[str, object]:
     deadline = time.monotonic() + 3
@@ -284,9 +286,7 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         for pid in pids:
             deadline = time.monotonic() + 2
             while time.monotonic() < deadline:
-                try:
-                    os.kill(pid, 0)
-                except ProcessLookupError:
+                if not _owned_pid_is_running(pid):
                     break
                 time.sleep(0.01)
             else:
@@ -296,3 +296,38 @@ def test_cancel_stalled_real_probe_leaves_unrelated_process_alive(tmp_path: Path
         thread.join(3)
         unrelated.terminate()
         unrelated.wait(3)
+
+
+def _owned_pid_is_running(pid: int) -> bool:
+    if sys.platform == "linux":
+        try:
+            # kill(pid, 0) also succeeds for terminated zombies awaiting init
+            # reaping. Those cannot execute; an active descendant still fails.
+            state = Path(f"/proc/{pid}/stat").read_text().rsplit(") ", 1)[1].split()[0]
+        except FileNotFoundError:
+            return False
+        except (OSError, IndexError):
+            return True  # Missing state evidence cannot prove termination.
+        return state not in {"Z", "X"}
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+@pytest.mark.skipif(sys.platform != "linux", reason="Linux procfs distinguishes terminated zombies")
+def test_owned_pid_liveness_rejects_running_child_but_accepts_terminated_zombie():
+    child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert _owned_pid_is_running(child.pid)
+        child.kill()
+        deadline = time.monotonic() + 3
+        while _owned_pid_is_running(child.pid) and time.monotonic() < deadline:
+            time.sleep(0.01)
+        # Deliberately inspect before wait() so the child is not yet reaped.
+        assert Path(f"/proc/{child.pid}/stat").read_text().rsplit(") ", 1)[1].split()[0] == "Z"
+        assert not _owned_pid_is_running(child.pid)
+    finally:
+        child.kill()
+        child.wait(3)

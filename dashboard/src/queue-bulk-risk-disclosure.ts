@@ -23,6 +23,8 @@ export type BulkSelectionStats = {
   elevatedActionCount: number;
   /** Selected actions classified as low risk (file reads, docs edits). */
   lowActionCount: number;
+  /** Selected actions whose one-time approval never lets the agent's next call through. */
+  retryBlockedActionCount?: number;
   /**
    * Sensitive file-read groups currently in the queue. These are never approved
    * by bulk approval — they stay in the queue for individual review — but their
@@ -155,8 +157,12 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     };
   }
 
+  // An unavailable once approval must be removed from the batch first.
+  const retryBlocked = stats.retryBlockedActionCount ?? 0;
   const bullets: string[] = [
-    `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
+    retryBlocked > 0
+      ? `Reviewing ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. This selection includes actions that cannot run on once consent.`
+      : `Approving ${mix} from ${stats.groupCount} ${pluralItems(stats.groupCount)}. Each runs once; the decision is not remembered.`,
   ];
 
   if (stats.highActionCount > 0) {
@@ -173,6 +179,12 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     );
   }
 
+  if (retryBlocked > 0) {
+    bullets.push(
+      `Run once is unavailable for ${retryBlocked} of the selected ${pluralActions(stats.actionCount)}. Open those requests individually to inspect supported approval or recovery choices.`,
+    );
+  }
+
   if (stats.duplicateActionCount > 0) {
     bullets.push(
       `${stats.duplicateActionCount} duplicate ${stats.duplicateActionCount === 1 ? "retry is" : "retries are"} included — make sure the repeats are expected, not a loop.`,
@@ -185,6 +197,14 @@ export function buildBulkRiskDisclosure(stats: BulkSelectionStats): BulkRiskDisc
     bullets.push(
       `${stats.sensitiveCount} sensitive ${stats.sensitiveCount === 1 ? "action stays" : "actions stay"} in the queue and will NOT be approved here.${sampleText}`,
     );
+  }
+
+  if (retryBlocked > 0) {
+    return {
+      tier, tone: "attention", headline: "This selection cannot be approved once",
+      body: "Open the unavailable actions individually to inspect supported approval or recovery choices, then remove them from this selection.",
+      bullets, requiresTypedConfirm: false, confirmPhrase: phrase,
+    };
   }
 
   if (tier === "high") {

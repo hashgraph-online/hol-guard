@@ -15,27 +15,39 @@ from codex_plugin_scanner.guard.store import GuardStore
 from .native_policy_snapshot_test_fixtures import _ack, _status
 
 
-def _publisher(store: GuardStore, monkeypatch: pytest.MonkeyPatch, client):
+def _fixture_key(store: GuardStore, monkeypatch: pytest.MonkeyPatch) -> GuardStore:
+    # Store writes start the resident, which mints a verifier when the key
+    # file is absent, so the fixture key has to be on disk first.
     monkeypatch.setattr(store, "_policy_integrity_secret_material", lambda *, create: (b"m" * 32, "fixture"))
+    store._provision_resident_verifier()
+    return store
+
+
+def _publisher(store: GuardStore, client):
     return NativePolicySnapshotPublisher(store=store, status_provider=_status, client_request=client)
 
 
 def _mutate(store: GuardStore) -> int:
     identity = UnlistedCliIdentity(
-        cli_id="local-cli.mcp-fixture", name="Fixture", kind="executable",
-        identity_hash="a" * 64, example_label="fixture-mcp",
+        cli_id="local-cli.mcp-fixture",
+        name="Fixture",
+        kind="executable",
+        identity_hash="a" * 64,
+        example_label="fixture-mcp",
     )
     store.record_local_cli_observation(identity, seen_at="2026-09-27T12:00:00Z", surface="mcp")
     return store.upsert_local_cli_grant(
-        identity=identity, state="blocked", expected_revision=store.read_local_cli_revision(),
+        identity=identity,
+        state="blocked",
+        expected_revision=store.read_local_cli_revision(),
         updated_at="2026-09-27T12:00:00Z",
     )
 
 
 def test_publication_status_requires_ack_for_exact_local_revision(tmp_path: Path, monkeypatch) -> None:
-    store = GuardStore(tmp_path / "home")
+    store = _fixture_key(GuardStore(tmp_path / "home"), monkeypatch)
     assert local_cli_publication_status(store.guard_home, 0)["state"] == "unavailable"
-    publisher = _publisher(store, monkeypatch, lambda **kwargs: _ack(kwargs["payload"]))
+    publisher = _publisher(store, lambda **kwargs: _ack(kwargs["payload"], guard_home=kwargs.get("guard_home")))
     try:
         assert local_cli_publication_status(store.guard_home, 0)["state"] == "pending"
         publisher._publish_once()
@@ -53,13 +65,13 @@ def test_publication_status_requires_ack_for_exact_local_revision(tmp_path: Path
 
 
 def test_local_revision_changed_during_native_ack_keeps_barrier_closed(tmp_path: Path, monkeypatch) -> None:
-    store = GuardStore(tmp_path / "home")
+    store = _fixture_key(GuardStore(tmp_path / "home"), monkeypatch)
 
     def client(**kwargs):
         _mutate(store)
-        return _ack(kwargs["payload"])
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
-    publisher = _publisher(store, monkeypatch, client)
+    publisher = _publisher(store, client)
     try:
         publisher._publish_once()
         assert not publisher.is_ready()
@@ -70,23 +82,30 @@ def test_local_revision_changed_during_native_ack_keeps_barrier_closed(tmp_path:
 
 
 def test_provider_schema_changed_during_ack_keeps_barrier_closed(tmp_path: Path, monkeypatch) -> None:
-    store = GuardStore(tmp_path / "home")
+    store = _fixture_key(GuardStore(tmp_path / "home"), monkeypatch)
     source = observed_mcp_tool("codex", "mcp__codex_apps__composio__composio_search_tools")
     assert source is not None
-    store.record_composio_discovery(source, (
-        ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object"}, True),
-    ), seen_at="2026-09-27T12:00:00Z")
+    store.record_composio_discovery(
+        source,
+        (ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object"}, True),),
+        seen_at="2026-09-27T12:00:00Z",
+    )
 
     def client(**kwargs):
         policy = json.loads(kwargs["payload"])["request"]["snapshot"]["effective_policy"]
         assert policy["mcp_provider_catalog_hash"] == store.read_mcp_provider_authority_hash()
-        store.record_composio_discovery(source, (
-            ComposioActionSchema("slack", "SLACK_SEARCH_MESSAGES", "Search",
-                                {"type": "object", "required": ["query"]}, True),
-        ), seen_at="2026-09-27T12:01:00Z")
-        return _ack(kwargs["payload"])
+        store.record_composio_discovery(
+            source,
+            (
+                ComposioActionSchema(
+                    "slack", "SLACK_SEARCH_MESSAGES", "Search", {"type": "object", "required": ["query"]}, True
+                ),
+            ),
+            seen_at="2026-09-27T12:01:00Z",
+        )
+        return _ack(kwargs["payload"], guard_home=kwargs.get("guard_home"))
 
-    publisher = _publisher(store, monkeypatch, client)
+    publisher = _publisher(store, client)
     try:
         publisher._publish_once()
         assert not publisher.is_ready()

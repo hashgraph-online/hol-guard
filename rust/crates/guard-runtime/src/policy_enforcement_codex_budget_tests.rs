@@ -1,6 +1,66 @@
 use super::*;
 
 #[test]
+fn codex_browser_process_timing_is_not_a_credential_selector() {
+    for token in [
+        "linux:12345",
+        "windows:134036121234567890",
+        "posix:Thu Oct  1 01:02:03 2026",
+    ] {
+        let payload = json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": token}});
+        let mut installed = policy("allow");
+        installed
+            .risk_actions
+            .insert("local_secret_read".into(), "block".into());
+        let native =
+            guard_command::pretool::evaluate_pre_tool_envelope("codex", "PreToolUse", &payload);
+        let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+        assert_eq!(result.decision, "allow", "{}", result.reason_code);
+    }
+}
+
+#[test]
+fn codex_browser_process_metadata_does_not_hide_credentials() {
+    for payload in [
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd", "startToken": "linux:123"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "private credential"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 0, "startToken": "linux:123"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123", "secret": "private"}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+            "nested": {"guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}}}),
+        json!({"tool_name": "Bash", "tool_input": {"command": "cat credentials.yaml"},
+            "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}}),
+    ] {
+        let mut installed = policy("allow");
+        installed
+            .risk_actions
+            .insert("local_secret_read".into(), "block".into());
+        let native =
+            guard_command::pretool::evaluate_pre_tool_envelope("codex", "PreToolUse", &payload);
+        let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+        assert_eq!(result.decision, "deny");
+    }
+}
+
+#[test]
+fn codex_browser_process_metadata_exception_does_not_apply_to_other_harnesses() {
+    let payload = json!({"tool_name": "Bash", "tool_input": {"command": "pwd"},
+        "guard_codex_browser_wait_process": {"pid": 123, "startToken": "linux:123"}});
+    let mut installed = policy("allow");
+    installed
+        .risk_actions
+        .insert("local_secret_read".into(), "block".into());
+    let native =
+        guard_command::pretool::evaluate_pre_tool_envelope("claude-code", "PreToolUse", &payload);
+    let result = apply_pre_tool_policy(&snapshot(installed), &payload, native).unwrap();
+    assert_eq!(result.decision, "deny");
+}
+
+#[test]
 fn codex_command_output_budget_is_not_a_credential_read() {
     let mut installed_policy = policy("allow");
     installed_policy
@@ -222,4 +282,52 @@ fn codex_post_budget_preserves_sensitive_output_policy_facts() {
             );
         }
     }
+}
+
+#[test]
+fn codex_routine_apply_patch_clears_the_persistence_floor() {
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target")
+        .join(format!("guard-runtime-apply-patch-{}", std::process::id()));
+    let workspace = root.join("home/project");
+    std::fs::create_dir_all(workspace.join("src")).unwrap();
+    std::fs::write(workspace.join("src/settings.ts"), "retryLimit: 3,\n").unwrap();
+    std::fs::write(workspace.join(".env"), "TOKEN=synthetic\n").unwrap();
+    // Hosts spell the workspace without the `\\?\` that canonicalize adds on
+    // Windows, where `/` inside such a verbatim path is no separator.
+    let root = std::fs::canonicalize(root).unwrap();
+    let root = std::path::PathBuf::from(root.to_string_lossy().trim_start_matches(r"\\?\"));
+    let (home, workspace) = (root.join("home"), root.join("home").join("project"));
+    let mut installed = policy("allow");
+    installed
+        .risk_actions
+        .insert("persistence".into(), "require-reapproval".into());
+    let review = |target: &str| {
+        let payload = json!({
+            "hook_event_name": "PreToolUse",
+            "tool_name": "apply_patch",
+            "tool_input": {"command": format!(
+                "*** Begin Patch\n*** Update File: {target}\n@@\n-  retryLimit: 3,\n+  retryLimit: 5,\n*** End Patch"
+            )}
+        });
+        let native = guard_command::pretool::evaluate_pre_tool_envelope_with_context(
+            "codex",
+            "PreToolUse",
+            &payload,
+            None,
+            None,
+            home.to_str(),
+            workspace.to_str(),
+        );
+        apply_pre_tool_policy(&snapshot(installed.clone()), &payload, native).unwrap()
+    };
+    let routine = review(
+        &workspace
+            .join("src")
+            .join("settings.ts")
+            .display()
+            .to_string(),
+    );
+    assert_eq!(routine.decision, "allow", "{}", routine.reason_code);
+    assert_eq!(review(".env").decision, "deny");
 }

@@ -7,18 +7,19 @@ by runtime command enforcement so the dashboard does not duplicate policy truth.
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Final
 
+from ..native_extension_control import ControlItem, ControlScenario, resolve_scenarios
 from ..runtime.command_extensions import CommandSafetyExtensionRegistry
 from ..runtime.extension_control_contract import (
     ControlLayerKind,
     ControlState,
-    ControlSurface,
     ControlTargetKind,
     ExtensionControlLayer,
 )
-from ..runtime.extension_control_resolver import compose_control_layers, resolve_extension_controls
 from ..runtime.generated_command_catalog import GeneratedCommandPermission
 
 SEMANTIC_PREVIEW_SCHEMA: Final = "guard.daemon.extension-control-semantic-preview.v1"
@@ -45,42 +46,53 @@ def _explicit_state(
     return "inherited"
 
 
-def _permission_blocked(
+@dataclass(frozen=True, slots=True)
+class _Effective:
+    """What one set of layers blocks, as the native resolver answered it."""
+
+    global_lockdown: bool
+    permission_allowed: dict[str, bool]
+    extension_blocked: dict[str, bool]
+
+
+def _resolve_effective(
     registry: CommandSafetyExtensionRegistry,
-    layers: tuple[ExtensionControlLayer, ...],
-    permission: GeneratedCommandPermission,
-) -> bool:
-    return resolve_extension_controls(
-        layers,
+    questions: Sequence[tuple[tuple[ExtensionControlLayer, ...], tuple[str, ...]]],
+    guard_home: Path | None,
+) -> list[_Effective]:
+    """Resolve every registry permission, and the named extensions, once per set of layers."""
+
+    permissions = registry.permissions
+    permission_items = tuple(ControlItem((), (permission.permission_id,)) for permission in permissions)
+    answers = resolve_scenarios(
         registry,
-        extension_ids=(),
-        permission_ids=(permission.permission_id,),
-        surface=ControlSurface.COMMAND_EVALUATION,
-    ).blocked
-
-
-def _extension_blocked(
-    registry: CommandSafetyExtensionRegistry,
-    layers: tuple[ExtensionControlLayer, ...],
-    extension_id: str,
-) -> bool:
-    return resolve_extension_controls(
-        layers,
-        registry,
-        extension_ids=(extension_id,),
-        permission_ids=(),
-        surface=ControlSurface.COMMAND_EVALUATION,
-    ).blocked
-
-
-def _all_effective_permission_states(
-    registry: CommandSafetyExtensionRegistry,
-    layers: tuple[ExtensionControlLayer, ...],
-) -> dict[str, bool]:
-    return {
-        permission.permission_id: not _permission_blocked(registry, layers, permission)
-        for permission in registry.permissions
-    }
+        [
+            ControlScenario(
+                layers,
+                (*permission_items, *(ControlItem((extension_id,), ()) for extension_id in extension_ids)),
+            )
+            for layers, extension_ids in questions
+        ],
+        guard_home=guard_home,
+    )
+    effective: list[_Effective] = []
+    for (_, extension_ids), answer in zip(questions, answers, strict=True):
+        permission_answers = answer.items[: len(permissions)]
+        extension_answers = answer.items[len(permissions) :]
+        effective.append(
+            _Effective(
+                answer.global_lockdown,
+                {
+                    permission.permission_id: not permission_answer.blocked
+                    for permission, permission_answer in zip(permissions, permission_answers, strict=True)
+                },
+                {
+                    extension_id: extension_answer.blocked
+                    for extension_id, extension_answer in zip(extension_ids, extension_answers, strict=True)
+                },
+            )
+        )
+    return effective
 
 
 def _layers_with_target_reverted(
@@ -108,20 +120,12 @@ def _layers_with_target_reverted(
     return tuple(reverted_local if layer is proposed_local else layer for layer in proposed_layers)
 
 
-def _marginal_permission_ids(
-    registry: CommandSafetyExtensionRegistry,
-    current_layers: tuple[ExtensionControlLayer, ...],
-    proposed_layers: tuple[ExtensionControlLayer, ...],
-    key: tuple[ControlTargetKind, str],
-) -> tuple[str, ...]:
-    reverted = _layers_with_target_reverted(current_layers, proposed_layers, key)
-    proposed_states = _all_effective_permission_states(registry, proposed_layers)
-    reverted_states = _all_effective_permission_states(registry, reverted)
+def _marginal_permission_ids(proposed: _Effective, reverted: _Effective) -> tuple[str, ...]:
     return tuple(
         sorted(
             permission_id
-            for permission_id, state in proposed_states.items()
-            if state != reverted_states.get(permission_id, state)
+            for permission_id, state in proposed.permission_allowed.items()
+            if state != reverted.permission_allowed.get(permission_id, state)
         )[:_MAX_RELATIONSHIP_IDS]
     )
 
@@ -174,10 +178,11 @@ def _provenance(
     layers: tuple[ExtensionControlLayer, ...],
     kind: ControlTargetKind,
     target_id: str,
+    *,
+    global_lockdown: bool,
 ) -> tuple[str, ...]:
-    composed = compose_control_layers(layers)
     sources: list[str] = []
-    if composed.global_lockdown:
+    if global_lockdown:
         sources.append("global-lockdown")
     for layer in layers:
         if any(control.target.kind is kind and control.target.target_id == target_id for control in layer.controls):
@@ -189,14 +194,14 @@ def _provenance(
 
 def _warnings_for_permission(
     registry: CommandSafetyExtensionRegistry,
-    proposed_layers: tuple[ExtensionControlLayer, ...],
+    proposed: _Effective,
     permission: GeneratedCommandPermission,
     *,
     requested_state: str,
     affected_permission_ids: tuple[str, ...],
 ) -> list[dict[str, object]]:
     warnings: list[dict[str, object]] = []
-    if requested_state == ControlState.ENABLED.value and _permission_blocked(registry, proposed_layers, permission):
+    if requested_state == ControlState.ENABLED.value and not proposed.permission_allowed[permission.permission_id]:
         warnings.append(
             {
                 "code": "requested-allow-not-effective",
@@ -205,7 +210,7 @@ def _warnings_for_permission(
         )
     for conflict_id in permission.conflicts:
         conflict = registry.permission(conflict_id)
-        if conflict is not None and not _permission_blocked(registry, proposed_layers, conflict):
+        if conflict is not None and proposed.permission_allowed[conflict.permission_id]:
             warnings.append(
                 {
                     "code": "conflicting-permission-effective",
@@ -229,12 +234,9 @@ def build_extension_control_semantic_preview(
     registry: CommandSafetyExtensionRegistry,
     current_layers: tuple[ExtensionControlLayer, ...],
     proposed_layers: tuple[ExtensionControlLayer, ...],
+    *,
+    guard_home: Path | None = None,
 ) -> dict[str, object]:
-    current_composed = compose_control_layers(current_layers)
-    proposed_composed = compose_control_layers(proposed_layers)
-    before_permission_states = _all_effective_permission_states(registry, current_layers)
-    after_permission_states = _all_effective_permission_states(registry, proposed_layers)
-
     current_local = _local_layer(current_layers)
     proposed_local = _local_layer(proposed_layers)
     current_controls = {
@@ -250,6 +252,33 @@ def build_extension_control_semantic_preview(
         :_MAX_CHANGED_TARGETS
     ]
 
+    # A changed target the catalog does not know yields no entry, so it needs no resolution.
+    known_keys = [
+        key
+        for key in changed_keys
+        if (registry.permission(key[1]) if key[0] is ControlTargetKind.PERMISSION else registry.get(key[1])) is not None
+    ]
+    changed_extension_ids = tuple(
+        extension.extension_id
+        for kind, target_id in known_keys
+        if kind is ControlTargetKind.EXTENSION
+        for extension in (registry.get(target_id),)
+        if extension is not None
+    )
+    # The current and proposed layers, then the proposed layers with each changed target reverted.
+    current, proposed, *reverted_effective = _resolve_effective(
+        registry,
+        [
+            (current_layers, changed_extension_ids),
+            (proposed_layers, changed_extension_ids),
+            *((_layers_with_target_reverted(current_layers, proposed_layers, key), ()) for key in known_keys),
+        ],
+        guard_home,
+    )
+    reverted_by_key = dict(zip(known_keys, reverted_effective, strict=True))
+    before_permission_states = current.permission_allowed
+    after_permission_states = proposed.permission_allowed
+
     changed_targets: list[dict[str, object]] = []
     all_affected_permission_ids: set[str] = set()
     all_affected_rule_ids: set[str] = set()
@@ -258,7 +287,9 @@ def build_extension_control_semantic_preview(
         key = (kind, target_id)
         before_explicit = _explicit_state(current_layers, kind, target_id)
         after_explicit = _explicit_state(proposed_layers, kind, target_id)
-        affected_permission_ids = _marginal_permission_ids(registry, current_layers, proposed_layers, key)
+        if key not in reverted_by_key:
+            continue
+        affected_permission_ids = _marginal_permission_ids(proposed, reverted_by_key[key])
         if kind is ControlTargetKind.PERMISSION and target_id not in affected_permission_ids:
             affected_permission_ids = tuple(sorted((*affected_permission_ids, target_id)))[:_MAX_RELATIONSHIP_IDS]
         affected_rule_ids = _rule_ids_for_permissions(registry, affected_permission_ids)
@@ -274,7 +305,7 @@ def build_extension_control_semantic_preview(
             ]
             warnings = _warnings_for_permission(
                 registry,
-                proposed_layers,
+                proposed,
                 permission,
                 requested_state=after_explicit,
                 affected_permission_ids=affected_permission_ids,
@@ -300,7 +331,9 @@ def build_extension_control_semantic_preview(
                     "dependency_permission_ids": sorted(permission.dependencies)[:_MAX_RELATIONSHIP_IDS],
                     "implied_permission_ids": sorted(permission.implied_permissions)[:_MAX_RELATIONSHIP_IDS],
                     "conflict_permission_ids": sorted(permission.conflicts)[:_MAX_RELATIONSHIP_IDS],
-                    "provenance": list(_provenance(proposed_layers, kind, target_id)),
+                    "provenance": list(
+                        _provenance(proposed_layers, kind, target_id, global_lockdown=proposed.global_lockdown)
+                    ),
                     "warnings": warnings,
                     **({"extension_name": extension.name} if extension is not None else {}),
                 }
@@ -315,7 +348,7 @@ def build_extension_control_semantic_preview(
             extension_rule_ids = {rule.rule_id for rule in extension.rules}
             affected_rule_ids = tuple(sorted(set(affected_rule_ids) | extension_rule_ids))[:_MAX_RELATIONSHIP_IDS]
             warnings: list[dict[str, object]] = []
-            after_effective = not _extension_blocked(registry, proposed_layers, extension.extension_id)
+            after_effective = not proposed.extension_blocked[extension.extension_id]
             if after_explicit == ControlState.ENABLED.value and not after_effective:
                 warnings.append(
                     {
@@ -330,9 +363,7 @@ def build_extension_control_semantic_preview(
                     "label": extension.name,
                     "before_explicit": before_explicit,
                     "after_explicit": after_explicit,
-                    "before_effective": "blocked"
-                    if _extension_blocked(registry, current_layers, extension.extension_id)
-                    else "allowed",
+                    "before_effective": "blocked" if current.extension_blocked[extension.extension_id] else "allowed",
                     "after_effective": "allowed" if after_effective else "blocked",
                     "affected_permission_ids": list(affected_permission_ids),
                     "affected_rule_ids": list(affected_rule_ids),
@@ -340,7 +371,9 @@ def build_extension_control_semantic_preview(
                     "dependency_permission_ids": [],
                     "implied_permission_ids": [],
                     "conflict_permission_ids": [],
-                    "provenance": list(_provenance(proposed_layers, kind, target_id)),
+                    "provenance": list(
+                        _provenance(proposed_layers, kind, target_id, global_lockdown=proposed.global_lockdown)
+                    ),
                     "warnings": warnings,
                 }
             )
@@ -357,13 +390,13 @@ def build_extension_control_semantic_preview(
         for permission_id, before in before_permission_states.items()
         if not before and after_permission_states.get(permission_id, False)
     )
-    lockdown_changed = current_composed.global_lockdown != proposed_composed.global_lockdown
+    lockdown_changed = current.global_lockdown != proposed.global_lockdown
 
     return {
         "schema_version": SEMANTIC_PREVIEW_SCHEMA,
         "global_lockdown": {
-            "before": current_composed.global_lockdown,
-            "after": proposed_composed.global_lockdown,
+            "before": current.global_lockdown,
+            "after": proposed.global_lockdown,
             "changed": lockdown_changed,
         },
         "changed_target_count": len(changed_targets),

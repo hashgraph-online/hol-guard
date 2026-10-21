@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import stat
 import subprocess
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import cast
@@ -58,21 +59,31 @@ def process_identity_matches(value: object) -> bool:
     return _process_start_token(pid) == start_token
 
 
-def process_start_token(pid: int) -> str | None:
+def process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
     """Return the platform-specific marker for the process currently using ``pid``."""
 
-    return _process_start_token(pid)
+    if deadline_monotonic is None:
+        return _process_start_token(pid)
+    return _process_start_token(pid, deadline_monotonic=deadline_monotonic)
 
 
-def _process_start_token(pid: int) -> str | None:
+def _process_start_token(pid: int, *, deadline_monotonic: float | None = None) -> str | None:
+    def expired() -> bool:
+        return deadline_monotonic is not None and time.monotonic() >= deadline_monotonic
+
+    if expired():
+        return None
     if os.name == "nt":
         created_at = windows_process_creation_time(pid)
-        return f"windows:{created_at}" if created_at is not None else None
+        return f"windows:{created_at}" if created_at is not None and not expired() else None
     proc_stat = _linux_proc_stat(pid)
     if proc_stat is not None:
-        return f"linux:{proc_stat}"
+        return f"linux:{proc_stat}" if not expired() else None
     ps_path = _trusted_posix_ps_path()
     if ps_path is None:
+        return None
+    timeout = 0.5 if deadline_monotonic is None else min(0.5, max(0.0, deadline_monotonic - time.monotonic()))
+    if timeout <= 0:
         return None
     try:
         result = subprocess.run(
@@ -81,12 +92,12 @@ def _process_start_token(pid: int) -> str | None:
             capture_output=True,
             env={"LANG": "C", "LC_ALL": "C"},
             text=True,
-            timeout=0.5,
+            timeout=timeout,
         )
     except (OSError, subprocess.SubprocessError):
         return None
     started_at = result.stdout.strip()
-    return f"posix:{started_at}" if result.returncode == 0 and started_at else None
+    return f"posix:{started_at}" if result.returncode == 0 and started_at and not expired() else None
 
 
 def _trusted_posix_ps_path() -> str | None:

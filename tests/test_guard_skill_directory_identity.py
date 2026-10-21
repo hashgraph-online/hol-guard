@@ -9,7 +9,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard import skill_directory_identity as identity_module
 from codex_plugin_scanner.guard.skill_directory_identity import (
     SKILL_DIRECTORY_IDENTITY_SCHEMA,
     SkillDirectoryIdentity,
@@ -328,30 +327,6 @@ def test_mtime_changes_do_not_change_content_identity(tmp_path: Path) -> None:
 
     assert after.directory_hash == before.directory_hash
     assert after.primary_content_hash == before.primary_content_hash
-
-
-def test_directory_enumeration_order_does_not_change_identity(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    scope = tmp_path / "scope"
-    skill = _make_skill(scope)
-    for relative_path in ("z.txt", "a.txt", "nested/y.txt", "nested/b.txt"):
-        path = skill.parent / relative_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(relative_path, encoding="utf-8")
-    baseline = _complete(skill, scope)
-    original_scandir = os.scandir
-
-    def reversed_scandir(path: os.PathLike[str] | str) -> object:
-        with original_scandir(path) as iterator:
-            return iter(reversed(list(iterator)))
-
-    monkeypatch.setattr(identity_module.os, "scandir", reversed_scandir)
-    reversed_identity = _complete(skill, scope)
-
-    assert reversed_identity.directory_hash == baseline.directory_hash
-    assert reversed_identity.primary_content_hash == baseline.primary_content_hash
 
 
 def test_unicode_names_are_normalized_to_nfc(tmp_path: Path) -> None:

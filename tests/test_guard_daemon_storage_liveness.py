@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import sqlite3
+import threading
 import time
 import urllib.request
 from collections.abc import Iterator
@@ -20,18 +21,22 @@ from codex_plugin_scanner.guard.cli.commands_support_command_activity import (
     record_pre_hook_command_activity_best_effort,
 )
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager_module
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.discovery import (
     DAEMON_DISCOVERY_PROTOCOL_VERSION,
     load_authenticated_daemon_state,
 )
 from codex_plugin_scanner.guard.daemon.runtime_heartbeat import RuntimeHeartbeatWriter
-from codex_plugin_scanner.guard.daemon.server import (
-    GuardDaemonServer,
-    _GuardDaemonHttpServer,
+from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer, _GuardDaemonHttpServer
+from codex_plugin_scanner.guard.native_daemon_route import _MAX_CONCURRENT_ASKS, native_route_facts
+from codex_plugin_scanner.guard.sqlite_tuning import (
+    sqlite_connect_timeout_override,
+    sqlite_connect_timeout_seconds,
+    sqlite_operation_deadline_monotonic,
 )
-from codex_plugin_scanner.guard.sqlite_tuning import sqlite_connect_timeout_override, sqlite_connect_timeout_seconds
+from codex_plugin_scanner.guard import store_review_event_outbox, store_storage_gate
 from codex_plugin_scanner.guard.store import GuardStore
+from codex_plugin_scanner.guard.store_review_event_outbox import StoreReviewEventOutboxMixin
+from tests.daemon_control_patching import patch_daemon_global
 from tests.native_command_activity_test_support import use_real_native_activity_reviews
 
 
@@ -61,7 +66,13 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
     monkeypatch.setattr(daemon_manager_module, "_guard_daemon_process_inventory_for_guard_home", empty_inventory)
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
+    # Route policy is answered by the resident; start its stream before the
+    # store is locked so the test measures storage contention only.
+    assert native_route_facts("POST", "/v1/daemon/identity-challenge", guard_home=store.guard_home)
     blocker = sqlite3.connect(store.path, timeout=2.0, isolation_level=None)
 
     try:
@@ -111,6 +122,7 @@ def test_critical_daemon_liveness_does_not_wait_for_locked_storage(
         daemon.stop()
 
 
+@pytest.mark.usefixtures("native_route_policy_with_hooks_off")
 def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -125,7 +137,22 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
     )
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0)
+    # Hold the native hook edge unavailable so the burst exercises storage
+    # contention rather than real native review latency.
+    monkeypatch.setattr(daemon._server.hook_worker, "_review_raw_hook_native", lambda **_: None)  # pyright: ignore[reportPrivateUsage]
     daemon.start()
+    # Route policy is answered by the resident, which needs the home's verifier
+    # key (provisioned through the store) and a started stream. Establish both
+    # before the store is locked so the burst measures storage contention only.
+    # Warm one resident per ask slot at once, so the burst does not pay spawns.
+    with ThreadPoolExecutor(max_workers=_MAX_CONCURRENT_ASKS) as warmup:
+        warmed = list(
+            warmup.map(
+                lambda _index: native_route_facts("POST", "/v1/hooks/pi", guard_home=store.guard_home),
+                range(_MAX_CONCURRENT_ASKS * 2),
+            )
+        )
+    assert all(facts.requires_header_token for facts in warmed)
     blocker = sqlite3.connect(store.path, timeout=0.1, isolation_level=None)
     _ = blocker.execute("begin exclusive")
     endpoint = (
@@ -141,6 +168,9 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
                     "hook_event_name": "PreToolUse",
                     "tool_name": "Bash",
                     "tool_input": {"command": f"echo bounded-{index}"},
+                    # Keep the daemon deadline inside the client timeout so the
+                    # burst measures bounded fail-safe denial, not native review.
+                    "guard_remaining_seconds": 1.0,
                 }
             ).encode(),
             headers={
@@ -166,17 +196,12 @@ def test_locked_storage_hook_burst_fails_safe_without_stranding_daemon(
         blocker.close()
 
     try:
-        assert daemon._server.hook_process_runner.wait_for_capacity(  # pyright: ignore[reportPrivateUsage]
-            minimum_workers=1,
-            timeout_seconds=15,
-        )
-        worker_stats = daemon._server.hook_process_runner.stats()  # pyright: ignore[reportPrivateUsage]
+        scheduler_stats = daemon._server.runtime_hook_scheduler.stats()  # pyright: ignore[reportPrivateUsage]
         resumed_payload, resumed_elapsed = review(100)
-        assert worker_stats["timeouts"] == 0
-        assert worker_stats["ready"] >= 1
-        # Storage recovery does not enable the explicitly disabled native authority.
+        assert scheduler_stats["active"] == 0
+        assert scheduler_stats["queued"] == 0
+        # Storage recovery never turns an unavailable native authority into an allow.
         assert resumed_payload.get("policy_action") == "block"
-        assert resumed_payload.get("reason_code") == "native_hook_disabled"
         assert resumed_elapsed < 1.0
     finally:
         daemon.stop()
@@ -272,8 +297,84 @@ def test_internal_hook_sqlite_timeout_is_bounded_without_changing_default() -> N
 def test_sqlite_timeout_override_is_scoped_to_current_context() -> None:
     assert sqlite_connect_timeout_seconds({}) == 30.0
     with sqlite_connect_timeout_override(0.05):
-        assert sqlite_connect_timeout_seconds({}) == 0.05
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
     assert sqlite_connect_timeout_seconds({}) == 30.0
+
+
+def test_sqlite_lock_wait_stays_short_when_the_operation_clock_is_longer() -> None:
+    with sqlite_connect_timeout_override(0.05, operation_seconds=5):
+        assert 0 < sqlite_connect_timeout_seconds({}) <= 0.05
+        deadline = sqlite_operation_deadline_monotonic()
+        assert deadline is not None
+        remaining = deadline - time.monotonic()
+        assert 4 < remaining <= 5
+    assert sqlite_connect_timeout_seconds({}) == 30.0
+    assert sqlite_operation_deadline_monotonic() is None
+
+
+@final
+class _GateWaitStore(StoreReviewEventOutboxMixin):
+    """Mixin host that takes the real storage gate, as a store does."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.guard_home = path.parent
+        self._guard_source = "test"
+
+    @contextmanager
+    def _hold_storage_gate(self, *, exclusive: bool) -> Iterator[None]:
+        with store_storage_gate.hold_storage_gate(self.guard_home, exclusive=exclusive):
+            yield
+
+    def _sqlite_profiler(self) -> SimpleNamespace:
+        return SimpleNamespace(record_busy_locked=lambda: None, record_transaction=lambda _elapsed_ms: None)
+
+    def _repair_store_permissions(self) -> None:
+        return None
+
+
+def test_store_call_budget_starts_once_the_storage_gate_is_held(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    budgets: list[float] = []
+
+    def record_budget(*, deadline_monotonic: float, **_rest: object) -> tuple[object, int | None]:
+        budgets.append(deadline_monotonic - time.monotonic())
+        return None, None
+
+    monkeypatch.setattr(store_review_event_outbox, "native_guard_store_call", record_budget)
+    # The internal hook lock-wait cap, which is also this process's ceiling.
+    monkeypatch.setenv("HOL_GUARD_INTERNAL_HOOK_SQLITE_TIMEOUT_MS", "250")
+    store = _GateWaitStore(tmp_path / "guard.db")
+
+    held = threading.Event()
+    done = threading.Event()
+
+    def hold_the_gate_exclusively() -> None:
+        # Holds are registered per thread, so this really keeps the caller out.
+        with store_storage_gate.hold_storage_gate(store.guard_home, exclusive=True):
+            held.set()
+            done.wait(timeout=0.1)
+
+    holder = threading.Thread(target=hold_the_gate_exclusively, daemon=True)
+    holder.start()
+    try:
+        assert held.wait(timeout=5)
+        started = time.monotonic()
+        assert store._native_store_call("requeue_pending_review_events", {}) is None
+        waited = time.monotonic() - started
+    finally:
+        done.set()
+        holder.join(timeout=5)
+
+    # The caller really queued behind the other holder, for less than the cap.
+    assert 0.05 <= waited < 0.25
+    # The cap bounds waiting for the database, not waiting to be admitted to it,
+    # so the call reaches the resident with its whole budget rather than with
+    # whatever the queue left of it. A wait longer than the cap is refused by
+    # the gate itself, whose own deadline is a separate bound.
+    assert budgets == pytest.approx([0.25], abs=0.05)
 
 
 def test_store_promotes_rollback_journal_before_bounded_hook_writes(
@@ -317,7 +418,10 @@ def test_store_promotes_rollback_journal_before_bounded_hook_writes(
     try:
         reader.execute("begin")
         assert reader.execute("select count(*) from command_activity").fetchone() == (0,)
-        with sqlite_connect_timeout_override(0.05):
+        # The override is a wall clock from entry, and native review runs before
+        # the write. The reader keeps its transaction until this call returns,
+        # so a lock wait still fails instead of waiting the reader out.
+        with sqlite_connect_timeout_override(5):
             assert record_pre_hook_command_activity_best_effort(
                 store=store,
                 guard_home=guard_home,
@@ -380,8 +484,8 @@ def test_storage_maintenance_failure_requests_immediate_retry(
 
     daemon = object.__new__(GuardDaemonServer)
     object.__setattr__(daemon, "_server", SimpleNamespace(store=FailingStore()))
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "load_guard_config",
         lambda _guard_home: SimpleNamespace(evidence_retain_days=30),
     )

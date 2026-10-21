@@ -13,13 +13,13 @@ from pathlib import Path
 
 from ..adapters.hermes_file_inspection import parse_hermes_yaml_mapping
 from ..file_identity import full_stat_identity
+from ..native_skill_workflow_preflight import native_skill_dependencies
 from ..path_security import path_has_symlink_component
 from ..skill_directory_discovery import discover_skill_documents
 from ..skill_directory_identity import inspect_skill_directory
 from ..skill_directory_identity_contract import SkillDirectoryIdentityLimits
 from ..windows_paths import open_windows_locked_regular_descriptor
 from .false_positive_rules import KNOWN_SKILL_DOC_ROOT_SUFFIXES
-from .skill_workflow_preflight import parse_guard_skill_dependencies
 
 _HEADER_BYTES = 16_384
 _INDEX_LIMIT = 1000
@@ -151,7 +151,7 @@ def read_skill_metadata(document: Path, *, root: Path) -> dict[str, object]:
         "metadata_digest": hashlib.sha256(header.encode()).hexdigest(),
         "requirements_complete": False,
         "instruction_content_loaded": False,
-        "dependencies": parse_guard_skill_dependencies(parsed),
+        "dependencies": native_skill_dependencies(parsed),
     }
 
 

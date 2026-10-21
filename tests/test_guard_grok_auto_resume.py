@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import argparse
 import io
 import json
 import sys
@@ -20,6 +19,8 @@ from codex_plugin_scanner.guard.adapters.grok_approval_resume import (
 from codex_plugin_scanner.guard.approvals import apply_approval_resolution
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
+
+pytestmark = pytest.mark.usefixtures("approval_questionnaire_mode")
 
 
 def _request(tmp_path: Path, request_id: str) -> GuardApprovalRequest:
@@ -338,7 +339,7 @@ def test_grok_pretool_posts_to_daemon(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_bridge
+    from codex_plugin_scanner.guard.adapters import bounded_cli_hook_daemon
 
     posted: list[str] = []
 
@@ -365,18 +366,20 @@ def test_grok_pretool_posts_to_daemon(
             return FakeResponse()
 
     monkeypatch.setattr(
-        bounded_cli_hook_bridge,
+        bounded_cli_hook_daemon,
         "_daemon_hook_endpoint",
         lambda *_args, **_kwargs: "http://127.0.0.1:4781/v1/hooks/grok",
     )
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_read_daemon_auth_token", lambda *_args, **_kwargs: "token")
-    monkeypatch.setattr(bounded_cli_hook_bridge, "_build_loopback_opener", lambda: FakeOpener())
-    stdout, _stderr, code = bounded_cli_hook_bridge._try_daemon_hook(
+    monkeypatch.setattr(bounded_cli_hook_daemon, "_read_daemon_auth_token", lambda *_args, **_kwargs: "token")
+    monkeypatch.setattr(bounded_cli_hook_daemon, "_build_loopback_opener", lambda: FakeOpener())
+    result = bounded_cli_hook_daemon.try_daemon_hook(
         guard_home=tmp_path / "guard-home",
         harness="grok",
         input_text=json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash"}),
         timeout_seconds=5.0,
     )
+    assert result is not None
+    stdout, _stderr, code = result
     assert posted
     assert code == 0
     assert json.loads(stdout)["decision"] == "allow"
@@ -498,22 +501,36 @@ def test_grok_isolated_hook_resumes_after_approval(tmp_path: Path) -> None:
     assert json.loads(stdout_line)["decision"] == "allow"
 
 
-def test_grok_json_mode_uses_native_hook_response() -> None:
-    from codex_plugin_scanner.guard.cli.commands_support_interaction import (
-        _should_emit_native_hook_json_response,
-        _should_emit_native_hook_response,
+def _recorded_artifact_directive(harness: str, *, json_mode: bool, event: str, action: str) -> dict[str, object]:
+    """The artifact hook's routing the resident must reproduce for these facts."""
+
+    import gzip
+
+    fixture = Path(__file__).resolve().parents[1] / (
+        "rust/crates/guard-runtime/tests/fixtures/artifact_directive_vectors.json.gz"
+    )
+    wanted = {
+        "harness": harness,
+        "json": json_mode,
+        "event": event,
+        "policy_action": action,
+        "output_stream_present": False,
+        "replayed": False,
+        "approval_context_present": False,
+    }
+    return next(
+        vector["directive"]
+        for vector in json.loads(gzip.decompress(fixture.read_bytes()))
+        if all(vector["facts"][key] == value for key, value in wanted.items()) and not any(vector["extra"].values())
     )
 
-    args = argparse.Namespace(harness="grok", json=True)
-    assert _should_emit_native_hook_response(args) is False
-    assert (
-        _should_emit_native_hook_json_response(
-            args,
-            event_name="PreToolUse",
-            output_stream=None,
-        )
-        is True
-    )
+
+def test_grok_json_mode_uses_native_hook_response() -> None:
+    directive = _recorded_artifact_directive("grok", json_mode=True, event="PreToolUse", action="allow")
+    assert directive["route"] == "render"
+    assert directive["try_json_document"] is True
+    assert directive["emitter"] == "grok"
+    assert directive["exit_code"] is None  # grok's adapter decides it from its emit state
 
 
 def test_apply_grok_pretool_wait_rewrites_hook_specific_output(

@@ -1,0 +1,167 @@
+{
+  "schema": "hol-guard-cursor-native-answers.v1",
+  "vectors": [
+    {
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"  Blocked: rm -rf \u00e9 \\\"q\\\" \\\\ \\n\\ttab \u007f \ud83d\ude00 \"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Blocked: rm -rf \\u00e9 \\\"q\\\" \\\\ \\n\\ttab \\u007f \\ud83d\\ude00\", \"agent_message\": \"Blocked: rm -rf \\u00e9 \\\"q\\\" \\\\ \\n\\ttab \\u007f \\ud83d\\ude00\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Reading .env is blocked.\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env is blocked.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": " BEFOREREADFILE\n",
+      "response": "{\"policy_action\": \"block\", \"reason_code\": \"native_policy_block\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Reading .env is blocked.\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Reading .env is blocked.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\": \"sandbox-required\", \"reason_code\": \"native_policy_block\", \"hookSpecificOutput\": {\"hookEventName\": \"PreToolUse\", \"permissionDecision\": \"deny\", \"permissionDecisionReason\": \"Run this in a sandbox.\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Run this in a sandbox.\", \"agent_message\": \"Run this in a sandbox.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "beforeMCPExecution",
+      "response": "{\"policy_action\":\"block\",\"reason\":\" top \",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"nested\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"top\", \"agent_message\": \"top\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"reason\":\"  \",\"stopReason\":5,\"systemMessage\":null,\"hookSpecificOutput\":[\"x\"],\"decision_v2_json\":{\"harness_message\":\" \",\"user_title\":\"Title\",\"user_body\":\"Body\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Body\", \"agent_message\": \"Body\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"decision_v2_json\":{\"user_body\":\"Body\",\"retry_instruction\":\"Retry later\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Retry later\", \"agent_message\": \"Retry later\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"hookSpecificOutput\":{\"permissionDecisionReason\":\"\\u001f reason \\u3000\"}}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"reason\", \"agent_message\": \"reason\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"HOL Guard blocked this Cursor action.\", \"agent_message\": \"HOL Guard blocked this Cursor action.\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\":\"sandbox-required\",\"risk_headline\":\"Headline\",\"why_now\":\"Now\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"Now\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"reason\":\"first\",\"reason\":\"second\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"second\", \"agent_message\": \"second\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"reason\":\"no link\",\"primary_approval_url\":\"  \",\"approval_requests\":[{\"approval_url\":\" \"},\"https://x.test/a\",{\"approval_url\":7}]}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"no link\", \"agent_message\": \"no link\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "beforeReadFile",
+      "response": "{\"policy_action\":\"allow\",\"continue\":true}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "event": "beforeShellExecution",
+      "response": "{\"policy_action\":\"warn\",\"reason\":\"careful\"}",
+      "stdout": "{\"permission\": \"allow\"}\n",
+      "exit_code": 0
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"reason\":\"r\",\"approval_url\":\"http://127.0.0.1:1/a\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"primary_approval_url\":\"http://127.0.0.1:1/a\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"guardApprovalUrl\":\" http://127.0.0.1:1/a \"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"approval_requests\":[{\"approval_url\":\"http://127.0.0.1:1/a\"}]}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"block\",\"reason\":\"\\ud800\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"allow\",\"reason\":\"\\ud800\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"review\",\"reason\":\"r\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r\", \"agent_message\": \"r\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"require-reapproval\",\"reason\":\"r\"}",
+      "stdout": "{\"permission\": \"deny\", \"user_message\": \"r\", \"agent_message\": \"r\"}\n",
+      "exit_code": 2
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":\"Block\",\"reason\":\"r\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"policy_action\":[\"block\"]}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "{\"reason\":\"r\"}",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "[]",
+      "stdout": null,
+      "exit_code": null
+    },
+    {
+      "event": "preToolUse",
+      "response": "",
+      "stdout": null,
+      "exit_code": null
+    }
+  ]
+}

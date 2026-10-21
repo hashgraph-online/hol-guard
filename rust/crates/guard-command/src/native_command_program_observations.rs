@@ -9,25 +9,89 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
-        let compatibility =
-            crate::command_compatibility::compatibility_observations(command, deadline)?;
-        let mut batch = self.observe_declarative(command, active_extensions, deadline)?;
+        self.observe_with_context(
+            command,
+            active_extensions,
+            deadline,
+            crate::pretool::PathContext::default(),
+        )
+    }
+
+    pub fn observe_with_context(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_in(command, active_extensions, deadline, context, None)
+    }
+
+    /// [`Self::observe_with_context`] with the execution environment the
+    /// command inherits, for proofs that run a metadata probe.
+    pub(crate) fn observe_in(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_in_with_dispatch(
+            command,
+            active_extensions,
+            deadline,
+            context,
+            environment,
+            None,
+        )
+    }
+
+    pub(crate) fn observe_in_with_dispatch(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        context: crate::pretool::PathContext<'_>,
+        environment: Option<&guard_contracts::GuardExecutionEnvironmentV1>,
+        dispatch: Option<&CommandCandidateIndex>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        let compatibility = crate::command_compatibility::compatibility_observations_in(
+            command,
+            deadline,
+            context,
+            environment,
+        )?;
+        let candidates = dispatch
+            .map(|index| index.candidates(command))
+            .unwrap_or_else(|| self.candidate_rule_indices(command));
+        let mut batch = self.observe_declarative_memo(
+            command,
+            active_extensions,
+            deadline,
+            candidates,
+            dispatch.map(|index| Arc::clone(&index.memo_layout)),
+        )?;
         for mut matched in compatibility.rule_matches {
             // Safe evidence is both capability- and segment-scoped. A preview
             // in one segment cannot suppress its destructive sibling, and a
             // CLI's help predicate cannot erase a separate capability whose
             // semantics deliberately still require review for trailing help.
+            // An uncertain match is never suppressed: a steered segment's
+            // safe-looking flags do not prove what the program will do.
+            let uncertain = matched.uncertainty;
             matched.segment_indexes.retain(|segment| {
-                !batch.observations.iter().any(|observation| {
-                    safe_variant_covers_compatibility(matched.rule_id, &observation.rule_id)
-                        && !observation.effective_segment_indexes.contains(segment)
-                        && observation.safe_variants.iter().any(|variant| {
-                            variant
-                                .matcher_evidence
-                                .iter()
-                                .any(|evidence| evidence.segment_index == *segment)
-                        })
-                })
+                uncertain
+                    || !batch.observations.iter().any(|observation| {
+                        safe_variant_covers_compatibility(matched.rule_id, &observation.rule_id)
+                            && !observation.effective_segment_indexes.contains(segment)
+                            && observation.safe_variants.iter().any(|variant| {
+                                variant
+                                    .matcher_evidence
+                                    .iter()
+                                    .any(|evidence| evidence.segment_index == *segment)
+                            })
+                    })
             });
             if matched.segment_indexes.is_empty() {
                 continue;
@@ -135,15 +199,41 @@ impl NativeCommandProgram {
         active_extensions: &BTreeSet<String>,
         deadline: Option<Instant>,
     ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_selected(
+            command,
+            active_extensions,
+            deadline,
+            self.candidate_rule_indices(command),
+        )
+    }
+
+    pub(super) fn observe_declarative_selected(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
+        self.observe_declarative_memo(command, active_extensions, deadline, candidates, None)
+    }
+
+    pub(super) fn observe_declarative_memo(
+        &self,
+        command: &CanonicalCommandV1,
+        active_extensions: &BTreeSet<String>,
+        deadline: Option<Instant>,
+        candidates: impl IntoIterator<Item = usize>,
+        layout: Option<Arc<MemoLayout>>,
+    ) -> Result<NativeCommandObservationBatchV1, &'static str> {
         let mut state = Evaluation {
             program: self,
             command,
             deadline,
-            memo: vec![None; self.nodes.len()],
+            memo: NodeMemo::new(layout),
         };
         let mut observations = Vec::new();
         let mut evidence_items = 0usize;
-        for index in self.candidate_rule_indices(command) {
+        for index in candidates {
             state.check_deadline()?;
             let rule = &self.rules[index];
             let extension = &self.extensions[rule.extension_index];

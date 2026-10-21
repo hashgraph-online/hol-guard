@@ -16,6 +16,9 @@ VERIFY_SCRIPT = Path(__file__).with_name("verify_native_runtime_release.py")
 
 
 def is_retryable_incomplete_error(stderr: str) -> bool:
+    # Registry metadata may briefly disappear between upload and propagation.
+    if stderr.strip() == "Error: Registry release is absent":
+        return True
     return "missing=" in stderr and "extra=[]" in stderr and "mismatched=[]" in stderr
 
 

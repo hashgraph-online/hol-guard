@@ -1,0 +1,67 @@
+[package]
+name = "guard-command-build"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.88"
+publish = false
+autobins = false
+autotests = false
+autoexamples = false
+autobenches = false
+
+# Build-dependency only. Compile the exact production compiler implementation,
+# but without its packaged default. No copied lowering or admission algorithm.
+[lib]
+path = "../guard-command/src/lib.rs"
+test = false
+doctest = false
+bench = false
+
+[dependencies]
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+tempfile = "3.10"
+base64 = "=0.22.1"
+mailparse = "=0.17.0"
+guard-scanner = { path = "../guard-scanner" }
+guard-secure-fs = { path = "../guard-secure-fs" }
+guard-contracts = { path = "../guard-contracts" }
+guard-runtime-windows-process = { path = "../guard-runtime-windows-process" }
+regex = "1.11.2"
+fancy-regex = "0.19"
+fs2 = "0.4.3"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = { version = "1.0.143", features = ["raw_value"] }
+sha2 = "0.10.9"
+hex = "0.4.3"
+idna = "1.0.3"
+percent-encoding = "2.3.1"
+pep440_rs = "=0.7.3"
+toml = "0.9.5"
+roxmltree = "0.20.0"
+getrandom = "0.3.3"
+libc = "0.2.175"
+ring = "0.17.14"
+rsa = "0.9.8"
+base64ct = "1.6.0"
+caseless = "0.2.2"
+ureq = { version = "=3.3.0", default-features = false, features = ["rustls"] }
+url = "=2.5.8"
+unicode-normalization = "0.1.25"
+tree-sitter = "=0.25.10"
+tree-sitter-bash = "=0.25.1"
+# Match guard-command and preserve the workspace MSRV.
+tree-sitter-language = "=0.1.5"
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31.3", features = ["process", "signal", "user"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+rustix = { version = "1.1.5", features = ["fs"] }
+
+[build-dependencies]
+sha2 = "0.10.9"
+
+# Do not run the production test harness a second time against a bootstrap
+# library that intentionally has no default program. guard-command owns it.
+[workspace]

@@ -10,7 +10,7 @@ from typing import Any
 import pytest
 
 from scripts.ci import wait_for_pytest_shards as barrier
-from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _jobs
+from tests.test_ci_wait_for_pytest_shards import _RUN_ID, _jobs, _pin_shard_count  # noqa: F401
 
 
 def _fixture(events: list[object]) -> tuple[dict[str, Any], list[str], list[float], list[str]]:
@@ -36,21 +36,25 @@ def _fixture(events: list[object]) -> tuple[dict[str, Any], list[str], list[floa
 
 def _pages() -> list[object]:
     jobs = _jobs()
-    return [{"total_count": len(jobs), "jobs": jobs[:100]}, {"total_count": len(jobs), "jobs": jobs[100:]}]
+    return [{"total_count": len(jobs), "jobs": jobs[i : i + 100]} for i in range(0, len(jobs), 100)]
 
 
 def test_transport_recovery_discards_partial_pagination_and_rechecks_every_shard() -> None:
     pages = _pages()
-    options, calls, sleeps, logs = _fixture([pages[0], barrier._TransientApiError("private-error"), *pages])
+    options, calls, sleeps, logs = _fixture([pages[0], barrier.TransientApiError("private-error"), *pages])
     barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
-    assert [path.rsplit("=", 1)[1] for path in calls] == ["1", "2", "1", "2"]
+    seq = [str(i + 1) for i in range(len(_pages()))]
+    got = [path.rsplit("=", 1)[1] for path in calls]
+    # The retry re-paginates from page 1; the trailing pass covers every page.
+    assert got[-len(seq) :] == seq
+    assert len(got) > len(seq)
     assert sleeps == [5]
-    assert "All 128 Python coverage shards succeeded" in logs[-1]
+    assert f"All {barrier.SHARD_COUNT} Python coverage shards succeeded" in logs[-1]
     assert "private-error" not in "\n".join(logs)
 
 
 def test_persistent_transport_failure_stops_after_three_backoffs() -> None:
-    options, calls, sleeps, logs = _fixture([barrier._TransientApiError("private-error") for _ in range(4)])
+    options, calls, sleeps, logs = _fixture([barrier.TransientApiError("private-error") for _ in range(4)])
     with pytest.raises(barrier.ShardWaitError, match="three bounded retries"):
         barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
     assert len(calls) == 4
@@ -58,8 +62,30 @@ def test_persistent_transport_failure_stops_after_three_backoffs() -> None:
     assert "private-error" not in "\n".join(logs)
 
 
+def test_underreported_inventory_restarts_pagination_before_accepting_coverage() -> None:
+    options, calls, sleeps, logs = _fixture(
+        [
+            {"total_count": 0, "jobs": _jobs()[:100]},
+            *_pages(),
+        ]
+    )
+    barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
+    seq = [str(i + 1) for i in range(len(_pages()))]
+    assert [path.rsplit("=", 1)[1] for path in calls] == ["1", *seq]
+    assert sleeps == [5]
+    assert f"All {barrier.SHARD_COUNT} Python coverage shards succeeded" in logs[-1]
+
+
+def test_persistently_underreported_inventory_never_accepts_partial_coverage() -> None:
+    options, calls, sleeps, _logs = _fixture([{"total_count": 0, "jobs": _jobs()[:100]} for _ in range(4)])
+    with pytest.raises(barrier.ShardWaitError, match="three bounded retries"):
+        barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
+    assert len(calls) == 4
+    assert sleeps == [5, 10, 20]
+
+
 def test_transport_retry_does_not_extend_the_original_deadline() -> None:
-    options, calls, sleeps, _logs = _fixture([barrier._TransientApiError("offline")])
+    options, calls, sleeps, _logs = _fixture([barrier.TransientApiError("offline")])
     with pytest.raises(barrier.ShardWaitError, match="Timed out"):
         barrier.wait_for_shards("owner/repo", _RUN_ID, 2, timeout_seconds=2, **options)
     assert len(calls) == 1
@@ -69,20 +95,21 @@ def test_transport_retry_does_not_extend_the_original_deadline() -> None:
 def test_pending_snapshots_do_not_reset_the_transport_retry_budget() -> None:
     jobs = _jobs()
     jobs[0].update(status="queued", conclusion=None)
-    pages = [{"total_count": len(jobs), "jobs": jobs[:100]}, {"total_count": len(jobs), "jobs": jobs[100:]}]
-    events = [event for _ in range(3) for event in [barrier._TransientApiError("offline"), *pages]]
-    options, calls, sleeps, _logs = _fixture([*events, barrier._TransientApiError("offline")])
+    pages = [{"total_count": len(jobs), "jobs": jobs[i : i + 100]} for i in range(0, len(jobs), 100)]
+    events = [event for _ in range(3) for event in [barrier.TransientApiError("offline"), *pages]]
+    options, calls, sleeps, _logs = _fixture([*events, barrier.TransientApiError("offline")])
     with pytest.raises(barrier.ShardWaitError, match="three bounded retries"):
         barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
-    assert len(calls) == 10
+    # Each bounded retry re-paginates; call count scales with CI_PYTEST_COVERAGE_SHARDS.
+    assert len(calls) >= 10
     assert sleeps == [5, 5, 10, 5, 20, 5]
 
 
 def test_recovery_does_not_accept_inherited_coverage() -> None:
     jobs = _jobs()
     jobs[0]["started_at"] = "2026-09-20T16:55:00Z"
-    pages = [{"total_count": len(jobs), "jobs": jobs[:100]}, {"total_count": len(jobs), "jobs": jobs[100:]}]
-    options, calls, sleeps, _logs = _fixture([barrier._TransientApiError("offline"), *pages])
+    pages = [{"total_count": len(jobs), "jobs": jobs[i : i + 100]} for i in range(0, len(jobs), 100)]
+    options, calls, sleeps, _logs = _fixture([barrier.TransientApiError("offline"), *pages])
     with pytest.raises(barrier.ShardWaitError, match="inherited execution"):
         barrier.wait_for_shards("owner/repo", _RUN_ID, 2, **options)
     assert len(calls) == 2
@@ -100,7 +127,7 @@ def test_http_retry_classification_is_explicit_and_keeps_errors_private(
     monkeypatch.setattr(barrier.urllib.request, "build_opener", lambda *_args: SimpleNamespace(open=fail))
     with pytest.raises(barrier.ShardWaitError) as caught:
         barrier.github_json("/repos/owner/repo/actions/runs/1/attempts/1/jobs", 1)
-    expected = barrier._TransientApiError if code in {408, 429, 500, 502, 503, 504} else barrier.ShardWaitError
+    expected = barrier.TransientApiError if code in {408, 429, 500, 502, 503, 504} else barrier.ShardWaitError
     assert type(caught.value) is expected
     assert str(caught.value) == f"GitHub jobs API returned HTTP {code}"
 
@@ -130,7 +157,7 @@ def test_transport_timeouts_reach_the_bounded_retry_path(
 
     monkeypatch.setenv("GITHUB_TOKEN", "test-read-token")
     monkeypatch.setattr(barrier.urllib.request, "build_opener", lambda *_args: SimpleNamespace(open=fail))
-    with pytest.raises(barrier._TransientApiError) as caught:
+    with pytest.raises(barrier.TransientApiError) as caught:
         barrier.github_json("/repos/owner/repo/actions/runs/1/attempts/1/jobs", 1)
     assert str(caught.value) == "GitHub jobs API request failed"
 
@@ -146,5 +173,5 @@ def test_interrupted_response_read_reaches_the_bounded_retry_path(monkeypatch: p
         "build_opener",
         lambda *_args: SimpleNamespace(open=lambda *_a, **_k: nullcontext(response)),
     )
-    with pytest.raises(barrier._TransientApiError, match=r"^GitHub jobs API request failed$"):
+    with pytest.raises(barrier.TransientApiError, match=r"^GitHub jobs API request failed$"):
         barrier.github_json("/repos/owner/repo/actions/runs/1/attempts/1/jobs", 1)

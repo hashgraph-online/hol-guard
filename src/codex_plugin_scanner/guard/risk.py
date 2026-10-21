@@ -1,502 +1,257 @@
-"""Risk heuristics and structured signal generation for local Guard artifacts."""
+"""Artifact risk signals for local Guard artifacts, derived by the resident.
+
+The resident ``artifact_risk`` op answers the typed signals, their V2
+projection and the summary in one reply. Any missing, failed or malformed
+answer raises; it never yields fewer signals.
+"""
 
 from __future__ import annotations
 
-import re
-from collections.abc import Sequence
-from pathlib import PurePath
-from urllib.parse import urlsplit
+import base64
+import json
+import zlib
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from typing import Final, TypeVar, get_args
+from uuid import uuid4
 
 from .models import GuardArtifact
-from .risk_exfil import detect_exfil_intent
-from .runtime.secret_sensitivity import classify_legacy_secret_path_families
-from .runtime.signals import RiskSignalV2
-from .types import GuardSignal
+from .native_content_sensitivity import PACK_THRESHOLD_BYTES, NativeContentSensitivityError, pack_json_body
+from .native_context import _canonical_request_sha256, _resolve_existing_digest_home, ensure_resident_prerequisite
+from .native_execution import _resident_request
+from .runtime.signals import (
+    RiskConfidenceLabel,
+    RiskRedactionLevel,
+    RiskSeverityLabel,
+    RiskSignalCategory,
+    RiskSignalV2,
+)
+from .types import EvidenceSource, GuardSignal, SignalFamily
 
-_RULE_VERSION = "guard-risk-v2"
-_URL_PATTERN = re.compile(r"https?://[^\s'\"`]+", re.IGNORECASE)
-_HOST_PATTERN = re.compile(r"\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b", re.IGNORECASE)
-_MEDIA_TYPE_PATTERN = re.compile(
-    r"\b(?:application|audio|font|image|message|model|multipart|text|video)/[a-z0-9!#$&^_.+-]+",
-    re.IGNORECASE,
+_Record = TypeVar("_Record")
+
+ARTIFACT_RISK_FEATURE: Final = "artifact-risk-v1"
+NO_RISK_SIGNAL_SUMMARY: Final = "No obvious secret-access or network signal was detected in the launch definition."
+_REQUEST_SCHEMA: Final = "guard-artifact-risk-request.v1"
+_RESULT_SCHEMA: Final = "guard-artifact-risk-result.v1"
+_TIMEOUT_SECONDS: Final = 10.0
+_LARGE_TIMEOUT_SECONDS: Final = 30.0
+_MAX_REQUEST_BYTES: Final = 6 * 1024 * 1024
+_MAX_UNPACKED_REPLY_BYTES: Final = 64 * 1024 * 1024
+_RESULT_KEYS: Final = frozenset({"schema", "request_id", "request_sha256", "status", "code", "payload"})
+_PAYLOAD_KEYS: Final = frozenset({"signals", "signals_v2", "summary"})
+# The metadata keys the derivation reads. Lists carry their ``str`` items;
+# other values that are not ``None``, ``bool`` or ``str`` carry ``str()`` and
+# truthiness.
+_LIST_KEYS: Final = frozenset({"env_keys", "prompt_signals", "runtime_request_signals"})
+_SCALAR_KEYS: Final = frozenset(
+    {
+        "analysis_truncated",
+        "config_parse_complete",
+        "config_reason",
+        "inspection_complete",
+        "inspection_reason",
+        "prompt_summary",
+        "request_summary",
+        "runtime_request_reason",
+        "runtime_request_summary",
+    }
 )
-_NON_NETWORK_SUFFIXES = {
-    "md",
-    "json",
-    "toml",
-    "yaml",
-    "yml",
-    "txt",
-    "py",
-    "js",
-    "jsx",
-    "cjs",
-    "cts",
-    "mjs",
-    "mts",
-    "ts",
-    "tsx",
-    "sh",
-    "cfg",
-    "conf",
-    "log",
-    "tmp",
-    "bak",
-    "bin",
+
+
+class NativeArtifactRiskError(NativeContentSensitivityError):
+    """The resident did not answer the artifact's risk signals; fail closed."""
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactRiskProfile:
+    """Every risk signal for one artifact, from one resident reply."""
+
+    signals: tuple[GuardSignal, ...]
+    signals_v2: tuple[RiskSignalV2, ...]
+    summary: str
+
+
+def _text(value: object) -> bool:
+    return isinstance(value, str)
+
+
+def _optional_text(value: object) -> bool:
+    return value is None or isinstance(value, str)
+
+
+def _one_of(alias: object) -> Callable[[object], bool]:
+    allowed = frozenset(get_args(alias))
+    return lambda value: isinstance(value, str) and value in allowed
+
+
+_SIGNAL_FIELDS: Final[Mapping[str, Callable[[object], bool]]] = {
+    "signal_id": _text,
+    "family": _one_of(SignalFamily),
+    "severity": lambda value: type(value) is int,
+    "confidence": lambda value: type(value) is float,
+    "evidence_source": _one_of(EvidenceSource),
+    "matched_text": _optional_text,
+    "explanation": _text,
+    "remediation": _optional_text,
+    "rule_version": _text,
 }
-_NON_NETWORK_EXACT_FILENAMES = frozenset({"next.config"})
-_ENCODED_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"\bbase64(?:\s+--decode|\s+-d)\b", "base64 decode invocation"),
-    (r"\bb64decode\b", "runtime base64 decode invocation"),
-    (r"xxd\s+-r\s+-p", "hex decode and reverse invocation"),
-    (r"frombase64string", "powershell base64 decode invocation"),
-)
-_STAGED_DOWNLOAD_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"curl\b[^\n|]*\|\s*(?:bash|sh|zsh)", "curl piped directly to shell"),
-    (r"wget\b[^\n|]*\|\s*(?:bash|sh|zsh)", "wget piped directly to shell"),
-    (r"python(?:3)?\s+-c[^\n]*requests\.(?:get|post)", "python inline fetch and execute pattern"),
-    (r"node\s+-e[^\n]*fetch\(", "node inline fetch and execute pattern"),
-)
-_GUARD_BYPASS_PATTERNS: tuple[tuple[str, str], ...] = (
-    (r"hol-guard\s+(?:disable|off|uninstall)", "explicit Guard disable command"),
-    (r"approval_policy\s*=\s*\"never\"", "approval policy forced to never"),
-    (r"\.codex/config\.toml", "direct Guard-managed configuration mutation"),
-    (r"guard[_-]?bypass", "explicit Guard bypass marker"),
-)
-_SECRET_PATH_LABELS: tuple[tuple[str, str], ...] = (
-    (".env", "local .env file"),
-    (".npmrc", "npm registry credentials"),
-    (".pypirc", "python package credentials"),
-    (".aws/credentials", "aws shared credentials"),
-    (".ssh/", "ssh material"),
-    (".gnupg/", "gpg material"),
-    (".docker/config.json", "docker credentials"),
-    (".kube/config", "kubeconfig"),
-    (".git-credentials", "git credential store"),
-)
+_SIGNAL_V2_FIELDS: Final[Mapping[str, Callable[[object], bool]]] = {
+    "signal_id": _text,
+    "category": _one_of(RiskSignalCategory),
+    "severity": _one_of(RiskSeverityLabel),
+    "confidence": _one_of(RiskConfidenceLabel),
+    "detector": _text,
+    "title": _text,
+    "plain_reason": _text,
+    "technical_detail": _optional_text,
+    "evidence_ref": _optional_text,
+    "redaction_level": _one_of(RiskRedactionLevel),
+    "false_positive_hint": _optional_text,
+    "advisory_id": _optional_text,
+}
+
+
+def artifact_risk_profile(artifact: GuardArtifact) -> ArtifactRiskProfile:
+    """Ask the resident for every risk signal of ``artifact`` in one round trip."""
+
+    wire = _wire_artifact(artifact)
+    try:
+        wire_bytes = json.dumps(wire, ensure_ascii=False, allow_nan=False).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError) as exc:
+        raise NativeArtifactRiskError("native_artifact_risk_request_invalid") from exc
+    large = len(wire_bytes) > PACK_THRESHOLD_BYTES
+    request: dict[str, object] = {
+        "schema": _REQUEST_SCHEMA,
+        "request_id": f"artifact-risk-{uuid4().hex}",
+        "artifact": pack_json_body(wire_bytes) if large else wire,
+    }
+    digest = "sha256:" + _canonical_request_sha256(request)
+    guard_home = _resolve_existing_digest_home(None)
+    if not ensure_resident_prerequisite(guard_home):
+        raise NativeArtifactRiskError("native_artifact_risk_unavailable")
+    response = _resident_request(
+        operation="artifact_risk",
+        request=request,
+        guard_home=guard_home,
+        timeout_seconds=_LARGE_TIMEOUT_SECONDS if large else _TIMEOUT_SECONDS,
+        required_feature=ARTIFACT_RISK_FEATURE,
+        response_schema=_RESULT_SCHEMA,
+        max_request_bytes=_MAX_REQUEST_BYTES,
+        record_success=False,
+    )
+    if response is None:
+        raise NativeArtifactRiskError("native_artifact_risk_unavailable")
+    from .native_consumer_artifact_compose import record_binding_health
+
+    # Health is recorded only once the reply is bound and decodes, so a
+    # resident sending unusable answers keeps counting toward the circuit.
+    try:
+        if (
+            set(response) != _RESULT_KEYS
+            or response["request_id"] != request["request_id"]
+            or response["request_sha256"] != digest
+            or response["status"] != "ok"
+            or response["code"] != "ok"
+        ):
+            raise NativeArtifactRiskError("native_artifact_risk_unavailable")
+        profile = _profile(_unpack(response["payload"]))
+    except NativeArtifactRiskError:
+        record_binding_health(guard_home, healthy=False, reason="native_artifact_risk_reply_invalid")
+        raise
+    record_binding_health(guard_home, healthy=True, reason="native_artifact_risk_reply_invalid")
+    return profile
 
 
 def artifact_risk_signals_typed(artifact: GuardArtifact) -> tuple[GuardSignal, ...]:
     """Return structured risk signals for a Guard artifact."""
 
-    signals: list[GuardSignal] = []
-    signals.extend(_metadata_signals(artifact))
-    combined = " ".join(_artifact_terms(artifact))
-    lowered = combined.lower()
-    command_name = PurePath(artifact.command or "").name.lower()
-    env_keys = _env_keys(artifact)
-
-    if artifact.url is not None and artifact.url.startswith(("http://", "https://")):
-        signals.append(
-            GuardSignal(
-                signal_id="network:remote-server",
-                family="network",
-                severity=6,
-                confidence=0.92,
-                evidence_source="artifact",
-                matched_text=artifact.url,
-                explanation="connects to a remote server",
-                remediation="Review remote host trust and scope before allowing.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    for host in sorted(extract_network_hosts(combined)):
-        signals.append(
-            GuardSignal(
-                signal_id=f"network:host:{host}",
-                family="network",
-                severity=5,
-                confidence=0.78,
-                evidence_source="artifact",
-                matched_text=host,
-                explanation=f"references network host `{host}`",
-                remediation="Confirm host ownership and allowed transport.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    if any(token in lowered for token in ("http://", "https://", "curl ", "wget ", "fetch(", "axios.", "requests.")):
-        signals.append(
-            GuardSignal(
-                signal_id="network:traffic",
-                family="network",
-                severity=5,
-                confidence=0.86,
-                evidence_source="artifact",
-                matched_text=None,
-                explanation="can send or receive network traffic",
-                remediation="Restrict network access to known destinations.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    if env_keys:
-        signals.append(
-            GuardSignal(
-                signal_id="secret:env-keys",
-                family="secret",
-                severity=5,
-                confidence=0.8,
-                evidence_source="artifact",
-                matched_text=", ".join(env_keys[:3]),
-                explanation="receives environment variables that may contain secrets",
-                remediation="Minimize env exposure and redact sensitive keys.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-        if _has_sensitive_env_semantics(env_keys):
-            signals.append(
-                GuardSignal(
-                    signal_id="secret:env-semantic",
-                    family="secret",
-                    severity=7,
-                    confidence=0.84,
-                    evidence_source="artifact",
-                    matched_text=", ".join(env_keys[:3]),
-                    explanation="uses environment key names that imply credentials or auth material",
-                    remediation="Pass scoped tokens only when required.",
-                    rule_version=_RULE_VERSION,
-                )
-            )
-
-    if any(token in lowered for token in (".env", "dotenv", "printenv", "process.env", "os.environ", "getenv(")):
-        signals.append(
-            GuardSignal(
-                signal_id="secret:env-read",
-                family="secret",
-                severity=7,
-                confidence=0.9,
-                evidence_source="artifact",
-                matched_text=None,
-                explanation="can read local environment secrets",
-                remediation="Prefer explicit per-command secret injection over broad env reads.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    for secret_class in sorted(classify_secret_paths(combined)):
-        signals.append(
-            GuardSignal(
-                signal_id=f"secret:path:{secret_class}",
-                family="secret",
-                severity=8,
-                confidence=0.88,
-                evidence_source="artifact",
-                matched_text=secret_class,
-                explanation=f"mentions sensitive local file family: {secret_class}",
-                remediation="Confirm file-read necessity and scope before approval.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-    if classify_secret_paths(combined):
-        signals.append(
-            GuardSignal(
-                signal_id="secret:sensitive-local-files",
-                family="secret",
-                severity=7,
-                confidence=0.82,
-                evidence_source="artifact",
-                matched_text=None,
-                explanation="mentions sensitive local files",
-                remediation="Verify file path access scope before allowing.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    if command_name in {"bash", "sh", "zsh", "powershell", "cmd"} or _has_shell_wrapper(artifact):
-        signals.append(
-            GuardSignal(
-                signal_id="execution:shell-wrapper",
-                family="execution",
-                severity=6,
-                confidence=0.83,
-                evidence_source="artifact",
-                matched_text=command_name if command_name else None,
-                explanation="runs through a shell wrapper",
-                remediation="Prefer direct executable invocation over shell wrappers.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    if _has_inline_code(artifact):
-        signals.append(
-            GuardSignal(
-                signal_id="execution:inline-code",
-                family="execution",
-                severity=7,
-                confidence=0.87,
-                evidence_source="artifact",
-                matched_text=command_name if command_name else None,
-                explanation="executes inline code at launch",
-                remediation="Pin script source and review inline code payload.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-
-    signals.extend(detect_encoded_command(lowered))
-    signals.extend(detect_staged_download(lowered))
-    signals.extend(detect_guard_bypass(lowered))
-    signals.extend(detect_exfil_intent(lowered))
-
-    return tuple(_dedupe_signals(signals))
+    return artifact_risk_profile(artifact).signals
 
 
 def artifact_risk_signals(artifact: GuardArtifact) -> tuple[str, ...]:
     """Backward-compatible string signals derived from structured signals."""
 
-    return tuple(signal.explanation for signal in artifact_risk_signals_typed(artifact))
+    return tuple(signal.explanation for signal in artifact_risk_profile(artifact).signals)
 
 
 def artifact_risk_signals_v2(artifact: GuardArtifact) -> tuple[RiskSignalV2, ...]:
     """Return product-facing V2 risk signals derived from legacy Guard signals."""
 
-    return tuple(RiskSignalV2.from_guard_signal(signal) for signal in artifact_risk_signals_typed(artifact))
+    return artifact_risk_profile(artifact).signals_v2
 
 
 def artifact_risk_summary(artifact: GuardArtifact) -> str:
     """Human-readable summary of the highest-impact artifact signals."""
 
-    metadata_summary = _metadata_summary(artifact)
-    if metadata_summary is not None:
-        return metadata_summary
-    return summarize_signals(artifact_risk_signals_typed(artifact))
+    return artifact_risk_profile(artifact).summary
 
 
-def summarize_signals(signals: Sequence[GuardSignal]) -> str:
-    """Summarize top signals by severity for CLI and approval UX."""
-
-    if not signals:
-        return "No obvious secret-access or network signal was detected in the launch definition."
-    network_candidate = next(
-        (signal for signal in signals if signal.family == "network" and "network" in signal.explanation.lower()),
-        None,
-    )
-    if network_candidate is None:
-        network_candidate = next((signal for signal in signals if signal.family == "network"), None)
-    secret_candidate = next(
-        (signal for signal in signals if signal.family == "secret" and "secret" in signal.explanation.lower()),
-        None,
-    )
-    if secret_candidate is None:
-        secret_candidate = next((signal for signal in signals if signal.family == "secret"), None)
-    if network_candidate is not None and secret_candidate is not None:
-        return f"{network_candidate.explanation.capitalize()}, and it also {secret_candidate.explanation}."
-    ranked = sorted(signals, key=lambda item: (item.severity, item.confidence), reverse=True)
-    if len(ranked) == 1:
-        return ranked[0].explanation.capitalize() + "."
-    return f"{ranked[0].explanation.capitalize()}, and it also {ranked[1].explanation}."
+def _wire_artifact(artifact: GuardArtifact) -> dict[str, object]:
+    metadata = artifact.metadata
+    return {
+        "name": artifact.name,
+        "command": artifact.command,
+        "url": artifact.url,
+        "args": list(artifact.args),
+        "metadata": {
+            key: _wire_value(key, metadata[key]) for key in sorted(_LIST_KEYS | _SCALAR_KEYS) if key in metadata
+        },
+    }
 
 
-def extract_network_hosts(text: str) -> set[str]:
-    """Extract host-like network references from text."""
-
-    hosts: set[str] = set()
-    media_type_spans = tuple(match.span() for match in _MEDIA_TYPE_PATTERN.finditer(text))
-    for value in _URL_PATTERN.findall(text):
-        try:
-            parsed = urlsplit(value)
-        except ValueError:
-            continue
-        if parsed.hostname:
-            hosts.add(parsed.hostname.lower())
-    for match in _HOST_PATTERN.finditer(text):
-        value = match.group(0)
-        if any(start <= match.start() and match.end() <= end for start, end in media_type_spans):
-            continue
-        if value.count(".") < 1:
-            continue
-        if text[match.end() : match.end() + 1] == "(":
-            continue
-        lowered = value.lower()
-        suffix = lowered.rsplit(".", 1)[-1]
-        if lowered in _NON_NETWORK_EXACT_FILENAMES or suffix in _NON_NETWORK_SUFFIXES:
-            continue
-        hosts.add(lowered)
-    return hosts
+def _wire_value(key: str, value: object) -> object:
+    if key in _LIST_KEYS:
+        return [item if isinstance(item, str) else None for item in value] if isinstance(value, list) else None
+    if value is None or isinstance(value, bool | str):
+        return value
+    return {"python_str": str(value), "truthy": bool(value)}
 
 
-def classify_secret_paths(text: str) -> set[str]:
-    """Classify secret-bearing file families referenced in text."""
-
-    return classify_legacy_secret_path_families(text)
-
-
-def detect_encoded_command(text: str) -> list[GuardSignal]:
-    """Detect encoded command decode-and-execute patterns."""
-
-    signals: list[GuardSignal] = []
-    for pattern, reason in _ENCODED_PATTERNS:
-        if re.search(pattern, text):
-            signals.append(
-                GuardSignal(
-                    signal_id=f"execution:encoded:{reason.replace(' ', '-')}",
-                    family="execution",
-                    severity=8,
-                    confidence=0.82,
-                    evidence_source="artifact",
-                    matched_text=reason,
-                    explanation="includes encoded command decode patterns",
-                    remediation="Decode and review payload before execution.",
-                    rule_version=_RULE_VERSION,
-                )
-            )
-    return signals
+def _record(item: object, fields: Mapping[str, Callable[[object], bool]], factory: Callable[..., _Record]) -> _Record:
+    if (
+        not isinstance(item, dict)
+        or set(item) != set(fields)
+        or not all(check(item[key]) for key, check in fields.items())
+    ):
+        raise NativeArtifactRiskError("native_artifact_risk_reply_invalid")
+    return factory(**item)
 
 
-def detect_staged_download(text: str) -> list[GuardSignal]:
-    """Detect staged downloader and fetch-and-exec patterns."""
+def _unpack(payload: object) -> object:
+    """Decode a reply the resident gzip-packed because it was large."""
 
-    signals: list[GuardSignal] = []
-    for pattern, reason in _STAGED_DOWNLOAD_PATTERNS:
-        if re.search(pattern, text):
-            signals.append(
-                GuardSignal(
-                    signal_id=f"network:staged:{reason.replace(' ', '-')}",
-                    family="network",
-                    severity=9,
-                    confidence=0.88,
-                    evidence_source="artifact",
-                    matched_text=reason,
-                    explanation="shows staged downloader behavior",
-                    remediation="Pin source artifact and avoid direct shell piping.",
-                    rule_version=_RULE_VERSION,
-                )
-            )
-    return signals
+    if not isinstance(payload, dict) or set(payload) != {"packed_json_gzip_v1"}:
+        return payload
+    packed = payload["packed_json_gzip_v1"]
+    try:
+        if not isinstance(packed, str):
+            raise ValueError("packed reply is not text")
+        decoder = zlib.decompressobj(wbits=16 + zlib.MAX_WBITS)
+        body = decoder.decompress(base64.b64decode(packed, validate=True), _MAX_UNPACKED_REPLY_BYTES + 1)
+        if len(body) > _MAX_UNPACKED_REPLY_BYTES:
+            raise ValueError("packed reply too large")
+        if not decoder.eof or decoder.unused_data:
+            raise ValueError("packed reply is not one complete gzip member")
+        return json.loads(body)
+    except (ValueError, zlib.error) as exc:
+        raise NativeArtifactRiskError("native_artifact_risk_reply_invalid") from exc
 
 
-def detect_guard_bypass(text: str) -> list[GuardSignal]:
-    """Detect explicit attempts to bypass Guard-managed controls."""
-
-    signals: list[GuardSignal] = []
-    for pattern, reason in _GUARD_BYPASS_PATTERNS:
-        if re.search(pattern, text):
-            signals.append(
-                GuardSignal(
-                    signal_id=f"policy:bypass:{reason.replace(' ', '-')}",
-                    family="policy",
-                    severity=9,
-                    confidence=0.9,
-                    evidence_source="artifact",
-                    matched_text=reason,
-                    explanation="contains guard bypass intent",
-                    remediation="Block and require manual investigation.",
-                    rule_version=_RULE_VERSION,
-                )
-            )
-    return signals
-
-
-def _artifact_terms(artifact: GuardArtifact) -> list[str]:
-    parts = [artifact.name, artifact.command or "", artifact.url or "", *artifact.args]
-    parts.extend(_env_keys(artifact))
-    request_summary = artifact.metadata.get("request_summary")
-    if isinstance(request_summary, str) and request_summary:
-        parts.append(request_summary)
-    runtime_reason = artifact.metadata.get("runtime_request_reason")
-    if isinstance(runtime_reason, str) and runtime_reason:
-        parts.append(runtime_reason)
-    return [part for part in parts if part]
-
-
-def _env_keys(artifact: GuardArtifact) -> list[str]:
-    env_keys = artifact.metadata.get("env_keys")
-    if not isinstance(env_keys, list):
-        return []
-    return [str(value) for value in env_keys if isinstance(value, str) and value]
-
-
-def _metadata_signals(artifact: GuardArtifact) -> list[GuardSignal]:
-    signals: list[GuardSignal] = []
-    if artifact.metadata.get("inspection_complete") is False or artifact.metadata.get("config_parse_complete") is False:
-        reason = artifact.metadata.get("inspection_reason") or artifact.metadata.get("config_reason") or "unknown"
-        signals.append(
-            GuardSignal(
-                signal_id="inspection:incomplete",
-                family="execution",
-                severity=8,
-                confidence=0.98,
-                evidence_source="artifact",
-                matched_text=str(reason),
-                explanation="artifact inspection is incomplete",
-                remediation="Repair or reduce the input, then run a complete inspection before approval.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-    elif artifact.metadata.get("analysis_truncated") is True:
-        signals.append(
-            GuardSignal(
-                signal_id="inspection:analysis-truncated",
-                family="execution",
-                severity=6,
-                confidence=0.95,
-                evidence_source="artifact",
-                matched_text=None,
-                explanation="artifact risk preview is truncated",
-                remediation="Review the complete content before approval.",
-                rule_version=_RULE_VERSION,
-            )
-        )
-    for key in ("runtime_request_signals", "prompt_signals"):
-        value = artifact.metadata.get(key)
-        if not isinstance(value, list):
-            continue
-        for item in value:
-            if not isinstance(item, str) or not item:
-                continue
-            signals.append(
-                GuardSignal(
-                    signal_id=f"metadata:{key}:{item[:32].lower().replace(' ', '-')}",
-                    family="prompt" if key == "prompt_signals" else "execution",
-                    severity=7 if key == "prompt_signals" else 6,
-                    confidence=0.85,
-                    evidence_source="prompt" if key == "prompt_signals" else "artifact",
-                    matched_text=item,
-                    explanation=item,
-                    remediation="Review request intent before approving.",
-                    rule_version=_RULE_VERSION,
-                )
-            )
-    return signals
-
-
-def _metadata_summary(artifact: GuardArtifact) -> str | None:
-    for key in ("runtime_request_summary", "prompt_summary"):
-        value = artifact.metadata.get(key)
-        if isinstance(value, str) and value:
-            return value
-    return None
-
-
-def _has_shell_wrapper(artifact: GuardArtifact) -> bool:
-    return any(value in {"-c", "-lc", "/c"} for value in artifact.args)
-
-
-def _has_inline_code(artifact: GuardArtifact) -> bool:
-    if artifact.command is None:
-        return False
-    command_name = PurePath(artifact.command).name.lower()
-    if command_name in {"python", "python3", "node", "ruby", "perl"}:
-        return any(value in {"-c", "-e"} for value in artifact.args)
-    return False
-
-
-def _has_sensitive_env_semantics(env_keys: list[str]) -> bool:
-    for env_key in env_keys:
-        lowered = env_key.lower()
-        if any(token in lowered for token in ("token", "secret", "password", "key", "credential", "auth")):
-            return True
-    return False
-
-
-def _dedupe_signals(values: list[GuardSignal]) -> list[GuardSignal]:
-    seen: set[str] = set()
-    ordered: list[GuardSignal] = []
-    for value in values:
-        token = f"{value.signal_id}:{value.explanation}"
-        if token in seen:
-            continue
-        seen.add(token)
-        ordered.append(value)
-    return ordered
+def _profile(payload: object) -> ArtifactRiskProfile:
+    if not isinstance(payload, dict) or set(payload) != _PAYLOAD_KEYS:
+        raise NativeArtifactRiskError("native_artifact_risk_reply_invalid")
+    raw_signals, raw_signals_v2, summary = payload["signals"], payload["signals_v2"], payload["summary"]
+    if (
+        not isinstance(raw_signals, list)
+        or not isinstance(raw_signals_v2, list)
+        or len(raw_signals) != len(raw_signals_v2)
+        or not isinstance(summary, str)
+        or not summary
+    ):
+        raise NativeArtifactRiskError("native_artifact_risk_reply_invalid")
+    signals = tuple(_record(item, _SIGNAL_FIELDS, GuardSignal) for item in raw_signals)
+    signals_v2 = tuple(_record(item, _SIGNAL_V2_FIELDS, RiskSignalV2) for item in raw_signals_v2)
+    if any(signal.signal_id != projected.signal_id for signal, projected in zip(signals, signals_v2, strict=True)):
+        raise NativeArtifactRiskError("native_artifact_risk_reply_invalid")
+    return ArtifactRiskProfile(signals=signals, signals_v2=signals_v2, summary=summary)

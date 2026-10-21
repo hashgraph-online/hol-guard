@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import urllib.error
+from dataclasses import replace
 from datetime import datetime, timezone
 from email.message import Message
 from pathlib import Path
@@ -25,6 +26,7 @@ from codex_plugin_scanner.guard.runtime.exact_cloud_review import (
     EXACT_CLOUD_REVIEW_OPERATION,
     EXACT_CLOUD_REVIEW_PROTOCOL_VERSION,
     _oauth_metadata,
+    apply_exact_cloud_review,
     disable_exact_cloud_review,
     enable_exact_cloud_review,
 )
@@ -198,6 +200,8 @@ def test_exact_claim_binds_current_local_authority_without_queue_snapshot(
     assert advertisement["machineId"] != advertisement["machineInstallationId"]
     assert advertisement["localRequestId"] == request["request_id"]
     assert advertisement["sourceClaimHash"] == claim["claimHash"]
+    assert advertisement["nativeBindingVersion"] == claim["nativeBindingVersion"]
+    assert advertisement["nativeBindingDigest"] == claim["nativeBindingDigest"]
 
     lease = command_queue._lease_payload(store, operations=(EXACT_CLOUD_REVIEW_OPERATION,))
     assert "localRequestsSnapshot" not in lease
@@ -271,8 +275,45 @@ def test_exact_claim_treats_scope_recommendation_as_non_authoritative(tmp_path: 
     action_claim = build_local_review_request_claim(request_row=changed_action, oauth=oauth, store=store)
 
     assert recommendation_claim["recommendedScope"] != original_claim["recommendedScope"]
-    assert recommendation_claim["claimHash"] == original_claim["claimHash"]
+    assert recommendation_claim["claimHash"] != original_claim["claimHash"]
     assert action_claim["claimHash"] != original_claim["claimHash"]
+
+
+def test_exact_apply_uses_frozen_browser_claim_when_live_display_is_reformatted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    store = connected_exact_review_store(tmp_path)
+    request = replace(
+        _request("exact-browser-frozen"),
+        launch_target="chrome-devtools navigate_page unknown",
+        browser_intent={"intent": "browser.navigation", "target_domain": "hol.org"},
+        decision_v2_json={"approval_scopes": ["artifact"]},
+    )
+    _add_request(store, request)
+    enable_exact_cloud_review(store)
+    oauth = _oauth_metadata(store)
+    snapshots = store.list_review_event_snapshots(request.request_id)
+    assert snapshots
+    live = store.get_approval_request(request.request_id)
+    assert isinstance(live, dict)
+    assert snapshots[0]["launch_target"] != live["launch_target"]
+    frozen_snapshot = snapshots[0]
+    monkeypatch.setattr(store, "list_review_event_snapshots", lambda _request_id: [frozen_snapshot])
+    frozen_claim = build_local_review_request_claim(request_row=frozen_snapshot, oauth=oauth, store=store)
+    live_claim = build_local_review_request_claim(request_row=live, oauth=oauth, store=store)
+    assert frozen_claim["nativeActionBinding"] == live_claim["nativeActionBinding"]
+
+    resolution = apply_exact_cloud_review(
+        store,
+        remote_approval=_remote_approval(
+            store,
+            request.request_id,
+            receipt_id="exact-browser-frozen-receipt",
+            source_claim=frozen_claim,
+        ),
+    )
+
+    assert resolution.action == "allow"
 
 
 def test_poll_exact_leases_acks_applies_and_posts_versioned_result(

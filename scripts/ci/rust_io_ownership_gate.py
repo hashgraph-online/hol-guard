@@ -17,279 +17,45 @@ import sys
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from functools import cache
 from pathlib import Path
 from typing import Final, cast
 
 if __package__ is None:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from scripts.ci.hook_route_handler_roots import ROUTE_HANDLER_ROOTS
+from scripts.ci.rust_io_ownership_cache import analysis_cache
+from scripts.ci.rust_io_ownership_cache import parsed_module as _parsed_module
 from scripts.ci.rust_io_ownership_contract import capability_contract
-from scripts.ci.rust_io_ownership_resolver import FunctionRecordLike, resolve_call
-
-SCHEMA: Final = "hol-guard.decision-critical-io.v1"
-NATIVE_MODES: Final = frozenset({"auto", "force"})
-COMPATIBILITY_MODES: Final = frozenset({"off", "shadow"})
-
-_FS_METHODS: Final = frozenset(
-    {
-        "open",
-        "read",
-        "read_bytes",
-        "read_text",
-        "stat",
-        "lstat",
-        "readlink",
-        "iterdir",
-        "glob",
-        "rglob",
-        "resolve",
-        "exists",
-        "is_file",
-        "is_dir",
-        "is_symlink",
-        "realpath",
-    }
+from scripts.ci.rust_io_ownership_policy import (
+    _ARCHIVE_MODULES,
+    _ASYNC_POLICY_PATHS,
+    _COMPATIBILITY_PATHS,
+    _DECODE_FUNCTIONS,
+    _EQUIVALENCE_FUNCTIONS,
+    _FS_FUNCTIONS,
+    _FS_METHODS,
+    _HASH_FUNCTIONS,
+    _PENDING_AUTHORITY_PATHS,
+    _PERSISTENCE_ONLY_PATHS,
+    _PERSISTENCE_PATH_PREFIXES,
+    _PRESENTATION_PATHS,
+    _SERVICE_PATHS,
+    _STRUCTURED_OUTPUT_MEDIATION_PATHS,
+    _TRANSPORT_AUTHORITY_PATHS,
+    _TRANSPORT_DECODE_PATHS,
+    _TRANSPORT_ENCODE_OPERATIONS,
+    _TRANSPORT_IDENTITY_PATHS,
+    _TRANSPORT_INTEGRITY_PATHS,
+    COMPATIBILITY_MODES,
+    NATIVE_MODES,
+    SCHEMA,
 )
-_FS_FUNCTIONS: Final = frozenset({"open", "readlink", "stat", "lstat", "listdir", "scandir"})
-_HASH_FUNCTIONS: Final = frozenset({"md5", "sha1", "sha224", "sha256", "sha384", "sha512", "blake2b", "blake2s"})
-_ARCHIVE_MODULES: Final = frozenset({"tarfile", "zipfile", "gzip", "bz2", "lzma", "shutil"})
-_DECODE_FUNCTIONS: Final = frozenset({"b64decode", "loads", "decode", "unpack", "decompress"})
-_EQUIVALENCE_FUNCTIONS: Final = frozenset({"output_equivalent", "parity_signature", "sha256_text"})
-
-_COMPATIBILITY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/runtime/source_paths.py",
-        "src/codex_plugin_scanner/guard/native_command_model.py",
-    }
-)
-_TRANSPORT_IDENTITY_PATHS: Final = frozenset(
-    {
-        # Payload-reference metadata validation; the native edge reads bytes.
-        "src/codex_plugin_scanner/guard/daemon/hook_request_parsing.py",
-        # Archive-inspection transport: lease, request binding, and the
-        # bounded native worker invocation; all archive semantics are Rust.
-        "src/codex_plugin_scanner/guard/native_archive_inspection.py",
-        "src/codex_plugin_scanner/guard/native_runtime.py",
-        "src/codex_plugin_scanner/guard/native_resident_client.py",
-        "src/codex_plugin_scanner/guard/native_runtime_resilience.py",
-        "src/codex_plugin_scanner/guard/codex_hook_launch_runtime.py",
-        "src/codex_plugin_scanner/guard/daemon/discovery.py",
-        "src/codex_plugin_scanner/guard/daemon/manager.py",
-        # Interpreter bootstrap identity only; no policy or command decisions.
-        "src/codex_plugin_scanner/guard/daemon/pipx_import_paths.py",
-        "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
-    }
-)
-_TRANSPORT_INTEGRITY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/native_decision_receipt.py",
-        "src/codex_plugin_scanner/guard/native_command_observations.py",
-        "src/codex_plugin_scanner/guard/daemon/hook_native_review_approval.py",
-    }
-)
-_TRANSPORT_AUTHORITY_PATHS: Final = frozenset(
-    {
-        # Strict owner-checked native command-control lock and marker transport.
-        "src/codex_plugin_scanner/guard/native_command_control_authority_io.py",
-    }
-)
-_TRANSPORT_DECODE_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/native_hook_edge.py",
-        "src/codex_plugin_scanner/guard/native_pretool.py",
-        "src/codex_plugin_scanner/guard/native_resident_client.py",
-        "src/codex_plugin_scanner/guard/native_runtime.py",
-    }
-)
-_STRUCTURED_OUTPUT_MEDIATION_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/runtime/secret_sensitivity.py",
-        "src/codex_plugin_scanner/guard/runtime/structured_data_sensitivity.py",
-        "src/codex_plugin_scanner/guard/runtime/structured_output_mediation.py",
-    }
-)
-_ASYNC_POLICY_PATHS: Final = frozenset(
-    {
-        "src/codex_plugin_scanner/guard/mdm/policy.py",
-        "src/codex_plugin_scanner/guard/mdm/managed_file_trust.py",
-        "src/codex_plugin_scanner/guard/mdm/contracts.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher_inputs.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_storage.py",
-        "src/codex_plugin_scanner/guard/config.py",
-        "src/codex_plugin_scanner/guard/config_file_io.py",
-        "src/codex_plugin_scanner/guard/directory_path_authority.py",
-        "src/codex_plugin_scanner/guard/runtime/command_activity_correlation.py",
-    }
-)
-_PERSISTENCE_PATH_PREFIXES: Final = (
-    "src/codex_plugin_scanner/guard/daemon/runtime_hook_evidence_writer.py",
-    "src/codex_plugin_scanner/guard/runtime/hook_enrichment_queue.py",
-    "src/codex_plugin_scanner/guard/daemon/hook_metrics.py",
-    "src/codex_plugin_scanner/guard/private_file_io.py",
-    "src/codex_plugin_scanner/guard/local_dashboard_session.py",
-    "src/codex_plugin_scanner/guard/guard_home_state.py",
-    "src/codex_plugin_scanner/guard/store_base.py",
-    "src/codex_plugin_scanner/guard/store_mcp_catalog.py",
-)
-_PRESENTATION_PATHS: Final = frozenset(
-    {
-        # Retained Python: approval presentation, harness adapters, and
-        # continuation surfaces. These render or forward decisions; they
-        # never compute them.
-        "src/codex_plugin_scanner/guard/adapters/cursor_native_approval.py",
-        "src/codex_plugin_scanner/guard/approval_scope_support.py",
-        "src/codex_plugin_scanner/guard/approvals.py",
-        "src/codex_plugin_scanner/guard/codex_app_server.py",
-        "src/codex_plugin_scanner/guard/continuation_runtime.py",
-        "src/codex_plugin_scanner/guard/edge_events.py",
-        "src/codex_plugin_scanner/guard/harness_usage.py",
-        "src/codex_plugin_scanner/guard/local_authority_integrity.py",
-        "src/codex_plugin_scanner/guard/mcp_tool_calls.py",
-        "src/codex_plugin_scanner/guard/temporary_mcp_approvals.py",
-    }
-)
-_SERVICE_PATHS: Final = frozenset(
-    {
-        # Retained Python: daemon supervision/lifecycle, cloud/OAuth/network
-        # services, publication, and install support.
-        "src/codex_plugin_scanner/guard/daemon/discovery.py",
-        "src/codex_plugin_scanner/guard/daemon/lifecycle_journal.py",
-        "src/codex_plugin_scanner/guard/daemon/manager.py",
-        "src/codex_plugin_scanner/guard/daemon/runtime_peer.py",
-        "src/codex_plugin_scanner/guard/daemon/start_classification.py",
-        "src/codex_plugin_scanner/guard/runtime/mcp_connection_identity.py",
-        "src/codex_plugin_scanner/guard/extension_builder/io.py",
-        "src/codex_plugin_scanner/guard/frozen_runtime_commands.py",
-        "src/codex_plugin_scanner/guard/live_process_identity.py",
-        "src/codex_plugin_scanner/guard/mdm/acl.py",
-        "src/codex_plugin_scanner/guard/mdm/network_credentials.py",
-        "src/codex_plugin_scanner/guard/mdm/network_transport.py",
-        "src/codex_plugin_scanner/guard/mdm/network_trust.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_key.py",
-        "src/codex_plugin_scanner/guard/native_policy_snapshot_windows_support.py",
-        "src/codex_plugin_scanner/guard/oauth_token_claims.py",
-        "src/codex_plugin_scanner/guard/stable_guard_cli.py",
-    }
-)
-_PENDING_AUTHORITY_PATHS: Final = frozenset(
-    {
-        # Decision-adjacent Python that remains authoritative until the
-        # package/archive, guarded-launch, command-authority, and local-MCP
-        # migration legs land. Each leg must shrink this set; it may only
-        # grow through an explicit contract change.
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_eval.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_floor.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_generic.py",
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_prepare.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_apply_patch_policy.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_commands.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_git.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_git_config.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_paths.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_prompt_attachments.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_reads.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_codex_tool_output.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_hook_state.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_native_search.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_runtime_artifacts.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_runtime_policy.py",
-        "src/codex_plugin_scanner/guard/cli/commands_support_runtime_resolution.py",
-        "src/codex_plugin_scanner/guard/package_execution_context.py",
-        "src/codex_plugin_scanner/guard/package_execution_context_configuration.py",
-        "src/codex_plugin_scanner/guard/package_execution_context_inputs.py",
-        "src/codex_plugin_scanner/guard/package_shim_frozen.py",
-        "src/codex_plugin_scanner/guard/package_shim_status.py",
-        "src/codex_plugin_scanner/guard/runtime/_shell_execution_context_support.py",
-        "src/codex_plugin_scanner/guard/runtime/_shell_secret_read_support.py",
-        "src/codex_plugin_scanner/guard/runtime/actions.py",
-        "src/codex_plugin_scanner/guard/runtime/approval_context.py",
-        "src/codex_plugin_scanner/guard/runtime/browser_mcp_intent.py",
-        "src/codex_plugin_scanner/guard/runtime/command_decision_adapter.py",
-        "src/codex_plugin_scanner/guard/runtime/command_evaluation.py",
-        "src/codex_plugin_scanner/guard/runtime/compound_git_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/contained_execution_common.py",
-        "src/codex_plugin_scanner/guard/runtime/containment_executor.py",
-        "src/codex_plugin_scanner/guard/runtime/direct_typescript_diagnostics.py",
-        "src/codex_plugin_scanner/guard/runtime/direct_vitest.py",
-        "src/codex_plugin_scanner/guard/runtime/effect_decision.py",
-        "src/codex_plugin_scanner/guard/runtime/embedded_script_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/extension_contribution.py",
-        "src/codex_plugin_scanner/guard/runtime/extension_control_runtime.py",
-        "src/codex_plugin_scanner/guard/runtime/extension_trust.py",
-        "src/codex_plugin_scanner/guard/runtime/false_positive_rules.py",
-        "src/codex_plugin_scanner/guard/runtime/git_execution_safety.py",
-        "src/codex_plugin_scanner/guard/runtime/git_index_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/github_actions_read_workflow.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_authorization.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_context.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_operations.py",
-        "src/codex_plugin_scanner/guard/runtime/github_workflow_runtime.py",
-        "src/codex_plugin_scanner/guard/runtime/jsonc.py",
-        "src/codex_plugin_scanner/guard/runtime/local_cli_commands.py",
-        "src/codex_plugin_scanner/guard/runtime/local_cli_compound.py",
-        "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
-        "src/codex_plugin_scanner/guard/runtime/local_package_script_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/lockfile_evaluation_support.py",
-        "src/codex_plugin_scanner/guard/runtime/lockfile_parse_result.py",
-        "src/codex_plugin_scanner/guard/runtime/mcp_protection.py",
-        "src/codex_plugin_scanner/guard/runtime/mcp_server_contribution.py",
-        "src/codex_plugin_scanner/guard/runtime/mcp_skill_firewall.py",
-        "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
-        "src/codex_plugin_scanner/guard/runtime/package_evidence_common.py",
-        "src/codex_plugin_scanner/guard/runtime/package_intent_common.py",
-        "src/codex_plugin_scanner/guard/runtime/package_intent_parser.py",
-        "src/codex_plugin_scanner/guard/runtime/package_json_scripts.py",
-        "src/codex_plugin_scanner/guard/runtime/package_manifest_diff.py",
-        "src/codex_plugin_scanner/guard/runtime/prompt_injection.py",
-        "src/codex_plugin_scanner/guard/runtime/read_only_git_audit.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_destination.py",
-        "src/codex_plugin_scanner/guard/runtime/restricted_archive_stream.py",
-        "src/codex_plugin_scanner/guard/runtime/routine_local_node.py",
-        "src/codex_plugin_scanner/guard/runtime/routine_node_identity.py",
-        "src/codex_plugin_scanner/guard/runtime/routine_setup_commands.py",
-        "src/codex_plugin_scanner/guard/runtime/runner.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/agent_guidance_reads.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/benign_requests.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/credential_exfiltration.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_inspection.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/developer_routines.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/git_routines.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_launch.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_observers.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/interpreter_trust.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/local_read_operands.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/request_artifacts.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/routine_directory_creation.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/sensitive_read_pipeline.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_quote_parsing.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/shell_static_safety.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/source_edit_context.py",
-        "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/tool_action_requests.py",
-        "src/codex_plugin_scanner/guard/runtime/shell_command_wrappers.py",
-        "src/codex_plugin_scanner/guard/runtime/shell_secret_reads.py",
-        "src/codex_plugin_scanner/guard/runtime/skill_paths.py",
-        "src/codex_plugin_scanner/guard/runtime/supply_chain_bundle_runtime.py",
-        "src/codex_plugin_scanner/guard/runtime/supply_chain_package_eval.py",
-        "src/codex_plugin_scanner/guard/runtime/typescript_launch_evidence.py",
-        "src/codex_plugin_scanner/guard/runtime/workspace_path_guard.py",
-        "src/codex_plugin_scanner/guard/shims.py",
-        "src/codex_plugin_scanner/guard/trusted_local_tools.py",
-        "src/codex_plugin_scanner/guard/trusted_package_tools.py",
-    }
-)
-_PERSISTENCE_ONLY_PATHS: Final = frozenset(
-    {
-        # Opt-in sealed diagnostics; these helpers never authorize a decision.
-        "src/codex_plugin_scanner/guard/codex_binding_capture.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_bounds.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_crypto.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_fs.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_join.py",
-        "src/codex_plugin_scanner/guard/codex_binding_capture_writer.py",
-    }
+from scripts.ci.rust_io_ownership_resolver import (
+    FunctionIndex,
+    FunctionRecordLike,
+    _import_target_path,
+    resolve_call,
 )
 
 
@@ -318,43 +84,31 @@ class IoObservation:
     reachable: bool
 
 
-ROOTS: Final = (
-    RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "review_http_payload",
-        "HookWorker",
-    ),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
-        "_review_post_tool_http",
-        "HookWorker",
-    ),
-    RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
-    RootSpec("src/codex_plugin_scanner/guard/native_runtime.py", "review_post_tool_native"),
-    RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-        "try_native_hook_authority",
-    ),
-    RootSpec(
-        "src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py",
-        "route_native_hook",
-    ),
+# `_branch_failures` asserts the shape of this one, so name it instead of reaching
+# for a position in ROOTS that a later entry point can quietly take over.
+HOOK_WORKER_ROOT: Final = RootSpec(
+    "src/codex_plugin_scanner/guard/daemon/hook_worker.py",
+    "review_http_payload",
+    "HookWorker",
 )
 
-
-def _read(path: Path) -> str:
-    try:
-        return path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise RuntimeError(f"could not inspect {path}") from exc
-
-
-@cache
-def _parsed_module(path: Path) -> ast.Module:
-    """Parse a source file once per process; inputs are read-only while validating."""
-
-    return ast.parse(_read(path), filename=str(path))
+ROOTS: Final = (
+    HOOK_WORKER_ROOT,
+    # The CLI command is where a harness hook invocation enters Guard, so the walk
+    # starts one level above `route_native_hook`: harness resolution and payload
+    # loading run before any native call and were outside the gate until now.
+    RootSpec(
+        "src/codex_plugin_scanner/guard/cli/commands_hook.py",
+        "_run_guard_hook_command",
+    ),
+    RootSpec("src/codex_plugin_scanner/guard/native_hook_edge.py", "review_raw_hook_native"),
+    RootSpec("src/codex_plugin_scanner/guard/native_resident_client.py", "native_resident_client_request"),
+    RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "try_native_hook_authority"),
+    RootSpec("src/codex_plugin_scanner/guard/cli/commands_hook_native_authority.py", "route_native_hook"),
+    # The resident's route names native hook handlers through a table, which a
+    # call walk cannot follow, so each handler is a root of its own.
+    *(RootSpec(path, name) for path, name in ROUTE_HANDLER_ROOTS),
+)
 
 
 def _relative(path: Path, root: Path) -> str:
@@ -433,6 +187,8 @@ def _calls(record: FunctionRecord) -> tuple[str, ...]:
 
 
 def _category(path: str, kind: str) -> str:
+    if kind == "transport_encode":
+        return "transport_encode"
     if path in _COMPATIBILITY_PATHS:
         return "compatibility_only"
     if path in _STRUCTURED_OUTPUT_MEDIATION_PATHS and kind in {"hash", "decode"}:
@@ -462,7 +218,55 @@ def _category(path: str, kind: str) -> str:
     return "unclassified_python_io"
 
 
-def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
+def _shadowed_names(root: Path, path: str, tree: ast.AST, record: FunctionRecord) -> frozenset[str]:
+    """Names a sibling module's export was deliberately renamed to in scope.
+
+    A bare call matches an operation by name alone, so
+    `from .runtime_resolution import _redact_secrets as resolve` would
+    otherwise be read as `Path.resolve`. A name qualifies only when all of
+    these hold:
+
+    - a relative import renames a sibling function to it, either at module
+      level or inside this function, so a rename in one function never hides
+      a real operation in another;
+    - neither this function nor the module also binds it through an absolute
+      import or a module-level definition, which would leave the call
+      ambiguous;
+    - the renamed function resolves in the repository and performs no
+      operation of its own. A renamed hashing or filesystem helper keeps
+      counting at every call site, as does a local wrapper such as
+      `def sha256(...)` or an absolute `from hashlib import sha256`.
+    """
+
+    module_body = getattr(tree, "body", [])
+    scope = [*module_body, *ast.walk(record.node)]
+    rebound = {
+        item.name for item in module_body if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+    }
+    for node in scope:
+        if isinstance(node, ast.Import):
+            rebound.update(alias.asname or alias.name.split(".", maxsplit=1)[0] for alias in node.names)
+        elif isinstance(node, ast.ImportFrom) and node.level == 0:
+            rebound.update(alias.asname or alias.name for alias in node.names)
+    names: set[str] = set()
+    for node in scope:
+        if not isinstance(node, ast.ImportFrom) or node.level == 0 or not node.module:
+            continue
+        target = _import_target_path(root, path, node)
+        for alias in node.names:
+            if alias.asname is None or alias.asname == alias.name or alias.asname in rebound:
+                continue
+            if target is not None and _performs_no_operation(root, target, alias.name):
+                names.add(alias.asname)
+    return frozenset(names)
+
+
+def _performs_no_operation(root: Path, path: str, name: str) -> bool:
+    candidates = [record for record in _functions(_parsed_module(root / path), path) if record.qualname == name]
+    return len(candidates) == 1 and next(iter(_observations(candidates[0])), None) is None
+
+
+def _observations(record: FunctionRecord, shadowed: frozenset[str] = frozenset()) -> Iterable[IoObservation]:
     path = record.path
     if record.name in _EQUIVALENCE_FUNCTIONS:
         yield IoObservation(path, record.node.lineno, record.name, "equivalence", _category(path, "equivalence"), True)
@@ -470,9 +274,13 @@ def _observations(record: FunctionRecord) -> Iterable[IoObservation]:
         if isinstance(node, ast.Call):
             name = _call_name(node)
             chain = _attribute_chain(node.func)
+            if isinstance(node.func, ast.Name) and name in shadowed:
+                continue
             kind: str | None = None
             operation: str | None = None
-            if chain and chain[0] in _ARCHIVE_MODULES:
+            if (path, chain) in _TRANSPORT_ENCODE_OPERATIONS:
+                kind, operation = "transport_encode", name
+            elif chain and chain[0] in _ARCHIVE_MODULES:
                 kind, operation = "archive", name
             elif name in _FS_FUNCTIONS or name in _FS_METHODS:
                 kind, operation = "filesystem", name
@@ -504,7 +312,7 @@ def _reachable_records(
     records: dict[tuple[str, str], list[FunctionRecord]],
 ) -> tuple[FunctionRecord, ...]:
     pending = [_root_record(root, spec, records) for spec in ROOTS]
-    records_view = cast(Mapping[tuple[str, str], list[FunctionRecordLike]], records)
+    records_view = FunctionIndex(cast(Mapping[tuple[str, str], list[FunctionRecordLike]], records))
     seen: set[tuple[str, str]] = set()
     result: list[FunctionRecord] = []
     while pending:
@@ -547,21 +355,13 @@ def _native_branch(record: FunctionRecord, marker: str) -> ast.If | None:
 
 def _branch_failures(root: Path, records: dict[tuple[str, str], list[FunctionRecord]]) -> list[str]:
     failures: list[str] = []
-    review = _root_record(root, ROOTS[0], records)
-    native = _native_branch(review, "auto")
-    if native is None or not _call_in_branch(native, "_review_native_edge"):
-        failures.append("HookWorker.review_http_payload has no direct auto/force native edge return")
+    review = _root_record(root, HOOK_WORKER_ROOT, records)
+    if not _call_in(review.node, "_review_native_edge"):
+        failures.append("HookWorker.review_http_payload has no direct native edge return")
     elif any(
-        _call_in_branch(native, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
+        _call_in(review.node, forbidden) for forbidden in ("load_guard_config", "review", "evaluate_source_file_ref")
     ):
-        failures.append("HookWorker native PostTool branch reaches Python semantic evaluation")
-
-    post = _root_record(root, ROOTS[1], records)
-    required = _native_branch(post, "native_required")
-    if required is None or not _call_in_branch(required, "review_post_tool_native"):
-        failures.append("HookWorker PostTool native-required branch is incomplete")
-    elif _call_in_branch(required, "review"):
-        failures.append("HookWorker native-required branch calls Python review")
+        failures.append("HookWorker hook review reaches Python semantic evaluation")
 
     publisher_path = "src/codex_plugin_scanner/guard/native_policy_snapshot_publisher.py"
     publisher = records.get((publisher_path, "start"), [])
@@ -587,7 +387,8 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
         tree = _parsed_module(path)
         module_records = tuple(_functions(tree, relative))
         for record in module_records:
-            for observation in _observations(record):
+            shadowed = _shadowed_names(root, relative, tree, record)
+            for observation in _observations(record, shadowed):
                 observations.append(
                     IoObservation(
                         observation.path,
@@ -604,11 +405,37 @@ def _inventory(root: Path, reachable: tuple[FunctionRecord, ...]) -> list[IoObse
     )
 
 
-def _capability_contract() -> list[dict[str, object]]:
-    return capability_contract(COMPATIBILITY_MODES)
-
-
 def validate(root: Path) -> dict[str, object]:
+    """Validate current source in a fresh, bounded-lifetime analysis scope."""
+    with analysis_cache():
+        return _validate(root)
+
+
+def _control_plane_remainder(inventory: list[IoObservation]) -> dict[str, object]:
+    """Describe the unclassified remainder so the count cannot be read as a gate debt.
+
+    Every unclassified operation is, by construction, off the hook decision path:
+    `_validate` refuses to pass while one is reachable. Reporting only the raw
+    category totals invites the opposite reading -- that thousands of operations
+    are waiting to be classified -- so say plainly that the remainder is Python
+    control plane and that none of it is reachable from a root.
+    """
+    remainder = [item for item in inventory if item.category.startswith("unclassified_python")]
+    return {
+        "operation_count": len(remainder),
+        "file_count": len({item.path for item in remainder}),
+        "reachable_count": sum(1 for item in remainder if item.reachable),
+        "by_subpackage": dict(sorted(Counter(_subpackage(item.path) for item in remainder).items())),
+    }
+
+
+def _subpackage(path: str) -> str:
+    tail = path.split("src/codex_plugin_scanner/guard/", 1)[-1]
+    head, separator, _ = tail.partition("/")
+    return head if separator else "<top-level>"
+
+
+def _validate(root: Path) -> dict[str, object]:
     root = root.resolve()
     records = _function_map(root)
     reachable = _reachable_records(root, records)
@@ -619,6 +446,10 @@ def validate(root: Path) -> dict[str, object]:
         failures.extend(
             f"reachable unclassified Python I/O: {item.path}:{item.line} {item.operation}" for item in reachable_bad
         )
+    # A waiver the hook graph no longer reaches excuses nothing; one outside this tree is left alone.
+    waived = {item.path for item in inventory if item.reachable and item.category == "pending_authority_migration"}
+    stale = sorted(path for path in _PENDING_AUTHORITY_PATHS if path not in waived and (root / path).is_file())
+    failures.extend(f"stale pending_authority_migration waiver: {path}" for path in stale)
     if failures:
         raise RuntimeError("; ".join(failures))
     reachable_inventory = [item for item in inventory if item.reachable]
@@ -628,11 +459,12 @@ def validate(root: Path) -> dict[str, object]:
         "status": "passed",
         "native_modes": sorted(NATIVE_MODES),
         "compatibility_modes": sorted(COMPATIBILITY_MODES),
-        "capabilities": _capability_contract(),
+        "capabilities": capability_contract(COMPATIBILITY_MODES),
         "roots": [f"{item.path}:{item.name}" for item in (_root_record(root, spec, records) for spec in ROOTS)],
         "reachable_function_count": len(reachable),
         "inventory_total": len(inventory),
         "inventory_by_category": dict(sorted(inventory_counts.items())),
+        "control_plane_remainder": _control_plane_remainder(inventory),
         "inventory": [
             {
                 "path": item.path,

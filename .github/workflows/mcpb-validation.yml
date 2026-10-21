@@ -3,6 +3,10 @@ name: MCPB pull request validation
 on:
   pull_request:
     branches: [main, release/3.0]
+    paths:
+      - "distributions/mcpb/**"
+      - ".github/tools/mcpb-cli/**"
+      - ".github/workflows/mcpb-validation.yml"
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ jobs:
         run: |
           set -euo pipefail
           npm ci --ignore-scripts --prefix .github/tools/mcpb-cli
+          node .github/tools/mcpb-cli/harden-forge.cjs
           MCPB_CLI="$GITHUB_WORKSPACE/.github/tools/mcpb-cli/node_modules/.bin/mcpb"
           "$MCPB_CLI" validate distributions/mcpb
           "$MCPB_CLI" pack distributions/mcpb "$RUNNER_TEMP/hol-guard.mcpb"

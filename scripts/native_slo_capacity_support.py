@@ -6,12 +6,17 @@ import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+from typing import TYPE_CHECKING
 
 from scripts.bench_guard_native_installed_slo_runtime import _require
 from scripts.native_slo_adapter import Observation
 from scripts.native_slo_contract import SAFE_ROUTE_NAMES
 
+if TYPE_CHECKING:
+    from scripts.native_slo_session import AdapterSession
+
 _MAX_CONCURRENCY = 64
+_BASELINE_WARMUP_CONCURRENCY = 16
 _LOAD_EXECUTOR_PREWARM_TIMEOUT_SECONDS = 10.0
 
 
@@ -121,3 +126,31 @@ def _reconcile_wave_routes(
     if not _wave_routes_match(observations, errors=errors, before=before, after=after, expected=expected):
         return observations
     return [replace(item, route="native_resident") if not item.overloaded else item for item in observations]
+
+
+def _hook_capacity_view(session: AdapterSession) -> dict[str, int]:
+    """Report the in-process hook scheduler's aggregate capacity as target/workers/ready/busy."""
+
+    stats = session.daemon._server.runtime_hook_scheduler.stats()
+    limit = stats["active_limit"]
+    active = stats["active"]
+    return {"target": limit, "workers": limit, "ready": max(0, limit - active), "busy": active}
+
+
+def _baseline_capacity(session: AdapterSession, expected: int) -> dict[str, int]:
+    """Express scheduler idleness as the bounded warmup capacity the RSS baseline compares."""
+
+    busy = _hook_capacity_view(session)["busy"]
+    return {"target": expected, "workers": expected, "ready": max(0, expected - busy), "busy": busy}
+
+
+def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
+    """Require an idle scheduler and return the concurrent request count used to warm it."""
+
+    capacity = _hook_capacity_view(session)
+    target = min(capacity["target"], _BASELINE_WARMUP_CONCURRENCY)
+    _require(
+        1 <= target <= _MAX_CONCURRENCY and capacity["busy"] == 0,
+        "hook scheduler was not idle while stabilizing",
+    )
+    return target

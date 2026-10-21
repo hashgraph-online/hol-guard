@@ -7,6 +7,8 @@ import pytest
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import run_mcp_catalog
 from tests.test_guard_mcp_catalog_coverage import _discovery, _requests, _server, _tools
 
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
 
 @pytest.mark.parametrize("missing", ["ttlMs", "cacheScope"])
 @pytest.mark.parametrize("invalid_page", ["<root>", "next"])

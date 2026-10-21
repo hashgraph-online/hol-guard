@@ -1,4 +1,5 @@
 import type { ChangeEvent } from "react";
+import { StyledSelect } from "./styled-select";
 import {
   HiMiniArrowTopRightOnSquare,
   HiMiniCheckCircle,
@@ -217,8 +218,8 @@ export function CloudExceptionSourceStep({
       {draft.sourceMode === "receipt" && hasReceipts ? (
         <label className="block space-y-1">
           <span className="text-sm font-medium text-brand-dark">Choose evidence receipt</span>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+          <StyledSelect
+            className="w-full" wrapperClassName="w-full"
             value={draft.sourceReceiptId}
             onChange={handleReceiptSelect}
             required
@@ -228,15 +229,15 @@ export function CloudExceptionSourceStep({
                 {harnessDisplayName(receipt.harness)} · {receipt.artifact_name ?? receipt.artifact_id}
               </option>
             ))}
-          </select>
+          </StyledSelect>
         </label>
       ) : null}
 
       {draft.sourceMode === "approval" && hasApprovals ? (
         <label className="block space-y-1">
           <span className="text-sm font-medium text-brand-dark">Choose approval record</span>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+          <StyledSelect
+            className="w-full" wrapperClassName="w-full"
             value={draft.sourceReviewItemId}
             onChange={handleApprovalSelect}
             required
@@ -246,7 +247,7 @@ export function CloudExceptionSourceStep({
                 {harnessDisplayName(approval.harness)} · {approval.artifact_name || approval.artifact_id}
               </option>
             ))}
-          </select>
+          </StyledSelect>
         </label>
       ) : null}
 
@@ -422,8 +423,8 @@ export function CloudExceptionScopeStep({
       {(draft.scope === "harness" || draft.scope === "artifact") && (
         <label className="block space-y-1">
           <span className="text-sm font-medium text-brand-dark">App</span>
-          <select
-            className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+          <StyledSelect
+            className="w-full" wrapperClassName="w-full"
             value={draft.harness}
             onChange={(event) => onDraftChange({ harness: event.target.value })}
             required
@@ -433,7 +434,7 @@ export function CloudExceptionScopeStep({
                 {harnessDisplayName(option)}
               </option>
             ))}
-          </select>
+          </StyledSelect>
         </label>
       )}
 

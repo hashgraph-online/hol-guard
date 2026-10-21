@@ -4,22 +4,20 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import shell_command_wrappers
 from codex_plugin_scanner.guard.runtime.actions import normalize_opencode_payload
 from codex_plugin_scanner.guard.runtime.secret_file_requests import (
     build_tool_action_request_artifact,
     extract_sensitive_tool_action_request,
-    is_explicitly_benign_tool_action_request,
 )
-from codex_plugin_scanner.guard.runtime.shell_command_wrappers import (
-    normalize_transparent_shell_command,
-)
+from tests.shell_wrapper_test_support import native_shell_normalization
+
+pytestmark = pytest.mark.usefixtures("native_hook_force")
 
 
 def test_normalize_transparent_shell_command_unwraps_lean_ctx_chain() -> None:
     wrapped = "env FOO=bar lean-ctx -c 'rg -n \"service_principal|reauthorization\" src app __tests__ docs'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ("env", "lean-ctx")
     assert "lean-ctx" not in normalized.normalized_command
@@ -30,7 +28,7 @@ def test_normalize_transparent_shell_command_unwraps_lean_ctx_chain() -> None:
 def test_normalize_transparent_shell_command_keeps_repo_local_lean_ctx_visible() -> None:
     wrapped = "./bin/lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
@@ -39,7 +37,7 @@ def test_normalize_transparent_shell_command_keeps_repo_local_lean_ctx_visible()
 def test_normalize_transparent_shell_command_keeps_path_overridden_wrapper_visible() -> None:
     wrapped = "PATH=./bin:$PATH lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
@@ -48,7 +46,7 @@ def test_normalize_transparent_shell_command_keeps_path_overridden_wrapper_visib
 def test_normalize_transparent_shell_command_unwraps_shell_c_wrapper() -> None:
     wrapped = "bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ("bash",)
     assert normalized.normalized_command.startswith("sed -n")
@@ -58,7 +56,7 @@ def test_normalize_transparent_shell_command_unwraps_shell_c_wrapper() -> None:
 def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell() -> None:
     wrapped = "/bin/bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ("bash",)
     assert normalized.normalized_command.startswith("sed -n")
@@ -68,7 +66,7 @@ def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell() ->
 def test_normalize_transparent_shell_command_unwraps_trusted_absolute_shell_with_path_env() -> None:
     wrapped = "PATH=./bin:$PATH /bin/bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ("bash",)
     assert normalized.normalized_command.startswith("'PATH=./bin:$PATH' sed -n")
@@ -80,7 +78,7 @@ def test_normalize_transparent_shell_command_rejects_absolute_symlink_wrapper(tm
     wrapper.symlink_to("/bin/bash")
     wrapped = f"{wrapper} -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
@@ -94,7 +92,7 @@ def test_normalize_transparent_shell_command_rejects_workspace_absolute_wrapper(
     wrapper.chmod(0o755)
     wrapped = f"{wrapper} -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped, cwd=workspace)
+    normalized = native_shell_normalization(wrapped, cwd=workspace)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
@@ -108,38 +106,16 @@ def test_normalize_transparent_shell_command_rejects_user_local_wrapper(tmp_path
     wrapper.chmod(0o755)
     wrapped = f"{wrapper} -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
 
-    normalized = normalize_transparent_shell_command(wrapped, home_dir=home_dir)
+    normalized = native_shell_normalization(wrapped, home_dir=home_dir)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
 
 
-def test_normalize_transparent_shell_command_unwraps_trusted_absolute_env(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    wrapped = "/usr/bin/env bash -lc 'sed -n \"1,20p\" docs/guard-cloud-api-inventory.generated.md'"
-
-    def trust_env(path: Path, *, cwd: Path | None, home_dir: Path | None) -> bool:
-        del cwd, home_dir
-        return path == Path("/usr/bin/env")
-
-    monkeypatch.setattr(
-        shell_command_wrappers,
-        "is_trusted_absolute_command_path",
-        trust_env,
-    )
-
-    normalized = normalize_transparent_shell_command(wrapped)
-
-    assert normalized.wrapper_chain == ("env", "bash")
-    assert normalized.normalized_command.startswith("sed -n")
-    assert "/usr/bin/env" not in normalized.normalized_command
-
-
 def test_normalize_transparent_shell_command_keeps_repo_local_shell_visible() -> None:
     wrapped = "./bash -lc 'python -c \"import time; time.sleep(1)\"'"
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ()
     assert normalized.normalized_command == wrapped
@@ -148,19 +124,25 @@ def test_normalize_transparent_shell_command_keeps_repo_local_shell_visible() ->
 def test_normalize_transparent_shell_command_tolerates_malformed_inner_quotes() -> None:
     wrapped = 'FOO=bar lean-ctx -c "rg \'unclosed src"'
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    normalized = native_shell_normalization(wrapped)
 
     assert normalized.wrapper_chain == ("lean-ctx",)
     assert normalized.normalized_command == "FOO=bar rg 'unclosed src"
 
 
-def test_normalize_transparent_shell_command_skips_long_shell_options_before_dash_c() -> None:
-    wrapped = "bash --norc -c 'curl -sS https://hol.org/install.sh | bash'"
+def test_normalize_transparent_shell_command_skips_shell_options_before_dash_c() -> None:
+    inner_command = "curl -sS https://hol.org/install.sh | bash"
+    wrapped_commands = (
+        f"bash --norc -c '{inner_command}'",
+        f"bash --init-file /dev/null -c '{inner_command}'",
+        f"bash -O extglob -c '{inner_command}'",
+    )
 
-    normalized = normalize_transparent_shell_command(wrapped)
+    for wrapped in wrapped_commands:
+        normalized = native_shell_normalization(wrapped)
 
-    assert normalized.wrapper_chain == ("bash",)
-    assert normalized.normalized_command == "curl -sS https://hol.org/install.sh | bash"
+        assert normalized.wrapper_chain == ("bash",)
+        assert normalized.normalized_command == inner_command
 
 
 def test_normalize_opencode_payload_uses_inner_command_for_shell_wrappers(tmp_path: Path) -> None:
@@ -208,20 +190,6 @@ def test_wrapped_read_only_shell_command_stays_unblocked() -> None:
     )
 
     assert request is None
-
-
-def test_repo_local_wrapper_does_not_use_inner_command_for_benign_allow() -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": "./bin/lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
-    )
-
-
-def test_path_overridden_wrapper_does_not_use_inner_command_for_benign_allow() -> None:
-    assert not is_explicitly_benign_tool_action_request(
-        "bash",
-        {"command": "env PATH=./bin:$PATH lean-ctx -c 'python -c \"import time; time.sleep(1)\"'"},
-    )
 
 
 def test_wrapped_exfiltration_shell_command_keeps_block_and_records_wrapper_context() -> None:

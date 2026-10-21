@@ -131,6 +131,14 @@ and expire. State-changing jobs remain paused for one-job local approval. Use
 without disconnecting Cloud sync. See the full
 [Cloud command capability contract](./cloud-command-capability.md).
 
+## What a connected machine reports
+
+A connected machine sends Guard Cloud a small fleet posture summary: Guard version, OS, which AI tools are
+protected, installed skill and plugin inventory, and the applied policy. It never gates local protection.
+Run `hol-guard cloud status` to see what was last sent and what Cloud shows, or
+`hol-guard settings set fleet-posture off` to limit it to version, protection state and policy status
+(managed installs cannot opt out). See [Fleet posture](./fleet-posture.md).
+
 ## Guard Cloud for teams
 
 Team plans add shared ownership, managed Control Sets, routing, RBAC, billing,
@@ -176,6 +184,7 @@ Local tightening remains valid.
 - [Local Extensions and protection settings](./managed-controls-local-extensions.md)
 - [Managed Controls release notes](./managed-controls-release-notes.md)
 - [Managed Controls support runbook](./managed-controls-support-runbook.md)
+- [Fleet posture](./fleet-posture.md)
 - [Get started](./get-started.md)
 - [Harness support](./harness-support.md)
 - [Remediation](./remediation.md)

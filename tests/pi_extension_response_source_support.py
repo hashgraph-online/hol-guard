@@ -25,6 +25,9 @@ def _strip_generated_types(fragment: str) -> str:
         "function normalizeGuardResponse(value: unknown): GuardResponse | null {": (
             "function normalizeGuardResponse(value) {"
         ),
+        "function normalizePromptGuardResponse(value: unknown, event: unknown): GuardResponse | null {": (
+            "function normalizePromptGuardResponse(value, event) {"
+        ),
         """function daemonResponseCanReturn(
   payload: Record<string, unknown>,
   response: GuardResponse,
@@ -33,8 +36,10 @@ def _strip_generated_types(fragment: str) -> str:
   response,
 ) {""",
         "  payload: Record<string, unknown>,": "  payload,",
+        "  cwd: string,": "  cwd,",
         "  cwd?: string,": "  cwd,",
         "  options?: { enforceSizeCap?: boolean; deadlineAt?: number },": "  options,",
+        "options: { deadlineAt?: number; allowRecovery?: boolean }": "options",
         "  reasonCode: string,": "  reasonCode,",
         "  reason: string,": "  reason,",
         "): GuardResponse {": ") {",
@@ -61,6 +66,14 @@ def _strip_generated_types(fragment: str) -> str:
   options,
 ) {""",
         "let result: GuardCliResult | null = null;": "let result = null;",
+        "function nativeGuardReplyFromLine(line: string): GuardDaemonReply | null {": (
+            "function nativeGuardReplyFromLine(line) {"
+        ),
+        "  let envelope: unknown;": "  let envelope;",
+        "(remaining: number): string =>": "(remaining) =>",
+        " as { status?: unknown; body?: unknown }": "",
+        "async (limitChars: number) =>": "async (limitChars) =>",
+        "  reply: GuardDaemonReply,\n": "  reply,\n",
         " as unknown": "",
         " as Record<string, unknown>": "",
         " as GuardResponse": "",
@@ -178,3 +191,10 @@ def _generated_structured_helper(source: str) -> str:
     }.items():
         helper = helper.replace(old, new)
     return helper
+
+
+def _generated_output_text_keys(source: str) -> str:
+    """Use the installed extension's actual key order, never a fixture copy."""
+    match = re.search(r"const OUTPUT_TEXT_KEYS = (\[.*?\]) as const;", source, re.DOTALL)
+    assert match is not None, "Generated extension output key contract is missing"
+    return "const OUTPUT_TEXT_KEYS = " + match.group(1) + ";"

@@ -1,14 +1,16 @@
-"""Read configured stdio MCP servers from detected harnesses."""
+"""Read configured MCP servers, stdio and remote, from detected harnesses."""
 
 from __future__ import annotations
 
 import logging
 import os
 import shlex
+import sqlite3
 import subprocess
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ..models import HarnessDetection
 from ..runtime.local_cli_identity import UnlistedCliIdentity
@@ -16,9 +18,18 @@ from ..runtime.local_mcp_probe import mcp_launch_tokens
 from ..runtime.mcp_connection_identity import McpConnectionIdentity, build_mcp_connection_identity
 from ..runtime.mcp_protection import McpServerIdentity, build_mcp_server_identity
 from .contracts import display_name_for
+from .harness_mcp_remote import (
+    MAX_DISCOVERED_MCP_SERVERS,
+    DiscoveredRemoteMcpServer,
+    _remote_servers,
+    remote_scan_harnesses,
+)
 from .mcp_servers import ManagedMcpServer, observable_stdio_servers_with_proxy, proxy_process_env
+from .remote_mcp_origin import remote_mcp_origin as remote_mcp_origin
 
-MAX_DISCOVERED_MCP_SERVERS = 100
+if TYPE_CHECKING:
+    from .base import HarnessContext
+
 logger = logging.getLogger(__name__)
 
 
@@ -32,6 +43,7 @@ class DiscoveredHarnessMcpServer:
     launch_command: str
     env: tuple[tuple[str, str], ...] = ()
     connection_identity: McpConnectionIdentity | None = None
+    harness: str = ""
 
 
 def discover_harness_mcp_servers(
@@ -44,30 +56,87 @@ def discover_harness_mcp_servers(
     """Return unique stdio MCP servers from harness configs. Does not probe."""
 
     loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
+    return _stdio_servers(loaded)
+
+
+def discover_remote_mcp_servers(
+    *,
+    home_dir: Path,
+    guard_home: Path,
+    workspace_dir: Path | None = None,
+    detections: Sequence[HarnessDetection] | None = None,
+) -> tuple[DiscoveredRemoteMcpServer, ...]:
+    """Return unique remote MCP servers from harness configs. Never connects."""
+
+    loaded = detections if detections is not None else _safe_detections(home_dir, guard_home, workspace_dir)
+    return _remote_servers(loaded)
+
+
+def configured_mcp_server_names(loaded: Sequence[HarnessDetection]) -> dict[str, tuple[str, ...]]:
+    """Map each harness to the MCP server names its configs declare, stdio or remote."""
+
+    names: dict[str, dict[str, None]] = {}
+    for detection in loaded:
+        for artifact in detection.artifacts:
+            if artifact.artifact_type == "mcp_server" and artifact.name.strip():
+                names.setdefault(artifact.harness, {})[artifact.name.strip()] = None
+    return {harness: tuple(found) for harness, found in names.items()}
+
+
+def configured_harness_detections(
+    home_dir: Path, guard_home: Path, workspace_dir: Path | None = None
+) -> list[HarnessDetection]:
+    """One detection pass that both ``discover_*`` functions can share."""
+
+    return _safe_detections(home_dir, guard_home, workspace_dir)
+
+
+def _collect_stdio_servers(detection: HarnessDetection, groups: dict[str, _DiscoveryGroup]) -> None:
+    """Fold one harness's stdio servers into ``groups``. Raises only on bad data."""
+
+    for server in observable_stdio_servers_with_proxy(detection):
+        built = _identity_for(server)
+        if built is None:
+            continue
+        identity, server_identity, connection_identity = built
+        key = identity.identity_hash
+        label = display_name_for(server.harness)
+        current = groups.get(key)
+        if current is None:
+            groups[key] = _DiscoveryGroup(
+                identity=identity,
+                server_identity=server_identity,
+                launch_command=_raw_launch_label(server.command, server.args),
+                labels=[label],
+                env=tuple(sorted(proxy_process_env(server.env).items())),
+                connection_identity=connection_identity,
+                harness=server.harness,
+            )
+            continue
+        if label not in current.labels:
+            current.labels.append(label)
+
+
+def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnessMcpServer, ...]:
     groups: dict[str, _DiscoveryGroup] = {}
     for detection in loaded:
-        for server in observable_stdio_servers_with_proxy(detection):
-            built = _identity_for(server)
-            if built is None:
-                continue
-            identity, server_identity, connection_identity = built
-            key = identity.identity_hash
-            label = display_name_for(server.harness)
-            current = groups.get(key)
-            launch_command = _raw_launch_label(server.command, server.args)
-            env = tuple(sorted(proxy_process_env(server.env).items()))
-            if current is None:
-                groups[key] = _DiscoveryGroup(
-                    identity=identity,
-                    server_identity=server_identity,
-                    launch_command=launch_command,
-                    labels=[label],
-                    env=env,
-                    connection_identity=connection_identity,
-                )
-                continue
-            if label not in current.labels:
-                current.labels.append(label)
+        # One harness whose entries cannot be read must not hide every other
+        # harness's connections. Detection is already isolated per adapter;
+        # this is the second half of that promise, for the servers a readable
+        # detection still carries in a shape Guard cannot turn into an identity.
+        # Safe to skip one harness here because stdio persistence only adds
+        # observations. The remote list in `harness_mcp_remote` stays all or
+        # nothing: `remote_scan_harnesses` promises a full read, and a partial
+        # one would make reconciliation forget the entries it could not parse.
+        try:
+            _collect_stdio_servers(detection, groups)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
+            logger.warning(
+                "MCP inventory skipped %s servers after invalid data (%s)",
+                detection.harness,
+                type(exc).__name__,
+            )
+            continue
     ranked = sorted(
         groups.values(),
         key=lambda group: (
@@ -85,6 +154,7 @@ def discover_harness_mcp_servers(
             launch_command=group.launch_command,
             env=group.env,
             connection_identity=group.connection_identity,
+            harness=group.harness,
         )
         for group in ranked[:MAX_DISCOVERED_MCP_SERVERS]
     )
@@ -95,8 +165,14 @@ def persist_discovered_harness_mcp_servers(
     servers: Sequence[DiscoveredHarnessMcpServer],
     *,
     seen_at: str,
+    remote: Sequence[DiscoveredRemoteMcpServer] = (),
+    remote_harnesses: Sequence[str] | None = None,
 ) -> dict[str, str]:
-    """Persist observations and return cli_id to source_label."""
+    """Persist observations and return cli_id to source_label.
+
+    ``remote_harnesses`` names the harnesses whose configs ``remote`` fully
+    covers; their remote declarations missing from ``remote`` are forgotten.
+    """
 
     ensure = getattr(store, "ensure_local_mcp_observation", None)
     if not callable(ensure):
@@ -113,10 +189,59 @@ def persist_discovered_harness_mcp_servers(
             connection_identity_hash=server.connection_identity.identity_hash
             if server.connection_identity is not None
             else None,
+            declared_source=f"{server.harness}:stdio" if server.harness else None,
         )
         if isinstance(cli_id, str) and cli_id:
             labels[cli_id] = server.source_label
+    remote_ids: list[str] = []
+    for declared in remote:
+        server_identity = declared.tool.server_identity
+        cli_id = ensure(
+            declared.tool.identity,
+            seen_at=seen_at,
+            server_identity_hash=server_identity.identity_hash,
+            server_command=server_identity.command,
+            server_args_hash=server_identity.args_hash,
+            source_label=declared.source_label,
+            remote_origin=declared.origin,
+            declared_source=f"{declared.tool.harness}:remote",
+        )
+        if isinstance(cli_id, str) and cli_id:
+            labels[cli_id] = declared.source_label
+            remote_ids.append(cli_id)
+    reconcile = getattr(store, "reconcile_remote_mcp_declarations", None)
+    if remote_harnesses is not None and callable(reconcile) and len(remote_ids) == len(remote):
+        try:
+            reconcile(harnesses=remote_harnesses, declared_cli_ids=remote_ids)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, sqlite3.Error) as error:
+            # The cleanup is display-only; the observations above still stand.
+            logger.debug("remote MCP declaration reconcile skipped: %s", type(error).__name__)
     return labels
+
+
+def observe_configured_mcp_servers(store: object, *, context: HarnessContext, seen_at: str, stdio: bool = True) -> int:
+    """Record every configured MCP server so Protect lists it before first use.
+
+    Best effort: setup commands must not fail because a harness config is
+    unreadable. Returns the number of connectors recorded. With ``stdio=False``
+    only remote servers are recorded: a stdio observation may carry a legacy
+    denial into a new grant, which a read-only caller must not do.
+    """
+
+    try:
+        detections = _safe_detections(context.home_dir, context.guard_home, context.workspace_dir)
+        remote = _remote_servers(detections)
+        labels = persist_discovered_harness_mcp_servers(
+            store,
+            _stdio_servers(detections) if stdio else (),
+            seen_at=seen_at,
+            remote=remote,
+            remote_harnesses=remote_scan_harnesses(detections, remote),
+        )
+    except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
+        logger.debug("configured MCP servers not recorded after %s", type(exc).__name__)
+        return 0
+    return len(labels)
 
 
 def discovered_server_for_observation(
@@ -226,6 +351,7 @@ class _DiscoveryGroup:
     labels: list[str]
     env: tuple[tuple[str, str], ...]
     connection_identity: McpConnectionIdentity
+    harness: str
 
 
 def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | None) -> list[HarnessDetection]:
@@ -251,7 +377,7 @@ def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | Non
             except (OSError, RuntimeError, UnicodeError) as exc:
                 logger.debug("MCP inventory skipped %s adapter after %s", adapter.harness, type(exc).__name__)
                 continue
-            except (TypeError, ValueError, KeyError) as exc:
+            except (TypeError, ValueError, KeyError, sqlite3.Error) as exc:
                 logger.warning(
                     "MCP inventory skipped %s adapter after invalid data (%s)",
                     adapter.harness,

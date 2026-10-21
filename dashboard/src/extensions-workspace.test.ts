@@ -26,6 +26,7 @@ import {
 } from "./extension-policy-panel";
 import { quickApplyPermissionIds } from "./protection-center/components/quick-apply-toolbar";
 import { PatternSearchConsole } from "./protection-center/components/pattern-search-console";
+import { catalogReadModelFromCatalog } from "./extension-catalog-v2";
 
 // Every authority action failure maps to plain language with a next step;
 // raw protocol codes never reach the operator.
@@ -90,7 +91,7 @@ const unenrolledMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityN
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(unenrolledMarkup, /Finish setting up protection/);
+assert.match(unenrolledMarkup, /Finish extension setup/);
 assert.match(unenrolledMarkup, /command controls enroll/);
 assert.match(unenrolledMarkup, /Copy setup command/);
 assert.doesNotMatch(unenrolledMarkup, /bg-amber-50/, "setup guidance is informational, not a failure");
@@ -120,12 +121,10 @@ const approvalSetupMarkup = renderToStaticMarkup(createElement(ProtectionAuthori
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(approvalSetupMarkup, /Set up local approval before enrollment/);
-assert.match(approvalSetupMarkup, /Set up approval/);
-assert.match(approvalSetupMarkup, /Guard Cloud sign-in and account MFA are separate and do not enable this gate/);
-assert.match(approvalSetupMarkup, /Settings &gt; Approval gate/);
-assert.match(approvalSetupMarkup, /Ask for proof on allow decisions/);
-assert.match(approvalSetupMarkup, /Optionally connect an Authenticator app; once enabled, its code replaces the Approval password for every protected action and disables cooldown/);
+assert.match(approvalSetupMarkup, /Set up local approval/);
+assert.match(approvalSetupMarkup, /Open approval settings/);
+assert.match(approvalSetupMarkup, /Guard Cloud is not required/);
+assert.doesNotMatch(approvalSetupMarkup, /enrollment|account MFA|Authenticator app|Check again/);
 assert.doesNotMatch(approvalSetupMarkup, /Authy/);
 assert.doesNotMatch(approvalSetupMarkup, /command controls enroll/);
 assert.doesNotMatch(approvalSetupMarkup, /Copy setup command/);
@@ -137,7 +136,7 @@ const disabledApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuth
   onCheckAgain: () => undefined,
   onOpenApprovalSettings: () => undefined,
 }));
-assert.match(disabledApprovalMarkup, /Set up local approval before enrollment/);
+assert.match(disabledApprovalMarkup, /Local approval is off/);
 assert.doesNotMatch(disabledApprovalMarkup, /command controls enroll/);
 
 const pendingApprovalMarkup = renderToStaticMarkup(createElement(ProtectionAuthorityNotice, {
@@ -353,6 +352,7 @@ assert.deepEqual(
 // leave silently disabled controls.
 const lockedSearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective: { ...effective, health: "recovery-required", failures: [{ code: "fixture-state" }] },
   query: "git",
   onRefresh: () => undefined,
@@ -363,6 +363,7 @@ assert.match(lockedSearchMarkup, /Settings cannot be changed until Guard verifie
 assert.match(lockedSearchMarkup, /aria-pressed="false"[^>]*disabled/, "locked quick-apply controls stay disabled while they explain why");
 const healthySearchMarkup = renderToStaticMarkup(createElement(PatternSearchConsole, {
   catalog: [extension],
+  readModel: catalogReadModelFromCatalog({ schema_version: "1.0.0", catalog_digest: "a".repeat(64), extensions: [extension] }),
   effective,
   query: "git",
   onRefresh: () => undefined,
@@ -451,6 +452,26 @@ const quickApplyToolbarSource = readFileSync(new URL("./protection-center/compon
 const policyEditingLocksSource = readFileSync(new URL("./protection-center/components/policy-editing-locks.tsx", import.meta.url), "utf8");
 const extensionNavigationSource = readFileSync(new URL("./protection-center/extension-navigation.ts", import.meta.url), "utf8");
 assert.match(workspaceHostSource, /data-testid="extensions-workspace"/);
+// A daemon that cannot prepare its verified catalog still serves the legacy
+// catalog from the registry it holds in memory, so the page says what is
+// reduced beside the list instead of replacing the page with an error.
+assert.match(workspaceHostSource, /data-testid="catalog-preparation-degraded"/);
+assert.match(
+  workspaceHostSource,
+  /role="status"[\s\S]{0,200}data-testid="catalog-preparation-degraded"/,
+  "the degraded catalog notice is a status, not an alert that takes the page away",
+);
+assert.match(workspaceHostSource, /CATALOG_PREPARATION_DEGRADED_MESSAGE/);
+assert.match(
+  workspaceHostSource,
+  /const catalog = reusableCatalogModel\(previous, fresh\);/,
+  "model reuse compares the degraded mode too, so the notice cannot outlive the failure",
+);
+assert.match(
+  workspaceHostSource,
+  /const catalogDegraded = state\.kind === "ready" && state\.catalog\.degraded === CATALOG_PREPARATION_FAILED;/,
+  "the notice is derived from a ready state, so it can never stand in for the list",
+);
 assert.match(workspaceHostSource, /pushExtensionHistory/);
 assert.match(workspaceHostSource, /replaceExtensionHistory/);
 assert.match(extensionNavigationSource, /guardAwareHref/);

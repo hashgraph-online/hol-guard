@@ -14,8 +14,21 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
+_helper_dir = str(Path(__file__).resolve().parent)
+sys.path.insert(0, _helper_dir)
+try:
+    from extension_claim_authority import ClaimProvenanceError as ClaimProvenanceError
+    from extension_claim_authority import accepted_claimant_ids as verified_claimant_ids
+    from extension_claim_authority import external_contribution
+finally:
+    sys.path.remove(_helper_dir)
+
+LINKEDIN_RE = re.compile(r"^https://(?:www\.)?linkedin\.com/(?:in|company)/[A-Za-z0-9][A-Za-z0-9-]{1,99}/?$")
+X_RE = re.compile(r"^https://(?:www\.)?(?:x\.com|twitter\.com)/[A-Za-z0-9_]{1,15}/?$")
+CONTRIBUTOR_PROFILE_FIELDS = frozenset({"description", "organization", "website", "linkedin", "x"})
 MARKER = "<!-- hol-extension-claim-notice:v1 -->"
 GUIDANCE_MARKER = "<!-- hol-extension-claim-guidance:v1 -->"
 DEFAULT_STUDIO_URL = "https://hol.org/guard/extension-studio"
@@ -38,6 +51,7 @@ READYNESS_REASONS = frozenset(
 )
 CONTRIBUTION_PREFIXES = (
     "contributions/extensions/",
+    "contributions/command-sources/",
     "contributions/mcp-servers/",
 )
 EXTENSION_ID_RE = re.compile(r"^(?:command|mcp)\.[a-z0-9]+(?:[.-][a-z0-9]+)*$")
@@ -48,6 +62,7 @@ SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 TRUSTED_NOTICE_ACTOR_ID = 41898282
 MAX_LISTING_BYTES = 16_384
+MAX_GITHUB_RESPONSE_BYTES = 8 * 1024 * 1024
 LISTING_SCHEMA_V1 = "guard.extension-listing.v1"
 LISTING_SCHEMA_V2 = "guard.extension-listing.v2"
 LISTING_REQUIRED_KEYS = frozenset({"schemaVersion", "extensionId", "tagline", "category", "limitations"})
@@ -95,7 +110,7 @@ class ExtensionReadiness:
 class GitHubApi:
     """Small GitHub REST client used by the post-merge workflow."""
 
-    def __init__(self, token: str, repo: str) -> None:
+    def __init__(self, token: str, repo: str, *, source_root: Path | None = None) -> None:
         if not token:
             raise ClaimNoticeError("GitHub token is required")
         if not REPO_RE.fullmatch(repo):
@@ -103,8 +118,13 @@ class GitHubApi:
         self.token = token
         self.repo = repo
         self.base_url = f"https://api.github.com/repos/{repo}"
+        self.source_root = source_root
+        self._immutable_reads: dict[str, Any] = {}
 
     def _request(self, url: str, *, method: str = "GET", payload: Any | None = None) -> Any:
+        immutable = method == "GET" and bool(re.search(r"/commits/[a-f0-9]{40}(?:[?]|$)", url))
+        if immutable and url in self._immutable_reads:
+            return self._immutable_reads[url]
         body = None
         headers = {
             "Accept": "application/vnd.github+json",
@@ -118,16 +138,21 @@ class GitHubApi:
         request = urllib.request.Request(url, headers=headers, method=method, data=body)
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                raw = response.read()
+                raw = response.read(MAX_GITHUB_RESPONSE_BYTES + 1)
         except urllib.error.HTTPError as error:
             detail = error.read().decode("utf-8", errors="replace")
             raise ClaimNoticeError(f"GitHub API {error.code} for {url}: {detail[:300]}") from error
         except OSError as error:
             raise ClaimNoticeError(f"GitHub API request failed for {url}: {error}") from error
+        if len(raw) > MAX_GITHUB_RESPONSE_BYTES:
+            raise ClaimNoticeError("GitHub API response exceeds the byte limit")
         if not raw:
             return None
         try:
-            return json.loads(raw.decode("utf-8"))
+            data = json.loads(raw.decode("utf-8"))
+            if immutable:
+                self._immutable_reads[url] = data
+            return data
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ClaimNoticeError(f"GitHub API returned invalid JSON for {url}") from error
 
@@ -303,6 +328,40 @@ def _public_reference(value: object, *, field: str) -> None:
         raise ClaimNoticeError(f"listing {field} must use public HTTPS without credentials") from error
 
 
+def _validate_contributor_profile(profile: object, extension_id: str) -> None:
+    """Presentation only. Profile contents are not claimant input."""
+
+    if not isinstance(profile, dict) or not profile or not frozenset(profile) <= CONTRIBUTOR_PROFILE_FIELDS:
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    for field in ("description", "organization"):
+        if field in profile:
+            maximum = 280 if field == "description" else 80
+            minimum = 12 if field == "description" else 2
+            _plain_text(profile[field], minimum=minimum, maximum=maximum, field=f"contributors.profile.{field}")
+    website = _profile_link(profile, "website", extension_id)
+    if website is not None:
+        _public_reference(website, field="contributors.profile.website")
+    linkedin = _profile_link(profile, "linkedin", extension_id)
+    if linkedin is not None:
+        if LINKEDIN_RE.fullmatch(linkedin) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor LinkedIn link is invalid")
+        _public_reference(linkedin, field="contributors.profile.linkedin")
+    x_url = _profile_link(profile, "x", extension_id)
+    if x_url is not None:
+        if X_RE.fullmatch(x_url) is None:
+            raise ClaimNoticeError(f"{extension_id}: contributor X link is invalid")
+        _public_reference(x_url, field="contributors.profile.x")
+
+
+def _profile_link(profile: dict[str, Any], field: str, extension_id: str) -> str | None:
+    if field not in profile:
+        return None
+    value = profile[field]
+    if not isinstance(value, str):
+        raise ClaimNoticeError(f"{extension_id}: contributor profile fields do not match the canonical schema")
+    return value
+
+
 def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> None:
     _plain_text(listing["summary"], minimum=20, maximum=2048, field="summary")
 
@@ -311,12 +370,20 @@ def _validate_v2_credit_fields(listing: dict[str, Any], extension_id: str) -> No
         raise ClaimNoticeError(f"{extension_id}: contributors must be an array of at most eight entries")
     contributor_ids: set[str] = set()
     for contributor in contributors:
-        if not isinstance(contributor, dict) or frozenset(contributor) != {
-            "githubId",
-            "githubLogin",
-            "roles",
-        }:
+        if (
+            not isinstance(contributor, dict)
+            or not {"githubId", "githubLogin", "roles"} <= frozenset(contributor)
+            or not frozenset(contributor)
+            <= {
+                "githubId",
+                "githubLogin",
+                "roles",
+                "profile",
+            }
+        ):
             raise ClaimNoticeError(f"{extension_id}: contributor fields do not match the canonical schema")
+        if "profile" in contributor:
+            _validate_contributor_profile(contributor["profile"], extension_id)
         github_id = contributor["githubId"]
         if not isinstance(github_id, str) or not GITHUB_ID_RE.fullmatch(github_id):
             raise ClaimNoticeError(f"{extension_id}: contributor GitHub ID is invalid")
@@ -438,10 +505,40 @@ def contribution_path(extension_id: str) -> str:
     raise ClaimNoticeError(f"unsupported extension ID: {extension_id}")
 
 
+def contribution_paths(extension_id: str) -> tuple[str, ...]:
+    """Every authored file that establishes a native contribution.
+
+    A command extension is contributed as its canonical source; the descriptor
+    under ``contributions/extensions/`` is generated on main after merge, so
+    either file proves the contribution exists at a revision.
+    """
+    paths = (contribution_path(extension_id),)
+    if extension_id.startswith("command."):
+        paths += (f"contributions/command-sources/{extension_id}.json",)
+    return paths
+
+
+def contribution_exists(client: GitHubApi, extension_id: str, ref: str) -> bool:
+    return any(client.file_exists(path, ref) for path in contribution_paths(extension_id))
+
+
+def accepted_claimant_ids(
+    client: GitHubApi, extension_id: str, ref: str, listing: dict[str, Any] | None
+) -> tuple[str, ...]:
+    return verified_claimant_ids(
+        client,
+        extension_id,
+        ref,
+        listing,
+        validate_listing=accepted_github_ids,
+        contribution_paths=contribution_paths,
+    )
+
+
 def build_comment(items: list[NoticeItem], studio_url: str) -> str:
     lines = [
         MARKER,
-        "Your HOL Guard extension contribution is merged and its publisher page is ready to claim.",
+        "Your HOL Guard extension contribution is merged. Claim your publisher page in Extension Studio.",
         "",
         "## Claim your extension",
         "",
@@ -568,8 +665,11 @@ def current_unmapped_contributions(client: GitHubApi, pr_number: int, records: l
         raise ClaimNoticeError("canonical contribution revision is unavailable")
     current: list[str] = []
     for extension_id in missing:
-        native_path = contribution_path(extension_id)
-        if not client.file_exists(native_path, merge_sha) or not client.file_exists(native_path, default_branch):
+        if not contribution_exists(client, extension_id, merge_sha) or not contribution_exists(
+            client, extension_id, default_branch
+        ):
+            continue
+        if not external_contribution(client, extension_id, default_branch):
             continue
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
@@ -657,28 +757,45 @@ def _plan_notice_items(
     for extension_id in candidates:
         listing_path = f"{LISTING_PREFIX}{extension_id}.json"
         current_listing = client.file_json(listing_path, merge_sha, missing_ok=True)
-        if current_listing is None or not accepted_github_ids(current_listing, extension_id):
-            newly_added = extension_id in contribution_changes and not client.file_exists(
-                contribution_path(extension_id), before_sha
+        merge_ids = accepted_claimant_ids(client, extension_id, merge_sha, current_listing)
+        newly_added = extension_id in contribution_changes and not contribution_exists(client, extension_id, before_sha)
+        if (
+            newly_added
+            and not merge_ids
+            and current_listing is not None
+            and (current_listing.get("maintainerGithubIds") == [])
+        ):
+            # A historical empty override may have since been removed. Recover
+            # only the original author who is accepted by current authority.
+            initial_ids = accepted_claimant_ids(client, extension_id, merge_sha, None)
+            tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
+            tip_ids = accepted_claimant_ids(client, extension_id, default_branch, tip_listing)
+            merge_ids = tuple(account_id for account_id in initial_ids if account_id in tip_ids)
+        if not merge_ids:
+            newly_added = extension_id in contribution_changes and not contribution_exists(
+                client, extension_id, before_sha
             )
             record(extension_id, "no_mapping", missing_mapping=newly_added)
             continue
-        merge_ids = accepted_github_ids(current_listing, extension_id)
 
-        native_path = contribution_path(extension_id)
-        if not client.file_exists(native_path, merge_sha):
+        if not contribution_exists(client, extension_id, merge_sha):
             raise ClaimNoticeError(f"{extension_id}: authority sidecar exists without a canonical native contribution")
-        if not client.file_exists(native_path, default_branch):
+        if not contribution_exists(client, extension_id, default_branch):
             print(f"PR #{pr_number}: {extension_id}: native contribution is absent from canonical {default_branch}")
             record(extension_id, "source_not_current")
             continue
-        contribution_existed = client.file_exists(native_path, before_sha)
+        contribution_existed = contribution_exists(client, extension_id, before_sha)
 
         if not contribution_existed:
             notify_ids = merge_ids
         elif extension_id in listing_changes:
+            if current_listing is None or "maintainerGithubIds" not in current_listing:
+                # Automatic initial invitations belong on the introducing PR.
+                # Snapshot reconciliation repairs that PR after a metadata fix.
+                record(extension_id, "source_not_current")
+                continue
             previous_listing = client.file_json(listing_path, before_sha, missing_ok=True)
-            previous_ids = accepted_github_ids(previous_listing, extension_id) if previous_listing else ()
+            previous_ids = accepted_claimant_ids(client, extension_id, before_sha, previous_listing)
             notify_ids = tuple(account_id for account_id in merge_ids if account_id not in previous_ids)
         else:
             notify_ids = ()
@@ -690,12 +807,8 @@ def _plan_notice_items(
         # merged sidecar must not re-invite a since-removed identity. Re-read
         # the canonical listing at the default branch tip and intersect.
         tip_listing = client.file_json(listing_path, default_branch, missing_ok=True)
-        if tip_listing is None:
-            print(f"PR #{pr_number}: {extension_id}: listing is absent from canonical {default_branch}; skipping")
-            record(extension_id, "source_not_current")
-            continue
         try:
-            tip_ids = accepted_github_ids(tip_listing, extension_id)
+            tip_ids = accepted_claimant_ids(client, extension_id, default_branch, tip_listing)
         except ClaimNoticeError as error:
             print(f"PR #{pr_number}: {extension_id}: canonical listing is invalid on {default_branch}: {error}")
             record(extension_id, "source_not_current")
@@ -885,6 +998,9 @@ def process(
     comments = client.comments(pr_number)
     existing_notice = trusted_notice_comment(comments)
     notice_exists = existing_notice is not None
+    if notice_exists and not refresh_existing:
+        print(f"PR #{pr_number}: trusted extension claim notice already exists; skipping duplicate")
+        return 0
     guidance_exists = has_trusted_guidance(comments)
     records: list[ExtensionReadiness] = []
     items, _, renames_excluded = _plan_notice_items(client, pr_number, allow_renames=allow_renames, records=records)
@@ -952,6 +1068,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo", default=os.environ.get("GITHUB_REPOSITORY", ""))
     parser.add_argument("--pr-number", type=int, required=True)
+    parser.add_argument("--source-root", type=Path, help="Trusted full-history canonical checkout for source proof.")
     parser.add_argument("--studio-url", default=os.environ.get("GUARD_EXTENSION_STUDIO_URL", DEFAULT_STUDIO_URL))
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--allow-renames", action="store_true")
@@ -981,7 +1098,7 @@ def main(argv: list[str] | None = None) -> int:
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN") or ""
     try:
         return process(
-            GitHubApi(token, args.repo),
+            GitHubApi(token, args.repo, source_root=args.source_root),
             args.pr_number,
             args.studio_url,
             dry_run=args.dry_run,

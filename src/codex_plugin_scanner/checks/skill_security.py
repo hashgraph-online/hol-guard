@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import re
+from bisect import bisect_right
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from ..models import SEVERITY_ORDER, CheckResult, Finding, ScanOptions, Severity
 from ..path_support import is_safe_relative_path, iter_safe_matching_files, resolves_within_root
 from .manifest import load_manifest
 from .skill_command_urls import CommandUrlPattern
+from .skill_curl_context import read_only_curl_spans
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,9 +27,10 @@ class SkillSecurityContext:
     skip_message: str | None = None
 
 
+_CURL_URL_PATTERN = CommandUrlPattern(re.compile(r"curl\s+", re.IGNORECASE))
 _RISKY_SKILL_PATTERNS: tuple[tuple[re.Pattern[str] | CommandUrlPattern, str], ...] = (
     (re.compile(r"cat\s+\.env", re.IGNORECASE), "reads the local .env file"),
-    (CommandUrlPattern(re.compile(r"curl\s+", re.IGNORECASE)), "sends workspace data to a remote endpoint"),
+    (_CURL_URL_PATTERN, "uses curl with uploads, shell composition, or arguments requiring review"),
     (CommandUrlPattern(re.compile(r"wget\s+", re.IGNORECASE)), "downloads or sends data over the network"),
     (re.compile(r"\b(?:bash|sh)\s+-lc\b", re.IGNORECASE), "runs through a shell wrapper"),
     (re.compile(r"(?:~\/\.ssh|id_rsa|authorized_keys)", re.IGNORECASE), "references sensitive SSH material"),
@@ -208,6 +211,22 @@ def _relative_skill_path(plugin_dir: Path, skill_path: Path) -> str:
         return skill_path.as_posix()
 
 
+def _normalize_skill_instruction_content(content: str) -> str:
+    """Preserve shell comments and join only physical backslash continuations."""
+
+    normalized: list[str] = []
+    for line in content.splitlines(keepends=True):
+        if line.lstrip(" \t").startswith("#"):
+            normalized.append(line)
+        elif line.endswith("\\\r\n"):
+            normalized.append(line[:-3] + " ")
+        elif line.endswith("\\\n"):
+            normalized.append(line[:-2] + " ")
+        else:
+            normalized.append(line)
+    return "".join(normalized)
+
+
 def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tuple[Finding, ...]:
     findings: list[Finding] = []
     for skill_path in iter_safe_matching_files(plugin_dir, skills_dir, "**/SKILL.md"):
@@ -215,9 +234,21 @@ def _local_skill_instruction_findings(plugin_dir: Path, skills_dir: Path) -> tup
             content = skill_path.read_text(encoding="utf-8", errors="ignore")
         except OSError:
             continue
+        # A shell comment does not continue after its trailing backslash.
+        # Preserve physical comment lines so they cannot absorb executable text.
+        content = _normalize_skill_instruction_content(content)
+        safe_curl_spans = read_only_curl_spans(content)
         relative_path = _relative_skill_path(plugin_dir, skill_path)
         for pattern, behavior in _RISKY_SKILL_PATTERNS:
-            match = pattern.search(content)
+            match = None
+            for candidate in pattern.finditer(content):
+                if pattern is _CURL_URL_PATTERN:
+                    start, end = candidate.span()
+                    span_index = bisect_right(safe_curl_spans, (start, len(content))) - 1
+                    if span_index >= 0 and end <= safe_curl_spans[span_index][1]:
+                        continue
+                match = candidate
+                break
             if match is None:
                 continue
             findings.append(

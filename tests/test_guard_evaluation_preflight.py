@@ -700,6 +700,50 @@ def test_setup_is_private_and_cleanup_preserves_unrelated_files(tmp_path: Path) 
     assert unrelated.read_bytes() == b"keep this file"
 
 
+def test_setup_failure_cleanup_uses_allocated_root_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    executable = _fake_host(tmp_path)
+    artifact = _artifact(tmp_path)
+    profile = _profile(tmp_path, executable)
+    allocated_identity: list[tuple[int, int]] = []
+    cleanup_identities: list[tuple[int, int] | None] = []
+    original_chmod = preflight_module.Path.chmod
+    original_remove = preflight_module._cleanup.remove_owned_root
+
+    def fail_root_chmod(path: Path, mode: int, *, follow_symlinks: bool = True) -> None:
+        if path.name.startswith(preflight_module._cleanup.OWNED_ROOT_PREFIX):
+            details = path.stat(follow_symlinks=False)
+            allocated_identity.append((details.st_dev, details.st_ino))
+            raise OSError("synthetic setup failure")
+        original_chmod(path, mode, follow_symlinks=follow_symlinks)
+
+    def observe_cleanup(
+        path: Path,
+        marker_token: str,
+        *,
+        expected_root_identity: tuple[int, int] | None = None,
+    ) -> bool:
+        cleanup_identities.append(expected_root_identity)
+        return original_remove(path, marker_token, expected_root_identity=expected_root_identity)
+
+    monkeypatch.setattr(preflight_module.Path, "chmod", fail_root_chmod)
+    monkeypatch.setattr(preflight_module._cleanup, "remove_owned_root", observe_cleanup)
+
+    setup = setup_evaluation(
+        profile,
+        artifact_paths=_artifact_paths(artifact),
+        parent_dir=tmp_path,
+        allow_host_execution=True,
+    )
+
+    assert setup.report.status == "blocked_environment"
+    assert setup.report.reason == "setup_recovery_unavailable"
+    assert allocated_identity
+    assert cleanup_identities == [allocated_identity[0]]
+    assert setup.root_identity == allocated_identity[0]
+    assert setup.root_path is not None
+    assert setup.marker_token is None
+
+
 def test_cleanup_rejects_a_tampered_ownership_marker(tmp_path: Path) -> None:
     executable = _fake_host(tmp_path)
     artifact = _artifact(tmp_path)

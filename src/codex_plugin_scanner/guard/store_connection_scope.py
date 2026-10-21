@@ -9,8 +9,10 @@ from contextlib import contextmanager, suppress
 from typing import TYPE_CHECKING
 
 from . import store_review_event_outbox_schema
+from .sqlite_deadline_connection import DeadlineConnection
 from .sqlite_profile import sqlite_error_is_busy_locked
 from .sqlite_recovery import sqlite_error_is_io
+from .sqlite_tuning import sqlite_operation_deadline_monotonic
 from .store_base import SQLITE_CACHE_SIZE_KIB, SQLITE_MMAP_SIZE_BYTES, sqlite_connect_timeout_seconds
 
 if TYPE_CHECKING:
@@ -81,10 +83,13 @@ def open_connection(store: GuardStore) -> Iterator[sqlite3.Connection]:
 @contextmanager
 def _open_connection(store: GuardStore) -> Iterator[sqlite3.Connection]:
     timeout = sqlite_connect_timeout_seconds()
+    if timeout <= 0:
+        raise TimeoutError("Guard storage operation deadline expired.")
     profiler = store._sqlite_profiler()
     started = time.monotonic()
     try:
-        connection = sqlite3.connect(store.path, timeout=timeout)
+        factory = DeadlineConnection if sqlite_operation_deadline_monotonic() is not None else sqlite3.Connection
+        connection = sqlite3.connect(store.path, timeout=timeout, factory=factory)
     except sqlite3.OperationalError as error:
         profiler.record_connect((time.monotonic() - started) * 1000)
         if sqlite_error_is_busy_locked(error):
@@ -116,23 +121,39 @@ def transaction(store: GuardStore, connection: sqlite3.Connection) -> Iterator[s
     started = time.monotonic()
     initial_changes = connection.total_changes
     notification: dict[str, object] | None = None
-    try:
-        yield connection
-        store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
-        outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
-            connection, initial_changes, profiler.record_commit
-        )
-        notification = store._take_policy_integrity_state_notification(connection)
-    except BaseException as error:
+    outbox_generation: int | None = None
+    failure: BaseException | None = None
+
+    def rollback_failed_transaction(error: BaseException) -> None:
         if isinstance(error, sqlite3.OperationalError) and sqlite_error_is_busy_locked(error):
             profiler.record_busy_locked()
         # Earlier method commits remain durable; this failed method rolls back.
         with suppress(sqlite3.DatabaseError):
             connection.rollback()
         store._take_policy_integrity_state_notification(connection)
+
+    try:
+        yield connection
+    except BaseException as error:
+        failure = error
         raise
     finally:
-        profiler.record_transaction((time.monotonic() - started) * 1000)
-    store_review_event_outbox_schema.notify_review_event_wake(store.path, outbox_generation)
-    if notification is not None:
-        store._publish_policy_integrity_state_notification(notification)
+        try:
+            if failure is not None:
+                rollback_failed_transaction(failure)
+            else:
+                try:
+                    store_review_event_outbox_schema.finalize_review_event_payload_hashes(connection)
+                    outbox_generation = store_review_event_outbox_schema.commit_review_event_transaction(
+                        connection, initial_changes, profiler.record_commit
+                    )
+                    notification = store._take_policy_integrity_state_notification(connection)
+                except BaseException as error:
+                    rollback_failed_transaction(error)
+                    raise
+                else:
+                    store_review_event_outbox_schema.notify_review_event_wake(store.path, outbox_generation)
+                    if notification is not None:
+                        store._publish_policy_integrity_state_notification(notification)
+        finally:
+            profiler.record_transaction((time.monotonic() - started) * 1000)

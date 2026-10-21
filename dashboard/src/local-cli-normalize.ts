@@ -1,6 +1,8 @@
 import type { LocalCliContinuity } from "./custom-extension-continuity-api";
 import { normalizeCodexHostInventory } from "./codex-host-inventory";
 import type { LocalCliCommand, LocalCliItem, LocalCliListResponse, LocalCliSurface, LocalMcpCatalog, McpClassification } from "./local-cli-api";
+import { normalizeProfileFields, normalizeSuggestedState } from "./local-cli-profile-fields";
+import { normalizeCapabilityFields } from "./local-cli-capability";
 import { SHA256_PATTERN, isLocalCliId, isRecord, optionalString, requiredInt, requiredString } from "./local-cli-fields";
 
 export function normalizeMcpClassification(value: unknown): McpClassification | undefined {
@@ -51,10 +53,16 @@ export function normalizeLocalCliItem(value: unknown): LocalCliItem {
     suggestion_score: optionalScore(value.suggestion_score),
     commands: Array.isArray(value.commands) ? value.commands.map(normalizeLocalCliCommand) : [],
     continuity: normalizeContinuity(value.continuity),
+    ...(value.shares_enrolled_server === true ? { shares_enrolled_server: true } : {}),
     ...(catalog ? { mcp_catalog: catalog } : {}),
     ...(providerCatalog ? { provider_catalog: providerCatalog } : {}),
     ...(["configured-connection", "host-namespace", "legacy-device"].includes(String(value.permission_scope))
       ? { permission_scope: value.permission_scope as LocalCliItem["permission_scope"] } : {}),
+    ...(typeof value.remote_origin === "string" && value.remote_origin.length <= 512
+      && /^https?:\/\/[^\s?#@]+$/.test(value.remote_origin)
+      ? { remote_origin: value.remote_origin } : {}),
+    ...normalizeProfileFields(value),
+    ...normalizeCapabilityFields(value),
   };
 }
 
@@ -195,6 +203,7 @@ export function normalizeLocalCliCommand(value: unknown): LocalCliCommand {
     parent_id: typeof parent === "string" && parent.trim() ? parent : null,
     state,
     classification: normalizeMcpClassification(value.classification),
+    ...normalizeSuggestedState(value.suggested_state),
   };
 }
 
@@ -203,6 +212,10 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
   const cloud = isRecord(value.cloud) ? value.cloud : {};
   const items = Array.isArray(value.items)
     ? value.items.flatMap((entry) => { try { return [normalizeLocalCliItem(entry)]; } catch { return []; } })
+    : [];
+  const seededItems = Array.isArray(value.seeded_items)
+    ? value.seeded_items.flatMap((entry) => { try { return [normalizeLocalCliItem(entry)]; } catch { return []; } })
+      .filter((item) => item.seeded === true)
     : [];
   const revision = requiredInt(value.revision, "revision");
   const publication = value.native_publication;
@@ -222,11 +235,13 @@ export function normalizeLocalCliList(value: unknown): LocalCliListResponse {
     schema_version: requiredString(value.schema_version, "schema"),
     revision,
     ...((discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed"
-      || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed")
+      || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "configured_host_persist_failed"
+      || discoveryIssue === "package_catalog_refresh_failed")
       ? { discovery_issue: discoveryIssue } : {}),
     ...(nativePublication ? { native_publication: nativePublication } : {}),
     ...(hostInventory ? { host_inventory: hostInventory } : {}),
     items,
+    seeded_items: seededItems,
     cloud: {
       sync_local_only: cloud.sync_local_only !== false,
       continuity_enabled: cloud.continuity_enabled === true,

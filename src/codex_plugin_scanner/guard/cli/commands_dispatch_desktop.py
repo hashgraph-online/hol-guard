@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, TextIO
 
@@ -569,6 +570,39 @@ def _run_guard_desktop_command(
     output_stream: TextIO | None = None,
 ) -> int:
     del workspace, input_text
+    if getattr(args, "desktop_command", None) == "qualify-owned":
+        from .desktop_owned_qualification import run_desktop_owned_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard owned qualification requires local Guard context")
+        return run_desktop_owned_qualification(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) in {
+        "transition-status",
+        "transition-recover",
+        "transition-activate",
+        "transition-finalize",
+    }:
+        from .desktop_runtime_transition import run_desktop_runtime_transition
+
+        if context is None or store is None:
+            raise RuntimeError("Guard transition requires local Guard context")
+        return run_desktop_runtime_transition(
+            args,
+            context=context,
+            store=store,
+            output_stream=output_stream or sys.stdout,
+        )
+    if getattr(args, "desktop_command", None) == "qualify":
+        from .desktop_qualification import run_desktop_qualification
+
+        if context is None or store is None:
+            raise RuntimeError("Guard candidate qualification requires local Guard context")
+        return run_desktop_qualification(args, context=context, store=store, output_stream=output_stream or sys.stdout)
     if getattr(args, "desktop_command", None) == "dashboard-update":
         from ..daemon.dashboard_update_runner import main as dashboard_update_main
 
@@ -607,12 +641,23 @@ def _run_guard_desktop_command(
             guard_home=resolved_guard_home,
             home_dir=getattr(context, "home_dir", None),
         )
-    payload = assemble_desktop_bootstrap_document(
-        context=context,
-        store=store,
-        config=config,
-        session_url=session_url,
-    )
+    # The projection makes ~30 short reads. One shared connection avoids a
+    # connect/close (and WAL checkpoint) per read, which Desktop's bounded
+    # update preflight cannot afford on a loaded machine. The scope holds the
+    # shared storage gate, so it covers only these reads, not daemon start/adopt
+    # or output.
+    with ExitStack() as scope:
+        try:
+            scope.enter_context(store.connection_scope())
+        except (OSError, TimeoutError, ValueError) as error:
+            print(f"Error: {error}", file=sys.stderr)
+            return 2
+        payload = assemble_desktop_bootstrap_document(
+            context=context,
+            store=store,
+            config=config,
+            session_url=session_url,
+        )
     print(json.dumps(payload, sort_keys=True), file=output_stream or sys.stdout)
     return 0
 

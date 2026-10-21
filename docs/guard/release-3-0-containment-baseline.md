@@ -2,6 +2,8 @@
 
 Status: wave-zero baseline. Audience: execution-assurance gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
 
+Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py` and `runtime/containment_backend_status.py` have been deleted; the Python paths below describe the snapshot named above, not current code.
+
 Characterizes every isolation implementation by actual enforced behavior, then records the macOS/Linux containment guarantee matrix. Guarantees are derived from the enforcement code, never inferred from class or file names.
 
 ## Isolation implementations
@@ -58,5 +60,5 @@ Where a control is not enforced by the backend it is omitted rather than inferre
 
 ## Notes
 
-- This baseline records current enforced behavior; it does not authorize new isolation backends.
+- This baseline records the behavior enforced at the snapshot named above; it does not authorize new isolation backends.
 - Real-backend isolated runs (macOS Seatbelt, Linux bwrap) are exercised by CI on their respective platforms; this document does not substitute for that matrix.

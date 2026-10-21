@@ -1,0 +1,285 @@
+"""Actual Rust source codecs and approval gate, isolated local installation.
+
+No actor/provider credentials, custody, external dispatch or business acceptance.
+"""
+
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from codex_plugin_scanner.guard import native_business_source_store as owner
+from codex_plugin_scanner.guard.approval_gate import ApprovalGateInput, require_high_risk, update_settings
+from codex_plugin_scanner.guard.native_policy_snapshot_codec import derive_native_policy_verifier_key
+from codex_plugin_scanner.guard.native_policy_snapshot_constants import NativePolicySnapshotError
+from codex_plugin_scanner.guard.policy_document_authority import policy_import_approval_binding
+from codex_plugin_scanner.guard.store import GuardStore
+from tests.test_native_business_document_compile import document
+
+
+def _grant(store, candidate, *, initialize=True):
+    password = "synthetic-source-installation-password"
+    if initialize:
+        update_settings(
+            store.guard_home,
+            {
+                "enabled": True,
+                "new_password": password,
+                "confirm_password": password,
+                "cooldown_seconds": 0,
+            },
+        )
+    grant = require_high_risk(
+        store.guard_home,
+        purpose="policy_import",
+        **policy_import_approval_binding(candidate, "replace"),
+        approval_gate_input=ApprovalGateInput(password=password, use_cooldown=False),
+    )
+    assert grant is not None
+    return grant
+
+
+def _install(store, candidate, grant, *, commit=True):
+    with (
+        owner.approved_business_source_mutation(
+            store, candidate, mode="replace", now=grant.issued_at, approval_gate_grant=grant
+        ) as mutation,
+        store._connect() as connection,
+    ):
+        connection.execute("begin immediate")
+        mutation.stage_on_connection(connection, now=grant.issued_at)
+        if commit:
+            connection.commit()
+        else:
+            connection.rollback()
+    return mutation
+
+
+def _key(store):
+    material = store._policy_integrity_secret_material(create=False)
+    assert material[0] is not None
+    return derive_native_policy_verifier_key(material[0])
+
+
+def test_old_current_fence_consumer_cannot_receive_installation_key(tmp_path, native_mcp_probe, monkeypatch):
+    from types import SimpleNamespace
+
+    store = GuardStore(tmp_path / "old-fence-home")
+    native_mcp_probe(store.guard_home)
+    monkeypatch.setattr(
+        owner,
+        "_consumer",
+        lambda *args, **kwargs: SimpleNamespace(
+            capabilities=SimpleNamespace(features=("native-business-source-current-fence-v1",))
+        ),
+    )
+    monkeypatch.setattr(
+        store, "_policy_integrity_secret_material", lambda **kwargs: pytest.fail("key crossed old fence")
+    )
+    with (
+        pytest.raises(NativePolicySnapshotError, match="native_business_source_current_fence_unavailable"),
+        owner.approved_business_source_mutation(
+            store,
+            document(),
+            mode="replace",
+            now="2026-10-06T00:00:00Z",
+            approval_gate_grant=None,
+        ),
+    ):
+        pytest.fail("old fence admitted installation")
+    assert not (store.guard_home / "native-runtime" / owner.ANCHOR_FILE_NAME).exists()
+
+
+def test_exact_approved_source_database_and_retained_marker_agree(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "source-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document(0)
+    grant = _grant(store, candidate)
+    installed = _install(store, candidate, grant)
+    observed = owner.read_installed_business_source(store, _key(store))
+    assert observed == installed.source
+    assert json.loads(observed.record_bytes)["source_document"] == candidate.to_mapping()
+    next_candidate = document(1)
+    newer = _install(store, next_candidate, _grant(store, next_candidate, initialize=False))
+    assert newer.source.mutation_revision == 2
+    assert owner.read_installed_business_source(store, _key(store)) == newer.source
+
+
+def test_installation_survives_slow_native_process_start(tmp_path: Path, native_mcp_probe, monkeypatch):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard import native_business_source_bridge as bridge
+    from codex_plugin_scanner.guard import native_runtime
+
+    store = GuardStore(tmp_path / "slow-start-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document(0)
+    grant = _grant(store, candidate)
+    skew = [0.0]
+    run_native_process = native_runtime._run_native_process
+
+    def slow_start(*args, **kwargs):
+        skew[0] += 1.5
+        return run_native_process(*args, **kwargs)
+
+    monkeypatch.setattr(bridge, "time", SimpleNamespace(monotonic=lambda: time.monotonic() + skew[0]))
+    monkeypatch.setattr(native_runtime, "_run_native_process", slow_start)
+    installed = _install(store, candidate, grant)
+    assert skew[0] > bridge.OPERATION_BUDGET_SECONDS
+    monkeypatch.setattr(bridge, "time", time)
+    monkeypatch.setattr(native_runtime, "_run_native_process", run_native_process)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_installation_deadline_never_outlives_its_approval(tmp_path: Path):
+    import time
+    from types import SimpleNamespace
+
+    from codex_plugin_scanner.guard.approval_gate_state import iso_from_epoch
+
+    grant = SimpleNamespace(expires_at=iso_from_epoch(time.time() + 10))
+    deadline = owner._mutation_deadline(None, grant)
+    assert deadline <= time.monotonic() + 10
+    expired = SimpleNamespace(expires_at=iso_from_epoch(time.time() - 1))
+    assert owner._mutation_deadline(None, expired) > time.monotonic() + 10
+
+
+def test_sql_rollback_leaves_closed_marker_and_no_source_admission(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "rollback-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_transaction_not_committed"):
+        _install(store, candidate, _grant(store, candidate), commit=False)
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_installation_incoherent"):
+        owner.read_installed_business_source(store, _key(store))
+    marker = json.loads((store.guard_home / "native-runtime" / owner.ANCHOR_FILE_NAME).read_bytes())
+    assert marker["phase"] == "closed"
+
+
+@pytest.mark.parametrize("missing", [owner.SOURCE_FILE_NAME, owner.ANCHOR_FILE_NAME, "both-and-snapshot"])
+def test_independent_retention_refuses_primary_source_state_loss(tmp_path: Path, native_mcp_probe, missing: str):
+    store = GuardStore(tmp_path / "loss-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    _install(store, candidate, _grant(store, candidate))
+    state = store.guard_home / "native-runtime"
+    if missing == "both-and-snapshot":
+        (state / owner.SOURCE_FILE_NAME).unlink()
+        (state / owner.ANCHOR_FILE_NAME).unlink()
+        with store._connect() as connection:
+            connection.execute("delete from sync_state where state_key = ?", (owner.INSTALLATION_STATE_KEY,))
+            connection.commit()
+    else:
+        (state / missing).unlink()
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_installation_incoherent"):
+        owner.read_installed_business_source(store, _key(store))
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_installation_incoherent"):
+        _install(store, document(2), _grant(store, document(2), initialize=False))
+
+
+def test_native_floor_refuses_approved_document_revision_rollback(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "floor-home")
+    native_mcp_probe(store.guard_home)
+    installed = _install(store, document(2), _grant(store, document(2)))
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_codec_refused"):
+        _install(store, document(1), _grant(store, document(1), initialize=False))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_expired_approval_cannot_open_committed_marker_after_sql_commit(tmp_path: Path, native_mcp_probe, monkeypatch):
+    from codex_plugin_scanner.guard.approval_gate import ApprovalGateError
+
+    store = GuardStore(tmp_path / "expiry-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    grant = _grant(store, candidate)
+    require = owner._require_approved
+    checks = []
+
+    def expire_at_commit(current_store, binding, current_grant, now):
+        checks.append(now)
+        if len(checks) == 4:
+            now = (datetime.fromisoformat(grant.issued_at.replace("Z", "+00:00")) + timedelta(seconds=31)).isoformat()
+        return require(current_store, binding, current_grant, now)
+
+    monkeypatch.setattr(owner, "_require_approved", expire_at_commit)
+    with pytest.raises(ApprovalGateError):
+        _install(store, candidate, grant)
+    assert len(checks) == 4
+    marker = json.loads((store.guard_home / "native-runtime" / owner.ANCHOR_FILE_NAME).read_bytes())
+    assert marker["phase"] == "closed"
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_installation_incoherent"):
+        owner.read_installed_business_source(store, _key(store))
+    monkeypatch.setattr(owner, "_require_approved", require)
+    from codex_plugin_scanner.guard.native_business_source_recovery import recover_committed_business_source
+
+    recovered = recover_committed_business_source(
+        store, candidate, approval_gate_grant=_grant(store, candidate, initialize=False)
+    )
+    assert owner.read_installed_business_source(store, _key(store)) == recovered
+
+
+def test_unchanged_installation_reuses_verification_without_native_calls(tmp_path: Path, native_mcp_probe, monkeypatch):
+    store = GuardStore(tmp_path / "memo-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    calls: list[str] = []
+    verify_record = owner.verify_business_source_record
+    verify_anchor = owner.verify_business_source_anchor
+
+    def counted_record(*args, **kwargs):
+        calls.append("record")
+        return verify_record(*args, **kwargs)
+
+    def counted_anchor(*args, **kwargs):
+        calls.append("anchor")
+        return verify_anchor(*args, **kwargs)
+
+    monkeypatch.setattr(owner, "verify_business_source_record", counted_record)
+    monkeypatch.setattr(owner, "verify_business_source_anchor", counted_anchor)
+    with owner._VERIFIED_LOCK:
+        owner._VERIFIED.pop(str(store.guard_home), None)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    assert calls == ["anchor", "record"]
+
+
+def test_changed_installation_bytes_or_key_are_verified_again(tmp_path: Path, native_mcp_probe):
+    store = GuardStore(tmp_path / "memo-tamper-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, bytes(32))
+    record_path = store.guard_home / "native-runtime" / owner.SOURCE_FILE_NAME
+    original = record_path.read_bytes()
+    record_path.write_bytes(original.replace(b'"mutation_revision":1', b'"mutation_revision":7', 1))
+    assert record_path.read_bytes() != original
+    with pytest.raises(NativePolicySnapshotError):
+        owner.read_installed_business_source(store, _key(store))
+    record_path.write_bytes(original)
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+
+
+def test_memo_hit_still_refuses_runtime_without_current_fence(tmp_path: Path, native_mcp_probe, monkeypatch):
+    from types import SimpleNamespace
+
+    store = GuardStore(tmp_path / "memo-fence-home")
+    native_mcp_probe(store.guard_home)
+    candidate = document()
+    installed = _install(store, candidate, _grant(store, candidate))
+    assert owner.read_installed_business_source(store, _key(store)) == installed.source
+    monkeypatch.setattr(
+        owner,
+        "_consumer",
+        lambda *args, **kwargs: SimpleNamespace(
+            capabilities=SimpleNamespace(features=("native-business-source-current-fence-v1",))
+        ),
+    )
+    with pytest.raises(NativePolicySnapshotError, match="native_business_source_current_fence_unavailable"):
+        owner.read_installed_business_source(store, _key(store))

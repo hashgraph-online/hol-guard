@@ -7,13 +7,17 @@ import os
 import sys
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TextIO, cast
+from typing import TYPE_CHECKING, TextIO, cast
 
 from ..approval_gate import ApprovalGateError, public_config, recent_totp_satisfied, require_high_risk
 from ..config import resolve_guard_home_for_user_home
 from ..harness_disconnect_gate import disconnect_requires_fresh_authenticator
+from ..native_resident_revival import revive_native_resident
 from ..windows_paths import trusted_windows_user_profile
 from .approval_gate_prompt import consume_desktop_lifecycle_env, prompt_for_approval_gate
+
+if TYPE_CHECKING:
+    from ..adapters.base import HarnessContext
 
 _ENROLLMENT_NOTICE = (
     "Local Guard approval protection is not enabled. Guard Cloud sign-in and account MFA are separate from this "
@@ -22,13 +26,16 @@ _ENROLLMENT_NOTICE = (
     "code replaces the `Approval password` for every protected action and disables cooldown. This notice is "
     "advisory and does not block the current command."
 )
+_REPAIR_ACTION = "doctor.repair"
 _CANONICAL_AUTHORITY_ACTION_PREFIXES = (
     "apps.",
     "bootstrap.",
     "disconnect",
     "doctor.",
+    "hooks.",
     "init.",
     "install",
+    "runtime.",
     "uninstall",
     "update",
 )
@@ -43,11 +50,30 @@ class LifecycleGateRequirement:
 def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequirement | None:
     # Every protection-mutating command must be listed here; unmatched commands are intentionally exempt.
     command = _string_attribute(args, "guard_command")
+    if command == "desktop" and _string_attribute(args, "desktop_command") == "transition-activate":
+        # The command consumes Desktop proof once, prepares the complete exact
+        # subject, then requires/validates runtime.transition before begin().
+        # A generic parsing-time gate would consume that proof too early.
+        return None
     if _bool_attribute(args, "dry_run"):
         return None
     if command in {"install", "uninstall", "update", "disconnect"}:
         return LifecycleGateRequirement(command, _command_subject(args))
     apps_command = _string_attribute(args, "apps_command")
+    if (
+        command == "apps"
+        and apps_command == "repair"
+        and (
+            _bool_attribute(args, "restore_authority")
+            or _string_attribute(args, "authority_request")
+            or _string_attribute(args, "authority_request_sha256")
+            or getattr(args, "authority_deadline_epoch", None) is not None
+            or getattr(args, "authority_verification_workspace", None) is not None
+        )
+    ):
+        # This explicit path prepares the exact file/native plan under its
+        # owner before consuming factors and requiring its repair-only grant.
+        return None
     if command == "apps" and apps_command in {"connect", "repair", "disconnect"}:
         return LifecycleGateRequirement(f"apps.{apps_command}", _string_attribute(args, "harness") or "all")
     if command == "bootstrap" and not _bool_attribute(args, "skip_install"):
@@ -71,6 +97,11 @@ def lifecycle_gate_requirement(args: argparse.Namespace) -> LifecycleGateRequire
         return LifecycleGateRequirement(f"trust.{trust_command}", "local-trust")
     if command == "doctor" and _bool_attribute(args, "repair"):
         return LifecycleGateRequirement("doctor.repair", _string_attribute(args, "harness") or "all")
+    if command == "repair":
+        # `repair` is the same operation as `doctor --repair` (dry-run exempt above).
+        return LifecycleGateRequirement("doctor.repair", "all")
+    if command == "hooks" and _string_attribute(args, "hooks_command") == "remove":
+        return LifecycleGateRequirement("hooks.remove", "all")
     return None
 
 
@@ -83,7 +114,14 @@ def enforce_lifecycle_gate(
     requirement = lifecycle_gate_requirement(args)
     if requirement is None:
         return
+    if requirement.action == _REPAIR_ACTION:
+        # A repair has to work when the native runtime is down: lift the respawn
+        # pacing first so the gate check below starts the resident instead of
+        # being refused by a crash-loop backoff. The gate itself is unchanged.
+        revive_native_resident(guard_home)
     authority_home = lifecycle_authority_home(guard_home, requirement=requirement)
+    if requirement.action == _REPAIR_ACTION and authority_home != guard_home:
+        revive_native_resident(authority_home)
     gate = public_config(authority_home)
     desktop_proof = consume_desktop_lifecycle_env(
         totp_enabled=gate.totp_enabled,
@@ -117,6 +155,68 @@ def enforce_lifecycle_gate(
         action=requirement.action,
         scope="local-protection",
         subject=requirement.subject,
+    )
+
+
+def restore_missing_native_runtime(
+    error: ApprovalGateError,
+    *,
+    context: HarnessContext | None,
+    guard_home: Path,
+    error_stream: TextIO | None = None,
+) -> bool:
+    """Install the native runtime when its absence is the only reason the authority cannot answer.
+
+    The repair reinstalls the installed version with the native wheel whose digest the installed
+    pure wheel pins, so it cannot change the version or turn protection off. It restores the
+    authority; the caller still runs the full gate afterwards.
+    """
+
+    if error.code != "native_approval_gate_unavailable":
+        return False
+    try:
+        from .update_commands import bundled_native_runtime_missing, repair_native_runtime_if_missing
+
+        if not bundled_native_runtime_missing():
+            return False
+        print(
+            "Installing the missing native runtime from the HOL Guard GitHub release.", file=error_stream or sys.stderr
+        )
+        repair = repair_native_runtime_if_missing(
+            context=context,
+            store=None,
+            workspace=None,
+            now=None,
+            guard_home=guard_home,
+        )
+        return repair is not None and repair[1] == 0 and not bundled_native_runtime_missing()
+    except Exception:
+        return False
+
+
+def explain_missing_native_runtime(error: ApprovalGateError) -> ApprovalGateError:
+    """Name the way out when the authority is silent because this install has no native runtime.
+
+    The gate still fails closed; the message only replaces "retry", which cannot succeed, with the
+    command that installs the runtime outside Guard.
+    """
+
+    if error.code != "native_approval_gate_unavailable":
+        return error
+    try:
+        from .update_commands import bundled_native_runtime_report
+
+        report = bundled_native_runtime_report()
+    except Exception:
+        return error
+    manual = report.get("manual_install") if report is not None and report.get("status") == "missing" else None
+    if not isinstance(manual, str):
+        return error
+    return ApprovalGateError(
+        error.code,
+        "This install has no native runtime, so the native approval authority cannot answer. "
+        f"Install the runtime with `{manual}`, then run the command again.",
+        status=error.status,
     )
 
 

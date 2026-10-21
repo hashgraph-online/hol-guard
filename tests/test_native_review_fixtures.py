@@ -30,15 +30,31 @@ def _edge(harness: str, *, url: str = "https://example.test", action_type: str =
             "reason_code": "native_pre_tool_unknown_review" if action_type == "unknown" else "native_network_review",
             "reason": "HOL Guard requires review before this network action can execute.",
         },
+        "harness_response": {
+            "decision": "deny",
+            "reason": "HOL Guard requires review before this network action can execute.",
+            "policy_action": "review",
+        },
     }
+
+
+# The root payload keys a harness's retry replaces for the same action, as in
+# `request_payload_identity` (rust/crates/guard-runtime/src/edge_identity.rs).
+TRANSPORT_CALL_ID_KEYS = {
+    "pi": ("tool_call_id",),
+    "omp": ("tool_call_id",),
+    "claude-code": ("tool_use_id",),
+    "codex": ("tool_use_id",),
+}
 
 
 def request_digest_for_fixture(harness: str, payload: object, workspace: object) -> str:
     """Shared receipt fixture implementation, not a pytest test function."""
     semantic = dict(payload) if isinstance(payload, dict) else payload
     if isinstance(semantic, dict):
-        if harness in {"pi", "omp"} and isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
-            semantic.pop("tool_call_id", None)
+        if isinstance(semantic.get("session_id"), str) and semantic["session_id"]:
+            for key in TRANSPORT_CALL_ID_KEYS.get(harness, ()):
+                semantic.pop(key, None)
         for key in (
             "event",
             "eventName",
@@ -64,10 +80,6 @@ def request_digest_for_fixture(harness: str, payload: object, workspace: object)
 
 
 def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, object]) -> tuple[HookWorker, GuardStore]:
-    monkeypatch.setattr(
-        "codex_plugin_scanner.guard.daemon.hook_worker.native_mode",
-        lambda: "auto",
-    )
 
     def review_raw_hook_native(*_args: object, **kwargs: object) -> dict[str, object]:
         rendered = copy.deepcopy(edge)
@@ -110,6 +122,9 @@ def _worker(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, edge: dict[str, obj
         review_raw_hook_native,
     )
     store = GuardStore(tmp_path / "guard-home")
+    from codex_plugin_scanner.guard.config import update_guard_settings
+
+    update_guard_settings(store.guard_home, {"blocked_request_mode": "ask"})
     store.upsert_runtime_state(
         session_id="native-review",
         daemon_host="127.0.0.1",

@@ -149,13 +149,11 @@ def validate_installed_proof_environment(source: str) -> None:
             )
             first_proof = min(proof_indices)
             if first_proof == 0 or lines[first_proof - 1] != f"source {helper}":
-                raise RuntimeError(
-                    f"installed proof environment helper must be sourced before each proof: {platform}"
-                )
+                raise RuntimeError(f"installed proof environment helper must be sourced before each proof: {platform}")
 
 
 def registered_harnesses() -> frozenset[str]:
-    path = Path("src/codex_plugin_scanner/guard/adapters/contracts.py")
+    path = Path("src/codex_plugin_scanner/guard/adapters/contract_registry.py")
     tree = ast.parse(_read(path), filename=str(path))
     harnesses: set[str] = set()
     for node in ast.walk(tree):

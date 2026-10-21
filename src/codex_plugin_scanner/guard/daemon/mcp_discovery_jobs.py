@@ -11,7 +11,12 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from uuid import uuid4
 
+from .background_diagnostics import record_background_event
+
 _LOG = logging.getLogger(__name__)
+# Named here so a support bundle can be searched for a discovery job that died
+# outside any stage. The line carries a code and a type, never provider text.
+DISCOVERY_JOB_FAILED_EVENT = "discovery_job_failed"
 _JOB_ID = re.compile(r"[a-f0-9]{32}\Z")
 # Two slow providers can occupy half the pool while two other connections
 # still refresh. Four also caps concurrent job threads and their possible
@@ -22,6 +27,7 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_refresh_unavailable",
         "catalog_revision_conflict",
         "configured_host_scan_failed",
+        "configured_host_persist_failed",
         "observed_provider_scan_failed",
         "catalog_limit_reached",
         "mcp_launch_failed",
@@ -29,6 +35,14 @@ _PUBLIC_FAILURE_CODES = frozenset(
         "mcp_initialize_failed",
         "mcp_protocol_unsupported",
         "mcp_capability_rejected",
+        # Codex host reads name the Codex problem to fix; without them every
+        # one of them reaches the page as the generic unexpected-error banner.
+        "codex_host_changed",
+        "codex_host_untrusted",
+        "codex_host_invalid",
+        "codex_host_limit",
+        "codex_host_timeout",
+        "codex_host_unavailable",
     }
 )
 
@@ -154,6 +168,13 @@ class McpDiscoveryJobs:
                 f"{frame.name}:{frame.lineno}" for frame in traceback.extract_tb(error.__traceback__, limit=8)
             )
             _LOG.warning("MCP discovery job %s failed (%s, %s) at %s", job.job_id, code, type(error).__name__, frames)
+            # Stages record themselves, but a job can also fail outside one -
+            # and the page tells the reader their failure is in Guard's log.
+            # One event per failed job keeps that promise true for every path.
+            # This branch catches every exception a provider can raise, so the
+            # message is provider-shaped text no redactor can bound. The code
+            # and the exception class name are enough to find the warning above.
+            record_background_event(DISCOVERY_JOB_FAILED_EVENT, f"code={code} error={type(error).__name__}")
         finally:
             with self._lock:
                 job.finished = time.monotonic()

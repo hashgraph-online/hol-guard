@@ -41,10 +41,16 @@ from tests.update_context_test_support import (
 
 
 @pytest.fixture(autouse=True)
-def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch) -> None:
+def _use_legacy_update_context(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"test-runtime")
+    runtime.chmod(0o700)
     monkeypatch.setattr(update_commands, "build_trusted_update_context", build_legacy_update_context)
     monkeypatch.setattr(update_commands, "_status_installed_distribution", build_legacy_status_distribution)
     monkeypatch.setattr(update_commands, "stage_trusted_wheel", stage_legacy_wheel)
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(update_commands, "resolve_guard_home", lambda: tmp_path / "guard-home")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: True)
     monkeypatch.setattr(
         update_commands,
         "record_local_wheel_receipt",
@@ -79,7 +85,7 @@ def test_extension_control_authority_blocks_only_downgrades_after_enrollment(
 ) -> None:
     class FakeStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(health, 0, registry.catalog_digest, ())
 
@@ -115,7 +121,7 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
 
     class ProtectedAuthorityStore:
         def read_extension_control_authority_for_registry(
-            self, registry: CommandSafetyExtensionRegistry
+            self, registry: CommandSafetyExtensionRegistry, **_kwargs
         ) -> ExtensionControlAuthorityView:
             return ExtensionControlAuthorityView(AuthorityHealth.PROTECTED, 1, registry.catalog_digest, ())
 
@@ -130,6 +136,76 @@ def test_update_blocks_protected_authority_downgrade_before_installer_execution(
     assert payload["status"] == "blocked"
     assert payload["changed"] is False
     assert payload["reason_code"] == "extension_control_authority_downgrade_blocked"
+
+
+def test_update_retires_native_resident_before_installer_execution(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    runtime = tmp_path / "hol-guard-runtime"
+    runtime.write_bytes(b"new-runtime")
+    runtime.chmod(0o700)
+    events: list[tuple[str, object]] = []
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_current_version_from_subprocess", lambda *_args, **_kwargs: "2.2.3")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_bundled_runtime_candidate", lambda: runtime)
+    monkeypatch.setattr(
+        update_commands,
+        "_retire_native_resident_before_update",
+        lambda guard_home: events.append(("retire", guard_home)) or True,
+    )
+    monkeypatch.setattr(update_commands, "_refresh_package_shims_after_update", lambda **_: (None, None))
+    monkeypatch.setattr(update_commands, "_repair_supported_harnesses", lambda **_: ([], []))
+
+    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        events.append(("install", command))
+        return subprocess.CompletedProcess(command, 0, "installed local wheel", "")
+
+    monkeypatch.setattr(update_commands.subprocess, "run", fake_run)
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 0, json.dumps(payload, sort_keys=True)
+    assert payload["status"] == "updated"
+    assert [event[0] for event in events] == ["retire", "install"]
+
+
+def test_update_aborts_when_native_resident_retirement_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    wheel = tmp_path / "hol_guard-2.2.3-py3-none-any.whl"
+    wheel.write_bytes(b"fake-wheel")
+    monkeypatch.setattr(update_commands, "_current_version", lambda: "2.2.1")
+    monkeypatch.setattr(update_commands, "_latest_version_from_pypi", lambda: "2.2.3")
+    monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
+    monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
+    monkeypatch.setattr(update_commands, "_retire_native_resident_before_update", lambda _guard_home: False)
+    monkeypatch.setattr(
+        update_commands.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("installer must not execute")),
+    )
+
+    payload, exit_code = update_commands.run_guard_update(
+        dry_run=False,
+        wheel=str(wheel),
+        guard_home=tmp_path / "guard-home",
+    )
+
+    assert exit_code == 1
+    assert payload["status"] == "failed"
+    assert payload["changed"] is False
+    assert payload["reason_code"] == "update_native_resident_retirement_failed"
 
 
 def test_daemon_refresh_after_update_uses_fresh_interpreter(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -862,17 +938,15 @@ def test_update_preserves_requested_wheel_during_broken_pipx_recovery(
         "-m",
         "pip",
         "install",
-        "--force-reinstall",
         str(wheel),
     ]
     assert commands == [
-        ["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)],
+        ["pipx", "runpip", "hol-guard", "install", str(wheel)],
         [
             "/opt/guard/bin/python",
             "-m",
             "pip",
             "install",
-            "--force-reinstall",
             str(wheel),
         ],
     ]
@@ -1205,7 +1279,7 @@ def test_update_requested_local_wheel_bypasses_python_incompatible_latest_releas
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["status"] == "updated"
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
@@ -1436,7 +1510,7 @@ def test_update_installs_requested_local_wheel_with_pipx(monkeypatch: pytest.Mon
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
     assert payload["requested_wheel"] == str(wheel)
     assert payload["resulting_version"] == "2.0.345"
@@ -1519,7 +1593,7 @@ def test_update_installs_requested_local_wheel_from_editable_install(
     payload, exit_code = update_commands.run_guard_update(dry_run=False, wheel=str(wheel))
 
     assert exit_code == 0
-    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", "--force-reinstall", str(wheel)]]
+    assert captured_commands == [["pipx", "runpip", "hol-guard", "install", str(wheel)]]
     assert payload["upgrade_source"] == "local_wheel"
 
 
@@ -1547,7 +1621,6 @@ def test_update_resolves_requested_wheel_from_directory(monkeypatch: pytest.Monk
         "runpip",
         "hol-guard",
         "install",
-        "--force-reinstall",
         str(newer_wheel),
     ]
     assert payload["message"] == "Review the planned local wheel install command before updating."
@@ -2354,6 +2427,7 @@ def test_current_update_does_not_repair_artifacts_owned_by_newer_desktop_runtime
     monkeypatch.setattr(update_commands, "_direct_url_payload", lambda: None)
     monkeypatch.setattr(update_commands, "_installer_kind", lambda: "pipx")
     monkeypatch.setattr(update_commands, "_verified_newer_guard_daemon", lambda *_args, **_kwargs: retained)
+    monkeypatch.setattr(update_commands, "bundled_native_runtime_missing", lambda: False)
     monkeypatch.setattr(
         update_commands,
         "_refresh_package_shims_after_update",

@@ -6,7 +6,7 @@ import json
 import urllib.request
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.pi_hooks import pi_hook_response_from_guard
+from codex_plugin_scanner.guard.adapters._modules.pi.pi_hooks import pi_hook_response_from_guard
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
 from codex_plugin_scanner.guard.harness_resume import resume_harness_operation
 from codex_plugin_scanner.guard.models import GuardApprovalRequest

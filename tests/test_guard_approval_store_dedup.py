@@ -15,23 +15,14 @@ from pathlib import Path
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
 from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_approvals import (
-    add_approval_request,
-    approval_index_statements,
-    approval_schema_statement,
-    count_approval_requests,
     get_approval_request,
     list_approval_requests,
 )
+from tests.native_approval_writes import add_approval_request, native_approval_connection, native_store
 
 
 def _make_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("pragma journal_mode=wal")
-    conn.execute(approval_schema_statement())
-    for stmt in approval_index_statements():
-        conn.execute(stmt)
-    return conn
+    return native_approval_connection()
 
 
 def _make_request(
@@ -100,7 +91,7 @@ class TestDuplicatePendingRequestCollapse:
                 "select status, reason from approval_requests where request_id = ?", (old_id,)
             ).fetchone()
             assert tuple(old) == ("expired", "superseded_by_fresh_review:" + fresh_id)
-            assert count_approval_requests(connection, status="pending") == 1
+            assert reopened.count_approval_requests(status="pending") == 1
 
     def test_corrupt_pending_authority_requires_a_new_host_attempt_and_request_id(self) -> None:
         conn = _make_conn()
@@ -118,7 +109,7 @@ class TestDuplicatePendingRequestCollapse:
             (old_id,),
         ).fetchone()
         assert tuple(old) == ("expired", None, "superseded_by_fresh_review:" + fresh_id)
-        assert count_approval_requests(conn, status="pending") == 1
+        assert native_store(conn).count_approval_requests(status="pending") == 1
         current = list_approval_requests(conn)[0]
         assert current["request_id"] == fresh_id
         assert current["policy_action"] == "require-reapproval"
@@ -190,7 +181,7 @@ class TestDuplicatePendingRequestCollapse:
             "select status, resolution_action, reason from approval_requests where request_id = ?", (old_id,)
         ).fetchone()
         assert tuple(old) == ("expired", None, "superseded_by_fresh_review:" + newer_id)
-        assert count_approval_requests(conn, status="pending") == 1
+        assert native_store(conn).count_approval_requests(status="pending") == 1
 
     def test_second_identical_request_updates_existing_row(self) -> None:
         """T720: A second pending request for the same artifact+workspace+launch_target
@@ -204,7 +195,7 @@ class TestDuplicatePendingRequestCollapse:
         id2 = add_approval_request(conn, req2, "2026-01-01T00:01:00Z")
 
         assert id1 == id2, "Second identical request must reuse the existing request_id"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 1, f"Expected 1 pending row, got {total}"
 
     def test_transient_variation_collapses_to_same_row(self) -> None:
@@ -226,7 +217,7 @@ class TestDuplicatePendingRequestCollapse:
         id2 = add_approval_request(conn, req2, "2026-01-01T00:01:00Z")
 
         assert id1 == id2, "Same command with different transient request IDs must collapse to one row"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 1, f"Expected 1 pending row after transient variation, got {total}"
 
     def test_actionable_request_dominates_a_later_watch_observation(self) -> None:
@@ -245,7 +236,7 @@ class TestDuplicatePendingRequestCollapse:
         )
 
         assert watch_id == actionable_id
-        assert count_approval_requests(conn, exclude_watch_only=True) == 1
+        assert native_store(conn).count_approval_requests(exclude_watch_only=True) == 1
 
     def test_actionable_request_promotes_an_existing_watch_observation(self) -> None:
         conn = _make_conn()
@@ -263,7 +254,7 @@ class TestDuplicatePendingRequestCollapse:
         actionable_id = add_approval_request(conn, _make_request(**request_args), "2026-01-01T00:01:00Z")
 
         assert actionable_id == watch_id
-        assert count_approval_requests(conn, exclude_watch_only=True) == 1
+        assert native_store(conn).count_approval_requests(exclude_watch_only=True) == 1
 
     def test_repeated_watch_observations_stay_out_of_actionable_count(self) -> None:
         conn = _make_conn()
@@ -277,8 +268,8 @@ class TestDuplicatePendingRequestCollapse:
         add_approval_request(conn, _make_request(**request_args), "2026-01-01T00:00:00Z")
         add_approval_request(conn, _make_request(**request_args), "2026-01-01T00:01:00Z")
 
-        assert count_approval_requests(conn) == 1
-        assert count_approval_requests(conn, exclude_watch_only=True) == 0
+        assert native_store(conn).count_approval_requests() == 1
+        assert native_store(conn).count_approval_requests(exclude_watch_only=True) == 0
 
 
 def test_watch_only_schema_migration_backfills_all_observations(tmp_path: Path) -> None:
@@ -334,7 +325,7 @@ class TestDifferentWorkspacesGetSeparateRows:
         id_b = add_approval_request(conn, req_ws_b, "2026-01-01T00:01:00Z")
 
         assert id_a != id_b, "Different workspaces must get separate request IDs"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 2, f"Expected 2 pending rows for 2 workspaces, got {total}"
 
     def test_null_and_named_workspace_get_separate_rows(self) -> None:
@@ -362,7 +353,7 @@ class TestDifferentWorkspacesGetSeparateRows:
         id_rm = add_approval_request(conn, req_rm, "2026-01-01T00:01:00Z")
 
         assert id_ls != id_rm, "Different commands must not collapse into one approval row"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
 
     def test_different_mcp_arguments_do_not_collapse_into_one_row(self) -> None:
@@ -401,7 +392,7 @@ class TestDifferentWorkspacesGetSeparateRows:
         id_sensitive = add_approval_request(conn, req_sensitive, "2026-01-01T00:01:00Z")
 
         assert id_safe != id_sensitive
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 2, f"Expected 2 pending rows for distinct MCP arguments, got {total}"
 
     def test_identical_mcp_arguments_still_collapse_when_session_metadata_differs(self) -> None:
@@ -448,7 +439,7 @@ class TestDifferentWorkspacesGetSeparateRows:
         id_second = add_approval_request(conn, req_second, "2026-01-01T00:01:00Z")
 
         assert id_first == id_second
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 1, f"Expected identical MCP actions to dedupe across session metadata, got {total}"
 
 
@@ -472,7 +463,7 @@ class TestLegacyNullIdentityKeyUpgradePath:
         second_id = add_approval_request(conn, req_new, "2026-01-01T00:01:00Z")
 
         assert first_id == second_id, "Legacy row with NULL identity key must be reused, not duplicated"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 1, f"Expected 1 pending row after deduping legacy null row, got {total}"
 
     def test_legacy_null_row_different_command_not_collapsed(self) -> None:
@@ -490,7 +481,7 @@ class TestLegacyNullIdentityKeyUpgradePath:
         id_b = add_approval_request(conn, req_b, "2026-01-01T00:01:00Z")
 
         assert id_a != id_b, "Different commands must each get their own pending row even when legacy row is NULL"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 2, f"Expected 2 pending rows for different commands, got {total}"
 
     def test_legacy_null_launch_target_row_is_deduped(self) -> None:
@@ -509,5 +500,5 @@ class TestLegacyNullIdentityKeyUpgradePath:
         second_id = add_approval_request(conn, req_retry, "2026-01-01T00:01:00Z")
 
         assert first_id == second_id, "NULL-launch-target legacy row must be reused for the same artifact"
-        total = count_approval_requests(conn, status="pending")
+        total = native_store(conn).count_approval_requests(status="pending")
         assert total == 1, f"Expected 1 pending row for NULL launch_target dedup, got {total}"

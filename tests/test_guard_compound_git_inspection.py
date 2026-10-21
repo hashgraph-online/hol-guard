@@ -6,9 +6,31 @@ from pathlib import Path
 
 import pytest
 
+from codex_plugin_scanner.guard import native_git_execution_safety
+from codex_plugin_scanner.guard.cli import commands_support_runtime_artifacts
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _hook_runtime_artifact
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.runtime import git_execution_safety
+from codex_plugin_scanner.guard.runtime import native_command_evaluation
+
+
+@pytest.fixture(autouse=True)
+def _patient_native_review(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep loaded CI runners from turning routine answers into fail-closed timeouts.
+
+    The hook path gives native review 0.5 s. A coverage shard can spend longer than
+    that starting the evaluator, and Guard then (correctly) reports
+    ``native_unavailable``. These tests are about the verdict, not the latency
+    budget, so the native call gets the 1 s ceiling that ``review_pre_tool_native``
+    allows any caller.
+    """
+
+    review = native_command_evaluation.review_command_native
+
+    def patient(*args: object, **kwargs: object) -> object:
+        kwargs.setdefault("timeout_seconds", 1.0)
+        return review(*args, **kwargs)
+
+    monkeypatch.setattr(commands_support_runtime_artifacts, "review_command_native", patient)
 
 
 def _artifact(command: str, *, home: Path) -> GuardArtifact | None:
@@ -58,10 +80,16 @@ def _init_push_repository(path: Path, *, branch: str = "fix/about-partners-link"
     )
 
 
-def test_compound_current_branch_push_to_verified_origin_is_routine(tmp_path: Path) -> None:
+def test_compound_current_branch_push_to_verified_origin_is_routine(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     home = tmp_path / "home"
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
+    # Routine push needs global Git config to belong to the account running Git.
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(native_git_execution_safety, "_account_home_directory", lambda: str(home))
     _init_push_repository(workspace)
 
     command = f"cd {workspace} && git push -u origin fix/about-partners-link 2>&1 | tail -2"
@@ -164,7 +192,7 @@ def test_compound_push_rejects_symlinked_repository_pre_push_hook(
     workspace = home / "projects" / "hol-guard-partners-fix"
     workspace.mkdir(parents=True)
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setattr(git_execution_safety, "_git_global_config_environment_is_stable", lambda: True)
+    monkeypatch.setattr(native_git_execution_safety, "_account_home_directory", lambda: str(home))
     _ = (home / ".gitconfig").write_text("[core]\n\thooksPath = .git/hooks\n", encoding="utf-8")
     _init_push_repository(workspace)
     payload = home / "payload"

@@ -13,49 +13,59 @@ import pytest
 
 from codex_plugin_scanner.guard.daemon import manager as daemon_manager
 from codex_plugin_scanner.guard.daemon import server as daemon_server_module
+from codex_plugin_scanner.guard.daemon import service_lifecycle
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.store import GuardStore
 
 
-def test_daemon_start_uses_full_initial_hook_worker_pool(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store = GuardStore(tmp_path / "guard-home")
-    daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
-    runner = daemon._server.hook_process_runner
-    enable_full_capacity = runner.enable_full_capacity
-    calls: list[dict[str, float]] = []
-
-    def recording_enable_full_capacity(**kwargs: float) -> None:
-        calls.append(kwargs)
-        enable_full_capacity(**kwargs)
-
-    monkeypatch.setattr(runner, "enable_full_capacity", recording_enable_full_capacity)
-    try:
-        daemon.start()
-        assert calls == [{}]
-        stats = runner.stats()
-        assert stats["target"] > 1
-        assert runner.wait_for_capacity(minimum_workers=int(stats["target"]), timeout_seconds=15)
-    finally:
-        daemon.stop()
-
-
+@pytest.mark.parametrize("cleanup_failure", ["none", "publisher", "socket"])
 def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loop(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    cleanup_failure: str,
 ) -> None:
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
+    hook_worker_close_calls = 0
+    real_hook_worker_close = daemon._server.hook_worker.close_contained
+
+    def record_hook_worker_close() -> bool:
+        nonlocal hook_worker_close_calls
+        hook_worker_close_calls += 1
+        contained = real_hook_worker_close()
+        return False if cleanup_failure == "publisher" and hook_worker_close_calls == 1 else contained
+
+    monkeypatch.setattr(daemon._server.hook_worker, "close_contained", record_hook_worker_close)
+    original_server_close = daemon._server.server_close
+    server_close_calls = 0
+
+    def close_with_optional_socket_failure() -> None:
+        nonlocal server_close_calls
+        server_close_calls += 1
+        if cleanup_failure == "socket" and server_close_calls == 1:
+            raise OSError("synthetic socket cleanup failure")
+        original_server_close()
+
+    monkeypatch.setattr(daemon._server, "server_close", close_with_optional_socket_failure)
     monkeypatch.setattr(
-        daemon._server.hook_process_runner,
-        "require_initial_capacity",
+        daemon,
+        "_persist_aibom_inventory_context",
         lambda: (_ for _ in ()).throw(RuntimeError("injected initial worker failure")),
     )
 
-    with pytest.raises(RuntimeError, match="injected initial worker failure"):
+    with pytest.raises(RuntimeError, match="injected initial worker failure") as raised:
         daemon.start()
+    assert hook_worker_close_calls >= 1
+    if cleanup_failure != "none":
+        assert daemon._owner_lock is not None
+        assert daemon._is_quarantined()
+        with pytest.raises(RuntimeError, match="already active"):
+            _ = daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)
+    if cleanup_failure != "none" and hasattr(raised.value, "add_note"):
+        assert (
+            "Guard retained daemon ownership because partial-start containment was unconfirmed."
+            in raised.value.__notes__
+        )
 
     def reject_shutdown() -> None:
         raise AssertionError("shutdown must not wait on an unstarted serve loop")
@@ -65,7 +75,6 @@ def test_stop_after_initial_worker_failure_does_not_shutdown_unstarted_serve_loo
 
     assert daemon._thread is None
     assert daemon._owner_lock is None
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
 
 
 def test_daemon_start_waits_for_serve_loop_entry(
@@ -188,7 +197,6 @@ def test_stop_before_serve_loop_entry_cannot_strand_daemon_thread(
         assert daemon._owner_lock is None
         assert finish_service_calls == 1
         assert listener_closed_before_loop_entry is False
-        assert daemon._server.hook_process_runner.stats()["workers"] == 0
     finally:
         release_serve_thread.set()
         daemon.stop()
@@ -336,7 +344,6 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     store = GuardStore(tmp_path / "guard-home")
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     port = daemon.port
-    real_thread = threading.Thread
     begin_service = daemon._begin_service
     started_threads: list[threading.Thread] = []
 
@@ -344,9 +351,23 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
         def start(self) -> None:
             raise RuntimeError("injected serve thread exhaustion")
 
-    def failed_thread_factory(*, target: object, daemon: bool) -> FailedServeThread:
-        del target, daemon
-        return FailedServeThread()
+    class ServeThreadExhaustion:
+        """``threading`` for the lifecycle module, where a serve thread cannot start.
+
+        Only the module that starts the serve thread sees this. Replacing the
+        real ``threading.Thread`` would also break ``threading.Timer``, whose
+        ``__init__`` calls ``Thread.__init__``, and the resident client arms a
+        timer while the daemon is rolling back: containment would then fail for
+        a reason this test is not about and the daemon would keep its ownership.
+        """
+
+        def __getattr__(self, name: str) -> object:
+            return getattr(threading, name)
+
+        @staticmethod
+        def Thread(*, target: object, daemon: bool) -> FailedServeThread:  # noqa: N802 - stands in for threading.Thread
+            del target, daemon
+            return FailedServeThread()
 
     def begin_then_fail_serve_thread() -> None:
         begin_service()
@@ -364,11 +385,7 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
             )
             if thread is not None
         )
-        monkeypatch.setattr(
-            threading,
-            "Thread",
-            failed_thread_factory,
-        )
+        monkeypatch.setattr(service_lifecycle, "threading", ServeThreadExhaustion())
 
     monkeypatch.setattr(daemon, "_begin_service", begin_then_fail_serve_thread)
     with pytest.raises(RuntimeError, match="injected serve thread exhaustion"):
@@ -378,7 +395,6 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     assert started_threads
     assert all(not thread.is_alive() for thread in started_threads)
     assert daemon._owner_lock is None
-    assert daemon._server.hook_process_runner.stats()["workers"] == 0
     assert daemon._server.runtime_heartbeat._thread is None
     assert daemon._server.unclassified_watchdog_thread is None
     assert daemon._server.approval_attention._thread is None
@@ -387,7 +403,7 @@ def test_serve_thread_start_failure_rolls_back_initialized_service(
     replacement = daemon_manager.acquire_guard_daemon_owner_lock(store.guard_home)
     daemon_manager.release_guard_daemon_owner_lock(replacement)
 
-    monkeypatch.setattr(threading, "Thread", real_thread)
+    monkeypatch.setattr(service_lifecycle, "threading", threading)
     monkeypatch.setattr(daemon, "_begin_service", begin_service)
     replacement = GuardDaemonServer(
         store,
@@ -416,8 +432,8 @@ def test_uncontained_service_blocks_replacement_until_retry_succeeds(
     daemon = GuardDaemonServer(store, host="127.0.0.1", port=0, idle_timeout_seconds=0)
     port = daemon.port
     daemon_ref = weakref.ref(daemon)
-    runner = daemon._server.hook_process_runner
-    close_runner = daemon._server.hook_process_runner.close_contained
+    runner = daemon._server.hook_worker
+    close_runner = runner.close_contained
     monkeypatch.setattr(runner, "close_contained", lambda: False)
     daemon._begin_service()
     assert not daemon._finish_service()

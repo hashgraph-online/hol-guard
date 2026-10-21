@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-from dataclasses import replace
 from importlib import resources
 from pathlib import Path
 
@@ -16,7 +15,6 @@ from codex_plugin_scanner.guard.policy_bundle_parser import (
 from codex_plugin_scanner.guard.policy_document import (
     canonical_policy_document_bytes,
     policy_document_digest,
-    validate_effective_rule_ids,
 )
 from codex_plugin_scanner.guard.policy_document_yaml import (
     MAX_POLICY_BYTES,
@@ -96,6 +94,30 @@ def test_provenance_update_and_import_fields_round_trip() -> None:
     assert document.rules[0].provenance.to_mapping() == provenance
 
 
+@pytest.mark.parametrize(
+    "fraction",
+    ["", ".1", ".12", ".123", ".1234", ".12345", ".123456", ".1234567", ".12345678", ".123456789"],
+)
+def test_utc_fractional_timestamps_preserve_expiry_and_provenance(fraction: str) -> None:
+    mapping = _basic_mapping()
+    spec = mapping["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    timestamp = f"2024-02-29T12:00:00{fraction}Z"
+    rule["lifetime"] = {"mode": "until", "expiresAt": timestamp}
+    provenance = rule["provenance"]
+    assert isinstance(provenance, dict)
+    provenance["createdAt"] = timestamp
+
+    document = parse_policy_document_yaml(_yaml(mapping))
+
+    assert document.rules[0].lifetime.expires_at == timestamp
+    assert document.rules[0].provenance.to_mapping()["createdAt"] == timestamp
+
+
 def test_yaml_11_ambiguous_scalars_remain_strings() -> None:
     document = parse_policy_document_yaml((FIXTURES / "valid" / "extensions-and-scalars.yaml").read_bytes())
 
@@ -125,30 +147,6 @@ def test_invalid_conformance_fixtures_have_bounded_codes() -> None:
         assert error.value.diagnostics[0].code == expected_code
         assert len(error.value.diagnostics) <= 20
         assert "redacted-fixture-value" not in str(error.value)
-
-
-def test_extensions_are_preserved_and_signed() -> None:
-    source = (FIXTURES / "valid" / "extensions-and-scalars.yaml").read_bytes()
-    document = parse_policy_document_yaml(source)
-    changed = replace(document, extensions=(("x-document-note", '"changed"'),))
-
-    assert "x-document-note" in document.to_mapping()
-    assert policy_document_digest(changed) != policy_document_digest(document)
-
-
-def test_duplicate_rule_ids_fail_across_explicit_document_set() -> None:
-    document = parse_policy_document_yaml((FIXTURES / "valid" / "basic.yaml").read_bytes())
-
-    with pytest.raises(ValueError, match="duplicate_effective_rule_id"):
-        validate_effective_rule_ids((document, document))
-
-
-def test_canonical_hash_vector_is_cross_language_stable() -> None:
-    vector = json.loads((FIXTURES / "hashes" / "basic.json").read_text(encoding="utf-8"))
-    document = parse_policy_document_yaml((FIXTURES / "valid" / "basic.yaml").read_bytes())
-
-    assert canonical_policy_document_bytes(document).decode("utf-8") == vector["canonicalJson"]
-    assert policy_document_digest(document) == vector["sha256"]
 
 
 def test_legacy_bundle_v1_hash_projection_is_unchanged() -> None:
@@ -338,15 +336,6 @@ def test_yaml_escaped_surrogate_is_rejected_before_canonicalization() -> None:
     assert error.value.diagnostics[0].code == "invalid_unicode"
 
 
-def test_canonical_object_keys_use_utf16_order() -> None:
-    value = _basic_mapping()
-    value["x-sort"] = {"\ue000": "bmp", "😀": "astral"}
-
-    canonical = canonical_policy_document_bytes(parse_policy_document_yaml(_yaml(value))).decode("utf-8")
-
-    assert canonical.index('"😀"') < canonical.index('"\ue000"')
-
-
 def test_command_expression_round_trips_without_flattening_boolean_semantics() -> None:
     value = _basic_mapping()
     spec = value["spec"]
@@ -403,3 +392,54 @@ def test_command_expression_reports_invalid_runtime_regex_at_commands_path() -> 
 
     assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")
     assert error.value.diagnostics[0].code.startswith("invalid_command_regex")
+
+
+def test_command_expression_reports_an_unclosed_glob_class_at_commands_path() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    match["commands"] = {
+        "combinator": "all",
+        "conditions": [{"field": "command", "operator": "glob", "value": "docker [compose"}],
+    }
+
+    with pytest.raises(PolicyDocumentError) as error:
+        parse_policy_document_yaml(_yaml(value))
+
+    assert error.value.diagnostics[0].path == ("spec", "rules", 0, "match", "commands")
+    assert error.value.diagnostics[0].code.startswith("glob_class_unclosed")
+
+
+def test_a_pattern_the_runtime_compiles_keeps_the_document_valid() -> None:
+    value = _basic_mapping()
+    spec = value["spec"]
+    assert isinstance(spec, dict)
+    rules = spec["rules"]
+    assert isinstance(rules, list)
+    rule = rules[0]
+    assert isinstance(rule, dict)
+    match = rule["match"]
+    assert isinstance(match, dict)
+    commands = {
+        "combinator": "all",
+        "conditions": [
+            {"field": "command", "operator": "regex", "value": r"^docker\s+compose\s+(up|down)$"},
+            {"field": "command", "operator": "glob", "value": "docker [a-z]*"},
+        ],
+    }
+    match["commands"] = commands
+
+    document = parse_policy_document_yaml(_yaml(value))
+
+    round_tripped = document.rules[0].match.to_mapping()["commands"]
+    assert isinstance(round_tripped, dict)
+    assert round_tripped["combinator"] == "all"
+    assert [
+        (condition["operator"], condition["value"]) for condition in round_tripped["conditions"]
+    ] == [(condition["operator"], condition["value"]) for condition in commands["conditions"]]

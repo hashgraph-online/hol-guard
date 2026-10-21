@@ -24,7 +24,10 @@ from codex_plugin_scanner.guard.runtime.extension_control_authority import (
     AuthorityHealth,
     ExtensionControlAuthorityView,
 )
+from codex_plugin_scanner.guard.runtime.extension_control_limits import CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.native_cloud_helpers import native_bridge as native_bridge
+from tests.native_cloud_helpers import prepare_native
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_ROOT = ROOT / "contracts" / "managed-controls" / "v1"
@@ -67,11 +70,33 @@ class FakeRegistry:
 class FakePostureStore:
     authority: ExtensionControlAuthorityView
     reads: int = 0
+    guard_home: Path = Path("/synthetic-guard-home")
 
-    def read_extension_control_authority_for_registry(self, registry: object) -> ExtensionControlAuthorityView:
+    def read_extension_control_authority_for_registry(
+        self, registry: object, **_kwargs
+    ) -> ExtensionControlAuthorityView:
         assert registry is BUILT_IN_COMMAND_EXTENSION_REGISTRY
         self.reads += 1
         return self.authority
+
+
+@pytest.fixture
+def prepared_posture_catalog(monkeypatch: pytest.MonkeyPatch, native_bridge) -> None:
+    from codex_plugin_scanner.guard.runtime import extension_catalog_pages as pages
+    from codex_plugin_scanner.guard.runtime import managed_controls_sync as controls
+
+    # Synthetic active-authority adapter for these catalog/session wire units.
+    monkeypatch.setattr(controls, "current_catalog_registry", lambda _: BUILT_IN_COMMAND_EXTENSION_REGISTRY)
+
+    def prepared(_home, *, registry, guard_version, generated_at):
+        return prepare_native(
+            values=[pages._raw_extension(item) for item in registry.extensions],
+            enforcement_digest=registry.catalog_digest,
+            guard_version=guard_version,
+            generated_at=generated_at,
+        )
+
+    monkeypatch.setattr(pages, "prepare_installed_catalog_view", prepared)
 
 
 def registry(*, reverse: bool = False) -> FakeRegistry:
@@ -324,10 +349,11 @@ def test_shared_invalid_catalog_cases_fail_behaviorally(case: str) -> None:
     elif case == "unknownField":
         payload["unexpected"] = True
     elif case == "oversized":
-        payload["unexpected"] = "x" * 1_000_001
+        payload["unexpected"] = "x" * (CLOUD_V1_MAX_CATALOG_PAYLOAD_BYTES + 1)
     else:
         payload["sourcePath"] = "/private/workspace"
-    with pytest.raises(ValueError):
+    # The size check runs first, so an oversized body must fail on size, not field shape.
+    with pytest.raises(ValueError, match="payload limit exceeded" if case == "oversized" else None):
         validate_extension_catalog_wire(payload)
 
 
@@ -380,8 +406,12 @@ def test_production_runtime_session_defaults_to_legacy_without_touching_local_au
 def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
+    prepared_posture_catalog: None,
 ) -> None:
     monkeypatch.setenv("GUARD_EXTENSION_CATALOG_SYNC_V1", "true")
+    # This is a session/catalog wire test; native package-manager inventory is
+    # qualified separately and is not required by the synthetic sender fixture.
+    monkeypatch.setattr(guard_runner_module, "_cloud_package_manager_coverage", lambda *args, **kwargs: {})
     payload = guard_runner_module._cloud_runtime_session_payload(
         GuardStore(tmp_path / "guard-home"),
         {
@@ -391,12 +421,15 @@ def test_cloud_runtime_session_payload_carries_catalog_posture_on_real_sync_path
         },
     )
     assert payload["extensionCatalogDigest"]
+    # A complete transport alone does not qualify native policy application.
     assert payload["extensionControlSchemaVersions"] == ["guard.extension-controls.v1"]
-    assert payload["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert payload["extensionCatalogViewDigest"] != payload["extensionCatalogDigest"]
+    assert payload["managedControlsCapabilities"] == ["extension-catalog.v2"]
 
 
-def test_production_runtime_session_advertises_only_enabled_protected_capabilities(
+def test_production_runtime_session_requires_completed_native_policy_observation(
     monkeypatch: pytest.MonkeyPatch,
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -411,10 +444,10 @@ def test_production_runtime_session_advertises_only_enabled_protected_capabiliti
         store,
         generated_at="2026-08-25T00:00:00Z",
     )
-    assert posture["extensionAuthorityRevision"] == 7
-    assert posture["effectiveProjectionDigest"] is not None
-    assert posture["managedControlsCapabilities"] == list(MANAGED_CONTROLS_RUNTIME_CAPABILITIES)
-    assert store.reads == 1
+    assert "extensionAuthorityRevision" not in posture
+    assert "effectiveProjectionDigest" not in posture
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]
+    assert store.reads == 0
 
 
 @pytest.mark.parametrize(
@@ -447,6 +480,7 @@ def test_production_runtime_session_downgrades_each_capability_independently(
     monkeypatch: pytest.MonkeyPatch,
     disabled_flag: str,
     missing_capabilities: set[str],
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -463,11 +497,13 @@ def test_production_runtime_session_downgrades_each_capability_independently(
         generated_at="2026-08-25T00:00:00Z",
     )
     advertised = set(posture["managedControlsCapabilities"])
-    assert advertised == set(MANAGED_CONTROLS_RUNTIME_CAPABILITIES) - missing_capabilities
+    # Individual opt-ins cannot override a missing authenticated native view.
+    assert advertised == {"extension-catalog.v2"}
 
 
 def test_production_runtime_session_downgrades_degraded_authority_to_catalog_only(
     monkeypatch: pytest.MonkeyPatch,
+    prepared_posture_catalog: None,
 ) -> None:
     for name in (
         "GUARD_EXTENSION_CATALOG_SYNC_V1",
@@ -481,6 +517,6 @@ def test_production_runtime_session_downgrades_degraded_authority_to_catalog_onl
         store,
         generated_at="2026-08-25T00:00:00Z",
     )
-    assert posture["extensionAuthorityRevision"] is None
-    assert posture["effectiveProjectionDigest"] is None
-    assert posture["managedControlsCapabilities"] == ["extension-catalog.v1"]
+    assert posture.get("extensionAuthorityRevision") is None
+    assert posture.get("effectiveProjectionDigest") is None
+    assert posture["managedControlsCapabilities"] == ["extension-catalog.v2"]

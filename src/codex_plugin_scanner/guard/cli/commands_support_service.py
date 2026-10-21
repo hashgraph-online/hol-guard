@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .commands_support_runtime_artifacts import _optional_string
 
 from ..daemon.runtime_peer import load_guard_daemon_endpoint_url
+from ..daemon.start_classification import GuardDaemonStillStartingError
 from ._commands_shared import *
 from .commands_parser_helpers import *
 
@@ -243,42 +244,36 @@ def _handle_daemon_status(guard_home: Path, as_json: bool) -> int:
     _emit("daemon", payload, as_json)
     return 0
 
+def _repair_resident_update_marker(guard_home: Path) -> dict[str, object] | None:
+    """Recover a resident-update marker stranded by an interrupted update."""
+
+    try:
+        from ..native_resident_update_lock import repair_stale_resident_update_marker
+        from ..native_runtime import native_runtime_status
+
+        # Point the marker at the runtime resident requests actually select (an
+        # override included), and only once ordinary admission accepts it.
+        status = native_runtime_status()
+        if not status.compatible or status.identity is None:
+            return {"status": "unavailable", "reason_code": status.reason}
+        return repair_stale_resident_update_marker(guard_home, status.identity.path)
+    except Exception:  # repair must not block daemon repair
+        return {"status": "unavailable", "reason_code": "update_native_resident_lock_failed"}
+
+
 def _handle_daemon_repair(guard_home: Path, as_json: bool, *, home_dir: Path | None = None) -> int:
-    result = repair_guard_daemon_runtime(guard_home, home_dir=home_dir)
+    marker = _repair_resident_update_marker(guard_home)
+    result: dict[str, object] = dict(repair_guard_daemon_runtime(guard_home, home_dir=home_dir))
+    if marker is not None:
+        result["resident_update_marker"] = marker
     _emit("daemon", result, as_json)
     return 0
 
 
 def _handle_daemon_stop(guard_home: Path, as_json: bool) -> int:
-    import json as _json
-    import os
-    import signal as _signal
+    from ..daemon_stop import stop_guard_daemon
 
-    state_path = guard_home / "daemon-state.json"
-    stopped = False
-    pid: int | None = None
-    if state_path.is_file():
-        try:
-            state = _json.loads(state_path.read_text())
-            pid = state.get("pid") if isinstance(state, dict) else None
-            if (
-                isinstance(pid, int)
-                and pid > 0
-                and _guard_daemon_pid_is_running(pid)
-                and _guard_daemon_pid_matches_command(pid, expected_guard_home=guard_home)
-            ):
-                os.kill(pid, _signal.SIGTERM)
-                stopped = True
-        except (ProcessLookupError, PermissionError, OSError, _json.JSONDecodeError, ValueError):
-            pass
-    from codex_plugin_scanner.guard.daemon.manager import clear_guard_daemon_state
-
-    with suppress(OSError):
-        clear_guard_daemon_state(guard_home)
-    payload: dict[str, object] = {"stopped": stopped, "running": False}
-    if pid is not None:
-        payload["pid"] = pid
-    _emit("daemon", payload, as_json)
+    _emit("daemon", stop_guard_daemon(guard_home), as_json)
     return 0
 
 
@@ -329,6 +324,9 @@ def _dispatch_guard_daemon_command(
         wake_token = getattr(args, "wake_token", None)
         try:
             ensure_guard_daemon(guard_home, home_dir=home_dir)
+        except GuardDaemonStillStartingError:
+            # A slow machine is still loading the daemon; it was left running.
+            print("Guard daemon is still starting.")
         finally:
             if isinstance(wake_token, str) and wake_token:
                 clear_guard_daemon_wake_reservation(guard_home, token=wake_token)

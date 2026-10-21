@@ -6,10 +6,7 @@ import pytest
 
 from codex_plugin_scanner.guard.models import GuardAction
 from codex_plugin_scanner.guard.native_command_model import _canonical_command_from_native, _request_payload
-from codex_plugin_scanner.guard.runtime.command_critical_floors import command_critical_floor_factors
 from codex_plugin_scanner.guard.runtime.command_evaluation import evaluate_command
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.effect_decision import EffectDecisionRequest, evaluate_effect_decision
 from tests.native_command_test_support import real_native_review_fixture
 
 
@@ -36,12 +33,6 @@ def _native_action(command: str) -> tuple[GuardAction, str | None]:
         native_extension_evidence=fixture.payload,
     )
     return evaluation.decision_plane.action, None
-
-
-def _critical_factor_action(command: str) -> GuardAction:
-    canonical = parse_shell_command(command, cwd=Path("workspace"), home_dir=Path("home"))
-    factors = command_critical_floor_factors(canonical)
-    return evaluate_effect_decision(EffectDecisionRequest(factors=factors)).action
 
 
 CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
@@ -123,6 +114,10 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("hol-guard capability consume --capability-id x --replay-sequence 2", "block"),
     ("hol-guard capability --verbose consume --capability-id x", "block"),
     ("hol-guard uninstall --all", "block"),
+    ("hol-guard hooks remove --all", "block"),
+    ("hol-guard hooks remove --stop-daemon", "block"),
+    ("xargs hol-guard hooks remove --all", "block"),
+    ("sh -c 'hol-guard hooks remove --all'", "block"),
     ("hol-guard policy disable", "block"),
     ("hol-guard clear --all", "block"),
     ("xargs hol-guard uninstall --all", "block"),
@@ -183,6 +178,7 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
     ("getfacl workspace/service", "review"),
     ("systemctl status service", "review"),
     ("hol-guard uninstall --help --installation-id fixture", "review"),
+    ("hol-guard hooks remove --help", "review"),
     ("hol-guard help uninstall", "review"),
     (
         "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
@@ -190,16 +186,6 @@ CRITICAL_COMMAND_FLOORS: tuple[tuple[str, GuardAction], ...] = (
         "review",
     ),
 )
-
-
-@pytest.mark.parametrize(("command", "expected"), CRITICAL_COMMAND_FLOORS)
-def test_security_critical_commands_retain_exact_floors(command: str, expected: GuardAction) -> None:
-    assert _critical_factor_action(command) == expected
-
-
-def test_launcher_ambiguity_fanout_fails_closed() -> None:
-    options = " ".join(f"--unknown value-{index}" for index in range(300))
-    assert _critical_factor_action(f"parallel {options} printf safe") == "block"
 
 
 def test_native_command_model_rejects_input_above_transport_budget() -> None:
@@ -219,26 +205,37 @@ def test_native_command_model_rejects_input_above_transport_budget() -> None:
 NATIVE_STRICTER_CRITICAL_COMMANDS = frozenset(
     {
         "xargs gh pr merge 17 --repo example/repo --squash",
-        "sh -c 'gh pr merge 17 --repo example/repo --squash'",
         "bash -lc 'gh pr merge 17 --repo example/repo --squash'",
         "PATH=scratch/bin:$PATH hol-guard status",
-        "printf '%s' \"$(cat workspace/sensitive)\"",
-        "docker compose ps",
-        "docker inspect container --format '{{.State.Status}}'",
-        (
-            "gh api graphql -f query='mutation($threadId:ID!){resolveReviewThread"
-            "(input:{threadId:$threadId}){thread{id}}}' -f threadId=T"
-        ),
     }
 )
 
 
+# A shell that carries its whole script in the same text runs exactly those
+# words. The retired Python owner could not read the script, so it treated the
+# shell as indirection and raised the floor; the native model reads it, so the
+# command reaches the floor the script reaches on its own. Each row is checked
+# against that script's own native action rather than a literal, so the two
+# can never drift apart.
+#
+# A login shell is not listed here. It sources the profile files before the
+# script, so it runs code this text does not hold and keeps the wrapper's own
+# uncertainty, which blocks above.
+CARRIED_SCRIPT_CRITICAL_COMMANDS: dict[str, str] = {
+    "sh -c 'gh pr merge 17 --repo example/repo --squash'": "gh pr merge 17 --repo example/repo --squash",
+}
+
+
 @pytest.mark.parametrize(("command", "factor_floor"), CRITICAL_COMMAND_FLOORS)
-def test_real_native_critical_floor_matches_frozen_baseline(
-    command: str, factor_floor: GuardAction
-) -> None:
+def test_real_native_critical_floor_matches_frozen_baseline(command: str, factor_floor: GuardAction) -> None:
     action, error = _native_action(command)
-    expected = "block" if command in NATIVE_STRICTER_CRITICAL_COMMANDS else factor_floor
+    script = CARRIED_SCRIPT_CRITICAL_COMMANDS.get(command)
+    if command in NATIVE_STRICTER_CRITICAL_COMMANDS:
+        expected: GuardAction = "block"
+    elif script is not None:
+        expected = _native_action(script)[0]
+    else:
+        expected = factor_floor
     assert action == expected
     if error is not None:
         assert action == "block"
@@ -282,24 +279,7 @@ CRITICAL_NEAR_MISS_COMMANDS: tuple[str, ...] = (
     "not-gh.exe pr merge 17 --repo example/repo --squash",
 )
 
-NATIVE_STRICTER_NEAR_MISSES = frozenset(
-    {
-        "rm -r workspace/cache",
-        "rm -rf ./build",
-        "rm --recursive --force ./dist ./coverage",
-        "docker compose version",
-        "rm -- -rf",
-        "rm -f -- -r",
-        "rm -r -- -f",
-        "gh api graphql -f query='mutation{updateIssue(input:{title:\"do not delete\"}){issue{id}}}'",
-        "gh api graphql -f query='mutation($removeLabel:String!){updateIssue(input:{title:$removeLabel}){issue{id}}}'",
-    }
-)
-
-
-@pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)
-def test_security_floors_do_not_widen_near_misses_to_block(command: str) -> None:
-    assert _critical_factor_action(command) != "block"
+NATIVE_STRICTER_NEAR_MISSES = frozenset[str]()
 
 
 @pytest.mark.parametrize("command", CRITICAL_NEAR_MISS_COMMANDS)

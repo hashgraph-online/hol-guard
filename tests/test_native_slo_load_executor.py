@@ -49,9 +49,9 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
 
     class FakeSession:
         def __init__(self) -> None:
-            runner = SimpleNamespace(stats=lambda: {"target": 2, "workers": 2, "ready": 2, "busy": 0})
+            scheduler = SimpleNamespace(stats=lambda: {"active_limit": 2, "active": 0})
             worker = SimpleNamespace(metrics=SimpleNamespace(snapshot=lambda: {"routes": {}}))
-            self.daemon = SimpleNamespace(_server=SimpleNamespace(hook_process_runner=runner, hook_worker=worker))
+            self.daemon = SimpleNamespace(_server=SimpleNamespace(runtime_hook_scheduler=scheduler, hook_worker=worker))
 
         def native_overload_count(self) -> int:
             return 0
@@ -80,8 +80,12 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         _routes: object,
         concurrency: int,
         executor: ThreadPoolExecutor,
+        *,
+        stage: str,
     ) -> tuple[list[Observation], int]:
-        calls.append((f"c{concurrency}", executor))
+        assert stage in {"capacity_prewarm", "concurrent_16", "rss_baseline_requests", "concurrent_64"}
+        name = f"stream-pool-fill-{concurrency}" if stage == "rss_baseline_requests" else f"c{concurrency}"
+        calls.append((name, executor))
         return [Observation("codex", "PreToolUse", "1k", 0.0, "native_resident", True)] * concurrency, 0
 
     monkeypatch.setattr(capacity, "_stabilize_ready_hook_workers", lambda *_args, **_kwargs: 2)
@@ -100,6 +104,7 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
         "prime-16",
         "c16",
         "prime-64",
+        "stream-pool-fill-64",
         "baseline-start",
         "worker-warmup",
         "baseline-end",
@@ -110,7 +115,8 @@ def test_capacity_proof_warms_resident_clients_before_isolated_c16_and_c64(
     assert executor_by_call["c16"] is not executor_by_call["c64"]
     assert calls[0][1] is calls[1][1]
     assert calls[1][1] is not calls[3][1]
-    assert executor_by_call["prime-64"] is executor_by_call["worker-warmup"] is executor_by_call["c64"]
+    assert executor_by_call["prime-64"] is executor_by_call["stream-pool-fill-64"] is executor_by_call["c64"]
+    assert executor_by_call["worker-warmup"] is executor_by_call["c64"]
 
 
 def test_native_capacity_warmup_initializes_sixteen_streams_with_two_python_workers(
@@ -137,7 +143,7 @@ def test_native_capacity_warmup_initializes_sixteen_streams_with_two_python_work
     class Session:
         daemon = SimpleNamespace(
             _server=SimpleNamespace(
-                hook_process_runner=SimpleNamespace(stats=lambda: {"target": 2, "workers": 2, "ready": 2, "busy": 0})
+                runtime_hook_scheduler=SimpleNamespace(stats=lambda: {"active_limit": 2, "active": 0})
             )
         )
 
@@ -169,7 +175,7 @@ def test_capacity_prewarm_rejects_incomplete_worker_initialization(
     monkeypatch.setattr(
         capacity,
         "_run_concurrent",
-        lambda *_args: ([object() for _ in range(completed)], errors),
+        lambda *_args, **_kwargs: ([object() for _ in range(completed)], errors),
     )
     with pytest.raises(RuntimeError, match="capacity prewarm did not complete every request"):
         capacity._prewarm_capacity_workers(cast(AdapterSession, object()), (("codex", "PreToolUse"),), 2)
@@ -188,7 +194,7 @@ def test_capacity_prewarm_rejects_failed_native_review(
 ) -> None:
     success = Observation("pi", "PreToolUse", "1k", 0.0, "native_resident", True)
     observations = [success] * 15 + [replace(success, **failed)]
-    monkeypatch.setattr(capacity, "_run_concurrent", lambda *_args: (observations, 0))
+    monkeypatch.setattr(capacity, "_run_concurrent", lambda *_args, **_kwargs: (observations, 0))
     with pytest.raises(RuntimeError, match="capacity prewarm did not complete native review"):
         capacity._prewarm_capacity_workers(cast(AdapterSession, object()), (("pi", "PreToolUse"),), 2)
 

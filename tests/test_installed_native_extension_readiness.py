@@ -14,7 +14,7 @@ from ci.native_runtime import probe_installed_native_extensions as probe
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 
-@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 105.0), (8.0, 108.0)])
+@pytest.mark.parametrize(("publish_timeout", "expected_deadline"), [(2.0, 109.0), (8.0, 109.0)])
 def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, publish_timeout: float, expected_deadline: float
 ) -> None:
@@ -23,6 +23,8 @@ def test_control_publication_finishes_before_hook_admission_with_one_deadline(
     published = [False]
     monkeypatch.setattr(probe.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(probe, "_PUBLISH_TIMEOUT_SECONDS", publish_timeout)
+    monkeypatch.setattr(probe, "_PUBLISH_STARTUP_TIMEOUT_SECONDS", 9.0)
+    assert probe._PUBLISH_STARTUP_TIMEOUT_SECONDS >= probe._PUBLISH_TIMEOUT_SECONDS
 
     def register(workspace: Path) -> None:
         assert workspace == tmp_path
@@ -153,10 +155,22 @@ def test_request_phase_diagnostic_does_not_serialize_the_policy_binding() -> Non
     assert private not in json.dumps(diagnostic)
 
 
-@pytest.mark.parametrize("reason", ["native_policy_not_ready", "daemon_hook_deadline_exhausted"])
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "native_policy_not_ready",
+        "daemon_hook_deadline_exhausted",
+        "daemon_hook_worker_unavailable",
+        "native_runtime_unavailable",
+        "native_decision_budget_exhausted",
+        "native_review_unavailable",
+    ],
+)
 def test_late_receipt_cannot_accept_failed_production_http_admission(reason: str) -> None:
-    with pytest.raises(RuntimeError, match="http_native_admission_failed"):
-        probe.require_native_http_admission({"decision": "deny", "reason_code": reason})
+    private = "private-request-data"
+    with pytest.raises(RuntimeError, match=f"http_native_admission_failed:{reason}$") as error:
+        probe.require_native_http_admission({"decision": "deny", "reason_code": reason, "payload": private})
+    assert private not in str(error.value)
 
 
 def test_native_policy_denial_remains_a_valid_production_response() -> None:

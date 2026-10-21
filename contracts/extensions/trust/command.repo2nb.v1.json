@@ -1,0 +1,5 @@
+{
+  "extension": "command.repo2nb",
+  "schemaVersion": "guard.extension-trust-binding.v1",
+  "trustClass": "external"
+}

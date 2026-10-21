@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,22 +11,14 @@ from codex_plugin_scanner.guard.adapters import get_adapter, list_adapters
 from codex_plugin_scanner.guard.adapters.base import HarnessContext
 from codex_plugin_scanner.guard.adapters.contracts import contract_for
 from codex_plugin_scanner.guard.adapters.pi_extension_previous_source import previous_managed_extension_source
-from codex_plugin_scanner.guard.adapters.pi_extension_source import (
-    legacy_managed_extension_source,
-    managed_extension_source,
-)
-from codex_plugin_scanner.guard.adapters.pi_support import stable_suffix
+from codex_plugin_scanner.guard.adapters.pi_extension_source import managed_extension_source
 from codex_plugin_scanner.guard.approvals import queue_blocked_approvals
-from codex_plugin_scanner.guard.cli.commands_support_codex_tool_output_messages import (
-    _codex_tool_output_request_summary,
-    _codex_tool_output_runtime_reason,
-    _codex_tool_output_runtime_summary,
-)
 from codex_plugin_scanner.guard.cli.commands_support_hook_payload import _approval_surface_policy_for_flow
 from codex_plugin_scanner.guard.cli.commands_support_runtime_artifacts import _codex_post_tool_output_artifact
 from codex_plugin_scanner.guard.consumer import artifact_hash
 from codex_plugin_scanner.guard.inventory_contract import inventory_snapshot_from_detection
 from codex_plugin_scanner.guard.models import HarnessDetection
+from codex_plugin_scanner.guard.native_context import ensure_resident_prerequisite
 from codex_plugin_scanner.guard.runtime.actions import normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.secret_sensitivity import classify_secret_content
 from codex_plugin_scanner.guard.store import GuardStore
@@ -178,7 +171,7 @@ class TestPiDetect:
         assert result.harness == "pi"
         assert any(path.endswith(".pi/agent/settings.json") for path in result.config_paths)
         artifact_ids = {artifact.artifact_id for artifact in result.artifacts}
-        assert f"pi:pi-global:package:{stable_suffix('npm:@demo/pi-tools@1.2.3')}" in artifact_ids
+        assert f"pi:pi-global:package:{hashlib.sha256(b'npm:@demo/pi-tools@1.2.3').hexdigest()[:16]}" in artifact_ids
         assert "pi:pi-global:extension:demo.ts" in artifact_ids
         assert "pi:pi-global:skill:skills/ship" in artifact_ids
         assert "pi:pi-global:prompt:review.md" in artifact_ids
@@ -273,10 +266,6 @@ class TestPiDetect:
 class TestPiInstall:
     def test_install_writes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
@@ -343,7 +332,9 @@ class TestPiInstall:
         assert "return waitForGuardCliChildExit(child, 200)" in text
         assert "guardCliContainmentFailed = true" in text
         assert "containmentFailure," in text
-        assert 'reason_code: "guard_cli_containment_failed"' in text
+        # Containment failure only stops daemon recovery; the decision path
+        # never falls back to the Python CLI.
+        assert 'reason_code: "guard_cli_containment_failed"' not in text
         assert "{ code: 'ECONTAINMENT' }" in text
         recovery_block = text.split("async function recoverGuardDaemon(", 1)[1].split(
             "async function daemonGuardResponse(",
@@ -367,7 +358,10 @@ class TestPiInstall:
         assert "sourceFileRefForPostToolUse" in text
         assert "isVirtualSourcePath" in text
         assert "isAbsoluteSourcePath" not in text
-        assert "if (!path || isVirtualSourcePath(path)) return null;" in text
+        assert (
+            "if (!path || isVirtualSourcePath(path) || isJsonQueryPath(path) || isPathListRead(path)) return null;"
+            in text
+        )
         assert "text_excerpt: toolOutput" in text
         assert "GUARD_SOURCE_REF_MAX_OUTPUT_CHARS" in text
         assert "GUARD_SOURCE_REF_ALLOWED_TOOL_NAMES" in text
@@ -395,31 +389,27 @@ class TestPiInstall:
 
     def test_install_writes_managed_extension_that_denies_on_hook_errors(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
         assert "serializedPayload = JSON.stringify(payloadToSend);" in text
         assert "serializedPayload.length > GUARD_MAX_SERIALIZED_PAYLOAD_CHARS" in text
-        assert "[...GUARD_CLI_WRAPPER_ARGS, JSON.stringify(args)]" in text
         assert "async function daemonGuardResponse(" in text
         assert "await fetch(`http://127.0.0.1:${connection.port}/v1/hooks/pi?" in text
         assert "serializedPayload, cwd, GUARD_DAEMON_TIMEOUT_MS, deadlineAt" in text
         assert "parsedPayload.guard_remaining_ms" in text
         assert "body: daemonPayload" in text
-        assert 'recoveryKind: "authenticated-control-plane-failure",\n        };' in text
+        assert 'recoveryKind: "authenticated-control-plane-failure",\n      };' in text
         assert "const response = await runGuard(" in text
-        assert "if (result.error) {" in text
-        assert "const errorMessage = result.error.message;" in text
-        assert "const errorCode =" in text
         assert 'decision: "deny"' in text
-        assert "errorCode === 'ETIMEDOUT'" in text
-        assert "could not complete fallback review before the Pi deadline" in text
-        assert "HOL Guard Pi hook failed before completing review" in text
+        # A daemon that stays unreachable after recovery denies the hook; no
+        # Python CLI reviews it instead.
+        assert 'return fallbackGuardResponse(\n    "daemon_unavailable",' in text
+        assert "could not complete fallback review" not in text
+        assert "HOL Guard Pi hook failed before completing review" not in text
+        decision_block = text.split("async function runGuard(", 1)[1]
+        assert "runGuardCliCommand(" not in decision_block
 
     def test_managed_extension_fails_safe_on_ambiguous_success_payloads(
         self,
@@ -427,24 +417,19 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
         text = Path(str(manifest["config_path"])).read_text(encoding="utf-8")
 
         assert 'if (!raw) return { response: null, recoveryKind: "transport-failure" };' in text
         assert "function normalizeGuardResponse(" in text
-        assert "const normalized = normalizeGuardResponse(parsed);" in text
+        assert "const normalized = normalizePromptGuardResponse(" in text
         assert 'parsed.reason !== undefined && parsed.reason !== null && typeof parsed.reason !== "string"' in text
         assert 'if (parsed.decision === "block")' in text
         assert "Array.isArray(value)" in text
         assert "function fallbackGuardResponse(" in text
-        assert '"guard_cli_invalid_response"' in text
-        assert 'normalized !== null && (result.status === 0 || normalized.decision === "deny")' in text
-        assert "if (result.status !== 0)" in text
+        assert '"guard_cli_invalid_response"' not in text
+        assert '"daemon_unavailable",' in text
         assert 'hook_event_name: "PreToolUse"' in text
 
     def test_install_writes_managed_extension_that_truncates_post_tool_payloads(
@@ -453,10 +438,6 @@ class TestPiInstall:
         monkeypatch,
     ) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
 
         manifest = get_adapter("pi").install(ctx)
 
@@ -500,7 +481,8 @@ class TestPiInstall:
         assert "const toolCallId = toolCallIdKey(event.toolCallId);" in text
         assert "function modelVisibleBlockedReason(reason: string, reasonCode?: string): string" in text
         assert "Do not retry the same tool call automatically" in text
-        assert 'reasonCode === "guard_cli_recovery_timeout"' in text
+        assert 'reasonCode === "daemon_unavailable"' in text
+        assert 'reasonCode === "guard_cli_recovery_timeout"' not in text
         assert 'reasonCode === "daemon_hook_deadline_exhausted"' in text
         assert "const modelReason = modelVisibleBlockedReason(reason, response.reason_code);" in text
         assert "if (toolCallId) blockedToolResults.set(toolCallId, modelReason);" in text
@@ -552,10 +534,6 @@ class TestPiInstall:
 
     def test_omp_install_writes_only_omp_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-omp"), "notes": []},
-        )
 
         manifest = get_adapter("omp").install(ctx)
 
@@ -564,7 +542,7 @@ class TestPiInstall:
         assert extension_path == ctx.home_dir / ".omp" / "agent" / "extensions" / "hol-guard.ts"
         assert '"--harness", "omp"' in extension_path.read_text(encoding="utf-8")
         assert "/v1/hooks/omp?" in extension_path.read_text(encoding="utf-8")
-        assert "Oh My Pi hook failed before completing review" in extension_path.read_text(encoding="utf-8")
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in extension_path.read_text(encoding="utf-8")
         assert "before Pi could use it" not in extension_path.read_text(encoding="utf-8")
         assert not (ctx.home_dir / ".pi" / "agent" / "extensions" / "hol-guard.ts").exists()
 
@@ -585,14 +563,10 @@ class TestPiInstall:
         assert str(home_dir) in source
         assert "Oh My Pieter" not in source
         assert "Pieter/Oh My Pi" not in source
-        assert "Oh My Pi hook failed before completing review" in source
+        assert "HOL Guard could not serialize Oh My Pi hook payload" in source
 
     def test_uninstall_removes_managed_extension(self, tmp_path: Path, monkeypatch) -> None:
         ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.install_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
         monkeypatch.setattr(
             "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
             lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
@@ -670,36 +644,7 @@ class TestPiInstall:
         assert not omp_extension_path.exists()
         assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
 
-    def test_uninstall_removes_pre_response_contract_legacy_omp_extension(
-        self,
-        tmp_path: Path,
-        monkeypatch,
-    ) -> None:
-        ctx = _ctx(tmp_path)
-        monkeypatch.setattr(
-            "codex_plugin_scanner.guard.adapters.pi.remove_guard_shim",
-            lambda *args, **kwargs: {"shim_path": str(ctx.guard_home / "bin" / "guard-pi"), "notes": []},
-        )
-        omp_settings_path = ctx.home_dir / ".omp" / "agent" / "settings.json"
-        omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
-        omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
-        omp_extension_path.write_text(
-            legacy_managed_extension_source(
-                guard_home=ctx.guard_home,
-                home_dir=ctx.home_dir,
-                settings_path=omp_settings_path,
-                harness="pi",
-            ),
-            encoding="utf-8",
-        )
-        _write_json(omp_settings_path, {"extensions": [str(omp_extension_path)]})
-
-        get_adapter("pi").uninstall(ctx)
-
-        assert not omp_extension_path.exists()
-        assert json.loads(omp_settings_path.read_text(encoding="utf-8"))["extensions"] == []
-
-    def test_uninstall_preserves_modified_pre_response_contract_legacy_omp_extension(
+    def test_uninstall_preserves_modified_previous_omp_extension(
         self,
         tmp_path: Path,
         monkeypatch,
@@ -713,7 +658,7 @@ class TestPiInstall:
         omp_extension_path = omp_settings_path.parent / "extensions" / "hol-guard.ts"
         omp_extension_path.parent.mkdir(parents=True, exist_ok=True)
         modified_source = (
-            legacy_managed_extension_source(
+            previous_managed_extension_source(
                 guard_home=ctx.guard_home,
                 home_dir=ctx.home_dir,
                 settings_path=omp_settings_path,
@@ -1000,48 +945,12 @@ class TestPiRuntime:
 
         assert artifact is None
 
-    def test_pi_focused_pytest_messages_label_pi_runtime(self) -> None:
-        assert _codex_tool_output_request_summary(
-            harness_label="Pi",
-            tool_name="Bash",
-            command_text=(
-                "python3 -m pytest "
-                "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-                "test_release_checklist_references_smoke_evidence -q 2>&1"
-            ),
-            local_secret_source=None,
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Pi tool `Bash` ran focused pytest, merged stderr into stdout while running "
-            "`python3 -m pytest "
-            "tests/test_guard_harness_smoke.py::TestSmokeEvidenceTemplate::"
-            "test_release_checklist_references_smoke_evidence -q 2>&1`, and the captured output "
-            "looked credential-like."
-        )
-        assert _codex_tool_output_runtime_summary(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Focused pytest merged stderr into stdout and emitted credential-looking output before "
-            "it reached Pi. Pytest can execute repository-controlled code, so this could be a real "
-            "local secret."
-        )
-        assert _codex_tool_output_runtime_reason(
-            None,
-            harness_label="Pi",
-            focused_pytest=True,
-            merged_output_capture=True,
-        ) == (
-            "Guard stopped this pytest output because pytest executes repository-controlled code, "
-            "and merging stderr into stdout can forward real local secrets to Pi. If you only need "
-            "the exit status, rerun without `2>&1` or keep stderr out of model-visible output."
-        )
-
     def test_pi_repeated_blocked_tool_output_reuses_pending_approval(self, tmp_path: Path) -> None:
         store = GuardStore(tmp_path / "guard-home")
+        # Provisioning the resident's verifier key writes a fake keyring beside
+        # the guard home. The shell context below hashes this directory, so
+        # provision before the first request instead of between the two.
+        assert ensure_resident_prerequisite(tmp_path / "guard-home")
         command = 'cd /tmp/fix-skills-503-rb && rg "deps.config" src/api/server/internal/routes.ts 2>&1 | head -5'
 
         def queue_for(output: str) -> list[dict[str, object]]:

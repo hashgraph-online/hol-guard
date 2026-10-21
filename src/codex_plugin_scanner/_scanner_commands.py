@@ -166,7 +166,10 @@ def run_scan(args: argparse.Namespace) -> int:
             f'Findings met or exceeded the "{args.fail_on_severity}" severity threshold.',
             file=sys.stderr,
         )
-        emit_hint("adjust --fail-on-severity only if your policy allows reporting without a blocking gate.")
+        emit_hint(
+            "report a suspected false positive to scanner maintainers with the rule, location and reproducer; "
+            "keep the gate unchanged."
+        )
         return 1
     if args.strict and result.findings:
         print("Strict mode failed because findings were present.", file=sys.stderr)

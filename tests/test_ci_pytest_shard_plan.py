@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import re
 import shlex
 from pathlib import Path
 
 import pytest
 
 from scripts.ci.build_pytest_shard_plan import (
+    NATIVE_OFFLINE_UPGRADE_FILES,
+    SANDBOX_GATE_FILES,
     SCHEDULING_ONLY_NODE_IDS,
     _split_file_nodes,
     build_affinity_node_shards,
@@ -15,10 +18,32 @@ from scripts.ci.build_pytest_shard_plan import (
     write_shard_plan,
 )
 from scripts.ci.pytest_duration_manifest import node_id_digest
+from tests.support.ci_workflow import expand_ci_job_actions
 
 
 def _durations(nodes: list[str], *, seconds: float = 1.0) -> dict[str, float]:
     return {node_id_digest(node_id): seconds for node_id in nodes}
+
+
+def test_dedicated_offline_upgrade_is_excluded_from_ordinary_shards() -> None:
+    nodes = [f"{path}::test_upgrade" for path in NATIVE_OFFLINE_UPGRADE_FILES]
+    ordinary = "tests/test_ordinary.py::test_control"
+    shards, loads = build_affinity_node_shards([*nodes, ordinary], 1, _durations(nodes, seconds=600))
+    assert shards == [[ordinary]]
+    assert loads == [1.0]
+
+
+def test_isolated_function_excludes_all_parameters_without_matching_other_tests(monkeypatch) -> None:
+    from scripts.ci import build_pytest_shard_plan as planner
+
+    parent = "tests/test_probe.py::test_latency"
+    isolated = [f"{parent}[first]", f"{parent}[second]"]
+    retained = [f"{parent}_control[value]", "tests/test_other.py::test_latency[first]"]
+    monkeypatch.setattr(planner, "SCHEDULING_ONLY_NODE_IDS", frozenset({parent}))
+
+    shards, _loads = build_affinity_node_shards(isolated + retained, 1, {})
+
+    assert shards == [sorted(retained)]
 
 
 def test_new_parameters_inherit_unsplit_duration_without_overriding_observations() -> None:
@@ -82,6 +107,76 @@ def test_scheduling_only_nodes_cannot_own_or_inflate_a_coverage_shard() -> None:
     assert sorted(node for shard in shards for node in shard) == sorted(traced_nodes)
     assert loads == [1.0] * len(traced_nodes)
     assert not SCHEDULING_ONLY_NODE_IDS.intersection(node for shard in shards for node in shard)
+
+
+def test_sandbox_gate_files_never_reach_a_coverage_shard() -> None:
+    gate_nodes = [f"{path}::test_case[{index}]" for index, path in enumerate(sorted(SANDBOX_GATE_FILES))]
+    kept = ["tests/test_guard_benign_false_positive_gate_support.py::test_case"]
+
+    shards, _ = build_affinity_node_shards(gate_nodes + kept, 1, _durations(gate_nodes + kept))
+
+    assert sorted(node for shard in shards for node in shard) == kept
+
+
+def test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_shards() -> None:
+    import yaml
+
+    module = "tests/test_guard_continuation_contract.py"
+    timing_node = f"{module}::test_bounded_adapter_cancels_a_hung_worker_and_records_timeout"
+    ordinary_node = f"{module}::test_failed_attempt_persistence_never_populates_the_in_memory_cache"
+    shards, _loads = build_affinity_node_shards([timing_node, ordinary_node], 1, {})
+    assert shards == [[ordinary_node]]
+
+    root = Path(__file__).resolve().parents[1]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
+    timing_step = next(
+        step
+        for step in jobs["scheduling-sensitive"]["steps"]
+        if step.get("name") == "Run scheduling-sensitive tests untraced"
+    )
+    assert "if" not in timing_step
+    selected = shlex.split(timing_step["run"])
+    assert module in selected or timing_node in selected
+    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+
+
+def test_full_corpus_process_timing_runs_serially_without_losing_other_report_checks() -> None:
+    import yaml
+
+    module = "tests/test_guard_command_decision_diff.py"
+    timing_node = f"{module}::test_fresh_process_report_is_environment_independent_and_bounded"
+    ordinary_node = f"{module}::test_report_contains_only_privacy_safe_deterministic_evidence"
+    shards, _ = build_affinity_node_shards([f"{timing_node}[pacific]", ordinary_node], 1, {})
+    assert shards == [[ordinary_node]]
+    root = Path(__file__).resolve().parents[1]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text()))["jobs"]
+    timing_step = next(step for step in jobs["scheduling-sensitive"]["steps"]
+                       if step.get("name") == "Run scheduling-sensitive tests untraced")
+    assert "if" not in timing_step
+    match = re.search(r"nodes=\((.*?)\n\s*\)", timing_step["run"], re.S)
+    assert match is not None
+    nodes = shlex.split(match.group(1))
+    assert nodes.count(timing_node) == 1
+    # Use the existing short slice without shifting the other timing workloads.
+    assert nodes.index(timing_node) % 4 == 1
+    assert "-n" not in shlex.split(timing_step["run"])
+    assert "scheduling-sensitive" in jobs["ci-python-312"]["needs"]
+
+
+@pytest.mark.parametrize("condition", ["false", "github.event_name == 'schedule'"])
+def test_hung_continuation_routing_rejects_conditional_execution(monkeypatch, condition: str) -> None:
+    original = expand_ci_job_actions
+
+    def with_conditional_timing_step(workflow):
+        expanded = original(workflow)
+        for step in expanded["jobs"]["scheduling-sensitive"]["steps"]:
+            if step.get("name") == "Run scheduling-sensitive tests untraced":
+                step["if"] = condition
+        return expanded
+
+    monkeypatch.setattr(f"{__name__}.expand_ci_job_actions", with_conditional_timing_step)
+    with pytest.raises(AssertionError):
+        test_hung_continuation_timing_runs_in_required_dedicated_lane_not_parallel_shards()
 
 
 def test_affinity_plan_splits_only_an_oversized_file() -> None:
@@ -240,16 +335,29 @@ def test_printf_format_requires_a_printf_command() -> None:
 
 
 def test_live_coverage_matrix_opens_every_generated_response_file(tmp_path: Path) -> None:
+    """Verify live coverage matrix opens every generated response file."""
     import yaml
 
     root = Path(__file__).resolve().parents[1]
-    jobs = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8"))["jobs"]
+    jobs = expand_ci_job_actions(yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8")))[
+        "jobs"
+    ]
     planner = next(
-        step for step in jobs["coverage-plan"]["steps"] if step.get("uses") == "./.github/actions/plan-pytest"
+        step for step in jobs["native-command-evaluators"]["steps"]
+        if step.get("uses") == "./.github/actions/plan-pytest"
     )
-    count = int(planner["with"]["shard-count"])
-    indices = jobs["coverage"]["strategy"]["matrix"]["shard-index"]
-    assert indices == list(range(count))
+    # shard-count is a `${{ env.NAME }}` expression referencing the workflow-level
+    # env block; resolve it to the literal before int() so the placeholder is not
+    # fed to int() verbatim.
+    workflow_env = yaml.safe_load((root / ".github/workflows/ci.yml").read_text(encoding="utf-8")).get("env", {})
+    raw_shard = str(planner["with"]["shard-count"])
+    env_match = re.fullmatch(r"\$\{\{\s*env\.([A-Z0-9_]+)\s*\}\}", raw_shard)
+    count = int(workflow_env[env_match.group(1)]) if env_match else int(raw_shard)
+    raw_indices = jobs["coverage"]["strategy"]["matrix"]["shard-index"]
+    assert raw_indices == "${{ fromJSON(needs.native-command-evaluators.outputs.shard-indices) }}"
+    assert jobs["native-command-evaluators"]["outputs"]["shard-count"] == "${{ steps.shard-indices.outputs.count }}"
+    assert planner["with"]["shard-count"] == "${{ env.CI_PYTEST_COVERAGE_SHARDS }}"
+    indices = list(range(count))
     command = next(
         step["run"] for step in jobs["coverage"]["steps"] if step.get("name", "").startswith("Run coverage shard")
     )

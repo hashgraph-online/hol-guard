@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from codex_plugin_scanner.guard.runtime import local_mcp_stdio as stdio_module
 from codex_plugin_scanner.guard.runtime.local_cli_commands import (
     MAX_LOCAL_CLI_COMMANDS,
     OTHER_COMMAND_ID,
@@ -29,6 +28,8 @@ from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     probe_env,
 )
 from codex_plugin_scanner.guard.runtime.mcp_protection import build_mcp_server_identity
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 
 @pytest.mark.parametrize(
@@ -299,10 +300,11 @@ def test_live_stdio_probe_lists_tools_from_large_payload(tmp_path: Path) -> None
     assert "Other tools" in names
 
 
-def test_legacy_output_limit_reports_failed_inventory(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(stdio_module, "MCP_PROBE_OUTPUT_LIMIT", 64_000)
+def test_legacy_output_limit_reports_failed_inventory(tmp_path: Path) -> None:
     server = tmp_path / "fat-mcp.py"
-    _write_framed_server(server, tools=_large_tools())
+    tools = _large_tools()
+    tools[0]["description"] = "x" * MCP_PROBE_OUTPUT_LIMIT
+    _write_framed_server(server, tools=tools)
     probed = probe_stdio_mcp_server(f"python3 {server}", cwd=tmp_path, home_dir=tmp_path, timeout=2.0)
     assert probed is not None
     assert probed.status == "failed"

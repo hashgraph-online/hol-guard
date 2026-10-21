@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .native_policy_bundle import PolicyBundleNativeUnavailableError
 from .policy_bundle_trusted_keys import (
     safe_load_policy_bundle_verification_keys,
     signing_key_is_current,
@@ -23,14 +24,18 @@ def review_verification_keyring_ready(store: GuardStore) -> bool:
     workspace_id = profile.get("workspace_id") if isinstance(profile, dict) else None
     if not isinstance(workspace_id, str) or not workspace_id.strip():
         return False
-    keys = safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY))
-    return any(
-        key.purpose == _REMOTE_APPROVAL_KEY_PURPOSE
-        and key.workspace_id == workspace_id
-        and key.state != "revoked"
-        and signing_key_is_current(key)
-        for key in keys
-    )
+    try:
+        keys = safe_load_policy_bundle_verification_keys(store.get_sync_payload(REVIEW_VERIFICATION_KEYRING_SYNC_KEY))
+        return any(
+            key.purpose == _REMOTE_APPROVAL_KEY_PURPOSE
+            and key.workspace_id == workspace_id
+            and key.state != "revoked"
+            and signing_key_is_current(key)
+            for key in keys
+        )
+    except PolicyBundleNativeUnavailableError:
+        # Readiness cannot be proven without the resident. Never report ready.
+        return False
 
 
 __all__ = ["REVIEW_VERIFICATION_KEYRING_SYNC_KEY", "review_verification_keyring_ready"]

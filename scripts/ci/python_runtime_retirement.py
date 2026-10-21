@@ -35,6 +35,22 @@ def _relative_path(value: object, *, source: bool) -> str:
     return value
 
 
+def _dead_code_removal(record: Mapping[str, object]) -> bool:
+    """Allow a retirement that deleted dead Python rather than superseding it.
+
+    Most retired modules name the Rust that took their behaviour over. A few
+    reached nobody at all, so there is no replacement to name; those still have
+    to be recorded here, or their path and digest keep no protection against
+    quietly coming back. Such a record declares why it was dead instead.
+    """
+    if record.get("retirement") != "dead_code":
+        return False
+    reason = record.get("removal_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        raise RuntimeError(f"dead code retirement needs a removal reason: {record.get('path')}")
+    return True
+
+
 def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
     records = contract.get("retired_modules", [])
     if not isinstance(records, list):
@@ -59,14 +75,12 @@ def _records(contract: Mapping[str, object]) -> list[dict[str, object]]:
         ):
             raise RuntimeError(f"retired implementation symbols are required: {path}")
         replacements = record.get("native_replacements")
-        if (
-            not isinstance(replacements, list)
-            or not replacements
-            or not all(
-                isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
-                for item in replacements
-            )
+        if not isinstance(replacements, list) or not all(
+            isinstance(item, str) and item.startswith("rust/") and ".." not in PurePosixPath(item).parts
+            for item in replacements
         ):
+            raise RuntimeError(f"native replacement paths are required: {path}")
+        if not replacements and not _dead_code_removal(record):
             raise RuntimeError(f"native replacement paths are required: {path}")
         paths.add(path)
         modules.add(module)
@@ -196,9 +210,7 @@ def _removed_runtime_flags(contract: Mapping[str, object]) -> set[str]:
     return set(flags)
 
 
-def _retired_content_validator(
-    records: list[dict[str, object]], flags: set[str]
-) -> Callable[[str, bytes], None]:
+def _retired_content_validator(records: list[dict[str, object]], flags: set[str]) -> Callable[[str, bytes], None]:
     modules = {str(record["module"]) for record in records}
     symbols = {symbol for record in records for symbol in record["forbidden_symbols"]}
     digests = {str(record["source_sha256"]) for record in records}
@@ -223,7 +235,8 @@ def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequen
     """Check package paths and contents once, before expensive source analysis."""
     records = _records(contract)
     basenames = {PurePosixPath(str(record["path"])).stem for record in records}
-    if not basenames:
+    bodies = contract.get("retired_bodies", [])
+    if not basenames and not bodies:
         return
     check_content = _retired_content_validator(records, _removed_runtime_flags(contract))
     for artifact in artifacts:
@@ -238,6 +251,7 @@ def validate_retired_artifacts(contract: Mapping[str, object], artifacts: Sequen
                 raise RuntimeError(f"package artifact contains retired module: {name}")
             if data is not None:
                 check_content(name, data)
+                _check_retired_body_content(name, data, bodies)
 
 
 def validate_retired_modules(
@@ -248,6 +262,7 @@ def validate_retired_modules(
     artifacts: Sequence[Path] = (),
 ) -> list[dict[str, object]]:
     records = _records(contract)
+    validate_retired_bodies(root, contract)
     retired_tests = contract.get("retired_test_paths", [])
     if not isinstance(retired_tests, list):
         raise RuntimeError("retired_test_paths must be a list")
@@ -282,3 +297,61 @@ def validate_retired_modules(
             check_content(path.relative_to(root).as_posix(), path.read_bytes())
     validate_retired_artifacts(contract, artifacts)
     return evidence
+
+
+def validate_retired_bodies(root: Path, contract: Mapping[str, object]) -> None:
+    """Allow a public DTO facade while rejecting its original implementation."""
+    records = contract.get("retired_bodies", [])
+    if not isinstance(records, list):
+        raise RuntimeError("retired_bodies must be a list")
+    seen: set[str] = set()
+    for record in records:
+        if not isinstance(record, dict):
+            raise RuntimeError("retired body record must be an object")
+        path = _relative_path(record.get("path"), source=True)
+        symbols = record.get("forbidden_symbols")
+        replacements = record.get("native_replacements")
+        if path in seen or not _sha256(record.get("source_sha256")):
+            raise RuntimeError(f"invalid retired body identity: {path}")
+        if (
+            not isinstance(symbols, list)
+            or not symbols
+            or not all(isinstance(s, str) and s.isidentifier() for s in symbols)
+        ):
+            raise RuntimeError(f"retired body symbols required: {path}")
+        if (
+            not isinstance(replacements, list)
+            or not replacements
+            or not all(
+                isinstance(p, str)
+                and p.startswith("rust/")
+                and ".." not in PurePosixPath(p).parts
+                and (root / p).is_file()
+                for p in replacements
+            )
+        ):
+            raise RuntimeError(f"retired body native replacement missing: {path}")
+        seen.add(path)
+        _check_retired_body_content(path, (root / path).read_bytes(), records)
+
+
+def _check_retired_body_content(name: str, source: bytes, records: object) -> None:
+    if not isinstance(records, list):
+        raise RuntimeError("retired_bodies must be a list")
+    digest = hashlib.sha256(source).hexdigest()
+    for record in records:
+        if not isinstance(record, dict) or not _sha256(record.get("source_sha256")):
+            raise RuntimeError("invalid retired body record")
+        if digest == record["source_sha256"]:
+            raise RuntimeError(f"retired Python body still exists: {name}")
+        if PurePosixPath(name).name != PurePosixPath(str(record.get("path"))).name:
+            continue
+        tree = ast.parse(source)
+        identifiers = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+        identifiers.update(
+            node.name
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        )
+        if identifiers.intersection(record.get("forbidden_symbols", [])):
+            raise RuntimeError(f"retired Python implementation symbol still exists: {name}")

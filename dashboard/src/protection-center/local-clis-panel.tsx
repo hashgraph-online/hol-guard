@@ -2,21 +2,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { HiMiniArrowLeft, HiMiniPlus } from "react-icons/hi2";
 
 import {
-  applyBulkCommandState,
   applyLocalCliMutation,
-  bulkCommandState,
-  enrollablePackageScriptCommands,
   LocalCliApiError,
   previewLocalCliMutation,
   recognizeLocalCli,
   refreshMcpInventory,
+  type LocalCliCommand,
   type LocalCliCommandState,
   type LocalCliItem,
   type LocalCliListResponse,
   type LocalCliState,
 } from "../local-cli-api";
-import { BulkPolicyPicker } from "./add-custom-extension-catalog";
-import { CustomExtensionCommandList, commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { commandStatesPayload, withCommandState } from "./custom-extension-commands";
+import { CustomExtensionCommandBrowser } from "./custom-extension-command-browser";
 import { McpDeclaredSkills } from "./mcp-declared-skills";
 import { useResolvedApprovalGate } from "../use-resolved-approval-gate";
 import { InlineError } from "./components/protection-primitives";
@@ -24,8 +22,12 @@ import { customExtensionContinuityView } from "../managed-controls/custom-extens
 import { commandPermissionChanges, mcpCatalogCopy, mcpToolCanReceiveDirectAllow, rebaseCommandDraft } from "./mcp-catalog-state";
 import { McpProviderActions, type ProviderActionDraft } from "./mcp-provider-actions";
 import { ProviderWorkflows } from "./provider-workflows";
-import { bulkPolicyCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken } from "./local-cli-panel-copy";
+import { bulkPolicyCopy, connectorGroupOutcomeCopy, continuityCopy, customExtensionStateLabel, detailCatalogHeading, detailCatalogHelper, detailPolicyCopy, mcpPermissionStatusLabel, nativePublicationMessage, randomToken, SUGGESTED_RULES_NOTICE } from "./local-cli-panel-copy";
+import { connectorGroupOutcome, connectorSetupMatch, customExtensionDisplayName, hasSuggestedRules, prefillSuggestedStates, type ConnectorSetupLink } from "./custom-extension-profile";
+import { ConnectorSetupBanner } from "./connector-setup-banner";
 import { CustomExtensionReviewModal } from "./local-cli-review-modal";
+import { LocalCliCapabilities } from "./local-cli-capabilities";
+import { canForgetLocalCli, ForgetLocalCliButton, lastSeenCopy } from "./local-cli-forget";
 
 export { customExtensionStateLabel } from "./local-cli-panel-copy";
 
@@ -46,12 +48,13 @@ export function LocalCliDetail(props: {
   revision: number;
   continuity: LocalCliListResponse["cloud"];
   nativePublication?: LocalCliListResponse["native_publication"];
+  setupLink?: ConnectorSetupLink | null;
   onBack: () => void;
   onRefresh: () => Promise<void>;
 }) {
   const { resolvedApprovalGate, resolveApprovalGate, refreshApprovalGate } = useResolvedApprovalGate(null);
   const [pending, setPending] = useState<LocalCliState | null>(null);
-  const [commands, setCommands] = useState(props.item.commands);
+  const [commands, setCommands] = useState(() => prefillSuggestedStates(props.item));
   const [providerDrafts, setProviderDrafts] = useState<Record<string, ProviderActionDraft>>({});
   const previousItem = useRef(props.item);
   const [busy, setBusy] = useState(false);
@@ -63,17 +66,20 @@ export function LocalCliDetail(props: {
   const added = props.item.state !== "unset";
   const commandChanges = commandPermissionChanges(props.item.commands, commands);
   const commandsDirty = commandChanges.length > 0;
+  const [recommended, setRecommended] = useState(false);
+  const [setupOutcome, setSetupOutcome] = useState<string | null>(null);
   useEffect(() => {
     const previous = previousItem.current;
     if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
       setPending(null);
+      setSetupOutcome(null);
       setProviderDrafts({});
       setCatalogError(null);
       setError(previous.cli_id === props.item.cli_id ? "This extension changed. Review its permissions again." : null);
     }
     setCommands((current) => {
       if (previous.cli_id !== props.item.cli_id || previous.identity_hash !== props.item.identity_hash) {
-        return props.item.commands;
+        return prefillSuggestedStates(props.item);
       }
       const changed = previous.mcp_catalog?.revision !== props.item.mcp_catalog?.revision
         ? props.item.mcp_catalog?.changes?.changed : [];
@@ -81,10 +87,17 @@ export function LocalCliDetail(props: {
     });
     previousItem.current = props.item;
   }, [props.item]);
-  const openPending = useCallback(async (state: LocalCliState) => {
+  const setupMatch = props.setupLink ? connectorSetupMatch(props.item, props.setupLink) : null;
+  const openPending = useCallback(async (state: LocalCliState, fromSetupLink = false) => {
     await refreshApprovalGate();
+    setRecommended(fromSetupLink);
     setPending(state);
   }, [refreshApprovalGate]);
+  const requestRecommended = useCallback(() => {
+    // The recommended setup is the suggested command states, never an unsaved draft.
+    setCommands(prefillSuggestedStates(props.item));
+    return openPending("allowed", true);
+  }, [openPending, props.item]);
   const requestAdd = useCallback(() => openPending("allowed"), [openPending]);
   const requestAllow = useCallback(() => openPending("allowed"), [openPending]);
   const requestBlock = useCallback(() => openPending("blocked"), [openPending]);
@@ -95,20 +108,18 @@ export function LocalCliDetail(props: {
   const handleCommandState = useCallback((commandId: string, state: LocalCliCommandState) => {
     setCommands((current) => withCommandState(current, commandId, state));
   }, []);
-  const applyBulk = useCallback((state: LocalCliCommandState) => {
-    setCommands((current) => {
-      let excluded = new Set<string>();
-      if (props.item.surface === "package-scripts") excluded = new Set(["root", "other"]);
-      if (props.item.surface === "mcp") {
-        excluded = new Set(current.filter((command) => !mcpToolCanReceiveDirectAllow(command)).map((command) => command.command_id));
-      }
-      return applyBulkCommandState(current, state, excluded);
-    });
+  const bulkEligible = useCallback((command: LocalCliCommand) => {
+    if (props.item.surface === "package-scripts") return command.command_id !== "root" && command.command_id !== "other";
+    if (props.item.surface === "mcp") return mcpToolCanReceiveDirectAllow(command);
+    return true;
   }, [props.item.surface]);
-  let bulkTargets = commands;
-  if (props.item.surface === "package-scripts") bulkTargets = enrollablePackageScriptCommands(commands);
-  if (props.item.surface === "mcp") bulkTargets = commands.filter(mcpToolCanReceiveDirectAllow);
-  const bulkState = bulkCommandState(bulkTargets);
+  const applyBulk = useCallback((commandIds: ReadonlySet<string>, state: LocalCliCommandState) => {
+    setCommands((current) => current.map((command) => (
+      commandIds.has(command.command_id) && bulkEligible(command) ? { ...command, state } : command
+    )));
+  }, [bulkEligible]);
+  const resetCommands = useCallback(() => setCommands(prefillSuggestedStates(props.item)), [props.item]);
+  const bulkTargetCount = commands.filter(bulkEligible).length;
   const bulkCopy = bulkPolicyCopy(props.item.surface);
   const continuity = customExtensionContinuityView("local-only");
   const catalog = mcpCatalogCopy(props.item);
@@ -145,13 +156,18 @@ export function LocalCliDetail(props: {
         state: pending,
         previous_revision: props.revision,
         session_nonce: randomToken(),
-        commands: commandStatesPayload(commands),
+        commands: commandStatesPayload(recommended ? prefillSuggestedStates(props.item) : commands),
         ...(pending !== "unset" && Object.keys(providerDrafts).length > 0
           ? { provider_actions: Object.values(providerDrafts) } : {}),
+        // Same endpoint and proof as any other change; the daemon re-checks the request belongs to this connector.
+        ...(recommended && pending === "allowed" && props.setupLink && setupMatch === "ready"
+          ? { connector_group_request_id: props.setupLink.requestId } : {}),
         ...credentials,
       };
       await previewLocalCliMutation(payload);
-      await applyLocalCliMutation(payload);
+      const outcome = connectorGroupOutcome(await applyLocalCliMutation(payload));
+      // Only the apply that resolved the group keeps its outcome; any later change clears it.
+      setSetupOutcome(outcome ? connectorGroupOutcomeCopy(outcome) : null);
       setProviderDrafts({});
       await props.onRefresh();
       await refreshApprovalGate();
@@ -161,7 +177,7 @@ export function LocalCliDetail(props: {
     } finally {
       setBusy(false);
     }
-  }, [commands, providerDrafts, pending, props, refreshApprovalGate]);
+  }, [commands, providerDrafts, pending, props, recommended, refreshApprovalGate, setupMatch]);
 
   useEffect(() => {
     void resolveApprovalGate({ failClosed: true }).catch(() => {
@@ -176,23 +192,35 @@ export function LocalCliDetail(props: {
         Extensions
       </button>
       <header className="mt-4 border-b border-slate-200 pb-6">
-        {props.item.surface !== "mcp" ? (
-          <p className="font-mono text-xs font-semibold tracking-[0.14em] text-slate-400">{props.item.example_label}</p>
-        ) : null}
-        <h1 className="mt-2 text-2xl font-semibold tracking-tight text-brand-dark">{props.item.name}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-brand-dark">{customExtensionDisplayName(props.item)}</h1>
         {props.item.surface === "mcp" && props.item.source_label ? (
           <p className="mt-2 text-sm text-slate-600">{props.item.source_label}</p>
         ) : null}
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{customExtensionStateLabel(props.item)}</p>
+        <p className="mt-2 flex max-w-2xl flex-wrap items-center gap-x-2 gap-y-1 text-sm leading-6 text-slate-600">
+          {props.item.surface !== "mcp" ? (
+            <code className="rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-brand-dark">{props.item.example_label}</code>
+          ) : null}
+          <span>{customExtensionStateLabel(props.item)}</span>
+          {lastSeenCopy(props.item.last_seen_at) ? (
+            <span className="text-xs text-slate-500">{lastSeenCopy(props.item.last_seen_at)}</span>
+          ) : null}
+        </p>
+        {props.setupLink && setupMatch ? (
+          <ConnectorSetupBanner name={customExtensionDisplayName(props.item)} heldIdentityHash={props.setupLink.identityHash}
+            currentIdentityHash={props.item.identity_hash}
+            match={setupMatch} busy={busy} outcome={setupOutcome} onSetUp={requestRecommended} />
+        ) : null}
         {continuityCopy(props.item) ? (
           <div className="mt-3 max-w-2xl rounded-xl border border-slate-200 bg-slate-50 p-3" data-testid="custom-extension-continuity">
             <p className="text-sm font-semibold text-brand-dark">{continuityCopy(props.item)?.title}</p>
             <p className="mt-1 text-sm leading-6 text-slate-600">{continuityCopy(props.item)?.description}</p>
           </div>
         ) : null}
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
-          {detailPolicyCopy(props.item.surface)}
-        </p>
+        {props.item.surface === "mcp" || !(added || hasSuggestedRules(props.item)) ? (
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-dark/75">
+            {detailPolicyCopy(props.item.surface)}
+          </p>
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-3">
           {added ? (
             <>
@@ -216,17 +244,26 @@ export function LocalCliDetail(props: {
                   Block this extension
                 </button>
               )}
-              <button type="button" className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/80" onClick={requestRemove}>
+              <button type="button" className="min-h-11 rounded-xl px-4 text-sm font-semibold text-brand-dark/70 hover:text-brand-dark" onClick={requestRemove}>
                 Remove custom extension
               </button>
             </>
           ) : (
-            <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestAdd}>
-              Add custom extension
-            </button>
+            <>
+              <button type="button" className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestAdd}>
+                Add custom extension
+              </button>
+            </>
+          )}
+          {canForgetLocalCli(props.item) && (
+            <ForgetLocalCliButton item={props.item} disabled={busy}
+              onForgotten={async () => { props.onBack(); await props.onRefresh(); }} />
           )}
         </div>
       </header>
+      {props.item.surface === "cli" && props.item.state === "allowed" ? (
+        <LocalCliCapabilities item={props.item} revision={props.revision} onRefresh={props.onRefresh} />
+      ) : null}
       {props.item.surface === "mcp" && added ? (
         <section className="mt-5 rounded-xl border border-slate-200 p-4" aria-labelledby="mcp-publication-heading">
           <h2 id="mcp-publication-heading" className="text-sm font-semibold text-brand-dark">{props.item.permission_scope === "configured-connection" ? "Policy status" : "Enforcement status"}</h2>
@@ -245,6 +282,7 @@ export function LocalCliDetail(props: {
         <section className="mt-6 border-b border-slate-200 pb-5" aria-labelledby="mcp-inventory-heading" aria-busy={catalogBusy}>
           <h2 id="mcp-inventory-heading" className="text-sm font-semibold text-brand-dark">{catalog.title}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{catalog.description}</p>
+          {props.item.remote_origin && !catalogBusy ? null : <>
           <p className="mt-2 text-xs leading-5 text-brand-dark/75">Refresh starts this connection’s configured server to list tools. It does not grant execution permission.</p>
           <button
             type="button"
@@ -256,6 +294,7 @@ export function LocalCliDetail(props: {
           </button>
           {catalogBusy ? <button type="button" onClick={() => catalogController.current?.abort()}
             className="ml-3 min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">Cancel refresh</button> : null}
+          </>}
           {catalogError ? <p role="alert" className="mt-3 max-w-2xl text-sm leading-6 text-red-700">{catalogError}</p> : null}
           {props.item.mcp_catalog ? (
             <p className="mt-2 text-xs leading-5 text-brand-dark/75">
@@ -292,6 +331,8 @@ export function LocalCliDetail(props: {
           <details className="mt-3 text-sm text-brand-dark/75">
             <summary className="min-h-11 cursor-pointer py-3 font-semibold">Connection details</summary>
             <p className="break-all font-mono text-xs leading-6">{props.item.example_label}</p>
+            {props.item.remote_origin
+              ? <p className="mt-2 break-all">Last seen remote origin: <span className="font-mono text-xs">{props.item.remote_origin}</span></p> : null}
             <p className="mt-2">Protocol: {props.item.mcp_catalog?.protocol_version ?? "Not verified"}</p>
             <p className="mt-2">Permission scope: {props.item.permission_scope === "configured-connection"
               ? "This configured host connection. Provider account and native host-hook binding are not verified."
@@ -330,12 +371,7 @@ export function LocalCliDetail(props: {
           ) : null}
         </>
       ) : null}
-      <section className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-4" aria-labelledby="custom-extension-continuity-heading">
-        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
-        <p className="mt-2 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
-        <p className="mt-2 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
-      </section>
-      {added ? (
+      {added || hasSuggestedRules(props.item) ? (
         <section className="mt-8" aria-labelledby="custom-extension-commands-heading">
           <h2 id="custom-extension-commands-heading" className="text-lg font-semibold text-brand-dark">
             {detailCatalogHeading(props.item.surface)}
@@ -343,39 +379,52 @@ export function LocalCliDetail(props: {
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">
             {detailCatalogHelper(props.item.surface)}
           </p>
-          {bulkTargets.length > 0 ? (
-            <BulkPolicyPicker
-              value={bulkState}
-              disabled={busy}
-              onChange={applyBulk}
-              groupLabel={bulkCopy.groupLabel}
-              allowLabel={props.item.surface === "mcp" ? "Allow listed" : undefined}
-              blockLabel={props.item.surface === "mcp" ? "Deny listed" : undefined}
-              mcpPolicy={props.item.surface === "mcp"}
-              mixedCopy={bulkCopy.mixedCopy}
-            />
+          {commandsDirty && hasSuggestedRules(props.item) && !added ? (
+            <p role="note" className="mt-2 max-w-2xl text-sm leading-6 text-brand-dark/75">{SUGGESTED_RULES_NOTICE}</p>
           ) : null}
-          {props.item.surface === "mcp" && bulkTargets.length > 0 ? (
+          <CustomExtensionCommandBrowser
+            key={props.item.cli_id}
+            commands={commands}
+            savedCommands={props.item.commands}
+            surface={props.item.surface}
+            disabled={busy}
+            bulkEligible={bulkEligible}
+            bulkGroupLabel={bulkCopy.groupLabel}
+            bulkMixedCopy={bulkCopy.mixedCopy}
+            onChange={handleCommandState}
+            onBulkChange={applyBulk}
+          />
+          {props.item.surface === "mcp" && bulkTargetCount > 0 ? (
             <p className="mt-2 text-xs leading-5 text-brand-dark/75">
-              Bulk choices apply to {bulkTargets.length} listed {bulkTargets.length === 1 ? "tool" : "tools"} with direct permissions.
+              Bulk choices apply to listed tools with direct permissions.
               Execution wrappers and unlisted tools keep their separate review settings.
             </p>
           ) : null}
-          <div className="mt-4">
-            <CustomExtensionCommandList
-              commands={commands}
-              disabled={busy}
-              surface={props.item.surface}
-              onChange={handleCommandState}
-            />
-          </div>
           {commandsDirty ? (
-            <button type="button" className="mt-4 min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
-              Review {commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes
-            </button>
+            <div className="guard-review-bar" data-testid="custom-extension-review-bar">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm text-brand-dark">
+                  {commandChanges.length} unsaved {props.item.surface === "mcp" ? "tool" : "command"} {commandChanges.length === 1 ? "change" : "changes"}.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {added ? (
+                    <button type="button" disabled={busy} onClick={resetCommands}
+                      className="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-brand-dark">Reset changes</button>
+                  ) : null}
+                  <button type="button" disabled={busy} className="min-h-11 rounded-xl bg-brand-blue px-4 text-sm font-semibold text-white" onClick={requestSaveCommands}>
+                    Review {commandChanges.length} {props.item.surface === "mcp" ? "tool" : "command"} changes
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : null}
         </section>
       ) : null}
+      <section className="mt-10 max-w-2xl border-t border-slate-200 pt-5" aria-labelledby="custom-extension-continuity-heading">
+        <h2 id="custom-extension-continuity-heading" className="text-sm font-semibold text-brand-dark">{continuity.title}</h2>
+        <p className="mt-1 text-sm leading-6 text-brand-dark/75">{props.continuity.summary || continuity.description}</p>
+        <p className="mt-1 text-xs leading-5 text-brand-dark/60">{continuity.privacyDisclosure}</p>
+      </section>
       {error && !pending ? <div className="mt-4"><InlineError message={error} /></div> : null}
       {pending ? (
         <CustomExtensionReviewModal

@@ -9,6 +9,15 @@ from .local_authority_integrity import sign_local_authority_payload
 from .store_base import _canonical_utc_timestamp, _timestamp_has_expired, _workspace_policy_key
 
 LOCAL_ONCE_INTEGRITY_PURPOSE = "guard-local-once-approval"
+LOCAL_ONCE_LEGACY_AUTHORITY_KIND = "legacy"
+EXACT_CLOUD_AUTHORITY_KIND = "exact-cloud"
+EXACT_CLOUD_INTEGRITY_PURPOSE = "guard-exact-cloud-local-once-v1"
+
+
+def local_once_integrity_purpose(authority_kind: object) -> str:
+    if authority_kind == EXACT_CLOUD_AUTHORITY_KIND:
+        return EXACT_CLOUD_INTEGRITY_PURPOSE
+    return LOCAL_ONCE_INTEGRITY_PURPOSE
 
 
 def persist_local_once_approval(
@@ -25,11 +34,14 @@ def persist_local_once_approval(
     expires_at: str,
     integrity_key: bytes,
     integrity_key_id: str,
+    authority_kind: str = LOCAL_ONCE_LEGACY_AUTHORITY_KIND,
 ) -> str | None:
     """Insert exact one-shot authority inside the caller's transaction."""
 
     if not artifact_id or not artifact_hash:
         return None
+    if authority_kind not in {LOCAL_ONCE_LEGACY_AUTHORITY_KIND, EXACT_CLOUD_AUTHORITY_KIND}:
+        raise ValueError("local approval authority kind is unsupported")
     canonical_created_at = _canonical_utc_timestamp(created_at)
     canonical_expires_at = _canonical_utc_timestamp(expires_at)
     if _timestamp_has_expired(canonical_expires_at, now=canonical_created_at):
@@ -48,12 +60,13 @@ def persist_local_once_approval(
         "created_at": canonical_created_at,
         "expires_at": canonical_expires_at,
         "claimed_at": None,
+        "authority_kind": authority_kind,
     }
     integrity = sign_local_authority_payload(
         signing_row,
         key=integrity_key,
         key_id=integrity_key_id,
-        purpose=LOCAL_ONCE_INTEGRITY_PURPOSE,
+        purpose=local_once_integrity_purpose(authority_kind),
         signed_at=canonical_created_at,
     )
     connection.execute(
@@ -61,9 +74,9 @@ def persist_local_once_approval(
         insert into guard_local_once_approvals (
           approval_id, request_id, harness, artifact_id, artifact_hash, workspace, publisher, action,
           created_at, expires_at, claimed_at, integrity_version, payload_hash, payload_mac,
-          integrity_key_id, signed_at
+          integrity_key_id, signed_at, authority_kind
         )
-        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, null, ?, ?, ?, ?, ?, ?)
         """,
         (
             approval_id,
@@ -81,6 +94,7 @@ def persist_local_once_approval(
             integrity["payload_mac"],
             integrity["integrity_key_id"],
             integrity["signed_at"],
+            authority_kind,
         ),
     )
     return approval_id

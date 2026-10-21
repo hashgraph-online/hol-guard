@@ -1,0 +1,140 @@
+name: Guard Gauntlet evidence
+
+on:
+  pull_request:
+    paths:
+      - 'ci/gauntlet/**'
+      - 'tests/test_guard_gauntlet*.py'
+      - '.github/workflows/guard-gauntlet*.yml'
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request whose current head was tested
+        required: true
+        type: string
+      candidate_sha:
+        description: Full pull request head SHA
+        required: true
+        type: string
+      evidence_url:
+        description: Optional direct HTTPS signed URL for a large public evidence ZIP
+        required: false
+        type: string
+      evidence_base64:
+        description: Public ZIP from Gauntlet dispatch inputs, as an alternative to a signed URL
+        required: false
+        type: string
+      evidence_sha256:
+        description: SHA-256 of that exact public evidence ZIP
+        required: true
+        type: string
+      attest_real_inference:
+        description: This evidence came from real model inference and the actual OMP CLI, not replayed or fabricated completions
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gauntlet-evidence-${{ github.event_name }}-${{ inputs.pr_number || github.event.pull_request.number }}-${{ inputs.candidate_sha || github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  contracts:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ci-python
+        with:
+          python-version: '3.12.14'
+          cache-dependency-glob: |
+            pyproject.toml
+            uv.lock
+      - uses: ./.github/actions/stage-command-projections
+      - name: Test the judge, not the product outcome
+        run: uv run --no-sync pytest -q tests/test_guard_gauntlet*.py
+
+  verify:
+    env:
+      GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
+    if: github.event_name == 'workflow_dispatch' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      tested_source_sha: ${{ steps.prepare.outputs.tested_source_sha }}
+    steps:
+      # This is the trusted default-branch or pinned bootstrap verifier. No candidate
+      # Python is imported or executed by the data-only validation job.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          path: trusted
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.14'
+      - name: Verify submitter, current PR and bounded evidence archive
+        id: prepare
+        working-directory: trusted
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: python -m ci.gauntlet.github_ci prepare --destination "$RUNNER_TEMP/gauntlet-evidence"
+      - name: Recompute every outcome against immutable candidate Git blobs
+        working-directory: trusted
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+        run: |
+          python -m ci.gauntlet verify "$RUNNER_TEMP/gauntlet-evidence" \
+            --expected-sha "$CANDIDATE_SHA" --source-manifest "$RUNNER_TEMP/gauntlet-source-manifest.json" \
+            > "$RUNNER_TEMP/gauntlet-verified.json"
+          {
+            echo "## Guard Gauntlet: independently verified live evidence"
+            echo '```json'
+            cat "$RUNNER_TEMP/gauntlet-verified.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Preserve verified public evidence
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: guard-gauntlet-${{ inputs.candidate_sha }}
+          path: ${{ runner.temp }}/gauntlet-evidence/
+          if-no-files-found: error
+          retention-days: 90
+
+  publish:
+    env:
+      GUARD_GAUNTLET_BOOTSTRAP_VERIFIER_SHA: ${{ github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3' && github.sha || '' }}
+    if: always() && github.event_name == 'workflow_dispatch' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.ref == 'refs/tags/guard-gauntlet-bootstrap-v3')
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      statuses: write
+      pull-requests: write
+    steps:
+      # The write-capable job never downloads or executes the submitted bundle
+      # or candidate code. It receives only the verified source SHA and job result.
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405
+        with:
+          python-version: '3.12.14'
+      - name: Publish exact-head qualification and evidence link
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          VALIDATION_RESULT: ${{ needs.verify.result }}
+          TESTED_SOURCE_SHA: ${{ needs.verify.outputs.tested_source_sha }}
+        run: python -m ci.gauntlet.github_ci publish

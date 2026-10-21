@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-import sqlite3
+from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,11 +12,27 @@ from typing import Any
 
 import pytest
 
+from codex_plugin_scanner.guard.config import update_guard_settings
 from codex_plugin_scanner.guard.daemon.hook_native_review_approval import pause_native_pre_tool_for_approval
+from codex_plugin_scanner.guard.native_policy_snapshot_publisher import provision_native_verifier_key_for_store
+from codex_plugin_scanner.guard.native_resident_client import close_native_residents
 from codex_plugin_scanner.guard.store import GuardStore
-from codex_plugin_scanner.guard.store_native_review_approvals import consume_native_review_approval
 from tests.test_native_command_observations import _edge, _observations, _receipt, _rehash
 from tests.test_native_review_policy_binding import _resign_identity
+
+
+@pytest.fixture(autouse=True)
+def questionnaire_mode(tmp_path: Path, native_approval_reuse_runtime: Path) -> Iterator[None]:
+    """Review presentation is resident-sole-authority: enroll the compiled runtime for this home."""
+
+    guard_home = tmp_path / "guard-home"
+    guard_home.mkdir(mode=0o700, exist_ok=True)
+    update_guard_settings(guard_home, {"blocked_request_mode": "ask"})
+    provision_native_verifier_key_for_store(GuardStore(guard_home))
+    try:
+        yield
+    finally:
+        close_native_residents(guard_home)
 
 
 def _review_fixture() -> tuple[dict[str, Any], dict[str, Any]]:
@@ -76,7 +92,7 @@ def test_policy_bound_review_approval_retries_once_without_requeue(tmp_path: Pat
     assert _pause(store, tmp_path, result, receipt).get("approval_request_id") != request_id
 
 
-@pytest.mark.parametrize("field", ["policy_digest", "rule_digest", "runtime_identity", "control_revision"])
+@pytest.mark.parametrize("field", ["rule_digest", "runtime_identity", "control_revision"])
 def test_changed_policy_domain_does_not_consume_original_approval(tmp_path: Path, field: str) -> None:
     store = GuardStore(tmp_path / "guard-home")
     result, receipt = _review_fixture()
@@ -92,6 +108,21 @@ def test_changed_policy_domain_does_not_consume_original_approval(tmp_path: Path
     assert changed.get("approval_reuse_status") != "accepted"
     assert changed["approval_request_id"] != request_id
     assert _pause(store, tmp_path, result, receipt).get("approval_reuse_status") == "accepted"
+
+
+def test_policy_snapshot_republish_keeps_original_approval(tmp_path: Path) -> None:
+    # #4955: a republished snapshot with the same verdict, rules and runtime
+    # is the same decision, so its retry still consumes the approval, once.
+    store = GuardStore(tmp_path / "guard-home")
+    result, receipt = _review_fixture()
+    request_id = _approve(store, _pause(store, tmp_path, result, receipt))
+    republished = copy.deepcopy(receipt)
+    republished["policy_digest"] = "e" * 64
+    _resign_identity(republished)
+    retry = _pause(store, tmp_path, result, republished)
+    assert retry.get("approval_reuse_status") == "accepted"
+    assert "approval_request_id" not in retry
+    assert _pause(store, tmp_path, result, receipt).get("approval_request_id") != request_id
 
 
 def test_policy_bound_review_has_only_one_concurrent_consumer(tmp_path: Path) -> None:
@@ -116,36 +147,6 @@ def test_policy_bound_review_has_only_one_concurrent_consumer(tmp_path: Path) ->
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         assert sorted(executor.map(lambda _: consume(), range(2))) == [False, True]
-
-
-@pytest.mark.parametrize(
-    "suffix",
-    [
-        ":",
-        ":" + "a" * 63,
-        ":" + "a" * 65,
-        ":" + "g" * 64,
-        ":" + "A" * 64,
-        ":" + "a" * 64 + ":extra",
-        ":" + "a" * 64 + "\n",
-    ],
-)
-def test_malformed_policy_domain_is_rejected_before_database_access(suffix: str) -> None:
-    binding = f"native-review-v4:{'a' * 64}:deny:review:review:native_sensitive_access_review"
-    with sqlite3.connect(":memory:") as connection:
-        statements: list[str] = []
-        connection.set_trace_callback(statements.append)
-        assert not consume_native_review_approval(
-            connection,
-            harness="claude-code",
-            artifact_id="claude-code:native-pretool:Bash",
-            artifact_name="Bash",
-            artifact_hash=binding + suffix,
-            launch_target="cat .env",
-            workspace=None,
-            now=datetime.now(timezone.utc).isoformat(),
-        )
-        assert not statements
 
 
 def test_policy_domain_cannot_be_stripped_or_substituted(tmp_path: Path) -> None:

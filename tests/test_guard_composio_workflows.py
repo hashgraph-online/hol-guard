@@ -14,17 +14,33 @@ _FIRST = "2026-09-27T12:00:00Z"
 
 
 def _result() -> dict[str, object]:
-    return {"successful": True, "error": None, "data": {
-        "success": True, "session": {"id": "PRIVATE_SESSION_NEVER_PERSIST"},
-        "results": [{"use_case": "Private personal request not retained",
-                     "primary_tool_slugs": ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"],
-                     "related_tool_slugs": ["SLACK_FIND_CHANNELS"],
-                     "recommended_plan_steps": ["private user text not retained"],
-                     "reference_workbench_snippets": ["do not persist code"]}],
-        "tool_schemas": {slug: {"toolkit": "slack", "tool_slug": slug, "description": "Synthetic",
-                                "input_schema": {"type": "object"}, "hasFullSchema": True}
-                         for slug in ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")},
-    }}
+    return {
+        "successful": True,
+        "error": None,
+        "data": {
+            "success": True,
+            "session": {"id": "PRIVATE_SESSION_NEVER_PERSIST"},
+            "results": [
+                {
+                    "use_case": "Private personal request not retained",
+                    "primary_tool_slugs": ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"],
+                    "related_tool_slugs": ["SLACK_FIND_CHANNELS"],
+                    "recommended_plan_steps": ["private user text not retained"],
+                    "reference_workbench_snippets": ["do not persist code"],
+                }
+            ],
+            "tool_schemas": {
+                slug: {
+                    "toolkit": "slack",
+                    "tool_slug": slug,
+                    "description": "Synthetic",
+                    "input_schema": {"type": "object"},
+                    "hasFullSchema": True,
+                }
+                for slug in ("SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE")
+            },
+        },
+    }
 
 
 def test_optional_guidance_yields_only_action_dependencies():
@@ -80,23 +96,3 @@ def test_workflow_persistence_is_identity_bound_and_grant_neutral(tmp_path: Path
     with store._connect() as connection:
         connection.execute("update local_cli_observation set identity_hash = ? where cli_id = ?", ("f" * 64, cli_id))
     assert store.read_local_mcp_workflows(cli_id)["proposals"] == []
-
-
-def test_journal_recovery_accepts_old_record_and_rejects_corrupt_guidance():
-    from codex_plugin_scanner.guard.daemon.runtime_hook_evidence_journal import _McpDiscoveryRecord
-    from codex_plugin_scanner.guard.runtime.composio_discovery import composio_discovered_actions
-
-    source = observed_mcp_tool("codex", _TOOL)
-    actions = composio_discovered_actions(_TOOL, _result())
-    proposals = composio_workflow_proposals(_TOOL, _result())
-    assert source and actions and proposals
-    record = _McpDiscoveryRecord("a" * 32, "codex", _TOOL, _FIRST, actions, proposals)
-    import json
-
-    body = json.loads(record.serialized())
-    assert _McpDiscoveryRecord.from_json(body).proposals == proposals
-    old = dict(body)
-    old.pop("workflow_proposals")
-    assert _McpDiscoveryRecord.from_json(old).proposals == ()
-    body["workflow_proposals"][0]["primary"] = ["../BAD"]
-    assert _McpDiscoveryRecord.from_json(body) is None

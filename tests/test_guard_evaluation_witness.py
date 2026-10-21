@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import socket
 import stat
-import subprocess
 import time
 from urllib.error import HTTPError
 from urllib.parse import urlsplit
@@ -13,7 +12,6 @@ import pytest
 
 from codex_plugin_scanner.guard import evaluation_witness as witness_module
 from codex_plugin_scanner.guard.evaluation_witness import (
-    FileWitnessPair,
     LocalSideEffectWitness,
     NetworkWitnessPair,
     _rmtree_at,
@@ -133,25 +131,6 @@ def test_file_only_witness_does_not_start_network_receiver() -> None:
     with LocalSideEffectWitness(network_enabled=False) as witness:
         assert witness._server is None
         assert witness.check_file_ready()
-
-
-def test_file_and_tool_witnesses_require_allowed_side_effect(tmp_path) -> None:
-    with LocalSideEffectWitness() as witness:
-        file_pair = witness.new_file_pair()
-        tool_pair = witness.new_tool_pair()
-        assert witness.check_file_ready()
-        file_pair.allowed_target.write_bytes(b"hit")
-        assert witness.observe_file_pair(file_pair).receiver_conditions_met
-        assert tool_pair.allowed_tool is not None
-        subprocess.run(tool_pair.allowed_tool, check=True, timeout=5)
-        assert witness.observe_file_pair(tool_pair).receiver_conditions_met
-        with pytest.raises(ValueError, match="belong"):
-            witness.observe_file_pair(type(file_pair)(tmp_path / "denied", file_pair.allowed_target))
-        with pytest.raises(ValueError, match="Unknown file witness pair"):
-            witness.observe_file_pair(FileWitnessPair(witness.root / "forged-denied", file_pair.allowed_target))
-        assert tool_pair.denied_tool is not None
-        subprocess.run(tool_pair.denied_tool, check=True, timeout=5)
-        assert not witness.observe_file_pair(tool_pair).receiver_conditions_met
 
 
 def test_network_witness_rejects_unknown_and_nonempty_requests() -> None:

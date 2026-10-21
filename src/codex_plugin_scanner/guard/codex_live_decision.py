@@ -72,6 +72,14 @@ def resolve_codex_live_allow_authority(
 ) -> dict[str, object] | None:
     """Return the exact unconsumed one-shot authority for this request."""
 
+    if _optional_text(request.get("request_id")) != request_id:
+        return None
+    exact_cloud_decision = store.peek_exact_cloud_local_once_approval(request_id=request_id, now=now)
+    if isinstance(exact_cloud_decision, Mapping) and _exact_request_authority(
+        exact_cloud_decision,
+        request_id=request_id,
+    ):
+        return {str(key): value for key, value in exact_cloud_decision.items()}
     lookup = store.resolve_policy_decision_lookup(
         str(request["harness"]),
         _optional_text(request.get("artifact_id")),

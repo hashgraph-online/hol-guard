@@ -1534,11 +1534,13 @@ def _pipx_execution_command(executable: str, args: list[str], *, python: str, in
             command.extend(["--python", python])
         command.extend(rest)
         return command
-    if len(args) >= 5 and args[:3] == ["runpip", "hol-guard", "install"]:
+    if len(args) >= 4 and args[:3] == ["runpip", "hol-guard", "install"]:
         install_args = args[3:]
         target = install_args[-1]
         flags = install_args[:-1]
         allowed_flags = (
+            [],
+            ["--force-reinstall", "--no-deps"],
             ["--force-reinstall"],
             ["--upgrade", "--force-reinstall"],
             ["--upgrade", "--force-reinstall", "--pre"],

@@ -4,24 +4,26 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
+from ..native_claude_permission_verdict import native_claude_permission_verdict
+from ..native_hook_artifact_compose import native_hook_compose
+from ..native_hook_decision import _INVALID, NativeHookDecisionError
 from .commands_support import *
 
 if TYPE_CHECKING:
+    from ..runtime.package_request_evaluation import PackageRequestEvaluation
     from ._commands_shared import _now
     from .commands_support_claude_approval import (
         _claude_guard_approval_question_message,
-        _claude_permission_notice_prefers_ask_user_question,
         _claude_permission_prompt_additional_context,
         _claude_permission_prompt_system_message,
         _claude_permission_prompt_terminal_notice,
         _claude_permission_request_additional_context,
+        _claude_permission_request_artifact_policy,
+        _claude_permission_request_reason_stub,
         _claude_permission_request_system_message,
         _claude_permission_request_terminal_notice,
-        _is_claude_permission_prompt_notification,
-        _is_claude_permission_request,
-        _resolve_claude_permission_request_policy_action,
     )
     from .commands_support_hook_payload import _emit_native_hook_notification_stderr, _emit_native_hook_response
     from .commands_support_hook_state import (
@@ -31,7 +33,6 @@ if TYPE_CHECKING:
         _peek_claude_permission_notice,
     )
     from .commands_support_prompts import _runtime_artifact_native_reason
-    from .commands_support_runtime_artifacts import _optional_string
 
 
 from ._commands_shared import *
@@ -47,69 +48,80 @@ def run_native_claude_permission_request(
     runtime_artifact: GuardArtifact | None,
     runtime_workspace: Path | None,
     store: GuardStore,
-) -> int | None:
+) -> int:
+    """Answer Claude's permission dialog with the verdict the resident picks.
+
+    This peeks and marks the notice, gathers the artifact policy only when the
+    resident asks for it and renders the response for the verdict it returns.
+    A verdict the resident cannot supply raises ``NativeHookDecisionError``.
+    """
+
     payload_map = dict(payload)
-    if not _is_claude_permission_request(args, payload_map):
-        return None
     notice = _peek_claude_permission_notice(store, payload_map)
     if notice is not None:
         _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
-    if notice is not None and _claude_permission_notice_prefers_ask_user_question(notice):
-        _emit_native_hook_response(
-            harness=args.harness,
-            policy_action="block",
-            event_name="PermissionRequest",
-            reason="HOL Guard is routing this approval through AskUserQuestion.",
-            system_message=_claude_permission_prompt_system_message(payload=payload_map, notice=notice),
-            additional_context=_claude_guard_approval_question_message(notice),
-            output_stream=output_stream,
-        )
-        return 0
-    native_reason: str | None = None
-    policy_action: str | None = None
-    if notice is not None:
-        policy_action = "require-reapproval"
-        native_reason = _optional_string(notice.get("reason"))
-    elif runtime_artifact is not None:
-        policy_action, reason_stub = _resolve_claude_permission_request_policy_action(
+    # The package evaluation behind the artifact policy, kept for the reason.
+    package_evaluation: dict[str, PackageRequestEvaluation | None] = {}
+
+    def artifact_policy() -> dict[str, object]:
+        if runtime_artifact is None:
+            raise NativeHookDecisionError(_INVALID)
+        facts, package_evaluation["artifact"] = _claude_permission_request_artifact_policy(
             config=config,
             store=store,
             args=args,
             runtime_artifact=runtime_artifact,
             runtime_workspace=runtime_workspace,
         )
-        if policy_action not in {"review", "require-reapproval", "sandbox-required", "block"}:
-            _emit_claude_permission_request_passthrough(output_stream=output_stream)
-            return 0
-        native_reason = _runtime_artifact_native_reason(runtime_artifact, reason_stub)
-    else:
+        return facts
+
+    answer = native_claude_permission_verdict(
+        notice=notice,
+        runtime_artifact_present=runtime_artifact is not None,
+        artifact_policy=artifact_policy,
+        guard_home=store.guard_home,
+    )
+    if answer.verdict == "passthrough":
         _emit_claude_permission_request_passthrough(output_stream=output_stream)
         return 0
-    if native_reason is None or not native_reason.strip():
-        native_reason = "HOL Guard is reviewing this Claude approval prompt."
+    native_reason = cast("str", answer.reason)
+    if answer.verdict == "guard_question":
+        _emit_native_hook_response(
+            harness=args.harness,
+            policy_action=cast("str", answer.policy_action),
+            event_name="PermissionRequest",
+            reason=native_reason,
+            system_message=_claude_permission_prompt_system_message(payload=payload_map, notice=notice),
+            additional_context=_claude_guard_approval_question_message(notice),
+            output_stream=output_stream,
+        )
+        return 0
+    if answer.reason_from_artifact:
+        # The resident names the artifact's reason only after it asked for,
+        # and was sent, that artifact's policy.
+        artifact = cast("GuardArtifact", runtime_artifact)
+        rendered = _runtime_artifact_native_reason(
+            artifact,
+            _claude_permission_request_reason_stub(
+                args=args,
+                runtime_artifact=artifact,
+                artifact_action=cast("str", answer.artifact_action),
+                package_evaluation=package_evaluation.get("artifact"),
+            ),
+            composer=native_hook_compose,
+            guard_home=store.guard_home,
+        )
+        if rendered.strip():
+            native_reason = rendered
     _emit_native_hook_notification_stderr(
         _claude_permission_request_terminal_notice(
             payload=payload_map,
             native_reason=native_reason,
         )
     )
-    if policy_action in {"block", "sandbox-required"}:
-        _emit_native_hook_response(
-            harness=args.harness,
-            policy_action=policy_action,
-            event_name="PermissionRequest",
-            reason=native_reason,
-            system_message=_claude_permission_request_system_message(
-                payload=payload_map,
-                native_reason=native_reason,
-            ),
-            additional_context=_claude_permission_request_additional_context(native_reason),
-            output_stream=output_stream,
-        )
-        return 0
     _emit_native_hook_response(
         harness=args.harness,
-        policy_action="require-reapproval",
+        policy_action=cast("str", answer.policy_action),
         event_name="PermissionRequest",
         reason=native_reason,
         system_message=_claude_permission_request_system_message(
@@ -128,10 +140,8 @@ def run_native_claude_permission_prompt_notification(
     output_stream: TextIO | None = None,
     payload: Mapping[str, object],
     store: GuardStore,
-) -> int | None:
+) -> int:
     payload_map = dict(payload)
-    if not _is_claude_permission_prompt_notification(args, payload_map):
-        return None
     notice = _load_claude_permission_notice(store, payload_map)
     _mark_claude_pending_permission_prompt_seen(store=store, payload=payload_map, notice=notice)
     store.add_event(

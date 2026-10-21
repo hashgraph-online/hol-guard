@@ -6,16 +6,36 @@ import json
 import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.approval_scope_support import (
     package_request_portable_workspace_scope,
     package_request_runtime_workspace_scope,
-    supported_request_scopes,
 )
 from codex_plugin_scanner.guard.models import GuardArtifact
 from codex_plugin_scanner.guard.package_execution_context import (
     build_package_execution_context,
     changed_package_execution_context_components,
 )
+
+pytestmark = pytest.mark.usefixtures("_native_package_context_authority")
+
+
+@pytest.fixture
+def _native_package_context_authority(native_context_digest: Path) -> None:
+    from codex_plugin_scanner.guard import native_context
+
+    home = native_context.context_digest_guard_home()
+    assert home is not None, "package context controls require a bound guard home"
+    result = native_context.native_context_digest(
+        "canonical_sha256",
+        {"material": None, "prefix": None},
+        guard_home=home,
+        timeout_seconds=5.0,
+    )
+    from codex_plugin_scanner.guard.native_resident_client import native_resident_client_failure_code
+
+    assert result is not None and result["status"] == "ok", native_resident_client_failure_code()
 
 
 def _write_repository(root: Path, *, common_git_dir: Path | None = None) -> Path:
@@ -438,25 +458,17 @@ def test_context_evidence_never_contains_configuration_values(tmp_path: Path) ->
     assert "registry.example.test" not in serialized
 
 
-def test_package_project_scope_requires_future_bound_v2_proof(tmp_path: Path) -> None:
+def test_native_build_failure_cannot_produce_reusable_context(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
+) -> None:
+    from codex_plugin_scanner.guard import native_package_context_build
+
     workspace = tmp_path / "workspace"
     _write_repository(workspace)
     _write_package_files(workspace)
     environment = _environment(tmp_path)
-    portable = _context(workspace, _artifact(), environment)
-    request = {
-        "artifact_id": "guard-cli:project:package-request:context-test",
-        "artifact_type": "package_request",
-        "policy_action": "review",
-        "workspace": str(workspace),
-        "scanner_evidence": [portable.to_evidence()],
-    }
-
-    assert supported_request_scopes(request) == ("artifact",)
-    nonportable_evidence = {
-        **portable.to_evidence(),
-        "portable": False,
-        "non_portable_reason": "dynamic_manager_configuration",
-    }
-    assert supported_request_scopes({**request, "scanner_evidence": [nonportable_evidence]}) == ("artifact",)
-    assert supported_request_scopes({**request, "scanner_evidence": []}) == ("artifact",)
+    monkeypatch.setattr(native_package_context_build, "_resident_request", lambda **_kwargs: None)
+    with pytest.raises(ValueError, match=r"native_package_context_build_|native_"):
+        _context(workspace, _artifact(), environment)

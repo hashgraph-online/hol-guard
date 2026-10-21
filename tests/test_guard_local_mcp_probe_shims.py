@@ -3,12 +3,16 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+import pytest
+
 from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_server
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import (
     is_package_shim_executable,
     probe_env,
     probe_search_path,
 )
+
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
 
 _FAKE_NPX_MCP = """#!/usr/bin/env python3
 import json

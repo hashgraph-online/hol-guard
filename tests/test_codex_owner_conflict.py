@@ -260,8 +260,9 @@ def test_deep_python_structure_preserves_the_owner_conflict_error():
 @pytest.mark.parametrize("binding_kind", ("same_home_bridge", "foreign_home_guard_cli"))
 @pytest.mark.parametrize("source_format", ("toml", "json"))
 @pytest.mark.parametrize("feature_enabled", (True, False))
+@pytest.mark.parametrize("operation", ("install", "prepare_install"))
 def test_install_rejects_unowned_guard_bridge_without_committing(
-    tmp_path: Path, binding_kind: str, source_format: str, feature_enabled: bool
+    tmp_path: Path, binding_kind: str, source_format: str, feature_enabled: bool, operation: str
 ) -> None:
     guard_home = tmp_path / "guard-home"
     home_dir = tmp_path / "home"
@@ -289,10 +290,10 @@ def test_install_rejects_unowned_guard_bridge_without_committing(
     before_json = hooks_path.read_bytes() if hooks_path.exists() else None
     before = config_path.read_bytes()
     context = HarnessContext(home_dir=home_dir, workspace_dir=None, guard_home=guard_home)
-    result: dict[str, object] | None = None
+    result: object = None
     failure: Exception | None = None
     try:
-        result = CodexHarnessAdapter().install(context)
+        result = getattr(CodexHarnessAdapter(), operation)(context)
     except Exception as error:
         failure = error
 
@@ -316,7 +317,7 @@ def test_install_rejects_unowned_guard_bridge_without_committing(
     manifest_path = codex_adapter.hook_manifest_path(guard_home, config_path)
     assert failure is not None, (
         "Install accepted an unowned Guard bridge; "
-        f"event group counts are {group_counts}, active={result.get('active') if result else None}, "
+        f"event group counts are {group_counts}, active={result.get('active') if isinstance(result, dict) else None}, "
         f"integrity={result.get('managed_hook_integrity') if result else None}, manifest={manifest_path.exists()}, "
         f"old_present={old_command in commands}, third_party_present={'lean-ctx hook observe' in commands}"
     )

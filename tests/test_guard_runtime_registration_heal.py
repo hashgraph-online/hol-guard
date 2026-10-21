@@ -13,11 +13,11 @@ import pytest
 from codex_plugin_scanner.guard import store_connection_schema
 from codex_plugin_scanner.guard.approvals import build_runtime_snapshot
 from codex_plugin_scanner.guard.daemon import protection_repair_retry
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.daemon.protection_repair_retry import containment_repair_outcome
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 from codex_plugin_scanner.guard.runtime.protection_health import ProtectionCheckStatus
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 from tests.runtime_registration_support import (
     CONTAINMENT_CHECK_IDS,
     T0,
@@ -175,11 +175,6 @@ def test_shutdown_winning_the_publish_race_never_registers(
     monkeypatch.setattr(daemon, "_publish_listen_state", lambda: published.append("published"))
     monkeypatch.setattr(daemon, "_reconcile_runtime_artifacts_best_effort", lambda: None)
     monkeypatch.setattr(daemon, "_maintain_command_activity_best_effort", lambda: None)
-    monkeypatch.setattr(
-        daemon._server.hook_process_runner,  # pyright: ignore[reportPrivateUsage]
-        "require_initial_capacity",
-        lambda: None,
-    )
 
     def win_shutdown_race() -> None:
         # Shutdown completed between the outer generation checks and the
@@ -204,8 +199,8 @@ def test_protection_repair_all_restores_runtime_registration(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stub_supported_repair(monkeypatch)
-    monkeypatch.setattr(
-        daemon_server_module,
+    patch_daemon_global(
+        monkeypatch,
         "_repair_command_activity_persistence_health",
         lambda _store: None,
     )
@@ -226,31 +221,24 @@ def test_protection_repair_all_restores_runtime_registration(
         daemon.stop()
 
 
-def test_protection_repair_all_reports_unavailable_native_probe_truthfully(
+def test_protection_repair_all_clears_degraded_evidence_without_a_native_probe(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     stub_supported_repair(monkeypatch, stub_evidence_health=False)
-    monkeypatch.setattr(daemon_server_module, "current_extension_control_snapshot", lambda: None)
-    monkeypatch.setattr(
-        daemon_server_module,
-        "evaluate_command_native",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("native evaluation unavailable")),
-    )
     store, daemon = start_daemon(tmp_path, monkeypatch)
+    store.record_command_activity_persistence_failure(
+        error_code="pre_record_failed",
+        occurred_at=datetime.now(timezone.utc),
+    )
     try:
-        before = store.get_command_activity_persistence_health().persistence_error_count
-        status, payload = post_repair(daemon, "all")
+        _status, payload = post_repair(daemon, "all")
     finally:
         daemon.stop()
 
-    assert status == 409
-    assert payload["error"] == "protection_repair_incomplete"
-    assert "decision_stream" in cast(list[str], payload["pending_check_ids"])
-    check_reasons = cast(dict[str, str], payload["check_reasons"])
-    assert check_reasons["decision_stream"] == "native_evaluation_unavailable"
-    after = store.get_command_activity_persistence_health().persistence_error_count
-    assert after == before
+    assert "decision_stream" in cast(list[str], payload["check_ids"])
+    assert "decision_stream" not in cast(dict[str, str], payload["check_reasons"])
+    assert store.get_command_activity_persistence_health().active_error_count == 0
 
 
 def test_containment_repair_outcome_reports_signal_reasons(monkeypatch: pytest.MonkeyPatch) -> None:

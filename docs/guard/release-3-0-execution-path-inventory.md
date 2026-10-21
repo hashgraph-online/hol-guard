@@ -2,6 +2,8 @@
 
 Status: wave-zero baseline inventory. Audience: execution-assurance implementers and gate reviewers. Source evidence snapshot: `origin/release/3.1` at `10348fd40fa53ef60d9363bb6c37591b8bb60a61`; release identity migrated to 3.0 and revalidated in PR #1901.
 
+Superseded: contained execution now runs in the Rust runtime (`rust/crates/guard-command/src/contained_execution.rs` and `contained_runner/`), reached through the resident's `contained_execute` operation. `runtime/containment_executor.py` and `runtime/containment_backend_status.py` have been deleted; the Python paths below describe the snapshot named above, not current code.
+
 This document is the versioned execution-path matrix for HOL Guard: every distinct path by which Guard intercepts, evaluates, or executes an action, with its entry point, execution owner, failure mode, and actual guarantee.
 
 ## Execution paths
@@ -14,7 +16,7 @@ This document is the versioned execution-path matrix for HOL Guard: every distin
 | 4 | CLI wrappers | `hol-guard run <harness>`, `hol-guard protect -- <cmd>` (cli/commands_*.py) | Guard CLI process | Wrapper failure → command not launched (no silent pass-through) | Launch-gate: harness only starts when effective action is not `block` (docs/guard/architecture.md) |
 | 5 | Package shims | `guard/shims/` — npm/npx/pnpm/yarn/bun, pip/pip3/pipenv/pipx/poetry/uv/uvx, cargo, go, mvn/gradle, composer, bundle | Shim wrapper process (Guard-owned) | Shim absent → package manager runs unmanaged | Support labels in `docs/guard/testing-matrix.md`: Protected (npm, PyPI), Beta (Cargo/Go/Maven/Composer/RubyGems), Monitor-only (Docker/Actions/system/NuGet) |
 | 6 | Containment executor | `runtime/containment_executor.py`, `containment_contract.py`, `containment_health.py`; contained runners: `contained_node_execution.py`, `contained_package_script_execution.py`, `contained_typescript_execution.py`, `contained_workspace_write_execution.py`, `cli/commands_contained_write.py` | Contained subprocess under OS sandbox (Seatbelt on macOS, Bubblewrap on Linux) | Sandbox unavailable → guarantee lowered, action upgraded per lattice (sandbox-required never collapses to review: `action_lattice.py:8-9`) | Filesystem/network/process limits enforced by OS sandbox primitives where available |
-| 7 | Restricted analysis sandboxes | `runtime/restricted_pytest*.py`, `runtime/restricted_archive_*.py`, `runtime/offline_archive_sandbox.py`, `runtime/cisco_scan_containment.py` | Guard-owned restricted runner | Restricted runner failure → scan skipped with evidence, never executed outside sandbox | Decode/scan without executing decoded payloads (architecture.md Safe Decode) |
+| 7 | Restricted analysis sandboxes | `runtime/restricted_pytest*.py`, `runtime/restricted_archive_*.py`, `runtime/offline_archive_sandbox.py` | Guard-owned restricted runner | Restricted runner failure → scan skipped with evidence, never executed outside sandbox | Decode/scan without executing decoded payloads (architecture.md Safe Decode) |
 | 8 | Approval center | `runtime/surface_server.py` `approval/*` methods; persistence `store_approvals.py` (`_QUEUE_IDENTITY_VERSION = "v1"`) | Daemon + approval-center UI | Approval daemon unreachable → actions needing approval hold at `review`/`require-reapproval` | Durable approval queue; 30-second transaction-local grants (README) |
 | 9 | Cloud sync path | `synced_policy.py` (`cached_policy_bundle_validation`), cloud sync-intel | Local policy cache refreshed from Cloud | Cloud unreachable → last authenticated cached bundle enforced; version downgrades rejected (`bundle_version_downgrade`) | Policy continuity without Cloud availability; v1/v2 bundles dispatched on `contractVersion` |
 | 10 | Local dashboard | `dashboard/` served locally | Local daemon + browser | Dashboard down → no enforcement impact (read/approve UI only) | Local-only status/approval surface; not an enforcement boundary |
@@ -29,4 +31,4 @@ This document is the versioned execution-path matrix for HOL Guard: every distin
 
 - Harness ownership grades are recorded separately in `release-3-0-harness-grades.md`.
 - `sandbox-required` consumer semantics are recorded in `release-3-0-sandbox-required-consumers.md`.
-- This inventory is descriptive of current behavior; it does not authorize new execution paths.
+- This inventory is descriptive of the snapshot named above; it does not authorize new execution paths.

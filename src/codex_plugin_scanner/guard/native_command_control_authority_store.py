@@ -14,6 +14,7 @@ from .native_command_control_authority import (
     AUTHORITY_MAX_BYTES,
     AUTHORITY_SCHEMA,
     MAX_REVISION,
+    PACK_AUTHORITY_SCHEMA,
     RECOVERY_SCHEMA,
     ZERO_DIGEST,
     authority_binding,
@@ -50,8 +51,8 @@ if TYPE_CHECKING:
     from .store import GuardStore
 
 
-def _key(store: GuardStore) -> bytes:
-    material = store._policy_integrity_secret_material(create=True)
+def _key(store: GuardStore, *, create: bool = True) -> bytes:
+    material = store._policy_integrity_secret_material(create=create)
     if material is None or not isinstance(material[0], bytes):
         raise NativePolicySnapshotError("native_command_control_authority_key_unavailable")
     return derive_native_policy_verifier_key(material[0])
@@ -63,6 +64,9 @@ def read_command_control_authority(store: GuardStore, verifier_key: bytes) -> di
 
 
 def _write(store: GuardStore, record: Mapping[str, object], verifier_key: bytes) -> dict[str, object]:
+    from .catalog_delivery.active_security import marker
+
+    record = marker(store, record)
     content = encode_authority(record, verifier_key)
     write_private_state(store.guard_home, AUTHORITY_FILE_NAME, content, AUTHORITY_MAX_BYTES)
     observed = read_private_state(store.guard_home, AUTHORITY_FILE_NAME, AUTHORITY_MAX_BYTES)
@@ -106,7 +110,7 @@ def _verify_legacy_generation_floor(guard_home: Path, verifier_key: bytes) -> No
 def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) -> Mapping[str, object] | None:
     """Verify every retained floor without constructing a credential-bearing store."""
 
-    from .native_command_control_binding import native_command_control_floor_mac
+    from .native_business_policy_floor import native_policy_authority_fields, native_policy_authority_floor_mac
 
     _verify_legacy_generation_floor(guard_home, verifier_key)
     content = read_private_state(guard_home, _RUST_SNAPSHOT_STATE_NAME, POLICY_SNAPSHOT_AUTHORITY_MAX_BYTES)
@@ -115,9 +119,7 @@ def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) ->
     record = _strict_json_loads_v3(content)
     if not isinstance(record, Mapping) or record.get("schema") != POLICY_SNAPSHOT_AUTHORITY_SCHEMA:
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
-    fields = {"schema", "generation_floor", "policy_digest", "snapshot", "floor_mac"}
-    if "command_control_floor" in record:
-        fields.add("command_control_floor")
+    fields = native_policy_authority_fields(record, "native_command_control_recovery_floor_invalid")
     generation = record.get("generation_floor")
     digest, mac = record.get("policy_digest"), record.get("floor_mac")
     floor = record.get("command_control_floor")
@@ -128,11 +130,13 @@ def read_native_control_floor_for_home(guard_home: Path, verifier_key: bytes) ->
         or not _valid_digest_v3(digest)
         or not _valid_digest_v3(mac)
         or _canonical_json_bytes_v3(record) != content
-        or ("command_control_floor" in record and floor is None)
     ):
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
     if not hmac.compare_digest(
-        cast(str, mac), native_command_control_floor_mac(generation, cast(str, digest), floor, verifier_key)
+        cast(str, mac),
+        native_policy_authority_floor_mac(
+            generation, cast(str, digest), floor, record.get("business_policy_floor"), verifier_key
+        ),
     ):
         raise NativePolicySnapshotError("native_command_control_recovery_floor_invalid")
     return None if floor is None else validate_control_floor(floor)
@@ -150,11 +154,15 @@ def _next(value: object) -> int:
 
 
 def _initial(store: GuardStore, verifier_key: bytes) -> dict[str, object]:
+    from .catalog_delivery.projection import program_authority
+
+    program = program_authority(store, verifier_key)
     floor = read_native_control_floor(store, verifier_key)
     prior = _floor_authority(floor)
     # Recreating a missing marker never lowers an authenticated native floor.
     return {
-        "schema": AUTHORITY_SCHEMA,
+        "schema": AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA,
+        **({"pack_program_digest": program} if program is not None else {}),
         "epoch": prior.get("epoch", 1),
         "mutation_revision": _next(prior.get("mutation_revision", 0)),
         "authority_key_id": prior.get("authority_key_id", authority_key_id(store._authority_key(required=False))),
@@ -230,6 +238,9 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
 
     require_command_control_mutation_lease(store.guard_home)
     verifier_key = _key(store)
+    from .catalog_delivery.projection import program_authority
+
+    program = program_authority(store, verifier_key, binding)
     current = read_command_control_authority(store, verifier_key)
     if current is None:
         current = _initial(store, verifier_key)
@@ -241,13 +252,19 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
     # recovery evidence never authorizes another key change in that epoch.
     if key_id != current["authority_key_id"] and current["authority_key_id"] != ZERO_DIGEST:
         raise NativePolicySnapshotError("native_command_control_authority_key_changed")
+    if program is None and current["schema"] in (PACK_AUTHORITY_SCHEMA, "guard.native-command-control-authority.v3"):
+        raise NativePolicySnapshotError("native_command_pack_activation_missing")
     candidate = {
         **current,
+        "schema": AUTHORITY_SCHEMA if program is None else PACK_AUTHORITY_SCHEMA,
+        **({"pack_program_digest": program} if program is not None else {}),
         "authority_key_id": key_id,
         "phase": "committed",
         "effective_digest": binding["effective_digest"],
     }
-    if current["phase"] == "committed" and current["effective_digest"] != candidate["effective_digest"]:
+    if current["phase"] == "committed" and (
+        current["effective_digest"] != candidate["effective_digest"] or current.get("pack_program_digest") != program
+    ):
         # A health/catalog change discovered by verification is still a new
         # fence; never reuse a committed fence for different effective bytes.
         candidate["mutation_revision"] = _next(current["mutation_revision"])
@@ -260,12 +277,26 @@ def commit_native_command_control_projection(store: GuardStore, binding: Mapping
 def read_committed_projection_authority(store: GuardStore, binding: Mapping[str, object]) -> dict[str, object]:
     """Read an unchanged committed marker without excluding native readers."""
 
-    current = read_command_control_authority(store, _key(store))
+    from .catalog_delivery.projection import program_authority
+
+    verifier_key = _key(store)
+    program = program_authority(store, verifier_key, binding)
+    current = read_command_control_authority(store, verifier_key)
     if (  # NOSONAR(S2583) A present authenticated marker can satisfy all retained checks.
         current is None  # NOSONAR(S2583) Missing markers require mutation; verified present markers return a dict.
         or current["phase"] != "committed"
         or current["effective_digest"] != binding["effective_digest"]
         or current["authority_key_id"] != authority_key_id(store._authority_key(required=False))
+        or current.get("pack_program_digest") != program
+        or current["schema"]
+        != (
+            "guard.native-command-control-authority.v3"
+            if binding.get("active_security_digest") is not None
+            else AUTHORITY_SCHEMA
+            if program is None
+            else PACK_AUTHORITY_SCHEMA
+        )
+        or current.get("active_security_digest") != binding.get("active_security_digest")
     ):
         raise NativeCommandControlMutationRequiredError()
     return authority_binding(current)

@@ -125,7 +125,7 @@ def _param_value_id(value: ast.expr) -> str | None:
     return None
 
 
-def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | None | object:
+def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str] | object | None:
     """Collect the valid ``[param]`` suffixes for a test function.
 
     Returns ``None`` when the node carries no parametrize mark, a set of
@@ -146,9 +146,8 @@ def _parametrize_suffixes(node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[s
         argnames = [name.strip() for name in argnames_node.value.split(",")]
         ids_node = next((keyword.value for keyword in call.keywords if keyword.arg == "ids"), None)
         if ids_node is not None:
-            if (
-                isinstance(ids_node, (ast.List, ast.Tuple))
-                and all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in ids_node.elts)
+            if isinstance(ids_node, (ast.List, ast.Tuple)) and all(
+                isinstance(item, ast.Constant) and isinstance(item.value, str) for item in ids_node.elts
             ):
                 layers.append([item.value for item in ids_node.elts])
             else:
@@ -253,7 +252,8 @@ def validate_retirement_ledger(root: Path, contract: dict[str, object]) -> dict[
         base, separator, params = node.partition("[")
         valid_node = bool(base) and all(part.isidentifier() for part in base.split("::"))
         if separator:
-            valid_node = valid_node and len(params) > 1 and node.endswith("]")
+            # pytest uses [] as the genuine ID for a single empty-string case.
+            valid_node = valid_node and node.endswith("]")
         if (
             not valid_node
             or path.suffix not in {".py", ".rs"}

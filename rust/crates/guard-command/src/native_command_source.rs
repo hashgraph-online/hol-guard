@@ -2,6 +2,13 @@
 
 use super::*;
 
+#[path = "native_command_source_admission.rs"]
+mod admission;
+#[path = "native_command_source_authoring.rs"]
+mod authoring;
+pub(crate) use authoring::Exchange as MetadataExchange;
+#[path = "native_command_source_baseline.rs"]
+mod baseline;
 #[path = "native_command_source_capabilities.rs"]
 mod capabilities;
 #[path = "native_command_source_catalog.rs"]
@@ -10,6 +17,8 @@ mod catalog;
 mod contract;
 #[path = "native_command_source_evaluation_batch.rs"]
 mod evaluation_batch;
+#[path = "native_command_source_fixture_catalog.rs"]
+mod fixture_catalog;
 #[path = "native_command_source_fixtures.rs"]
 mod fixtures;
 #[path = "native_command_source_hints.rs"]
@@ -20,10 +29,18 @@ mod json;
 mod matcher;
 #[path = "native_command_source_mcp.rs"]
 mod mcp;
+#[path = "native_command_source_metadata_index.rs"]
+mod metadata_index;
+#[path = "native_command_source_packs.rs"]
+mod packs;
 #[path = "native_command_source_parity.rs"]
 mod parity;
+#[path = "native_command_source_stream.rs"]
+mod stream;
 #[path = "native_command_source_validation.rs"]
 mod validation;
+pub use admission::authoring_admission;
+pub use authoring::{authoring_context, authoring_index};
 pub use catalog::{
     compile_addition, compile_addition_with_mcp, compile_catalog, compile_catalog_with_mcp,
     CompiledSourceCatalog,
@@ -31,7 +48,19 @@ pub use catalog::{
 pub use contract::{descriptor_schema, source_schema};
 pub use evaluation_batch::evaluate_batch;
 pub use fixtures::run_fixtures;
+pub use packs::objects::{
+    lookup as lookup_pack, read_blob as read_pack_blob, ObjectRef as PackObjectRef,
+};
+pub use packs::{
+    compile_pack_stream, compile_pack_stream_reusing, CompilationStats, PackCompiler,
+    PackReleaseReuse,
+};
 pub use parity::compare_programs;
+pub use stream::{compile_source_stream, validate_and_compact_source, SourceStreamError};
+
+pub const MAX_SOURCE_INPUT_BYTES: usize = json::MAX_SOURCE_BYTES;
+
+pub(super) use mcp::McpInventory;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -42,6 +71,7 @@ struct BuildRequest {
     mcp_sources: Vec<Value>,
     trust: Value,
     base: Option<BaseProgram>,
+    validation_base: Option<baseline::ValidationBase>,
 }
 
 #[derive(Deserialize)]
@@ -53,6 +83,17 @@ enum BaseProgram {
 /// Decode an owned build envelope. Sources cannot contain file/remote includes;
 /// callers supply the separately reviewed trust input outside each source.
 pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, false)
+}
+
+fn compile_fixture_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'static str> {
+    compile_owned_request(bytes, true)
+}
+
+fn compile_owned_request(
+    bytes: &[u8],
+    fixture: bool,
+) -> Result<CompiledSourceCatalog, &'static str> {
     let request: BuildRequest = serde_json::from_value(json::decode(bytes)?)
         .map_err(|_| "command_source_build_contract_invalid")?;
     if request.schema != "guard.command-extension-build.v1" {
@@ -73,8 +114,24 @@ pub fn compile_build_request(bytes: &[u8]) -> Result<CompiledSourceCatalog, &'st
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| "command_source_encoding_failed")?;
     let mcp_borrowed = mcp_sources.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let baseline = if matches!(request.base, Some(BaseProgram::Packaged)) {
+        Some(
+            request
+                .validation_base
+                .as_ref()
+                .ok_or("command_source_global_validation_required")?
+                .prepare(&borrowed, &mcp_borrowed, fixture)?,
+        )
+    } else {
+        None
+    };
     match request.base {
-        Some(BaseProgram::Packaged) => compile_addition_with_mcp(&borrowed, &mcp_borrowed, &trust),
+        Some(BaseProgram::Packaged) if fixture => {
+            fixture_catalog::compile_fixture_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
+        }
+        Some(BaseProgram::Packaged) => {
+            catalog::addition::compile_with_base(&borrowed, &mcp_borrowed, &trust, baseline)
+        }
         None => compile_catalog_with_mcp(&borrowed, &mcp_borrowed, &trust),
     }
 }
@@ -143,7 +200,7 @@ mod tests {
 
     #[test]
     fn every_baseline_node_tree_lowers_to_its_original_content_identity() {
-        let program: Value = serde_json::from_slice(EMBEDDED_PROGRAM).unwrap();
+        let program: Value = serde_json::from_slice(packaged_command_program_bytes()).unwrap();
         fn inline(id: &str, nodes: &Value) -> Value {
             let node = &nodes[id];
             let mut result = serde_json::json!({"op":node["op"], "config":node["config"]});

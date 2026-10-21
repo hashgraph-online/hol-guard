@@ -2,22 +2,39 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 PYTEST_RESTRICTED_PROFILE_VERSION = "pytest-restricted-v1"
+PYTEST_READ_ONLY_PROFILE_VERSION = "pytest-readonly-v2"
+NODE_TEST_READ_ONLY_PROFILE_VERSION = "node-test-readonly-v1"
+VITEST_READ_ONLY_PROFILE_VERSION = "vitest-readonly-v1"
+GIT_READ_ONLY_PROFILE_VERSION = "git-readonly-v1"
+NODE_TOOL_READ_ONLY_PROFILE_VERSION = "node-tool-readonly-v1"
+NODE_BUILD_OUTPUT_PROFILE_VERSION = "node-build-output-v1"
+PYTHON_EVAL_READ_ONLY_PROFILE_VERSION = "python-eval-readonly-v1"
+NODE_EVAL_READ_ONLY_PROFILE_VERSION = "node-eval-readonly-v1"
+READ_ONLY_TEST_PROFILES = frozenset(
+    {
+        PYTEST_READ_ONLY_PROFILE_VERSION,
+        NODE_TEST_READ_ONLY_PROFILE_VERSION,
+        VITEST_READ_ONLY_PROFILE_VERSION,
+        GIT_READ_ONLY_PROFILE_VERSION,
+        NODE_TOOL_READ_ONLY_PROFILE_VERSION,
+        NODE_BUILD_OUTPUT_PROFILE_VERSION,
+        PYTHON_EVAL_READ_ONLY_PROFILE_VERSION,
+        NODE_EVAL_READ_ONLY_PROFILE_VERSION,
+    }
+)
 PYTEST_RESTRICTED_REASON_CODE = "pytest_restricted_profile_required"
 PYTEST_SANDBOX_UNAVAILABLE_REASON_CODE = "pytest_restricted_sandbox_unavailable"
 PYTEST_INVALID_COMMAND_REASON_CODE = "pytest_restricted_invalid_command"
 PYTEST_INVALID_WORKSPACE_REASON_CODE = "pytest_restricted_invalid_workspace"
 PYTEST_EXTERNAL_PYTHONPATH_REASON_CODE = "pytest_restricted_external_pythonpath"
 
-RestrictedPytestBackend = Literal["macos-seatbelt", "linux-bubblewrap"]
+RestrictedPytestBackend = Literal["macos-seatbelt", "linux-bubblewrap", "windows-appcontainer"]
 
-_MAX_ARG_COUNT = 4_096
-_MAX_ARG_BYTES = 1_048_576
 _DEFAULT_TIMEOUT_SECONDS = 30 * 60
 _DEFAULT_CPU_SECONDS = 20 * 60
 _DEFAULT_MEMORY_BYTES = 4 * 1024 * 1024 * 1024
@@ -25,132 +42,6 @@ _DEFAULT_FILE_BYTES = 256 * 1024 * 1024
 _DEFAULT_OPEN_FILES = 256
 _DEFAULT_PROCESSES = 64
 
-_PYTEST_EXECUTABLE_NAMES = frozenset({"pytest", "py.test", "pytest.exe", "py.test.exe"})
-_PYTHON_EXECUTABLE_PATTERN = re.compile(r"^(?:python|pythonw)(?:\d+(?:\.\d+)*)?(?:\.exe)?$", re.IGNORECASE)
-_PROJECT_WORKSPACE_MARKERS = (
-    ".git",
-    "pyproject.toml",
-    "pytest.ini",
-    "setup.cfg",
-    "setup.py",
-    "tox.ini",
-)
-_SENSITIVE_HOME_ROOT_NAMES = frozenset(
-    {
-        ".aws",
-        ".azure",
-        ".config",
-        ".docker",
-        ".gnupg",
-        ".kube",
-        ".ssh",
-        "Library",
-    }
-)
-_SECRET_ENV_MARKERS = (
-    r"API_?KEY",
-    r"AUTH(?:ORIZATION)?",
-    "BEARER",
-    "COOKIE",
-    r"CREDENTIALS?",
-    "DSN",
-    r"KEY(?:_?ID)?",
-    "PASSWORD",
-    r"PRIVATE_?KEY",
-    "SECRET",
-    "SESSION",
-    "TOKEN",
-)
-_SECRET_ENV_PATTERN = re.compile(
-    rf"(?:^|_)(?:{'|'.join(_SECRET_ENV_MARKERS)})(?:_|$)",
-    re.IGNORECASE,
-)
-_DENIED_ENV_KEYS = frozenset(
-    {
-        "AWS_CONFIG_FILE",
-        "AWS_SHARED_CREDENTIALS_FILE",
-        "BASH_ENV",
-        "DATABASE_URL",
-        "DOCKER_CONFIG",
-        "DOCKER_HOST",
-        "DYLD_INSERT_LIBRARIES",
-        "DYLD_LIBRARY_PATH",
-        "ENV",
-        "GIT_ASKPASS",
-        "GNUPGHOME",
-        "KRB5CCNAME",
-        "KUBECONFIG",
-        "LD_LIBRARY_PATH",
-        "LD_PRELOAD",
-        "MONGODB_URI",
-        "MYSQL_PWD",
-        "NODE_AUTH_TOKEN",
-        "NPM_CONFIG_USERCONFIG",
-        "PGPASSWORD",
-        "PIP_CONFIG_FILE",
-        "PYTHONBREAKPOINT",
-        "PYTHONHOME",
-        "PYTHONINSPECT",
-        "PYTHONSTARTUP",
-        "PYTHONUSERBASE",
-        "PYTHONWARNINGS",
-        "REDIS_URL",
-        "SSH_ASKPASS",
-        "SSH_AUTH_SOCK",
-        "ZDOTDIR",
-    }
-)
-_PROXY_ENV_KEYS = frozenset(
-    {
-        "ALL_PROXY",
-        "HTTPS_PROXY",
-        "HTTP_PROXY",
-        "NO_PROXY",
-        "all_proxy",
-        "https_proxy",
-        "http_proxy",
-        "no_proxy",
-    }
-)
-_SAFE_ENV_KEYS = frozenset(
-    {
-        "CI",
-        "CLICOLOR",
-        "CLICOLOR_FORCE",
-        "COLORTERM",
-        "COLUMNS",
-        "FORCE_COLOR",
-        "GITHUB_ACTIONS",
-        "GITLAB_CI",
-        "LANG",
-        "LANGUAGE",
-        "LINES",
-        "LOGNAME",
-        "NO_COLOR",
-        "PYTHONHASHSEED",
-        "PYTHONIOENCODING",
-        "PYTHONUNBUFFERED",
-        "PYTHONUTF8",
-        "PYTHONDONTWRITEBYTECODE",
-        "PYTEST_DISABLE_PLUGIN_AUTOLOAD",
-        "SOURCE_DATE_EPOCH",
-        "TERM",
-        "TERM_PROGRAM",
-        "TERM_PROGRAM_VERSION",
-        "TF_BUILD",
-        "TZ",
-        "USER",
-        "VIRTUAL_ENV_PROMPT",
-    }
-)
-_TRUSTED_EXECUTABLE_ROOTS = (
-    Path("/bin"),
-    Path("/opt/homebrew"),
-    Path("/opt/hostedtoolcache/Python"),
-    Path("/System"),
-    Path("/usr/bin"),
-    Path("/usr/local"),
-)
 _SEALED_SYSTEM_EXECUTABLE_ROOTS = (
     Path("/bin"),
     Path("/System"),
@@ -219,6 +110,8 @@ class RestrictedPytestPlan:
     executable: Path
     allowed_executables: tuple[Path, ...]
     denied_capabilities: tuple[str, ...]
+    read_only_roots: tuple[Path, ...] = ()
+    output_roots: tuple[Path, ...] = ()
 
     def to_evidence(self) -> dict[str, object]:
         return {
@@ -232,5 +125,9 @@ class RestrictedPytestPlan:
             "denied_capabilities": list(self.denied_capabilities),
             "network": "denied",
             "host_home": "unmounted-or-denied",
-            "writes": ["workspace", "private-temporary-directory"],
+            "writes": (
+                ["private-temporary-directory", *(str(path) for path in self.output_roots)]
+                if self.profile_version in READ_ONLY_TEST_PROFILES
+                else ["workspace", "private-temporary-directory"]
+            ),
         }

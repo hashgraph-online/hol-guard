@@ -81,7 +81,7 @@ def test_unsafe_managed_root_never_starts_node(tmp_path, monkeypatch) -> None:
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="Node is not installed")
-@pytest.mark.parametrize("source,ok", [("module.exports = {};", True), ("function broken( {", False)])
+@pytest.mark.parametrize("source,ok", [("export default {};", True), ("function broken( {", False)])
 def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypatch, source, ok) -> None:
     context = _context(tmp_path, monkeypatch)
     path = cline_plugin.cline_plugin_root(context) / "index.js"
@@ -94,7 +94,9 @@ def test_real_node_checks_managed_source_without_executing_it(tmp_path, monkeypa
     original_run = subprocess.run
 
     def traced_run(*args, **kwargs):
-        kwargs["timeout"] *= under_coverage_scale(3.0)
+        # Keep the production probe's 5s contract pinned by the mock test above,
+        # but give a real Node process room to start on a saturated CI host.
+        kwargs["timeout"] = max(kwargs["timeout"] * under_coverage_scale(3.0), 15)
         return original_run(*args, **kwargs)
 
     monkeypatch.setattr(cline_plugin_probe.subprocess, "run", traced_run)

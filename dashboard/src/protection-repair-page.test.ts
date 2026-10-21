@@ -25,8 +25,9 @@ assert(setup.actionLabel === "Set up approval", "the setup button names the next
 
 const repaired = protectionRepairView("protected", true);
 assert(repaired.action === "home", "a protected policy does not offer another repair");
-assert(repaired.title === "Protection is repaired", "success says the repair finished");
-assert(repaired.body === "Retry the blocked action.", "success tells the user to retry the blocked action");
+assert(repaired.title === "Trusted settings are protected", "success reports verified settings health");
+assert(repaired.body === "Trusted settings pass their integrity check. Retry the blocked action. If it still fails, open Home to check Guard.", "success describes the repaired settings and next steps");
+assert(repaired.body.includes("open Home"), "continued failures have a runtime recovery path");
 
 const other = protectionRepairView("degraded-unacknowledged", true);
 assert(other.action === "extensions", "other protection states leave this page");

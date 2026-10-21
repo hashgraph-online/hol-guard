@@ -2,52 +2,71 @@ from __future__ import annotations
 
 import pytest
 
+from codex_plugin_scanner.guard.native_composio_role import NativeComposioRole
+from codex_plugin_scanner.guard.runtime import composio_contract
 from codex_plugin_scanner.guard.runtime.composio_contract import (
-    composio_batch_actions,
+    composio_names_a_wrapper,
     composio_requires_action_review,
     composio_tool_role,
 )
 
 
-def test_hosted_batch_preserves_actions_accounts_and_arguments() -> None:
-    parsed = composio_batch_actions({"tools": [
-        {"tool_slug": "SLACK_SEARCH_MESSAGES", "account": "work", "arguments": {"query": "test"}},
-        {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {"channel": "test"}},
-    ]})
-    assert parsed is not None
-    assert [action.tool_slug for action in parsed] == ["SLACK_SEARCH_MESSAGES", "SLACK_SEND_MESSAGE"]
-    assert parsed[0].account == "work"
-    assert parsed[1].account is None  # Missing identity is not guessed from the toolkit.
-    assert parsed[0].arguments == {"query": "test"}
+def _answer(monkeypatch: pytest.MonkeyPatch, native: NativeComposioRole | None) -> list[str]:
+    asked: list[str] = []
+
+    def fake(tool_name: str) -> NativeComposioRole | None:
+        asked.append(tool_name)
+        return native
+
+    monkeypatch.setattr(composio_contract, "composio_role_native", fake)
+    return asked
 
 
-@pytest.mark.parametrize("member", [
-    None, {}, {"tool_slug": "SLACK_SEND_MESSAGE"},
-    {"tool_slug": " SLACK_SEND_MESSAGE", "arguments": {}},
-    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": [], "account": "work"},
-    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}, "account": ""},
-    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}, "account": 1},
-    {"tool_slug": "SLACK_SEND_MESSAGE", "arguments": {}, "unrecognized_scope": "admin"},
-])
-def test_bad_member_invalidates_entire_batch(member: object) -> None:
-    assert composio_batch_actions({"tools": [
-        {"tool_slug": "SLACK_SEARCH_MESSAGES", "arguments": {"query": "test"}}, member,
-    ]}) is None
+def test_the_resident_names_the_role_python_reports(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked = _answer(monkeypatch, NativeComposioRole(role="discovery", requires_action_review=False))
+    tool = "mcp__codex_apps__composio__composio_search_tools"
+    assert composio_tool_role(tool) == "discovery"
+    assert not composio_requires_action_review(tool)
+    assert asked == [tool, tool]
 
 
-@pytest.mark.parametrize("tools", [[], None, {}, [
-    {"tool_slug": "SLACK_SEARCH_MESSAGES", "arguments": {}}
-] * 51])
-def test_batch_limits_are_explicit(tools: object) -> None:
-    assert composio_batch_actions({"tools": tools}) is None
+def test_review_follows_the_resident_even_against_the_role_it_named(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Python reports what the runtime decided; it never re-derives review from
+    # the role, so a change on the native side needs no second edit here.
+    _answer(monkeypatch, NativeComposioRole(role="discovery", requires_action_review=True))
+    assert composio_requires_action_review("mcp__a__composio_search_tools")
+    _answer(monkeypatch, NativeComposioRole(role="batch", requires_action_review=False))
+    assert not composio_requires_action_review("mcp__a__composio_multi_execute_tool")
 
 
-def test_discovery_does_not_authorize_execution() -> None:
-    assert composio_tool_role("mcp__codex_apps__composio__composio_search_tools") == "discovery"
-    assert not composio_requires_action_review("COMPOSIO_SEARCH_TOOLS")
+def test_an_unreachable_resident_names_no_role_and_still_draws_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _answer(monkeypatch, None)
+    # No role refuses every discovery-only path, which all gate on an exact
+    # "discovery"; the provider review is drawn rather than skipped.
+    assert composio_tool_role("mcp__codex_apps__composio__composio_search_tools") is None
     assert composio_requires_action_review("mcp__codex_apps__composio__composio_multi_execute_tool")
-    assert composio_requires_action_review("COMPOSIO_REMOTE_WORKBENCH")
-    assert composio_requires_action_review("COMPOSIO_REMOTE_BASH_TOOL")
-    assert composio_requires_action_review("COMPOSIO_MANAGE_CONNECTIONS")
-    assert composio_tool_role("COMPOSIO_FUTURE_EXECUTOR") == "unknown"
-    assert composio_requires_action_review("COMPOSIO_FUTURE_EXECUTOR")
+
+
+def test_an_outage_leaves_a_tool_that_is_not_composios_alone(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Reviewing every MCP tool as a provider action during an outage would move
+    # the approval identity of tools the contract never placed and refuse to
+    # remember their approvals, so the stricter answer stops at the name shape
+    # every role shares.
+    _answer(monkeypatch, None)
+    assert not composio_requires_action_review("mcp__notes__read_note")
+    assert not composio_names_a_wrapper("mcp__notes__read_note")
+    assert composio_names_a_wrapper("mcp__a__COMPOSIO_Multi_Execute_Tool")
+    assert composio_names_a_wrapper("composio_remote_bash_tool")
+
+
+def test_python_keeps_no_role_table_of_its_own(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A role the contract has never published still comes straight through, so
+    # the answer cannot be coming from a table on this side.
+    _answer(monkeypatch, NativeComposioRole(role="unknown", requires_action_review=True))
+    assert composio_tool_role("mcp__codex_apps__composio__composio_search_tools") == "unknown"

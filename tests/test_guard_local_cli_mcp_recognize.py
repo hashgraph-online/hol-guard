@@ -26,6 +26,8 @@ from codex_plugin_scanner.guard.runtime.local_mcp_probe import probe_stdio_mcp_s
 from codex_plugin_scanner.guard.runtime.local_mcp_stdio import probe_search_path
 from codex_plugin_scanner.guard.store import GuardStore
 
+pytestmark = pytest.mark.usefixtures("native_mcp_probe")
+
 _FAKE_NPX_MCP = """#!/usr/bin/env python3
 import json
 import sys
@@ -214,9 +216,10 @@ def test_stored_mcp_recognition_returns_none_on_sqlite_error() -> None:
     assert recognized is None
 
 
-def test_recognize_skips_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
+def test_recognize_skips_package_shim_npx(tmp_path: Path, monkeypatch, native_mcp_probe) -> None:
     home = tmp_path / "home"
     home.mkdir()
+    native_mcp_probe(home)
     real_npx = _shim_first_npx_path(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
@@ -234,9 +237,10 @@ def test_recognize_skips_package_shim_npx(tmp_path: Path, monkeypatch) -> None:
     assert which("npx", path=probe_search_path()) == str(real_npx)
 
 
-def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypatch) -> None:
+def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypatch, native_mcp_probe) -> None:
     home = tmp_path / "home"
     home.mkdir()
+    native_mcp_probe(home)
     _shim_first_npx_path(tmp_path, monkeypatch)
     monkeypatch.setattr(
         "codex_plugin_scanner.guard.daemon.local_cli_api.Path.home",
@@ -283,9 +287,10 @@ def test_recognize_retry_lists_tools_after_failed_store(tmp_path: Path, monkeypa
     assert any(isinstance(entry, dict) and entry.get("name") == "list_pages" for entry in commands)
 
 
-def test_refresh_uses_exact_configured_launch_not_display_label(tmp_path: Path, monkeypatch) -> None:
+def test_refresh_uses_exact_configured_launch_not_display_label(tmp_path: Path, monkeypatch, native_mcp_probe) -> None:
     home = tmp_path / "home"
     home.mkdir()
+    native_mcp_probe(home)
     _shim_first_npx_path(tmp_path, monkeypatch)
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
     args = ("-y", "chrome-devtools-mcp@latest", "--workspace", "x" * 220, "--account", "fixture-account")
@@ -334,9 +339,10 @@ def test_unavailable_refresh_never_guesses_a_launch_command(tmp_path: Path, monk
 
 
 @pytest.mark.parametrize("legacy", [False, True])
-def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(tmp_path, monkeypatch, legacy):
+def test_configured_refresh_preserves_initialize_failure_and_stored_permissions(tmp_path, monkeypatch, native_mcp_probe, legacy):
     home = tmp_path / "home"
     home.mkdir()
+    native_mcp_probe(home)
     monkeypatch.setattr("codex_plugin_scanner.guard.daemon.local_cli_api.Path.home", staticmethod(lambda: home))
     detection = _detection(
         "opencode",

@@ -198,6 +198,19 @@ def test_snapshot_has_bucket_counters(recorder: HookMetricsRecorder) -> None:
     assert snap["total_decisions"] == 3
 
 
+def test_rollup_retains_tail_latency(recorder: HookMetricsRecorder, store: GuardStore) -> None:
+    for latency in [*range(1, 100), 15000]:
+        _record_one(recorder, latency_ms=latency)
+    snapshot = recorder.snapshot()
+    assert snapshot["latency_p99_ms"] == 99
+    assert snapshot["latency_p95_ms"] == 95
+    assert snapshot["latency_p50_ms"] == 50
+    recorder.maybe_flush_to_store(store, force=True)
+    row = store.list_events(limit=1)[0]
+    payload = row["payload"]
+    assert payload["latency_p99_ms"] == snapshot["latency_p99_ms"]
+
+
 def test_failure_metrics_are_sanitized_and_bounded(recorder: HookMetricsRecorder) -> None:
     recorder.record_failure(stage="engine", exception_type="RuntimeError")
     recorder.record_failure(stage="unexpected/private/path", exception_type="not a class")

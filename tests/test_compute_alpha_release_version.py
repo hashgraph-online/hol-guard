@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import io
 import json
+import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -94,3 +96,57 @@ def test_cli_fails_closed_for_invalid_registry_payload(
 
     assert main() == 1
     assert "JSON array of strings" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    ("base", "existing", "expected"),
+    [
+        ("3.42.0", [], "3.43.0a1"),
+        ("3.42.0", ["3.42.0", "3.1.0a13", "3.43.0a1", "3.43.0a4"], "3.43.0a5"),
+        ("3.43.0", ["3.43.0", "3.43.0a5"], "3.44.0a1"),
+    ],
+)
+def test_main_train_alphas_target_the_minor_after_the_stable_base(
+    base: str, existing: list[str], expected: str
+) -> None:
+    assert compute_alpha_release_version("main", existing, base) == expected
+
+
+def test_main_train_requires_a_canonical_stable_base() -> None:
+    with pytest.raises(ValueError, match="requires --base-version"):
+        _ = compute_alpha_release_version("main", [])
+    with pytest.raises(ValueError, match="canonical stable"):
+        _ = compute_alpha_release_version("main", [], "3.43.0a1")
+
+
+def test_main_train_closes_once_its_stable_release_exists() -> None:
+    with pytest.raises(ValueError, match="closes release train"):
+        _ = compute_alpha_release_version("main", ["3.43.0"], "3.42.0")
+
+
+def test_cli_computes_main_train_alpha(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["compute_alpha_release_version.py", "--release-train", "main", "--base-version", "3.42.0"],
+    )
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(["3.42.0", "3.43.0a1"])))
+
+    assert main() == 0
+    assert capsys.readouterr().out == "3.43.0a2\n"
+
+
+def test_cli_runs_directly_as_a_script() -> None:
+    script = Path(__file__).resolve().parents[1] / "scripts" / "compute_alpha_release_version.py"
+    result = subprocess.run(
+        [sys.executable, str(script), "--release-train", "main", "--base-version", "3.42.0"],
+        input=json.dumps(["3.42.0"]),
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+
+    assert result.stdout == "3.43.0a1\n"

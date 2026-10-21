@@ -1,0 +1,745 @@
+[
+  {
+    "case": 0,
+    "request": {
+      "factors": [],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "review",
+      "disposition": "review",
+      "proof_routes": [],
+      "controlling_reasons": [],
+      "reasons": []
+    }
+  },
+  {
+    "case": 1,
+    "request": {
+      "factors": [
+        {
+          "source": "match",
+          "reason_code": "m.review",
+          "basis": {
+            "action_floor": "review",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "review",
+      "disposition": "review",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.review",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.review",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 2,
+    "request": {
+      "factors": [
+        {
+          "source": "match",
+          "reason_code": "m.require_reapproval",
+          "basis": {
+            "action_floor": "require-reapproval",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "require-reapproval",
+      "disposition": "require-reapproval",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.require_reapproval",
+          "action_floor": "require-reapproval",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.require_reapproval",
+          "action_floor": "require-reapproval",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 3,
+    "request": {
+      "factors": [
+        {
+          "source": "match",
+          "reason_code": "m.sandbox_required",
+          "basis": {
+            "action_floor": "sandbox-required",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "sandbox-required",
+      "disposition": "sandbox-required",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.sandbox_required",
+          "action_floor": "sandbox-required",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.sandbox_required",
+          "action_floor": "sandbox-required",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 4,
+    "request": {
+      "factors": [
+        {
+          "source": "match",
+          "reason_code": "m.block",
+          "basis": {
+            "action_floor": "block",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "block",
+      "disposition": "block",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.block",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.block",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 5,
+    "request": {
+      "factors": [
+        {
+          "source": "match",
+          "reason_code": "m.warn",
+          "basis": {
+            "action_floor": "warn",
+            "proof_route": "verified"
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": {
+            "route": "verified",
+            "binding_digest": "02a36cbfff143945b688a359adeff257af14bdc3261b1590f233161ea5590ee7",
+            "satisfied_requirements": [
+              "operation-and-targets"
+            ],
+            "enforced": false
+          }
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "warn",
+      "disposition": "warn",
+      "proof_routes": [
+        "verified"
+      ],
+      "controlling_reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.warn",
+          "action_floor": "warn",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "match",
+          "reason_code": "m.warn",
+          "action_floor": "warn",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 6,
+    "request": {
+      "factors": [
+        {
+          "source": "effect",
+          "reason_code": "m.allow",
+          "basis": {
+            "action_floor": "allow",
+            "proof_route": "verified"
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": {
+            "kind": "sensitive-read",
+            "target_scope": "workspace",
+            "reversibility": "reversible",
+            "blast_radius": "single-resource",
+            "evidence_source": "parser",
+            "confidence": "exact",
+            "containment": "none",
+            "proof_requirements": [
+              "operation-and-targets"
+            ],
+            "uncertainty_reasons": [],
+            "schema_version": "1.0.0"
+          },
+          "proof": {
+            "route": "verified",
+            "binding_digest": "b1d2c3bc303ac27b156990fc4fba952e15af05523ec63b35d6cee53e1db38e6f",
+            "satisfied_requirements": [
+              "operation-and-targets"
+            ],
+            "enforced": false
+          }
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "allow",
+      "disposition": "silent-verified",
+      "proof_routes": [
+        "verified"
+      ],
+      "controlling_reasons": [
+        {
+          "source": "effect",
+          "reason_code": "m.allow",
+          "action_floor": "allow",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "effect",
+          "reason_code": "m.allow",
+          "action_floor": "allow",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 7,
+    "request": {
+      "factors": [],
+      "uncertainties": [
+        "partial-parse"
+      ],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "review",
+      "disposition": "review",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.partial-parse",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.partial-parse",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 8,
+    "request": {
+      "factors": [],
+      "uncertainties": [
+        "parser-failure"
+      ],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "block",
+      "disposition": "block",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.parser-failure",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.parser-failure",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 9,
+    "request": {
+      "factors": [],
+      "uncertainties": [
+        "unknown-effect"
+      ],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "require-reapproval",
+      "disposition": "require-reapproval",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.unknown-effect",
+          "action_floor": "require-reapproval",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.unknown-effect",
+          "action_floor": "require-reapproval",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 10,
+    "request": {
+      "factors": [],
+      "uncertainties": [
+        "rollback-boundary-version"
+      ],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "block",
+      "disposition": "block",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.rollback-boundary-version",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "policy",
+          "reason_code": "uncertainty.rollback-boundary-version",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 11,
+    "request": {
+      "factors": [
+        {
+          "source": "control",
+          "reason_code": "mid",
+          "basis": {
+            "action_floor": "warn",
+            "proof_route": "verified"
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": {
+            "route": "verified",
+            "binding_digest": "90ac16783fbc54c3689c63b3ab89b39cea28f8743a88ff34e6a1c61ed746d0e2",
+            "satisfied_requirements": [
+              "operation-and-targets"
+            ],
+            "enforced": false
+          }
+        },
+        {
+          "source": "policy",
+          "reason_code": "high",
+          "basis": {
+            "action_floor": "block",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "block",
+      "disposition": "block",
+      "proof_routes": [
+        "verified"
+      ],
+      "controlling_reasons": [
+        {
+          "source": "policy",
+          "reason_code": "high",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "control",
+          "reason_code": "mid",
+          "action_floor": "warn",
+          "segment_ref": null,
+          "operation_ref": null
+        },
+        {
+          "source": "policy",
+          "reason_code": "high",
+          "action_floor": "block",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 12,
+    "request": {
+      "factors": [
+        {
+          "source": "effect",
+          "reason_code": "eff",
+          "basis": {
+            "action_floor": "review",
+            "proof_route": null
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": {
+            "kind": "sensitive-read",
+            "target_scope": "workspace",
+            "reversibility": "reversible",
+            "blast_radius": "single-resource",
+            "evidence_source": "parser",
+            "confidence": "partial",
+            "containment": "none",
+            "proof_requirements": [
+              "expected-effects"
+            ],
+            "uncertainty_reasons": [
+              "dynamic-input"
+            ],
+            "schema_version": "1.0.0"
+          },
+          "proof": null
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "review",
+      "disposition": "review",
+      "proof_routes": [],
+      "controlling_reasons": [
+        {
+          "source": "effect",
+          "reason_code": "eff",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        },
+        {
+          "source": "effect",
+          "reason_code": "uncertainty.dynamic-input",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "effect",
+          "reason_code": "eff",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        },
+        {
+          "source": "effect",
+          "reason_code": "uncertainty.dynamic-input",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 13,
+    "request": {
+      "factors": [
+        {
+          "source": "effect",
+          "reason_code": "contained",
+          "basis": {
+            "action_floor": "review",
+            "proof_route": "contained"
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": {
+            "kind": "sensitive-read",
+            "target_scope": "workspace",
+            "reversibility": "reversible",
+            "blast_radius": "single-resource",
+            "evidence_source": "parser",
+            "confidence": "exact",
+            "containment": "eligible",
+            "proof_requirements": [
+              "containment-identity"
+            ],
+            "uncertainty_reasons": [],
+            "schema_version": "1.0.0"
+          },
+          "proof": {
+            "route": "contained",
+            "binding_digest": "2d711642b726b04401627ca9fbac32f5c8530fb1903cc4db02258717921a4881",
+            "satisfied_requirements": [
+              "containment-identity"
+            ],
+            "enforced": true
+          }
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "review",
+      "disposition": "review",
+      "proof_routes": [
+        "contained"
+      ],
+      "controlling_reasons": [
+        {
+          "source": "effect",
+          "reason_code": "contained",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "effect",
+          "reason_code": "contained",
+          "action_floor": "review",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  },
+  {
+    "case": 14,
+    "request": {
+      "factors": [
+        {
+          "source": "authorization",
+          "reason_code": "w",
+          "basis": {
+            "action_floor": "allow",
+            "proof_route": "workflow-authorized"
+          },
+          "segment_ref": null,
+          "operation_ref": null,
+          "producer_ref": null,
+          "evidence_digest": null,
+          "assessment": null,
+          "proof": {
+            "route": "workflow-authorized",
+            "binding_digest": "50e721e49c013f00c62cf59f2163542a9d8df02464efeb615d31051b0fddc326",
+            "satisfied_requirements": [
+              "operation-and-targets"
+            ],
+            "enforced": false
+          }
+        }
+      ],
+      "uncertainties": [],
+      "schema_version": "1.1.0"
+    },
+    "expected": {
+      "schema_version": "1.1.0",
+      "action": "allow",
+      "disposition": "workflow-authorized",
+      "proof_routes": [
+        "workflow-authorized"
+      ],
+      "controlling_reasons": [
+        {
+          "source": "authorization",
+          "reason_code": "w",
+          "action_floor": "allow",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ],
+      "reasons": [
+        {
+          "source": "authorization",
+          "reason_code": "w",
+          "action_floor": "allow",
+          "segment_ref": null,
+          "operation_ref": null
+        }
+      ]
+    }
+  }
+]

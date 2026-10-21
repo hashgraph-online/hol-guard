@@ -11,7 +11,10 @@ renders native results and coordinates the control plane; it does not replace
 the native semantic decision after a failure. See the
 [native runtime authority contract](../../../docs/guard/adr/0010-native-posttool-default-auto.md).
 
-The offline `guard-command-source` compiler is also built from this crate.
+The offline `guard-command-source` compiler is also built from this crate. It
+remains a standalone development, CI, and build-time binary; the packaged
+`hol-guard-runtime` executable hosts the same operations at top level, so
+platform wheels ship only the runtime.
 Compiling a contribution or passing its fixtures does not activate an extension,
 create an authenticated receipt, or qualify an installed runtime.
 
@@ -21,7 +24,8 @@ Most contributions add or update versioned JSON in
 [`contributions/command-sources/`](../../../contributions/command-sources).
 Compose the admitted native matcher operations, add portable behavior fixtures,
 and keep trust classification in the separately reviewed
-[`trust-class-map.v1.json`](../../../contracts/extensions/trust-class-map.v1.json).
+[`trust/`](../../../contracts/extensions/trust). Clean Rust builds derive the
+aggregate from these bindings without requiring a generated map in the checkout.
 Do not add a Python detector or edit generated descriptors and program files as
 independent inputs.
 

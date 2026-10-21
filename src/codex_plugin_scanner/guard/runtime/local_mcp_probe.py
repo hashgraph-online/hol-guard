@@ -124,6 +124,7 @@ def probe_stdio_mcp_server(
     cancel: threading.Event | None = None,
     connection_identity_hash: str | None = None,
     report_failure: bool = False,
+    guard_home: Path | None = None,
 ) -> McpProbeResult | None:
     """Launch a stdio MCP server and list tools, or return None when it is not MCP."""
 
@@ -154,6 +155,7 @@ def probe_stdio_mcp_server(
             extra_env=extra_env,
             cancel=cancel,
             connection_identity_hash=connection_identity_hash or server_identity.identity_hash,
+            guard_home=guard_home,
         )
         if catalog.protocol_version is None:
             if report_failure:

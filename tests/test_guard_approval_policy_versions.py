@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -12,12 +14,12 @@ from codex_plugin_scanner.guard import mcp_tool_calls as mcp_tool_calls_module
 from codex_plugin_scanner.guard.cli import commands_support_runtime_policy as runtime_policy_module
 from codex_plugin_scanner.guard.config import GuardConfig
 from codex_plugin_scanner.guard.models import GuardArtifact
-from codex_plugin_scanner.guard.proxy import stdio as stdio_module
 from codex_plugin_scanner.guard.runtime.actions import GuardActionEnvelope, normalize_harness_payload
 from codex_plugin_scanner.guard.runtime.approval_context import (
+    APPROVAL_CONTEXT_TOKEN_PREFIX,
     approval_context_tokens_validation_reason,
-    parse_approval_context_token,
 )
+from tests.guard_sensitive_read_support import sensitive_read_token
 
 
 def _config(tmp_path: Path) -> GuardConfig:
@@ -50,17 +52,31 @@ def _workspace(config: GuardConfig) -> Path:
     return config.workspace
 
 
-def _assert_only_policy_component_changed(saved_token: str, current_token: str) -> None:
-    saved = parse_approval_context_token(saved_token)
-    current = parse_approval_context_token(current_token)
+def _token_components(token: str) -> dict[str, object]:
+    """Decode a minted token so a test can name the dimension that moved.
 
-    assert saved is not None
-    assert current is not None
-    assert saved.identity_hash == current.identity_hash
-    assert saved.content_hash == current.content_hash
-    assert saved.capabilities_hash == current.capabilities_hash
-    assert saved.policy_hash != current.policy_hash
-    assert saved.sandbox_hash == current.sandbox_hash
+    Guard no longer decodes a token in Python; the native authority owns the
+    grammar. These tests still have to show that a policy change moves the
+    policy component and nothing else, so the decode lives here, next to the
+    assertion it serves.
+    """
+
+    assert token.startswith(APPROVAL_CONTEXT_TOKEN_PREFIX)
+    encoded = token[len(APPROVAL_CONTEXT_TOKEN_PREFIX) :]
+    payload = json.loads(base64.urlsafe_b64decode(f"{encoded}{'=' * (-len(encoded) % 4)}".encode("ascii")))
+    assert isinstance(payload, dict)
+    return payload
+
+
+def _assert_only_policy_component_changed(saved_token: str, current_token: str) -> None:
+    saved = _token_components(saved_token)
+    current = _token_components(current_token)
+
+    assert saved["identity"] == current["identity"]
+    assert saved["content"] == current["content"]
+    assert saved["capabilities"] == current["capabilities"]
+    assert saved["policy"] != current["policy"]
+    assert saved["sandbox"] == current["sandbox"]
     assert approval_context_tokens_validation_reason(saved_token, current_token) == "approval_reuse_policy_changed"
 
 
@@ -83,12 +99,13 @@ def _runtime_hook_token(
         data_flow_action=None,
         scanner_action=None,
         current_action="review",
+        risk_classes=(),
         data_flow_signals=(),
         scanner_evidence=(),
     )
 
 
-def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -> None:
+def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path, native_context_digest: Path) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
         artifact_id="codex:project:runtime-permission-mode",
@@ -119,17 +136,14 @@ def test_runtime_hook_permission_mode_changes_sandbox_identity(tmp_path: Path) -
         config=config,
         action_envelope=envelope("bypassPermissions"),
     )
-    ask_context = parse_approval_context_token(ask_token)
-    bypass_context = parse_approval_context_token(bypass_token)
-    assert ask_context is not None
-    assert bypass_context is not None
-    assert ask_context.sandbox_hash != bypass_context.sandbox_hash
+    assert _token_components(ask_token)["sandbox"] != _token_components(bypass_token)["sandbox"]
     assert approval_context_tokens_validation_reason(ask_token, bypass_token) is not None
 
 
 def test_runtime_hook_evaluator_policy_version_is_the_only_changed_component(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
@@ -173,9 +187,10 @@ def _tool_call_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
     )
 
 
-def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
+def test_mcp_tool_call_approval_ignores_presentation_only_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = mcp_tool_calls_module.build_tool_call_artifact(
@@ -198,29 +213,15 @@ def test_mcp_tool_call_evaluator_policy_version_is_the_only_changed_component(
         == saved_token
     )
 
-    monkeypatch.setattr(
-        mcp_tool_calls_module,
-        "_MCP_TOOL_CALL_EVALUATOR_POLICY_VERSION",
-        "mcp-tool-call-evaluation-v3-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _tool_call_token(artifact=artifact, config=config),
-    )
-
 
 def _sensitive_read_token(*, artifact: GuardArtifact, config: GuardConfig) -> str:
-    return stdio_module.build_sensitive_read_approval_hash(
-        artifact,
-        config=config,
-        cwd=config.workspace,
-        current_action="review",
-    )
+    return sensitive_read_token(artifact, config=config, cwd=config.workspace)
 
 
-def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_component(
+def test_stdio_sensitive_read_token_ignores_presentation_only_changes(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    native_context_digest: Path,
 ) -> None:
     config = _config(tmp_path)
     artifact = GuardArtifact(
@@ -245,14 +246,4 @@ def test_stdio_sensitive_read_evaluator_policy_version_is_the_only_changed_compo
             config=_ux_only_config_change(config),
         )
         == saved_token
-    )
-
-    monkeypatch.setattr(
-        stdio_module,
-        "_STDIO_SENSITIVE_READ_EVALUATOR_POLICY_VERSION",
-        "stdio-sensitive-read-evaluation-v2-test",
-    )
-    _assert_only_policy_component_changed(
-        saved_token,
-        _sensitive_read_token(artifact=artifact, config=config),
     )

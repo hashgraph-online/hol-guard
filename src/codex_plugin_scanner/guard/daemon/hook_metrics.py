@@ -7,6 +7,7 @@ flushed to SQLite asynchronously via ``maybe_flush_to_store()``.
 
 from __future__ import annotations
 
+import math
 import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, final
@@ -23,11 +24,11 @@ SIZE_BUCKETS = (
     (5 * 1024 * 1024, "1m-5m"),
 )
 _MAX_COUNTER_KEYS = 256
-_HARNESSES = {"pi", "omp", "codex", "claude-code", "cursor", "opencode"}
+_HARNESSES = {"pi", "omp", "codex", "claude-code", "cursor", "opencode", "grok", "zcode"}
 _DECISIONS = {"allow", "deny", "ask", "block", "warn", "error"}
 _CACHE_STATUSES = {"hit", "miss", "bypass", "disabled", "error"}
 _FALLBACK_KINDS = {"none", "fail_closed", "local", "cache", "error"}
-_EVENTS = {"pretooluse", "posttooluse", "permissionrequest", "userpromptsubmit"}
+_EVENTS = {"pretooluse", "posttooluse", "permissionrequest", "userpromptsubmit", "sessionstart", "subagentstart"}
 _ROUTES = {"native_resident", "native_oneshot", "native_fail_safe", "native_degraded", "python_semantic"}
 
 
@@ -122,18 +123,19 @@ class HookMetricsRecorder:
     def snapshot(self) -> dict[str, object]:
         """Return a snapshot of current metrics."""
         with self._lock:
-            latencies = sorted(self._latencies)
-            p50 = latencies[len(latencies) // 2] if latencies else 0.0
-            p95 = latencies[int(len(latencies) * 0.95)] if latencies else 0.0
-            p99 = latencies[int(len(latencies) * 0.99)] if latencies else 0.0
-            return {
-                "counters": dict(self._counters),
-                "latency_p50_ms": round(p50, 2),
-                "latency_p95_ms": round(p95, 2),
-                "latency_p99_ms": round(p99, 2),
-                "total_decisions": len(self._latencies),
-                "routes": dict(self._routes),
-            }
+            return self._snapshot_locked()
+
+    def _snapshot_locked(self) -> dict[str, object]:
+        latencies = sorted(self._latencies)
+        snapshot: dict[str, object] = {
+            "counters": dict(self._counters),
+            "total_decisions": len(latencies),
+            "routes": dict(self._routes),
+        }
+        for label, percentile in (("p50", 0.5), ("p95", 0.95), ("p99", 0.99)):
+            value = latencies[math.ceil(len(latencies) * percentile) - 1] if latencies else 0.0
+            snapshot[f"latency_{label}_ms"] = round(value, 2)
+        return snapshot
 
     def record_route(self, route: str) -> None:
         """Record bounded decision-route provenance without request data."""
@@ -157,17 +159,7 @@ class HookMetricsRecorder:
         with self._lock:
             if not force and len(self._latencies) < 100:
                 return
-            snapshot: dict[str, object] = {
-                "counters": dict(self._counters),
-                "latency_p50_ms": round(
-                    sorted(self._latencies)[len(self._latencies) // 2] if self._latencies else 0.0, 2
-                ),
-                "latency_p95_ms": round(
-                    sorted(self._latencies)[int(len(self._latencies) * 0.95)] if self._latencies else 0.0, 2
-                ),
-                "total_decisions": len(self._latencies),
-                "routes": dict(self._routes),
-            }
+            snapshot = self._snapshot_locked()
             self._counters.clear()
             self._latencies.clear()
             self._routes.clear()

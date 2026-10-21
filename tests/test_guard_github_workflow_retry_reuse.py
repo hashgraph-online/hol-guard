@@ -5,29 +5,17 @@
 
 from __future__ import annotations
 
-import hashlib
 import sys
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
 from codex_plugin_scanner.guard.models import GuardApprovalRequest
-from codex_plugin_scanner.guard.runtime.command_model import parse_shell_command
-from codex_plugin_scanner.guard.runtime.github_workflow_approval_record import GitHubWorkflowApprovalRecord
-from codex_plugin_scanner.guard.runtime.github_workflow_authorization import (
-    GitHubWorkflowBindingContext,
-    github_repository_sha256,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_context import (
-    GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA,
-    GitHubWorkflowDescriptor,
-)
-from codex_plugin_scanner.guard.runtime.github_workflow_operations import parse_github_workflow_operation
+from codex_plugin_scanner.guard.native_github_workflow import GitHubWorkflowDescriptor
 from codex_plugin_scanner.guard.runtime.github_workflow_runtime import (
     claim_resolved_github_workflow_authorization,
     issue_resolved_github_workflow_capability,
@@ -36,10 +24,12 @@ from codex_plugin_scanner.guard.store import GuardStore
 from codex_plugin_scanner.guard.store_workflow_capability_common import WORKFLOW_CAPABILITY_STORE_CLOCK
 from codex_plugin_scanner.guard.workflow_capabilities import (
     WorkflowCapabilityRuleBinding,
-    canonical_framed_payload,
     format_utc_timestamp,
     parse_utc_timestamp,
 )
+from tests.github_workflow_test_support import descriptor as build_descriptor
+from tests.github_workflow_test_support import digest, with_binding
+from tests.github_workflow_test_support import native_lineage_verified as native_lineage_verified
 
 _ISSUED = datetime(2026, 7, 20, 12, tzinfo=timezone.utc)
 _EXECUTABLE = str(Path(sys.executable).resolve())
@@ -47,7 +37,7 @@ _COMMAND = f"{_EXECUTABLE} issue lock 17 --repo example/repo"
 
 
 @pytest.fixture(autouse=True)
-def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
+def fixed_authority(monkeypatch: pytest.MonkeyPatch, native_lineage_verified: None) -> None:
     monkeypatch.setattr(
         GuardStore,
         "_policy_integrity_secret_material",
@@ -56,42 +46,8 @@ def fixed_authority(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(WORKFLOW_CAPABILITY_STORE_CLOCK, "now", lambda: format_utc_timestamp(_ISSUED))
 
 
-def _digest(label: str) -> str:
-    return hashlib.sha256(label.encode("ascii")).hexdigest()
-
-
-def _framed_digest(purpose: str, payload: object) -> str:
-    return hashlib.sha256(canonical_framed_payload(purpose, payload)).hexdigest()
-
-
-def _descriptor(command: str = _COMMAND, *, repository: str = "example/repo") -> GitHubWorkflowDescriptor:
-    operation = parse_github_workflow_operation(
-        parse_shell_command(command), repository=repository, expected_executable=_EXECUTABLE
-    )
-    assert operation is not None
-    return GitHubWorkflowDescriptor(
-        schema_version=GITHUB_WORKFLOW_DESCRIPTOR_SCHEMA,
-        operation=operation,
-        binding_context=GitHubWorkflowBindingContext(
-            repository_sha256=github_repository_sha256(repository),
-            workspace_sha256=_framed_digest("github-workspace", str(Path("/workspace").resolve())),
-            executable_sha256=hashlib.sha256(Path(_EXECUTABLE).read_bytes()).hexdigest(),
-            cwd_sha256=_digest("cwd"),
-            environment_sha256=_digest("environment"),
-            configuration_sha256=_digest("configuration"),
-            manifest_sha256=_digest("manifest"),
-            lockfile_sha256=_digest("lockfile"),
-            sandbox_sha256=_digest("sandbox"),
-            policy_id="guard.command-policy",
-            policy_version="policy.v1",
-            effect_id="github.maintain-remote",
-            effect_version="effect.v1",
-            decision_id="github.workflow-authorized",
-            decision_version="decision.v1",
-            rules=(WorkflowCapabilityRuleBinding("github.maintain-remote", "rule.v1"),),
-        ),
-        viewer_sha256=_digest("viewer"),
-    )
+def _descriptor(command: str = _COMMAND) -> GitHubWorkflowDescriptor:
+    return build_descriptor(command)
 
 
 def _seed(store: GuardStore, descriptor: GitHubWorkflowDescriptor) -> None:
@@ -114,7 +70,7 @@ def _seed(store: GuardStore, descriptor: GitHubWorkflowDescriptor) -> None:
         scanner_evidence=(
             {
                 "source": "github_workflow_approval_record",
-                "record": GitHubWorkflowApprovalRecord.from_descriptor(descriptor).to_dict(),
+                "record": descriptor.record.to_dict(),
             },
         ),
         raw_command_text=_COMMAND,
@@ -241,32 +197,20 @@ def test_claim_and_revocation_race_preserves_atomic_cutoff(tmp_path: Path) -> No
     assert not _claim(store, descriptor)
 
 
-def _context_drift(descriptor: GitHubWorkflowDescriptor, field: str, value: object) -> GitHubWorkflowDescriptor:
-    return replace(descriptor, binding_context=replace(descriptor.binding_context, **{field: value}))
-
-
 def test_all_binding_drift_fails_without_consuming_uses(tmp_path: Path) -> None:
     store = GuardStore(tmp_path / "guard-home", prime_policy_integrity=False)
     descriptor = _descriptor()
     _seed(store, descriptor)
     drifts: tuple[Callable[[], GitHubWorkflowDescriptor], ...] = (
-        lambda: _descriptor(f"{_EXECUTABLE} issue unlock 17 --repo example/repo"),
-        lambda: _descriptor(f"{_EXECUTABLE} issue lock 18 --repo example/repo"),
-        lambda: _descriptor(f"{_EXECUTABLE} issue lock 17 --repo other/repo", repository="other/repo"),
-        lambda: _context_drift(descriptor, "policy_version", "policy.v2"),
-        lambda: _context_drift(descriptor, "effect_version", "effect.v2"),
-        lambda: _context_drift(descriptor, "decision_version", "decision.v2"),
-        lambda: _context_drift(
-            descriptor,
-            "rules",
-            (WorkflowCapabilityRuleBinding("github.maintain-remote", "rule.v2"),),
-        ),
-        lambda: _context_drift(descriptor, "cwd_sha256", _digest("other-cwd")),
-        lambda: _context_drift(descriptor, "environment_sha256", _digest("other-environment")),
-        lambda: _context_drift(descriptor, "configuration_sha256", _digest("other-configuration")),
-        lambda: _context_drift(descriptor, "manifest_sha256", _digest("other-manifest")),
-        lambda: _context_drift(descriptor, "lockfile_sha256", _digest("other-lockfile")),
-        lambda: _context_drift(descriptor, "sandbox_sha256", _digest("other-sandbox")),
+        lambda: build_descriptor(f"{_EXECUTABLE} issue unlock 17 --repo example/repo", operation="unlock-issue"),
+        lambda: build_descriptor(f"{_EXECUTABLE} issue lock 18 --repo example/repo", resource="18"),
+        lambda: build_descriptor(f"{_EXECUTABLE} issue lock 17 --repo other/repo", repository="other/repo"),
+        lambda: with_binding(descriptor, policy_version="policy.v2"),
+        lambda: with_binding(descriptor, effect_version="effect.v2"),
+        lambda: with_binding(descriptor, decision_version="decision.v2"),
+        lambda: with_binding(descriptor, rules=(WorkflowCapabilityRuleBinding("github.maintain-remote", "rule.v2"),)),
+        lambda: with_binding(descriptor, launch_sha256=digest("other-launch")),
+        lambda: with_binding(descriptor, executable_sha256=digest("other-executable")),
     )
     assert all(not _claim(store, drift()) for drift in drifts)
     assert [_claim(store, descriptor) for _ in range(10)] == [True] * 10

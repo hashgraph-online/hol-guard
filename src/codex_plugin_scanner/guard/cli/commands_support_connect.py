@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import sys
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from ._commands_shared import _SERVICE_RUNTIME_CHOICES, _SERVICE_RUNTIME_PROFILE_STATE_KEY, _now
@@ -17,15 +17,9 @@ from ._commands_shared import *
 from .commands_parser_helpers import *
 from ..browser_opener import open_browser_url
 from .connect_sync_result import apply_guard_connect_sync_result
-from ..local_supply_chain import _resolve_guard_sync_auth_context as _local_resolve_guard_sync_auth_context
 from ..synced_policy import synced_policy_payload as _synced_policy_payload
 
 
-def _connect_guard_sync_auth_context(store: GuardStore) -> dict[str, object]:
-    resolver = globals().get("_resolve_guard_sync_auth_context")
-    if callable(resolver):
-        return cast(dict[str, object], resolver(store))
-    return _local_resolve_guard_sync_auth_context(store)
 
 def _validate_policy_scope(
     scope: str,
@@ -72,10 +66,6 @@ def _guard_doctor_connect_health_payload(store: GuardStore) -> dict[str, object]
         payload["latest_connect_state"] = _guard_doctor_latest_connect_state_payload(latest_state)
     return payload
 
-def _guard_doctor_oauth_storage_health_payload(store: GuardStore) -> dict[str, str]:
-    return _guard_doctor_oauth_storage_health_payload_from_health(
-        store.get_oauth_local_credential_health(),
-    )
 
 def _guard_doctor_oauth_storage_health_payload_from_health(oauth_storage_health: dict[str, object]) -> dict[str, str]:
     state = "unknown"
@@ -530,7 +520,6 @@ __all__ = [
     "_guard_cloud_urls_for_connect",
     "_guard_doctor_connect_health_payload",
     "_guard_doctor_latest_connect_state_payload",
-    "_guard_doctor_oauth_storage_health_payload",
     "_guard_service_runtime_profile",
     "_manual_guard_login_payload",
     "_refresh_cloud_policy_bundle",

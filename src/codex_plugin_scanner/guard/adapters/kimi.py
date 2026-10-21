@@ -6,31 +6,35 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from ..aibom_detection import extend_detection_with_workspace_aibom
-from ..codex_config import read_toml_payload
-from ..models import GuardArtifact, HarnessDetection
-from ..shims import install_guard_shim, remove_guard_shim
+from ..aibom_detection import extend_detection_with_workspace_aibom, native_adapter_detection_with_warnings
+from ..models import HarnessDetection
+from ..shims import prepare_guard_shim, remove_guard_shim
 from .base import (
     HarnessAdapter,
     HarnessContext,
+    PreparedHarnessInstall,
     _command_available,
     _ensure_path_within_root,
-    _json_payload,
     _shell_command,
+    detection_request,
 )
 from .bounded_cli_hook_bridge import bounded_cli_hook_command
 
 _KIMI_HOME_ENV_VAR = "KIMI_CODE_HOME"
 _KIMI_DIR = ".kimi-code"
 _KIMI_CONFIG_FILE = "config.toml"
-_KIMI_MCP_FILE = "mcp.json"
 _GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS = 25
 
 
 _GUARD_MANAGED_BEGIN = "# BEGIN HOL GUARD MANAGED HOOKS"
 _GUARD_MANAGED_END = "# END HOL GUARD MANAGED HOOKS"
 _GUARD_MANAGED_MARKER = "HOL GUARD MANAGED HOOKS"
+
+
+if TYPE_CHECKING:
+    from ..runtime_transition import TransitionFile
 
 
 class KimiHarnessAdapter(HarnessAdapter):
@@ -54,28 +58,6 @@ class KimiHarnessAdapter(HarnessAdapter):
             return Path(value).expanduser().resolve()
         return context.home_dir
 
-    @classmethod
-    def _config_candidates(cls, context: HarnessContext) -> list[tuple[Path, str]]:
-        home = cls._kimi_home_dir(context)
-        candidates: list[tuple[Path, str]] = [
-            (home / _KIMI_DIR / _KIMI_CONFIG_FILE, "global"),
-        ]
-        if context.workspace_dir is not None:
-            candidates.append((context.workspace_dir / _KIMI_DIR / _KIMI_CONFIG_FILE, "project"))
-        return candidates
-
-    @classmethod
-    def _mcp_candidates(cls, context: HarnessContext) -> list[tuple[Path, str]]:
-        home = cls._kimi_home_dir(context)
-        candidates: list[tuple[Path, str]] = [
-            (home / _KIMI_DIR / _KIMI_MCP_FILE, "global"),
-        ]
-        if context.workspace_dir is not None:
-            candidates.append((context.workspace_dir / _KIMI_DIR / _KIMI_MCP_FILE, "project"))
-        return candidates
-
-    _read_toml = staticmethod(read_toml_payload)
-
     def policy_path(self, context: HarnessContext) -> Path:
         home = self._kimi_home_dir(context)
         if context.workspace_dir is not None:
@@ -87,33 +69,16 @@ class KimiHarnessAdapter(HarnessAdapter):
         return home / _KIMI_DIR / _KIMI_CONFIG_FILE
 
     def detect(self, context: HarnessContext) -> HarnessDetection:
-        artifacts: list[GuardArtifact] = []
-        found_paths: list[str] = []
-
-        for config_path, scope in self._config_candidates(context):
-            if not config_path.is_file():
-                continue
-            found_paths.append(str(config_path))
-            payload = self._read_toml(config_path)
-            if payload:
-                self._append_hook_artifacts(artifacts, payload, config_path, scope)
-
-        for mcp_path, scope in self._mcp_candidates(context):
-            if not mcp_path.is_file():
-                continue
-            found_paths.append(str(mcp_path))
-            payload = _json_payload(mcp_path)
-            if payload:
-                self._append_mcp_artifacts(artifacts, payload, mcp_path, scope)
-
-        installed = bool(found_paths) or _command_available(self.executable)
+        request = {**detection_request(self.harness, context), "home": str(self._kimi_home_dir(context))}
+        artifacts, found_paths, warnings = native_adapter_detection_with_warnings("kimi_detect", request)
+        command_available = _command_available(self.executable)
         detection = HarnessDetection(
             harness=self.harness,
-            installed=installed,
-            command_available=_command_available(self.executable),
-            config_paths=tuple(found_paths),
-            artifacts=tuple(artifacts),
-            warnings=(),
+            installed=bool(found_paths) or command_available,
+            command_available=command_available,
+            config_paths=found_paths,
+            artifacts=artifacts,
+            warnings=warnings,
         )
         return extend_detection_with_workspace_aibom(
             detection,
@@ -121,83 +86,10 @@ class KimiHarnessAdapter(HarnessAdapter):
             workspace_dir=context.workspace_dir,
         )
 
-    def _append_hook_artifacts(
-        self,
-        artifacts: list[GuardArtifact],
-        payload: dict[str, object],
-        config_path: Path,
-        scope: str,
-    ) -> None:
-        hooks = payload.get("hooks")
-        if not isinstance(hooks, list):
-            return
-        for index, entry in enumerate(hooks):
-            if not isinstance(entry, dict):
-                continue
-            command = entry.get("command")
-            if not isinstance(command, str) or not command.strip():
-                continue
-            event = entry.get("event")
-            event_name = event if isinstance(event, str) else ""
-            matcher = entry.get("matcher")
-            timeout = entry.get("timeout")
-            metadata: dict[str, object] = {"event": event_name, "command": command}
-            if isinstance(matcher, str):
-                metadata["matcher"] = matcher
-            if isinstance(timeout, (int, float)):
-                metadata["timeout"] = timeout
-            artifact_id = f"kimi:{scope}:hook:{event_name.lower() or 'unknown'}:{index}"
-            name = f"{event_name or 'hook'}:{matcher}" if isinstance(matcher, str) and matcher else event_name or "hook"
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=artifact_id,
-                    name=name,
-                    harness=self.harness,
-                    artifact_type="hook",
-                    source_scope=scope,
-                    config_path=str(config_path),
-                    command=command,
-                    metadata=metadata,
-                )
-            )
-
-    def _append_mcp_artifacts(
-        self,
-        artifacts: list[GuardArtifact],
-        payload: dict[str, object],
-        mcp_path: Path,
-        scope: str,
-    ) -> None:
-        servers = payload.get("mcpServers")
-        if not isinstance(servers, dict):
-            return
-        for server_name, server_config in servers.items():
-            if not isinstance(server_name, str) or not isinstance(server_config, dict):
-                continue
-            command = server_config.get("command")
-            url = server_config.get("url")
-            if not isinstance(command, str) and not isinstance(url, str):
-                continue
-            raw_args = server_config.get("args")
-            args = tuple(str(value) for value in raw_args) if isinstance(raw_args, list) else ()
-            transport = "http" if isinstance(url, str) else "stdio"
-            artifacts.append(
-                GuardArtifact(
-                    artifact_id=f"kimi:{scope}:mcp:{server_name}",
-                    name=server_name,
-                    harness=self.harness,
-                    artifact_type="mcp_server",
-                    source_scope=scope,
-                    config_path=str(mcp_path),
-                    command=command if isinstance(command, str) else None,
-                    args=args,
-                    url=url if isinstance(url, str) else None,
-                    transport=transport,
-                )
-            )
-
     @staticmethod
-    def _hook_command_parts(context: HarnessContext) -> tuple[str, ...]:
+    def _hook_command_parts(
+        context: HarnessContext, *, prepared_files: list[TransitionFile] | None = None
+    ) -> tuple[str, ...]:
         guard_args = [
             "guard",
             "hook",
@@ -217,31 +109,44 @@ class KimiHarnessAdapter(HarnessAdapter):
             cli_args=guard_args,
             harness="kimi",
             timeout_seconds=_GUARD_HOOK_INTERNAL_TIMEOUT_SECONDS,
+            prepared_files=prepared_files,
         )
 
-    def install(self, context: HarnessContext) -> dict[str, object]:
-        shim_manifest = install_guard_shim(
+    def prepare_install(self, context: HarnessContext) -> PreparedHarnessInstall:
+        from ..codex_hook_recovery import _snapshot
+        from ..runtime_transition import TransitionFile
+
+        prepared_shim = prepare_guard_shim(
             self.harness,
             context,
             launcher_name=self.launcher_name,
             display_name="kimi",
         )
+        shim_manifest = prepared_shim.manifest
         config_path = self._managed_config_path(context)
         _ensure_path_within_root(context.home_dir, config_path, label="Kimi Code")
-        config_path.parent.mkdir(parents=True, exist_ok=True)
-
-        hook_command = _shell_command(self._hook_command_parts(context))
+        hook_files: list[TransitionFile] = []
+        hook_command = _shell_command(self._hook_command_parts(context, prepared_files=hook_files))
         managed_block = self._build_managed_block(hook_command)
-        existing_text = config_path.read_text(encoding="utf-8") if config_path.is_file() else ""
+        before = _snapshot(config_path)
+        existing_text = before.decode("utf-8") if before is not None else ""
         cleaned_text = _remove_managed_block(existing_text)
         new_text = f"{cleaned_text.rstrip()}\n\n{managed_block}\n".lstrip()
-        config_path.write_text(new_text, encoding="utf-8")
+        mode = config_path.stat().st_mode & 0o777 if before is not None else 0o644
+        config = TransitionFile(
+            config_path.resolve(strict=False),
+            before,
+            new_text.encode("utf-8"),
+            before_mode=mode,
+            after_mode=mode,
+        )
+        config.payload()
 
         raw_notes = shim_manifest.get("notes")
         shim_notes = (
             [str(note) for note in raw_notes if isinstance(note, str)] if isinstance(raw_notes, (list, tuple)) else []
         )
-        return {
+        manifest: dict[str, object] = {
             "harness": self.harness,
             "active": True,
             "config_path": str(config_path),
@@ -251,6 +156,10 @@ class KimiHarnessAdapter(HarnessAdapter):
                 *shim_notes,
             ],
         }
+        return PreparedHarnessInstall((*prepared_shim.files, *hook_files, config), manifest)
+
+    def install(self, context: HarnessContext) -> dict[str, object]:
+        return self.prepare_install(context).publish(context.guard_home)
 
     def uninstall(self, context: HarnessContext) -> dict[str, object]:
         shim_manifest = remove_guard_shim(

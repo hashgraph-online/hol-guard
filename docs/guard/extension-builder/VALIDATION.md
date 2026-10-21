@@ -87,8 +87,9 @@ rust/target/release/guard-command-source test < source-fixtures-current.json
 Python only assembles the envelope from checked-in JSON files. Rust validates
 the complete catalog and evaluates every case through native policy. Commit
 the canonical source and portable fixture, not `source-fixtures-current.json`.
-MCP kits generate MCP contribution tests instead of a command-source fixture;
-run their generated test file as part of the source-tree checks.
+MCP kits produce a contribution descriptor rather than a command-source
+fixture; the shared MCP contribution checks validate it — no
+per-contribution test module is generated.
 
 ## Source-tree checks
 
@@ -105,6 +106,7 @@ uv run --no-sync pytest tests/test_guard_command_*extensions.py \
   tests/test_guard_command_extension_registry.py \
   tests/test_guard_command_critical_floors.py
 
+uv run --no-sync python tests/guard_command_decision_diff.py --write
 uv run --no-sync python tests/guard_command_decision_diff.py --check
 ```
 
@@ -143,7 +145,7 @@ commands to satisfy a test.
 
 ## Installed-wheel matrix
 
-The [Extension Builder workflow](../../../.github/workflows/extension-builder-ci.yml)
+The [Extension Builder workflow](../../../.github/workflows/nightly-native.yml)
 builds and installs a wheel on Linux with Python 3.10 and 3.13, macOS ARM64
 with Python 3.13, and Windows with Python 3.13. The
 [installed verifier](../../../scripts/ci/verify_extension_builder_install.py)
@@ -182,26 +184,22 @@ review outputs; the canonical source and trust map remain the inputs.
 
 ## Legacy migration validation
 
-The structural diagnostic in `scripts/command_source_backlog.py` reads
-pinned legacy Python blobs without importing or executing them. It reports
-allowlisted literal conversions and blockers for dynamic imports, custom code,
-top-level execution, unsupported constructs, and missing native operations.
-Validate any proposed JSON with the Rust compiler and add independent portable
-cases before publication.
+The one-time Python backlog and reviewed-baseline converters are retired.
+For any historical Python proposal, manually express the reviewed behavior
+as canonical JSON and independent portable cases without executing the old
+Python module. Validate the source and portable cases with the Rust
+`guard-command-source` compiler and check the generated projections before
+publication. A missing native operation is a Rust implementation gap, not
+permission to restore a Python evaluator.
 
-The one-time reviewed-baseline converter in
-`scripts/migrate_command_extension_sources.py` is dry-run by default,
-requires an explicit baseline identity and compiler, and only writes after
-`--write`. It is migration tooling, not a release or hook-path dependency.
-`native_operation_required` is a contract gap to resolve in reviewed Rust
-support; it is not permission to restore a Python fallback.
 
 ## Material limitations
 
 Validation does not certify every flag combination, dynamic plugin, server
 scope, upstream version, executable, or Windows shell interpretation. Source
 and fixture limits reject excessive input instead of truncating it. The
-current native budgets include 4 MiB source/build input, 4 MiB compiled
-program, 32 matcher depth, 16,384 matcher nodes, 512 extensions, 1,024 rules,
+current native budgets include 8 MiB source/build input, 6 MiB pack
+lifecycle request, 4 MiB compiled program, 32 matcher depth, 16,384 matcher
+nodes, 512 extensions, 1,024 rules,
 and 64 safe variants per rule; adapter-specific limits live in the versioned
 contracts.

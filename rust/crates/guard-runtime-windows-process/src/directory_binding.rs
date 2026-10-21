@@ -1,21 +1,30 @@
 use std::ffi::OsStr;
 use std::io;
 use std::os::windows::io::AsRawHandle;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path, PathBuf, Prefix, PrefixComponent};
 
 use winapi::shared::minwindef::{DWORD, FALSE};
-use winapi::um::fileapi::CreateDirectoryW;
+use winapi::um::fileapi::{CreateDirectoryW, GetLongPathNameW};
 use winapi::um::minwinbase::SECURITY_ATTRIBUTES;
 use winapi::um::winnt::{FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE};
 use windows_permissions::SecurityDescriptor;
 
+use super::file_identity::file_information;
 use super::private_files::{
-    create_private_file as create_path_private_file, file_information, mark_handle_for_delete,
-    open_directory_bound, open_inspect_private_file, open_raw, open_raw_directory_bound,
-    open_rename_directory, rename_into_directory, validate_handle, verify_private_file,
+    create_private_file as create_path_private_file, mark_handle_for_delete, open_directory_bound,
+    open_inspect_private_file, open_raw, open_raw_directory_bound, open_rename_directory,
+    rename_into_directory, validate_handle, verify_private_file,
 };
+use super::MAX_PATH;
 
 const ERROR_ALREADY_EXISTS: i32 = 183;
+
+#[path = "directory_paths.rs"]
+mod paths;
+pub use paths::path_is_within;
+use paths::{
+    normalize_absolute_path, open_equivalent_directory, path_has_prefix, validate_boundary,
+};
 
 /// Directory handles held from every component of a checked path.
 ///
@@ -155,6 +164,37 @@ where
     )
 }
 
+/// Hold an existing read-only directory and its checked ancestry without
+/// requesting file creation, ACL repair, or delete rights.
+pub fn bind_readonly_directory(path: &Path) -> io::Result<PrivateDirectoryBinding> {
+    if !path.is_absolute() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "readonly directory path must be absolute",
+        ));
+    }
+    let path = normalize_absolute_path(path)?;
+    let mut current = PathBuf::new();
+    let mut handles = Vec::new();
+    for component in path.components() {
+        current.push(component.as_os_str());
+        if matches!(component, Component::RootDir | Component::Normal(_)) {
+            handles.push(open_directory_bound(&current, false, false)?);
+        }
+    }
+    if handles.is_empty() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "readonly directory path must identify a directory below its root",
+        ));
+    }
+    Ok(PrivateDirectoryBinding {
+        path,
+        handles,
+        created_final: false,
+    })
+}
+
 /// Bind an existing directory tree without changing its ACL.
 pub fn bind_directory<F>(
     path: &Path,
@@ -194,6 +234,7 @@ where
     let mut handles = Vec::new();
     let mut created_indices = Vec::new();
     let mut created_final = false;
+    let mut bound_path = path.clone();
     for (index, component) in path.components().enumerate() {
         match component {
             Component::Prefix(prefix) => current.push(prefix.as_os_str()),
@@ -204,49 +245,61 @@ where
                 current.push(name);
                 let is_target = index == final_component;
                 let is_private = path_has_prefix(&current, &private_root);
+                let mut reopen_path = current.clone();
                 let (mut handle, created) = match open_directory_bound(&current, false, is_target) {
                     Ok(handle) => (handle, false),
                     Err(error) if error.kind() == io::ErrorKind::NotFound => {
-                        let Some(descriptor) = security_descriptor else {
-                            cleanup_created_components(&handles, &created_indices, None);
-                            return Err(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                if is_private {
-                                    "private directory ancestry is missing"
-                                } else {
-                                    "trusted directory ancestry is missing"
-                                },
-                            ));
-                        };
-                        if !is_private {
-                            cleanup_created_components(&handles, &created_indices, None);
-                            return Err(io::Error::new(
-                                io::ErrorKind::NotFound,
-                                "trusted directory ancestry is missing",
-                            ));
-                        }
-                        let (handle, created) =
-                            match create_private_directory_handle(&current, descriptor) {
-                                Ok(result) => result,
-                                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                                    match open_directory_bound(&current, false, is_target) {
-                                        Ok(handle) => (handle, false),
-                                        Err(error) => {
-                                            cleanup_created_components(
-                                                &handles,
-                                                &created_indices,
-                                                None,
-                                            );
-                                            return Err(error);
+                        if let Some((handle, opened)) =
+                            open_equivalent_directory(&current, is_target)
+                        {
+                            reopen_path = opened;
+                            (handle, false)
+                        } else {
+                            let Some(descriptor) = security_descriptor else {
+                                cleanup_created_components(&handles, &created_indices, None);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::NotFound,
+                                    if is_private {
+                                        "private directory ancestry is missing"
+                                    } else {
+                                        "trusted directory ancestry is missing"
+                                    },
+                                ));
+                            };
+                            if !is_private {
+                                cleanup_created_components(&handles, &created_indices, None);
+                                return Err(io::Error::new(
+                                    io::ErrorKind::NotFound,
+                                    "trusted directory ancestry is missing",
+                                ));
+                            }
+                            let (handle, created) =
+                                match create_private_directory_handle(&current, descriptor) {
+                                    Ok(result) => result,
+                                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                                        match open_directory_bound(&current, false, is_target) {
+                                            Ok(handle) => (handle, false),
+                                            Err(error) => {
+                                                cleanup_created_components(
+                                                    &handles,
+                                                    &created_indices,
+                                                    None,
+                                                );
+                                                return Err(error);
+                                            }
                                         }
                                     }
-                                }
-                                Err(error) => {
-                                    cleanup_created_components(&handles, &created_indices, None);
-                                    return Err(error);
-                                }
-                            };
-                        (handle, created)
+                                    Err(error) => {
+                                        cleanup_created_components(
+                                            &handles,
+                                            &created_indices,
+                                            None,
+                                        );
+                                        return Err(error);
+                                    }
+                                };
+                            (handle, created)
+                        }
                     }
                     Err(error) => {
                         cleanup_created_components(&handles, &created_indices, None);
@@ -260,7 +313,7 @@ where
                     if is_private && !created {
                         drop(handle);
                         match durable_private_directory_handle(
-                            &current,
+                            &reopen_path,
                             is_target,
                             is_private,
                             &mut verify,
@@ -283,12 +336,15 @@ where
                 if created {
                     created_indices.push(handles.len());
                 }
+                if is_target {
+                    bound_path = reopen_path;
+                }
                 handles.push(handle);
             }
         }
     }
     Ok(PrivateDirectoryBinding {
-        path,
+        path: bound_path,
         handles,
         created_final,
     })
@@ -341,111 +397,6 @@ fn cleanup_created_components(
     }
 }
 
-fn normalize_absolute_path(path: &Path) -> io::Result<PathBuf> {
-    let absolute = if path.is_absolute() {
-        path.to_owned()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    let mut normalized = PathBuf::new();
-    for component in absolute.components() {
-        match component {
-            Component::ParentDir => {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidInput,
-                    "directory path cannot contain parent components",
-                ))
-            }
-            Component::CurDir => {}
-            Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            Component::RootDir | Component::Normal(_) => normalized.push(component.as_os_str()),
-        }
-    }
-    // Windows can represent the same path with different prefixes (for
-    // example, `C:\\...` versus the `\\\\?\\C:\\...` form returned by
-    // `canonicalize`). Resolve the existing portion of every input so the
-    // boundary check compares equivalent path representations. The final
-    // private directory may not exist yet, so retain any missing tail.
-    canonicalize_existing_prefix(&normalized)
-}
-
-fn canonicalize_existing_prefix(path: &Path) -> io::Result<PathBuf> {
-    let mut existing = path.to_owned();
-    let mut missing_tail = Vec::new();
-
-    let canonical_existing = loop {
-        match existing.canonicalize() {
-            Ok(canonical) => break canonical,
-            Err(error) => {
-                let Some(name) = existing.file_name() else {
-                    return Err(error);
-                };
-                missing_tail.push(name.to_owned());
-                let Some(parent) = existing.parent() else {
-                    return Err(error);
-                };
-                if parent == existing {
-                    return Err(error);
-                }
-                existing = parent.to_owned();
-            }
-        }
-    };
-
-    let mut canonical = canonical_existing;
-    for component in missing_tail.iter().rev() {
-        canonical.push(component);
-    }
-    Ok(canonical)
-}
-
-fn validate_boundary(path: &Path, trusted_base: &Path, private_root: &Path) -> io::Result<()> {
-    if !path.is_absolute() || !trusted_base.is_absolute() || !private_root.is_absolute() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "directory binding paths must be absolute",
-        ));
-    }
-    if !path_has_prefix(private_root, trusted_base) || !path_has_prefix(path, private_root) {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "directory binding path is outside its trusted private boundary",
-        ));
-    }
-    if !path
-        .components()
-        .any(|component| matches!(component, Component::Normal(_)))
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "private directory path has no directory component",
-        ));
-    }
-    if !private_root
-        .components()
-        .any(|component| matches!(component, Component::Normal(_)))
-    {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "private directory boundary has no directory component",
-        ));
-    }
-    Ok(())
-}
-
-fn path_has_prefix(path: &Path, prefix: &Path) -> bool {
-    let mut path_components = path.components();
-    for expected in prefix.components() {
-        let Some(actual) = path_components.next() else {
-            return false;
-        };
-        if actual.as_os_str() != expected.as_os_str() {
-            return false;
-        }
-    }
-    true
-}
-
 /// Create one owner-private directory with its security descriptor applied at
 /// creation time. Returns whether this call created the directory.
 pub fn create_private_directory(
@@ -489,4 +440,60 @@ fn create_private_directory_handle(
         return Err(io::Error::new(io::ErrorKind::AlreadyExists, error));
     }
     Err(error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn verbatim_disk_prefix_matches_drive_prefix() {
+        let path = Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home\native-runtime");
+        let prefix = Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(path_has_prefix(
+            prefix,
+            Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home")
+        ));
+    }
+
+    #[test]
+    fn windows_prefix_compare_is_case_insensitive_and_rejects_siblings() {
+        let path = Path::new(r"\\?\C:\Users\RUNNERADMIN\AppData\Local\Temp\Home");
+        let prefix = Path::new(r"c:\users\runneradmin\appdata\local\temp\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(!path_has_prefix(
+            Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\other"),
+            Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home")
+        ));
+    }
+
+    #[test]
+    fn verbatim_unc_prefix_matches_unc_prefix() {
+        let path = Path::new(r"\\?\UNC\server\share\home\native-runtime");
+        let prefix = Path::new(r"\\server\share\home");
+        assert!(path_has_prefix(path, prefix));
+        assert!(!path_has_prefix(path, Path::new(r"\\other\share\home")));
+    }
+    #[test]
+    fn win32_child_is_within_verbatim_root() {
+        let root = Path::new(r"\\?\C:\Users\runneradmin\AppData\Local\Temp\home");
+        let child = Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\home\native-runtime");
+        assert!(path_is_within(child, root));
+        assert!(!path_is_within(
+            Path::new(r"C:\Users\runneradmin\AppData\Local\Temp\other"),
+            root
+        ));
+    }
+
+    #[test]
+    fn verbatim_existing_directory_binds() {
+        let directory = std::env::temp_dir().join(format!("hg-bind-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let display = directory.display().to_string();
+        let verbatim = PathBuf::from(format!(r"\\?\{display}"));
+        let binding = bind_directory(&verbatim, &directory, &directory, |_, _, _, _| Ok(()));
+        let _ = std::fs::remove_dir_all(&directory);
+        binding.expect("verbatim spelling of an existing directory opens");
+    }
 }

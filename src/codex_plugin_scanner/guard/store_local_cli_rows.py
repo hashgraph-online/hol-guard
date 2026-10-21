@@ -2,54 +2,58 @@
 
 from __future__ import annotations
 
+import json
+import logging
 import sqlite3
 from collections.abc import Mapping
 from typing import cast
 
-from .runtime.custom_extension_suggestion import (
-    LocalCliKind,
-    is_suggestable_custom_tool,
-    suggestion_score,
-)
+from .runtime.custom_extension_suggestion import SuggestionTool, suggestion_tool, suggestion_verdicts
+
+_LOGGER = logging.getLogger(__name__)
+# Native batches allow 4096 tools and a 2 MiB request; source paths can be
+# long, so stay well inside both.
+_SUGGESTION_BATCH = 256
 
 
-def _with_suggestable(item: dict[str, object]) -> dict[str, object]:
-    kind = item.get("kind")
-    name = item.get("name")
-    if not isinstance(kind, str) or not isinstance(name, str):
+def _with_suggestions(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    """Rank items in bounded native batches; items the resident cannot rank stay hidden."""
+
+    ranked: list[tuple[dict[str, object], SuggestionTool]] = []
+    for item in items:
         item["suggestion_score"] = 0
         item["suggestable"] = False
-        return item
-    raw_path = item.get("source_path")
-    raw_count = item.get("observed_count")
-    raw_help = item.get("help_status")
-    raw_surface = item.get("surface")
-    source_path = raw_path if isinstance(raw_path, str) else None
-    observed_count = raw_count if isinstance(raw_count, int) else 0
-    help_status = raw_help if isinstance(raw_help, str) else None
-    surface = raw_surface if isinstance(raw_surface, str) else "cli"
-    typed_kind: LocalCliKind = "script" if kind == "script" else "executable"
-    item["suggestion_score"] = suggestion_score(
-        name=name,
-        kind=typed_kind,
-        source_path=source_path,
-        observed_count=observed_count,
-        help_status=help_status,
-        surface=surface,
-    )
-    item["suggestable"] = is_suggestable_custom_tool(
-        name=name,
-        kind=typed_kind,
-        source_path=source_path,
-        observed_count=observed_count,
-        help_status=help_status,
-        surface=surface,
-    )
-    return item
+        kind = item.get("kind")
+        name = item.get("name")
+        if not isinstance(kind, str) or not isinstance(name, str):
+            continue
+        raw_path = item.get("source_path")
+        raw_count = item.get("observed_count")
+        raw_help = item.get("help_status")
+        raw_surface = item.get("surface")
+        tool = suggestion_tool(
+            name=name,
+            kind="script" if kind == "script" else "executable",
+            source_path=raw_path if isinstance(raw_path, str) else None,
+            observed_count=raw_count if isinstance(raw_count, int) else 0,
+            help_status=raw_help if isinstance(raw_help, str) else None,
+            surface=raw_surface if isinstance(raw_surface, str) else "cli",
+        )
+        ranked.append((item, tool))
+    for offset in range(0, len(ranked), _SUGGESTION_BATCH):
+        batch = ranked[offset : offset + _SUGGESTION_BATCH]
+        verdicts = suggestion_verdicts([tool for _item, tool in batch])
+        if verdicts is None:
+            _LOGGER.warning("native custom extension suggestion unavailable for %d tools", len(batch))
+            continue
+        for (item, _tool), verdict in zip(batch, verdicts, strict=True):
+            item["suggestion_score"] = verdict["score"]
+            item["suggestable"] = verdict["suggestable"]
+    return items
 
 
 def _observation_from_row(row: object) -> dict[str, object]:
-    values = _row_values(row, 14)
+    values = _row_values(row, 16)
     surface = values[10] if values[10] in {"cli", "mcp", "package-scripts"} else "cli"
     source_label = values[12]
     command = values[13]
@@ -73,7 +77,25 @@ def _observation_from_row(row: object) -> dict[str, object]:
         "server_identity_hash": values[11],
         "source_label": source_label if isinstance(source_label, str) and source_label else None,
         **({"permission_scope": scope} if surface == "mcp" else {}),
+        **(_declaration(values[14], values[15]) if surface == "mcp" else {}),
     }
+
+
+def _declaration(remote_origin: object, declared_sources_json: object) -> dict[str, object]:
+    """Which harness configs declare an MCP connector; a remote one adds its origin."""
+
+    sources: list[str] = []
+    if isinstance(declared_sources_json, str):
+        try:
+            decoded = json.loads(declared_sources_json)
+        except ValueError:
+            decoded = None
+        if isinstance(decoded, list):
+            sources = [value for value in decoded if isinstance(value, str)][:16]
+    declaration: dict[str, object] = {"declared_sources": sources}
+    if isinstance(remote_origin, str) and remote_origin:
+        declaration["remote_origin"] = remote_origin
+    return declaration
 
 
 def _grant_from_row(row: object) -> dict[str, object]:
@@ -129,3 +151,17 @@ def _row_text(row: object, index: int) -> str:
     if not isinstance(value, str):
         raise ValueError("invalid local CLI row")
     return value
+
+
+def local_cli_rules_exist(connection: sqlite3.Connection, *, blocks_only: bool) -> bool:
+    """Whether a device grant or per-command state exists; only blocks if asked."""
+
+    if blocks_only:
+        query = (
+            "select exists(select 1 from local_cli_grant where state = 'blocked')"
+            " or exists(select 1 from local_cli_command_grant where state = 'block')"
+        )
+    else:
+        query = "select exists(select 1 from local_cli_grant) or exists(select 1 from local_cli_command_grant)"
+    row = connection.execute(query).fetchone()
+    return bool(row and row[0])

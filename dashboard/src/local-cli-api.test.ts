@@ -11,6 +11,7 @@ import {
   isLocalCliId,
   normalizeLocalCliItem,
   normalizeLocalCliList,
+  readJson,
   preferredPackageScriptExtension,
   seenSuggestionMeta,
   suggestedCustomExtensions,
@@ -22,7 +23,9 @@ import {
   suggestedSeenExtensions,
   waitForMcpDiscoveryJob,
 } from "./local-cli-api";
+import { packageScriptQueryFrom } from "./protection-center/add-custom-extension-project";
 import { parseProtectionRoute, localCliHref, addCustomExtensionHref } from "./local-cli-links";
+import { fetchLocalCliApi } from "./guard-api";
 
 assert.equal(isLocalCliId("local-cli.cwv-py-abcdef12"), true);
 assert.equal(isLocalCliId("command.git"), false);
@@ -107,6 +110,8 @@ const mcpItem = normalizeLocalCliItem({
 });
 assert.equal(mcpItem.surface, "mcp");
 assert.equal(mcpItem.server_identity_hash, "b".repeat(64));
+assert.equal(mcpItem.shares_enrolled_server, undefined);
+assert.equal(normalizeLocalCliItem({ ...mcpItem, shares_enrolled_server: true }).shares_enrolled_server, true);
 assert.equal(
   normalizeLocalCliItem({ ...mcpItem, source_label: "Codex, Claude Code" }).source_label,
   "Codex, Claude Code",
@@ -301,6 +306,11 @@ assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "guard:audit").map((entry) => entry.name),
   ["guard:reddit-targeting:audit"],
 );
+assert.equal(packageScriptQueryFrom("guard:reddit", packageScripts.commands), "guard:reddit");
+assert.equal(packageScriptQueryFrom("no-such-script", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("guard:audit", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("npm run", packageScripts.commands), "");
+assert.equal(packageScriptQueryFrom("  ", packageScripts.commands), "");
 assert.deepEqual(
   filterPackageScriptCommands(packageScripts.commands, "npm run").map((entry) => entry.name),
   ["guard:reddit-targeting:audit", "build"],
@@ -360,7 +370,7 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
 {
   const observed = { ...item, cli_id: "local-cli.mcp-observed", name: "Observed connector", surface: "mcp" as const,
     source_label: "Synthetic host", state: "unset" as const, suggestable: true, last_seen_at: "2026-09-27T12:00:00Z" };
-  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const };
+  const hidden = { ...observed, cli_id: "local-cli.hidden", surface: "cli" as const, suggestable: false };
   const before = JSON.stringify([item, observed, hidden]);
   const workspace = connectorWorkspaceItems([item, observed, hidden]);
   assert.equal(workspace[0]?.cli_id, observed.cli_id);
@@ -368,4 +378,39 @@ assert.equal(addedCustomExtensions(mixedValidity.items).length, 2);
   assert.deepEqual(connectorWorkspaceItems(workspace, "synthetic host").map((entry) => entry.cli_id), [observed.cli_id]);
   assert.equal(JSON.stringify([item, observed, hidden]), before);
   assert.equal(observed.state, "unset");
+}
+
+{
+  // Forget must pass the dashboard's local-CLI path allowlist (issue 3819).
+  const realFetch = globalThis.fetch;
+  const storage = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: {
+      location: { origin: "http://127.0.0.1:4174", pathname: "/", search: "", hash: "" },
+      sessionStorage: storage,
+      localStorage: storage,
+    },
+  });
+  let requested = "";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    requested = String(input);
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    await fetchLocalCliApi("/v1/local-clis/forget", { method: "POST", body: "{}" });
+  } finally {
+    globalThis.fetch = realFetch;
+    Reflect.deleteProperty(globalThis, "window");
+  }
+  assert.match(requested, /\/v1\/local-clis\/forget$/);
+  await assert.rejects(fetchLocalCliApi("/v1/local-clis/forget-all"), /Invalid local CLI API path/);
+}
+
+{
+  const failure = (status: number, body: unknown) => readJson(new Response(JSON.stringify(body), { status }));
+  await assert.rejects(failure(401, { error: "unauthorized" }), /could not confirm this dashboard session\. Reload this page/);
+  await assert.rejects(failure(401, { error: "unauthorized", message: " " }), /could not confirm this dashboard session/);
+  await assert.rejects(failure(409, { error: "revision_conflict", message: "Reload first." }), /Reload first\./);
+  await assert.rejects(failure(500, { error: "internal" }), /could not update this custom extension/);
 }

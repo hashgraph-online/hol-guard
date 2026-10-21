@@ -16,6 +16,7 @@ from ._scanner_commands import _scan_with_policy
 from .action_environment import drop_external_analyzer_credentials
 from .cli_ui import build_plain_text, build_verification_text
 from .config import ConfigError, load_scanner_config
+from .contributor_review import contributor_review_lines
 from .github_reporting import (
     build_scan_pr_comment_body,
     build_verify_pr_comment_body,
@@ -293,6 +294,7 @@ def _build_step_summary_lines(
         lines.append(f"- Submission issues: {', '.join(issue.url for issue in submission_issues)}")
     if mode in {"scan", "lint", "submit"}:
         lines.extend(_build_findings_summary_lines(findings))
+        lines.extend(contributor_review_lines(findings))
     return tuple(lines)
 
 

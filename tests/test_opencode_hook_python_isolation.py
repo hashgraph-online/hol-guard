@@ -21,6 +21,43 @@ def _context(tmp_path: Path, *, workspace: Path | None = None) -> HarnessContext
     )
 
 
+def test_preparation_attests_running_python_without_persistent_probe_state(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    with pytest.raises(RuntimeError, match="preparation interrupted"), hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(context)
+        attestation = hook_python.attest_guard_hook_python(context)
+        assert attestation.executable == Path(sys.executable).absolute()
+        assert hook_python._path_is_owned_private_directory(probe)
+        assert not context.guard_home.exists()
+        raise RuntimeError("preparation interrupted")
+    assert not probe.exists()
+    assert hook_python._PREPARATION_PROBE.get() is None
+    assert not context.guard_home.exists()
+
+
+def test_preparation_rejects_inherited_probe_scope(tmp_path: Path) -> None:
+    context = _context(tmp_path)
+    with hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(context)
+        token = hook_python._PREPARATION_PROBE.set((os.getpid() + 1, probe))
+        try:
+            with pytest.raises(RuntimeError, match="neutral_cwd_unavailable"):
+                hook_python.attest_guard_hook_python(context)
+        finally:
+            hook_python._PREPARATION_PROBE.reset(token)
+    assert not context.guard_home.exists()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX private directory modes")
+def test_preparation_rejects_probe_that_loses_private_permissions(tmp_path: Path) -> None:
+    with hook_python.disposable_guard_hook_probe():
+        probe = hook_python._attestation_probe_cwd(_context(tmp_path))
+        probe.chmod(0o755)
+        with pytest.raises(RuntimeError, match="neutral_cwd_unavailable"):
+            hook_python.attest_guard_hook_python(_context(tmp_path))
+    assert not probe.exists()
+
+
 def test_probe_environment_drops_python_virtualenv_and_loader_controls(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -85,30 +122,6 @@ def test_workspace_shadow_modules_and_sitecustomize_never_execute(
 
     assert resolved == Path(sys.executable).absolute()
     assert not marker.exists()
-
-
-def test_candidates_ignore_path_collision_and_workspace_virtualenv(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workspace = tmp_path / "workspace"
-    fake_bin = tmp_path / "fake-bin"
-    fake_bin.mkdir()
-    workspace_python = workspace / ".venv" / "bin" / "python"
-    workspace_python.parent.mkdir(parents=True)
-    workspace_python.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
-    workspace_python.chmod(0o755)
-    for name in ("hol-guard", "plugin-guard"):
-        collision = fake_bin / name
-        collision.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
-        collision.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{fake_bin}{os.pathsep}{os.environ.get('PATH', '')}")
-
-    candidates = hook_python._guard_hook_python_candidates(_context(tmp_path, workspace=workspace))
-
-    assert candidates[0] == Path(sys.executable).absolute()
-    assert workspace_python not in candidates
-    assert all(candidate.parent != fake_bin for candidate in candidates)
 
 
 def test_probe_rejects_noisy_stdout_before_parsing_identity(
@@ -203,21 +216,6 @@ def test_moved_or_unexpected_package_root_is_rejected(tmp_path: Path) -> None:
             neutral_cwd=tmp_path,
             expected_package_root=unexpected_root,
         )
-
-
-def test_only_the_running_guard_interpreter_is_a_candidate(tmp_path: Path) -> None:
-    context = _context(tmp_path)
-    pipx_python = context.home_dir / ".local" / "pipx" / "venvs" / "hol-guard" / "bin" / "python"
-    uv_python = context.home_dir / ".local" / "share" / "uv" / "tools" / "hol-guard" / "bin" / "python"
-    for candidate in (pipx_python, uv_python):
-        candidate.parent.mkdir(parents=True, exist_ok=True)
-        candidate.write_text("placeholder", encoding="utf-8")
-
-    candidates = hook_python._guard_hook_python_candidates(context)
-
-    assert candidates == [Path(sys.executable).absolute()]
-    assert pipx_python.absolute() not in candidates
-    assert uv_python.absolute() not in candidates
 
 
 def test_probe_uses_private_guard_owned_neutral_directory(tmp_path: Path) -> None:

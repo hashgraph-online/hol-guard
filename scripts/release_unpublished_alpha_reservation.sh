@@ -1,6 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 tag="alpha/v${VERSION}"
+# Assets now precede registry publication. Even a partial draft reserves its
+# source identity; deleting its tag would orphan immutable package inputs.
+if gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft >release.json 2>release.err; then
+  echo "GitHub release already reserves ${VERSION}; keeping its source tag"
+  exit 0
+elif ! grep -qi 'release not found' release.err; then
+  cat release.err >&2
+  exit 1
+fi
 set +e
 ref_json=$(gh api --method GET "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" 2>ref.err)
 ref_code=$?

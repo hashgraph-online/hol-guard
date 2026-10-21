@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Hashable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Protocol
 
 from .managed_controls_policy_bundle import signed_cloud_extension_projection_digest
@@ -68,6 +69,10 @@ def managed_delivery_matches_base(
     return (
         isinstance(catalog_digest, str)
         and bool(catalog_digest)
+        and (
+            policy.cloud_enforcement_digest is None
+            or catalog_digest == base_authority.catalog_digest == policy.cloud_enforcement_digest
+        )
         and delivery.get("extensionAuthorityRevision") == base_authority.revision
         and delivery.get("effectiveProjectionDigest") == effective_projection_digest(base_authority)
         and delivery.get("payloadHash") == policy_bundle.get("payloadHash")
@@ -75,6 +80,64 @@ def managed_delivery_matches_base(
         == signed_cloud_extension_projection_digest(
             policy,
             catalog_digest=catalog_digest,
+        )
+    )
+
+
+def revalidate_cloud_policy(
+    connection: sqlite3.Connection,
+    *,
+    policy: ParsedManagedControlsPolicy,
+    policy_bundle: Mapping[str, object],
+    guard_home,
+    registry,
+    capabilities: frozenset[str],
+    verdicts: PrecomputedVerdicts | None,
+) -> bool:
+    """Recheck the complete local observation outside the authority transaction.
+
+    The verdict is reused only for the exact session row read under the lock.
+    The base enforcement identity is independently compared by the caller.
+    """
+    if policy.cloud_projection_digest is None:
+        return True
+    from .managed_controls_policy_bundle import parsed_managed_controls_from_validated_policy_bundle
+    from .managed_controls_policy_fields import ManagedControlsPolicyError
+
+    row = connection.execute(
+        "select payload_json from sync_state where state_key = ?", ("runtime_session_summary",)
+    ).fetchone()
+    summary_json = None if row is None else str(row["payload_json"])
+    if summary_json is None:
+        return False
+
+    def compute() -> bool:
+        try:
+            summary = json.loads(summary_json)
+            if not isinstance(summary, dict):
+                return False
+            current = parsed_managed_controls_from_validated_policy_bundle(
+                dict(policy_bundle),
+                registry=registry,
+                negotiated_capabilities=capabilities,
+                guard_home=guard_home,
+                runtime_summary=summary,
+            )
+            return (
+                current.cloud_projection_digest == policy.cloud_projection_digest
+                and current.cloud_enforcement_digest == policy.cloud_enforcement_digest
+            )
+        except (ManagedControlsPolicyError, OSError, RuntimeError, TypeError, ValueError):
+            return False
+
+    if verdicts is None:
+        # Never start a resident round trip while holding the authority lock.
+        return False
+    return bool(
+        verdicts.resolve(
+            ("cloud-policy", summary_json, policy.cloud_projection_digest, policy.cloud_enforcement_digest),
+            compute,
+            "policy_local_view_invalid",
         )
     )
 
@@ -114,24 +177,58 @@ def composed_managed_authority(
     )
 
 
-def encoded_delivery_acknowledgement(
-    connection: sqlite3.Connection,
+@dataclass(frozen=True)
+class DeliveryAcknowledgementInputs:
+    """State read under the write lock that the acknowledgement is derived from."""
+
+    previous_json: str | None
+    applied_revision: int
+    applied_digest: str
+
+
+class ResidentVerdictRequiredError(Exception):
+    """Signal that a resident verdict must be computed outside the authority lock."""
+
+    def __init__(self, key: Hashable, compute: Callable[[], object], invalid_reason: str) -> None:
+        super().__init__("resident verdict must be computed before taking the authority lock")
+        self.key = key
+        self.compute = compute
+        self.invalid_reason = invalid_reason
+
+
+class PrecomputedVerdicts:
+    """Resident verdicts computed between attempts, keyed by the exact state they decide.
+
+    The resident can take seconds, so it must not run while the authority lock
+    and the SQLite write transaction are held. A locked attempt asks for a
+    verdict with the state it just read; a verdict is reused only when it was
+    computed for exactly that state, otherwise the attempt is abandoned and
+    retried against the re-read state.
+    """
+
+    def __init__(self) -> None:
+        self._values: dict[Hashable, object] = {}
+
+    def resolve(self, key: Hashable, compute: Callable[[], object], invalid_reason: str) -> object:
+        if key in self._values:
+            return self._values[key]
+        raise ResidentVerdictRequiredError(key, compute, invalid_reason)
+
+    def fill(self, required: ResidentVerdictRequiredError) -> None:
+        self._values[required.key] = required.compute()
+
+
+def _encode_acknowledgement(
+    inputs: DeliveryAcknowledgementInputs,
     *,
+    device_id: str,
     delivery: Mapping[str, object],
     policy_bundle: Mapping[str, object],
-    published_authority: ExtensionControlAuthorityView,
     observed_at: str,
 ) -> str:
-    device_id = delivery.get("deviceId")
-    if not isinstance(device_id, str) or not device_id:
-        raise ValueError("Managed Controls delivery requires a device identity")
-    row = connection.execute(
-        "select payload_json from sync_state where state_key = ?",
-        ("policy_bundle_ack",),
-    ).fetchone()
     previous = None
-    if row is not None:
-        value = json.loads(str(row["payload_json"]))
+    if inputs.previous_json is not None:
+        value = json.loads(inputs.previous_json)
         previous = value if isinstance(value, dict) else None
     acknowledgement = policy_bundle_acknowledgement_payload(
         device_id=device_id,
@@ -140,7 +237,51 @@ def encoded_delivery_acknowledgement(
         synced_at=observed_at,
         previous=previous,
         delivery=dict(delivery),
-        applied_extension_authority_revision=published_authority.managed_revision,
-        applied_effective_projection_digest=effective_projection_digest(published_authority),
+        applied_extension_authority_revision=inputs.applied_revision,
+        applied_effective_projection_digest=inputs.applied_digest,
     )
     return json.dumps(acknowledgement, allow_nan=False)
+
+
+def encoded_delivery_acknowledgement(
+    connection: sqlite3.Connection,
+    *,
+    delivery: Mapping[str, object],
+    policy_bundle: Mapping[str, object],
+    published_authority: ExtensionControlAuthorityView,
+    observed_at: str,
+    verdicts: PrecomputedVerdicts | None = None,
+) -> str:
+    """Return the encoded acknowledgement for the state observed on ``connection``.
+
+    The acknowledgement comes from the resident. With ``verdicts`` the call never
+    reaches the resident: it returns the result computed for exactly the state
+    observed here, or raises ``ResidentVerdictRequiredError`` so the caller can
+    compute it after releasing the lock and retry.
+    """
+
+    device_id = delivery.get("deviceId")
+    if not isinstance(device_id, str) or not device_id:
+        raise ValueError("Managed Controls delivery requires a device identity")
+    row = connection.execute(
+        "select payload_json from sync_state where state_key = ?",
+        ("policy_bundle_ack",),
+    ).fetchone()
+    inputs = DeliveryAcknowledgementInputs(
+        previous_json=None if row is None else str(row["payload_json"]),
+        applied_revision=published_authority.managed_revision,
+        applied_digest=effective_projection_digest(published_authority),
+    )
+
+    def compute() -> str:
+        return _encode_acknowledgement(
+            inputs,
+            device_id=device_id,
+            delivery=delivery,
+            policy_bundle=policy_bundle,
+            observed_at=observed_at,
+        )
+
+    if verdicts is None:
+        return compute()
+    return str(verdicts.resolve(("ack", inputs), compute, "managed_controls_delivery_ack_invalid"))

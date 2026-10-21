@@ -15,11 +15,15 @@ from scripts.bench_guard_native_installed_slo_runtime import _require
 from scripts.native_slo_adapter import Observation, process_rss_bytes, route_counts
 from scripts.native_slo_baseline import steady_state_rss_baseline as _steady_state_rss_baseline
 from scripts.native_slo_capacity_support import (
+    _baseline_capacity,
     _classify_native_overloads,
     _diagnostic_route_counters,
+    _hook_capacity_view,
     _prime_load_executor,
     _reconcile_wave_routes,
+    _stabilize_ready_hook_workers,
 )
+from scripts.native_slo_failure_details import failure_details, report_request_failures
 from scripts.native_slo_preflight import preflight_operation
 from scripts.native_slo_progress import SloProgress
 from scripts.native_slo_session import AdapterSession
@@ -30,7 +34,6 @@ _STEADY_STATE_CONCURRENCY = 16
 # worker is prestarted before a measured wave, and this one-second envelope lets
 # those transport deadlines resolve before the executor-level no-hang bound.
 _CONCURRENT_WAVE_TIMEOUT_SECONDS = 6.0
-_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -106,53 +109,35 @@ def _run_concurrent(
             for future in unfinished:
                 if not future.cancelled():
                     future.add_done_callback(record_late)
-            finished_observations: list[Observation] = []
-            for future in finished:
-                if future.cancelled():
-                    continue
-                try:
-                    finished_observations.append(future.result())
-                except Exception:
-                    continue
-            if finished_observations:
-                on_transport_observations(finished_observations)
+        finished_observations: list[Observation] = []
+        completed_failures: list[dict[str, str]] = []
+        for future in finished:
+            if future.cancelled():
+                continue
+            try:
+                finished_observations.append(future.result())
+            except Exception as error:
+                completed_failures.append(failure_details(error))
+        if finished_observations and on_transport_observations is not None:
+            on_transport_observations(finished_observations)
+        report_request_failures(
+            completed_failures,
+            stage=stage,
+            submitted=len(futures),
+            responses=len(finished_observations),
+            errors=len(completed_failures),
+        )
         executor.shutdown(wait=False, cancel_futures=True)
         raise RuntimeError("native_installed_slo_failed: concurrent capacity wave timed out")
+    failures: list[dict[str, str]] = []
     for future in futures:
         try:
             observations.append(future.result())
-        except Exception:
+        except Exception as error:
             errors += 1
+            failures.append(failure_details(error))
+    report_request_failures(failures, stage=stage, submitted=len(futures), responses=len(observations), errors=errors)
     return observations, errors
-
-
-def _stabilize_ready_hook_workers(session: AdapterSession) -> int:
-    """Bring every configured steady-state hook worker to ready before RSS sampling."""
-
-    runner = session.daemon._server.hook_process_runner
-    runner.notify_queued_work()
-    runner.enable_full_capacity(delay_seconds=0.0, active_deferral_seconds=0.0)
-    target = runner.stats()["target"]
-    _require(
-        isinstance(target, int) and not isinstance(target, bool) and 1 <= target <= _MAX_CONCURRENCY,
-        "hook worker stabilization target was invalid",
-    )
-    _require(
-        runner.wait_for_capacity(
-            minimum_workers=target,
-            timeout_seconds=_HOOK_WORKER_STABILIZATION_TIMEOUT_SECONDS,
-        ),
-        "hook worker stabilization did not reach the configured target",
-    )
-    stabilized = runner.stats()
-    _require(
-        stabilized["target"] == target
-        and stabilized["workers"] == target
-        and stabilized["ready"] == target
-        and stabilized["busy"] == 0,
-        "hook worker capacity changed while stabilizing",
-    )
-    return target
 
 
 def _prewarm_ready_hook_workers(
@@ -165,9 +150,9 @@ def _prewarm_ready_hook_workers(
     on_submitted: ProgressCountCallback | None = None,
     on_cancelled: ProgressCountCallback | None = None,
 ) -> tuple[list[Observation], int]:
-    kwargs: ConcurrentWaveOptions = {}
+    kwargs: ConcurrentWaveOptions = {"stage": "rss_baseline_requests"}
     if observer is not None:
-        kwargs.update(observer=observer, stage="rss_baseline_requests")
+        kwargs["observer"] = observer
     if on_submitted is not None:
         kwargs["on_submitted"] = on_submitted
     if on_cancelled is not None:
@@ -178,13 +163,10 @@ def _prewarm_ready_hook_workers(
 
 
 def _require_ready_hook_workers(session: AdapterSession, ready_workers: int) -> None:
-    stats = session.daemon._server.hook_process_runner.stats()
+    capacity = _hook_capacity_view(session)
     _require(
-        stats["target"] == ready_workers
-        and stats["workers"] == ready_workers
-        and stats["ready"] == ready_workers
-        and stats["busy"] == 0,
-        "hook worker capacity was not steady after prewarm",
+        capacity["busy"] == 0 and capacity["ready"] >= ready_workers,
+        "hook scheduler capacity was not steady after prewarm",
     )
 
 
@@ -203,9 +185,9 @@ def _measure_classified_wave(
     metrics = session.daemon._server.hook_worker.metrics
     before = route_counts(metrics.snapshot())
     overloads_before = session.native_overload_count()
-    wave_kwargs: ConcurrentWaveOptions = {}
+    wave_kwargs: ConcurrentWaveOptions = {"stage": stage}
     if observer is not None:
-        wave_kwargs.update(observer=observer, stage=stage)
+        wave_kwargs["observer"] = observer
     if on_submitted is not None:
         wave_kwargs["on_submitted"] = on_submitted
     if on_cancelled is not None:
@@ -316,9 +298,9 @@ def _prewarm_capacity_workers(
 
     try:
         _prime_load_executor(executor, _STEADY_STATE_CONCURRENCY)
-        wave_kwargs: ConcurrentWaveOptions = {}
+        wave_kwargs: ConcurrentWaveOptions = {"stage": "capacity_prewarm"}
         if observer is not None:
-            wave_kwargs.update(observer=observer, stage="capacity_prewarm")
+            wave_kwargs["observer"] = observer
         if on_submitted is not None:
             wave_kwargs["on_submitted"] = on_submitted
         if on_cancelled is not None:
@@ -405,9 +387,16 @@ def _measure_rss_and_c64(
                 on_submitted=progress.submit,
                 on_cancelled=progress.cancel,
             )
+        if include_capacity:
+            # 16-client waves reuse a few lazily started resident client streams; the 64-client wave fills the
+            # pool to its fixed cap. Fill it first so the baseline holds that bounded pool, not just the c64 delta.
+            _, burst_errors = _run_concurrent(
+                session, routes, load_concurrency, executor, stage="rss_baseline_requests", **baseline_kwargs
+            )
+            _require(burst_errors == 0, "resident stream pool burst returned request errors")
         rss_baseline = _steady_state_rss_baseline(
             lambda: _prewarm_ready_hook_workers(session, routes, ready_workers, executor, **baseline_kwargs),
-            sample_capacity=session.daemon._server.hook_process_runner.stats,
+            sample_capacity=lambda: _baseline_capacity(session, ready_workers),
             expected_warmup_count=ready_workers,
         )
         baseline_completed = True

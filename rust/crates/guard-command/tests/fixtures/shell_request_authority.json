@@ -1,0 +1,1232 @@
+{
+  "cases": [
+    {
+      "args": [
+        ""
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "plain"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$HOME"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "${HOME}"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "${HOME}"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "${HOME}"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "${HOME}"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "${HOME}"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "$9"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "$9"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$9"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$9"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$9"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "$$"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "$$"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$$"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$$"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$$"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "$(pwd)"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "`pwd`"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "'$HOME'"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "'$HOME'"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "'$HOME'"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "'$HOME'"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "'$HOME'"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "\"$HOME\""
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "\"$HOME\""
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "\"$HOME\""
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "\"$HOME\""
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "\"$HOME\""
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "\\$HOME"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "\\$HOME"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\\$HOME"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\\$HOME"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\\$HOME"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u00e9"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "\u96ea"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "\u96ea"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u96ea"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u96ea"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "\u96ea"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "a$b"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "a$b"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "a$b"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "a$b"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": true
+    },
+    {
+      "args": [
+        "a$b"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "gh"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "gh"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "gh"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "gh"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "gh"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": true
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3.12"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": true
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "pythonw.exe"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": true
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "python3x"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_TOKEN"
+      ],
+      "call": "_github_environment_name",
+      "result": true
+    },
+    {
+      "args": [
+        "GH_TOKEN"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_TOKEN"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_TOKEN"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_TOKEN"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_HOST"
+      ],
+      "call": "_github_environment_name",
+      "result": true
+    },
+    {
+      "args": [
+        "GH_HOST"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_HOST"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_HOST"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GH_HOST"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "GITHUB_TOKEN"
+      ],
+      "call": "_github_environment_name",
+      "result": true
+    },
+    {
+      "args": [
+        "GITHUB_TOKEN"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GITHUB_TOKEN"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GITHUB_TOKEN"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "GITHUB_TOKEN"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        "OTHER"
+      ],
+      "call": "_github_environment_name",
+      "result": false
+    },
+    {
+      "args": [
+        "OTHER"
+      ],
+      "call": "_shell_token_has_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "OTHER"
+      ],
+      "call": "github_argument_token_has_untrusted_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "OTHER"
+      ],
+      "call": "_shell_token_has_active_expansion",
+      "result": false
+    },
+    {
+      "args": [
+        "OTHER"
+      ],
+      "call": "_is_pytest_python_interpreter_command",
+      "result": false
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": []
+    },
+    {
+      "args": [
+        ""
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "gh pr view 1"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": []
+    },
+    {
+      "args": [
+        "gh pr view 1"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo '$HOME'"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": []
+    },
+    {
+      "args": [
+        "echo '$HOME'"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "gh api \"$ENDPOINT\""
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": []
+    },
+    {
+      "args": [
+        "gh api \"$ENDPOINT\""
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": true
+    },
+    {
+      "args": [
+        "gh api ${URL}"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": []
+    },
+    {
+      "args": [
+        "gh api ${URL}"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": true
+    },
+    {
+      "args": [
+        "gh pr create --body $(cat notes.md)"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "cat notes.md"
+      ]
+    },
+    {
+      "args": [
+        "gh pr create --body $(cat notes.md)"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": true
+    },
+    {
+      "args": [
+        "gh pr create --body $(cat notes.md)",
+        22
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "cat notes.md",
+        35
+      ]
+    },
+    {
+      "args": [
+        "echo `pwd`"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "pwd"
+      ]
+    },
+    {
+      "args": [
+        "echo `pwd`"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo `pwd`",
+        6
+      ],
+      "call": "_read_backtick_command_substitution",
+      "result": [
+        "pwd",
+        10
+      ]
+    },
+    {
+      "args": [
+        "echo `pwd`",
+        10
+      ],
+      "call": "_read_backtick_command_substitution",
+      "result": [
+        "",
+        10
+      ]
+    },
+    {
+      "args": [
+        "echo $(printf $(pwd))"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "printf $(pwd)"
+      ]
+    },
+    {
+      "args": [
+        "echo $(printf $(pwd))"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo $(printf $(pwd))",
+        7
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "printf $(pwd)",
+        21
+      ]
+    },
+    {
+      "args": [
+        "echo $(printf $(pwd))",
+        16
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "pwd",
+        20
+      ]
+    },
+    {
+      "args": [
+        "echo $(printf 'a)b')"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "printf 'a)b'"
+      ]
+    },
+    {
+      "args": [
+        "echo $(printf 'a)b')"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo $(printf 'a)b')",
+        7
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "printf 'a)b'",
+        20
+      ]
+    },
+    {
+      "args": [
+        "echo \u00e9$(printf \u96ea)"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "printf \u96ea"
+      ]
+    },
+    {
+      "args": [
+        "echo \u00e9$(printf \u96ea)"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo \u00e9$(printf \u96ea)",
+        8
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "printf \u96ea",
+        17
+      ]
+    },
+    {
+      "args": [
+        "echo $(unfinished"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "unfinished"
+      ]
+    },
+    {
+      "args": [
+        "echo $(unfinished"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo $(unfinished",
+        7
+      ],
+      "call": "_read_command_substitution",
+      "result": [
+        "unfinished",
+        17
+      ]
+    },
+    {
+      "args": [
+        "echo `unfinished"
+      ],
+      "call": "_shell_command_substitution_payloads",
+      "result": [
+        "unfinished"
+      ]
+    },
+    {
+      "args": [
+        "echo `unfinished"
+      ],
+      "call": "_github_shell_has_dynamic_arguments",
+      "result": false
+    },
+    {
+      "args": [
+        "echo `unfinished",
+        6
+      ],
+      "call": "_read_backtick_command_substitution",
+      "result": [
+        "unfinished",
+        16
+      ]
+    },
+    {
+      "args": [
+        []
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": []
+    },
+    {
+      "args": [
+        [
+          "gh",
+          "pr",
+          "view"
+        ]
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": [
+        [
+          [
+            "gh",
+            "pr",
+            "view"
+          ]
+        ]
+      ]
+    },
+    {
+      "args": [
+        [
+          "gh",
+          "api",
+          "|",
+          "cat"
+        ]
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": [
+        [
+          [
+            "gh",
+            "api"
+          ],
+          [
+            "cat"
+          ]
+        ]
+      ]
+    },
+    {
+      "args": [
+        [
+          "echo",
+          "x",
+          ";",
+          "gh",
+          "pr",
+          "list"
+        ]
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": [
+        [
+          [
+            "echo",
+            "x"
+          ]
+        ],
+        [
+          [
+            "gh",
+            "pr",
+            "list"
+          ]
+        ]
+      ]
+    },
+    {
+      "args": [
+        [
+          "a",
+          "&&",
+          "b",
+          "||",
+          "c"
+        ]
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": [
+        [
+          [
+            "a"
+          ]
+        ],
+        [
+          [
+            "b"
+          ]
+        ],
+        [
+          [
+            "c"
+          ]
+        ]
+      ]
+    },
+    {
+      "args": [
+        [
+          "(",
+          "gh",
+          "pr",
+          "list",
+          ")"
+        ]
+      ],
+      "call": "_iter_shell_pipelines",
+      "result": [
+        [
+          [
+            "(",
+            "gh",
+            "pr",
+            "list",
+            ")"
+          ]
+        ]
+      ]
+    }
+  ],
+  "retained_original_fixture_sha256": {
+    "rust/crates/guard-command/tests/fixtures/sfrs/classify_github_shell_capabilities.json.gz": "82f67f1fc406e50db843190085caa2a9ce204298c1c77b73e481a3ba590d14b4",
+    "rust/crates/guard-command/tests/fixtures/sfrs/fs_helpers.json.gz": "f5249e6f6d02e50f1ab8ab3c5791a3b3e1fe1d60b1b5a511bdf91a2580deb359",
+    "rust/crates/guard-command/tests/fixtures/sfrs/github_body.json.gz": "de532d1d1d69a678b932fe20682723a86189cf76d242b923d3671742a6d9d005",
+    "rust/crates/guard-command/tests/fixtures/sfrs/intermediate_tokens.json.gz": "fe85e5500ef3cf7c9f81bd69650d09e6cfca8813dedb5717c78e9de32223105a"
+  },
+  "schema": "guard-shell-request-authority-python-parity.v1",
+  "source_commit": "68558a59d9e8b6d4a8a86ef9de9263de41248068",
+  "source_sha256": {
+    "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py": "5453086e51325808e512a050a4b7408b8a26f82e2a7e2b6c4fae80367a52ce7a",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py": "64ba8eac46f7178a1899ca502a333a33e321f36f10a699ba77337babb3dc9c24",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_expansion.py": "1d245cfc7dd004faba76f35dd631f1d6561945610a6f7e1f1e0236feeb74cf68",
+    "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_shell_capabilities.py": "d584623615ba075ac4ab57cc81f9db42a8c4448638308935dff08e5172484317"
+  }
+}

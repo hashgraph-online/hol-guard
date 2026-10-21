@@ -29,10 +29,13 @@ Never ask for a token, secret, or other credential to work around fork access.
 ## Declarative extension submissions
 
 When a pull request changes `contributions/command-sources/`, portable command
-fixtures, or the extension trust map:
+fixtures, or `contracts/extensions/trust/*.v1.json` (per-extension trust
+bindings):
 
 1. Check that the source filename, fixture filename, fixture source binding,
-   and external trust-map entry agree.
+   and the extension's trust-binding file agree. `trust-class-map.v1.json` is a
+   ignored package projection of `trust/`; builds generate it, and PRs must
+   never commit or hand-edit it.
 2. When those authored inputs are valid, synchronize only deterministic
    projections with `scripts/prepare_extension_contribution.py` and include its
    generated descriptor, native program, catalog, and package-resource updates.

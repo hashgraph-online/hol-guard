@@ -121,7 +121,7 @@ def _rewrite_store_base() -> None:
         "_ENCRYPTED_SECRET_INIT_LOCKS: dict[str, threading.Lock] = {}",
         '_POLICY_INTEGRITY_MIGRATION_ELIGIBLE_STATUSES = frozenset({"missing_integrity", "unknown_key"})',
     )
-    old_block = '''        lock_key = os.path.realpath(os.fspath(self.key_path))
+    old_block = """        lock_key = os.path.realpath(os.fspath(self.key_path))
         with _ENCRYPTED_SECRET_INIT_LOCKS_GUARD:
             thread_lock = _ENCRYPTED_SECRET_INIT_LOCKS.setdefault(lock_key, threading.Lock())
         with thread_lock:
@@ -147,31 +147,31 @@ def _rewrite_store_base() -> None:
                     self._fernet = Fernet(key)
                 finally:
                     _release_advisory_file_lock(lock_handle)
-'''
-    new_block = '''        self._fernet = Fernet(
+"""
+    new_block = """        self._fernet = Fernet(
             initialize_encrypted_secret_store_key(self),
         )
-'''
+"""
     if old_block not in text:
         raise RuntimeError("expected current encrypted-key initialization block was not found")
     text = text.replace(old_block, new_block)
     text = text.replace(
-        '''        if not existing:
+        """        if not existing:
             raise RuntimeError("encrypted Guard secret key is empty")
-''',
-        '''        if not existing:
+""",
+        """        if not existing:
             raise RuntimeError(
                 "encrypted Guard secret key is empty",
             )
-''',
+""",
     )
     text = text.replace(
-        '''        raise RuntimeError("encrypted Guard secret key is invalid")
-''',
-        '''        raise RuntimeError(
+        """        raise RuntimeError("encrypted Guard secret key is invalid")
+""",
+        """        raise RuntimeError(
             "encrypted Guard secret key is invalid",
         )
-''',
+""",
     )
     if "threading" in text or "_ENCRYPTED_SECRET_INIT_LOCKS" in text:
         raise RuntimeError("stale inline encrypted-key lock implementation remains")
@@ -255,7 +255,7 @@ def _move_authority_tests() -> None:
         segment = ast.get_source_segment(auth_text, node)
         if segment:
             parts.append(segment.rstrip() + "\n\n")
-    parts.append('''\
+    parts.append("""\
 def test_unavailable_system_keyring_uses_owner_only_vault(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(
@@ -324,7 +324,7 @@ def test_linux_legacy_keyring_authority_migrates_then_survives_keyring_loss(
     assert restarted.read_extension_control_authority(
         catalog_digest=BUILT_IN_COMMAND_EXTENSION_REGISTRY.catalog_digest
     ).health is AuthorityHealth.PROTECTED
-''')
+""")
     NEW_AUTH_TEST.write_text("".join(parts), encoding="utf-8")
 
 

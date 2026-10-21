@@ -3,8 +3,8 @@
 Status: executable migration contract for `main`.
 
 The machine-readable source of truth is
-`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The always-selected
-`Rust authority ownership` workflow rejects protected hook/data-plane changes
+`docs/guard/contracts/hook-data-plane-ownership.v2.json`. The
+nightly native workflow (`nightly-native.yml`) rejects protected hook/data-plane changes
 that do not match a declared ownership node.
 
 ## Pinned baselines
@@ -115,7 +115,19 @@ tests, language-neutral parity fixtures, and package content.
 
 `scripts/ci/rust_io_ownership_gate.py` builds an AST inventory of synchronous
 Python filesystem, hash, decode, and archive operations and walks supported
-hook entrypoints. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
+hook entrypoints. The walk starts at the CLI hook command, so harness
+resolution and payload loading are inside the gate rather than ahead of it.
+
+The inventory covers the whole Guard package, not just the decision path, so
+most of its operations are unclassified by design: they belong to the Python
+control plane the native runtime never consults. The report's
+`control_plane_remainder` block records that remainder with its
+`reachable_count`, which is zero whenever the gate passes -- the gate refuses
+to pass while any unclassified operation is reachable from a root. Read the
+unclassified category totals through that block; on their own they look like a
+classification backlog, and they are not one. An operation only becomes gate
+work when a new root makes it reachable, which is also the point at which it
+has to be classified. `scripts/ci/rust_io_privacy_gate.py` statically checks route,
 metrics, journal, and enrichment serializers and dynamically probes raw source,
 command, secret, and private-path payloads. Both gates emit versioned,
 aggregate-only JSON evidence.
@@ -130,6 +142,16 @@ Route and evidence artifacts contain only bounded dimensions, reason codes,
 counts, hashes, and booleans. They exclude raw payloads, source, commands,
 prompts, content, secrets, tokens, and paths. The `workspace_bound` boolean may
 record that a workspace was present without disclosing its name or location.
+
+The Extensions allow hint is advisory presentation, not a decision: whether a
+paused review may carry an "enable this permission" hint is gated by one
+intentional mirror of the resident's `allow_hint_candidate` check in the
+Python control plane (`native_review_allow_hint._definite_review_binding` and
+`extension_allow_hint`). All three state the same rule — the pause must be
+the extension review itself (`native_command_review_required`) — and the
+recorded vectors in `rust/crates/guard-runtime/testdata/hook_direct_review/`
+pin the resident and daemon copies together. The settle proofs and the
+counterfactual that verifies a hint before it is stored remain Rust-owned.
 
 ## Harness route inventory
 
@@ -161,6 +183,19 @@ Current material gaps include:
   resident-memory replay state, and final consume fence. Python may present
   the opaque challenge and forward the external artifact, but it never signs,
   authorizes, or persists approval state.
+- Rust owns the reuse of a saved approval on the artifact hook: the resident
+  (`artifact_reuse_step`) answers a plan of effects (claim, revalidate, settled)
+  and Python only runs them. A claim that wins is always followed by its
+  revalidation with no resident call between the two, and a resident that
+  fails or answers a malformed plan fails closed to the host outage. The one
+  Python decision left is the package fallback floor, which never ends weaker
+  than the recomputed action.
+- Rust owns the CLI hook's verdict for Claude Code's permission dialog: the
+  resident (`claude_permission_verdict`) picks no decision, the Guard approval
+  question, a review that defers to Claude's dialog, or a deny, and asks for
+  the runtime artifact's policy only when the verdict rests on it. Python
+  gathers that policy, renders the reason, copy and envelope, and answers a
+  verdict the resident cannot supply with the host outage response.
 
 ## No-environment production contract
 
@@ -175,12 +210,13 @@ Installed native artifacts must prove all listed environment variables are absen
 
 Unset mode selects `auto`; an invalid mode also selects `auto`. Auto mode uses
 only the package-bound, manifest-attested runtime and ignores a binary override.
-Unset fast-path configuration enables the resident worker. No production path
-searches `PATH` or downloads a runtime. Native unavailability produces a
+Unset fast-path configuration enables the resident worker. No hook or daemon path
+searches `PATH` or downloads a runtime; only the explicit `update`, `install` and
+`doctor --repair` commands fetch a missing GitHub-only native wheel. Native unavailability produces a
 deterministic fail-safe result.
 
-The stable native-wheel matrix exercises Linux x64, macOS x64, macOS arm64, and
-Windows x64. Desktop Core stages the runtime from an attested native wheel,
+The stable native-wheel matrix exercises Linux x64, macOS x64, macOS arm64,
+Windows x64, and Windows arm64. Desktop Core stages the runtime from an attested native wheel,
 binds version and target, refreshes the manifest after signing changes the
 binary, and verifies the frozen sidecar.
 

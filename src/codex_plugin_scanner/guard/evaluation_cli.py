@@ -10,7 +10,6 @@ runner does not produce installed-host proof.
 from __future__ import annotations
 
 import argparse
-import contextlib
 import json
 import os
 from collections.abc import Mapping, Sequence
@@ -24,8 +23,8 @@ from .evaluation_cli_recovery import (
     _read_recovery_token,
     _recovery_token_path,
     _remove_recovery_token,
-    _write_recovery_token,
 )
+from .evaluation_cli_recovery import _write_recovery_token as _write_recovery_token
 from .evaluation_cli_run import run_synthetic_command
 from .evaluation_contracts import EvaluationContractError, EvaluationProfile, EvaluationResult
 from .evaluation_evidence_package import (
@@ -35,11 +34,9 @@ from .evaluation_evidence_package import (
     write_evaluation_evidence_package,
 )
 from .evaluation_json import reject_duplicate_keys
-from .evaluation_preflight import (
-    cleanup_interrupted_evaluation_setup,
-    preflight_evaluation,
-    setup_evaluation,
-)
+from .evaluation_preflight import cleanup_interrupted_evaluation_setup
+from .evaluation_preflight import preflight_evaluation as preflight_evaluation
+from .evaluation_preflight import setup_evaluation as setup_evaluation
 from .evaluation_runner import BUILT_IN_CASE_IDS
 
 CLI_SCHEMA_VERSION = "guard.evaluation-cli.v1"
@@ -202,51 +199,9 @@ def _artifact_paths(specs: Sequence[str], profile: EvaluationProfile) -> dict[st
 
 
 def _run_preflight(args: argparse.Namespace) -> int:
-    try:
-        profile_path = _path_argument(
-            args, "profile_path", "profile_option", "evaluation profile", code="profile_argument_required"
-        )
-        profile = _load_profile(profile_path)
-        artifacts = _artifact_paths(cast(list[str], args.artifact), profile)
-        if args.setup:
-            if os.name == "nt":
-                raise _CliError(
-                    "recovery_windows_unavailable",
-                    "private recovery token storage is unavailable on Windows",
-                    status="blocked_environment",
-                )
-            setup = setup_evaluation(
-                profile,
-                host_executable=args.host_executable,
-                artifact_paths=artifacts or None,
-                allow_host_execution=bool(args.allow_host_execution),
-            )
-            report = setup.to_dict()
-            cleanup: dict[str, object] | None = None
-            if setup.report.status == "passed":
-                try:
-                    target_scope = cast(Mapping[str, object], profile.data["targetScope"])
-                    declared_parent = Path(cast(str, target_scope["rootPath"]))
-                    _write_recovery_token(setup, declared_parent=declared_parent)
-                except _CliError as error:
-                    with contextlib.suppress(EvaluationContractError):
-                        setup.cleanup()
-                    _emit(_result("preflight", error.status, report=report, error=error))
-                    return _exit_code(error.status)
-                cleanup = {"available": True, "tokenLocation": "declared_parent"}
-            _emit(_result("preflight", setup.report.status, report=report, cleanup=cleanup))
-            return _exit_code(setup.report.status)
-        report = preflight_evaluation(
-            profile,
-            host_executable=args.host_executable,
-            artifact_paths=artifacts or None,
-            allow_host_execution=bool(args.allow_host_execution),
-        )
-        _emit(_result("preflight", report.status, report=report.to_dict()))
-        return _exit_code(report.status)
-    except _CliError as error:
-        _emit(_result("preflight", error.status, error=error))
-        return _exit_code(error.status)
+    from .evaluation_cli_setup import run_preflight
+
+    return run_preflight(args)
 
 
 def _run_synthetic(args: argparse.Namespace) -> int:

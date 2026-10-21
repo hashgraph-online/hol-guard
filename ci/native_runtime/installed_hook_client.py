@@ -10,8 +10,10 @@ import urllib.request
 from collections.abc import Mapping
 from pathlib import Path
 
-from codex_plugin_scanner.guard.adapters.claude_daemon_hook_transport import authenticated_claude_hook_response
-from codex_plugin_scanner.guard.adapters.codex_daemon_hook_transport import _daemon_response_once
+from codex_plugin_scanner.guard.adapters._modules.claude.claude_daemon_hook_transport import (
+    authenticated_claude_hook_response,
+)
+from codex_plugin_scanner.guard.adapters._modules.codex.codex_daemon_hook_transport import _daemon_response_once
 from codex_plugin_scanner.guard.daemon.server import GuardDaemonServer
 
 _SAFE_REASON_CODE = re.compile(r"[a-z][a-z0-9_]{0,95}\Z")
@@ -58,7 +60,7 @@ def installed_hook_request(
                 state_path=guard_home / "daemon-state.json",
                 query=query,
                 data=encoded,
-                timeout_seconds=5,
+                timeout_seconds=10,
             )
         )
         return decoded if isinstance(decoded, dict) else None
@@ -69,7 +71,7 @@ def installed_hook_request(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=5) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             decoded = json.loads(response.read().decode("utf-8"))
             return decoded if isinstance(decoded, dict) else None
     except urllib.error.HTTPError as error:

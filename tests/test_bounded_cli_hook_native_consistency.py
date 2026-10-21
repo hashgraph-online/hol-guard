@@ -6,7 +6,7 @@ import json
 import pytest
 
 from codex_plugin_scanner.guard.adapters.bounded_cli_hook_daemon import _daemon_response_to_native
-from codex_plugin_scanner.guard.daemon.hook_worker_responses import harness_json_from_native_pre_tool_review
+from codex_plugin_scanner.guard.daemon.hook_fail_closed import render_pre_tool_review
 
 
 def _translate(payload: dict[str, object], *, harness: str = "grok", event: str = "PreToolUse"):
@@ -96,7 +96,7 @@ def test_zcode_authority_block_stderr_carries_remediation() -> None:
     )
 
     assert code == 2
-    assert "hol-guard command controls acknowledge-degraded" in stderr
+    assert "hol-guard command controls recover-authority" in stderr
 
 
 def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
@@ -110,9 +110,9 @@ def test_zcode_prompt_blocks_keep_blocking_exit() -> None:
 
 def test_zcode_native_review_renderer_asks_and_exits_zero() -> None:
     # The daemon worker renders review-tier PreToolUse responses through
-    # harness_json_from_native_pre_tool_review; for zcode that envelope must
+    # the pre-tool review renderer; for zcode that envelope must
     # ask and the bridge must exit 0 so zcode opens its permission prompt.
-    rendered = harness_json_from_native_pre_tool_review(
+    rendered = render_pre_tool_review(
         "zcode",
         {"policy_action": "review", "reason": "Approval required.", "reason_code": "native_pre_tool_review"},
         approval=None,

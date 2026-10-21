@@ -24,20 +24,28 @@ use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use super::normalize_scope_text;
 
+#[path = "policy_store_business_floor_tests.rs"]
+mod business_floor_tests;
+#[path = "policy_store_business_source_tests.rs"]
+mod business_source_tests;
 #[path = "policy_store_command_authority_tests.rs"]
 mod command_authority_tests;
 #[path = "policy_store_command_floor_tests.rs"]
 mod command_floor_tests;
+#[path = "policy_store_command_pack_tests.rs"]
+mod command_pack_tests;
 #[path = "policy_store_fault_tests.rs"]
 mod fault_tests;
 #[path = "policy_store_fixture_tests.rs"]
 mod fixture_tests;
 #[path = "policy_store_migration_tests.rs"]
 mod migration_tests;
+#[path = "policy_store_verify_once_tests.rs"]
+mod verify_once_tests;
 
 use fixture_tests::policy;
 
-fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
+pub(super) fn policy_with_default(default_action: &str) -> EffectiveNativePolicyV3 {
     let mut value = policy();
     value.default_action = default_action.to_owned();
     value
@@ -52,7 +60,7 @@ fn fixture_directory(path: &Path) {
     fs::create_dir(path).unwrap();
 }
 
-fn fixture_file(path: &Path, bytes: &[u8]) {
+pub(super) fn fixture_file(path: &Path, bytes: &[u8]) {
     #[cfg(windows)]
     {
         use std::io::Write;
@@ -66,11 +74,11 @@ fn fixture_file(path: &Path, bytes: &[u8]) {
     fs::write(path, bytes).unwrap();
 }
 
-fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
+pub(super) fn signed_snapshot(generation: u64, key: &[u8], guard_home: &Path) -> PolicySnapshotV3 {
     signed_snapshot_with_policy(generation, key, guard_home, policy())
 }
 
-fn signed_snapshot_with_policy(
+pub(super) fn signed_snapshot_with_policy(
     generation: u64,
     key: &[u8],
     guard_home: &Path,
@@ -94,8 +102,10 @@ fn signed_snapshot_with_policy(
         },
         effective_policy,
         command_extensions: None,
+        business_policy: None,
         issued_at_ms: now_ms().unwrap().saturating_sub(1),
-        expires_at_ms: now_ms().unwrap() + 60_000,
+        // Long enough that a loaded runner cannot outlast it mid-test.
+        expires_at_ms: now_ms().unwrap() + 3_600_000,
         integrity: SnapshotIntegrityV3 {
             algorithm: POLICY_SNAPSHOT_INTEGRITY_ALGORITHM.into(),
             key_id: verifier_key_id(key),
@@ -107,7 +117,7 @@ fn signed_snapshot_with_policy(
     snapshot
 }
 
-fn test_root(label: &str) -> PathBuf {
+pub(super) fn test_root(label: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
         "hol-guard-policy-store-{label}-{}-{}",
         std::process::id(),
@@ -119,7 +129,7 @@ fn test_root(label: &str) -> PathBuf {
     root
 }
 
-fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
+pub(super) fn install_test_key(root: &Path, value: u8) -> [u8; VERIFIER_KEY_BYTES] {
     let key = [value; VERIFIER_KEY_BYTES];
     let path = root.join(VERIFIER_KEY_FILE_NAME);
     fixture_file(&path, &key);
@@ -335,12 +345,16 @@ fn restarted_resident_applies_installed_policy_without_request_time_io() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &restarted).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
     assert_eq!(result.result["minimum_action"], "block");
     assert_eq!(result.result["authority"], "rust");
+    assert!(result.receipt.origin_authentication.is_some());
+    crate::policy_store::native_review_origin::verify(&restarted, &result.receipt).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
 
@@ -373,7 +387,9 @@ fn authenticated_edge_preserves_clean_default_warning() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();
@@ -416,7 +432,9 @@ fn authenticated_observe_edge_preserves_intrinsic_pretool_floor() {
             home_dir: "/home/test".into(),
             guard_home: root.to_string_lossy().into_owned(),
             source_ref_external_allowed: false,
+            execution_environment: None,
         },
+        recording_only: false,
     };
     let result = crate::edge::evaluate_envelope_with_store(envelope, &store).unwrap();
     let result: GuardHookEdgeResultV2 = serde_json::from_slice(&result).unwrap();

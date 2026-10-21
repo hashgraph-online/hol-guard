@@ -1,7 +1,31 @@
 use super::*;
+use std::cell::RefCell;
 use std::fs;
 use std::path::Path;
+use std::sync::mpsc::Sender;
 use std::time::{Instant, SystemTime, UNIX_EPOCH};
+
+thread_local! {
+    static LOCK_BUSY_NOTIFICATION: RefCell<Option<Sender<()>>> = const { RefCell::new(None) };
+    static LOCK_RETRY_DEADLINE_NOTIFICATION: RefCell<Option<Sender<(Instant, Instant)>>> =
+        const { RefCell::new(None) };
+}
+
+pub(super) fn notify_lock_busy_for_test() {
+    LOCK_BUSY_NOTIFICATION.with(|notification| {
+        if let Some(sender) = notification.borrow_mut().take() {
+            let _ = sender.send(());
+        }
+    });
+}
+
+pub(super) fn notify_lock_retry_deadline_for_test(deadline: Instant) {
+    LOCK_RETRY_DEADLINE_NOTIFICATION.with(|notification| {
+        if let Some(sender) = notification.borrow_mut().take() {
+            let _ = sender.send((deadline, Instant::now()));
+        }
+    });
+}
 
 fn fixture_file(path: &Path, bytes: &[u8]) {
     #[cfg(windows)]
@@ -96,9 +120,8 @@ fn expired_one_shot_does_not_retry_a_busy_cleanup_lock() {
     LOCK_RETRY_DEADLINE_NOTIFICATION
         .with(|notification| *notification.borrow_mut() = Some(deadline_sender));
     drop(lease);
-    busy_receiver
-        .try_recv()
-        .expect("cleanup must attempt the lock");
+    let cleanup_attempt = busy_receiver.try_recv();
+    cleanup_attempt.expect("cleanup must attempt the lock");
     assert!(
         deadline_receiver.try_recv().is_err(),
         "cleanup must not enter the retry loop"
@@ -158,6 +181,20 @@ fn uninspectable_lease_path_retains_the_resident() {
     assert!(any_live_for_home(&root));
 
     fs::remove_dir_all(root).expect("test directory should be removable");
+}
+
+#[test]
+fn removed_state_base_releases_the_resident() {
+    let home = test_directory("removed-state-base");
+    let state_base = home.join("native-runtime");
+    // Guard provisions the state base before the resident runs. On Windows
+    // the resident only binds it and never creates it, so provision it here.
+    #[cfg(windows)]
+    fixture_directory(&state_base);
+    lease_directory(&state_base).expect("lease directory should be available");
+    fs::remove_dir_all(&home).expect("test directory should be removable");
+
+    assert!(!any_live_for_home(&state_base));
 }
 
 #[test]
@@ -249,43 +286,112 @@ fn absolute_lease_deadline_can_wait_beyond_stream_retry_budget() {
 
 #[test]
 fn absolute_lease_deadline_returns_busy_without_stream_budget_extension() {
+    use std::cell::Cell;
+
+    let root = test_directory("absolute-contention");
+    let directory = lease_directory(&root).expect("lease directory should be available");
+    let held = acquire_directory_lock(&directory, &root)
+        .expect("initial lock open should succeed")
+        .expect("test should hold the lease lock");
+    let started = Instant::now();
+    let clock = Cell::new(started);
+    let deadline = started + Duration::from_millis(30);
+    let (busy_sender, busy_receiver) = std::sync::mpsc::channel();
+    let (deadline_sender, deadline_receiver) = std::sync::mpsc::channel();
+    LOCK_BUSY_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(busy_sender));
+    LOCK_RETRY_DEADLINE_NOTIFICATION
+        .with(|notification| *notification.borrow_mut() = Some(deadline_sender));
+    let mut sleeps = Vec::new();
+    // Exercise real lock contention with a controlled clock. Runner scheduling
+    // and ACL setup cannot consume the budget before the first lock attempt.
+    let result = acquire_directory_lock_with_clock(
+        &directory,
+        &root,
+        deadline,
+        || clock.get(),
+        |duration| {
+            assert!(duration <= deadline.saturating_duration_since(clock.get()));
+            sleeps.push(duration);
+            clock.set(clock.get() + duration);
+        },
+    );
+    assert!(matches!(result, Err(error) if error == "native_resident_lease_busy"));
+    busy_receiver
+        .try_recv()
+        .expect("the real lock must have been contested");
+    let (used_deadline, _) = deadline_receiver
+        .try_recv()
+        .expect("deadline must be observed");
+    assert_eq!(used_deadline, deadline);
+    assert_eq!(clock.get(), deadline);
+    assert_eq!(
+        sleeps.iter().copied().sum::<Duration>(),
+        Duration::from_millis(30)
+    );
+    assert_eq!(sleeps.last(), Some(&Duration::from_millis(15)));
+    drop(held);
+    fs::remove_dir_all(root).expect("test directory should be removable");
+}
+
+#[test]
+fn absolute_lease_deadline_survives_private_file_setup() {
     let root = test_directory("absolute-bounded");
     let directory = lease_directory(&root).expect("lease directory should be available");
     let held = acquire_directory_lock(&directory, &root)
         .expect("initial lock open should succeed")
         .expect("test should hold the lease lock");
     crate::resident_state::runtime_digest()
-        .expect("runtime digest should be available before timing the lock wait");
-    let (busy_sender, busy_receiver) = std::sync::mpsc::channel();
+        .expect("runtime digest should be available before the lock wait");
     let (deadline_sender, deadline_receiver) = std::sync::mpsc::channel();
     let (started_sender, started_receiver) = std::sync::mpsc::channel();
     let worker_root = root.clone();
     let worker = thread::spawn(move || {
-        LOCK_BUSY_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(busy_sender));
         LOCK_RETRY_DEADLINE_NOTIFICATION
             .with(|notification| *notification.borrow_mut() = Some(deadline_sender));
+        let deadline = Instant::now() + Duration::from_millis(30);
         started_sender
-            .send(())
+            .send(deadline)
             .expect("absolute bounded worker should start");
-        let started = Instant::now();
-        let result = acquire_until(&worker_root, started + Duration::from_millis(30));
-        let elapsed = started.elapsed();
-        let error = result.err().unwrap_or_else(|| "acquired".to_owned());
-        (error, elapsed)
+        acquire_until(&worker_root, deadline)
+            .err()
+            .unwrap_or_else(|| "acquired".to_owned())
     });
-    started_receiver
+    let requested_deadline = started_receiver
         .recv_timeout(Duration::from_secs(1))
         .expect("absolute bounded worker should be scheduled");
-    busy_receiver
-        .recv_timeout(Duration::from_secs(1))
-        .expect("absolute retry path should observe the held lock");
-    deadline_receiver
+    let (used_deadline, observed_at) = deadline_receiver
         .recv_timeout(Duration::from_secs(1))
         .expect("absolute retry path should reach its deadline");
     drop(held);
-    let (error, elapsed) = worker.join().expect("absolute bounded worker should exit");
+    let error = worker.join().expect("absolute bounded worker should exit");
     assert_eq!(error, "native_resident_lease_busy");
-    assert!(elapsed < Duration::from_millis(200));
+    // Validate the deadline actually used, not scheduling/ACL latency outside
+    // the retry loop. The real lock remains held until the rejection path fires.
+    assert_eq!(used_deadline, requested_deadline);
+    assert!(observed_at >= requested_deadline);
+    assert_eq!(
+        fs::read_dir(&directory)
+            .expect("lease directory should remain readable")
+            .count(),
+        1,
+        "an expired request must not publish a client lease"
+    );
+    fs::remove_dir_all(root).expect("test directory should be removable");
+}
+
+#[test]
+fn expired_absolute_lock_deadline_rejects_before_opening_a_lock() {
+    let root = test_directory("expired-before-open");
+    let missing = root.join("must-not-be-opened");
+    let deadline = Instant::now() - Duration::from_millis(1);
+    let (sender, receiver) = std::sync::mpsc::channel();
+    LOCK_RETRY_DEADLINE_NOTIFICATION.with(|notification| *notification.borrow_mut() = Some(sender));
+    let result = acquire_directory_lock_until(&missing, &root, deadline);
+    assert!(matches!(result, Err(error) if error == "native_resident_lease_busy"));
+    let (used_deadline, observed_at) = receiver.try_recv().expect("deadline must be observed");
+    assert_eq!(used_deadline, deadline);
+    assert!(observed_at >= deadline);
+    assert!(!missing.exists());
     fs::remove_dir_all(root).expect("test directory should be removable");
 }
 
@@ -343,49 +449,6 @@ fn stale_lease_overflow_drains_instead_of_keeping_the_resident() {
 }
 
 #[test]
-fn expired_live_process_leases_drain_and_a_fresh_lease_remains() {
-    let root = test_directory("expired-live-owner");
-    let directory = lease_directory(&root).expect("lease directory should be available");
-    let process_id = std::process::id();
-    let start_marker = crate::resident_state::process_start_marker(process_id)
-        .expect("current process should have a start marker");
-    let digest = "ab".repeat(32);
-    let body = format!("{process_id}\n{start_marker}\n{digest}\n");
-    let stale_at = SystemTime::now()
-        .checked_sub(LEASE_EXPIRY + Duration::from_secs(1))
-        .expect("test clock should support stale timestamp");
-    let fresh = directory.join(format!("client-{process_id}-fresh.lease"));
-    for index in 0..LEASE_MAX_DIRECTORY_ENTRIES {
-        let path = directory.join(format!("client-{process_id}-stale-{index:04}.lease"));
-        let mut file = fixture_file_handle(&path);
-        file.write_all(body.as_bytes())
-            .expect("fixture should be written");
-        file.set_modified(stale_at)
-            .expect("fixture should become stale");
-    }
-    fixture_file(&fresh, body.as_bytes());
-
-    let mut retained = false;
-    for _ in 0..4 {
-        retained = any_live_for_home(&root);
-    }
-
-    assert!(retained);
-    assert!(fresh.is_file());
-    let remaining = fs::read_dir(&directory)
-        .expect("lease directory should remain readable")
-        .filter_map(Result::ok)
-        .filter(|entry| {
-            let name = entry.file_name();
-            let name = name.to_string_lossy();
-            name.starts_with("client-") && name.ends_with(".lease")
-        })
-        .count();
-    assert_eq!(remaining, 1);
-    fs::remove_dir_all(root).expect("test directory should be removable");
-}
-
-#[test]
 fn lease_directory_entry_overflow_is_retained_as_live() {
     let root = test_directory("entry-overflow");
     let directory = lease_directory(&root).expect("lease directory should be available");
@@ -398,3 +461,6 @@ fn lease_directory_entry_overflow_is_retained_as_live() {
 
     fs::remove_dir_all(root).expect("test directory should be removable");
 }
+
+#[path = "managed_resident_lease_retirement_tests.rs"]
+mod retirement;

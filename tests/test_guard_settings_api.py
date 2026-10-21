@@ -13,7 +13,6 @@ import pytest
 from codex_plugin_scanner.guard import config as config_module
 from codex_plugin_scanner.guard.config import load_guard_config, resolve_risk_action, update_guard_settings
 from codex_plugin_scanner.guard.daemon import GuardDaemonServer
-from codex_plugin_scanner.guard.daemon import server as daemon_server_module
 from codex_plugin_scanner.guard.mdm.contracts import ManagedPolicy, ManagedPolicyState
 from codex_plugin_scanner.guard.models import GuardApprovalRequest, PolicyDecision
 from codex_plugin_scanner.guard.runtime.runner import (
@@ -23,6 +22,7 @@ from codex_plugin_scanner.guard.runtime.runner import (
     _reset_cloud_receipt_redaction_authority,
 )
 from codex_plugin_scanner.guard.store import GuardStore
+from tests.daemon_control_patching import patch_daemon_global
 
 _LIVE_OUTBOX_TABLE = "guard_review_outbox_events"
 
@@ -296,9 +296,9 @@ def test_relaxed_security_level_persists_granular_risk_settings(tmp_path: Path) 
 
 
 def test_settings_export_import_and_reset_round_trip(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setattr(
-        daemon_server_module,
-        "resolve_package_firewall_entitlement",
+    patch_daemon_global(
+        monkeypatch,
+        "package_firewall_entitlement_or_denied",
         lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
     )
     _store, daemon = _with_daemon(tmp_path / "guard-home")
@@ -364,9 +364,9 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": True, "sync": True}},
         )
-        monkeypatch.setattr(
-            daemon_server_module,
-            "resolve_package_firewall_entitlement",
+        patch_daemon_global(
+            monkeypatch,
+            "package_firewall_entitlement_or_denied",
             lambda _store: {"allowed": True, "reason": "paid_entitlement_active", "tier": "team"},
         )
         allowed_status, allowed_payload = _json_request(
@@ -376,9 +376,9 @@ def test_cloud_sync_requires_trusted_paid_team_entitlement(tmp_path: Path, monke
             method="POST",
             payload={"settings": {"billing": False, "sync": True}},
         )
-        monkeypatch.setattr(
-            daemon_server_module,
-            "resolve_package_firewall_entitlement",
+        patch_daemon_global(
+            monkeypatch,
+            "package_firewall_entitlement_or_denied",
             lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
         )
         _json_request(
@@ -437,9 +437,9 @@ def test_watch_to_protected_api_ignores_existing_sync_without_entitlement(
         cloud_sync_entitled=True,
     )
     _store, daemon = _with_daemon(guard_home)
-    monkeypatch.setattr(
-        daemon_server_module,
-        "resolve_package_firewall_entitlement",
+    patch_daemon_global(
+        monkeypatch,
+        "package_firewall_entitlement_or_denied",
         lambda _store: {"allowed": False, "reason": "paid_guard_cloud_required", "tier": "free"},
     )
     try:

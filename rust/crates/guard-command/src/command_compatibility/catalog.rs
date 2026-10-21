@@ -9,6 +9,7 @@ pub fn compatibility_rule_ids() -> &'static [&'static str] {
         "command.git.unverified-fetch",
         "command.git.index-inspection",
         "command.git.branch",
+        "command.git.worktree",
         "command.git.pull",
         "command.git.push",
         "command.git.clone",
@@ -52,6 +53,7 @@ pub(super) fn github_owner(capability: &str) -> (&'static str, bool) {
         "read_local" => ("command.github.permission.read-local", true),
         "read_remote" => ("command.github.permission.read-remote", true),
         "propose_remote" => ("command.github.permission.propose-remote", true),
+        "create_private_remote" => ("command.github.permission.create-private-remote", true),
         "routine_review_thread_remote" => (
             "command.github.permission.routine-review-thread-remote",
             true,

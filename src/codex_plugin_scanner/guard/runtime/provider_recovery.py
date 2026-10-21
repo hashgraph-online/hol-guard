@@ -38,14 +38,6 @@ class RecoveryPhase(str, Enum):
     UNAVAILABLE = "unavailable"
 
 
-# Mapping between RecoveryPhase and ProviderHealthState variants
-_RECOVERY_TO_HEALTH: dict[RecoveryPhase, ProviderHealthState] = {
-    RecoveryPhase.HEALTHY: ProviderHealthState.HEALTHY,
-    RecoveryPhase.DEGRADED: ProviderHealthState.DEGRADED,
-    RecoveryPhase.RECOVERING: ProviderHealthState.DEGRADED,
-    RecoveryPhase.UNAVAILABLE: ProviderHealthState.UNAVAILABLE,
-}
-
 _HEALTH_TO_RECOVERY: dict[ProviderHealthState, RecoveryPhase] = {
     ProviderHealthState.HEALTHY: RecoveryPhase.HEALTHY,
     ProviderHealthState.DEGRADED: RecoveryPhase.DEGRADED,
@@ -116,12 +108,6 @@ def _require_retry_seconds(value: object) -> None:
         raise ValueError("value must be an int or float")
 
 
-def _require_recovery_state(value: object) -> None:
-    """Validate value is a RecoveryState; raise ValueError if not."""
-    if not isinstance(value, RecoveryState):
-        raise ValueError("value must be a RecoveryState")
-
-
 def _require_sha256(value: object, label: str) -> str:
     """Validate a lowercase hex SHA-256 digest."""
     if not isinstance(value, str) or len(value) != _SHA256_HEX_LENGTH:
@@ -144,149 +130,14 @@ def _require_dedupe_key(value: object, label: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def next_recovery_state(state: RecoveryState, *, succeeded: bool, error_digest: str | None = None) -> RecoveryState:
-    """Advance recovery state machine one step.
-
-    Args:
-        state: Current recovery state.
-        succeeded: Whether the last attempt succeeded.
-        error_digest: Optional sha256 digest of the error.  Raw error text is
-            never accepted - only opaque digests.
-
-    Returns:
-        New RecoveryState reflecting the transition.
-
-    Rules:
-    - On success: reset to HEALTHY with attempt 0 and 0 backoff.
-    - On failure: increment attempt, compute backoff, and transition:
-      - attempt >= 5 -> UNAVAILABLE (no further retries)
-      - attempt 1 -> DEGRADED (first failure from HEALTHY)
-      - attempt 2..4 -> RECOVERING (subsequent retrying attempts)
-    """
-    _require_recovery_state(state)
-
-    if succeeded:
-        # Success resets everything.
-        return RecoveryState(
-            phase=RecoveryPhase.HEALTHY,
-            attempt=0,
-            next_retry_seconds=0.0,
-            last_error_digest=None,
-            notice_dedupe_key=_dedupe_key(RecoveryPhase.HEALTHY, None),
-        )
-
-    # Failure path - error_digest must be a valid sha256 or None.
-    if error_digest is not None:
-        _ = _require_sha256(error_digest, "error_digest")
-
-    new_attempt = min(state.attempt + 1, _MAX_ATTEMPTS)
-    new_error_digest = error_digest or state.last_error_digest
-    new_next_retry = min(2.0**new_attempt, _BACKOFF_CAP_SECONDS)
-
-    # Determine new phase based on attempt and previous phase.
-    if new_attempt >= _MAX_ATTEMPTS:
-        new_phase = RecoveryPhase.UNAVAILABLE
-    elif state.phase is RecoveryPhase.HEALTHY:
-        # First failure -> DEGRADED.
-        new_phase = RecoveryPhase.DEGRADED
-    else:
-        # Subsequent failures -> RECOVERING.
-        new_phase = RecoveryPhase.RECOVERING
-
-    notice_key = _dedupe_key(new_phase, new_error_digest)
-    return RecoveryState(
-        phase=new_phase,
-        attempt=new_attempt,
-        next_retry_seconds=new_next_retry,
-        last_error_digest=new_error_digest,
-        notice_dedupe_key=notice_key,
-    )
-
-
 def _dedupe_key(phase: RecoveryPhase, error_digest: str | None) -> str:
     """Build a stable opaque dedupe key from phase + error_digest."""
     payload = f"{phase.value}:{error_digest or 'none'}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def recovery_notice(state: RecoveryState, *, previous: RecoveryState | None = None) -> str | None:
-    """Return a privacy-safe typed notice or None.
-
-    A notice is emitted only when:
-    - The phase has changed since the previous state, AND
-    - The new state is not a deduplicated duplicate (key comparison).
-
-    Privacy guarantee: the notice never contains raw error text, paths, or
-    secrets - only the phase and attempt count.
-
-    Args:
-        state: Current recovery state.
-        previous: The previous RecoveryState (or None on first).
-
-    Returns:
-        A typed notice string, or None if no new notice is warranted.
-    """
-    _require_recovery_state(state)
-
-    # No previous state -> emit on first non-trivial state.
-    if previous is None:
-        if state.phase is RecoveryPhase.HEALTHY:
-            return None
-        return _build_notice(state)
-
-    # Only emit on phase change.
-    if state.phase is previous.phase:
-        # Even if phase is the same, if dedupe key changed (different error),
-        # emit a retry notice.
-        if (
-            state.notice_dedupe_key is not None
-            and previous.notice_dedupe_key is not None
-            and state.notice_dedupe_key != previous.notice_dedupe_key
-        ):
-            return _build_notice(state)
-        return None
-
-    # Phase changed - emit unless dedupe key matches (same error+phase combo).
-    if (
-        state.notice_dedupe_key is not None
-        and previous.notice_dedupe_key is not None
-        and state.notice_dedupe_key == previous.notice_dedupe_key
-    ):
-        return None
-
-    return _build_notice(state)
-
-
-def _build_notice(state: RecoveryState) -> str:
-    """Build a privacy-safe notice string."""
-    labels: dict[RecoveryPhase, str] = {
-        RecoveryPhase.HEALTHY: "Provider recovered",
-        RecoveryPhase.DEGRADED: "Provider degraded - recovering",
-        RecoveryPhase.RECOVERING: "Provider recovering",
-        RecoveryPhase.UNAVAILABLE: "Provider unavailable - retries exhausted",
-    }
-    label = labels.get(state.phase, "Provider recovery")
-    return f"[{state.phase.value.upper()}] {label} (attempt {state.attempt}/{_MAX_ATTEMPTS})"
-
-
-def to_provider_health_state(phase: RecoveryPhase) -> ProviderHealthState:
-    """Map a RecoveryPhase to the corresponding ProviderHealthState."""
-    return _RECOVERY_TO_HEALTH[phase]
-
-
-def from_provider_health_state(
-    health: ProviderHealthState,
-) -> RecoveryPhase:
-    """Map a ProviderHealthState to the corresponding RecoveryPhase."""
-    return _HEALTH_TO_RECOVERY[health]
-
-
 __all__ = [
     "ProviderHealthState",
     "RecoveryPhase",
     "RecoveryState",
-    "from_provider_health_state",
-    "next_recovery_state",
-    "recovery_notice",
-    "to_provider_health_state",
 ]

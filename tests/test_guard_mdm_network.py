@@ -24,12 +24,12 @@ from codex_plugin_scanner.guard.mdm.contracts import ManagedNetworkPolicy
 from codex_plugin_scanner.guard.mdm.managed_file_trust import machine_controlled_file_is_trusted
 from codex_plugin_scanner.guard.mdm.network import (
     ManagedNetworkError,
-    diagnose_endpoint,
     managed_requests_session,
     managed_ssl_context,
     managed_urlopen,
     platform_system_proxies,
 )
+from codex_plugin_scanner.guard.mdm.network_diagnostics import diagnose_endpoint
 
 
 class _FakeResponse:

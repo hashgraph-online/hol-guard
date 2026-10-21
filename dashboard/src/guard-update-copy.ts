@@ -10,6 +10,48 @@ export function updateStatusLabel(status: GuardUpdateStatus | null | undefined):
   return `Version ${status.current_version}`;
 }
 
+export type DesktopUpdateBannerModel = {
+  latestVersion: string;
+  title: string;
+  body: string;
+};
+
+/**
+ * The prominent update announcement for the dashboard inside the HOL Guard
+ * app. Standalone dashboards keep their inline Update action; embedded
+ * ones must announce just as clearly, with the app's updater as the actor.
+ * Dismissal is per version, so a later release announces itself again.
+ */
+export function desktopUpdateBannerModel(
+  status: GuardUpdateStatus | null | undefined,
+  embeddedInDesktop: boolean,
+  dismissedVersion: string | null,
+): DesktopUpdateBannerModel | null {
+  if (!embeddedInDesktop) {
+    return null;
+  }
+  if (!status?.update_available || !status.latest_version) {
+    return null;
+  }
+  if (status.update_suppressed === true) {
+    return null;
+  }
+  if (dismissedVersion !== null && dismissedVersion === status.latest_version) {
+    return null;
+  }
+  return {
+    latestVersion: status.latest_version,
+    title: `HOL Guard ${status.latest_version} is ready`,
+    body: "The HOL Guard app installs this update and shows its progress. Your approvals and settings stay saved.",
+  };
+}
+
+export const DESKTOP_HANDOFF_OPENING_LABEL = "Opening the app updater…";
+export const DESKTOP_HANDOFF_GUIDANCE =
+  "If the updater didn't open, choose Check for Updates from the HOL Guard menu-bar icon.";
+export const DESKTOP_HANDOFF_FAILED =
+  "The request did not reach the app. Choose Check for Updates from the HOL Guard menu-bar icon.";
+
 export function shouldPromptRecoveryReinstall(status: GuardUpdateStatus | null | undefined): boolean {
   return (
     status?.recovery_reinstall_available === true &&

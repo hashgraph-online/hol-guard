@@ -4,21 +4,22 @@ from pathlib import Path
 
 import yaml
 
+from tests.support.ci_workflow import expand_ci_job_actions
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def _configuration() -> tuple[dict, dict]:
-    action = yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text())
-    workflow = yaml.safe_load((ROOT / ".github/workflows/native-wheel-ci.yml").read_text())
+    """Load the cache action and expanded native workflow for dependency contract assertions."""
+    action = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/actions/native-regression/action.yml").read_text()))
+    workflow = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/nightly-native.yml").read_text()))
     return action, workflow
 
 
 def test_each_native_platform_has_one_regression_cache_writer() -> None:
     """Both setup paths use shard zero, while other shards remain read-only."""
     action, workflow = _configuration()
-    setup_steps = [
-        step for step in action["runs"]["steps"] if step.get("uses", "").startswith("astral-sh/setup-uv@")
-    ]
+    setup_steps = [step for step in action["runs"]["steps"] if step.get("uses", "").startswith("astral-sh/setup-uv@")]
     assert len(setup_steps) == 2
     for step in setup_steps:
         options = step["with"]
@@ -50,9 +51,7 @@ def test_macos_proofs_restore_the_same_lock_bound_cache_without_writing() -> Non
     action_python = next(
         step for step in action["runs"]["steps"] if step.get("uses", "").startswith("actions/setup-python@")
     )
-    proof_python = next(
-        step for step in proof["steps"] if step.get("uses", "").startswith("actions/setup-python@")
-    )
+    proof_python = next(step for step in proof["steps"] if step.get("uses", "").startswith("actions/setup-python@"))
     assert proof_python["with"]["python-version"] == action_python["with"]["python-version"] == "3.12"
 
 
@@ -70,5 +69,8 @@ def test_dependency_cache_does_not_replace_same_run_wheel_or_full_regression_man
     assert run["env"]["HOL_GUARD_TEST_USE_INSTALLED"] == "1"
     assert "scripts/ci/native_regression_shard.py" in run["run"]
     assert not run.get("continue-on-error", False)
-    assert "native-regression-complete" in workflow["jobs"]["linux-x64"]["needs"]
-    assert "native-regression-complete" in workflow["jobs"]["windows-x64"]["needs"]
+    assert set(workflow["jobs"]["native-regression-complete"]["needs"]) == {
+        "linux-regression",
+        "windows-regression",
+        "macos-regression",
+    }

@@ -6,8 +6,11 @@ import sys
 from importlib.metadata import metadata
 from pathlib import Path
 
+import yaml
 from packaging.markers import default_environment
 from packaging.requirements import Requirement
+
+from tests.support.ci_workflow import expand_ci_job_actions
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -39,7 +42,7 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "litellm" not in dependencies
     assert "requests>=2.32,<3" in dependency_entries
     assert "cryptography>=50.0.0" in dependency_entries
-    assert "aiohttp==3.14.3" in override_entries
+    assert "aiohttp==3.14.4" in override_entries
     assert "click==8.4.1" in override_entries
     assert "cisco-ai-skill-scanner==2.0.12" in override_entries
     assert "importlib-metadata==8.9.0" in override_entries
@@ -47,7 +50,8 @@ def test_pyproject_keeps_cisco_mcp_scanner_optional() -> None:
     assert "litellm==1.93.2" in override_entries
     assert "magika==1.0.3" in override_entries
     assert "openai==2.41.1" in override_entries
-    assert "pyjwt==2.14.0" in override_entries
+    assert "multidict>=6.9.1" in override_entries
+    assert "pyjwt==2.15.0" in override_entries
     assert "python-dotenv==1.2.2" in override_entries
     assert "python-multipart==0.0.32" in override_entries
     assert "starlette==1.3.1" in override_entries
@@ -108,7 +112,9 @@ def test_readme_distinguishes_baseline_and_full_cisco_installs() -> None:
 
 
 def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
-    ci_workflow = (ROOT / ".github/workflows/ci.yml").read_text(encoding="utf-8")
+    """Verify repo controlled surfaces prefer cisco extra where supported."""
+    jobs = expand_ci_job_actions(yaml.safe_load((ROOT / ".github/workflows/ci.yml").read_text()))["jobs"]
+    ci_workflow = "\n".join([*jobs, *(step.get("run", "") for job in jobs.values() for step in job["steps"])])
     publish_workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
@@ -141,13 +147,17 @@ def test_repo_controlled_surfaces_prefer_cisco_extra_where_supported() -> None:
     assert build_deps_index < pip_install_index
     assert pip_install_index < purge_index
     assert "cryptography==50.0.0" in docker_requirements
-    assert "aiohttp==3.14.3" in docker_requirements
+    assert "aiohttp==3.14.4" in docker_requirements
     assert "cisco-ai-mcp-scanner==" in docker_requirements
     assert "importlib-metadata==8.9.0" in docker_requirements
     assert "litellm==1.93.2" in docker_requirements
     assert "python-dotenv==1.2.2" in docker_requirements
     assert "python-multipart==0.0.32" in docker_requirements
-    assert "pyjwt==2.14.0" in docker_requirements
+    # The image installs these pins with --no-deps, so the patched versions
+    # have to be carried here and not only in the project manifest.
+    assert "mcp==1.30.0" in docker_requirements
+    assert "multidict==6.9.1" in docker_requirements
+    assert "pyjwt==2.15.0" in docker_requirements
     assert "starlette==1.3.1" in docker_requirements
     assert "tokenizers==0.23.1" in docker_requirements
     assert "--hash=sha256:" in docker_requirements

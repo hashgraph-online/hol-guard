@@ -10,11 +10,19 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from .runtime.local_cli_commands import (
+    OTHER_COMMAND_ID,
+    ROOT_COMMAND_ID,
+    LocalCliCommand,
     LocalCliCommandState,
     is_local_cli_command_id,
     is_local_cli_command_state,
 )
 from .runtime.local_cli_identity import UnlistedCliIdentity, is_local_cli_id
+from .store_local_cli_capabilities import (
+    LocalCliCapabilityError,
+    clear_local_cli_capabilities,
+    write_local_cli_capabilities,
+)
 from .store_local_cli_schema import ensure_local_cli_schema
 from .store_mcp_provider_permissions import ProviderUpdate, write_provider_choices
 
@@ -33,6 +41,9 @@ class CustomExtensionContinuityMutation:
     requires_protected_extension_authority: bool = False
     required_negotiated_capability: str | None = None
     provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None
+    catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None
+    # Only the local authority apply sets this; signed continuity never does.
+    capability_updates: Mapping[str, Mapping[str, str]] | None = None
 
 
 class StoreCustomExtensionContinuityMixin:
@@ -51,6 +62,8 @@ class StoreCustomExtensionContinuityMixin:
         sync_preconditions: Mapping[str, object] | None = None,
         observation_preconditions: Mapping[str, object] | None = None,
         provider_updates: Mapping[str, Sequence[ProviderUpdate]] | None = None,
+        catalog_seeds: Mapping[str, Sequence[LocalCliCommand]] | None = None,
+        capability_updates: Mapping[str, Mapping[str, str]] | None = None,
     ) -> int:
         """Commit exact local authority, continuity state, and receipts together."""
 
@@ -63,6 +76,8 @@ class StoreCustomExtensionContinuityMixin:
             sync_preconditions=sync_preconditions or {},
             observation_preconditions=observation_preconditions or {},
             provider_updates=provider_updates,
+            catalog_seeds=catalog_seeds,
+            capability_updates=capability_updates,
         )
         with self._connect() as connection:
             _ = connection.execute("begin immediate")
@@ -85,14 +100,18 @@ def apply_custom_extension_continuity_mutation_locked(
     """Apply a preflighted mutation inside an existing immediate transaction."""
 
     _validate_authority_updates(mutation.authority_updates)
-    if set(mutation.provider_updates or {}) - {identity.cli_id for identity, _, _ in mutation.authority_updates}:
+    updated_ids = {identity.cli_id for identity, _, _ in mutation.authority_updates}
+    if set(mutation.provider_updates or {}) - updated_ids:
         raise ValueError("provider choices require matching extension authority")
+    if set(mutation.capability_updates or {}) - updated_ids:
+        raise ValueError("capability choices require matching extension authority")
     ensure_local_cli_schema(connection)
     current_revision = _authority_revision(connection)
     if current_revision != mutation.expected_revision:
         raise ValueError("local_cli_revision_conflict")
     _require_sync_preconditions(connection, mutation.sync_preconditions)
     _require_observation_preconditions(connection, mutation.observation_preconditions)
+    _seed_default_catalogs(connection, mutation.catalog_seeds or {})
     for identity, state, command_states in mutation.authority_updates:
         current_revision = _write_local_cli_grant(
             connection,
@@ -113,12 +132,61 @@ def apply_custom_extension_continuity_mutation_locked(
                 updates=updates,
                 updated_at=mutation.updated_at,
             )
+        capabilities = (mutation.capability_updates or {}).get(identity.cli_id)
+        if capabilities:
+            if state == "unset":
+                raise LocalCliCapabilityError("capabilities_require_allowed_grant")
+            write_local_cli_capabilities(
+                connection,
+                cli_id=identity.cli_id,
+                choices=capabilities,
+                revision=current_revision,
+                updated_at=mutation.updated_at,
+            )
     boundary("after_authority")
     _write_sync_payloads(connection, mutation.sync_payloads, updated_at=mutation.updated_at)
     boundary("after_sync_state")
     _write_events(connection, mutation.events, occurred_at=mutation.updated_at)
     boundary("after_event")
     return current_revision
+
+
+def _seed_default_catalogs(
+    connection: sqlite3.Connection,
+    seeds: Mapping[str, Sequence[LocalCliCommand]],
+) -> None:
+    """Store a curated catalog only where the stored one holds just the defaults.
+
+    Runs after the revision check, so a rejected mutation leaves the catalog
+    untouched. Default commands stay in the seed, so no saved rule is dropped.
+    """
+
+    for cli_id, commands in seeds.items():
+        rows = connection.execute("select command_id from local_cli_command where cli_id = ?", (cli_id,)).fetchall()
+        if any(str(row[0]) not in {ROOT_COMMAND_ID, OTHER_COMMAND_ID} for row in rows):
+            continue
+        if not {ROOT_COMMAND_ID, OTHER_COMMAND_ID} <= {command.command_id for command in commands}:
+            raise ValueError("invalid local CLI catalog seed")
+        _ = connection.execute("delete from local_cli_command where cli_id = ?", (cli_id,))
+        for index, command in enumerate(commands):
+            if not is_local_cli_command_id(command.command_id):
+                raise ValueError("invalid local CLI command id")
+            _ = connection.execute(
+                """
+                insert into local_cli_command (
+                    cli_id, command_id, name, usage, description, parent_id, sort_index
+                ) values (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    cli_id,
+                    command.command_id,
+                    command.name[:120],
+                    command.usage[:160],
+                    command.description[:240],
+                    command.parent_id,
+                    index,
+                ),
+            )
 
 
 def _validate_authority_updates(
@@ -200,6 +268,14 @@ def _write_local_cli_grant(
     from .store_local_cli import _write_command_states
 
     next_revision = current_revision + 1
+    previous = connection.execute(
+        "select identity_hash, state from local_cli_grant where cli_id = ?", (identity.cli_id,)
+    ).fetchone()
+    if state != "allowed" or previous is None or previous[0] != identity.identity_hash or previous[1] != state:
+        # Capabilities were chosen for one exact allowed grant. A grant that is
+        # blocked, reviewed, removed or re-identified, or that comes back from
+        # such a state, never inherits rows (including salvaged orphans).
+        clear_local_cli_capabilities(connection, identity.cli_id)
     if state == "unset":
         connection.execute("delete from local_mcp_provider_grant where cli_id = ?", (identity.cli_id,))
         _ = connection.execute("delete from local_cli_grant where cli_id = ?", (identity.cli_id,))
