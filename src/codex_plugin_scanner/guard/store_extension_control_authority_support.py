@@ -13,11 +13,13 @@ from collections.abc import Generator, Mapping
 from contextlib import contextmanager
 from dataclasses import replace
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import cast
+from typing import Final, cast
 
 from .edge_events import build_policy_event
 from .extension_control_events import extension_control_change_payload
+from .native_extension_control import NativeExtensionControlError, compose_control_layers
 from .runtime.extension_control_authority import (
     AuthorityAnchor,
     AuthorityHealth,
@@ -33,7 +35,6 @@ from .runtime.extension_control_contract import (
     ExtensionControl,
     ExtensionControlLayer,
 )
-from .runtime.extension_control_resolver import compose_control_layers
 from .store_base import (
     EncryptedFileSecretStore,
     MigratingFallbackSecretStore,
@@ -47,6 +48,33 @@ _ANCHOR_REF_SUFFIX = ":anchor"
 _MAX_TRANSITION_ID_LENGTH = 256
 _MAX_CONTROLS_PER_LAYER = 512
 _MAX_SERIALIZED_LAYERS_BYTES = 256 * 1024
+_LAYER_INVALID_CODE: Final = "native_extension_control_layer_invalid"
+# Composition is a pure function of the layers, so a layer set the native
+# runtime accepted once stays accepted: validating a transition chain then asks
+# the runtime once per distinct revision instead of once per read.
+_COMPOSABLE_LAYER_SETS: Final = 512
+
+
+@lru_cache(maxsize=_COMPOSABLE_LAYER_SETS)
+def _require_composable(layers: tuple[ExtensionControlLayer, ...]) -> None:
+    """Raise unless the native runtime composes ``layers`` without a resolver failure.
+
+    A layer set the runtime rejects is a verdict on the stored layers. A
+    runtime that cannot answer is an outage and never reads as one, so it
+    surfaces as the same unavailability the authority lease reports. Only an
+    accepted set is cached; a raised error is asked again.
+    """
+
+    try:
+        composed = compose_control_layers(layers)
+    except NativeExtensionControlError as error:
+        if error.code == _LAYER_INVALID_CODE:
+            raise ExtensionControlAuthorityError("invalid extension control layers") from error
+        from .native_command_control_authority_io import NativeCommandControlAuthorityUnavailableError
+
+        raise NativeCommandControlAuthorityUnavailableError(shared=True) from error
+    if composed.failures:
+        raise ExtensionControlAuthorityError("invalid extension control layers")
 
 
 def preserve_migrated_extension_control(
@@ -250,9 +278,7 @@ class _ExtensionControlAuthoritySupportMixin:
             raise ExtensionControlAuthorityError("too many extension controls in layer")
         if any(layer.catalog_digest != catalog_digest for layer in layers):
             raise ExtensionControlAuthorityError("extension control catalog digest mismatch")
-        composed = compose_control_layers(layers)
-        if composed.failures:
-            raise ExtensionControlAuthorityError("invalid extension control layers")
+        _require_composable(tuple(layers))
         if len({layer.kind for layer in layers}) != len(layers):
             raise ExtensionControlAuthorityError("duplicate extension control layer")
         if any(layer.kind not in {ControlLayerKind.LOCAL_ADMIN, ControlLayerKind.SIGNED_CLOUD} for layer in layers):

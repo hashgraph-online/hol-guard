@@ -1,0 +1,406 @@
+"""Extension-control composition and resolution answered by the native runtime.
+
+How control layers compose, which catalog identities a set of layers blocks and
+whether an extension is active are decided by the resident
+(``extension_control``), the same resolver command evaluation runs. Python
+builds the request from layer and catalog values and renders the answer; there
+is no Python evaluator. A reply that is not a bound, strictly decoded ``ok``
+raises ``NativeExtensionControlError`` and callers fail closed.
+"""
+
+from __future__ import annotations
+
+import json
+import threading
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from itertools import islice
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Final
+
+from .native_daemon_route import _decide
+from .native_resident_decision import ResidentOperation, shape_fields
+from .runtime.extension_control_contract import (
+    ComposedExtensionControls,
+    ControlLayerKind,
+    ControlResolverFailure,
+    ControlState,
+    ControlSurface,
+    ControlTarget,
+    ControlTargetKind,
+    ExtensionControl,
+    ExtensionControlLayer,
+    ResolverFailureCode,
+)
+from .runtime.extension_control_limits import MAX_CONTROL_LAYERS
+from .runtime.extension_trust import trust_class_for
+
+if TYPE_CHECKING:
+    from .runtime.command_extensions import CommandSafetyExtensionRegistry
+
+EXTENSION_CONTROL_FEATURE: Final = "extension-control-v1"
+_TIMEOUT_SECONDS: Final = 5.0
+# The resident bounds one request to 4 MiB of canonical JSON, 4096 items and 64
+# scenarios; larger questions are split across requests below those bounds. The
+# byte budget leaves room for the request envelope.
+_MAX_REQUEST_BYTES: Final = 4 * 1024 * 1024 + 64 * 1024
+_MAX_BATCH_BYTES: Final = 4 * 1024 * 1024 - 64 * 1024
+_MAX_ITEMS_PER_REQUEST: Final = 2048
+_MAX_SCENARIOS_PER_REQUEST: Final = 64
+_MAX_CONCURRENT_ASKS: Final = 4
+_SLOTS: Final = threading.BoundedSemaphore(_MAX_CONCURRENT_ASKS)
+_OPT_STR: Final = (str, type(None))
+_OPT_BOOL: Final = (bool, type(None))
+
+
+class NativeExtensionControlError(RuntimeError):
+    """No authoritative answer; ``code`` says why, for diagnostics only."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
+
+
+_OPERATION: Final = ResidentOperation(
+    operation="extension_control",
+    feature=EXTENSION_CONTROL_FEATURE,
+    prefix="native_extension_control",
+    request_schema="guard-extension-control-request.v1",
+    request_id_prefix="extension-control",
+    result_schema="guard-extension-control-result.v1",
+    timeout_seconds=_TIMEOUT_SECONDS,
+    error=NativeExtensionControlError,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class ControlItem:
+    """One resolution: the identities to resolve and, optionally, one to test for activity."""
+
+    extension_ids: tuple[str, ...] = ()
+    permission_ids: tuple[str, ...] = ()
+    active_extension_id: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ControlScenario:
+    """Items resolved against one set of layers on one surface."""
+
+    layers: tuple[ExtensionControlLayer, ...]
+    items: tuple[ControlItem, ...]
+    surface: ControlSurface = ControlSurface.COMMAND_EVALUATION
+    authority_failure: ResolverFailureCode | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class ControlAnswer:
+    """The effective state of one item."""
+
+    blocked: bool
+    reason_codes: tuple[str, ...]
+    failures: tuple[ControlResolverFailure, ...]
+    explicitly_enabled_permission_ids: tuple[str, ...]
+    active: bool | None
+
+
+@dataclass(frozen=True, slots=True)
+class ScenarioAnswer:
+    """A scenario's lockdown state and the answer to each of its items, in order."""
+
+    global_lockdown: bool
+    items: tuple[ControlAnswer, ...]
+
+
+def _invalid() -> RuntimeError:
+    return NativeExtensionControlError(_OPERATION.invalid)
+
+
+def _shape(value: object, fields: Mapping[str, Any]) -> dict[str, Any]:
+    return shape_fields(value, fields, _invalid)
+
+
+def _strings(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise _invalid()
+    return tuple(value)
+
+
+def _failures(value: object) -> tuple[ControlResolverFailure, ...]:
+    if not isinstance(value, list):
+        raise _invalid()
+    failures: list[ControlResolverFailure] = []
+    for raw in value:
+        entry = _shape(raw, {"code": str, "layer_kind": _OPT_STR})
+        try:
+            kind = None if entry["layer_kind"] is None else ControlLayerKind(entry["layer_kind"])
+            failures.append(ControlResolverFailure(ResolverFailureCode(entry["code"]), kind))
+        except ValueError:
+            raise _invalid() from None
+    return tuple(failures)
+
+
+def _composed(value: object) -> ComposedExtensionControls:
+    fields = _shape(value, {"global_lockdown": bool, "controls": list, "failures": list})
+    controls: list[ExtensionControl] = []
+    for raw in fields["controls"]:
+        entry = _shape(raw, {"target_kind": str, "target_id": str, "state": str})
+        try:
+            target = ControlTarget(ControlTargetKind(entry["target_kind"]), entry["target_id"])
+            controls.append(ExtensionControl(target, ControlState(entry["state"])))
+        except ValueError:
+            raise _invalid() from None
+    return ComposedExtensionControls(fields["global_lockdown"], tuple(controls), _failures(fields["failures"]))
+
+
+_ITEM_FIELDS: Final = {
+    "blocked": bool,
+    "factor_reason_codes": list,
+    "failures": list,
+    "explicitly_enabled_permission_ids": list,
+    "active": _OPT_BOOL,
+}
+
+
+def _answer(value: object, item: ControlItem) -> ControlAnswer:
+    fields = _shape(value, _ITEM_FIELDS)
+    # The answer carries an activity verdict exactly when the item asked for one.
+    if (fields["active"] is None) != (item.active_extension_id is None):
+        raise _invalid()
+    return ControlAnswer(
+        fields["blocked"],
+        _strings(fields["factor_reason_codes"]),
+        _failures(fields["failures"]),
+        _strings(fields["explicitly_enabled_permission_ids"]),
+        fields["active"],
+    )
+
+
+def _scenario_answers(value: object, asked: Sequence[Sequence[ControlItem]]) -> list[ScenarioAnswer]:
+    if not isinstance(value, list) or len(value) != len(asked):
+        raise _invalid()
+    scenarios: list[ScenarioAnswer] = []
+    for raw, items in zip(value, asked, strict=True):
+        fields = _shape(raw, {"global_lockdown": bool, "results": list})
+        results = fields["results"]
+        if len(results) != len(items):
+            raise _invalid()
+        scenarios.append(
+            ScenarioAnswer(
+                fields["global_lockdown"],
+                tuple(_answer(result, item) for result, item in zip(results, items, strict=True)),
+            )
+        )
+    return scenarios
+
+
+def _layer_wire(layer: ExtensionControlLayer) -> dict[str, object]:
+    return {
+        "schema_version": layer.schema_version,
+        "kind": layer.kind.value,
+        "catalog_digest": layer.catalog_digest,
+        "global_lockdown": layer.global_lockdown,
+        "controls": [
+            {
+                "target_kind": control.target.kind.value,
+                "target_id": control.target.target_id,
+                "state": control.state.value,
+            }
+            for control in layer.controls
+        ],
+    }
+
+
+def _registry_wire(registry: CommandSafetyExtensionRegistry, *, trust_classes: bool) -> dict[str, object]:
+    return {
+        "catalog_digest": registry.catalog_digest,
+        "extensions": [
+            {
+                "extension_id": extension.extension_id,
+                "aliases": list(extension.aliases),
+                "dependencies": list(extension.dependencies),
+                "required": extension.required,
+                "trust_class": trust_class_for(extension.extension_id) if trust_classes else None,
+            }
+            for extension in registry.extensions
+        ],
+        "permissions": [
+            {
+                "permission_id": permission.permission_id,
+                "extension_id": permission.extension_id,
+                "dependencies": list(permission.dependencies),
+                "implied_permissions": list(permission.implied_permissions),
+            }
+            for permission in registry.permissions
+        ],
+    }
+
+
+def _item_wire(item: ControlItem) -> dict[str, object]:
+    return {
+        "extension_ids": list(item.extension_ids),
+        "permission_ids": list(item.permission_ids),
+        "active_extension_id": item.active_extension_id,
+    }
+
+
+def _wire_bytes(value: object) -> int:
+    """Canonical size of ``value``; ASCII escaping never counts fewer bytes than the resident reads."""
+
+    return len(json.dumps(value, separators=(",", ":")))
+
+
+@dataclass(frozen=True, slots=True)
+class _Piece:
+    """A scenario, or a run of its items when it is larger than one request."""
+
+    index: int
+    wire: dict[str, object]
+    items: tuple[ControlItem, ...]
+    size: int
+
+
+def _pieces(scenarios: Sequence[ControlScenario]) -> Iterator[_Piece]:
+    for index, scenario in enumerate(scenarios):
+        layers = [_layer_wire(layer) for layer in islice(scenario.layers, MAX_CONTROL_LAYERS + 1)]
+        base: dict[str, object] = {
+            "layers": layers,
+            "surface": scenario.surface.value,
+            "authority_failure": None if scenario.authority_failure is None else scenario.authority_failure.value,
+        }
+        for start in range(0, max(len(scenario.items), 1), _MAX_ITEMS_PER_REQUEST):
+            items = scenario.items[start : start + _MAX_ITEMS_PER_REQUEST]
+            wire = {**base, "items": [_item_wire(item) for item in items]}
+            yield _Piece(index, wire, items, _wire_bytes(wire))
+
+
+def _too_large() -> RuntimeError:
+    return NativeExtensionControlError(f"{_OPERATION.prefix}_too_large")
+
+
+def _batches(pieces: Iterable[_Piece], registry_bytes: int) -> Iterator[list[_Piece]]:
+    """Group pieces into requests that stay inside every resident bound.
+
+    Each request carries the registry, so a piece that cannot fit beside it has
+    no request to travel in and the whole question is refused.
+    """
+
+    batch: list[_Piece] = []
+    batch_items = 0
+    batch_bytes = registry_bytes
+    for piece in pieces:
+        if registry_bytes + piece.size > _MAX_BATCH_BYTES:
+            raise _too_large()
+        if batch and (
+            len(batch) >= _MAX_SCENARIOS_PER_REQUEST
+            or batch_items + len(piece.items) > _MAX_ITEMS_PER_REQUEST
+            or batch_bytes + piece.size > _MAX_BATCH_BYTES
+        ):
+            yield batch
+            batch, batch_items, batch_bytes = [], 0, registry_bytes
+        batch.append(piece)
+        batch_items += len(piece.items)
+        batch_bytes += piece.size
+    if batch:
+        yield batch
+
+
+def _ask(
+    query: dict[str, object],
+    guard_home: Path | None,
+    fields: Mapping[str, Any],
+    parse: Callable[[dict[str, Any]], Any],
+) -> Any:
+    """Ask the resident; ``parse`` runs inside payload validation so a bad payload counts against its health."""
+
+    parsed: list[Any] = []
+
+    def validate(payload: dict[str, Any]) -> None:
+        parsed.append(parse(payload))
+
+    _decide(
+        query,
+        guard_home,
+        fields,
+        validate,
+        operation=_OPERATION,
+        max_request_bytes=_MAX_REQUEST_BYTES,
+        slots=_SLOTS,
+    )
+    return parsed[0]
+
+
+def compose_control_layers(
+    layers: Iterable[ExtensionControlLayer],
+    *,
+    guard_home: Path | None = None,
+) -> ComposedExtensionControls:
+    """Compose layers with disable dominance and deterministic output."""
+
+    query: dict[str, object] = {"kind": "compose", "layers": [_layer_wire(layer) for layer in layers]}
+    return _ask(query, guard_home, {"composed": dict}, lambda payload: _composed(payload["composed"]))
+
+
+def resolve_scenarios(
+    registry: CommandSafetyExtensionRegistry,
+    scenarios: Sequence[ControlScenario],
+    *,
+    guard_home: Path | None = None,
+    trust_classes: bool = False,
+) -> tuple[ScenarioAnswer, ...]:
+    """Resolve every scenario's items against ``registry``, one answer per scenario in order.
+
+    ``trust_classes`` sends each extension's curated trust class; it is needed
+    only by items that ask whether an extension is active.
+    """
+
+    if not scenarios:
+        return ()
+    registry_wire = _registry_wire(registry, trust_classes=trust_classes)
+    # Size every piece before the first ask, so a question that cannot be
+    # carried is refused without a partial round of requests.
+    batches = list(_batches(list(_pieces(scenarios)), _wire_bytes(registry_wire)))
+    items: list[list[ControlAnswer]] = [[] for _ in scenarios]
+    lockdowns: list[bool | None] = [None] * len(scenarios)
+    for batch in batches:
+        query: dict[str, object] = {
+            "kind": "resolve",
+            "registry": registry_wire,
+            "scenarios": [piece.wire for piece in batch],
+        }
+        asked = [piece.items for piece in batch]
+        answered: list[ScenarioAnswer] = _ask(
+            query,
+            guard_home,
+            {"scenarios": list},
+            lambda payload, asked=asked: _scenario_answers(payload["scenarios"], asked),
+        )
+        for piece, answer in zip(batch, answered, strict=True):
+            # Every piece of one scenario resolves the same layers.
+            if lockdowns[piece.index] not in (None, answer.global_lockdown):
+                raise _invalid()
+            lockdowns[piece.index] = answer.global_lockdown
+            items[piece.index].extend(answer.items)
+    return tuple(
+        ScenarioAnswer(bool(lockdown), tuple(answers)) for lockdown, answers in zip(lockdowns, items, strict=True)
+    )
+
+
+def resolve_extension_controls(
+    layers: Iterable[ExtensionControlLayer],
+    registry: CommandSafetyExtensionRegistry,
+    *,
+    extension_ids: tuple[str, ...],
+    permission_ids: tuple[str, ...],
+    surface: ControlSurface,
+    authority_failure: ResolverFailureCode | None = None,
+    guard_home: Path | None = None,
+) -> ControlAnswer:
+    """Resolve one set of catalog identities against ``layers``."""
+
+    scenario = ControlScenario(
+        tuple(layers),
+        (ControlItem(extension_ids, permission_ids),),
+        surface,
+        authority_failure,
+    )
+    return resolve_scenarios(registry, (scenario,), guard_home=guard_home)[0].items[0]

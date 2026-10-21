@@ -16,6 +16,7 @@ from codex_plugin_scanner.guard.managed_controls_policy_bundle import (
     MANAGED_CONTROLS_ACTIVE_STATE_KEY,
     _projection_digest,
 )
+from codex_plugin_scanner.guard.native_extension_control import resolve_extension_controls
 from codex_plugin_scanner.guard.runtime import command_extensions
 from codex_plugin_scanner.guard.runtime.command_extensions import (
     BUILT_IN_COMMAND_EXTENSION_REGISTRY,
@@ -37,7 +38,6 @@ from codex_plugin_scanner.guard.runtime.extension_control_contract import (
     ControlTargetKind,
     ResolverFailureCode,
 )
-from codex_plugin_scanner.guard.runtime.extension_control_resolver import resolve_extension_controls
 from tests.test_guard_extension_control_authority import (
     MemorySecretStore,
     _commit_enabled_permission,

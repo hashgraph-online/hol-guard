@@ -1980,24 +1980,6 @@
         "evidence": "build_memory_decision_event_envelope is called only from memory_decision_outbox.py, build_runtime_session_event only from runtime/runner.py and build_access_graph_snapshot_event only from access_graph_events.py; all three callers are outside runtime scope. The retained receipt, policy and harness-usage builders do not reference them, and the report validates this reference closure on every run."
       },
       {
-        "id": "extension-control-dashboard-resolution",
-        "category": "control_plane",
-        "path": "src/codex_plugin_scanner/guard/runtime/extension_control_resolver.py",
-        "symbols": [
-          "_FAILURE_REASON",
-          "_TRUSTED_LOCKDOWN_SURFACES",
-          "resolve_extension_controls",
-          "_has_explicit_enabled_permission",
-          "_validate_layer_targets",
-          "_extension_closure",
-          "_permission_closure",
-          "_resolution"
-        ],
-        "entry_points": [],
-        "reason": "resolve_extension_controls builds the effective extension-control view for the dashboard projection and the semantic preview. Hook evaluation reads extension controls through the native resident and never calls it.",
-        "evidence": "rg -l 'resolve_extension_controls' src -g '*.py' lists only daemon/extension_control_projection.py and daemon/extension_control_semantic_preview.py outside runtime/extension_control_resolver.py; neither is in the runtime import closure."
-      },
-      {
         "id": "unlisted-cli-check-for-mcp-probe",
         "category": "control_plane",
         "path": "src/codex_plugin_scanner/guard/runtime/local_cli_identity.py",
