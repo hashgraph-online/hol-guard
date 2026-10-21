@@ -435,5 +435,19 @@ pub(super) fn benign_prompt_text(text: &str) -> bool {
     // dumps and value requests still keep the prompt off the benign path.
     // Words inside an unconditional prohibition ("never X or Y") are not
     // requested actions; the strong intent detectors run on the raw prompt.
-    !prompt_requests_secret(&remainder) && !risky_action.is_match(&mask_negated_clauses(&remainder))
+    !prompt_requests_secret(&remainder)
+        && !risky_action.is_match(&mask_format_options(&mask_negated_clauses(&remainder)))
+}
+
+/// `--format`, `-format` and the `format:` value of `--pretty=format:` choose
+/// how a command prints its output; the bare word, or an assignment such as
+/// `operation=format`, still asks to format a disk.
+fn mask_format_options(value: &str) -> String {
+    static OPTION: OnceLock<Regex> = OnceLock::new();
+    OPTION
+        .get_or_init(|| {
+            Regex::new(r"(?i)(^|[^a-z0-9-])--?format\b|=format:").expect("bounded format option")
+        })
+        .replace_all(value, "${1}output-layout")
+        .into_owned()
 }

@@ -547,10 +547,6 @@
         "reason": "Retained conservatively in runtime scope: generated_command_catalog and native_command_control_binding reach authenticated pack metadata, activation projection and recovery through lazy imports. Count the complete shared delivery modules, including preparation and transport helpers, rather than exclude code reachable through those authority boundaries. Pack admission and hook evaluation remain native."
       },
       {
-        "path": "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py",
-        "reason": "Reviewed and retained in runtime scope: cli/commands_support_runtime_artifacts reaches github_command_capabilities at module load when it builds runtime artifacts; the resident now recognises non-executing GitHub Actions reads. It returns unknown when the native GitHub classifier is unavailable and never re-derives a capability in Python. The sensitive-request classifiers that used to reach it eagerly now run in the resident, so it is reached through that lazily loaded artifact module and stays counted."
-      },
-      {
         "path": "src/codex_plugin_scanner/guard/retry_lineage.py",
         "reason": "Reviewed and retained in runtime scope: Copilot hook processing captures local retry correlation metadata through capture_retry_lineage. The identifiers are diagnostic inputs, not authorization. Native continuation finalization preserves the first valid lineage when updating an operation; the remaining Python capture path stays counted."
       },
@@ -818,12 +814,6 @@
           "src/codex_plugin_scanner/guard/runtime/github_workflow_approval_record.py"
         ],
         "reason": "Reviewed: GitHub workflow capability preflight and approval records. commands_hook_native_eval.py imports github_workflow_runtime to resolve the workflow capability preflight on a native hook call, and commands_support_runtime_policy.py reads GitHubWorkflowApprovalRecord when it resolves runtime policy, so both are hook-path runtime and stay counted. approvals.py used to pull them in eagerly; they are now reached only through these lazy hook-path imports."
-      },
-      {
-        "path": [
-          "src/codex_plugin_scanner/guard/runtime/github_command_capabilities.py"
-        ],
-        "reason": "Reviewed: fail-closed bridge to the native GitHub CLI classifier. github_shell_capabilities.py classifies gh commands through it while a hook evaluates a shell request, so it is hook-path runtime and stays counted. When the resident cannot answer it returns the review floor instead of re-deriving the capability in Python."
       },
       {
         "path": [
