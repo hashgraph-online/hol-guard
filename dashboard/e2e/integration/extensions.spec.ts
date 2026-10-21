@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { daemonApi, expect, expectNoErrorBoundary, test, type IntegrationState } from "./fixtures";
+import { escapeRegExp } from "./inbox-helpers";
 
 type CatalogIndex = { total_count: number; items: { extension_id: string; name: string }[] };
 type CatalogRules = { total_count: number; items: { rule_id: string; title: string }[] };
@@ -41,7 +42,7 @@ test("catalog lists every built-in tool the daemon's real catalog serves", async
   // "protection" suffix the rows drop.
   for (const item of index.items.slice(0, 3)) {
     const name = item.name.replace(/ (?:command )?protection$/, "");
-    await expect(catalog.getByRole("button", { name: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`) }).first()).toBeVisible();
+    await expect(catalog.getByRole("button", { name: new RegExp(`^${escapeRegExp(name)}\\b`) }).first()).toBeVisible();
   }
   await expect(catalog.getByRole("button", { name: /^API gateway\b.*HOL curated library/ })).toBeVisible();
 
@@ -126,7 +127,7 @@ test("the list switch moves between built-in tools and detected custom extension
   await expect(page.getByRole("heading", { name: "All tools" })).toHaveCount(0);
   const section = page.getByTestId("custom-extensions-section");
   await expect(section.getByRole("heading", { name: "Custom extensions" })).toBeVisible();
-  const row = section.getByRole("button", { name: new RegExp(`^${cliName}\\b`) });
+  const row = section.getByRole("button", { name: new RegExp(`^${escapeRegExp(cliName)}\\b`) });
   await expect(row).toContainText("Custom");
   await expect(row).toContainText("Detected");
   await expect(row).toContainText("Guard detected this tool. Review it before adding it.");
@@ -140,8 +141,8 @@ test("the list switch moves between built-in tools and detected custom extension
   // The row opens the connector's own page, which offers adding or forgetting
   // it. Adding needs the approval password, so the dialog is opened and closed.
   await custom.click();
-  await section.getByRole("button", { name: new RegExp(`^${cliName}\\b`) }).click();
-  await expect(page).toHaveURL(new RegExp(`/extensions/local-cli/${cliId.replace(/\./g, "\\.")}(?:[?#]|$)`));
+  await section.getByRole("button", { name: new RegExp(`^${escapeRegExp(cliName)}\\b`) }).click();
+  await expect(page).toHaveURL(new RegExp(`/extensions/local-cli/${escapeRegExp(cliId)}(?:[?#]|$)`));
   await expectNoErrorBoundary(page);
   await expect(page.getByRole("heading", { name: cliName, level: 1 })).toBeVisible();
   await expect(page.getByText(seeded(state).custom_cli_example)).toBeVisible();
