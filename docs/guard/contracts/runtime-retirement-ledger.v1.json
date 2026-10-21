@@ -85,7 +85,8 @@
   "src/codex_plugin_scanner/guard/adapters/codex_daemon_start_wait.py",
   "src/codex_plugin_scanner/guard/runtime/npm_source_spec.py",
   "src/codex_plugin_scanner/guard/runtime/github_pr_body_file.py",
-  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py"
+  "src/codex_plugin_scanner/guard/runtime/secret_file_request_services/github_pr_body_safety.py",
+  "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py"
  ],
  "retired_tests": [
   {
@@ -6630,6 +6631,33 @@
     "rust/crates/guard-command/src/sfrs_gh_body_file_check.rs::existing_locked_service_preserves_static_body_files_and_rejects_aliases"
    ],
    "status": "native_behavior_ported_requires_ci"
+  },
+  {
+   "old_node": "tests/test_native_command_options.py::test_public_option_helpers_replay_native_original_vectors",
+   "source_sha256": "c93813c59088f5fa73613d4bcbdb371c5cf20f1b7918428b7d5a69a8fb1bcb4b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_option_helpers_replay"
+   ],
+   "status": "native_behavior_ported_requires_ci",
+   "rationale": "Replayed a sample of the option vectors in tests/fixtures/shell-helper-python.v1.json through the retired Python caller. The Rust test replays every option vector in the same fixture against the resident."
+  },
+  {
+   "old_node": "tests/test_native_command_options.py::test_option_cache_reuses_native_results_and_rechecks_runtime",
+   "source_sha256": "c93813c59088f5fa73613d4bcbdb371c5cf20f1b7918428b7d5a69a8fb1bcb4b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_option_helpers_replay"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the retired Python caller's lru_cache of native option results. The cache was deleted with the module; the resident answers each option call directly, so there is no Python cache to reuse or skip."
+  },
+  {
+   "old_node": "tests/test_native_command_options.py::test_option_cache_does_not_store_native_errors",
+   "source_sha256": "c93813c59088f5fa73613d4bcbdb371c5cf20f1b7918428b7d5a69a8fb1bcb4b",
+   "replacement_nodes": [
+    "rust/crates/guard-runtime/src/shell_helpers_vectors_tests.rs::original_python_option_helpers_replay"
+   ],
+   "status": "obsolete_implementation_assertion",
+   "rationale": "Asserted the retired Python caller's lru_cache of native option results. The cache was deleted with the module; the resident answers each option call directly, so there is no Python cache to reuse or skip."
   }
  ],
  "preserved_tests": [

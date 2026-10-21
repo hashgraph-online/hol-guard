@@ -439,6 +439,7 @@ mod hook_cli_claude_text;
 #[cfg(test)]
 mod hook_decision_apply_patch_gate_tests;
 mod hook_decision_artifact_directive;
+mod hook_decision_artifact_finalize;
 mod hook_decision_artifact_reuse_step;
 mod hook_decision_artifact_review_route;
 #[cfg(all(test, unix))]

@@ -1260,6 +1260,26 @@
     "rust/crates/guard-command/src/sfrs_credential_exfil.rs",
     "rust/crates/guard-command/src/sfrs_interpreter_heredoc.rs"
    ]
+  },
+  {
+   "path": "src/codex_plugin_scanner/guard/runtime/command_option_parsing.py",
+   "module": "codex_plugin_scanner.guard.runtime.command_option_parsing",
+   "source_sha256": "3ce77bdfa45cdd1296b2d85286daf964cbbe61cbee8a280e01cd584a307a3ccf",
+   "forbidden_symbols": [
+    "ArgumentSemantics",
+    "argument_semantics",
+    "matches_subcommands_conservatively",
+    "flags_present_in_all_option_parses",
+    "known_option_advance",
+    "long_flag_assignment_is_enabled",
+    "_option_result",
+    "_option_call"
+   ],
+   "native_replacements": [
+    "rust/crates/guard-command/src/command_option_parsing.rs",
+    "rust/crates/guard-command/src/command_argument_semantics.rs",
+    "rust/crates/guard-command/src/shell_helpers.rs"
+   ]
   }
  ],
  "retired_test_paths": [
@@ -1290,7 +1310,8 @@
   "tests/test_codex_daemon_start_wait.py",
   "tests/test_codex_daemon_bridge_failure_reason.py",
   "tests/test_npm_source_spec.py",
-  "tests/test_guard_github_pr_body_file.py"
+  "tests/test_guard_github_pr_body_file.py",
+  "tests/test_native_command_options.py"
  ],
  "retired_bodies": [
   {

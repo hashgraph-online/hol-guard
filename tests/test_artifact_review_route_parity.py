@@ -266,7 +266,8 @@ def test_a_silent_review_records_the_inbox_denial_and_a_silent_block_does_not(
     monkeypatch.setattr(silent_review, "_runtime_request_summary", lambda _artifact: "summary")
     monkeypatch.setattr(silent_review, "_action_envelope_json", lambda _envelope: None)
     monkeypatch.setattr(silent_review, "_terminalize_runtime_action_copy", lambda _payload: None)
-    monkeypatch.setattr(silent_review, "set_native_artifact_hook_final_action", lambda *_a, **_k: None)
+    monkeypatch.setattr(silent_review, "plan_native_artifact_hook_final_action", lambda *_a, **_k: {})
+    monkeypatch.setattr(silent_review, "apply_native_artifact_hook_final_action", lambda *_a, **_k: None)
 
     def state() -> SimpleNamespace:
         return SimpleNamespace(

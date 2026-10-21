@@ -15,8 +15,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 use crate::{
-    ArtifactReusePlanV1, ArtifactReuseStepInputsV1, CodexToolOutputFactsV1, HookRouteInputsV1,
-    HookRouteV1, NativeExtensionControlLayerV1, NativePermissionPersistInputsV1,
+    ArtifactBrowserOutcomeInputsV1, ArtifactBrowserOutcomeV1, ArtifactFinalizeInputsV1,
+    ArtifactFinalizeV1, ArtifactReusePlanV1, ArtifactReuseStepInputsV1, CodexToolOutputFactsV1,
+    HookRouteInputsV1, HookRouteV1, NativeExtensionControlLayerV1, NativePermissionPersistInputsV1,
     NativePermissionPersistPlanV1,
 };
 
@@ -82,6 +83,16 @@ pub enum HookDecisionQueryV1 {
     /// queued for approval.
     ArtifactReviewRoute {
         inputs: Box<ArtifactReviewRouteInputsV1>,
+    },
+    /// The artifact hook's final-action settle: the normalized final action,
+    /// the decision record's key, the evidence patch and the receipt fields.
+    ArtifactFinalize {
+        inputs: Box<ArtifactFinalizeInputsV1>,
+    },
+    /// Whether a browser approval outcome settles the artifact hook, and how
+    /// the hook ends once it does.
+    ArtifactBrowserOutcome {
+        inputs: Box<ArtifactBrowserOutcomeInputsV1>,
     },
     /// The artifact hook's approval-reuse state machine: the plan of effects
     /// (claim, revalidate) and the settlement the request reaches.
@@ -414,6 +425,8 @@ pub enum HookDecisionPayloadV1 {
     ArtifactDirective(Box<HookResponseDirectiveV1>),
     NativePermissionPersistPlan(Box<NativePermissionPersistPlanV1>),
     ArtifactReviewRoute(Box<ArtifactReviewRouteV1>),
+    ArtifactFinalize(Box<ArtifactFinalizeV1>),
+    ArtifactBrowserOutcome(Box<ArtifactBrowserOutcomeV1>),
     ArtifactReuseStep {
         plan: Box<ArtifactReusePlanV1>,
     },
