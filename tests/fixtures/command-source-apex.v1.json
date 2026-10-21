@@ -24137,6 +24137,7 @@
     "trust": {
       "classes": {
         "external": [
+          "command.aether-vault",
           "command.agentbridge",
           "command.agenticjobs",
           "command.agi-memory",
@@ -24178,6 +24179,7 @@
           "command.mcp-architecture-intelligence-platform",
           "command.mcp-asdecided",
           "command.mcp-aseprite",
+          "command.mcp-askjev",
           "command.mcp-authyouragent",
           "command.mcp-ccm",
           "command.mcp-cf-mail-mcp",
@@ -24202,7 +24204,9 @@
           "command.mcp-krusch-agentic-proxy",
           "command.mcp-krusch-context-mcp",
           "command.mcp-krusch-git",
+          "command.mcp-kuuhaku",
           "command.mcp-lattice-talk",
+          "command.mcp-leadline",
           "command.mcp-loomdesk",
           "command.mcp-mail-server",
           "command.mcp-melra",
@@ -24338,27 +24342,42 @@
   "cases": [
     {
       "command": "apex compress ./src -o backup.apx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.apex"
+      ],
       "expected_action": "review",
       "expected_effective_segments": [
         0
       ],
-      "id": "case-1"
+      "id": "case-1",
+      "rule_id": "command.apex.compress"
     },
     {
       "command": "apex extract archive.apx -d ./out",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.apex"
+      ],
       "expected_action": "review",
       "expected_effective_segments": [
         1
       ],
-      "id": "case-2"
+      "id": "case-2",
+      "rule_id": "command.apex.decompress"
     },
     {
       "command": "apex repair damaged.apx",
+      "disabled_permissions": [],
+      "enabled_extensions": [
+        "command.apex"
+      ],
       "expected_action": "review",
       "expected_effective_segments": [
         2
       ],
-      "id": "case-3"
+      "id": "case-3",
+      "rule_id": "command.apex.repair"
     }
   ],
   "schema": "guard.command-extension-fixtures.v1"
