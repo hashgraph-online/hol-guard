@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from types import TracebackType
-from typing import Final, final
+from typing import Final, Literal, final
 
 from typing_extensions import override
 
@@ -138,13 +138,19 @@ class DaemonDiagnostics:
         event: str,
         *,
         detail: str | None = None,
-        exc_info: tuple[type[BaseException], BaseException, TracebackType | None] | None = None,
+        exc_info: tuple[type[BaseException], BaseException, TracebackType | None] | Literal[False] | None = None,
     ) -> bool:
+        # As in `logging`, False asks for no traceback. The caller has already
+        # reduced the failure to a bounded, path-free line, and a traceback
+        # would put the absolute path it was reading back into daemon.log - the
+        # artifact an operator hands over. True is not accepted: a caller that
+        # wants the live exception passes nothing.
+        recorded: tuple[type[BaseException], BaseException, TracebackType | None] | None = exc_info or None
         if exc_info is None:
             exception_type, exception, traceback = sys.exc_info()
             if exception_type is not None and exception is not None:
-                exc_info = (exception_type, exception, traceback)
-        return self._enqueue(self._record(logging.ERROR, event, detail=detail, exc_info=exc_info))
+                recorded = (exception_type, exception, traceback)
+        return self._enqueue(self._record(logging.ERROR, event, detail=detail, exc_info=recorded))
 
     def close(self, *, timeout_seconds: float = 1.0) -> bool:
         from .background_diagnostics import release_sink
