@@ -78,8 +78,8 @@
     "memory_brief, memory_recall, memory_get, memory_list and memory_stats are read-only (readOnlyHint: true): from 0.1.2 they never write, move or delete memory files and only refresh the derived SQLite index.",
     "memory_remember and memory_reinforce write Markdown files under HALFLIFE_HOME; writes that look like secrets are refused.",
     "memory_forget permanently deletes one memory: its file, graph sidecar, archived copy and index rows; keep it on review.",
-    "Pin the release when launching (uvx halflife-mcp==0.1.2) so only the reviewed version runs; maintenance (archiving faded memories, expiring old traces) runs on the first write call.",
-    "The server makes no network calls of its own. For vector search, launch uvx --with fastembed --with numpy halflife-mcp (keeps this package identity); the model downloads once; HALFLIFE_EMBED=off disables it.",
+    "Pin the release when launching (uvx halflife-mcp@0.1.2) so only the reviewed version runs; maintenance (archiving faded memories, expiring old traces) runs on the first write call.",
+    "The server makes no network calls of its own. For vector search, launch uvx --with fastembed --with numpy halflife-mcp@0.1.2 (keeps this package identity); the model downloads once; HALFLIFE_EMBED=off disables it.",
     "Serve over stdio. The --http mode has no authentication and refuses non-loopback hosts unless --allow-network is passed."
   ]
 }
