@@ -58,7 +58,8 @@ impl Home {
                 actor_id_hash text not null, idempotency_key_hash text not null, nonce_hash text not null,
                 catalog_digest text not null, layers_json text not null, snapshot_json text not null,
                 snapshot_digest text not null, snapshot_mac text not null, transition_json text not null,
-                transition_digest text not null, transition_mac text not null, created_at text not null);
+                transition_digest text not null, transition_mac text not null, created_at text not null,
+                committed_at text);
              create table extension_control_catalog_manifest (
                 catalog_digest text primary key, manifest_json text not null, record_json text not null,
                 record_digest text not null, record_mac text not null, recorded_at text not null);
@@ -140,7 +141,7 @@ impl Home {
         self.db
             .execute(
                 "insert into extension_control_authority_transition values
-                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 params![
                     revision,
                     revision - 1,
@@ -156,7 +157,8 @@ impl Home {
                     transition_json,
                     transition_digest,
                     transition_mac,
-                    AT
+                    AT,
+                    (phase == "committed").then_some(AT)
                 ],
             )
             .unwrap();
