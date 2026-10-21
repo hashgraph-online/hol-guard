@@ -84,6 +84,7 @@ from ..runtime.package_json_script_memory import (
 )
 from ..runtime.package_json_scripts import looks_like_package_script_paste
 from ..store_local_cli_capabilities import LocalCliCapabilityError
+from .background_diagnostics import failure_detail, record_background_event
 from .local_cli_api_contract import LOCAL_CLI_API_SCHEMA as _LOCAL_CLI_API_SCHEMA
 from .local_cli_api_contract import LocalCliApiError
 from .local_cli_capability_api import (
@@ -112,6 +113,19 @@ _LOGGER = logging.getLogger(__name__)
 
 _VALID_STATES = frozenset({"allowed", "blocked", "unset"})
 _DISCOVERY_TTL_SECONDS = 30.0
+# A failed host scan used to leave daemon.log empty, so a support bundle could
+# not say which of the stages below aborted the job. One event per stage names
+# the stage and the exception class; `failure_detail` keeps paths and secrets
+# out of the line, because daemon.log is an artifact an operator hands over.
+DISCOVERY_STAGE_FAILED_EVENT = "discovery_stage_failed"
+
+
+def record_discovery_stage_failure(stage: str, error: BaseException | None = None) -> None:
+    """Record one aborted discovery stage without logging what it was reading."""
+
+    detail = f"stage={stage}" + (f" {failure_detail(error)}" if error is not None else "")
+    _LOGGER.warning("discovery stage failed (%s)", detail)
+    record_background_event(DISCOVERY_STAGE_FAILED_EVENT, detail)
 
 
 def _client_discovery_job_id(payload: dict[str, object]) -> str | None:
@@ -371,7 +385,7 @@ class LocalCliApiService:
             if payload.get("operation") == "codex-host-connections":
                 return self._discovery_jobs.start(
                     "inventory:codex-host",
-                    lambda cancel: self._codex_host_inventory.refresh(codex_home=Path.home() / ".codex", cancel=cancel),
+                    self._refresh_codex_host_inventory,
                     reuse_seconds=0 if payload.get("force_refresh") is True else 30,
                     requested_job_id=_client_discovery_job_id(payload),
                 )
@@ -389,13 +403,23 @@ class LocalCliApiService:
                             saturated = discover_observed_mcp_tools(
                                 self._store, seen_at=utc_now(), configured_servers=self._configured_server_names()
                             )
-                        except LocalCliCatalogLimitError:
+                        except LocalCliCatalogLimitError as error:
+                            record_discovery_stage_failure("catalog_limit_reached", error)
                             raise DiscoveryStageError("catalog_limit_reached") from None
-                        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
-                            self._record_discovery_failure("local_cli_observed_discovery_failed")
+                        except (
+                            OSError,
+                            RuntimeError,
+                            TypeError,
+                            ValueError,
+                            KeyError,
+                            UnicodeError,
+                            sqlite3.Error,
+                        ) as error:
+                            record_discovery_stage_failure("observed_provider_scan_failed", error)
                             raise DiscoveryStageError("observed_provider_scan_failed") from None
                         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
                         if saturated:
+                            record_discovery_stage_failure("catalog_limit_reached")
                             raise DiscoveryStageError("catalog_limit_reached")
 
                 return self._discovery_jobs.start(
@@ -564,10 +588,10 @@ class LocalCliApiService:
         backfill_observed_local_clis(self._store, seen_at=utc_now(), home_dir=Path.home())
         try:
             labels = self._observe_harness_mcp_servers(strict=True)
-        except DiscoveryStageError:
+        except DiscoveryStageError as error:
             labels = {}
             if discovery_issue is None:
-                discovery_issue = "configured_host_scan_failed"
+                discovery_issue = error.code
         try:
             items = apply_source_labels(
                 refresh_package_script_catalogs(self._store, home_dir=Path.home()),
@@ -876,14 +900,24 @@ class LocalCliApiService:
         finally:
             notify_native_policy_mutation(self._store.guard_home)
 
-    def _record_discovery_failure(self, event: str) -> None:
-        """Record the exception being handled under ``event`` in daemon.log."""
+    def _record_discovery_failure(self, event: str, error: BaseException | None = None) -> None:
+        """Name a discovery failure in daemon.log, without its traceback.
 
-        _LOGGER.warning("%s", event, exc_info=True)
+        daemon.log is a support artifact an operator hands over. A traceback
+        carries the absolute path and the username of whatever the scan was
+        reading - an `OSError` names the file that failed outright - so
+        neither sink gets one. The exception class is what separates a
+        permission problem from malformed configuration, and the stage record
+        beside it names which scan stopped.
+        """
+
+        failure = error if error is not None else sys.exc_info()[1]
+        name = type(failure).__name__
+        _LOGGER.warning("%s (error=%s)", event, name)
         # A service built without `__init__` (as some tests do) has no recorder.
         record_exception = getattr(self, "_record_exception", None)
         if record_exception is not None:
-            record_exception(event, detail=type(sys.exc_info()[1]).__name__)
+            record_exception(event, detail=name, exc_info=False)
 
     def _observe_harness_mcp_servers(self, *, strict: bool = False, fresh: bool = False) -> dict[str, str]:
         try:
@@ -893,6 +927,20 @@ class LocalCliApiService:
                 self._configured_names = {}
             servers = self._discovered_servers(strict=True) if strict else self._discovered_servers()
             remote, remote_harnesses = self._remote_scan()
+        except DiscoveryStageError:
+            # The scan already recorded its own stage; re-wrapping it here
+            # would file a second record naming this wrapper instead.
+            raise
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
+            # Two sinks, two readers: the daemon's own recorder names the
+            # exception for whoever reads daemon.log, and the stage record names
+            # the code the banner shows, so the two never disagree.
+            self._record_discovery_failure("local_cli_configured_discovery_failed")
+            if strict:
+                record_discovery_stage_failure("configured_host_scan_failed", error)
+                raise DiscoveryStageError("configured_host_scan_failed") from None
+            return {}
+        try:
             return persist_discovered_harness_mcp_servers(
                 self._store,
                 servers,
@@ -903,11 +951,36 @@ class LocalCliApiService:
         except DiscoveryStageError:
             # `_discovered_servers` already recorded the underlying cause.
             raise
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
             self._record_discovery_failure("local_cli_configured_discovery_failed")
             if strict:
-                raise DiscoveryStageError("configured_host_scan_failed") from None
+                # Saving is a separate failure from reading: the reader's agent
+                # configuration is fine, so the banner must not send them to it.
+                record_discovery_stage_failure("configured_host_persist_failed", error)
+                raise DiscoveryStageError("configured_host_persist_failed") from None
             return {}
+
+    def _refresh_codex_host_inventory(self, cancel: threading.Event) -> None:
+        """Refresh the Codex host inventory, keeping the reason the read failed.
+
+        ``CodexHostInventoryCache`` raises a bare ``ValueError`` whose text is
+        the reason, which carries no ``code``, so every Codex failure used to
+        reach the page as the generic "unexpected error" banner. Naming the
+        reason here lets the Extensions page say which Codex problem to fix.
+        """
+
+        from ..runtime.codex_host_inventory import HOST_FAILURE_CODES
+
+        try:
+            self._codex_host_inventory.refresh(codex_home=Path.home() / ".codex", cancel=cancel)
+        except ValueError as error:
+            reason = str(error)
+            code = reason if reason in HOST_FAILURE_CODES else "codex_host_invalid"
+            record_discovery_stage_failure(code, error)
+            raise DiscoveryStageError(code) from None
+        except (OSError, RuntimeError, TypeError, KeyError, UnicodeError, sqlite3.Error) as error:
+            record_discovery_stage_failure("codex_host_unavailable", error)
+            raise DiscoveryStageError("codex_host_unavailable") from None
 
     def _configured_server_names(self) -> dict[str, tuple[str, ...]]:
         _ = self._discovered_servers()
@@ -945,12 +1018,20 @@ class LocalCliApiService:
                 workspace_dir=workspace_dir,
                 detections=detections,
             )
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
-            self._record_discovery_failure("local_cli_configured_discovery_failed")
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
             # A failed read leaves no remote snapshot to reconcile against.
             self._remote_discovery_cache = None
             self._configured_names = {}
             if strict:
+                # Both records are filed here, where the raised exception is
+                # still the cause. Once this leaves as a `DiscoveryStageError`
+                # the caller only sees the wrapper, so a record filed there
+                # would name the wrapper instead of what actually failed.
+                # Background polling also reaches this helper, and recording
+                # every cache expiry would fill daemon.log while a config stays
+                # broken, so only the explicit scan a reader asked for records.
+                self._record_discovery_failure("local_cli_configured_discovery_failed")
+                record_discovery_stage_failure("configured_host_scan_failed", error)
                 raise DiscoveryStageError("configured_host_scan_failed") from None
             return ()
         self._discovery_cache = (now, servers)
@@ -963,8 +1044,14 @@ class LocalCliApiService:
                 detections=detections,
             )
             harnesses = remote_scan_harnesses(detections, remote)
-        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error):
-            # A failed read lists none and must not forget any declaration.
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as error:
+            # A failed read lists none and must not forget any declaration. It
+            # does not fail the job, so the record is the only sign it happened
+            # - but this helper also serves background polling, and recording
+            # every cache expiry would fill daemon.log while a config stays
+            # broken. Only the explicit scan a reader asked for records it.
+            if strict:
+                record_discovery_stage_failure("remote_scan_skipped", error)
             remote, harnesses = (), None
         self._remote_discovery_cache = (now, remote, harnesses)
         return servers

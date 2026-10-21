@@ -50,6 +50,9 @@ _FAILURE_CODES = frozenset(
         "codex_host_unavailable",
     }
 )
+# The discovery job turns these into the banner's guidance, so they are part of
+# this module's contract rather than an internal detail.
+HOST_FAILURE_CODES = _FAILURE_CODES
 
 
 class CodexHostInventoryCache:

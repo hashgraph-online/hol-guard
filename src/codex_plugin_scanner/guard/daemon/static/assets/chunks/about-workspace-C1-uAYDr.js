@@ -1,4 +1,4 @@
-import { j as jsxRuntimeExports, T as Tag, dX as Surface, a6 as Badge, r as reactExports, S as SectionLabel, cn as HiMiniArrowTopRightOnSquare, db as HiMiniCheckBadge } from "../guard-dashboard.js";
+import { j as jsxRuntimeExports, T as Tag, d_ as Surface, a6 as Badge, r as reactExports, S as SectionLabel, cn as HiMiniArrowTopRightOnSquare, de as HiMiniCheckBadge } from "../guard-dashboard.js";
 import { b as ABOUT_TRUST_CONTRACT_CLAIMS, c as ALLOWED_LINKS, d as ABOUT_DATA_BOUNDARY_ROWS, e as ABOUT_STANDARDS_NODES, f as ABOUT_PATH_CARDS, g as ABOUT_PARTNER_SECTION_TITLE, h as ABOUT_PARTNER_SECTION_BODY, i as ABOUT_PARTNER_LEVELS, j as ABOUT_PARTNER_CTA, k as ABOUT_PARTNER_CTA_HREF, l as ABOUT_AFFILIATE_SECTION_TITLE, m as ABOUT_AFFILIATE_SECTION_BODY, n as ABOUT_AFFILIATE_TERMS, o as ABOUT_AFFILIATE_CTA, p as ABOUT_AFFILIATE_CTA_HREF, q as ABOUT_AFFILIATE_DISCLOSURE } from "./about-content-BwtrHEyh.js";
 function AboutRuntimeProofStrip({
   summary

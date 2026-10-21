@@ -91,7 +91,7 @@ export type LocalCliListResponse = {
   host_inventory?: import("./codex-host-inventory").CodexHostInventory;
   schema_version: string;
   revision: number;
-  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "package_catalog_refresh_failed";
+  discovery_issue?: "catalog_limit_reached" | "observed_provider_scan_failed" | "configured_host_scan_failed" | "configured_host_persist_failed" | "package_catalog_refresh_failed";
   native_publication?: {
     state: "acknowledged" | "pending" | "failed" | "unavailable";
     revision: number;

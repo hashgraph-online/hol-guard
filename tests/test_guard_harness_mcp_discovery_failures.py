@@ -88,7 +88,9 @@ def test_cli_id_collision_keeps_both_servers(tmp_path: Path) -> None:
 def _recording_service(home: Path) -> tuple[LocalCliApiService, list[tuple[str, str | None]]]:
     recorded: list[tuple[str, str | None]] = []
 
-    def record(event: str, *, detail: str | None = None) -> bool:
+    def record(event: str, *, detail: str | None = None, exc_info: object = None) -> bool:
+        # Mirrors `DaemonDiagnostics.record_exception`, whose `exc_info=False`
+        # asks for a record with no traceback.
         recorded.append((event, detail))
         return True
 

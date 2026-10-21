@@ -1,4 +1,4 @@
-import { r as reactExports, j as jsxRuntimeExports, cP as GuardModalLayer, a4 as HiMiniExclamationTriangle, ap as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
+import { r as reactExports, j as jsxRuntimeExports, cS as GuardModalLayer, a4 as HiMiniExclamationTriangle, ap as HiMiniWrenchScrewdriver } from "../guard-dashboard.js";
 function ConfirmDialogPanel(props) {
   const tone = props.tone ?? "default";
   const destructive = tone === "destructive";

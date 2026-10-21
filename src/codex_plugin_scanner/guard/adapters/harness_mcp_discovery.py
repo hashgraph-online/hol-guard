@@ -91,32 +91,52 @@ def configured_harness_detections(
     return _safe_detections(home_dir, guard_home, workspace_dir)
 
 
+def _collect_stdio_servers(detection: HarnessDetection, groups: dict[str, _DiscoveryGroup]) -> None:
+    """Fold one harness's stdio servers into ``groups``. Raises only on bad data."""
+
+    for server in observable_stdio_servers_with_proxy(detection):
+        built = _identity_for(server)
+        if built is None:
+            continue
+        identity, server_identity, connection_identity = built
+        key = identity.identity_hash
+        label = display_name_for(server.harness)
+        current = groups.get(key)
+        if current is None:
+            groups[key] = _DiscoveryGroup(
+                identity=identity,
+                server_identity=server_identity,
+                launch_command=_raw_launch_label(server.command, server.args),
+                labels=[label],
+                env=tuple(sorted(proxy_process_env(server.env).items())),
+                connection_identity=connection_identity,
+                harness=server.harness,
+            )
+            continue
+        if label not in current.labels:
+            current.labels.append(label)
+
+
 def _stdio_servers(loaded: Sequence[HarnessDetection]) -> tuple[DiscoveredHarnessMcpServer, ...]:
     groups: dict[str, _DiscoveryGroup] = {}
     for detection in loaded:
-        for server in observable_stdio_servers_with_proxy(detection):
-            built = _identity_for(server)
-            if built is None:
-                continue
-            identity, server_identity, connection_identity = built
-            key = identity.identity_hash
-            label = display_name_for(server.harness)
-            current = groups.get(key)
-            launch_command = _raw_launch_label(server.command, server.args)
-            env = tuple(sorted(proxy_process_env(server.env).items()))
-            if current is None:
-                groups[key] = _DiscoveryGroup(
-                    identity=identity,
-                    server_identity=server_identity,
-                    launch_command=launch_command,
-                    labels=[label],
-                    env=env,
-                    connection_identity=connection_identity,
-                    harness=server.harness,
-                )
-                continue
-            if label not in current.labels:
-                current.labels.append(label)
+        # One harness whose entries cannot be read must not hide every other
+        # harness's connections. Detection is already isolated per adapter;
+        # this is the second half of that promise, for the servers a readable
+        # detection still carries in a shape Guard cannot turn into an identity.
+        # Safe to skip one harness here because stdio persistence only adds
+        # observations. The remote list in `harness_mcp_remote` stays all or
+        # nothing: `remote_scan_harnesses` promises a full read, and a partial
+        # one would make reconciliation forget the entries it could not parse.
+        try:
+            _collect_stdio_servers(detection, groups)
+        except (OSError, RuntimeError, TypeError, ValueError, KeyError, UnicodeError, sqlite3.Error) as exc:
+            logger.warning(
+                "MCP inventory skipped %s servers after invalid data (%s)",
+                detection.harness,
+                type(exc).__name__,
+            )
+            continue
     ranked = sorted(
         groups.values(),
         key=lambda group: (
@@ -357,7 +377,7 @@ def _safe_detections(home_dir: Path, guard_home: Path, workspace_dir: Path | Non
             except (OSError, RuntimeError, UnicodeError) as exc:
                 logger.debug("MCP inventory skipped %s adapter after %s", adapter.harness, type(exc).__name__)
                 continue
-            except (TypeError, ValueError, KeyError) as exc:
+            except (TypeError, ValueError, KeyError, sqlite3.Error) as exc:
                 logger.warning(
                     "MCP inventory skipped %s adapter after invalid data (%s)",
                     adapter.harness,

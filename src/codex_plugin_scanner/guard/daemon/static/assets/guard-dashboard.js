@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-DqU3nbr5.js","assets/chunks/harness-version-label-B5upMG3f.js","assets/chunks/connect-guard-cloud-button-nIjTkiyS.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-C03WpejL.js","assets/chunks/confirm-dialog-DKs42E8c.js","assets/chunks/extensions-workspace-mIiVHPcV.js","assets/chunks/app-detail-workspace-By-Wp0bd.js","assets/chunks/policy-workspace-page-toUA_hyd.js","assets/chunks/about-workspace-DRsCiD3h.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/chunks/home-dashboard-Wxa6VirA.js","assets/chunks/home-protection-module-Du65PsUR.js","assets/chunks/about-content-BwtrHEyh.js","assets/chunks/app-catalog-BU3dzTBu.js","assets/chunks/fleet-workspace-CkMTJ0-Z.js","assets/chunks/harness-version-label-0p6P70WE.js","assets/chunks/connect-guard-cloud-button-COC8NKLs.js","assets/chunks/settings-save-proof-modal-DSJONzDi.js","assets/chunks/settings-workspace-DdhT0dGq.js","assets/chunks/confirm-dialog-DoiBaaXB.js","assets/chunks/extensions-workspace-C9XJKTns.js","assets/chunks/app-detail-workspace-B9rlD0o5.js","assets/chunks/policy-workspace-page-VXBC0Fjp.js","assets/chunks/about-workspace-C1-uAYDr.js"])))=>i.map(i=>d[i]);
 (function polyfill() {
   const relList = document.createElement("link").relList;
   if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -33841,6 +33841,47 @@ function SemanticFilterButton(props) {
     }
   );
 }
+class DiscoveryFailure extends Error {
+  code;
+  constructor(code, message) {
+    super(message);
+    this.name = "DiscoveryFailure";
+    this.code = code;
+  }
+}
+const GENERIC_API_MESSAGES = /* @__PURE__ */ new Set([
+  "Guard could not update this custom extension.",
+  "Guard could not load custom extensions."
+]);
+const CONFIGURED_CONNECTIONS_FALLBACK = "Guard could not check host configuration. Known connections remain available. Choose Check for connectors again; if that keeps failing, restart Guard.";
+const CODEX_HOST_FALLBACK = "Guard could not read the Codex app inventory. Known connections remain available. Choose Check for connectors again; if that keeps failing, reopen the Codex app.";
+const START_FAILURE_MESSAGES = {
+  discovery_busy: "Guard is already refreshing other connections. Wait a few seconds, then choose Check for connectors again.",
+  discovery_retry_backoff: "The last connector scan failed. Wait ten seconds, then choose Check for connectors again.",
+  discovery_unavailable: "Guard is shutting down, so it cannot scan for connectors. Reopen Guard, then check again.",
+  discovery_job_unavailable: "This connector scan expired. Choose Check for connectors again to start a new one.",
+  discovery_job_id_conflict: "Another connector scan is already running under this identity. Wait a few seconds, then check again.",
+  invalid_discovery_job: "Guard could not track this connector scan. Reload this page, then check again.",
+  local_cli_unavailable: "Guard's extension service is not answering, so host connections could not be read. Restart Guard, then check again.",
+  local_cli_request_failed: "Guard's connector scan returned no result. Reload this page, then choose Check for connectors again."
+};
+const TRUSTED_MESSAGE_CODES = /* @__PURE__ */ new Set(["session_expired"]);
+function errorCode(error) {
+  const code = error?.code;
+  return typeof code === "string" ? code : "";
+}
+function discoveryFailureMessage(error, fallback) {
+  if (error instanceof DiscoveryFailure) return error.message;
+  const code = errorCode(error);
+  if (!code) return fallback;
+  if (Object.prototype.hasOwnProperty.call(START_FAILURE_MESSAGES, code)) {
+    const authored = START_FAILURE_MESSAGES[code];
+    if (typeof authored === "string" && authored) return authored;
+  }
+  if (!TRUSTED_MESSAGE_CODES.has(code)) return fallback;
+  const message = error instanceof Error ? error.message.trim() : "";
+  return message && !GENERIC_API_MESSAGES.has(message) ? message : fallback;
+}
 const CLI_ID_PATTERN = /^local-cli\.[a-z0-9]+(?:-[a-z0-9]+){0,8}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 function isRecord(value) {
@@ -33862,10 +33903,53 @@ function optionalString(value) {
 function isLocalCliId(value) {
   return CLI_ID_PATTERN.test(value);
 }
+function stageFailure(code) {
+  switch (code) {
+    case "mcp_refresh_unavailable":
+      return new DiscoveryFailure("mcp_refresh_unavailable", "Guard cannot list this connection directly. Refresh it in its host app.");
+    case "mcp_launch_failed":
+      return new DiscoveryFailure("mcp_launch_failed", "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept.");
+    case "mcp_transport_failed":
+      return new DiscoveryFailure("mcp_transport_failed", "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.");
+    case "mcp_initialize_failed":
+      return new DiscoveryFailure("mcp_initialize_failed", "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.");
+    case "mcp_protocol_unsupported":
+      return new DiscoveryFailure("mcp_protocol_unsupported", "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.");
+    case "mcp_capability_rejected":
+      return new DiscoveryFailure("mcp_capability_rejected", "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept.");
+    case "catalog_revision_conflict":
+      return new DiscoveryFailure("catalog_revision_conflict", "A newer discovery finished first. Reload the inventory.");
+    case "configured_host_scan_failed":
+      return new DiscoveryFailure("configured_host_scan_failed", "Guard could not read this device's configured connections. Check that your agent apps' MCP settings are valid, then choose Check for connectors again. Known connections were kept.");
+    case "configured_host_persist_failed":
+      return new DiscoveryFailure("configured_host_persist_failed", "Guard read this device's connections but could not save them. Choose Check for connectors again; if that keeps failing, restart Guard. Known connections were kept.");
+    case "codex_host_changed":
+      return new DiscoveryFailure("codex_host_changed", "The Codex app restarted while Guard was reading it. Choose Check for connectors again. Known connections were kept.");
+    case "codex_host_untrusted":
+      return new DiscoveryFailure("codex_host_untrusted", "Guard will not read this Codex app inventory because the app's control socket is not the one Guard trusts. Reopen the Codex app, then check again. Known connections were kept.");
+    case "codex_host_invalid":
+      return new DiscoveryFailure("codex_host_invalid", "Guard could not make sense of the Codex app's inventory. Update or reopen the Codex app, then choose Check for connectors again. Known connections were kept.");
+    case "codex_host_limit":
+      return new DiscoveryFailure("codex_host_limit", "The Codex app reported more connections than Guard can read safely. Remove connections you do not use in the Codex app, then check again. Known connections were kept.");
+    case "codex_host_timeout":
+      return new DiscoveryFailure("codex_host_timeout", "The Codex app did not answer in time. Choose Check for connectors again; if that keeps failing, reopen the Codex app. Known connections were kept.");
+    case "codex_host_unavailable":
+      return new DiscoveryFailure("codex_host_unavailable", "Guard could not reach the Codex app. Open or reopen the Codex app, then choose Check for connectors again. Known connections were kept.");
+    case "observed_provider_scan_failed":
+      return new DiscoveryFailure("observed_provider_scan_failed", "Guard could not merge observed provider tools. Known tools and choices were kept; choose Check for connectors again.");
+    case "catalog_limit_reached":
+      return new DiscoveryFailure("catalog_limit_reached", "This connector has more tools than Guard can catalog safely. Existing choices were kept; remove tools you do not use in the host app, then check again.");
+    case "discovery_failed":
+      return new DiscoveryFailure("discovery_failed", "The connector scan stopped on an unexpected error. Known tools and choices were kept. Choose Check for connectors again; if that keeps failing, restart Guard. Guard recorded the reason in its log for support.");
+    default:
+      console.warn("Unknown discovery error code:", code);
+      return new DiscoveryFailure("discovery_failed", "Discovery did not finish. Known tools and choices were kept. Try again shortly.");
+  }
+}
 async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
   const normalize = (body) => {
     if (!isRecord(body) || typeof body.job_id !== "string" || !/^[a-f0-9]{32}$/.test(body.job_id) || body.cli_id !== cliId || !["running", "cancelling", "complete", "cancelled", "failed"].includes(String(body.state))) {
-      throw new Error("Invalid discovery progress");
+      throw new DiscoveryFailure("discovery_progress_invalid", "Guard could not read this discovery's progress. Reload this page, then try again.");
     }
     return body;
   };
@@ -33876,7 +33960,9 @@ async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
       body: JSON.stringify(payload)
     }));
     const next = normalize(body);
-    if (payload.job_id !== next.job_id) throw new Error("Discovery identity changed");
+    if (payload.job_id !== next.job_id) {
+      throw new DiscoveryFailure("discovery_identity_changed", "A different discovery replaced this one. Known tools and choices were kept; try again.");
+    }
     return next;
   };
   let job = normalize(initialJob);
@@ -33890,43 +33976,7 @@ async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
       }
       if (job.state === "failed") {
         finished = true;
-        let message;
-        switch (job.error) {
-          case "mcp_refresh_unavailable":
-            message = "Guard cannot list this connection directly. Refresh it in its host app.";
-            break;
-          case "mcp_launch_failed":
-            message = "Guard could not launch this MCP server. Check its configured executable and dependencies in the host app. Known tools and choices were kept.";
-            break;
-          case "mcp_transport_failed":
-            message = "Guard could not communicate with this MCP server. Check its executable, dependencies, and server logs in the host app. Known tools and choices were kept.";
-            break;
-          case "mcp_initialize_failed":
-            message = "The MCP server did not complete initialization. Check that it starts in the host app and uses stdio MCP. Known tools and choices were kept.";
-            break;
-          case "mcp_protocol_unsupported":
-            message = "This server uses an MCP protocol version Guard does not support. Check the server and Guard versions. Known tools and choices were kept.";
-            break;
-          case "mcp_capability_rejected":
-            message = "The MCP server rejected Guard's discovery capabilities. Check the server's client requirements and Guard version. Known tools and choices were kept.";
-            break;
-          case "catalog_revision_conflict":
-            message = "A newer discovery finished first. Reload the inventory.";
-            break;
-          case "configured_host_scan_failed":
-            message = "Guard could not read the host's configured connections. Check the host app and retry.";
-            break;
-          case "observed_provider_scan_failed":
-            message = "Guard could not merge observed provider tools. Known tools and choices were kept; retry discovery.";
-            break;
-          case "catalog_limit_reached":
-            message = "This connector has more tools than Guard can catalog safely. Existing choices were kept.";
-            break;
-          default:
-            console.warn("Unknown discovery error code:", job.error);
-            message = "Discovery did not finish. Known tools and choices were kept. Try again shortly.";
-        }
-        throw new Error(message);
+        throw stageFailure(job.error);
       }
       await new Promise((resolve) => {
         const done = () => {
@@ -33939,9 +33989,14 @@ async function waitForDiscoveryJob(cliId, initialJob, signal, readJson2) {
       });
       if (!signal.aborted) job = await request2({ job_id: job.job_id });
     }
-    throw new Error("Discovery took too long. Known tools and choices were kept.");
+    throw new DiscoveryFailure("discovery_timeout", "Discovery took too long. Known tools and choices were kept. Try again shortly.");
   } finally {
-    if (!finished) await request2({ job_id: job.job_id, cancel: true });
+    if (!finished) {
+      try {
+        await request2({ job_id: job.job_id, cancel: true });
+      } catch {
+      }
+    }
   }
 }
 function record(value) {
@@ -34256,7 +34311,7 @@ function normalizeLocalCliList(value) {
   return {
     schema_version: requiredString(value.schema_version, "schema"),
     revision,
-    ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
+    ...discoveryIssue === "catalog_limit_reached" || discoveryIssue === "observed_provider_scan_failed" || discoveryIssue === "configured_host_scan_failed" || discoveryIssue === "configured_host_persist_failed" || discoveryIssue === "package_catalog_refresh_failed" ? { discovery_issue: discoveryIssue } : {},
     ...nativePublication ? { native_publication: nativePublication } : {},
     ...hostInventory ? { host_inventory: hostInventory } : {},
     items,
@@ -35978,7 +36033,7 @@ function turnProtectionOnUpdate(snapshot) {
 }
 const McpPolicyRequestPanel = lazyWorkspace(
   "mcp-policy-request-panel",
-  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-BNToJaG3.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
+  () => __vitePreload(() => import("./chunks/mcp-policy-request-panel-CdbiqqaN.js"), true ? [] : void 0).then((m) => ({ default: m.McpPolicyRequestPanel }))
 );
 function InboxWatchBanner(props) {
   const { snapshot } = props;
@@ -36396,29 +36451,29 @@ function useRouteFocus(view, mainSelector = "main#main-content") {
 }
 const HOME_QUEUE_PREVIEW_LIMIT = 50;
 const HomeWorkspace = lazyWorkspace("home-dashboard", () => __vitePreload(() => import("./chunks/home-dashboard-Wxa6VirA.js"), true ? __vite__mapDeps([0,1,2,3]) : void 0).then((m) => ({ default: m.HomeWorkspace })));
-const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-DqU3nbr5.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
-const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-C03WpejL.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
+const FleetWorkspace = lazyWorkspace("fleet-workspace", () => __vitePreload(() => import("./chunks/fleet-workspace-CkMTJ0-Z.js"), true ? __vite__mapDeps([4,3,5,6,7]) : void 0).then((m) => ({ default: m.FleetWorkspace })));
+const SettingsWorkspace = lazyWorkspace("settings-workspace", () => __vitePreload(() => import("./chunks/settings-workspace-DdhT0dGq.js"), true ? __vite__mapDeps([8,7,3,9,6]) : void 0).then((m) => ({ default: m.SettingsWorkspace })));
 const ExtensionsWorkspace = lazyWorkspace(
   "extensions-workspace",
-  () => __vitePreload(() => import("./chunks/extensions-workspace-mIiVHPcV.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
+  () => __vitePreload(() => import("./chunks/extensions-workspace-C9XJKTns.js"), true ? __vite__mapDeps([10,9]) : void 0).then((module) => ({ default: module.ExtensionsWorkspace }))
 );
-const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-By-Wp0bd.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
+const AppDetailWorkspace = lazyWorkspace("app-detail-workspace", () => __vitePreload(() => import("./chunks/app-detail-workspace-B9rlD0o5.js"), true ? __vite__mapDeps([11,5]) : void 0).then((m) => ({ default: m.AppDetailWorkspace })));
 const HelpModal = lazyWorkspace("help-modal", () => __vitePreload(() => import("./chunks/help-modal-B0TZsHE3.js"), true ? [] : void 0).then((m) => ({ default: m.HelpModal })));
 const SupplyChainHubWorkspace = lazyWorkspace(
   "supply-chain-hub-workspace",
-  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-DNXzPpwg.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
+  () => __vitePreload(() => import("./chunks/supply-chain-hub-workspace-BvuDt7F-.js").then((n) => n.d), true ? [] : void 0).then((m) => ({ default: m.SupplyChainHubWorkspace }))
 );
 const PolicyWorkspacePage = lazyWorkspace(
   "policy-workspace-page",
-  () => __vitePreload(() => import("./chunks/policy-workspace-page-toUA_hyd.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
+  () => __vitePreload(() => import("./chunks/policy-workspace-page-VXBC0Fjp.js"), true ? __vite__mapDeps([12,6]) : void 0).then((m) => ({ default: m.PolicyWorkspacePage }))
 );
 const AboutWorkspace = lazyWorkspace(
   "about-workspace",
-  () => __vitePreload(() => import("./chunks/about-workspace-DRsCiD3h.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
+  () => __vitePreload(() => import("./chunks/about-workspace-C1-uAYDr.js"), true ? __vite__mapDeps([13,2]) : void 0).then((m) => ({ default: m.AboutWorkspace }))
 );
 const ProtectionRepairPage = lazyWorkspace(
   "protection-repair-page",
-  () => __vitePreload(() => import("./chunks/protection-repair-page-BpN1oSAA.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
+  () => __vitePreload(() => import("./chunks/protection-repair-page-C7iXdeiN.js"), true ? [] : void 0).then((m) => ({ default: m.ProtectionRepairPage }))
 );
 function LazyFallback() {
   return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex min-h-[200px] items-center justify-center", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "guard-skeleton h-8 w-48" }) });
@@ -37445,7 +37500,7 @@ export {
   normalizeExtensionCatalogItem as by,
   guardApiCacheScope as bz,
   HiMiniChevronDown as c,
-  DEFAULT_FILTER_STATE as c$,
+  HiMiniHome as c$,
   readJson as c0,
   enrollablePackageScriptCommands as c1,
   seenSuggestionMeta as c2,
@@ -37461,28 +37516,28 @@ export {
   extensionStateLabel as cC,
   HiMiniGlobeAlt as cD,
   HiMiniFunnel as cE,
-  refreshCodexHostInventory as cF,
-  loadCurrentDashboardBuild as cG,
-  canonicalExtensionId as cH,
-  extensionDetailHref as cI,
-  DEFAULT_EXTENSION_DETAIL_URL_STATE as cJ,
-  acknowledgeDegradedExtensionControlAuthority as cK,
-  recoverExtensionControlAuthority as cL,
-  readExtensionDetailUrlState as cM,
-  parseProtectionRoute as cN,
-  addCustomExtensionHref as cO,
-  GuardModalLayer as cP,
-  runHarnessAction as cQ,
-  GuardHarnessActionError as cR,
-  HiMiniRocketLaunch as cS,
-  HiMiniTrash as cT,
-  fetchGuardApi as cU,
-  formatHarnessCommand as cV,
-  fetchApprovalPage as cW,
-  fetchPolicy as cX,
-  HiMiniHome as cY,
-  appSetupTarget as cZ,
-  guardActionPresentation as c_,
+  discoveryFailureMessage as cF,
+  refreshCodexHostInventory as cG,
+  CODEX_HOST_FALLBACK as cH,
+  CONFIGURED_CONNECTIONS_FALLBACK as cI,
+  loadCurrentDashboardBuild as cJ,
+  canonicalExtensionId as cK,
+  extensionDetailHref as cL,
+  DEFAULT_EXTENSION_DETAIL_URL_STATE as cM,
+  acknowledgeDegradedExtensionControlAuthority as cN,
+  recoverExtensionControlAuthority as cO,
+  readExtensionDetailUrlState as cP,
+  parseProtectionRoute as cQ,
+  addCustomExtensionHref as cR,
+  GuardModalLayer as cS,
+  runHarnessAction as cT,
+  GuardHarnessActionError as cU,
+  HiMiniRocketLaunch as cV,
+  HiMiniTrash as cW,
+  fetchGuardApi as cX,
+  formatHarnessCommand as cY,
+  fetchApprovalPage as cZ,
+  fetchPolicy as c_,
   keepsPackageScriptCatalog as ca,
   recognizeLocalCli as cb,
   preferredPackageScriptExtension as cc,
@@ -37510,80 +37565,83 @@ export {
   connectorWorkspaceItems as cy,
   customExtensionNeedsReview as cz,
   HiMiniArrowPath as d,
-  HiMiniDocumentMagnifyingGlass as d$,
-  filterEvidence as d0,
-  sortEvidence as d1,
-  computeMetrics as d2,
-  CommandActivityWorkspace as d3,
-  EvidenceFilterBar as d4,
-  EvidenceInsightStrip as d5,
-  EvidenceActionList as d6,
-  EvidenceActionDetail as d7,
-  policyIdentityKey as d8,
-  clearLabelForScope as d9,
-  fetchReceipts as dA,
-  lazyWorkspace as dB,
-  __vitePreload as dC,
-  scopeLabel as dD,
-  HiMiniCloudArrowUp as dE,
-  HiMiniCodeBracket as dF,
-  HiMiniClipboardDocument as dG,
-  HiMiniUsers as dH,
-  HiMiniFolder as dI,
-  HiMiniIdentification as dJ,
-  StyledSelect as dK,
-  policyActionLabel as dL,
-  createCloudExceptionRequest as dM,
-  HiMiniPuzzlePiece as dN,
-  fetchCloudExceptions as dO,
-  fetchCloudExceptionRequests as dP,
-  downloadBlob as dQ,
-  PaginationControls as dR,
-  PolicyStatField as dS,
-  HiMiniArrowDownTray as dT,
-  HiMiniInbox as dU,
-  HiMiniQueueList as dV,
-  subscribeDashboardLocation as dW,
-  Surface as dX,
-  fetchMcpPolicyRequest as dY,
-  resolveMcpPolicyRequest as dZ,
-  HiMiniDocumentPlus as d_,
-  HiMiniChartBar as da,
-  HiMiniCheckBadge as db,
-  isSupplyChainAuditIncomplete as dc,
-  isSupplyChainAuditEvidence as dd,
-  readString$1 as de,
-  IconActionButton as df,
-  HiMiniBeaker as dg,
-  ActivationSummary as dh,
-  ActionResultPanel as di,
-  HiMiniBugAnt as dj,
-  ConnectFlowCard as dk,
-  ApprovalProofInline as dl,
-  HiMiniCloudArrowDown as dm,
-  fetchPackageFirewallStatus as dn,
-  runPackageAudit as dp,
-  resolveSupplyChainAuditFailure as dq,
-  runPackageSync as dr,
-  startPackageFirewallConnect as ds,
-  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dt,
-  repairSupplyChainProtection as du,
-  runPackageFirewallAction as dv,
-  parseInterceptProofSnapshot as dw,
-  activatePackageFirewallRuntime as dx,
-  EntitlementNotice as dy,
-  chooseSupplyChainAuditFolder as dz,
+  fetchMcpPolicyRequest as d$,
+  appSetupTarget as d0,
+  guardActionPresentation as d1,
+  DEFAULT_FILTER_STATE as d2,
+  filterEvidence as d3,
+  sortEvidence as d4,
+  computeMetrics as d5,
+  CommandActivityWorkspace as d6,
+  EvidenceFilterBar as d7,
+  EvidenceInsightStrip as d8,
+  EvidenceActionList as d9,
+  activatePackageFirewallRuntime as dA,
+  EntitlementNotice as dB,
+  chooseSupplyChainAuditFolder as dC,
+  fetchReceipts as dD,
+  lazyWorkspace as dE,
+  __vitePreload as dF,
+  scopeLabel as dG,
+  HiMiniCloudArrowUp as dH,
+  HiMiniCodeBracket as dI,
+  HiMiniClipboardDocument as dJ,
+  HiMiniUsers as dK,
+  HiMiniFolder as dL,
+  HiMiniIdentification as dM,
+  StyledSelect as dN,
+  policyActionLabel as dO,
+  createCloudExceptionRequest as dP,
+  HiMiniPuzzlePiece as dQ,
+  fetchCloudExceptions as dR,
+  fetchCloudExceptionRequests as dS,
+  downloadBlob as dT,
+  PaginationControls as dU,
+  PolicyStatField as dV,
+  HiMiniArrowDownTray as dW,
+  HiMiniInbox as dX,
+  HiMiniQueueList as dY,
+  subscribeDashboardLocation as dZ,
+  Surface as d_,
+  EvidenceActionDetail as da,
+  policyIdentityKey as db,
+  clearLabelForScope as dc,
+  HiMiniChartBar as dd,
+  HiMiniCheckBadge as de,
+  isSupplyChainAuditIncomplete as df,
+  isSupplyChainAuditEvidence as dg,
+  readString$1 as dh,
+  IconActionButton as di,
+  HiMiniBeaker as dj,
+  ActivationSummary as dk,
+  ActionResultPanel as dl,
+  HiMiniBugAnt as dm,
+  ConnectFlowCard as dn,
+  ApprovalProofInline as dp,
+  HiMiniCloudArrowDown as dq,
+  fetchPackageFirewallStatus as dr,
+  runPackageAudit as ds,
+  resolveSupplyChainAuditFailure as dt,
+  runPackageSync as du,
+  startPackageFirewallConnect as dv,
+  PACKAGE_FIREWALL_CONNECT_POPUP_BLOCKED_MESSAGE as dw,
+  repairSupplyChainProtection as dx,
+  runPackageFirewallAction as dy,
+  parseInterceptProofSnapshot as dz,
   HiMiniCheck as e,
-  fetchSupplyChainBundle as e0,
-  isSupplyChainScannerEvidence as e1,
-  isBlockedGuardAction as e2,
-  HiMiniShieldExclamation as e3,
-  HiMiniComputerDesktop as e4,
-  HiMiniChevronLeft as e5,
-  HiMiniArrowDown as e6,
-  HiMiniArrowUp as e7,
-  runAuditRemediation as e8,
-  HiMiniSignal as e9,
+  resolveMcpPolicyRequest as e0,
+  HiMiniDocumentPlus as e1,
+  HiMiniDocumentMagnifyingGlass as e2,
+  fetchSupplyChainBundle as e3,
+  isSupplyChainScannerEvidence as e4,
+  isBlockedGuardAction as e5,
+  HiMiniShieldExclamation as e6,
+  HiMiniComputerDesktop as e7,
+  HiMiniChevronLeft as e8,
+  HiMiniArrowDown as e9,
+  HiMiniArrowUp as ea,
+  runAuditRemediation as eb,
+  HiMiniSignal as ec,
   formatRelativeTime as f,
   HiMiniNoSymbol as g,
   harnessDisplayName as h,
