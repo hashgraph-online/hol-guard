@@ -17,6 +17,7 @@ const chrome = process.env.CI ? { channel: "chrome" } : {};
 
 export default defineConfig({
   testDir: "./e2e/integration",
+  globalSetup: "./e2e/integration/global-setup.ts",
   timeout: 45_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,

@@ -965,8 +965,10 @@ jobs:
       - uses: ./.github/actions/restore-command-projections
       - run: |
           chmod 0755 rust/target/release/guard-command-source rust/target/release/hol-guard-runtime
-          # The source tree has no bundled runtime; Guard honors the binary
+          # The source tree bundles neither the runtime nor the source compiler
+          # that prepares the extension catalog. Guard honors the binary
           # override only in force mode.
+          echo "HOL_GUARD_NATIVE_SOURCE_COMPILER=$GITHUB_WORKSPACE/rust/target/release/guard-command-source" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE_BINARY=$GITHUB_WORKSPACE/rust/target/release/hol-guard-runtime" >> "$GITHUB_ENV"
           echo "HOL_GUARD_NATIVE=force" >> "$GITHUB_ENV"
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
